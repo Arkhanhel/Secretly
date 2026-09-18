@@ -29,10 +29,10 @@ jobs:
         working-directory: apps/flutter/secretly_app
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -60,7 +60,7 @@ jobs:
     timeout-minutes: 40
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Version comes from rust-toolchain.toml, which is committed.
       - name: Show toolchain
@@ -98,7 +98,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Every first-party source file must carry an SPDX identifier. Vendored
       # third-party code keeps its own headers and is skipped.

@@ -89,6 +89,8 @@ void main() {
       '../../../tools/macos_build_android_release.sh',
       '../../../tools/macos_build_ios_release.sh',
     ]) {
+      // Скрипты сборки лежат в tools/ и в публичную выкладку не входят — там
+      // проверять нечего, и тест честно пропускается, а не падает.
       test(script.split('/').last, () {
         final s = File(script).readAsStringSync();
         final start = s.indexOf(r'if [ "$call_logs" -eq 1 ]; then');
@@ -103,7 +105,11 @@ void main() {
           isTrue,
           reason: 'без второй переменной флаг не включает НИЧЕГО',
         );
-      });
+      },
+          skip: File(script).existsSync()
+              ? null
+              : 'release build scripts live in tools/, which is not part of the '
+                  'public repository');
     }
   });
 }

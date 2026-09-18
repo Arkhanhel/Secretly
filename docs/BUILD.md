@@ -110,16 +110,20 @@ default.
 
 ## Reproducing a published build
 
-Every release we publish carries a build marker and a SHA-256 of the artefact,
-listed at https://secretlyapp.com/verify. To check a build against ours you need
-the same Flutter and Rust versions from the table above, the same source tag,
-and the same `--dart-define` values, which are on that page as well.
+[`docs/VERIFY.md`](VERIFY.md) lists the SHA-256 of every artefact we upload to
+the stores, together with the exact `--dart-define` values those builds were
+made with.
 
-Android is the platform where this comparison is meaningful. iOS binaries are
-re-signed by Apple during distribution and cannot be byte-compared.
+Read it before comparing hashes. Google Play splits an App Bundle into
+per-device APKs and re-signs them with Google's key; Apple re-signs and
+re-encrypts the IPA. Neither installed copy can be byte-compared with the file
+we uploaded — by anyone, including us. What you *can* do today is rebuild from
+this source with the pinned toolchains and inspect what the result does. A
+directly downloadable signed APK with a published checksum, which would make a
+real comparison possible, is on the way; `VERIFY.md` says where that stands.
 
-If your build does not match ours, that is a finding we want to hear about:
-support@secretlyapp.com.
+If your build behaves differently from what the threat model claims, that is a
+finding we want to hear about: support@secretlyapp.com.
 
 ## What you will notice is missing
 

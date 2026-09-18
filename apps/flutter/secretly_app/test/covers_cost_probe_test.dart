@@ -16,6 +16,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/premium/cosmetics_catalog.dart';
 import 'package:secretly_app/ui/thermal_guard.dart';
 
+import 'art_assets_availability.dart';
+
 void main() {
   testWidgets('per-frame cost of every cover', (tester) async {
     // A profile banner on a 3x phone: 390x220dp.
@@ -154,6 +156,15 @@ void main() {
   });
 
   testWidgets('a still cover paints once and starts no ticker', (tester) async {
+    // В публичной копии картинки обложек — заглушки, и проверка упала бы на
+    // загрузке ассета, а не на том, ради чего написана. `markTestSkipped`
+    // выбран вместо параметра `skip`: у `testWidgets` он булев, а так причина
+    // видна в отчёте CI.
+    if (artAssetsArePlaceholders) {
+      markTestSkipped(artAssetsSkipReason);
+      return;
+    }
+
     // Picker grids draw stills. If one ever starts a ticker again, a screenful
     // of them is back to seventeen live blur-heavy painters.
     await tester.pumpWidget(

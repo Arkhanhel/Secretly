@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/widgets/telegram_wallpaper.dart';
 
+import 'art_assets_availability.dart';
+
 /// «Обои проводят сообщение» (2026-08-02).
 ///
 /// Эта фича почти всё время обязана МОЛЧАТЬ: волна возникает на отправку и на
@@ -214,5 +216,6 @@ void main() {
     expect(maxG, greaterThan(240));
     expect(maxB, 0, reason: 'синий канал не используется — обязан быть пуст');
     image.dispose();
-  });
+  },
+      skip: artAssetsArePlaceholders ? artAssetsSkipReason : null);
 }

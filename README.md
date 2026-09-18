@@ -123,7 +123,8 @@ their licences.
 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) ·
 [`CHANGELOG.md`](CHANGELOG.md) ·
 [`AUTHORS`](AUTHORS) ·
-[`docs/BUILD.md`](docs/BUILD.md)
+[`docs/BUILD.md`](docs/BUILD.md) ·
+[`docs/VERIFY.md`](docs/VERIFY.md)
 
 ## Русская версия
 
