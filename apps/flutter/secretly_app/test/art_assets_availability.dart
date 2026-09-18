@@ -26,7 +26,9 @@ import 'dart:io';
 /// test('обои нужного размера', () { ... },
 ///     skip: artAssetsArePlaceholders ? artAssetsSkipReason : null);
 /// ```
-late final bool artAssetsArePlaceholders = _detectPlaceholders();
+// Переменная верхнего уровня в Dart и так вычисляется лениво при первом
+// обращении, поэтому `late` здесь не нужен — анализатор на него ругается.
+final bool artAssetsArePlaceholders = _detectPlaceholders();
 
 /// Причина пропуска. Отдельной константой, чтобы во всех тестах она читалась
 /// одинаково и человек, увидевший «skipped» в CI, сразу понял, в чём дело.
