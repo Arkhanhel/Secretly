@@ -7,7 +7,7 @@ body:
       value: |
         **Not for security problems.** If what you found lets someone read,
         alter or link messages that should be private, email
-        support@secretlyapp.com instead — see `SECURITY.md`.
+        security@secretlyapp.com instead — see `SECURITY.md`.
 
         Please do not put anything private in this form. It is public, and it
         stays public. Redact contact names, profile identifiers and message

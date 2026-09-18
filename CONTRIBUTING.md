@@ -32,7 +32,7 @@ will understand.
 ## Security — not through issues
 
 Found a vulnerability? **Do not open a public issue.** The process is in
-[SECURITY.md](SECURITY.md): email support@secretlyapp.com with `SECURITY` in
+[SECURITY.md](SECURITY.md): email security@secretlyapp.com with `SECURITY` in
 the subject.
 
 This applies to anything that contradicts [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).

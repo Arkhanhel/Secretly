@@ -123,7 +123,7 @@ directly downloadable signed APK with a published checksum, which would make a
 real comparison possible, is on the way; `VERIFY.md` says where that stands.
 
 If your build behaves differently from what the threat model claims, that is a
-finding we want to hear about: support@secretlyapp.com.
+finding we want to hear about: security@secretlyapp.com.
 
 ## What you will notice is missing
 

@@ -1,7 +1,7 @@
 # Contributor License Agreement
 
 **Yurii Arkhanhelskyi** — author and rights holder of Secretly
-Contact: support@secretlyapp.com
+Contact: legal@secretlyapp.com
 
 Version 1.1 — 18 September 2026
 
@@ -149,7 +149,7 @@ One signature covers all of your future contributions — you do not need to rep
 it for every pull request.
 
 If you are contributing on behalf of an employer, ask them to email
-**support@secretlyapp.com** confirming they permit it, before you sign.
+**legal@secretlyapp.com** confirming they permit it, before you sign.
 
 ---
 

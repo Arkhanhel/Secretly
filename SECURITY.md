@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Email **support@secretlyapp.com** with `SECURITY` in the subject line.
+Email **security@secretlyapp.com** with `SECURITY` in the subject line.
 
 Please include:
 
