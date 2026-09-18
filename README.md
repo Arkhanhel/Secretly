@@ -29,15 +29,21 @@ can check yourself, which is most of the reason the code is here.
 
 ## What is in the repository
 
-The client is Dart and Flutter, roughly 333,000 lines, with the phone and
-desktop interfaces sharing one codebase. Interface translations ship in eight
-languages.
+About 478,000 lines of our own code, counted with `wc -l`:
 
-Three Rust crates back it:
+| | lines |
+|---|---|
+| Client, Dart and Flutter — phone and desktop share one codebase | 332,931 |
+| Client tests | 86,739 |
+| `server/relay` — message transport, rooms, calls, blob storage | 34,772 |
+| `server/keys` — identities, prekey bundles, encrypted backups, entitlements | 13,560 |
+| Android, iOS, macOS and Windows platform code | 9,606 |
+| `core/rust/secretly_core` — crypto primitives shared over FFI | 201 |
 
-- `server/keys` — identities, prekey bundles, encrypted backups, entitlements
-- `server/relay` — message transport, rooms, calls, blob storage
-- `core/rust/secretly_core` — the crypto primitives shared over FFI
+Generated localisations add another 22,000 lines and are not counted above.
+Neither is the vendored code under `third_party/`, which is about 484,000 lines
+on its own — mostly whisper.cpp and ggml for on-device speech recognition. The
+interface ships in eight languages.
 
 Encryption is Double Ratchet with X3DH key agreement and Ed25519 identities.
 Media and archives use XChaCha20-Poly1305, the local database is SQLCipher,

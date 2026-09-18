@@ -14,6 +14,8 @@ Three programs and one shared library.
 | Component | Language | Size (measured 18 Sep 2026) | Role |
 |---|---|---|---|
 | Client | Dart / Flutter | 332,931 lines, generated localisations excluded | iOS, Android, macOS, Windows |
+| Client tests | Dart | 86,739 lines | — |
+| Platform code | Swift / Kotlin / C++ | 9,606 lines | per-platform glue, notification extension |
 | `secretly_relay` | Rust | 34,772 lines | message transport, rooms, calls, blobs |
 | `secretly_keys` | Rust | 13,560 lines | identity, key bundles, backups, entitlements |
 | `secretly_core` | Rust | 201 lines | local-content AEAD over FFI — see below |
