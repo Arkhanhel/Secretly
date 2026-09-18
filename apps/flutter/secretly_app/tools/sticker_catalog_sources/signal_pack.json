@@ -1,0 +1,84 @@
+{
+  "pack_id": "signal_pack",
+  "pack_version": 1,
+  "title": "Signal",
+  "description": "Sharp alert-and-security stickers for urgent pings, ops chatter, and private coordination.",
+  "icon_sticker_id": "signal_lock",
+  "icon_emoji_hint": "🔐",
+  "featured_rank": 110,
+  "tags": ["security", "ops", "featured", "remote"],
+  "stickers": [
+    {
+      "sticker_id": "signal_lock",
+      "source_path": "assets/app_ui/icons/png/239-smart-lock.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "🔐",
+      "label": "Smart Lock",
+      "keywords": ["lock", "secure", "замок", "безопасно"]
+    },
+    {
+      "sticker_id": "signal_tracker",
+      "source_path": "assets/app_ui/icons/png/126-gps-tracker.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "📍",
+      "label": "Tracker",
+      "keywords": ["gps", "tracker", "трекер", "координаты"]
+    },
+    {
+      "sticker_id": "signal_camera",
+      "source_path": "assets/app_ui/icons/png/129-cctv.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "📹",
+      "label": "Camera",
+      "keywords": ["cctv", "camera", "камера", "наблюдение"]
+    },
+    {
+      "sticker_id": "signal_siren",
+      "source_path": "assets/app_ui/icons/png/134-siren.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "🚨",
+      "label": "Siren",
+      "keywords": ["siren", "alert", "сирена", "тревога"]
+    },
+    {
+      "sticker_id": "signal_badge",
+      "source_path": "assets/app_ui/icons/png/165-police-badge.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "🛡️",
+      "label": "Badge",
+      "keywords": ["badge", "shield", "значок", "щит"]
+    },
+    {
+      "sticker_id": "signal_sos",
+      "source_path": "assets/app_ui/icons/png/166-sos.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "🆘",
+      "label": "SOS",
+      "keywords": ["sos", "urgent", "сос", "срочно"]
+    },
+    {
+      "sticker_id": "signal_antivirus",
+      "source_path": "assets/app_ui/icons/png/190-antivirus.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "🛡️",
+      "label": "Antivirus",
+      "keywords": ["antivirus", "defense", "антивирус", "защита"]
+    },
+    {
+      "sticker_id": "signal_shield",
+      "source_path": "assets/app_ui/icons/png/191-shield.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "🛡️",
+      "label": "Shield",
+      "keywords": ["shield", "secure", "щит", "охрана"]
+    }
+  ]
+}

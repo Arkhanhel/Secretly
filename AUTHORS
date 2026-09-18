@@ -1,0 +1,18 @@
+Secretly — authors
+==================
+
+Copyright (C) 2025-2026 Yurii Arkhanhelskyi
+
+Yurii Arkhanhelskyi <yurii@secretlyapp.com>
+    Author of the project. Client, cryptographic layer, both Rust servers,
+    architecture and documentation.
+
+The application is published in the app stores by SIA Secretly, Valmiera,
+Latvia (registration number 40203722244).
+
+Contributors are added to this file as their first change is merged, in the
+name or handle they choose. If you would rather not be listed, say so in your
+pull request and you will not be.
+
+Third-party code included in this repository keeps its own authors and
+licences; see NOTICE.

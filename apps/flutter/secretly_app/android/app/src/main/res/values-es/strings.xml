@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">Secretly</string>
+    <string name="notification_channel_messages_name">Mensajes</string>
+    <string name="notification_channel_messages_description">Mensajes entrantes de Secretly</string>
+    <string name="notification_action_reply">Responder</string>
+    <string name="notification_action_mark_read">Marcar como leído</string>
+    <string name="notification_message_new">Nuevo mensaje</string>
+    <string name="notification_channel_media_name">Reproducción multimedia</string>
+    <string name="notification_channel_media_description">Controles de audio de Secretly</string>
+    <string name="notification_media_previous">Anterior</string>
+    <string name="notification_media_play">Reproducir</string>
+    <string name="notification_media_pause">Pausar</string>
+    <string name="notification_media_next">Siguiente</string>
+    <string name="notification_media_stop">Detener</string>
+    <string name="notification_channel_incoming_calls_name">Llamadas entrantes</string>
+    <string name="notification_channel_incoming_calls_description">Alertas de llamadas entrantes de Secretly</string>
+    <string name="notification_channel_ongoing_calls_name">Llamadas en curso</string>
+    <string name="notification_channel_ongoing_calls_description">Estado de la llamada activa de Secretly en la barra de notificaciones</string>
+    <string name="notification_channel_active_call_name">Llamada activa</string>
+    <string name="notification_channel_active_call_description">Mantiene activas las llamadas de Secretly en segundo plano</string>
+    <string name="notification_action_decline">Rechazar</string>
+    <string name="notification_action_answer">Responder</string>
+    <string name="notification_action_hang_up">Colgar</string>
+    <string name="call_unknown">Desconocido</string>
+    <string name="call_incoming_voice">Llamada de voz entrante</string>
+    <string name="call_incoming_video">Videollamada entrante</string>
+    <string name="call_ongoing_voice">Llamada de voz - toca para volver</string>
+    <string name="call_ongoing_video">Videollamada - toca para volver</string>
+    <string name="call_active">Llamada activa</string>
+    <string name="call_voice">Llamada de voz</string>
+    <string name="call_video">Videollamada</string>
+</resources>

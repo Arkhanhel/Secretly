@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Adaptive launcher-icon background colours, sampled from each themed
+         ic_launcher_*.png so the inset foreground bitmap (which carries the same
+         solid background) blends seamlessly onto this layer — leaving just the
+         logo centred inside the adaptive safe zone. -->
+    <color name="ic_launcher_bg">#000000</color>
+    <color name="ic_launcher_bg_midnight">#0C0D11</color>
+    <color name="ic_launcher_bg_ocean">#4A6BFF</color>
+    <color name="ic_launcher_bg_sunset">#E21A00</color>
+    <color name="ic_launcher_bg_emerald">#0F5132</color>
+    <color name="ic_launcher_bg_graphite">#2A2D34</color>
+</resources>

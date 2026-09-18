@@ -1,0 +1,363 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
+// Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'dart:async';
+import 'dart:io' show Platform;
+import 'dart:ui' show PlatformDispatcher;
+
+import 'package:flutter/foundation.dart'
+    show VoidCallback, kIsWeb, visibleForTesting;
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../app/app_controller.dart';
+import '../../../calls/call_manager.dart';
+import '../../../calls/call_state.dart';
+import '../../../l10n/app_localizations.dart';
+import '../calls/call_peer_label.dart';
+
+/// Desktop-only system-notification bridge.
+///
+/// Listens to AppController's [AppController.inAppNotifications] stream for
+/// new incoming messages and to [CallManager.state] for ringing-incoming
+/// calls. When the app window is *not* focused, fires a local notification
+/// via flutter_local_notifications. Tapping a notification surfaces the
+/// matching conversation through [onTap].
+///
+/// Strict scope: mobile (iOS / Android) notification flow lives in
+/// [AppController] and is untouched. This service is only constructed from
+/// the desktop production app and runs only when running on a desktop OS.
+///
+/// Screen-share guard: callers may set [setScreenShareActive] to true to
+/// suppress all notifications while a desktop screen-share is in progress
+/// (per TZ §9.2). Desktop screen-share UI is not yet wired, so the flag
+/// stays false by default.
+/// Текст баннера входящего звонка.
+///
+/// 🔴 Уровень приватности 0 обещает «ни отправителя, ни текста», и для
+/// сообщений это соблюдалось, а звонок называл человека по имени. Теперь на
+/// нулевом уровне в баннере только название приложения — как у неизвестного
+/// звонящего.
+@visibleForTesting
+String desktopCallNotificationBody({
+  required int previewLevel,
+  required String knownName,
+  required String appTitle,
+}) {
+  final name = knownName.trim();
+  if (previewLevel < 1 || name.isEmpty) return appTitle;
+  return name;
+}
+
+class DesktopNotificationService {
+  DesktopNotificationService({required this.controller});
+
+  /// Set by the desktop app shell once the service is up, mirroring
+  /// [CallManager.instance] — lets the Settings pane reach the live instance
+  /// without threading it through the widget tree.
+  static DesktopNotificationService? instance;
+
+  static const String _prefsPreviewLevelKey = 'desktop_notif_preview_level_v1';
+
+  /// The SHARED notification-privacy key the controller owns
+  /// (`_prefsNotifPrivacyLevelKey` in app_controller.dart). Read directly so a
+  /// level set on the phone applies here before the controller is even up.
+  static const String _prefsSharedPrivacyLevelKey = 'notif_privacy_level_v1';
+  /// Per-scope switches, SHARED with mobile (`notif_private_chats_v1` /
+  /// `notif_groups_v1`). Muting rooms while keeping direct messages is the
+  /// single most useful notification control on a desktop, where a busy room
+  /// can otherwise make the whole feature unusable — and because the keys are
+  /// shared, the choice follows the profile to the phone.
+  static const String _prefsPrivateChatsKey = 'notif_private_chats_v1';
+  static const String _prefsGroupsKey = 'notif_groups_v1';
+
+  static const String _prefsSoundKey = 'desktop_notif_sound_v1';
+  static const String _prefsDoNotDisturbKey = 'desktop_notif_dnd_v1';
+
+  final AppController controller;
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
+  final StreamController<String> _tapController =
+      StreamController<String>.broadcast();
+
+  StreamSubscription<ChatNotifEvent>? _inAppSub;
+  VoidCallback? _callListener;
+  CallManager? _callManager;
+  SharedPreferences? _prefs;
+
+  bool _ready = false;
+  bool _windowFocused = true;
+  bool _screenShareActive = false;
+  String _lastNotifiedCallId = '';
+
+  // Same 0/1/2 scale as mobile's globalNotificationPrivacyLevel: 0 = hidden
+  // (neither sender nor text), 1 = sender only, 2 = sender + message text.
+  int _previewLevel = 1;
+  bool _privateChatsEnabled = true;
+  bool _groupsEnabled = true;
+  bool _soundEnabled = true;
+  bool _doNotDisturb = false;
+
+  /// Fires the convoId payload of a tapped notification.
+  Stream<String> get onTap => _tapController.stream;
+
+  int get previewLevel => _previewLevel;
+  bool get privateChatsEnabled => _privateChatsEnabled;
+  bool get groupsEnabled => _groupsEnabled;
+
+  Future<void> setPrivateChatsEnabled(bool value) async {
+    _privateChatsEnabled = value;
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
+    await prefs.setBool(_prefsPrivateChatsKey, value);
+  }
+
+  Future<void> setGroupsEnabled(bool value) async {
+    _groupsEnabled = value;
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
+    await prefs.setBool(_prefsGroupsKey, value);
+  }
+  bool get soundEnabled => _soundEnabled;
+  bool get doNotDisturb => _doNotDisturb;
+
+  /// Sets the notification privacy level.
+  ///
+  /// Routed through the CONTROLLER, not written straight to preferences. The
+  /// shared setter derives eleven other flags from this one number — show
+  /// sender and show text, for private chats and for rooms, in both the
+  /// current and legacy key namespaces — and then refreshes the push policy.
+  /// Writing only the desktop key left the phone's notifications on the old
+  /// level, so the same profile behaved differently depending on which device
+  /// the change was made from.
+  ///
+  /// The desktop key is still written, so a desktop that boots before the
+  /// controller is ready starts on the user's real choice rather than the
+  /// default.
+  Future<void> setPreviewLevel(int level) async {
+    _previewLevel = level.clamp(0, 2);
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
+    await prefs.setInt(_prefsPreviewLevelKey, _previewLevel);
+    try {
+      await controller.setGlobalNotificationPrivacyLevel(_previewLevel);
+    } catch (_) {
+      // Local behaviour already changed; a failed shared write must not undo
+      // what the user just asked for on this device.
+    }
+  }
+
+  Future<void> setSoundEnabled(bool value) async {
+    _soundEnabled = value;
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
+    await prefs.setBool(_prefsSoundKey, value);
+  }
+
+  Future<void> setDoNotDisturb(bool value) async {
+    _doNotDisturb = value;
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
+    await prefs.setBool(_prefsDoNotDisturbKey, value);
+  }
+
+  bool get _isDesktopOs =>
+      !kIsWeb &&
+      (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
+
+  Future<void> init({CallManager? callManager}) async {
+    if (!_isDesktopOs) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _prefs = prefs;
+      // Prefer the SHARED key: a level chosen on the phone must govern here
+      // too. The desktop key is only the fallback for a profile that has
+      // never set one.
+      final shared = prefs.getInt(_prefsSharedPrivacyLevelKey);
+      _previewLevel =
+          (shared ?? prefs.getInt(_prefsPreviewLevelKey) ?? 1).clamp(0, 2);
+      _privateChatsEnabled = prefs.getBool(_prefsPrivateChatsKey) ?? true;
+      _groupsEnabled = prefs.getBool(_prefsGroupsKey) ?? true;
+      _soundEnabled = prefs.getBool(_prefsSoundKey) ?? true;
+      _doNotDisturb = prefs.getBool(_prefsDoNotDisturbKey) ?? false;
+    } catch (_) {
+      // fall back to in-memory defaults
+    }
+    try {
+      const macSettings = DarwinInitializationSettings(
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
+      );
+      const linuxSettings = LinuxInitializationSettings(
+        defaultActionName: 'Открыть',
+      );
+      const initSettings = InitializationSettings(
+        macOS: macSettings,
+        linux: linuxSettings,
+      );
+      await _plugin.initialize(
+        initSettings,
+        onDidReceiveNotificationResponse: _onResponse,
+      );
+      // Permission prompt is implicit via DarwinInitializationSettings on
+      // macOS; explicit call below makes the prompt deterministic if the
+      // bundle entitlement hasn't been granted yet.
+      //
+      // CRITICAL: the system "Allow notifications?" dialog can block boot
+      // indefinitely if the user doesn't dismiss it (observed on first run
+      // under sandbox). The permission outcome is non-essential for app
+      // startup — we fire-and-forget so the splash can dismiss and the
+      // shell renders even when the prompt is still on-screen.
+      final macImpl = _plugin
+          .resolvePlatformSpecificImplementation<
+            MacOSFlutterLocalNotificationsPlugin
+          >();
+      if (macImpl != null) {
+        unawaited(
+          macImpl
+              .requestPermissions(alert: true, badge: true, sound: true)
+              .catchError((_) => false),
+        );
+      }
+      _ready = true;
+    } catch (_) {
+      _ready = false;
+      return;
+    }
+
+    _inAppSub?.cancel();
+    _inAppSub = controller.inAppNotifications.listen(_onChatEvent);
+
+    _attachCallManager(callManager);
+  }
+
+  /// Re-bind to a fresh [CallManager] after a controller restart.
+  void attachCallManager(CallManager? cm) {
+    if (!_isDesktopOs) return;
+    _attachCallManager(cm);
+  }
+
+  void _attachCallManager(CallManager? cm) {
+    _detachCallManager();
+    if (cm == null) return;
+    _callManager = cm;
+    _callListener = () => _onCallStateChanged(cm.state.value);
+    cm.state.addListener(_callListener!);
+  }
+
+  void _detachCallManager() {
+    final cm = _callManager;
+    final listener = _callListener;
+    if (cm != null && listener != null) {
+      try {
+        cm.state.removeListener(listener);
+      } catch (_) {}
+    }
+    _callListener = null;
+    _callManager = null;
+  }
+
+  void setWindowFocused(bool focused) {
+    _windowFocused = focused;
+  }
+
+  void setScreenShareActive(bool active) {
+    _screenShareActive = active;
+  }
+
+  AppLocalizations get _l10n =>
+      lookupAppLocalizations(PlatformDispatcher.instance.locale);
+
+  Future<void> _onChatEvent(ChatNotifEvent evt) async {
+    if (!_ready ||
+        _windowFocused ||
+        _screenShareActive ||
+        _doNotDisturb) {
+      return;
+    }
+    // Rooms and direct chats are muted independently. `group:` is the same
+    // convo-id prefix the rest of the app uses to tell them apart.
+    final isRoom = evt.convoId.startsWith('group:');
+    if (isRoom && !_groupsEnabled) return;
+    if (!isRoom && !_privateChatsEnabled) return;
+
+    final id = (evt.convoId.hashCode & 0x7fffffff);
+    // Same 0/1/2 preview scale as mobile: redact sender/text before it ever
+    // reaches the OS notification center when the user asked for privacy.
+    final showSender = _previewLevel >= 1;
+    final showText = _previewLevel >= 2;
+    final title = showSender ? evt.title : _l10n.appTitle;
+    final body = showText ? evt.body : _l10n.notificationBodyNewMessage;
+    try {
+      await _plugin.show(
+        id,
+        title,
+        body,
+        NotificationDetails(
+          macOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBanner: true,
+            presentSound: _soundEnabled,
+          ),
+          linux: const LinuxNotificationDetails(),
+        ),
+        payload: evt.convoId,
+      );
+    } catch (_) {}
+  }
+
+  void _onCallStateChanged(CallState s) {
+    if (!_ready || _windowFocused || _screenShareActive || _doNotDisturb) {
+      return;
+    }
+    if (s.phase != CallPhase.ringingIncoming) {
+      _lastNotifiedCallId = '';
+      return;
+    }
+    if (s.callId.isEmpty || s.callId == _lastNotifiedCallId) return;
+    _lastNotifiedCallId = s.callId;
+    // Без сырого profile_id: неизвестного подписывает заголовок, а в тексте —
+    // название приложения (17.09.2026).
+    final caller = desktopCallNotificationBody(
+      previewLevel: _previewLevel,
+      knownName: desktopCallPeerKnownName(s),
+      appTitle: _l10n.appTitle,
+    );
+    final title = s.isVideo ? 'Видеозвонок' : 'Входящий звонок';
+    final id = (('call:${s.callId}').hashCode & 0x7fffffff);
+    unawaited(
+      _plugin.show(
+        id,
+        title,
+        caller,
+        NotificationDetails(
+          macOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBanner: true,
+            presentSound: _soundEnabled,
+            interruptionLevel: InterruptionLevel.timeSensitive,
+          ),
+          linux: const LinuxNotificationDetails(),
+        ),
+        payload: 'call:${s.callId}',
+      ),
+    );
+  }
+
+  void _onResponse(NotificationResponse response) {
+    final payload = response.payload?.trim() ?? '';
+    if (payload.isEmpty) return;
+    _tapController.add(payload);
+  }
+
+  Future<void> dispose() async {
+    await _inAppSub?.cancel();
+    _inAppSub = null;
+    _detachCallManager();
+    if (!_tapController.isClosed) {
+      await _tapController.close();
+    }
+    _ready = false;
+  }
+}

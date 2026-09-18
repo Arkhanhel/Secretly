@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">Secretly</string>
+    <string name="notification_channel_messages_name">Сообщения</string>
+    <string name="notification_channel_messages_description">Входящие сообщения Secretly</string>
+    <string name="notification_action_reply">Ответить</string>
+    <string name="notification_action_mark_read">Прочитано</string>
+    <string name="notification_message_new">Новое сообщение</string>
+    <string name="notification_channel_media_name">Воспроизведение медиа</string>
+    <string name="notification_channel_media_description">Управление аудио Secretly</string>
+    <string name="notification_media_previous">Назад</string>
+    <string name="notification_media_play">Воспроизвести</string>
+    <string name="notification_media_pause">Пауза</string>
+    <string name="notification_media_next">Далее</string>
+    <string name="notification_media_stop">Остановить</string>
+    <string name="notification_channel_incoming_calls_name">Входящие звонки</string>
+    <string name="notification_channel_incoming_calls_description">Оповещения о входящих звонках Secretly</string>
+    <string name="notification_channel_ongoing_calls_name">Текущие звонки</string>
+    <string name="notification_channel_ongoing_calls_description">Статус активного звонка Secretly в панели уведомлений</string>
+    <string name="notification_channel_active_call_name">Активный звонок</string>
+    <string name="notification_channel_active_call_description">Сохраняет звонки Secretly активными в фоне</string>
+    <string name="notification_action_decline">Отклонить</string>
+    <string name="notification_action_answer">Ответить</string>
+    <string name="notification_action_hang_up">Завершить</string>
+    <string name="call_unknown">Неизвестно</string>
+    <string name="call_incoming_voice">Входящий звонок</string>
+    <string name="call_incoming_video">Входящий видеозвонок</string>
+    <string name="call_ongoing_voice">Голосовой звонок - нажмите для возврата</string>
+    <string name="call_ongoing_video">Видеозвонок - нажмите для возврата</string>
+    <string name="call_active">Активный звонок</string>
+    <string name="call_voice">Голосовой звонок</string>
+    <string name="call_video">Видеозвонок</string>
+</resources>

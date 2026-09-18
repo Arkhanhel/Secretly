@@ -1,0 +1,1010 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
+// Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'dart:async';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+
+import '../../../../app/app_controller.dart';
+import '../../../premium/cosmetics_catalog.dart'
+    show AvatarFrame, coverWidgetFor, kAvatarFrames, kProfileCovers;
+import '../../design/tokens.dart';
+import '../../primitives/avatar.dart';
+import '../../primitives/desktop_tooltip.dart';
+import '../../primitives/context_menu.dart';
+import '../../primitives/desktop_button.dart';
+import '../../primitives/desktop_dialog.dart';
+import '../../primitives/desktop_snackbar.dart';
+import '../../primitives/desktop_text_field.dart';
+import '../../primitives/hover_listener.dart';
+import 'avatar_preview_dialog.dart';
+import 'details_action_row.dart';
+import 'details_header.dart';
+import 'details_headline.dart';
+import 'details_info_section.dart';
+
+/// Мой профиль — В ПРАВОЙ ПАНЕЛИ, а не отдельной страницей.
+///
+/// 🔴 ПОЧЕМУ ПЕРЕЕХАЛО (13.09.2026, прямое указание владельца). Свой профиль
+/// открывался поверх всего окна отдельным «рабочим столом» с боковым списком
+/// разделов — то есть так, как не открывается больше ни один профиль в этом
+/// приложении. Чужой профиль живёт в правой панели, комната живёт в правой
+/// панели, а свой почему-то закрывал собой переписку целиком.
+///
+/// Теперь он ровно там же и выглядит так же: обложка, портрет с рамкой, имя,
+/// строка действий, разделы. Разница только в том, что здесь всё можно
+/// изменить — и каждое изменение открывается ОТДЕЛЬНЫМ МАЛЕНЬКИМ ОКНОМ
+/// посередине, а не уводит человека с экрана переписки.
+class SelfProfileView extends StatefulWidget {
+  const SelfProfileView({
+    super.key,
+    required this.controller,
+    required this.onClose,
+    this.onOpenDeviceSettings,
+    this.onOpenAppearanceSettings,
+  });
+
+  final AppController controller;
+  final VoidCallback onClose;
+
+  /// Открыть настройки на разделе «Сессии и устройства».
+  ///
+  /// 🔴 Строка «Устройства» здесь была и НИЧЕГО не открывала: вместо действия
+  /// в ней было написано «Настройки → Устройства», то есть маршрут словами.
+  /// Нет обработчика — строки нет вовсе: указатель в никуда хуже отсутствия
+  /// указателя.
+  final VoidCallback? onOpenDeviceSettings;
+
+  /// Открыть настройки на разделе «Внешний вид».
+  ///
+  /// 🔴 ССЫЛКА, А НЕ КОПИЯ ОРГАНОВ УПРАВЛЕНИЯ. В макете тема, акцент и рамка
+  /// стоят на одном экране профиля. Рамка здесь и есть — она про ЭТОТ
+  /// профиль и живёт только тут. А тема и акцент — настройки ОКНА, и у них
+  /// уже есть своё место в настройках; поставить те же переключатели ещё и
+  /// сюда значило бы завести один выбор в двух местах, ровно как было с
+  /// подтемами комнаты и с выходом из аккаунта.
+  final VoidCallback? onOpenAppearanceSettings;
+
+  @override
+  State<SelfProfileView> createState() => _SelfProfileViewState();
+}
+
+/// Как украшение выглядит — портретом с рамкой или полоской обложки.
+class _CosmeticPreview extends StatelessWidget {
+  const _CosmeticPreview({
+    required this.id,
+    required this.frame,
+    required this.name,
+    required this.avatarPath,
+  });
+
+  /// `null` — «без рамки» / «без обложки»: показываем голый портрет и пустую
+  /// полоску, чтобы отказ тоже был виден глазом.
+  final String? id;
+  final bool frame;
+  final String name;
+  final String? avatarPath;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    if (frame) {
+      return Avatar(
+        name: name,
+        image: Avatar.fileImage(avatarPath),
+        frameId: id,
+        // В сетке рамок кадров десяток: анимировать их все разом — это та
+        // самая вечная перерисовка, которой в этом окне уже платили
+        // процентами процессора.
+        allowAnimatedFrame: false,
+        size: 54,
+      );
+    }
+    final cover = coverWidgetFor(id);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(DRadii.sm),
+      child: SizedBox(
+        width: double.infinity,
+        height: 54,
+        child: cover ?? ColoredBox(color: c.bg),
+      ),
+    );
+  }
+}
+
+class _SelfProfileViewState extends State<SelfProfileView> {
+  /// Фото, которое здесь показывается. Не `controller.myAvatarPath`: на
+  /// спаренном компьютере своего файла нет — лицо приезжает вместе с
+  /// метаданными профиля, и показать надо именно его.
+  String? _avatarPath;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_reloadAvatar());
+    // 🔴 Открыли свой профиль — забираем СВЕЖЕЕ опубликованное лицо.
+    //
+    // Рамка, обложка, ник и эмодзи-статус живут у каждого устройства своей
+    // копией и догоняют друг друга обходом раз в десять минут. Этого хватает,
+    // чтобы устройства сошлись сами, но мало, когда человек СМОТРИТ на свой
+    // профиль: он ждёт правды сейчас, а не через десять минут.
+    unawaited(widget.controller.refreshMyProfileMetaNow());
+  }
+
+  Future<void> _reloadAvatar() async {
+    final path = await widget.controller.resolvedOwnAvatarPath();
+    if (!mounted) return;
+    setState(() => _avatarPath = path);
+  }
+
+  AppController get _c => widget.controller;
+
+  // ── Мини-окна ──────────────────────────────────────────────────────
+
+  /// Правка одной строки профиля отдельным окном.
+  ///
+  /// Поле ввода прямо в панели шириной 330 точек читается плохо, а «О себе»
+  /// там и вовсе не помещается. Окно посередине даёт тексту место и ясно
+  /// отделяет правку от просмотра.
+  Future<void> _editLine({
+    required String title,
+    required String initial,
+    required int maxLength,
+    required Future<void> Function(String value) save,
+    bool multiline = false,
+  }) async {
+    final ctrl = TextEditingController(text: initial);
+    try {
+      final saved = await DesktopDialog.show<String>(
+        context,
+        title: title,
+        size: DDialogSize.small,
+        body: DesktopTextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLength: maxLength,
+          minLines: multiline ? 3 : 1,
+          maxLines: multiline ? 5 : 1,
+          onSubmitted: multiline
+              ? null
+              : (v) => Navigator.of(context).maybePop(v),
+        ),
+        primary: DDialogAction(
+          label: 'Сохранить',
+          onPressed: () => Navigator.of(context).maybePop(ctrl.text),
+        ),
+        secondary: DDialogAction(
+          label: 'Отмена',
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      );
+      if (saved == null || !mounted) return;
+      await save(saved.trim());
+      if (mounted) setState(() {});
+    } finally {
+      ctrl.dispose();
+    }
+  }
+
+  /// Emoji-status picker. A short curated set beats a full emoji keyboard
+  /// here: a status is a mood marker, not free-form input, and the row must
+  /// also offer a way to REMOVE it — otherwise a status set once could never
+  /// be cleared.
+  Future<void> _pickEmojiStatus() async {
+    const options = <String>[
+      '😀', '😎', '🥳', '🤝', '💼', '📚', '🎧', '🎮', //
+      '✈️', '🏖️', '🌙', '☕', '🔥', '💡', '❤️', '🫡',
+    ];
+    final current = _c.myEmojiStatus ?? '';
+    final picked = await DesktopDialog.show<String>(
+      context,
+      title: 'Эмодзи-статус',
+      size: DDialogSize.small,
+      body: Wrap(
+        spacing: DSpace.s,
+        runSpacing: DSpace.s,
+        children: [
+          for (final e in options)
+            HoverListener(
+              onTap: () => Navigator.of(context).maybePop(e),
+              builder: (ctx, hovered, pressed) => Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: e == current
+                      ? DColors.of(ctx).accentPrimary.withValues(alpha: 0.20)
+                      : (hovered ? DColors.of(ctx).hover : Colors.transparent),
+                  borderRadius: BorderRadius.circular(DRadii.md),
+                ),
+                child: Text(e, style: const TextStyle(fontSize: 22)),
+              ),
+            ),
+        ],
+      ),
+      primary: current.isEmpty
+          ? null
+          : DDialogAction(
+              label: 'Убрать статус',
+              kind: DButtonKind.tonal,
+              onPressed: () => Navigator.of(context).maybePop(''),
+            ),
+      secondary: DDialogAction(
+        label: 'Отмена',
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    await _c.setMyEmojiStatus(picked.isEmpty ? null : picked);
+    if (mounted) setState(() {});
+  }
+
+  /// Применить рамку из полосы в панели — тем же путём, что и выбор в сетке.
+  ///
+  /// Отказ говорится словами: рамка могла отвалиться вместе с подпиской, и
+  /// молчаливое «ничего не произошло» человек прочитает как поломку.
+  Future<void> _applyFrame(String? id) async {
+    try {
+      await _c.setMyFrame(id);
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      DesktopSnackbar.show(
+        context,
+        message: 'Не удалось применить: $e',
+        kind: DSnackKind.error,
+      );
+    }
+  }
+
+  /// Frame / cover picker. Both are premium cosmetics; the controller's
+  /// getters already return null when the tier does not allow them, so a
+  /// lapsed subscription simply stops rendering the choice rather than
+  /// losing it.
+  Future<void> _pickCosmetic({required bool frame}) async {
+    final currentId = frame ? _c.myFrameId : _c.myCoverId;
+    final name = _c.myNickname.trim();
+    final display = name.isEmpty ? 'Secretly' : name;
+    final avatarPath = (_avatarPath ?? '').trim();
+    final hasAvatar = avatarPath.isNotEmpty;
+    final ids = <String?>[
+      null, // «Без рамки» / «Без обложки» — removal must always be reachable
+      ...(frame
+          ? kAvatarFrames.map((f) => f.id)
+          : kProfileCovers.map((c) => c.id)),
+    ];
+    final picked = await DesktopDialog.show<String>(
+      context,
+      title: frame ? 'Рамка аватара' : 'Обложка профиля',
+      size: DDialogSize.medium,
+      body: SizedBox(
+        height: 320,
+        child: GridView.builder(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            mainAxisSpacing: DSpace.s,
+            crossAxisSpacing: DSpace.s,
+            // Под превью нужна высота: квадратная плитка держит и рамку на
+            // портрете, и полоску обложки.
+            childAspectRatio: 0.95,
+          ),
+          itemCount: ids.length,
+          itemBuilder: (ctx, i) {
+            final id = ids[i];
+            final selected = id == currentId;
+            final label = id == null
+                ? (frame ? 'Без рамки' : 'Без обложки')
+                : (frame
+                      ? kAvatarFrames.firstWhere((f) => f.id == id).name(true)
+                      : kProfileCovers
+                            .firstWhere((c) => c.id == id)
+                            .name(true));
+            return HoverListener(
+              // Sentinel: DesktopDialog.show returns null when DISMISSED, so
+              // "no frame" cannot also be null or the two would be identical.
+              onTap: () => Navigator.of(ctx).maybePop(id ?? '__none'),
+              builder: (c2, hovered, pressed) => Container(
+                padding: const EdgeInsets.all(DSpace.xs),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? DColors.of(ctx).accentPrimary.withValues(alpha: 0.18)
+                      : (hovered
+                            ? DColors.of(ctx).hover
+                            : DColors.of(ctx).elevated),
+                  borderRadius: BorderRadius.circular(DRadii.md),
+                  border: Border.all(
+                    color: selected
+                        ? DColors.of(ctx).accentPrimary
+                        : DColors.of(ctx).borderSubtle,
+                  ),
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // 🔴 УКРАШЕНИЕ ВЫБИРАЮТ ГЛАЗАМИ, А НЕ ПО СПИСКУ ИМЁН.
+                    //
+                    // Здесь стоял один текст: «Аврора», «Космос», «Пульс» —
+                    // и человек, который за эти рамки платит, узнавал, как
+                    // они выглядят, только применив каждую по очереди. Показ
+                    // ничего не стоит: и рамка, и обложка умеют рисовать себя
+                    // сами (`builder`), тем же кодом, что и в профиле.
+                    _CosmeticPreview(
+                      id: id,
+                      frame: frame,
+                      name: display,
+                      avatarPath: hasAvatar ? avatarPath : null,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: DType.tiny.copyWith(
+                        color: DColors.of(ctx).textPrimary,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+      secondary: DDialogAction(
+        label: 'Отмена',
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final value = picked == '__none' ? null : picked;
+    try {
+      if (frame) {
+        await _c.setMyFrame(value);
+      } else {
+        await _c.setMyCover(value);
+      }
+      if (mounted) setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      DesktopSnackbar.show(
+        context,
+        message: 'Не удалось применить: $e',
+        kind: DSnackKind.error,
+      );
+    }
+  }
+
+  /// Picks a new avatar from disk.
+  ///
+  /// Bytes go through the shared setter, which downscales and re-encodes on a
+  /// worker, so a 12-megapixel photo does not become the profile picture
+  /// verbatim.
+  Future<void> _pickAvatar() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final bytes = result.files.first.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        if (!mounted) return;
+        DesktopSnackbar.show(
+          context,
+          message: 'Не удалось прочитать файл',
+          kind: DSnackKind.error,
+        );
+        return;
+      }
+      await _c.setMyAvatarFromImageBytes(bytes);
+      if (!mounted) return;
+      await _reloadAvatar();
+      if (!mounted) return;
+      DesktopSnackbar.show(
+        context,
+        message: 'Фото профиля обновлено',
+        kind: DSnackKind.success,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      DesktopSnackbar.show(
+        context,
+        message: 'Не удалось обновить фото: $e',
+        kind: DSnackKind.error,
+      );
+    }
+  }
+
+  Future<void> _removeAvatar() async {
+    try {
+      await _c.removeMyAvatar();
+      if (!mounted) return;
+      await _reloadAvatar();
+    } catch (e) {
+      if (!mounted) return;
+      DesktopSnackbar.show(
+        context,
+        message: 'Не удалось убрать фото: $e',
+        kind: DSnackKind.error,
+      );
+    }
+  }
+
+  // ── Разметка ───────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    final name = _c.myNickname.trim();
+    final display = name.isEmpty ? 'Secretly' : name;
+    final bio = _c.myBio.trim();
+    final id = _c.profileId;
+    final hasLocalAvatar = (_c.myAvatarPath ?? '').trim().isNotEmpty;
+    final colors = DColors.of(context);
+    final avatarPath = (_avatarPath ?? '').trim();
+    final hasAvatar = avatarPath.isNotEmpty;
+
+    return Column(
+      children: [
+        DetailsHeader(
+          title: 'Мой профиль',
+          // Идентификатор переехал под имя (макет): здесь он был бы вторым
+          // разом на одном экране, а повтор читается как две разные строки.
+          subtitle: null,
+          onClose: widget.onClose,
+          menuSections: const <List<CtxMenuItem>>[],
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DetailsHeadline(
+                  name: display,
+                  // ◆ ПОД ИМЕНЕМ — ИДЕНТИФИКАТОР, а не присутствие (макет).
+                  //
+                  // Своё присутствие и так очевидно: человек сидит перед этим
+                  // окном. А свой Secretly ID — единственное, чем он делится,
+                  // чтобы с ним связались, и искать его в «Информации» ниже
+                  // приходилось каждый раз.
+                  idLine: _c.profileId,
+                  // ◆ «Редактировать» рядом с именем. Правка шла нажатием по
+                  // строкам «Имя» и «О себе» ниже, и узнать об этом было
+                  // нельзя: строки выглядели фактами, а не полями.
+                  trailing: DesktopButton(
+                    label: 'Редактировать',
+                    icon: FluentIcons.edit_24_regular,
+                    kind: DButtonKind.tonal,
+                    onPressed: () => unawaited(
+                      _editLine(
+                        title: 'Имя',
+                        initial: name,
+                        maxLength: 40,
+                        save: (v) => _c.setMyNickname(v),
+                      ),
+                    ),
+                  ),
+                  cover: coverWidgetFor(_c.myCoverId),
+                  // 🔴 «Сменить обложку» — кнопка ПОВЕРХ самой обложки, как в
+                  // макете. Раньше обложку меняли только из ряда действий
+                  // ниже, и связи между кнопкой и картинкой не было никакой.
+                  //
+                  // Когда обложки нет, кнопки тоже нет: «сменить» на пустом
+                  // месте нечего, там работает «Обложка» в ряду действий.
+                  onChangeCover: _c.myCoverId == null
+                      ? null
+                      : () => unawaited(_pickCosmetic(frame: false)),
+                  emojiStatus: _c.myEmojiStatus,
+                  premiumBadge: _c.myPremiumBadge,
+                  frameId: _c.myFrameId,
+                  // 🔴 БЕЙДЖ КАМЕРЫ НА ПОРТРЕТЕ — очевидный вход в смену фото.
+                  //
+                  // Нажатие по портрету открывало ТОЛЬКО предпросмотр, а
+                  // поменять фото можно было кнопкой «Фото» ниже и строкой
+                  // «Заменить фото» ещё ниже. Во всех мессенджерах камера в
+                  // углу своего портрета означает ровно одно, и человек
+                  // сначала жмёт туда. Раньше он попадал в просмотр.
+                  //
+                  // Предпросмотр никуда не делся — он на самом портрете; в
+                  // углу камера. Два действия, два места.
+                  avatar: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      HoverListener(
+                        onTap: () => showAvatarPreviewDialog(
+                          context,
+                          name: display,
+                          imagePath: hasAvatar ? avatarPath : null,
+                        ),
+                        cursor: SystemMouseCursors.click,
+                        builder: (ctx, hovered, pressed) => AnimatedScale(
+                          scale: pressed ? 0.97 : 1.0,
+                          duration: DMotion.fast,
+                          child: Avatar(
+                            name: display,
+                            image: hasAvatar
+                                ? Avatar.fileImage(avatarPath)
+                                : null,
+                            frameId: _c.myFrameId,
+                            allowAnimatedFrame: true,
+                            size: 88,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: -2,
+                        bottom: -2,
+                        child: DesktopTooltip(
+                          message: 'Сменить фото',
+                          child: HoverListener(
+                            onTap: () => unawaited(_pickAvatar()),
+                            cursor: SystemMouseCursors.click,
+                            builder: (ctx, hovered, pressed) =>
+                                AnimatedContainer(
+                                  duration: DMotion.fast,
+                                  width: 26,
+                                  height: 26,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: hovered || pressed
+                                        ? colors.accentPrimary
+                                        : colors.elevated,
+                                    shape: BoxShape.circle,
+                                    // Вырез цветом панели: без него кружок
+                                    // слипается с краем портрета.
+                                    border: Border.all(
+                                      color: colors.chatList,
+                                      width: 3,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    FluentIcons.camera_24_filled,
+                                    size: 13,
+                                    color: hovered || pressed
+                                        ? Colors.white
+                                        : colors.textSecondary,
+                                  ),
+                                ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                DetailsActionRow(
+                  items: [
+                    DetailsActionItem(
+                      icon: FluentIcons.image_24_regular,
+                      label: 'Фото',
+                      onPressed: () => unawaited(_pickAvatar()),
+                    ),
+                    DetailsActionItem(
+                      icon: FluentIcons.circle_24_regular,
+                      label: 'Рамка',
+                      onPressed: () => unawaited(_pickCosmetic(frame: true)),
+                      active: _c.myFrameId != null,
+                    ),
+                    DetailsActionItem(
+                      icon: FluentIcons.panel_top_gallery_24_regular,
+                      label: 'Обложка',
+                      onPressed: () => unawaited(_pickCosmetic(frame: false)),
+                      active: _c.myCoverId != null,
+                    ),
+                    DetailsActionItem(
+                      icon: FluentIcons.emoji_24_regular,
+                      label: 'Статус',
+                      onPressed: () => unawaited(_pickEmojiStatus()),
+                      active: (_c.myEmojiStatus ?? '').isNotEmpty,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: DSpace.s),
+                // 🔴 РАМКА ВЫБИРАЕТСЯ ПРЯМО ЗДЕСЬ, А НЕ В ДИАЛОГЕ.
+                //
+                // В макете рамки лежат в самом профиле кружками с настоящими
+                // градиентами: человек видит, что покупает, не нажимая
+                // ничего. Кнопка «Рамка» осталась — за ней полная сетка со
+                // всеми вариантами; полоса показывает первые и выбранную.
+                _FrameStrip(
+                  frames: kAvatarFrames,
+                  currentId: _c.myFrameId,
+                  unlocked: _c.cosmeticsUnlocked,
+                  name: display,
+                  avatarPath: (_avatarPath ?? '').trim().isEmpty
+                      ? null
+                      : _avatarPath,
+                  onPick: (id) => unawaited(_applyFrame(id)),
+                  onMore: () => unawaited(_pickCosmetic(frame: true)),
+                ),
+                // Заголовка у раздела нет: строка сама называет и что за ней,
+                // и куда она ведёт — тем же порядком, что строка «Устройства»
+                // ниже (сверху описание, снизу название раздела настроек).
+                if (widget.onOpenAppearanceSettings != null)
+                  DetailsInfoSection(
+                    children: [
+                      DetailsInfoRow(
+                        icon: FluentIcons.color_24_regular,
+                        label: 'Внешний вид',
+                        value: 'Тема, акцент и обои чата',
+                        onTap: widget.onOpenAppearanceSettings,
+                      ),
+                    ],
+                  ),
+                DetailsInfoSection(
+                  title: 'Профиль',
+                  children: [
+                    DetailsInfoRow(
+                      icon: FluentIcons.person_24_regular,
+                      label: 'Имя',
+                      value: display,
+                      onTap: () => unawaited(
+                        _editLine(
+                          title: 'Имя',
+                          initial: name,
+                          maxLength: 40,
+                          save: (v) => _c.setMyNickname(v),
+                        ),
+                      ),
+                    ),
+                    DetailsInfoRow(
+                      icon: FluentIcons.text_description_24_regular,
+                      label: 'О себе',
+                      value: bio.isEmpty ? 'Не заполнено' : bio,
+                      multiline: true,
+                      onTap: () => unawaited(
+                        _editLine(
+                          title: 'О себе',
+                          initial: bio,
+                          maxLength: 140,
+                          multiline: true,
+                          save: (v) => _c.setMyBio(v),
+                        ),
+                      ),
+                    ),
+                    DetailsInfoRow(
+                      icon: FluentIcons.key_24_regular,
+                      label: 'Secretly ID',
+                      value: id,
+                      copyValue: id,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: DSpace.s),
+                DetailsInfoSection(
+                  title: 'Фото профиля',
+                  children: [
+                    // Порядок как у соседних строк: СВЕРХУ действие, снизу
+                    // пояснение. «Проверить контакт» в карточке собеседника
+                    // устроен так же.
+                    DetailsInfoRow(
+                      icon: FluentIcons.image_24_regular,
+                      value: hasAvatar ? 'Заменить фото' : 'Выбрать фото',
+                      // 🔴 «Убрать» убирает ФАЙЛ, выбранный здесь. Фотография,
+                      // приехавшая с телефона, файлом на этом компьютере не
+                      // является, и сервер удаление не принимает: пустое
+                      // значение он читает как «мнения нет». Поэтому строки
+                      // там нет, а вместо неё — прямой ответ, где это
+                      // делается.
+                      label: hasLocalAvatar
+                          ? 'Выбрано на этом компьютере'
+                          : (hasAvatar
+                                ? 'Синхронизировано с телефоном'
+                                : 'Не выбрано'),
+                      onTap: () => unawaited(_pickAvatar()),
+                    ),
+                    if (hasLocalAvatar)
+                      DetailsInfoRow(
+                        icon: FluentIcons.delete_24_regular,
+                        value: 'Убрать фото',
+                        label: 'Останутся инициалы',
+                        onTap: () => unawaited(_removeAvatar()),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: DSpace.s),
+                DetailsInfoSection(
+                  title: 'Аккаунт',
+                  children: [
+                    DetailsInfoRow(
+                      icon: FluentIcons.phone_24_regular,
+                      label: 'Восстановление',
+                      value:
+                          'Этот компьютер подключён к телефону и своей фразы '
+                          'восстановления не хранит: аккаунт возвращает копия '
+                          'и ключ восстановления.',
+                      multiline: true,
+                    ),
+                    if (widget.onOpenDeviceSettings != null)
+                      DetailsInfoRow(
+                        icon: FluentIcons.qr_code_24_regular,
+                        label: 'Устройства',
+                        value: 'Подключённые компьютеры и телефоны',
+                        onTap: widget.onOpenDeviceSettings,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: DSpace.l),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Полоса рамок аватара прямо в профиле.
+///
+/// 🔴 УКРАШЕНИЕ ВЫБИРАЮТ ГЛАЗАМИ. В макете рамки лежат в самом профиле
+/// кружками с настоящими градиентами и подписями — человек видит, что
+/// покупает, ещё ничего не нажав. В коде до этого рамка выбиралась только в
+/// модальном окне, то есть о её существовании надо было сперва догадаться.
+///
+/// Полоса показывает НЕ ВСЕ рамки: их два десятка, и вертикальная панель
+/// шириной 330 точек столько не держит. Здесь первые несколько плюс кнопка
+/// «Ещё» в ту же полную сетку — она никуда не делась.
+///
+/// Заблокированные варианты ПОКАЗЫВАЮТСЯ с замком и подписью «PRO», а не
+/// прячутся: спрятанное платное содержимое человек считает отсутствующим, а
+/// увиденное — выбором. Нажатие по такому кружку ничего не применяет.
+class _FrameStrip extends StatelessWidget {
+  const _FrameStrip({
+    required this.frames,
+    required this.currentId,
+    required this.unlocked,
+    required this.name,
+    required this.avatarPath,
+    required this.onPick,
+    required this.onMore,
+  });
+
+  final List<AvatarFrame> frames;
+  final String? currentId;
+  final bool unlocked;
+  final String name;
+  final String? avatarPath;
+  final void Function(String? id) onPick;
+  final VoidCallback onMore;
+
+  /// Сколько рамок показывать до кнопки «Ещё».
+  ///
+  /// Три плюс «без рамки» плюс «Ещё» — пять кружков, и они помещаются в ряд
+  /// на панели шириной 360. На узкой панели [Wrap] переносит последний вниз,
+  /// а не обрезает его краем: обрезанный кружок читается как поломка, а не
+  /// как «прокрути вбок».
+  static const int _kVisible = 3;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    // Выбранная рамка всегда в полосе, даже если она не из первых: иначе
+    // человек не увидел бы, что у него стоит.
+    final shown = <AvatarFrame>[];
+    final current = currentId == null
+        ? null
+        : frames.where((f) => f.id == currentId).firstOrNull;
+    if (current != null) shown.add(current);
+    for (final f in frames) {
+      if (shown.length >= _kVisible) break;
+      if (current != null && f.id == current.id) continue;
+      shown.add(f);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        DSpace.m,
+        DSpace.s,
+        DSpace.m,
+        DSpace.s,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              DSpace.s,
+              0,
+              DSpace.s,
+              DSpace.xs,
+            ),
+            child: Text(
+              'РАМКА АВАТАРА',
+              style: DType.meta.copyWith(color: c.textDisabled),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: DSpace.xs),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: DSpace.s,
+              children: [
+                _FrameTile(
+                  label: 'Без рамки',
+                  selected: currentId == null,
+                  locked: false,
+                  name: name,
+                  avatarPath: avatarPath,
+                  frameId: null,
+                  onTap: () => onPick(null),
+                ),
+                for (final f in shown)
+                  _FrameTile(
+                    label: f.nameRu,
+                    selected: f.id == currentId,
+                    // Ни одной бесплатной рамки в каталоге нет
+                    // (`isCosmeticFree` для avatarFrame всегда false), поэтому
+                    // замок вешает один общий признак доступа.
+                    locked: !unlocked,
+                    name: name,
+                    avatarPath: avatarPath,
+                    frameId: f.id,
+                    onTap: unlocked ? () => onPick(f.id) : null,
+                  ),
+                _MoreFramesTile(onTap: onMore),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FrameTile extends StatelessWidget {
+  const _FrameTile({
+    required this.label,
+    required this.selected,
+    required this.locked,
+    required this.name,
+    required this.avatarPath,
+    required this.frameId,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final bool locked;
+  final String name;
+  final String? avatarPath;
+  final String? frameId;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    return HoverListener(
+      onTap: onTap,
+      cursor: onTap == null
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click,
+      builder: (ctx, hovered, pressed) => SizedBox(
+        width: 58,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                // Обводка выбранной идёт ВОКРУГ кружка, а не по нему: рамка
+                // сама рисует кольцо, и вторая линия поверх неё съела бы
+                // ровно то, что человек и выбирает.
+                Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: selected
+                          ? c.accentPrimary
+                          : (hovered ? c.borderSubtle : Colors.transparent),
+                      width: selected ? 2 : 1,
+                    ),
+                  ),
+                ),
+                Opacity(
+                  opacity: locked ? 0.55 : 1,
+                  child: Avatar(
+                    name: name,
+                    image: Avatar.fileImage(avatarPath),
+                    frameId: frameId,
+                    // Полоса стоит в открытой панели постоянно: два десятка
+                    // живых колец здесь — это вечная перерисовка.
+                    allowAnimatedFrame: false,
+                    size: 46,
+                  ),
+                ),
+                if (locked)
+                  Positioned(
+                    right: 2,
+                    bottom: 2,
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: c.elevated,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: c.borderSubtle),
+                      ),
+                      child: Icon(
+                        FluentIcons.lock_closed_12_filled,
+                        size: 9,
+                        color: c.textSecondary,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              locked ? 'PRO' : label,
+              maxLines: 1,
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+              style: DType.tiny.copyWith(
+                fontSize: 10.5,
+                color: selected ? c.textPrimary : c.textSecondary,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// «Ещё» — вход в полную сетку рамок. Круг того же размера, чтобы полоса не
+/// сбивалась с ритма.
+class _MoreFramesTile extends StatelessWidget {
+  const _MoreFramesTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    return SizedBox(
+      width: 62,
+      child: HoverListener(
+        onTap: onTap,
+        cursor: SystemMouseCursors.click,
+        builder: (ctx, hovered, pressed) => Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 46,
+              height: 46,
+              margin: const EdgeInsets.only(top: 6),
+              decoration: BoxDecoration(
+                color: hovered ? c.hover : c.elevated,
+                shape: BoxShape.circle,
+                border: Border.all(color: c.borderSubtle),
+              ),
+              child: Icon(
+                FluentIcons.more_horizontal_24_regular,
+                size: 18,
+                color: c.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Ещё',
+              style: DType.tiny.copyWith(
+                fontSize: 10.5,
+                color: c.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

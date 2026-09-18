@@ -1,0 +1,19 @@
+DiceBear avatars — license notes
+=================================
+
+These avatar PNGs were generated once via the DiceBear API (https://dicebear.com)
+and are bundled as static assets. The DiceBear core library is MIT licensed; each
+avatar STYLE carries its own license (https://www.dicebear.com/licenses/).
+
+Styles bundled here and their licenses (all permit commercial use):
+
+  lorelei      — CC0 1.0 (public domain, no attribution)        by Lisa Wischofsky
+  notionists   — CC0 1.0 (public domain, no attribution)        by Zoish
+  open-peeps   — CC0 1.0 (public domain, no attribution)        by Pablo Stanley
+  pixel-art    — CC0 1.0 (public domain, no attribution)        by DiceBear
+  bottts       — Free for personal and commercial use           by Pablo Stanley
+  avataaars    — Free for personal and commercial use           by Pablo Stanley
+
+No attribution is required for the CC0 styles. The two "free for commercial use"
+styles (bottts, avataaars) are likewise cleared for use in this app. Generated
+content is the style's license — bundling pre-generated avatars is permitted.

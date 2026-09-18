@@ -1,0 +1,33 @@
+group 'com.skynodigital.whisper_cpp_flutter'
+version '1.0'
+
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies { classpath 'com.android.tools.build:gradle:8.7.3' }
+}
+allprojects { repositories { google(); mavenCentral() } }
+apply plugin: 'com.android.library'
+// Secretly vendoring patch (05.09.2026): upstream 0.4.1 never applied the Kotlin
+// plugin, so WhisperCppFlutterPlugin.kt was not compiled and the app's generated
+// plugin registrant failed with "cannot find symbol". Version comes from the
+// app's settings.gradle (org.jetbrains.kotlin.android, apply false).
+apply plugin: 'kotlin-android'
+
+android {
+    namespace 'com.skynodigital.whisper_cpp_flutter'
+    compileSdk 35
+    defaultConfig {
+        minSdk 24
+        externalNativeBuild { cmake { cppFlags '-std=c++17 -O3 -fvisibility=hidden' } }
+        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
+    }
+    externalNativeBuild { cmake { path '../CMakeLists.txt'; version '3.22.1' } }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+}

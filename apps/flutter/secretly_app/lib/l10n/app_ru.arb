@@ -1,0 +1,1003 @@
+{
+  "appTitle": "Secretly",
+  "starting": "Запуск…",
+  "encrypting": "Шифрование…",
+  "errorPrefix": "Ошибка: {error}",
+  "@errorPrefix": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "settingsTitle": "Настройки",
+  "notificationsSection": "Уведомления",
+  "languageSection": "Язык",
+  "comingSoon": "Скоро будет",
+  "idsTitle": "Идентификаторы",
+  "profileIdLabel": "ID профиля",
+  "deviceIdLabel": "ID устройства",
+  "profileIdShort": "Профиль",
+  "deviceIdShort": "Устройство",
+  "copy": "Копировать",
+  "copied": "Скопировано",
+  "copyBoth": "Копировать оба",
+  "openMyId": "Открыть мой ID",
+  "close": "Закрыть",
+  "tabChats": "Чаты",
+  "tabGroups": "Комнаты",
+  "tabContacts": "Контакты",
+  "tabProfile": "Профиль",
+  "accountSection": "Аккаунт",
+  "chatsSection": "Чаты",
+  "privacySection": "Приватность",
+  "devicesSection": "Устройства",
+  "systemSection": "Система",
+  "languageSystemDefault": "Системный язык",
+  "languageSystemCurrent": "Системный ({language})",
+  "@languageSystemCurrent": {
+    "placeholders": {
+      "language": {}
+    }
+  },
+  "languageChooseAppLanguage": "Выберите язык приложения",
+  "languageAvailableWave1": "Доступно: английский, русский, украинский, испанский, португальский (Бразилия), французский и немецкий. Можно также следовать системному языку.",
+  "languageMessageTranslation": "Перевод сообщений",
+  "languageShowTranslateButton": "Показывать кнопку «Перевести»",
+  "languageTranslateWholeChats": "Переводить чаты целиком",
+  "favoritesTitle": "Избранное",
+  "favoritesSubtitle": "Ваши личные заметки",
+  "favoritesEmptyTitle": "В избранном пока пусто",
+  "favoritesEmptySubtitle": "Отправляйте сюда сообщения, файлы и заметки, чтобы хранить их приватно на своих устройствах.",
+  "favoritesPersonalNotebookLabel": "Личные заметки",
+  "more": "Ещё",
+  "stickersRecent": "Недавние стикеры",
+  "searchStickers": "Поиск стикеров",
+  "noStickersFound": "Стикеры не найдены",
+  "noRecentStickers": "Здесь появятся ваши последние стикеры",
+  "cancelSelection": "Отменить выбор",
+  "chatsTitle": "Чаты",
+  "newChat": "Новый чат",
+  "openContactsToStartChat": "Откройте «Контакты», чтобы начать чат",
+  "noChatsYet": "Чатов пока нет",
+  "openDemoChat": "Открыть демо-чат",
+  "archive": "Архив",
+  "unarchive": "Из архива",
+  "pin": "Закрепить",
+  "unpin": "Открепить",
+  "clearHistory": "Очистить историю",
+  "archiveHeader": "Архив ({count})",
+  "@archiveHeader": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "deleteChatsConfirmTitle": "Удалить {count} чат(ов)?",
+  "@deleteChatsConfirmTitle": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "deleteChatsConfirmBody": "Чаты будут удалены только с этого устройства.",
+  "clearHistoryConfirmTitle": "Очистить историю для {count} чат(ов)?",
+  "@clearHistoryConfirmTitle": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "clearHistoryConfirmBody": "Сообщения будут удалены только с этого устройства.",
+  "contactsTitle": "Контакты",
+  "contactsTab": "Контакты",
+  "requestsTab": "Запросы",
+  "addContact": "Добавить контакт",
+  "deleteContact": "Удалить контакт",
+  "noContactsYet": "Контактов пока нет",
+  "noRequests": "Запросов нет",
+  "secretlyIdLabel": "ID в Secretly",
+  "secretlyIdHint": "XXXX-XXXX-...-CHECK",
+  "nameOptionalLabel": "Имя (необязательно)",
+  "scanContactQrTitle": "Сканировать QR контакта",
+  "qrMissingSecretlyId": "В QR нет ID в Secretly",
+  "differentServerTitle": "Другой сервер",
+  "differentServerBody": "Этот QR относится к другому серверу.\n\nСервер в QR: {qrServer}\nЭто приложение: {appServer}\n\nУстановите одинаковый APK/сервер на оба телефона.",
+  "@differentServerBody": {
+    "placeholders": {
+      "qrServer": {},
+      "appServer": {}
+    }
+  },
+  "contactActionProfileNotFound": "Такого ID в Secretly нет на этом сервере.",
+  "contactActionTransportBlocked": "Это действие недоступно, потому что приложение привязано к другому серверу.",
+  "contactActionServiceUnavailable": "Сервер сейчас недоступен. Попробуйте ещё раз чуть позже.",
+  "contactActionCallsDisabled": "Звонки отключены в настройках приватности.",
+  "contactActionCallsDisabledForContact": "Звонки отключены для этого контакта.",
+  "callServiceUnavailable": "Сервис звонков сейчас недоступен.",
+  "callAlreadyInProgress": "Сейчас уже идёт другой звонок.",
+  "callIceUnavailable": "Защищённое соединение для звонка сейчас недоступно. Попробуйте ещё раз чуть позже.",
+  "callPermissionDenied": "Нет доступа к микрофону или камере. Разрешите доступ и попробуйте ещё раз.",
+  "callNegotiationFailed": "Не удалось установить защищённый звонок. Попробуйте ещё раз.",
+  "callConnectionInterrupted": "Соединение звонка было прервано. Попробуйте ещё раз.",
+  "callActionGeneric": "Не удалось начать звонок. Попробуйте ещё раз.",
+  "callEncryptedBadge": "Сквозное шифрование",
+  "incomingVideoCall": "Входящий видеозвонок",
+  "incomingVoiceCall": "Входящий аудиозвонок",
+  "callDecline": "Отклонить",
+  "callConnectionUnstable": "Связь нестабильна",
+  "callNetworkVeryWeak": "Очень слабый сигнал сети",
+  "callNetworkWeak": "Слабый сигнал сети",
+  "callEnded": "Звонок завершён",
+  "callReplacedByNewerAttempt": "Вызов заменён более новой попыткой",
+  "callDeclined": "Вызов отклонён",
+  "callYouDeclined": "Вы отклонили",
+  "callNoAnswer": "Нет ответа",
+  "callConnectionError": "Ошибка соединения",
+  "callVideoUnavailable": "Видео недоступно",
+  "callWaitingForRemoteVideo": "Ожидание видео собеседника...",
+  "callAttachingRemoteVideo": "Подключаем видео...",
+  "callStartingRemoteVideo": "Запускаем видео...",
+  "callRemoteVideoNotArriving": "Видео собеседника не поступает",
+  "callRemoteVideoBindFailed": "Не удалось привязать видеопоток",
+  "callRemoteVideoNoFrames": "Видео подключено, но кадры не идут",
+  "callMinimize": "Свернуть",
+  "callStatusCalling": "Вызов...",
+  "callStatusIncoming": "Входящий...",
+  "callStatusConnecting": "Подключение...",
+  "callStatusReconnecting": "Переподключение...",
+  "callStatusEnded": "Завершён",
+  "callVideoCall": "Видеозвонок",
+  "callControlMute": "Микрофон",
+  "callControlSpeaker": "Динамик",
+  "callControlCamera": "Камера",
+  "callControlFlip": "Развернуть",
+  "callControlStop": "Стоп",
+  "callControlShare": "Экран",
+  "callControlEnd": "Завершить",
+  "contactActionGeneric": "Не удалось выполнить действие. Попробуйте ещё раз.",
+  "notificationTitleRoom": "Комната",
+  "notificationTitleRequest": "Запрос",
+  "notificationTitleChat": "Чат",
+  "notificationBodyNewMessage": "Новое сообщение",
+  "contactLookupUnavailable": "Поиск сейчас недоступен. Попробуйте ещё раз чуть позже.",
+  "addContactFailed": "Не удалось добавить контакт: {error}",
+  "@addContactFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "deleteContactsConfirmTitle": "Удалить {count} контакт(ов)?",
+  "@deleteContactsConfirmTitle": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "deleteContactsConfirmBody": "Чаты не удаляются.",
+  "privacyTitle": "Приватность",
+  "blockedUsersSubtitle": "Заблокированные не смогут доставлять вам сообщения (на уровне сервера).",
+  "noBlockedUsers": "Список пуст",
+  "unblockFailed": "Не удалось разблокировать: {error}",
+  "@unblockFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "diagIdentity": "Идентичность",
+  "diagEndpoints": "Эндпоинты",
+  "diagServerBinding": "Привязка к серверу",
+  "diagMismatch": "Несовпадение: профиль относится к другому серверу. Используйте Настройки → Сбросить профиль.",
+  "diagStatus": "Статус",
+  "diagTimestamps": "Временные метки",
+  "diagTips": "Подсказки",
+  "diagTipsBody": "Если отправка не работает и пишет \"profile not found\":\n1) Проверьте, что на обоих телефонах один и тот же APK/сервер\n2) Пере-добавьте контакт, отсканировав QR\n3) Если менялись адреса, используйте Сброс профиля\n",
+  "secretlyUser": "Пользователь Secretly",
+  "onlineStatus": "в сети",
+  "edit": "Редактировать",
+  "removePhoto": "Удалить фото",
+  "profileSectionTitle": "Профиль",
+  "myNicknameLabel": "Мой ник",
+  "myNicknameHint": "например, Алекс",
+  "includeNicknameInQr": "Включать ник в моём QR",
+  "includeNicknameInQrSubtitle": "По умолчанию выключено для приватности. Если включить, сканер может автоматически назвать вас.",
+  "verifyTitle": "Проверка: {title}",
+  "@verifyTitle": {
+    "placeholders": {
+      "title": {}
+    }
+  },
+  "scanVerifyQrTitle": "Сканировать QR для проверки",
+  "qrBelongsAnotherServer": "QR относится к другому серверу: {server}",
+  "@qrBelongsAnotherServer": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "qrSecretlyIdMismatch": "ID в Secretly из QR не совпадает с этим контактом",
+  "qrMissingDeviceKeyInfo": "В QR нет данных устройства/ключа",
+  "deviceNotCachedTapRefresh": "Устройство не закешировано. Сначала нажмите «Обновить».",
+  "identityKeyMismatch": "Несовпадение identity key. Не проверяйте.",
+  "verifiedSuccess": "Проверено ✅",
+  "refreshKeys": "Обновить ключи",
+  "keysOfflineCannotFetch": "Keys недоступен. Сейчас нельзя получить ключи контакта.",
+  "devicesLabel": "Устройства",
+  "noDeviceKeysCachedYet": "Ключи устройств ещё не закешированы.",
+  "deviceTitle": "Устройство {deviceId}",
+  "@deviceTitle": {
+    "placeholders": {
+      "deviceId": {}
+    }
+  },
+  "deviceFpStatus": "fp: {fp}\n{status}",
+  "@deviceFpStatus": {
+    "placeholders": {
+      "fp": {},
+      "status": {}
+    }
+  },
+  "verifiedLower": "проверено",
+  "unverifiedLower": "не проверено",
+  "keysOfflineIdTemporary": "Keys недоступен. В dev-режиме ID может быть временным.",
+  "serverKeysLabel": "Сервер (Keys)",
+  "nicknameLabel": "Ник",
+  "identityFingerprintLabel": "Отпечаток identity",
+  "scanToAddVerifyContact": "Сканируйте, чтобы добавить/проверить этот контакт",
+  "mySecretlyId": "Мой ID в Secretly",
+  "deviceId": "ID устройства",
+  "recoveryKit": "Recovery Kit",
+  "safeBackupTitle": "Резервная копия",
+  "safeBackupSubtitle": "Зашифрованная резервная копия на сервере",
+  "safeBackupIntro": "Создайте зашифрованную резервную копию локально или на сервере. Позже можно восстановить аккаунт по файлу или ID в Secretly.",
+  "safeBackupUploadNow": "Загрузить копию",
+  "safeBackupRestoreFromServer": "Восстановить с сервера",
+  "safeBackupRestoreTitle": "Восстановление с сервера",
+  "safeBackupRestoreConfirmTitle": "Восстановить аккаунт?",
+  "safeBackupRestoreConfirmBody": "Это удалит локальные чаты/контакты на этом устройстве и восстановит аккаунт из выбранной резервной копии. Приложение автоматически перезапустится.",
+  "safeBackupUploaded": "Резервная копия загружена",
+  "safeBackupUploadFailed": "Не удалось загрузить резервную копию",
+  "safeBackupUploadFailedWithError": "Не удалось загрузить резервную копию: {error}",
+  "@safeBackupUploadFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "safeBackupNotFound": "На сервере нет резервной копии для этого ID в Secretly",
+  "exportRecoveryKit": "Экспорт Recovery Kit",
+  "exportRecoveryKitSubtitle": "Зашифрованный QR для восстановления аккаунта",
+  "restoreRecoveryKit": "Восстановить из Recovery Kit",
+  "restoreRecoveryKitSubtitle": "Удаляет локальные данные и восстанавливает ID в Secretly",
+  "recoveryPasswordTitle": "Пароль Recovery Kit",
+  "password": "Пароль",
+  "confirmPassword": "Повторите пароль",
+  "export": "Экспорт",
+  "scanQr": "Сканировать QR",
+  "invalidRecoveryKit": "Некорректный Recovery Kit",
+  "wrongPassword": "Неверный пароль",
+  "restoreConfirmTitle": "Восстановить аккаунт?",
+  "restoreConfirmBody": "Это удалит локальные чаты/контакты на этом устройстве и восстановит аккаунт из Recovery Kit.",
+  "restore": "Восстановить",
+  "darkTheme": "Тёмная тема",
+  "darkThemeSubtitle": "Тот же акцентный оттенок в тёмной теме.",
+  "blockUnverified": "Блокировать отправку непроверенным",
+  "blockUnverifiedSubtitle": "Строгий режим: в личной переписке писать только тем, чьи ключи вы сверили лично. На группы не распространяется.",
+  "blockedUsers": "Заблокированные",
+  "resetProfile": "Сбросить профиль",
+  "resetProfileSubtitle": "Исправляет несоответствие сервера, создавая новый ID в Secretly",
+  "resetProfileDialogTitle": "Сбросить профиль?",
+  "resetProfileDialogBody": "Это удалит локальные чаты/контакты/запросы на этом устройстве и создаст новый ID в Secretly.\n\nИспользуйте, если вы сменили APK/сервер и сообщения перестали работать.",
+  "cancel": "Отмена",
+  "ok": "OK",
+  "add": "Добавить",
+  "delete": "Удалить",
+  "clear": "Очистить",
+  "block": "Заблокировать",
+  "unblock": "Разблокировать",
+  "accept": "Принять",
+  "verify": "Проверить",
+  "menu": "Меню",
+  "search": "Поиск",
+  "queryLabel": "Запрос",
+  "messageHint": "Сообщение",
+  "notificationActionMarkRead": "Прочитано",
+  "addCaption": "Добавить подпись",
+  "uploadCanceled": "Загрузка отменена",
+  "attachmentFinalizeTimeout": "Сеть нестабильна: файл загружен, но подтверждение отправки не получено. Попробуйте ещё раз.",
+  "attachmentTransferUnavailable": "Сейчас не удалось передать вложение. Проверьте интернет/сервер и попробуйте ещё раз.",
+  "attachmentSendUnavailable": "Отправка вложения пока недоступна. Попробуйте ещё раз.",
+  "attachmentContactSyncPending": "Ждём синхронизацию идентичности контакта. Попросите контакт отправить ещё одно сообщение и попробуйте снова.",
+  "attachmentContactBlocked": "Этот контакт заблокирован.",
+  "attachmentRecipientNotFound": "Профиль получателя не найден на этом сервере. Проверьте ID в Secretly и убедитесь, что у обоих устройств один и тот же сервер.",
+  "attachmentRecipientNoDevices": "У получателя пока нет зарегистрированных устройств. Попросите открыть Secretly и попробуйте снова.",
+  "attachmentNoDeliverableDevices": "Не удалось доставить вложение ни на одно устройство получателя. Попробуйте ещё раз.",
+  "attachmentActionGeneric": "Не удалось отправить вложение. Попробуйте ещё раз.",
+  "send": "Отправить",
+  "attach": "Вложение",
+  "photo": "Фото",
+  "video": "Видео",
+  "file": "Файл",
+  "music": "Музыка",
+  "attachment": "Вложение",
+  "downloading": "Загрузка…",
+  "downloadFailed": "Не удалось скачать: {error}",
+  "@downloadFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "savedTo": "Сохранено в: {path}",
+  "@savedTo": {
+    "placeholders": {
+      "path": {}
+    }
+  },
+  "noMessagesYet": "Сообщений пока нет",
+  "decrypting": "Расшифровка…",
+  "uploading": "Загрузка…",
+  "uploadTimedOut": "Загрузка превысила время ожидания. Проверьте интернет/сервер и попробуйте ещё раз.",
+  "uploadingBytes": "Загружено {sent} / {total} байт",
+  "@uploadingBytes": {
+    "placeholders": {
+      "sent": {},
+      "total": {}
+    }
+  },
+  "requestsInfo": "Этот чат находится в «Запросах». Примите, чтобы отвечать, или заблокируйте, чтобы игнорировать.",
+  "verifyRequired": "Нужна проверка",
+  "verifyContact": "Проверить контакт",
+  "muteNotifications": "Выключить уведомления",
+  "unmuteNotifications": "Включить уведомления",
+  "setContactPhoto": "Установить фото контакта",
+  "removeContactPhoto": "Удалить фото контакта",
+  "blockUser": "Заблокировать пользователя",
+  "unblockUser": "Разблокировать пользователя",
+  "deleteChat": "Удалить чат",
+  "missingRecipient": "Не указан получатель",
+  "contactNotVerified": "Код безопасности собеседника изменился. Сверьте его, чтобы писать дальше.",
+  "safetyNumberChangedTitle": "Код безопасности изменился",
+  "safetyNumberChangedBody": "Раньше вы сверяли код с этим человеком. Сейчас у него новые ключи — обычно так бывает после переустановки приложения или смены телефона. Переписка в любом случае остаётся зашифрованной. Сверьте код заново, если хотите убедиться, что это по-прежнему он.",
+  "safetyNumberStrictBody": "У вас включено «Блокировать отправку непроверенным». Сверьте код этого человека, чтобы отправлять ему сообщения.",
+  "sendAnyway": "Отправить всё равно",
+  "alsoDeleteChat": "Также удалить чат",
+  "unblockUserConfirmTitle": "Разблокировать пользователя?",
+  "blockUserConfirmTitle": "Заблокировать пользователя?",
+  "deleteChatConfirmTitle": "Удалить чат?",
+  "deleteChatConfirmBody": "Чат будет удалён только с этого устройства.",
+  "attachFailed": "Не удалось прикрепить: {error}",
+  "@attachFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "sendFailed": "Не удалось отправить: {error}",
+  "@sendFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "actionFailed": "Действие не выполнено: {error}",
+  "@actionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "roomPolicyNotMember": "Вы больше не участник этой комнаты.",
+  "roomPolicyAdminsOnly": "Только владельцы и администраторы могут делать это в комнате.",
+  "roomPolicyTextMessagesDisabled": "Ваша роль не может отправлять текстовые сообщения в этой комнате.",
+  "roomPolicyMediaDisabled": "Ваша роль не может отправлять медиа в этой комнате.",
+  "roomPolicyReactionsDisabled": "Реакции в этой комнате отключены.",
+  "roomPolicyReactionNotAllowed": "Эта реакция недоступна в этой комнате.",
+  "roomPolicyPinDenied": "Только администраторы могут закреплять сообщения в этой комнате.",
+  "roomPolicyAddMembersDenied": "Только администраторы могут добавлять участников в эту комнату.",
+  "roomPolicyChangeInfoDenied": "Только администраторы могут изменять профиль группы.",
+  "roomPolicySlowMode": "Включён медленный режим. Попробуйте снова через {seconds} сек.",
+  "@roomPolicySlowMode": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "noMatches": "Совпадений нет",
+  "attachmentTooLarge": "Слишком большой файл ({mb} МБ).",
+  "@attachmentTooLarge": {
+    "placeholders": {
+      "mb": {}
+    }
+  },
+  "attachmentFileMissing": "Файл больше недоступен.",
+  "foundPrefix": "Найдено: {hit}",
+  "@foundPrefix": {
+    "placeholders": {
+      "hit": {}
+    }
+  },
+  "contactDetailsChat": "Чат",
+  "contactDetailsSound": "Звук",
+  "contactDetailsCall": "Звонок",
+  "contactDetailsVideo": "Видео",
+  "contactDetailsUsernameLabel": "Имя пользователя",
+  "contactDetailsAddToContacts": "Добавить в контакты",
+  "contactDetailsMediaTab": "Медиа",
+  "contactDetailsFilesTab": "Файлы",
+  "contactDetailsNoMedia": "Нет медиа",
+  "contactDetailsNoFiles": "Нет файлов",
+  "contactDetailsStatusRecently": "был(а) недавно",
+  "contactDetailsStatusAt": "был(а) в {time}",
+  "@contactDetailsStatusAt": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "contactDetailsAutoDelete": "Автоудаление",
+  "contactDetailsShareContact": "Поделиться контактом",
+  "contactDetailsEditContact": "Изменить контакт",
+  "contactDetailsDeleteContact": "Удалить контакт",
+  "contactDetailsSendGift": "Отправить подарок",
+  "contactDetailsStartSecretChat": "Начать секретный чат",
+  "contactDetailsCreateShortcut": "Создать ярлык",
+  "contactDetailsNameLabel": "Имя",
+  "contactDetailsSave": "Сохранить",
+  "contactDetailsDeleteConfirmTitle": "Удалить контакт?",
+  "contactAutoDeleteOff": "Выключено",
+  "contactAutoDelete1Day": "24 часа",
+  "contactAutoDelete7Days": "7 дней",
+  "contactAutoDelete30Days": "30 дней",
+  "contactEditTitle": "Изменить контакт",
+  "contactEditDone": "ГОТОВО",
+  "contactEditNameLabel": "Имя",
+  "contactEditAssignEmoji": "Присвоить эмодзи",
+  "contactEditClearEmoji": "Убрать эмодзи",
+  "contactEditSetPhoto": "Установить фото",
+  "chatMenuReply": "Ответить",
+  "chatMenuCopy": "Копировать",
+  "chatMenuForward": "Переслать",
+  "chatMenuPin": "Закрепить",
+  "chatMenuDelete": "Удалить",
+  "reset": "Сбросить",
+  "diagnostics": "Диагностика",
+  "diagnosticsSubtitle": "Статус, привязка, время",
+  "sendLater": "Отправить позже",
+  "sendSilently": "Отправить без звука",
+  "scheduledSendToday": "Отправить сегодня в {time}",
+  "@scheduledSendToday": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "scheduledSendOn": "Отправить {date} в {time}",
+  "@scheduledSendOn": {
+    "placeholders": {
+      "date": {},
+      "time": {}
+    }
+  },
+  "repeatNever": "Никогда",
+  "repeat": "Повторять",
+  "onboardingBackTooltip": "Назад",
+  "onboardingWelcomeTitle": "Добро пожаловать!",
+  "onboardingWelcomeSubtitle": "Мессенджер нового поколения.\nПолная приватность. Без компромиссов.",
+  "onboardingCreateAccount": "Создать новый аккаунт",
+  "onboardingAlreadyHaveAccount": "Уже есть аккаунт",
+  "onboardingFeatureE2eTitle": "Шифрование E2E",
+  "onboardingFeatureE2eBody": "Сообщения шифруются на устройстве. Ключи — только у вас.",
+  "onboardingFeaturePrivacyTitle": "Полная анонимность",
+  "onboardingFeaturePrivacyBody": "Без номера телефона. Без привязки к личным данным.",
+  "onboardingFeatureRelayTitle": "Без посредников",
+  "onboardingFeatureRelayBody": "Relay-сервер не хранит сообщения. Только передаёт.",
+  "onboardingProfileTitle": "Ваш профиль",
+  "onboardingProfileSubtitle": "Как вас будут видеть другие пользователи",
+  "onboardingProfileNameSection": "Имя профиля",
+  "onboardingProfileNameHint": "Ваше имя или псевдоним",
+  "onboardingNotificationsSection": "Уведомления",
+  "onboardingMessageNotificationsTitle": "Уведомления о сообщениях",
+  "onboardingMessageNotificationsSubtitle": "Получать push-уведомления от Secretly",
+  "onboardingIncomingCallsTitle": "Входящие звонки",
+  "onboardingIncomingCallsSubtitle": "Принимать звонки от контактов",
+  "continueAction": "Продолжить",
+  "onboardingBackupSaveFailed": "Не удалось сохранить настройки резервной копии",
+  "backupPasswordRequirements": "Минимум 8 символов, латиница/ASCII, одна заглавная буква и один спецсимвол. Без пробелов в начале или конце.",
+  "backupPasswordTooShort": "Пароль должен быть не короче {minLength} символов.",
+  "backupPasswordTooLong": "Пароль должен быть не длиннее {maxLength} символов.",
+  "backupPasswordNonAscii": "Используйте только латиницу, цифры и ASCII-символы.",
+  "backupPasswordOuterWhitespace": "Уберите пробелы в начале или конце пароля.",
+  "backupPasswordMissingUppercase": "Добавьте хотя бы одну заглавную букву A-Z.",
+  "backupPasswordMissingSpecial": "Добавьте хотя бы один спецсимвол, например !, # или ?.",
+  "onboardingBackupPasswordTitle": "Пароль резервной копии",
+  "onboardingPasswordsDoNotMatch": "Пароли не совпадают",
+  "onboardingBackupTitle": "Резервные копии",
+  "onboardingBackupSubtitle": "Защитите переписку от потери данных.\nДаже при смене устройства.",
+  "onboardingAutoBackupSection": "Автоматическая резервная копия",
+  "onboardingAutoBackupTitle": "Автокопия",
+  "onboardingAutoBackupSubtitle": "Автоматически сохранять резервную копию",
+  "onboardingStorageTypeSection": "Тип хранилища",
+  "onboardingBackupMediaTitle": "Делать резервную копию медиа",
+  "onboardingBackupMediaSubtitle": "Фото, видео, файлы и аватары попадут только в локальную резервную копию",
+  "onboardingFrequencySection": "Частота",
+  "onboardingEnterSecretly": "Войти в Secretly",
+  "onboardingSkipBackup": "Пропустить настройку резервной копии",
+  "onboardingSecretlyIdCopied": "Secretly ID скопирован",
+  "onboardingRegistrationCompleteTitle": "Регистрация завершена",
+  "onboardingRegistrationCompleteSubtitle": "Сохраните свой Secretly ID сейчас. Он нужен для восстановления аккаунта и резервной копии на новом устройстве.",
+  "onboardingYourSecretlyId": "Ваш Secretly ID",
+  "onboardingCopyId": "Скопировать ID",
+  "onboardingRecoveryWarning": "Без ID в Secretly и пароля резервной копии восстановить серверную копию будет невозможно. Сохраните ID в надёжном месте и не забывайте пароль.",
+  "onboardingStorageCloud": "Облако",
+  "onboardingStorageCloudSubtitle": "На сервере Secretly",
+  "onboardingStorageLocal": "Локально",
+  "onboardingStorageLocalSubtitle": "На этом устройстве",
+  "onboardingInterval6Hours": "6 часов",
+  "onboardingInterval12Hours": "12 часов",
+  "onboardingIntervalEveryDay": "Каждый день",
+  "onboardingIntervalEvery3Days": "Каждые 3 дня",
+  "onboardingIntervalWeekly": "Раз в неделю",
+  "onboardingBackupLocalCandidate": "Локальная резервная копия Secretly",
+  "onboardingDownloads": "Загрузки",
+  "onboardingDeviceFolder": "Папка устройства",
+  "onboardingNoBackupsFound": "Резервные копии на устройстве не найдены",
+  "onboardingFoundBackups": "Найденные резервные копии",
+  "onboardingNoBackupsFoundBody": "Secretly проверил локальные резервные копии приложения и папку Загрузки. Если файл лежит в другом месте, выберите его вручную.",
+  "chooseManually": "Выбрать вручную",
+  "onboardingChooseBackupFileTitle": "Выберите файл резервной копии Secretly",
+  "onboardingReadBackupFailed": "Не удалось прочитать файл резервной копии",
+  "onboardingServerBackupNotFound": "Резервная копия не найдена на сервере",
+  "onboardingRestoreThisBackupTitle": "Восстановить эту резервную копию?",
+  "onboardingRestoreThisBackupBody": "Текущие локальные данные на этом устройстве будут заменены.",
+  "onboardingSecretlyIdSummary": "ID в Secretly: {profileId}",
+  "onboardingContactsSummary": "Контакты: {count}",
+  "onboardingMessagesSummary": "Сообщения: {count}",
+  "onboardingChatsSummary": "Чаты: {count}",
+  "onboardingMediaFilesSummary": "Медиа-файлы: {count}",
+  "onboardingBrokenBackup": "Повреждённый или неверный файл резервной копии",
+  "onboardingRestoreFailed": "Ошибка восстановления. Попробуйте ещё раз.",
+  "onboardingRestoreLoginTitle": "Войти в аккаунт",
+  "onboardingRestoreLoginSubtitle": "Восстановите переписку и настройки\nиз ранее созданной резервной копии.",
+  "onboardingRestoreMediaSubtitle": "Для будущих локальных резервных копий: фото, видео, файлы и аватары будут добавляться только если включить это.",
+  "onboardingRestoreFromCloudTitle": "С облака Secretly",
+  "onboardingRestoreFromCloudSubtitle": "Введите ID в Secretly и пароль резервной копии — данные загрузятся с сервера",
+  "onboardingRestoreFromDeviceTitle": "Найти резервную копию на устройстве",
+  "onboardingRestoreFromDeviceSubtitle": "Secretly сам проверит локальные резервные копии и Загрузки",
+  "onboardingRestoring": "Восстановление...",
+  "onboardingRestoreFromServerTitle": "Восстановить с сервера",
+  "@backupPasswordTooShort": {
+    "placeholders": {
+      "minLength": {}
+    }
+  },
+  "@backupPasswordTooLong": {
+    "placeholders": {
+      "maxLength": {}
+    }
+  },
+  "@onboardingSecretlyIdSummary": {
+    "placeholders": {
+      "profileId": {}
+    }
+  },
+  "@onboardingContactsSummary": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@onboardingMessagesSummary": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@onboardingChatsSummary": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@onboardingMediaFilesSummary": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "callRecordOutgoingVideoCall": "Исходящий видеозвонок",
+  "callRecordOutgoingCall": "Исходящий звонок",
+  "callRecordIncomingVideoCall": "Входящий видеозвонок",
+  "callRecordIncomingCall": "Входящий звонок",
+  "callRecordMissedCall": "Пропущенный звонок",
+  "callRecordDeclinedCall": "Отклонённый звонок",
+  "callRecordBusy": "Абонент занят",
+  "callRecordFailed": "Ошибка связи",
+  "callRecordCanceled": "Отменённый звонок",
+  "callRecordOngoing": "Идёт звонок",
+  "safeBackupInvalidBackup": "Некорректная резервная копия Secretly",
+  "recoveryKitPrepareFailed": "Не удалось подготовить Recovery Kit на этом устройстве.",
+  "safeBackupPreviewProfileId": "ID в Secretly: {profileId}",
+  "@safeBackupPreviewProfileId": {
+    "placeholders": {
+      "profileId": {
+        "type": "String"
+      }
+    }
+  },
+  "safeBackupPreviewContacts": "Контакты: {count}",
+  "@safeBackupPreviewContacts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "safeBackupPreviewServer": "Сервер: {server}",
+  "@safeBackupPreviewServer": {
+    "placeholders": {
+      "server": {
+        "type": "String"
+      }
+    }
+  },
+  "safeBackupPreviewTitle": "Что будет восстановлено:",
+  "safeBackupSavedToFiles": "Резервная копия сохранена в Файлы Secretly",
+  "safeBackupExportCanceled": "Экспорт резервной копии отменён",
+  "safeBackupExportFailed": "Не удалось экспортировать резервную копию: {error}",
+  "@safeBackupExportFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "safeBackupCreateDialogTitle": "Создать резервную копию",
+  "safeBackupServerDestination": "Резервная копия на сервер",
+  "safeBackupLocalDestination": "Резервная копия в файл",
+  "safeBackupRestoreDialogTitle": "Восстановить резервную копию",
+  "safeBackupRestoreFromDevice": "Восстановить из файла",
+  "safeBackupDownloadsLocation": "Загрузки",
+  "safeBackupDeviceFolderLocation": "Папка устройства",
+  "safeBackupChooseManualHint": "Secretly автоматически проверил локальные резервные копии приложения и папку Загрузки. Можно выбрать файл вручную, если он сохранён в другом месте.",
+  "safeBackupChooseManually": "Выбрать вручную",
+  "safeBackupReadFileFailed": "Не удалось прочитать файл резервной копии: {error}",
+  "@safeBackupReadFileFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "safeBackupFrequencyTitle": "Частота сохранения",
+  "saveAction": "Сохранить",
+  "safeBackupEnableAutoTitle": "Включить автокопию",
+  "safeBackupEnableAutoSubtitle": "Работает в приложении при наличии сети; шифруется вашим паролем",
+  "safeBackupUploadToServer": "Загружать на сервер",
+  "safeBackupSaveOnDevice": "Сохранять на устройстве",
+  "safeBackupPasswordConfigured": "Пароль автокопии: установлен",
+  "safeBackupPasswordNotSet": "Пароль автокопии: не задан",
+  "safeBackupPasswordSaved": "Пароль автокопии сохранён",
+  "genericFailed": "Ошибка: {error}",
+  "@genericFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "safeBackupSetPassword": "Задать пароль",
+  "safeBackupPasswordRemoved": "Пароль автокопии удалён",
+  "safeBackupClearPassword": "Удалить пароль",
+  "safeBackupRunRequested": "Автокопия запущена",
+  "safeBackupRunNow": "Запустить автокопию сейчас",
+  "safeBackupLastAutoBackup": "Последняя автокопия: {time}",
+  "@safeBackupLastAutoBackup": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "safeBackupLastAutoBackupNever": "Последняя автокопия: никогда",
+  "safeBackupLastDeviceBackup": "Последняя резервная копия на устройстве: {time}",
+  "@safeBackupLastDeviceBackup": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "safeBackupLastAutoBackupError": "Ошибка автокопии: {error}",
+  "@safeBackupLastAutoBackupError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "securityScopeAppObject": "приложение",
+  "securityScopePersonalObject": "Личные",
+  "securityUnlockAppTitle": "Разблокируйте приложение",
+  "securityUnlockPersonalTitle": "Разблокируйте Личные",
+  "securityUnlockFingerprintAutoSubtitle": "Вход по отпечатку запускается автоматически. Если нужно, ниже можно сразу использовать пароль.",
+  "securityUnlockBiometricPatternAutoSubtitle": "Сначала запускается нативная биометрия. Если нужно, ниже можно открыть экран графического ключа.",
+  "securityUnlockNativeSubtitle": "Подтвердите вход через нативную аутентификацию устройства.",
+  "securityUnlockPasswordSubtitle": "Введите пароль, чтобы открыть {scopeName}.",
+  "@securityUnlockPasswordSubtitle": {
+    "placeholders": {
+      "scopeName": {
+        "type": "String"
+      }
+    }
+  },
+  "securityUnlockPatternSubtitle": "Нарисуйте графический ключ для доступа к {scopeName}.",
+  "@securityUnlockPatternSubtitle": {
+    "placeholders": {
+      "scopeName": {
+        "type": "String"
+      }
+    }
+  },
+  "securityUnlockBiometricSubtitle": "Подтвердите личность через нативную биометрию устройства.",
+  "securityUnlockAppBiometricReason": "Подтвердите личность для входа в приложение",
+  "securityUnlockPersonalBiometricReason": "Подтвердите личность для доступа к Личным",
+  "securityUnlockPasswordMismatch": "Пароль не совпадает. Попробуйте еще раз.",
+  "securityUnlockPatternMismatch": "Графический ключ не совпадает.",
+  "securityUnlockNativeIncomplete": "Нативная аутентификация не завершена.",
+  "securityPasswordContinueHint": "Введите пароль для входа",
+  "securityUseFingerprint": "Войти с отпечатком",
+  "securityUsePassword": "Войти с помощью пароля",
+  "securityClearPattern": "Сбросить ключ",
+  "securityConnectFourDots": "Соедините минимум 4 точки.",
+  "securityPasswordMinFourChars": "Минимум 4 символа.",
+  "securityPasswordsMismatchFull": "Пароли не совпадают.",
+  "securityPasswordSetupTitle": "Пароль для {scopeName}",
+  "@securityPasswordSetupTitle": {
+    "placeholders": {
+      "scopeName": {
+        "type": "String"
+      }
+    }
+  },
+  "securityPasswordSetupDescription": "Пароль хранится только в защищенном хранилище устройства.",
+  "securityNewPassword": "Новый пароль",
+  "securityRepeatPassword": "Повторите пароль",
+  "securitySavePassword": "Сохранить пароль",
+  "securityPatternSetupInstruction": "Нарисуйте графический ключ минимум из 4 точек.",
+  "securityPatternSetupRepeat": "Повторите графический ключ для подтверждения.",
+  "securityPatternMinFourDots": "Минимум 4 точки.",
+  "securityPatternMismatchStartOver": "Ключи не совпали. Начните заново.",
+  "securityPatternSetupTitle": "Графический ключ для {scopeName}",
+  "@securityPatternSetupTitle": {
+    "placeholders": {
+      "scopeName": {
+        "type": "String"
+      }
+    }
+  },
+  "securityStartOver": "Начать заново",
+  "securityTitle": "Безопасность",
+  "securityNativeAuthentication": "Нативная аутентификация",
+  "securityReady": "Готово",
+  "securityUnavailable": "Недоступно",
+  "securityNativeAvailableDescription": "Используется для Face ID, отпечатка пальца и системной аутентификации устройства.",
+  "securityNativeUnavailableDescription": "На этом устройстве биометрия или системная аутентификация сейчас недоступны.",
+  "securityAppLockTitle": "Вход в приложение",
+  "securityAppLockDescription": "Блокирует вход в приложение и может срабатывать после скрытия приложения.",
+  "securityPersonalChatsTitle": "Личные чаты",
+  "securityPersonalChatsDescription": "Защищает скрытую категорию Личные и вход в конкретные личные чаты.",
+  "securityAuthEnableAppLockReason": "Подтвердите биометрию для включения входа в приложение",
+  "securityAuthChangeSettingsReason": "Подтвердите биометрию для изменения настроек безопасности",
+  "securityAuthProtectPersonalReason": "Подтвердите биометрию для защиты Личных",
+  "securityAuthChangePersonalReason": "Подтвердите биометрию для изменения защиты Личных",
+  "securityNativeUnavailableError": "Нативная аутентификация недоступна на этом устройстве.",
+  "securityBiometricCancelled": "Подтверждение биометрии отменено.",
+  "securityProtectionMode": "Режим защиты",
+  "securityProtectionModeSubtitle": "Выберите, чем блокировать доступ.",
+  "securityProtectionModeDescription": "Пароль и графический ключ хранятся только как стойкие хэши в secure storage. Биометрия использует нативный системный экран.",
+  "securityProtectionOff": "Выключено",
+  "securityProtectionOffDescription": "Доступ без дополнительной защиты.",
+  "securityPasswordModeDescription": "Собственный пароль для разблокировки.",
+  "securityPatternModeTitle": "Графический ключ",
+  "securityPatternModeDescription": "Рисунок из точек, как на Android.",
+  "securityNativePromptDescription": "Нативный системный экран Face ID, отпечатка или системной аутентификации устройства.",
+  "securityRelockAfterHidden": "Перезапрашивать после скрытия приложения",
+  "securityRelockAfterHiddenDescription": "Если выключить, защита будет срабатывать только после полного перезапуска приложения.",
+  "securityGracePeriod": "Задержка перед повторной блокировкой",
+  "securityGraceUnavailable": "Недоступно при выключенной автоблокировке.",
+  "securityAllowQuickUnlockWith": "Разрешить быструю разблокировку через {method}",
+  "@securityAllowQuickUnlockWith": {
+    "placeholders": {
+      "method": {
+        "type": "String"
+      }
+    }
+  },
+  "securityQuickUnlockSubtitle": "Оставляет пароль или графический ключ как основной резервный способ.",
+  "securityChangePassword": "Сменить пароль",
+  "securityChangePattern": "Сменить графический ключ",
+  "securityChangeCredentialSubtitle": "Текущая защита обновится сразу после подтверждения нового секрета.",
+  "securityProtectionActivated": "Защита активирована сразу.",
+  "securityLockNow": "Заблокировать сейчас",
+  "securitySaveChanges": "Сохранить",
+  "securityGraceImmediately": "Сразу",
+  "securityGraceAfterSeconds": "Через {seconds} сек",
+  "@securityGraceAfterSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "securityGraceAfterMinutes": "Через {minutes} мин",
+  "@securityGraceAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "securityStatusLocked": "Заблокировано",
+  "securityStatusUnlocked": "Разблокировано",
+  "securityAfterHide": "Сразу после скрытия",
+  "securityGracePill": "Задержка {seconds}с",
+  "@securityGracePill": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "securityNoProtection": "Без защиты",
+  "securityNativeBiometrics": "Нативная биометрия",
+  "securityBiometricFaceFingerprint": "Face ID / отпечаток",
+  "securityBiometricFingerprint": "Отпечаток пальца",
+  "securityBiometricNativeDeviceAuthentication": "Системная аутентификация",
+  "devicesLinkOpenFailed": "Не удалось открыть ссылку в браузере.",
+  "devicesDesktopDescriptionPrefix": "Вы можете зайти в приложение ",
+  "devicesDesktopAppLink": "Secretly на компьютере",
+  "devicesDesktopDescriptionSuffix": " с помощью QR кода.",
+  "devicesFailureTransportBlocked": "Транспорт заблокирован для текущего сервера. Переключите телефон и desktop на один сервер и повторите.",
+  "devicesFailureIdentityNotServerBacked": "Desktop-профиль еще не зарегистрирован на сервере. Повторите попытку через несколько секунд.",
+  "devicesFailureProfileUnavailable": "Профиль desktop пока не виден на сервере. Держите приложение открытым и повторите попытку.",
+  "devicesFailureDeviceUnavailable": "Устройство desktop пока не видно на сервере. Держите приложение открытым, затем обновите QR и повторите.",
+  "devicesFailureCompanionRequired": "Для этого профиля не включён desktop companion. Активируйте доступ на основном телефоне и повторите попытку.",
+  "devicesFailureCompanionLimit": "Лимит desktop-устройств для этого профиля исчерпан. Удалите старое desktop-устройство или увеличьте доступные места.",
+  "devicesFailurePrimaryRequired": "Основной аккаунт нужно создать на телефоне, а desktop подключать через QR.",
+  "devicesFailureInvalidQr": "Это не QR для авторизации устройства.",
+  "devicesFailureQrExpired": "Срок действия QR истёк. Создайте новый код на desktop.",
+  "devicesFailureServerMismatch": "Этот QR относится к другому серверу. Переключите телефон и desktop на один сервер и повторите.",
+  "devicesFailureProfileMismatch": "Пакет синхронизации относится к другому профилю. Создайте новый QR и повторите.",
+  "devicesFailureRequestNotFound": "Запрос синхронизации не найден или уже истёк. Создайте новый QR.",
+  "devicesFailureSessionExpired": "Сессия QR истекла. Создайте новый QR и повторите.",
+  "devicesFailureSessionValidation": "Проверка QR-сессии не прошла. Создайте новый QR и повторите.",
+  "devicesFailureStateMismatch": "Состояние запроса синхронизации больше не актуально. Создайте новый QR и повторите.",
+  "devicesFailureDeviceMismatch": "Пакет синхронизации относится к другому устройству. Создайте новый QR и повторите.",
+  "devicesFailureDeclined": "Вход был отклонён на основном телефоне. Создайте новый QR и повторите попытку.",
+  "devicesFailureInvalidPayload": "Получен некорректный пакет синхронизации. Создайте новый QR и повторите.",
+  "devicesFailureInterrupted": "Защищённая синхронизация была прервана. Создайте новый QR и повторите.",
+  "devicesNewUser": "Новый пользователь",
+  "devicesNewUserDesktopConfirm": "Очистить локальные данные и подготовить это desktop-устройство для входа через QR с основного телефона?",
+  "devicesNewUserMobileConfirm": "Очистить текущий локальный профиль и зарегистрировать нового пользователя на этом устройстве?",
+  "devicesCreateAction": "Создать",
+  "devicesScanDeviceQr": "Сканировать QR устройства",
+  "devicesRequestApproved": "Запрос подтверждён. Синхронизация отправлена на компьютер.",
+  "devicesRequestDeclined": "Запрос отклонён. Desktop останется неавторизованным.",
+  "devicesApproveSignInTitle": "Разрешить вход на устройстве?",
+  "devicesConfirmSyncPrimary": "Подтвердите синхронизацию с основного устройства (телефон).",
+  "devicesApprovalDeviceOnly": "Устройство: {name}. Подтверждение выполняется только с основного телефона.",
+  "@devicesApprovalDeviceOnly": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesSyncChats": "Синхронизировать чаты",
+  "devicesSyncSettings": "Синхронизировать настройки",
+  "devicesSyncMedia": "Синхронизировать медиа",
+  "devicesDeclineSignIn": "Отклонить вход",
+  "devicesApprove": "Разрешить",
+  "devicesTitle": "Устройства",
+  "devicesConnectDevice": "Подключить устройство",
+  "devicesPrimaryDeviceTitle": "Это основное устройство",
+  "devicesPrimaryDeviceSubtitle": "Разрешение на синхронизацию чатов, настроек и медиа выдаётся только здесь.",
+  "devicesQrSessionExpiredNewCode": "Срок действия QR истёк. Сгенерируйте новый код.",
+  "devicesQrExpiresIn": "QR действует ещё {time}",
+  "@devicesQrExpiresIn": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesWaitingQrScan": "Ожидание сканирования QR на телефоне.",
+  "devicesQrScannedConfirm": "QR отсканирован. Подтвердите вход на телефоне.",
+  "devicesApplyingSecureBundle": "Применяем защищённый пакет синхронизации…",
+  "devicesAuthorizationFailed": "Ошибка авторизации. Повторите попытку.",
+  "devicesUnauthenticatedChooseAction": "Вы не авторизованы. Выберите действие ниже.",
+  "devicesAuthenticated": "Устройство авторизовано.",
+  "devicesDesktopWebAuthorization": "Авторизация на Desktop/Web",
+  "devicesDesktopModeDescription": "Выберите режим: зарегистрировать нового пользователя или войти через QR с подтверждением на телефоне.",
+  "devicesCancelQr": "Отменить QR",
+  "devicesRefreshQr": "Обновить QR",
+  "devicesSignInViaQr": "Войти по QR",
+  "devicesOpenPrimaryInstruction": "Откройте Secretly на основном телефоне → Настройки → Устройства → Подключить устройство.",
+  "storageSection": "Хранилище",
+  "storageSectionSubtitle": "Кеш и загрузки на этом устройстве",
+  "storageUsageTitle": "Использование памяти",
+  "storageCategoryMedia": "Кеш медиа",
+  "storageCategoryVoiceTranscripts": "Расшифровки голоса",
+  "storageCategoryVoiceModel": "Офлайн-модель голоса",
+  "storageCategoryStickers": "Стикеры",
+  "storageCategoryEmoji": "Анимированные эмодзи",
+  "storageCategoryProfileMedia": "Моя галерея и аватары",
+  "storageCategoryRecents": "Недавние файлы",
+  "storageTotal": "Всего",
+  "storageCalculating": "Подсчёт…",
+  "storageClearCache": "Очистить кеш",
+  "storageClearCacheHint": "Удаляет кешированные медиа, аватары собеседников и анимированные эмодзи. Ваша галерея, стикеры и чаты сохраняются; медиа скачается заново при просмотре.",
+  "storageClearing": "Очистка кеша…",
+  "storageClearedToast": "Кеш очищен",
+  "storageRemoveVoiceModel": "Удалить офлайн-модель голоса (140 МБ)",
+  "storageRemoveVoiceModelHint": "Освобождает модель распознавания речи на устройстве. Она скачается заново при следующей расшифровке голосового сообщения.",
+  "storageRemoveVoiceModelConfirmTitle": "Удалить модель голоса?",
+  "storageRemoveVoiceModelConfirmBody": "Модель распознавания речи (140 МБ) будет удалена с устройства. Она скачается заново при следующей расшифровке голосового сообщения.",
+  "storageRemoveVoiceModelConfirm": "Удалить",
+  "storageVoiceModelNotInstalled": "Модель голоса не установлена",
+  "storageVoiceModelRemovedToast": "Модель голоса удалена",
+  "backupStateProtected": "История защищена",
+  "backupStateUnprotected": "История не защищена",
+  "backupStateFailing": "Копия не создаётся",
+  "backupStateStale": "Копия устарела",
+  "backupStateNone": "Копия ещё не создана",
+  "backupLastAt": "Последняя копия: {time}",
+  "backupIntroHint": "Копия позволяет вернуть переписку на новом устройстве",
+  "backupAccessUpgradeTitle": "Пересохраните копию",
+  "backupAccessUpgradeBody": "Ваша копия на сервере создана в старом формате: её можно скачать, зная только идентификатор профиля. Данные внутри зашифрованы вашим паролем, но лишний рубеж не помешает. Пересохранение добавит проверку пароля на самом сервере.",
+  "backupAccessUpgradeAction": "Пересохранить",
+  "backupSectionAutomatic": "Автоматически",
+  "backupAutoToggle": "Создавать копии",
+  "backupPassword": "Пароль",
+  "backupPasswordSet": "Задан",
+  "backupPasswordNotSet": "Не задан",
+  "backupPasswordSaved": "Пароль сохранён",
+  "backupWhere": "Куда",
+  "backupHowOften": "Как часто",
+  "backupIncludeMedia": "Включать медиа",
+  "backupAutoFooter": "Копия зашифрована вашим паролем. Без него восстановить её невозможно — сохраните пароль отдельно. Медиа не попадают в копию на сервере.",
+  "backupNow": "Создать копию сейчас",
+  "backupSectionRestore": "Восстановление",
+  "backupRestoreAction": "Восстановить из копии",
+  "backupRestoreFooter": "Заменит переписку и настройки на этом устройстве данными из копии.",
+  "backupSectionKey": "Ключ Secretly ID",
+  "backupKeyShow": "Показать ключ",
+  "backupKeyRestore": "Восстановить по ключу",
+  "backupKeyFooter": "Возвращает только ваш Secretly ID — переписки в ключе нет. Восстановление по ключу стирает локальные данные.",
+  "backupDestServerDevice": "Сервер и устройство",
+  "backupDestServer": "Сервер",
+  "backupDestDevice": "Устройство",
+  "backupDestNone": "Не выбрано",
+  "backupDestServerOnly": "Только сервер",
+  "backupDestDeviceOnly": "Только устройство",
+  "backupTileOff": "Выключен — история не защищена",
+  "backupTilePending": "Включён, но ещё ни разу не выполнялся",
+  "backupTileFailing": "Не выполняется — нужно проверить",
+  "backupTileStale": "Давно не обновлялся",
+  "backupPasswordChange": "Изменить пароль",
+  "backupPasswordRemove": "Удалить пароль",
+  "chatUndecryptablePending": "Сообщение пришло, но пока не читается — восстанавливаем защищённую сессию…",
+  "liquidGlassTitle": "Жидкое стекло",
+  "liquidGlassSubtitle": "Преломляющие панели и островки. Выключите для обычного материала — он экономнее и меньше греет.",
+  "billingPendingTitle": "Ожидаем оплату",
+  "billingPendingBody": "Заказ создан, но платёж ещё не подтверждён. Завершите оплату выбранным способом — премиум включится сам.",
+  "callsHideAddressTitle": "Скрывать мой адрес в звонках",
+  "callsHideAddressSubtitle": "Через наш сервер: собеседник не увидит IP-адрес, но задержка может вырасти",
+  "desktopJoinRoomByLink": "Войти по ссылке",
+  "desktopJoinRoomLinkHint": "Вставьте ссылку-приглашение",
+  "desktopJoinRoomLinkInvalid": "Это не ссылка-приглашение в комнату",
+  "desktopOfflineLockTitle": "Пароль после долгого отсутствия связи",
+  "desktopOfflineLockDescription": "Компьютер не выходил на связь дольше срока — при запуске спросим пароль входа. Потерянный компьютер команду «отключить» не получает, а срок получает.",
+  "desktopOfflineLockNever": "Никогда",
+  "desktopOfflineLockDays7": "7 дней",
+  "desktopOfflineLockDays14": "14 дней",
+  "desktopOfflineLockDays30": "30 дней",
+  "desktopPollTitle": "Опрос",
+  "desktopPollAnonymous": "Анонимный опрос",
+  "desktopPollClosed": "Завершён",
+  "desktopPollVoters": "Проголосовали: {count}",
+  "desktopPollMultipleHint": "Можно выбрать несколько",
+  "desktopPollCloseAction": "Завершить опрос",
+  "desktopEventTitle": "Событие",
+  "desktopEventGoing": "Иду",
+  "desktopEventMaybe": "Возможно",
+  "desktopEventNo": "Не иду",
+  "desktopPollNewTitle": "Новый опрос",
+  "desktopPollQuestionHint": "Вопрос",
+  "desktopPollOptionHint": "Вариант {index}",
+  "desktopPollAddOption": "Добавить вариант",
+  "desktopPollCreateAction": "Создать",
+  "desktopPollNeedTwo": "Нужен вопрос и хотя бы два варианта",
+  "desktopPollMultipleLabel": "Несколько ответов",
+  "desktopPollAnonymousLabel": "Анонимно",
+  "desktopEventNewTitle": "Новое событие",
+  "desktopEventTitleHint": "Название",
+  "desktopEventDescriptionHint": "Описание",
+  "desktopEventLocationHint": "Место",
+  "desktopEventPickWhen": "Выбрать дату и время",
+  "desktopEventNeedTitleAndDate": "Нужны название и дата"
+}

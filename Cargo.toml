@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+  "core/rust/secretly_core",
+  "server/keys",
+  "server/relay",
+]
+
+# Shared package fields for every workspace member. Automated licence scanners
+# read these; without them the project reads as "licence not declared".
+[workspace.package]
+license = "AGPL-3.0-only"
+authors = ["Yurii Arkhanhelskyi <yurii@secretlyapp.com>"]
+repository = "https://github.com/Arkhanhel/Secretly"
+edition = "2024"
+rust-version = "1.93"

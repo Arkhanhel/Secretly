@@ -1,0 +1,99 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+
+# Android (Flutter)
+**/android/.gradle/
+**/android/local.properties
+**/android/key.properties
+**/android/**/upload-keystore.jks
+**/android/**/*.jks
+
+# iOS/macOS
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+
+# Rust
+**/target/
+
+# VS Code
+.vscode/*.log
+
+# OS
+Thumbs.db
+Desktop.ini
+
+# Local environment / artifacts
+.env
+.env.*
+!.env.example
+.venv/
+
+# Terraform / Ansible local state and secrets
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.retry
+infra/ansible/inventories/*.ini
+!infra/ansible/inventories/*.ini.example
+
+*.db
+_logcat*.txt
+_tmp_*_pkg.txt
+_final_*.txt
+_live_call_*.txt
+_now_*.txt
+_post_call_*.txt
+_retest_*.txt
+*.tar.gz
+
+# Firebase service-account secrets (never commit)
+secretly-*.json
+*service-account*.json
+
+# Large local diagnostics/build artifacts (never commit)
+*.hprof
+_tmp_apkcheck/
+artifacts/installed_*.apk
+
+# Repository-local generated outputs
+artifacts/
+95Wallpaper/
+.tmp_*
+_analyze_*.txt
+_desktop_build_*.txt
+_relay_*.txt
+_build_roomphase1b_transcript.txt
+build_release_apk_*.log
+install_apk_*.log
+photo_*.jpg
+debug.log
+7fd270.log
+secretly_server.tar.gz
+tools/.last*_release_apk.json
+
+# Monetization config signing PRIVATE key (never commit)
+ops/secrets/
+ops/test/delivery_robot.conf
+
+# Конфигурация редактора: 25.08.2026 в .vscode/mcp.json обнаружен рабочий токен
+# стороннего сервиса. Такие файлы личные и под контроль версий не идут.
+.vscode/
+**/.vscode/
+
+# Вложения к заявке — генерируются из docs/ скриптом, в git не нужны
+artifacts/otf-attachments/

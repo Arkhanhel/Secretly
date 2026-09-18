@@ -1,0 +1,160 @@
+platform :ios, '15.5'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+# Disable file_picker's media-picker bridge so it does NOT pull in
+# DKImagePickerController/DKPhotoGallery/SwiftyGif. These transitive pods
+# are unused in this app (all FilePicker.pickFiles calls use FileType.custom
+# or FileType.any → UIDocumentPicker), and they were the suspected source
+# of the App Store automated rejection (`objc_*AssociatedWeakObject`
+# symbols in the binary + 2019-era DKPhotoGallery touching deprecated APIs).
+#
+# IMPORTANT: file_picker.podspec checks `Pod.const_defined?(:PICKER_MEDIA)`,
+# so the constant must live on the top-level `Pod` module itself. Defining it
+# inline with `module Pod ... end` doesn't work — the Podfile is evaluated
+# inside `Pod::Podfile`, which would create a nested `Pod::Podfile::Pod`
+# constant and confuse CocoaPods's own lookup. Use `Pod.const_set` instead.
+::Pod.const_set(:PICKER_MEDIA, false) unless ::Pod.const_defined?(:PICKER_MEDIA)
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  use_frameworks!
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  # SwiftyGif 5.4.5 uses 'PlatformImageView' in the manager but extension methods
+  # are on UIImageView, causing compile errors on iOS. The file is patched manually
+  # (read-only pod cache), so the post_install only ensures the fix survives re-installs.
+  # NOTE: with PICKER_MEDIA=false above SwiftyGif is no longer pulled in, but the
+  # patch stays defensive in case it returns transitively from another pod.
+  swifty_dir = installer.sandbox.pod_dir('SwiftyGif') rescue nil
+  if swifty_dir && File.directory?(swifty_dir)
+    swifty_manager = File.join(swifty_dir, 'SwiftyGif', 'SwiftyGifManager.swift')
+    if File.exist?(swifty_manager)
+      content = File.read(swifty_manager)
+      patched = content
+        .gsub('PlatformImageView', 'UIImageView')
+        .gsub(/^#if os\(macOS\)\npublic typealias UIImageView = NSImageView\n#else\npublic typealias UIImageView = UIImageView\n#endif\n/, "\n")
+      if patched != content
+        File.chmod(0644, swifty_manager)
+        File.write(swifty_manager, patched)
+      end
+    end
+
+    # SwiftyGif 5.4.5 uses objc_getAssociatedWeakObject/objc_setAssociatedWeakObject
+    # — Swift wrappers whose names exactly match the iOS 17+ private Objective-C
+    # runtime. Apple's static binary scanner flags these as non-public API.
+    # Replace all callers with the public objc_*AssociatedObject + delete the
+    # helper file so the symbol names never appear in the compiled binary.
+    swifty_imageview = File.join(swifty_dir, 'SwiftyGif', 'UIImageView+SwiftyGif.swift')
+    if File.exist?(swifty_imageview)
+      content = File.read(swifty_imageview)
+      patched = content
+        .gsub(
+          "get { return (objc_getAssociatedWeakObject(self, _delegateKey!) as? SwiftyGifDelegate) }",
+          "get { return objc_getAssociatedObject(self, _delegateKey!) as? SwiftyGifDelegate }"
+        )
+        .gsub(
+          "set { objc_setAssociatedWeakObject(self, _delegateKey!, newValue) }",
+          "set { objc_setAssociatedObject(self, _delegateKey!, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }"
+        )
+      if patched != content
+        File.chmod(0644, swifty_imageview)
+        File.write(swifty_imageview, patched)
+      end
+    end
+
+    # Remove the helper file that defines objc_*AssociatedWeakObject (name
+    # collision with private Apple runtime). After the patch above no caller
+    # references these wrappers; deleting the source removes the symbol
+    # strings entirely from the binary.
+    weak_helper = File.join(swifty_dir, 'SwiftyGif', 'ObjcAssociatedWeakObject.swift')
+    if File.exist?(weak_helper)
+      File.chmod(0644, weak_helper)
+      File.write(weak_helper, "// Removed by Podfile post_install to avoid private-API symbol-name match.\n")
+    end
+  end
+
+  # sqlite3 pod ships its own MAX/MIN macros that conflict with iOS 26+ SDK sys/param.h.
+  # Suppress the ambiguity warning/error so the C compilation succeeds.
+  installer.pods_project.targets.each do |target|
+    next unless target.name == 'sqlite3'
+    target.build_configurations.each do |config|
+      existing = config.build_settings['OTHER_CFLAGS'] || '$(inherited)'
+      config.build_settings['OTHER_CFLAGS'] = "#{existing} -Wno-ambiguous-macro"
+    end
+  end
+
+  # macOS sync (iCloud, Time Machine, Finder copy-merge) leaves Finder-style
+  # duplicates inside Pods/ — files like "pb_decode 2.c" and entire directories
+  # named "Foo 2". CocoaPods globs them into the build phase, producing
+  # duplicate C/Swift symbols at link time and — for SwiftyGif — an unpatched
+  # copy of the private-API helper inside "SwiftyGif 2/". Strip every " 2"
+  # source from every target's build phases (previously this only ran for
+  # nanopb).
+  installer.pods_project.targets.each do |target|
+    # PBXAggregateTarget (e.g. "Pods-Runner") has no source/headers/resources
+    # phases — guard with respond_to? before accessing them.
+    phases = []
+    phases << target.source_build_phase if target.respond_to?(:source_build_phase)
+    phases << target.headers_build_phase if target.respond_to?(:headers_build_phase)
+    phases << target.resources_build_phase if target.respond_to?(:resources_build_phase)
+    phases.compact.each do |phase|
+      phase.files.each do |build_file|
+        path = build_file.file_ref&.path.to_s
+        next if path.empty?
+        # Match both " 2." (duplicate file like "pb_decode 2.c") and " 2/" /
+        # " 2 " (duplicate directory segment).
+        if path.match?(/ 2\./) || path.match?(/ 2\//) || path.match?(/ 2$/)
+          build_file.remove_from_project
+        end
+      end
+    end
+  end
+
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
+      config.build_settings['APP_SHORTCUTS_ENABLE_FLEXIBLE_MATCHING'] = 'NO'
+      # permission_handler (iOS): without these preprocessor macros every
+      # permission handler compiles to a no-op stub that ALWAYS returns
+      # "denied" — so Permission.camera/microphone.request() fails even when the
+      # user has granted access (this broke video-note recording on iOS).
+      # Enable the camera + microphone handlers app-wide.
+      defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
+      defs = [defs] unless defs.is_a?(Array)
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] =
+        defs + ['PERMISSION_CAMERA=1', 'PERMISSION_MICROPHONE=1']
+    end
+  end
+end

@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">Secretly</string>
+    <string name="notification_channel_messages_name">Повідомлення</string>
+    <string name="notification_channel_messages_description">Вхідні повідомлення Secretly</string>
+    <string name="notification_action_reply">Відповісти</string>
+    <string name="notification_action_mark_read">Прочитано</string>
+    <string name="notification_message_new">Нове повідомлення</string>
+    <string name="notification_channel_media_name">Відтворення медіа</string>
+    <string name="notification_channel_media_description">Керування аудіо Secretly</string>
+    <string name="notification_media_previous">Назад</string>
+    <string name="notification_media_play">Відтворити</string>
+    <string name="notification_media_pause">Пауза</string>
+    <string name="notification_media_next">Далі</string>
+    <string name="notification_media_stop">Зупинити</string>
+    <string name="notification_channel_incoming_calls_name">Вхідні дзвінки</string>
+    <string name="notification_channel_incoming_calls_description">Сповіщення про вхідні дзвінки Secretly</string>
+    <string name="notification_channel_ongoing_calls_name">Поточні дзвінки</string>
+    <string name="notification_channel_ongoing_calls_description">Статус активного дзвінка Secretly у панелі сповіщень</string>
+    <string name="notification_channel_active_call_name">Активний дзвінок</string>
+    <string name="notification_channel_active_call_description">Підтримує дзвінки Secretly активними у фоні</string>
+    <string name="notification_action_decline">Відхилити</string>
+    <string name="notification_action_answer">Відповісти</string>
+    <string name="notification_action_hang_up">Завершити</string>
+    <string name="call_unknown">Невідомо</string>
+    <string name="call_incoming_voice">Вхідний голосовий дзвінок</string>
+    <string name="call_incoming_video">Вхідний відеодзвінок</string>
+    <string name="call_ongoing_voice">Голосовий дзвінок - натисніть, щоб повернутися</string>
+    <string name="call_ongoing_video">Відеодзвінок - натисніть, щоб повернутися</string>
+    <string name="call_active">Активний дзвінок</string>
+    <string name="call_voice">Голосовий дзвінок</string>
+    <string name="call_video">Відеодзвінок</string>
+</resources>

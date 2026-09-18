@@ -1,0 +1,1007 @@
+{
+  "@@locale": "es",
+  "@appTitle": {
+    "description": "Application title"
+  },
+  "appTitle": "Secretly",
+  "starting": "Iniciando…",
+  "encrypting": "Cifrando…",
+  "errorPrefix": "Error: {error}",
+  "@errorPrefix": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "settingsTitle": "Ajustes",
+  "notificationsSection": "Notificaciones",
+  "languageSection": "Idioma",
+  "comingSoon": "Próximamente",
+  "idsTitle": "IDs",
+  "profileIdLabel": "ID de perfil",
+  "deviceIdLabel": "ID de dispositivo",
+  "profileIdShort": "Perfil",
+  "deviceIdShort": "Dispositivo",
+  "copy": "Copiar",
+  "copied": "Copiado",
+  "copyBoth": "Copiar ambos",
+  "openMyId": "Abrir mi ID",
+  "close": "Cerrar",
+  "tabChats": "Chats",
+  "tabGroups": "Salas",
+  "tabContacts": "Contactos",
+  "tabProfile": "Perfil",
+  "accountSection": "Cuenta",
+  "chatsSection": "Chats",
+  "privacySection": "Privacidad",
+  "devicesSection": "Dispositivos",
+  "systemSection": "Sistema",
+  "languageSystemDefault": "Predeterminado del sistema",
+  "languageSystemCurrent": "Sistema ({language})",
+  "@languageSystemCurrent": {
+    "placeholders": {
+      "language": {}
+    }
+  },
+  "languageChooseAppLanguage": "Elegir idioma de la app",
+  "languageAvailableWave1": "Disponible: inglés, ruso, ucraniano, español, portugués (Brasil), francés y alemán. También puedes usar el idioma del sistema.",
+  "languageMessageTranslation": "Traducción de mensajes",
+  "languageShowTranslateButton": "Mostrar botón Traducir",
+  "languageTranslateWholeChats": "Traducir chats completos",
+  "favoritesTitle": "Favoritos",
+  "favoritesSubtitle": "Tus notas personales",
+  "favoritesEmptyTitle": "Aún no hay favoritos",
+  "favoritesEmptySubtitle": "Envía mensajes, archivos y notas aquí para mantenerlos privados en tus dispositivos.",
+  "favoritesPersonalNotebookLabel": "Notas personales",
+  "more": "Más",
+  "stickersRecent": "Stickers recientes",
+  "searchStickers": "Buscar stickers",
+  "noStickersFound": "No se encontraron stickers",
+  "noRecentStickers": "Tus stickers recientes aparecerán aquí",
+  "cancelSelection": "Cancelar selección",
+  "chatsTitle": "Chats",
+  "newChat": "Nuevo chat",
+  "openContactsToStartChat": "Abre Contactos para iniciar un chat",
+  "noChatsYet": "Aún no hay chats",
+  "openDemoChat": "Abrir chat de demostración",
+  "archive": "Archivar",
+  "unarchive": "Desarchivar",
+  "pin": "Fijar",
+  "unpin": "Desfijar",
+  "clearHistory": "Borrar historial",
+  "archiveHeader": "Archivo ({count})",
+  "@archiveHeader": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "deleteChatsConfirmTitle": "¿Eliminar {count} chat(s)?",
+  "@deleteChatsConfirmTitle": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "deleteChatsConfirmBody": "Esto elimina los chats solo de este dispositivo.",
+  "clearHistoryConfirmTitle": "¿Borrar el historial de {count} chat(s)?",
+  "@clearHistoryConfirmTitle": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "clearHistoryConfirmBody": "Esto elimina los mensajes solo de este dispositivo.",
+  "contactsTitle": "Contactos",
+  "contactsTab": "Contactos",
+  "requestsTab": "Solicitudes",
+  "addContact": "Añadir contacto",
+  "deleteContact": "Eliminar contacto",
+  "noContactsYet": "Aún no hay contactos",
+  "noRequests": "No hay solicitudes",
+  "secretlyIdLabel": "Secretly ID",
+  "secretlyIdHint": "XXXX-XXXX-...-CHECK",
+  "nameOptionalLabel": "Nombre (opcional)",
+  "scanContactQrTitle": "Escanear QR de contacto",
+  "qrMissingSecretlyId": "El QR no contiene un Secretly ID",
+  "differentServerTitle": "Servidor diferente",
+  "differentServerBody": "Este QR pertenece a otro servidor.\n\nServidor del QR: {qrServer}\nEsta app: {appServer}\n\nInstala el mismo APK/servidor en ambos teléfonos.",
+  "@differentServerBody": {
+    "placeholders": {
+      "qrServer": {},
+      "appServer": {}
+    }
+  },
+  "contactActionProfileNotFound": "No se encontró ese Secretly ID en este servidor.",
+  "contactActionTransportBlocked": "Esta acción no está disponible porque la app está vinculada a otro servidor.",
+  "contactActionServiceUnavailable": "El servidor no está disponible ahora. Inténtalo de nuevo en un momento.",
+  "contactActionCallsDisabled": "Las llamadas están desactivadas en los ajustes de privacidad.",
+  "contactActionCallsDisabledForContact": "Las llamadas están desactivadas para este contacto.",
+  "callServiceUnavailable": "El servicio de llamadas no está disponible ahora.",
+  "callAlreadyInProgress": "Ya hay otra llamada en curso.",
+  "callIceUnavailable": "La configuración segura de la llamada no está disponible ahora. Inténtalo de nuevo en un momento.",
+  "callPermissionDenied": "El acceso al micrófono o a la cámara está bloqueado. Concede permisos e inténtalo de nuevo.",
+  "callNegotiationFailed": "No se pudo establecer la llamada segura. Inténtalo de nuevo.",
+  "callConnectionInterrupted": "La conexión de la llamada se interrumpió. Inténtalo de nuevo.",
+  "callActionGeneric": "No se pudo iniciar la llamada. Inténtalo de nuevo.",
+  "callEncryptedBadge": "Cifrado de extremo a extremo",
+  "incomingVideoCall": "Videollamada entrante",
+  "incomingVoiceCall": "Llamada de voz entrante",
+  "callDecline": "Rechazar",
+  "callConnectionUnstable": "Conexión inestable",
+  "callNetworkVeryWeak": "Señal de red muy débil",
+  "callNetworkWeak": "Señal de red débil",
+  "callEnded": "Llamada finalizada",
+  "callReplacedByNewerAttempt": "La llamada fue reemplazada por un intento más reciente",
+  "callDeclined": "Llamada rechazada",
+  "callYouDeclined": "Rechazaste",
+  "callNoAnswer": "Sin respuesta",
+  "callConnectionError": "Error de conexión",
+  "callVideoUnavailable": "Video no disponible",
+  "callWaitingForRemoteVideo": "Esperando el video remoto...",
+  "callAttachingRemoteVideo": "Adjuntando video remoto...",
+  "callStartingRemoteVideo": "Iniciando video remoto...",
+  "callRemoteVideoNotArriving": "El video remoto no está llegando",
+  "callRemoteVideoBindFailed": "No se pudo vincular el flujo de video remoto",
+  "callRemoteVideoNoFrames": "El video remoto está adjunto, pero no se renderizan fotogramas",
+  "callMinimize": "Minimizar",
+  "callStatusCalling": "Llamando...",
+  "callStatusIncoming": "Entrante...",
+  "callStatusConnecting": "Conectando...",
+  "callStatusReconnecting": "Reconectando...",
+  "callStatusEnded": "Finalizada",
+  "callVideoCall": "Videollamada",
+  "callControlMute": "Silenciar",
+  "callControlSpeaker": "Altavoz",
+  "callControlCamera": "Cámara",
+  "callControlFlip": "Cambiar",
+  "callControlStop": "Detener",
+  "callControlShare": "Compartir",
+  "callControlEnd": "Finalizar",
+  "contactActionGeneric": "No se pudo completar la acción. Inténtalo de nuevo.",
+  "notificationTitleRoom": "Sala",
+  "notificationTitleRequest": "Solicitud",
+  "notificationTitleChat": "Chat",
+  "notificationBodyNewMessage": "Nuevo mensaje",
+  "contactLookupUnavailable": "La búsqueda no está disponible ahora. Inténtalo de nuevo en un momento.",
+  "addContactFailed": "No se pudo añadir el contacto: {error}",
+  "@addContactFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "deleteContactsConfirmTitle": "¿Eliminar {count} contacto(s)?",
+  "@deleteContactsConfirmTitle": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "deleteContactsConfirmBody": "Los chats no se eliminan.",
+  "privacyTitle": "Privacidad",
+  "blockedUsersSubtitle": "Los usuarios bloqueados no pueden entregarte mensajes (aplicado por el servidor).",
+  "noBlockedUsers": "No hay usuarios bloqueados",
+  "unblockFailed": "No se pudo desbloquear: {error}",
+  "@unblockFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "diagIdentity": "Identidad",
+  "diagEndpoints": "Endpoints",
+  "diagServerBinding": "Vinculación del servidor",
+  "diagMismatch": "No coincide: el perfil pertenece a otro servidor. Usa Ajustes → Restablecer perfil.",
+  "diagStatus": "Estado",
+  "diagTimestamps": "Marcas de tiempo",
+  "diagTips": "Consejos",
+  "diagTipsBody": "Si los mensajes fallan con \"profile not found\":\n1) Asegúrate de que ambos teléfonos usen el mismo APK/servidor\n2) Vuelve a añadir el contacto escaneando el QR\n3) Si cambiaron los endpoints, usa Restablecer perfil\n",
+  "secretlyUser": "Usuario de Secretly",
+  "onlineStatus": "en línea",
+  "edit": "Editar",
+  "removePhoto": "Eliminar foto",
+  "profileSectionTitle": "Perfil",
+  "myNicknameLabel": "Mi apodo",
+  "myNicknameHint": "p. ej., Alex",
+  "includeNicknameInQr": "Incluir mi apodo en mi QR",
+  "includeNicknameInQrSubtitle": "Desactivado de forma predeterminada por privacidad. Si se activa, quienes escaneen pueden asignarte un nombre automáticamente.",
+  "verifyTitle": "Verificar: {title}",
+  "@verifyTitle": {
+    "placeholders": {
+      "title": {}
+    }
+  },
+  "scanVerifyQrTitle": "Escanear QR de verificación",
+  "qrBelongsAnotherServer": "El QR pertenece a otro servidor: {server}",
+  "@qrBelongsAnotherServer": {
+    "placeholders": {
+      "server": {}
+    }
+  },
+  "qrSecretlyIdMismatch": "El Secretly ID del QR no coincide con este contacto",
+  "qrMissingDeviceKeyInfo": "El QR no incluye información del dispositivo/clave",
+  "deviceNotCachedTapRefresh": "El dispositivo no está en caché. Toca Actualizar primero.",
+  "identityKeyMismatch": "La identity key no coincide. No verifiques.",
+  "verifiedSuccess": "Verificado ✅",
+  "refreshKeys": "Actualizar Keys",
+  "keysOfflineCannotFetch": "El servicio Keys está sin conexión. No se pueden obtener las claves del contacto ahora.",
+  "devicesLabel": "Dispositivos",
+  "noDeviceKeysCachedYet": "Aún no hay claves de dispositivos en caché.",
+  "deviceTitle": "Dispositivo {deviceId}",
+  "@deviceTitle": {
+    "placeholders": {
+      "deviceId": {}
+    }
+  },
+  "deviceFpStatus": "fp: {fp}\n{status}",
+  "@deviceFpStatus": {
+    "placeholders": {
+      "fp": {},
+      "status": {}
+    }
+  },
+  "verifiedLower": "verificado",
+  "unverifiedLower": "sin verificar",
+  "keysOfflineIdTemporary": "El servicio Keys está sin conexión. El ID puede ser temporal en modo de desarrollo.",
+  "serverKeysLabel": "Servidor (Keys)",
+  "nicknameLabel": "Apodo",
+  "identityFingerprintLabel": "Huella de identidad",
+  "scanToAddVerifyContact": "Escanea para añadir/verificar este contacto",
+  "mySecretlyId": "Mi Secretly ID",
+  "deviceId": "ID de dispositivo",
+  "recoveryKit": "Recovery Kit",
+  "safeBackupTitle": "Safe Backup",
+  "safeBackupSubtitle": "Safe Backup cifrado almacenado en el servidor",
+  "safeBackupIntro": "Crea una copia cifrada localmente o en el servidor. Podrás restaurarla más tarde desde un archivo o un Secretly ID.",
+  "safeBackupUploadNow": "Subir copia ahora",
+  "safeBackupRestoreFromServer": "Restaurar desde el servidor",
+  "safeBackupRestoreTitle": "Restaurar desde copia del servidor",
+  "safeBackupRestoreConfirmTitle": "¿Restaurar cuenta?",
+  "safeBackupRestoreConfirmBody": "Esto eliminará los chats/contactos locales de este dispositivo y restaurará la cuenta desde la copia seleccionada. La app se reiniciará automáticamente.",
+  "safeBackupUploaded": "Copia subida",
+  "safeBackupUploadFailed": "No se pudo subir la copia",
+  "safeBackupUploadFailedWithError": "No se pudo subir la copia: {error}",
+  "@safeBackupUploadFailedWithError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "safeBackupNotFound": "No se encontró una copia en el servidor para este Secretly ID",
+  "exportRecoveryKit": "Exportar Recovery Kit",
+  "exportRecoveryKitSubtitle": "QR cifrado para recuperación de cuenta",
+  "restoreRecoveryKit": "Restaurar desde Recovery Kit",
+  "restoreRecoveryKitSubtitle": "Borra los datos locales y restaura este Secretly ID",
+  "recoveryPasswordTitle": "Contraseña de Recovery Kit",
+  "password": "Contraseña",
+  "confirmPassword": "Confirmar contraseña",
+  "export": "Exportar",
+  "scanQr": "Escanear QR",
+  "invalidRecoveryKit": "Recovery Kit no válido",
+  "wrongPassword": "Contraseña incorrecta",
+  "restoreConfirmTitle": "¿Restaurar cuenta?",
+  "restoreConfirmBody": "Esto eliminará los chats/contactos locales de este dispositivo y restaurará la cuenta desde el Recovery Kit.",
+  "restore": "Restaurar",
+  "darkTheme": "Tema oscuro",
+  "darkThemeSubtitle": "Usar el mismo tono de acento en modo oscuro.",
+  "blockUnverified": "Bloquear envío a contactos sin verificar",
+  "blockUnverifiedSubtitle": "Modo estricto: en chats individuales, enviar solo a contactos cuyas claves hayas comprobado tú mismo. No se aplica a los grupos.",
+  "blockedUsers": "Usuarios bloqueados",
+  "resetProfile": "Restablecer perfil",
+  "resetProfileSubtitle": "Corrige la discrepancia de servidor/cuenta creando un nuevo Secretly ID",
+  "resetProfileDialogTitle": "¿Restablecer perfil?",
+  "resetProfileDialogBody": "Esto eliminará chats/contactos/solicitudes locales de este dispositivo y creará un nuevo Secretly ID.\n\nÚsalo si cambiaste de APK/servidor y los mensajes empezaron a fallar.",
+  "cancel": "Cancelar",
+  "ok": "OK",
+  "add": "Añadir",
+  "delete": "Eliminar",
+  "clear": "Borrar",
+  "block": "Bloquear",
+  "unblock": "Desbloquear",
+  "accept": "Aceptar",
+  "verify": "Verificar",
+  "menu": "Menú",
+  "search": "Buscar",
+  "queryLabel": "Consulta",
+  "messageHint": "Mensaje",
+  "notificationActionMarkRead": "Marcar como leído",
+  "addCaption": "Añadir un título",
+  "uploadCanceled": "Carga cancelada",
+  "attachmentFinalizeTimeout": "La red es inestable: la carga terminó, pero expiró la confirmación de envío. Inténtalo de nuevo.",
+  "attachmentTransferUnavailable": "No se pudo transferir el adjunto ahora. Revisa internet/servidor e inténtalo de nuevo.",
+  "attachmentSendUnavailable": "El envío de adjuntos aún no está listo. Inténtalo de nuevo.",
+  "attachmentContactSyncPending": "Esperando la sincronización de identidad del contacto. Pídele al contacto que envíe un mensaje más e inténtalo de nuevo.",
+  "attachmentContactBlocked": "Este contacto está bloqueado.",
+  "attachmentRecipientNotFound": "No se encontró el perfil del destinatario en este servidor. Revisa el Secretly ID y asegúrate de que ambos dispositivos usen el mismo servidor.",
+  "attachmentRecipientNoDevices": "El destinatario aún no tiene dispositivos registrados. Pídele que abra Secretly e inténtalo de nuevo.",
+  "attachmentNoDeliverableDevices": "No se pudo entregar el adjunto a ningún dispositivo del destinatario. Inténtalo de nuevo.",
+  "attachmentActionGeneric": "No se pudo enviar el adjunto. Inténtalo de nuevo.",
+  "send": "Enviar",
+  "attach": "Adjuntar",
+  "photo": "Foto",
+  "video": "Video",
+  "file": "Archivo",
+  "music": "Música",
+  "attachment": "Adjunto",
+  "downloading": "Descargando…",
+  "downloadFailed": "Falló la descarga: {error}",
+  "@downloadFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "savedTo": "Guardado en: {path}",
+  "@savedTo": {
+    "placeholders": {
+      "path": {}
+    }
+  },
+  "noMessagesYet": "Aún no hay mensajes",
+  "decrypting": "Descifrando…",
+  "uploading": "Subiendo…",
+  "uploadTimedOut": "La carga agotó el tiempo de espera. Revisa internet/servidor e inténtalo de nuevo.",
+  "uploadingBytes": "Subidos {sent} / {total} bytes",
+  "@uploadingBytes": {
+    "placeholders": {
+      "sent": {},
+      "total": {}
+    }
+  },
+  "requestsInfo": "Este chat está en Solicitudes. Acepta para responder o bloquea para ignorarlo.",
+  "verifyRequired": "Verificación requerida",
+  "verifyContact": "Verificar contacto",
+  "muteNotifications": "Silenciar notificaciones",
+  "unmuteNotifications": "Activar notificaciones",
+  "setContactPhoto": "Establecer foto del contacto",
+  "removeContactPhoto": "Eliminar foto del contacto",
+  "blockUser": "Bloquear usuario",
+  "unblockUser": "Desbloquear usuario",
+  "deleteChat": "Eliminar chat",
+  "missingRecipient": "Falta el destinatario",
+  "contactNotVerified": "El código de seguridad cambió. Compruébalo para seguir escribiendo.",
+  "safetyNumberChangedTitle": "El código de seguridad cambió",
+  "safetyNumberChangedBody": "Ya habías comprobado el código de este contacto. Ahora sus claves son nuevas: suele ocurrir tras reinstalar la app o cambiar de teléfono. El chat sigue cifrado en cualquier caso. Compara el código otra vez si quieres asegurarte de que sigue siendo esa persona.",
+  "safetyNumberStrictBody": "Tienes activado «Bloquear envío a no verificados». Compara el código de este contacto para enviarle mensajes.",
+  "sendAnyway": "Enviar de todos modos",
+  "alsoDeleteChat": "Eliminar también el chat",
+  "unblockUserConfirmTitle": "¿Desbloquear usuario?",
+  "blockUserConfirmTitle": "¿Bloquear usuario?",
+  "deleteChatConfirmTitle": "¿Eliminar chat?",
+  "deleteChatConfirmBody": "Esto elimina el chat solo de este dispositivo.",
+  "attachFailed": "No se pudo adjuntar: {error}",
+  "@attachFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "sendFailed": "No se pudo enviar: {error}",
+  "@sendFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "actionFailed": "La acción falló: {error}",
+  "@actionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "roomPolicyNotMember": "Ya no participas en esta sala.",
+  "roomPolicyAdminsOnly": "Solo propietarios y administradores de la sala pueden hacer eso.",
+  "roomPolicyTextMessagesDisabled": "Tu rol no puede enviar mensajes de texto en esta sala.",
+  "roomPolicyMediaDisabled": "Tu rol no puede enviar contenido multimedia en esta sala.",
+  "roomPolicyReactionsDisabled": "Las reacciones están desactivadas en esta sala.",
+  "roomPolicyReactionNotAllowed": "Esta reacción no está permitida en esta sala.",
+  "roomPolicyPinDenied": "Solo los administradores pueden fijar mensajes en esta sala.",
+  "roomPolicyAddMembersDenied": "Solo los administradores pueden añadir participantes a esta sala.",
+  "roomPolicyChangeInfoDenied": "Solo los administradores pueden cambiar el perfil del grupo.",
+  "roomPolicySlowMode": "El modo lento está activado. Inténtalo de nuevo en {seconds} s.",
+  "@roomPolicySlowMode": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "noMatches": "No hay coincidencias",
+  "attachmentTooLarge": "El adjunto es demasiado grande ({mb} MB).",
+  "@attachmentTooLarge": {
+    "placeholders": {
+      "mb": {}
+    }
+  },
+  "attachmentFileMissing": "El archivo ya no está disponible.",
+  "foundPrefix": "Encontrado: {hit}",
+  "@foundPrefix": {
+    "placeholders": {
+      "hit": {}
+    }
+  },
+  "contactDetailsChat": "Chat",
+  "contactDetailsSound": "Sonido",
+  "contactDetailsCall": "Llamada",
+  "contactDetailsVideo": "Video",
+  "contactDetailsUsernameLabel": "Nombre de usuario",
+  "contactDetailsAddToContacts": "Añadir a contactos",
+  "contactDetailsMediaTab": "Multimedia",
+  "contactDetailsFilesTab": "Archivos",
+  "contactDetailsNoMedia": "No hay multimedia",
+  "contactDetailsNoFiles": "No hay archivos",
+  "contactDetailsStatusRecently": "visto recientemente",
+  "contactDetailsStatusAt": "visto a las {time}",
+  "@contactDetailsStatusAt": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "contactDetailsAutoDelete": "Eliminación automática",
+  "contactDetailsShareContact": "Compartir contacto",
+  "contactDetailsEditContact": "Editar contacto",
+  "contactDetailsDeleteContact": "Eliminar contacto",
+  "contactDetailsSendGift": "Enviar regalo",
+  "contactDetailsStartSecretChat": "Iniciar chat secreto",
+  "contactDetailsCreateShortcut": "Crear acceso directo",
+  "contactDetailsNameLabel": "Nombre",
+  "contactDetailsSave": "Guardar",
+  "contactDetailsDeleteConfirmTitle": "¿Eliminar contacto?",
+  "contactAutoDeleteOff": "Desactivado",
+  "contactAutoDelete1Day": "24 horas",
+  "contactAutoDelete7Days": "7 días",
+  "contactAutoDelete30Days": "30 días",
+  "contactEditTitle": "Editar contacto",
+  "contactEditDone": "LISTO",
+  "contactEditNameLabel": "Nombre",
+  "contactEditAssignEmoji": "Asignar emoji",
+  "contactEditClearEmoji": "Borrar emoji",
+  "contactEditSetPhoto": "Establecer foto",
+  "chatMenuReply": "Responder",
+  "chatMenuCopy": "Copiar",
+  "chatMenuForward": "Reenviar",
+  "chatMenuPin": "Fijar",
+  "chatMenuDelete": "Eliminar",
+  "reset": "Restablecer",
+  "diagnostics": "Diagnóstico",
+  "diagnosticsSubtitle": "Estado, vinculación, marcas de tiempo",
+  "sendLater": "Enviar más tarde",
+  "sendSilently": "Enviar sin sonido",
+  "scheduledSendToday": "Enviar hoy a las {time}",
+  "@scheduledSendToday": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "scheduledSendOn": "Enviar el {date} a las {time}",
+  "@scheduledSendOn": {
+    "placeholders": {
+      "date": {},
+      "time": {}
+    }
+  },
+  "repeatNever": "Nunca",
+  "repeat": "Repetir",
+  "onboardingBackTooltip": "Atrás",
+  "onboardingWelcomeTitle": "¡Bienvenido!",
+  "onboardingWelcomeSubtitle": "Un mensajero de nueva generación.\nPrivacidad total. Sin concesiones.",
+  "onboardingCreateAccount": "Crear cuenta nueva",
+  "onboardingAlreadyHaveAccount": "Ya tengo una cuenta",
+  "onboardingFeatureE2eTitle": "Cifrado E2E",
+  "onboardingFeatureE2eBody": "Los mensajes se cifran en tu dispositivo. Solo tú tienes las claves.",
+  "onboardingFeaturePrivacyTitle": "Anonimato completo",
+  "onboardingFeaturePrivacyBody": "Sin número de teléfono. Sin vinculación a datos personales.",
+  "onboardingFeatureRelayTitle": "Sin intermediarios",
+  "onboardingFeatureRelayBody": "El servidor relay no guarda mensajes. Solo los transmite.",
+  "onboardingProfileTitle": "Tu perfil",
+  "onboardingProfileSubtitle": "Cómo te verán otros usuarios",
+  "onboardingProfileNameSection": "Nombre del perfil",
+  "onboardingProfileNameHint": "Tu nombre o seudónimo",
+  "onboardingNotificationsSection": "Notificaciones",
+  "onboardingMessageNotificationsTitle": "Notificaciones de mensajes",
+  "onboardingMessageNotificationsSubtitle": "Recibir notificaciones push de Secretly",
+  "onboardingIncomingCallsTitle": "Llamadas entrantes",
+  "onboardingIncomingCallsSubtitle": "Aceptar llamadas de contactos",
+  "continueAction": "Continuar",
+  "onboardingBackupSaveFailed": "No se pudieron guardar los ajustes de copia de seguridad",
+  "backupPasswordRequirements": "Usa al menos 8 caracteres ASCII, una letra mayúscula y un carácter especial. Sin espacios al inicio ni al final.",
+  "backupPasswordTooShort": "La contraseña debe tener al menos {minLength} caracteres.",
+  "backupPasswordTooLong": "La contraseña no debe superar {maxLength} caracteres.",
+  "backupPasswordNonAscii": "Usa solo letras latinas, dígitos y símbolos ASCII.",
+  "backupPasswordOuterWhitespace": "Quita los espacios al inicio o al final de la contraseña.",
+  "backupPasswordMissingUppercase": "Añade al menos una letra mayúscula A-Z.",
+  "backupPasswordMissingSpecial": "Añade al menos un carácter especial, como !, # o ?.",
+  "onboardingBackupPasswordTitle": "Contraseña de la copia de seguridad",
+  "onboardingPasswordsDoNotMatch": "Las contraseñas no coinciden",
+  "onboardingBackupTitle": "Copias de seguridad",
+  "onboardingBackupSubtitle": "Protege tus chats contra la pérdida de datos.\nIncluso al cambiar de dispositivo.",
+  "onboardingAutoBackupSection": "Copia automática",
+  "onboardingAutoBackupTitle": "Copia automática",
+  "onboardingAutoBackupSubtitle": "Guardar automáticamente una copia de seguridad",
+  "onboardingStorageTypeSection": "Tipo de almacenamiento",
+  "onboardingBackupMediaTitle": "Incluir multimedia",
+  "onboardingBackupMediaSubtitle": "Fotos, videos, archivos y avatares se incluyen solo en copias locales",
+  "onboardingFrequencySection": "Frecuencia",
+  "onboardingEnterSecretly": "Entrar en Secretly",
+  "onboardingSkipBackup": "Omitir configuración de copia",
+  "onboardingSecretlyIdCopied": "Secretly ID copiado",
+  "onboardingRegistrationCompleteTitle": "Registro completado",
+  "onboardingRegistrationCompleteSubtitle": "Guarda ahora tu Secretly ID. Lo necesitarás para restaurar tu cuenta y la copia de seguridad en un dispositivo nuevo.",
+  "onboardingYourSecretlyId": "Tu Secretly ID",
+  "onboardingCopyId": "Copiar ID",
+  "onboardingRecoveryWarning": "Sin tu Secretly ID y la contraseña de la copia, no será posible restaurar la copia del servidor. Guarda el ID en un lugar seguro y no olvides la contraseña.",
+  "onboardingStorageCloud": "Nube",
+  "onboardingStorageCloudSubtitle": "En el servidor de Secretly",
+  "onboardingStorageLocal": "Local",
+  "onboardingStorageLocalSubtitle": "En este dispositivo",
+  "onboardingInterval6Hours": "6 horas",
+  "onboardingInterval12Hours": "12 horas",
+  "onboardingIntervalEveryDay": "Cada día",
+  "onboardingIntervalEvery3Days": "Cada 3 días",
+  "onboardingIntervalWeekly": "Una vez por semana",
+  "onboardingBackupLocalCandidate": "Copia local de Secretly",
+  "onboardingDownloads": "Descargas",
+  "onboardingDeviceFolder": "Carpeta del dispositivo",
+  "onboardingNoBackupsFound": "No se encontraron copias en este dispositivo",
+  "onboardingFoundBackups": "Copias encontradas",
+  "onboardingNoBackupsFoundBody": "Secretly revisó las copias locales de la app y la carpeta Descargas. Si el archivo está en otro lugar, elígelo manualmente.",
+  "chooseManually": "Elegir manualmente",
+  "onboardingChooseBackupFileTitle": "Elige un archivo de copia de Secretly",
+  "onboardingReadBackupFailed": "No se pudo leer el archivo de copia",
+  "onboardingServerBackupNotFound": "No se encontró una copia en el servidor",
+  "onboardingRestoreThisBackupTitle": "¿Restaurar esta copia?",
+  "onboardingRestoreThisBackupBody": "Los datos locales actuales de este dispositivo serán reemplazados.",
+  "onboardingSecretlyIdSummary": "Secretly ID: {profileId}",
+  "onboardingContactsSummary": "Contactos: {count}",
+  "onboardingMessagesSummary": "Mensajes: {count}",
+  "onboardingChatsSummary": "Chats: {count}",
+  "onboardingMediaFilesSummary": "Archivos multimedia: {count}",
+  "onboardingBrokenBackup": "Archivo de copia dañado o no válido",
+  "onboardingRestoreFailed": "La restauración falló. Inténtalo de nuevo.",
+  "onboardingRestoreLoginTitle": "Iniciar sesión en tu cuenta",
+  "onboardingRestoreLoginSubtitle": "Restaura chats y ajustes\ndesde una copia creada anteriormente.",
+  "onboardingRestoreMediaSubtitle": "Para futuras copias locales: fotos, videos, archivos y avatares se añadirán solo si esto está activado.",
+  "onboardingRestoreFromCloudTitle": "Desde la nube de Secretly",
+  "onboardingRestoreFromCloudSubtitle": "Introduce tu Secretly ID y la contraseña de copia; los datos se descargarán del servidor",
+  "onboardingRestoreFromDeviceTitle": "Buscar copia en este dispositivo",
+  "onboardingRestoreFromDeviceSubtitle": "Secretly revisará automáticamente las copias locales y Descargas",
+  "onboardingRestoring": "Restaurando...",
+  "onboardingRestoreFromServerTitle": "Restaurar desde servidor",
+  "@backupPasswordTooShort": {
+    "placeholders": {
+      "minLength": {}
+    }
+  },
+  "@backupPasswordTooLong": {
+    "placeholders": {
+      "maxLength": {}
+    }
+  },
+  "@onboardingSecretlyIdSummary": {
+    "placeholders": {
+      "profileId": {}
+    }
+  },
+  "@onboardingContactsSummary": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@onboardingMessagesSummary": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@onboardingChatsSummary": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@onboardingMediaFilesSummary": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "callRecordOutgoingVideoCall": "Videollamada saliente",
+  "callRecordOutgoingCall": "Llamada saliente",
+  "callRecordIncomingVideoCall": "Videollamada entrante",
+  "callRecordIncomingCall": "Llamada entrante",
+  "callRecordMissedCall": "Llamada perdida",
+  "callRecordDeclinedCall": "Llamada rechazada",
+  "callRecordBusy": "Ocupado",
+  "callRecordFailed": "Error de llamada",
+  "callRecordCanceled": "Llamada cancelada",
+  "callRecordOngoing": "Llamada en curso",
+  "safeBackupInvalidBackup": "Copia de seguridad de Secretly no válida",
+  "recoveryKitPrepareFailed": "No se pudo preparar un Recovery Kit en este dispositivo.",
+  "safeBackupPreviewProfileId": "ID de Secretly: {profileId}",
+  "@safeBackupPreviewProfileId": {
+    "placeholders": {
+      "profileId": {
+        "type": "String"
+      }
+    }
+  },
+  "safeBackupPreviewContacts": "Contactos: {count}",
+  "@safeBackupPreviewContacts": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "safeBackupPreviewServer": "Servidor: {server}",
+  "@safeBackupPreviewServer": {
+    "placeholders": {
+      "server": {
+        "type": "String"
+      }
+    }
+  },
+  "safeBackupPreviewTitle": "Vista previa de la copia:",
+  "safeBackupSavedToFiles": "Copia guardada en Secretly Files",
+  "safeBackupExportCanceled": "Exportación de copia cancelada",
+  "safeBackupExportFailed": "No se pudo exportar la copia: {error}",
+  "@safeBackupExportFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "safeBackupCreateDialogTitle": "Crear copia",
+  "safeBackupServerDestination": "Copia en servidor",
+  "safeBackupLocalDestination": "Copia local",
+  "safeBackupRestoreDialogTitle": "Restaurar copia",
+  "safeBackupRestoreFromDevice": "Restaurar desde el dispositivo",
+  "safeBackupDownloadsLocation": "Descargas",
+  "safeBackupDeviceFolderLocation": "Carpeta del dispositivo",
+  "safeBackupChooseManualHint": "Secretly comprobó automáticamente las copias locales de la app y Descargas. Si el archivo está en otro lugar, puedes elegirlo manualmente.",
+  "safeBackupChooseManually": "Elegir manualmente",
+  "safeBackupReadFileFailed": "No se pudo leer el archivo de copia: {error}",
+  "@safeBackupReadFileFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "safeBackupFrequencyTitle": "Frecuencia de guardado",
+  "saveAction": "Guardar",
+  "safeBackupEnableAutoTitle": "Activar copia automática",
+  "safeBackupEnableAutoSubtitle": "Se ejecuta en la app cuando hay conexión; se cifra con tu contraseña",
+  "safeBackupUploadToServer": "Subir al servidor",
+  "safeBackupSaveOnDevice": "Guardar en este dispositivo",
+  "safeBackupPasswordConfigured": "Contraseña de copia automática: configurada",
+  "safeBackupPasswordNotSet": "Contraseña de copia automática: no definida",
+  "safeBackupPasswordSaved": "Contraseña de copia automática guardada",
+  "genericFailed": "Error: {error}",
+  "@genericFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "safeBackupSetPassword": "Definir contraseña",
+  "safeBackupPasswordRemoved": "Contraseña de copia automática eliminada",
+  "safeBackupClearPassword": "Borrar contraseña",
+  "safeBackupRunRequested": "Copia automática iniciada",
+  "safeBackupRunNow": "Ejecutar copia automática ahora",
+  "safeBackupLastAutoBackup": "Última copia automática: {time}",
+  "@safeBackupLastAutoBackup": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "safeBackupLastAutoBackupNever": "Última copia automática: nunca",
+  "safeBackupLastDeviceBackup": "Última copia del dispositivo: {time}",
+  "@safeBackupLastDeviceBackup": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "safeBackupLastAutoBackupError": "Error de copia automática: {error}",
+  "@safeBackupLastAutoBackupError": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "securityScopeAppObject": "la app",
+  "securityScopePersonalObject": "chats personales",
+  "securityUnlockAppTitle": "Desbloquea la app",
+  "securityUnlockPersonalTitle": "Desbloquea los chats personales",
+  "securityUnlockFingerprintAutoSubtitle": "El desbloqueo con huella se inicia automáticamente. Si hace falta, puedes usar tu contraseña abajo.",
+  "securityUnlockBiometricPatternAutoSubtitle": "La biometría nativa se inicia primero automáticamente. Si hace falta, puedes usar tu patrón abajo.",
+  "securityUnlockNativeSubtitle": "Confirma el acceso con la autenticación nativa del dispositivo.",
+  "securityUnlockPasswordSubtitle": "Introduce tu contraseña para abrir {scopeName}.",
+  "@securityUnlockPasswordSubtitle": {
+    "placeholders": {
+      "scopeName": {
+        "type": "String"
+      }
+    }
+  },
+  "securityUnlockPatternSubtitle": "Dibuja tu patrón para acceder a {scopeName}.",
+  "@securityUnlockPatternSubtitle": {
+    "placeholders": {
+      "scopeName": {
+        "type": "String"
+      }
+    }
+  },
+  "securityUnlockBiometricSubtitle": "Confirma tu identidad con la autenticación nativa del dispositivo.",
+  "securityUnlockAppBiometricReason": "Autentícate para desbloquear la app",
+  "securityUnlockPersonalBiometricReason": "Autentícate para abrir los chats personales",
+  "securityUnlockPasswordMismatch": "La contraseña no coincide. Inténtalo de nuevo.",
+  "securityUnlockPatternMismatch": "El patrón no coincide.",
+  "securityUnlockNativeIncomplete": "La autenticación nativa no se completó.",
+  "securityPasswordContinueHint": "Introduce tu contraseña para continuar",
+  "securityUseFingerprint": "Usar huella",
+  "securityUsePassword": "Usar contraseña",
+  "securityClearPattern": "Borrar patrón",
+  "securityConnectFourDots": "Conecta al menos 4 puntos.",
+  "securityPasswordMinFourChars": "Usa al menos 4 caracteres.",
+  "securityPasswordsMismatchFull": "Las contraseñas no coinciden.",
+  "securityPasswordSetupTitle": "Contraseña para {scopeName}",
+  "@securityPasswordSetupTitle": {
+    "placeholders": {
+      "scopeName": {
+        "type": "String"
+      }
+    }
+  },
+  "securityPasswordSetupDescription": "La contraseña se guarda solo en el almacén seguro del dispositivo.",
+  "securityNewPassword": "Nueva contraseña",
+  "securityRepeatPassword": "Repite la contraseña",
+  "securitySavePassword": "Guardar contraseña",
+  "securityPatternSetupInstruction": "Dibuja un patrón con al menos 4 puntos.",
+  "securityPatternSetupRepeat": "Repite el patrón para confirmarlo.",
+  "securityPatternMinFourDots": "Usa al menos 4 puntos.",
+  "securityPatternMismatchStartOver": "Los patrones no coinciden. Empieza de nuevo.",
+  "securityPatternSetupTitle": "Patrón para {scopeName}",
+  "@securityPatternSetupTitle": {
+    "placeholders": {
+      "scopeName": {
+        "type": "String"
+      }
+    }
+  },
+  "securityStartOver": "Empezar de nuevo",
+  "securityTitle": "Seguridad",
+  "securityNativeAuthentication": "Autenticación nativa",
+  "securityReady": "Listo",
+  "securityUnavailable": "No disponible",
+  "securityNativeAvailableDescription": "Se usa para Face ID, huella y autenticación nativa del dispositivo.",
+  "securityNativeUnavailableDescription": "La biometría o autenticación nativa no está disponible en este dispositivo ahora mismo.",
+  "securityAppLockTitle": "Bloqueo de la app",
+  "securityAppLockDescription": "Protege la entrada a la app y puede volver a bloquearla cuando se oculta.",
+  "securityPersonalChatsTitle": "Chats personales",
+  "securityPersonalChatsDescription": "Protege la sección Personal oculta y la entrada directa a chats personales.",
+  "securityAuthEnableAppLockReason": "Autentícate para activar el bloqueo de la app",
+  "securityAuthChangeSettingsReason": "Autentícate para cambiar la configuración de seguridad",
+  "securityAuthProtectPersonalReason": "Autentícate para proteger los chats personales",
+  "securityAuthChangePersonalReason": "Autentícate para cambiar la protección de chats personales",
+  "securityNativeUnavailableError": "La autenticación nativa no está disponible en este dispositivo.",
+  "securityBiometricCancelled": "Se canceló la confirmación biométrica.",
+  "securityProtectionMode": "Modo de protección",
+  "securityProtectionModeSubtitle": "Elige cómo se debe proteger el acceso.",
+  "securityProtectionModeDescription": "Las contraseñas y patrones se guardan solo como hashes fuertes en secure storage. La biometría usa el aviso nativo del sistema.",
+  "securityProtectionOff": "Desactivado",
+  "securityProtectionOffDescription": "Acceso sin protección adicional.",
+  "securityPasswordModeDescription": "Una contraseña dedicada para desbloquear el acceso.",
+  "securityPatternModeTitle": "Patrón",
+  "securityPatternModeDescription": "Un patrón de puntos similar al bloqueo de Android.",
+  "securityNativePromptDescription": "El aviso nativo de Face ID, huella o autenticación del sistema del dispositivo.",
+  "securityRelockAfterHidden": "Volver a bloquear al ocultar la app",
+  "securityRelockAfterHiddenDescription": "Si está desactivado, la protección solo vuelve tras reiniciar completamente la app.",
+  "securityGracePeriod": "Periodo de espera antes de bloquear",
+  "securityGraceUnavailable": "No disponible mientras el bloqueo en segundo plano esté desactivado.",
+  "securityAllowQuickUnlockWith": "Permitir desbloqueo rápido con {method}",
+  "@securityAllowQuickUnlockWith": {
+    "placeholders": {
+      "method": {
+        "type": "String"
+      }
+    }
+  },
+  "securityQuickUnlockSubtitle": "Mantiene la contraseña o el patrón como método principal de respaldo.",
+  "securityChangePassword": "Cambiar contraseña",
+  "securityChangePattern": "Cambiar patrón",
+  "securityChangeCredentialSubtitle": "La protección actual se actualizará en cuanto se confirme el nuevo secreto.",
+  "securityProtectionActivated": "La protección se activó inmediatamente.",
+  "securityLockNow": "Bloquear ahora",
+  "securitySaveChanges": "Guardar cambios",
+  "securityGraceImmediately": "Inmediatamente",
+  "securityGraceAfterSeconds": "Después de {seconds} s",
+  "@securityGraceAfterSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "securityGraceAfterMinutes": "Después de {minutes} min",
+  "@securityGraceAfterMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "securityStatusLocked": "Bloqueado",
+  "securityStatusUnlocked": "Desbloqueado",
+  "securityAfterHide": "Al ocultar",
+  "securityGracePill": "Espera {seconds} s",
+  "@securityGracePill": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "securityNoProtection": "Sin protección",
+  "securityNativeBiometrics": "Biometría nativa",
+  "securityBiometricFaceFingerprint": "Face ID / huella",
+  "securityBiometricFingerprint": "Huella",
+  "securityBiometricNativeDeviceAuthentication": "Autenticación nativa del dispositivo",
+  "devicesLinkOpenFailed": "No se pudo abrir el enlace en un navegador.",
+  "devicesDesktopDescriptionPrefix": "Puedes iniciar sesión en la ",
+  "devicesDesktopAppLink": "app de Secretly para escritorio",
+  "devicesDesktopDescriptionSuffix": " usando un código QR.",
+  "devicesFailureTransportBlocked": "El transporte está bloqueado para el servidor actual. Usa el mismo servidor en el teléfono y el escritorio e inténtalo de nuevo.",
+  "devicesFailureIdentityNotServerBacked": "La identidad de escritorio aún no está respaldada por el servidor. Reinténtalo en unos segundos.",
+  "devicesFailureProfileUnavailable": "El perfil de escritorio aún no aparece en el servidor. Mantén la app abierta e inténtalo de nuevo.",
+  "devicesFailureDeviceUnavailable": "El dispositivo de escritorio aún no aparece en el servidor. Mantén la app abierta, actualiza el QR e inténtalo de nuevo.",
+  "devicesFailureCompanionRequired": "El acceso companion de escritorio no está activado para este perfil. Actívalo en el teléfono principal e inténtalo de nuevo.",
+  "devicesFailureCompanionLimit": "El límite de dispositivos de escritorio ya está en uso para este perfil. Elimina un dispositivo antiguo o aumenta los cupos disponibles.",
+  "devicesFailurePrimaryRequired": "Primero crea la cuenta principal en un teléfono y luego enlaza el escritorio con QR.",
+  "devicesFailureInvalidQr": "Este QR no es un código de autorización de dispositivo.",
+  "devicesFailureQrExpired": "El código QR caducó. Genera uno nuevo en el escritorio.",
+  "devicesFailureServerMismatch": "Este QR pertenece a otro servidor. Usa el mismo servidor en el teléfono y el escritorio e inténtalo de nuevo.",
+  "devicesFailureProfileMismatch": "El paquete de sincronización apunta a otro perfil. Genera un QR nuevo e inténtalo de nuevo.",
+  "devicesFailureRequestNotFound": "La solicitud de sincronización de escritorio no se encontró o ya caducó. Genera un QR nuevo.",
+  "devicesFailureSessionExpired": "La sesión QR caducó. Genera un QR nuevo e inténtalo de nuevo.",
+  "devicesFailureSessionValidation": "Falló la validación de la sesión QR. Genera un QR nuevo e inténtalo de nuevo.",
+  "devicesFailureStateMismatch": "El estado de la solicitud de sincronización ya no coincide. Genera un QR nuevo e inténtalo de nuevo.",
+  "devicesFailureDeviceMismatch": "El paquete de sincronización apunta a otro dispositivo. Genera un QR nuevo e inténtalo de nuevo.",
+  "devicesFailureDeclined": "El inicio de sesión fue rechazado en el teléfono principal. Genera un QR nuevo para reintentarlo.",
+  "devicesFailureInvalidPayload": "Paquete de sincronización de escritorio no válido. Genera un QR nuevo e inténtalo de nuevo.",
+  "devicesFailureInterrupted": "La sincronización segura se interrumpió antes de completarse. Genera un QR nuevo e inténtalo de nuevo.",
+  "devicesNewUser": "Nuevo usuario",
+  "devicesNewUserDesktopConfirm": "¿Borrar los datos locales y preparar este dispositivo de escritorio para iniciar sesión por QR desde el teléfono principal?",
+  "devicesNewUserMobileConfirm": "¿Borrar el perfil local actual y registrar un nuevo usuario en este dispositivo?",
+  "devicesCreateAction": "Crear",
+  "devicesScanDeviceQr": "Escanear QR del dispositivo",
+  "devicesRequestApproved": "Solicitud aprobada. Paquete de sincronización enviado al escritorio.",
+  "devicesRequestDeclined": "Solicitud rechazada. El escritorio seguirá sin autenticar.",
+  "devicesApproveSignInTitle": "¿Aprobar inicio de sesión en este dispositivo?",
+  "devicesConfirmSyncPrimary": "Confirma la sincronización desde el dispositivo principal (teléfono).",
+  "devicesApprovalDeviceOnly": "Dispositivo: {name}. La aprobación solo se permite desde el teléfono principal.",
+  "@devicesApprovalDeviceOnly": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesSyncChats": "Sincronizar chats",
+  "devicesSyncSettings": "Sincronizar ajustes",
+  "devicesSyncMedia": "Sincronizar medios",
+  "devicesDeclineSignIn": "Rechazar inicio",
+  "devicesApprove": "Aprobar",
+  "devicesTitle": "Dispositivos",
+  "devicesConnectDevice": "Conectar dispositivo",
+  "devicesPrimaryDeviceTitle": "Este es el dispositivo principal",
+  "devicesPrimaryDeviceSubtitle": "El permiso para sincronizar chats, ajustes y medios solo se concede aquí.",
+  "devicesQrSessionExpiredNewCode": "La sesión QR caducó. Genera un código nuevo.",
+  "devicesQrExpiresIn": "El QR caduca en {time}",
+  "@devicesQrExpiresIn": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesWaitingQrScan": "Esperando escaneo QR en el teléfono.",
+  "devicesQrScannedConfirm": "QR escaneado. Confirma el inicio en el teléfono.",
+  "devicesApplyingSecureBundle": "Aplicando paquete de sincronización segura…",
+  "devicesAuthorizationFailed": "Error de autorización. Inténtalo de nuevo.",
+  "devicesUnauthenticatedChooseAction": "No estás autenticado. Elige una acción abajo.",
+  "devicesAuthenticated": "Dispositivo autenticado.",
+  "devicesDesktopWebAuthorization": "Autorización Desktop/Web",
+  "devicesDesktopModeDescription": "Elige modo: registrar un nuevo usuario o entrar por QR con aprobación del teléfono.",
+  "devicesCancelQr": "Cancelar QR",
+  "devicesRefreshQr": "Actualizar QR",
+  "devicesSignInViaQr": "Entrar por QR",
+  "devicesOpenPrimaryInstruction": "Abre Secretly en el teléfono principal → Ajustes → Dispositivos → Conectar dispositivo.",
+  "storageSection": "Almacenamiento",
+  "storageSectionSubtitle": "Caché y descargas en este dispositivo",
+  "storageUsageTitle": "Uso de almacenamiento",
+  "storageCategoryMedia": "Caché de medios",
+  "storageCategoryVoiceTranscripts": "Transcripciones de voz",
+  "storageCategoryVoiceModel": "Modelo de voz sin conexión",
+  "storageCategoryStickers": "Stickers",
+  "storageCategoryEmoji": "Emojis animados",
+  "storageCategoryProfileMedia": "Mi galería y avatares",
+  "storageCategoryRecents": "Archivos recientes",
+  "storageTotal": "Total",
+  "storageCalculating": "Calculando…",
+  "storageClearCache": "Borrar caché",
+  "storageClearCacheHint": "Elimina los medios en caché, los avatares de contactos y los emojis animados. Tu galería, stickers y chats se conservan; los medios se vuelven a descargar al verlos.",
+  "storageClearing": "Borrando caché…",
+  "storageClearedToast": "Caché borrada",
+  "storageRemoveVoiceModel": "Eliminar el modelo de voz sin conexión (140 MB)",
+  "storageRemoveVoiceModelHint": "Libera el modelo de reconocimiento de voz del dispositivo. Se vuelve a descargar automáticamente la próxima vez que transcribas un mensaje de voz.",
+  "storageRemoveVoiceModelConfirmTitle": "¿Eliminar el modelo de voz?",
+  "storageRemoveVoiceModelConfirmBody": "El modelo de reconocimiento de voz de 140 MB se eliminará del dispositivo. Se vuelve a descargar automáticamente la próxima vez que transcribas un mensaje de voz.",
+  "storageRemoveVoiceModelConfirm": "Eliminar",
+  "storageVoiceModelNotInstalled": "No hay ningún modelo de voz instalado",
+  "storageVoiceModelRemovedToast": "Modelo de voz eliminado",
+  "backupStateProtected": "Tu historial está protegido",
+  "backupStateUnprotected": "Tu historial no está protegido",
+  "backupStateFailing": "Las copias están fallando",
+  "backupStateStale": "La copia está desactualizada",
+  "backupStateNone": "Aún no hay copia",
+  "backupLastAt": "Última copia: {time}",
+  "backupIntroHint": "Una copia te permite llevar tus chats a un dispositivo nuevo",
+  "backupAccessUpgradeTitle": "Vuelve a guardar la copia",
+  "backupAccessUpgradeBody": "Tu copia en el servidor se creó con el formato antiguo: puede descargarla quien conozca el identificador del perfil. El contenido sigue cifrado con tu contraseña, pero una segunda barrera no sobra. Volver a guardarla añade una comprobación de contraseña en el propio servidor.",
+  "backupAccessUpgradeAction": "Volver a guardar",
+  "backupSectionAutomatic": "Automático",
+  "backupAutoToggle": "Copiar automáticamente",
+  "backupPassword": "Contraseña",
+  "backupPasswordSet": "Definida",
+  "backupPasswordNotSet": "Sin definir",
+  "backupPasswordSaved": "Contraseña guardada",
+  "backupWhere": "Dónde",
+  "backupHowOften": "Con qué frecuencia",
+  "backupIncludeMedia": "Incluir multimedia",
+  "backupAutoFooter": "La copia está cifrada con tu contraseña. Sin ella no se puede restaurar nada: guárdala en un lugar seguro. Los archivos multimedia nunca se suben al servidor.",
+  "backupNow": "Copiar ahora",
+  "backupSectionRestore": "Restaurar",
+  "backupRestoreAction": "Restaurar desde una copia",
+  "backupRestoreFooter": "Reemplaza los chats y ajustes de este dispositivo con el contenido de la copia.",
+  "backupSectionKey": "Clave de Secretly ID",
+  "backupKeyShow": "Mostrar la clave",
+  "backupKeyRestore": "Restaurar con una clave",
+  "backupKeyFooter": "Restaura solo tu Secretly ID: no contiene chats. Restaurar con una clave borra los datos locales.",
+  "backupDestServerDevice": "Servidor y dispositivo",
+  "backupDestServer": "Servidor",
+  "backupDestDevice": "Dispositivo",
+  "backupDestNone": "Sin elegir",
+  "backupDestServerOnly": "Solo servidor",
+  "backupDestDeviceOnly": "Solo dispositivo",
+  "backupTileOff": "Desactivado: tu historial no está protegido",
+  "backupTilePending": "Activado, pero aún no se ha ejecutado",
+  "backupTileFailing": "No se ejecuta: revísalo",
+  "backupTileStale": "Sin actualizar desde hace tiempo",
+  "backupPasswordChange": "Cambiar contraseña",
+  "backupPasswordRemove": "Eliminar contraseña",
+  "chatUndecryptablePending": "Ha llegado un mensaje, pero aún no se puede leer: restaurando la sesión segura…",
+  "liquidGlassTitle": "Cristal líquido",
+  "liquidGlassSubtitle": "Barras e islas con refracción. Desactívalo para el material sencillo: gasta menos batería y calienta menos.",
+  "billingPendingTitle": "Esperando el pago",
+  "billingPendingBody": "El pedido se creó pero el pago aún no está confirmado. Completa el pago con el método elegido: Premium se activará solo.",
+  "callsHideAddressTitle": "Ocultar mi dirección en las llamadas",
+  "callsHideAddressSubtitle": "A través de nuestro servidor: la otra persona no verá tu dirección IP, pero el retraso puede aumentar",
+  "desktopJoinRoomByLink": "Unirse con un enlace",
+  "desktopJoinRoomLinkHint": "Pega el enlace de invitación",
+  "desktopJoinRoomLinkInvalid": "Este no es un enlace de invitación a una sala",
+  "desktopOfflineLockTitle": "Pedir la contraseña tras mucho tiempo sin conexión",
+  "desktopOfflineLockDescription": "Si este ordenador no contacta con el servidor durante más tiempo del indicado, pedirá la contraseña al iniciarse. Un ordenador perdido nunca recibe el cierre de sesión remoto, pero sí alcanza este límite.",
+  "desktopOfflineLockNever": "Nunca",
+  "desktopOfflineLockDays7": "7 días",
+  "desktopOfflineLockDays14": "14 días",
+  "desktopOfflineLockDays30": "30 días",
+  "desktopPollTitle": "Encuesta",
+  "desktopPollAnonymous": "Encuesta anónima",
+  "desktopPollClosed": "Cerrada",
+  "desktopPollVoters": "Han votado: {count}",
+  "desktopPollMultipleHint": "Puedes elegir varias",
+  "desktopPollCloseAction": "Cerrar la encuesta",
+  "desktopEventTitle": "Evento",
+  "desktopEventGoing": "Voy",
+  "desktopEventMaybe": "Quizá",
+  "desktopEventNo": "No voy",
+  "desktopPollNewTitle": "Nueva encuesta",
+  "desktopPollQuestionHint": "Pregunta",
+  "desktopPollOptionHint": "Opción {index}",
+  "desktopPollAddOption": "Añadir opción",
+  "desktopPollCreateAction": "Crear",
+  "desktopPollNeedTwo": "Hace falta una pregunta y al menos dos opciones",
+  "desktopPollMultipleLabel": "Varias respuestas",
+  "desktopPollAnonymousLabel": "Anónima",
+  "desktopEventNewTitle": "Nuevo evento",
+  "desktopEventTitleHint": "Título",
+  "desktopEventDescriptionHint": "Descripción",
+  "desktopEventLocationHint": "Lugar",
+  "desktopEventPickWhen": "Elegir fecha y hora",
+  "desktopEventNeedTitleAndDate": "Hacen falta un título y una fecha"
+}

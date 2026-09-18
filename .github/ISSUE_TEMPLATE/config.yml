@@ -1,0 +1,24 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: 🔒 Security vulnerability — do not open an issue
+    url: https://github.com/Arkhanhel/Secretly/security/policy
+    about: >
+      Found a way to read, alter or link messages that should be private? Email
+      support@secretlyapp.com with SECURITY in the subject. Please do not
+      describe it in a public issue — people are using this application in
+      places where an unfixed disclosure is dangerous for them.
+
+  - name: 💬 Question or idea
+    url: https://github.com/Arkhanhel/Secretly/issues/new?labels=question
+    about: >
+      For anything that is not a defect — how something works, whether a change
+      would be welcome, or a feature you would like. Ask before writing a large
+      change.
+
+  - name: 📖 Threat model — read before reporting a design flaw
+    url: https://github.com/Arkhanhel/Secretly/blob/main/docs/THREAT_MODEL.md
+    about: >
+      What Secretly protects against and, more usefully, what it does not.
+      Section 5 lists limitations we already know about. A report showing that
+      the real impact is worse than we described is welcome.

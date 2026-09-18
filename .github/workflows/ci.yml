@@ -1,0 +1,128 @@
+name: CI
+
+# Public CI for the open-source repository. It proves that the published tree
+# compiles and that the test suite passes on a clean machine — nothing else.
+# No secrets, no signing keys, no release artefacts: those stay in the private
+# build pipeline.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    name: Flutter — analyze and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: apps/flutter/secretly_app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Pinned on purpose: this is the version the published builds are made
+      # with. See .flutter-version and docs/BUILD.md.
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.41.7
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test --concurrency=1
+
+  rust:
+    name: Rust — build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Version comes from rust-toolchain.toml, which is committed.
+      - name: Show toolchain
+        run: rustc --version && cargo --version
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      # Style checks are advisory for now and do not fail the build. The tree
+      # predates them: rustfmt would rewrite 154 files, and clippy objects to
+      # the raw-pointer FFI exports of secretly_core, which are unsafe by
+      # nature and need proper annotation rather than a blanket allow. Both
+      # are tracked and will become blocking once the tree is clean — we would
+      # rather say that plainly than hide the checks.
+      - name: Format check (advisory)
+        continue-on-error: true
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (advisory)
+        continue-on-error: true
+        run: cargo clippy --workspace --all-targets
+
+      - name: Test
+        run: cargo test --workspace
+
+  licence-headers:
+    name: Licence headers present
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Every first-party source file must carry an SPDX identifier. Vendored
+      # third-party code keeps its own headers and is skipped.
+      - name: Check SPDX headers
+        shell: bash
+        run: |
+          missing=0
+          while IFS= read -r f; do
+            # Vendored third-party code keeps its own headers; generated
+            # files would lose the header on the next generation. The same
+            # rules live in tools/add_spdx_headers.py.
+            case "$f" in
+              */third_party/*) continue ;;
+              */l10n/app_localizations*) continue ;;
+              *.g.dart|*.freezed.dart|*.gen.dart|*.pb.dart) continue ;;
+              */generated/*) continue ;;
+            esac
+            if ! head -3 "$f" | grep -q 'SPDX-License-Identifier'; then
+              echo "missing SPDX header: $f"
+              missing=$((missing + 1))
+            fi
+          done < <(git ls-files '*.dart' '*.rs')
+          if [ "$missing" -gt 0 ]; then
+            echo "::error::$missing file(s) without an SPDX header"
+            exit 1
+          fi
+          echo "all first-party sources carry an SPDX header"

@@ -1,0 +1,331 @@
+name: secretly_app
+description: "Secure private messaging and calling for Secretly."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+# 🔴 Держать в согласии с последним выпуском (04.09.2026). Номер всё равно
+# передаётся флагами сборки, но расхождение здесь уже стоило одной пересборки:
+# файл отставал на сотню сборок, и собранное ушло с номером МЕНЬШЕ того, что
+# стоял на устройстве. Установка такой сборки либо отвергается, либо сталкивает
+# старый код с новой схемой базы, а миграции односторонние.
+version: 1.8.39+588
+
+# Лицензия определяется файлом LICENSE в корне (AGPL-3.0-only);
+# отдельного поля license в pubspec не предусмотрено.
+repository: https://github.com/Arkhanhel/Secretly
+issue_tracker: https://github.com/Arkhanhel/Secretly/issues
+
+environment:
+  sdk: ^3.9.2
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  flutter_localizations:
+    sdk: flutter
+
+  intl: ^0.20.2
+
+  ffi: ^2.1.3
+  cryptography: ^2.7.0
+  crypto: ^3.0.6
+  convert: ^3.1.2
+  http: ^1.2.2
+  flutter_secure_storage: ^9.2.4
+  local_auth: ^2.3.0
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  shared_preferences: ^2.3.3
+  # DELIVERY RELIABILITY (2026-07-17): Android background task scheduler for the
+  # outbox flush + inbound top-up when the app is asleep/backgrounded and FCM
+  # didn't wake it. iOS uses the NSE instead. All work is idempotent (relay
+  # msg_id dedup + inbox_seen), so a WorkManager run can never duplicate.
+  workmanager: ^0.6.0
+  sqflite_common: ^2.5.4
+  sqflite_common_ffi: ^2.3.4
+  sqflite_sqlcipher: ^3.1.0
+  sqlite3_flutter_libs: ^0.5.32
+  uuid: ^4.5.1
+  web_socket_channel: ^3.0.1
+  stream_channel: ^2.1.4
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^7.2.0
+  image_picker: ^1.1.2
+  file_picker: ^10.2.1
+  image: ^4.5.4
+  just_audio: ^0.10.5
+  # Direct (not transitive) because the notification cue declares its own
+  # Android audio attributes — see AppController._ensureNotificationCueAudio
+  # Attributes. Without the usage tag the cue plays on the MEDIA stream, which
+  # the ringer does not mute, so the app sounded through silent mode.
+  audio_session: ^0.2.2
+  audiotags:
+    path: third_party/audiotags
+  record: ^6.0.0
+  speech_to_text: ^7.0.0
+  video_player: ^2.10.0
+  visibility_detector: ^0.4.0+2
+  # Android: many OEMs (Samsung/OnePlus/Xiaomi) pin Flutter apps to 60 Hz even
+  # on 120 Hz panels; this asks the OS for the highest refresh mode at startup.
+  flutter_displaymode: ^0.6.0
+  ffmpeg_kit_flutter_new: ^4.2.1
+  flutter_webrtc: 0.12.12+hotfix.1
+  flutter_background: 1.3.1
+  livekit_client: 2.4.0
+  connectivity_plus: ^6.1.5
+  line_awesome_flutter: ^3.0.1
+  fluentui_system_icons: ^1.1.273
+  shimmer: ^3.0.0
+  glass_kit: ^4.0.2
+  lottie: ^3.1.2
+  flutter_svg: ^2.1.0
+  animations: ^2.0.11
+  flutter_local_notifications: ^17.2.2
+  firebase_core: ^3.15.2
+  firebase_messaging: ^15.2.10
+  flutter_contacts: ^2.0.2
+  share_plus: ^12.0.1
+  url_launcher: ^6.3.1
+  webview_flutter: ^4.10.0
+  in_app_purchase: ^3.2.0
+  # Direct dep so we can select the Play Billing subscription OFFER (the free
+  # trial) explicitly — see BillingService._buildPurchaseParam.
+  in_app_purchase_android: ^0.5.0
+  # Нативная плашка обновления Google Play (гибкая, не принудительная).
+  # Работает ТОЛЬКО для установленных из Play; на iOS, десктопе и ручных APK
+  # обёртка молча ничего не делает — см. lib/version/native_update_prompt.dart.
+  in_app_update: ^4.2.3
+  app_links: ^7.0.0
+  window_manager: ^0.5.0
+  # Validate restored window position against attached displays (already a
+  # transitive dep of window_manager; made explicit for direct use).
+  screen_retriever: ^0.2.0
+  tray_manager: ^0.5.0
+  # Desktop: drag-and-drop files onto the chat to attach them (E7).
+  desktop_drop: ^0.6.0
+  # Desktop: read images/files from the clipboard for Cmd/Ctrl+V paste (E7).
+  pasteboard: ^0.4.0
+  photo_manager: ^3.9.0
+  camera: ^0.12.0+1
+  permission_handler: ^12.0.1
+  wakelock_plus: ^1.5.2
+  # Расшифровка голосовых на устройстве (whisper.cpp 1.9.2, исходники вшиты в
+  # пакет). 06.09.2026 заменил `whisper_flutter_new` (GPL-3.0 — блокировал
+  # коммерческую лицензию на клиент и был спорен для App Store) на MIT-обёртку
+  # без freezed/riverpod. Локальная копия 0.4.1 с правкой одной строки в
+  # android/build.gradle (upstream не применял kotlin-android — класс плагина
+  # не компилировался); см. third_party/whisper_cpp_flutter_plus/VENDORED.md.
+  whisper_cpp_flutter_plus:
+    path: third_party/whisper_cpp_flutter_plus
+  # On-device message translation (privacy: text never leaves the device — no
+  # cloud translator, consistent with E2EE). Models download on demand.
+  google_mlkit_translation: ^0.13.0
+  google_mlkit_language_id: ^0.13.0
+  google_mlkit_subject_segmentation: ^0.0.3
+  # Vendored fork of liquid_glass_widgets 0.18.4 (2026-07-23): ONE diff in
+  # glass_bottom_bar.dart JellyClipper — the label mask no longer insets 4px, so
+  # the accent label fully covers its leftmost letter (was a white anti-alias
+  # seam on long selected labels). Re-diff against upstream on any bump.
+  liquid_glass_widgets:
+    path: third_party/liquid_glass_widgets
+
+# Use SQLite3MultipleCiphers build of sqlite3 on desktop (enables `PRAGMA key`).
+hooks:
+  user_defines:
+    sqlite3:
+      source: sqlite3mc
+
+dev_dependencies:
+  # Виртуальное время для тестов. Пакет и так есть в дереве — приходит с
+  # flutter_test, — но без прямого объявления анализатор справедливо ругается на
+  # использование транзитивной зависимости. Нужен, чтобы тесты дросселей и
+  # таймаутов не зависели от реального времени: с реальными задержками они
+  # плывут под нагрузкой и дают ложные падения.
+  fake_async: ^1.3.3
+  flutter_test:
+    sdk: flutter
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See that file for information about deactivating specific lint
+  # rules and activating additional ones.
+  flutter_lints: ^5.0.0
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  generate: true
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  # GPU fragment shaders (Flutter 3.10+ FragmentProgram API). Used by the
+  # premium "black hole" profile cover — real Schwarzschild lensing.
+  shaders:
+    - assets/shaders/black_hole.frag
+    # «Обои проводят сообщение»: волна света вдоль сети дудлов. Читает
+    # запечённое поле расстояний assets/wallpaper_fx/pattern_field.png
+    # (tools/bake_wallpaper_field.py).
+    - assets/shaders/wallpaper_pulse.frag
+
+  assets:
+    - pubspec.yaml
+    - assets/icon/
+    - assets/app_icons/
+    - assets/avatars/dicebear/
+    - assets/Background/
+    - assets/Background/improved_light/
+    - assets/wallpaper_fx/
+    - assets/app_ui/icons/Interactive Mood Selector UI.json
+    - assets/app_ui/icons/Messenger sync.json
+    - assets/app_ui/icons/app_icon.png
+    - assets/app_ui/icons/donation box.json
+    # Каталогом, а не поимённо: файлы иконок не входят в публичную
+    # выкладку (лицензия Icons8 разрешает использовать их в приложении,
+    # но не раздавать файлами). Поимённая ссылка на отсутствующий файл
+    # роняет сборку; каталог берёт то, что есть.
+    - assets/app_ui/icons/
+    - assets/app_ui/icons/note (1).png
+    - assets/app_ui/icons/notebook.svg
+    - assets/app_ui/icons/security_unlock.json
+    - assets/app_ui/icons/png/
+    - assets/app_ui/icons/reactions/
+    - assets/app_ui/icons/Settings/
+    - assets/app_ui/icons/Settings/Chats/
+    - assets/app_ui/icons/Settings/privat/
+    - assets/app_ui/sounds/
+    - assets/app_ui/sounds/call/
+    - assets/app_ui/sounds/noti/
+    - assets/app_ui/sounds/inchat/
+
+  fonts:
+    # STATIC Inter weights (instanced from InterVariable at opsz=14). The
+    # variable font triggered a known iOS/CoreText bug where typed spaces
+    # rendered HUGE (variable-font advances mis-applied); static instances fix
+    # it and match Android's existing look (Skia already used the opsz=14
+    # default). Regen: fontTools varLib.instancer opsz=14 + each wght.
+    # 🔴 Manrope — шрифт МАКЕТА десктопа (14.09.2026). Мобильная версия его не
+    # трогает: её типографика остаётся на Inter, Manrope читает только
+    # `lib/ui/desktop/design/typography.dart`. Начертания статические, тем же
+    # способом, что и Inter ниже, — по той же причине (переменный шрифт ломал
+    # отрисовку пробелов в CoreText).
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-Regular.ttf
+        - asset: assets/fonts/Manrope-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Manrope-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Manrope-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Manrope-ExtraBold.ttf
+          weight: 800
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Inter-ExtraBold.ttf
+          weight: 800
+    # Bundled Roboto (Telegram-parity for the Flutter Dash theme) so it renders
+    # the real Roboto even on ROMs that substitute the system 'Roboto' alias
+    # (e.g. MIUI -> MiSans). Sourced from the Flutter SDK material_fonts.
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+        - asset: assets/fonts/Roboto-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700
+    # Display / handwriting fonts for the sticker text editor (all OFL-licensed,
+    # from the Google Fonts repo). Used by the sticker editor's font picker only.
+    - family: Pacifico
+      fonts:
+        - asset: assets/fonts/Pacifico-Regular.ttf
+    - family: Lobster
+      fonts:
+        - asset: assets/fonts/Lobster-Regular.ttf
+    - family: Bangers
+      fonts:
+        - asset: assets/fonts/Bangers-Regular.ttf
+    - family: Anton
+      fonts:
+        - asset: assets/fonts/Anton-Regular.ttf
+    - family: BebasNeue
+      fonts:
+        - asset: assets/fonts/BebasNeue-Regular.ttf
+    - family: Righteous
+      fonts:
+        - asset: assets/fonts/Righteous-Regular.ttf
+    - family: Monoton
+      fonts:
+        - asset: assets/fonts/Monoton-Regular.ttf
+    - family: Kalam
+      fonts:
+        - asset: assets/fonts/Kalam-Regular.ttf
+    - family: Creepster
+      fonts:
+        - asset: assets/fonts/Creepster-Regular.ttf
+    - family: PressStart2P
+      fonts:
+        - asset: assets/fonts/PressStart2P-Regular.ttf
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/to/font-from-package

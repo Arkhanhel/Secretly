@@ -1,0 +1,84 @@
+{
+  "pack_id": "studio_pack",
+  "pack_version": 1,
+  "title": "Studio",
+  "description": "Creative direction pack for design reviews, launch polish, and visual brainstorming.",
+  "icon_sticker_id": "studio_palette",
+  "icon_emoji_hint": "🎨",
+  "featured_rank": 120,
+  "tags": ["design", "creative", "featured", "remote"],
+  "stickers": [
+    {
+      "sticker_id": "studio_palette",
+      "source_path": "assets/app_ui/icons/png/205-palette.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "🎨",
+      "label": "Palette",
+      "keywords": ["palette", "color", "палитра", "цвет"]
+    },
+    {
+      "sticker_id": "studio_brush",
+      "source_path": "assets/app_ui/icons/png/177-brush.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "🖌️",
+      "label": "Brush",
+      "keywords": ["brush", "paint", "кисть", "рисунок"]
+    },
+    {
+      "sticker_id": "studio_shape",
+      "source_path": "assets/app_ui/icons/png/178-shape.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "🔷",
+      "label": "Shape",
+      "keywords": ["shape", "form", "фигура", "форма"]
+    },
+    {
+      "sticker_id": "studio_brainstorm",
+      "source_path": "assets/app_ui/icons/png/204-brainstorm.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "💡",
+      "label": "Brainstorm",
+      "keywords": ["idea", "brainstorm", "идея", "мозговой штурм"]
+    },
+    {
+      "sticker_id": "studio_pantone",
+      "source_path": "assets/app_ui/icons/png/202-pantone.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "🧪",
+      "label": "Pantone",
+      "keywords": ["pantone", "swatch", "палитра", "образец"]
+    },
+    {
+      "sticker_id": "studio_thinking",
+      "source_path": "assets/app_ui/icons/png/206-design-thinking.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "🧠",
+      "label": "Thinking",
+      "keywords": ["thinking", "design", "мышление", "дизайн"]
+    },
+    {
+      "sticker_id": "studio_process",
+      "source_path": "assets/app_ui/icons/png/083-design-process.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "🗺️",
+      "label": "Process",
+      "keywords": ["process", "flow", "процесс", "поток"]
+    },
+    {
+      "sticker_id": "studio_create",
+      "source_path": "assets/app_ui/icons/png/116-creative.png",
+      "format": "png",
+      "animated": false,
+      "emoji_hint": "✨",
+      "label": "Create",
+      "keywords": ["creative", "spark", "творчество", "искра"]
+    }
+  ]
+}

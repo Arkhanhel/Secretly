@@ -1,0 +1,15 @@
+# The Rust version the relay and the keys server are built with.
+#
+# Why this file exists (4 September 2026). The version was pinned nowhere, so a
+# build depended on whatever happened to be installed on the machine doing it.
+# Measurement confirmed the gap: the workstation had 1.95.0 while the binary
+# running in production had been built with 1.93.1 — meaning "build the same
+# thing that is in production" was impossible even for us, let alone for an
+# outside reviewer.
+#
+# The pin follows the SERVER, not the workstation: this is the version that
+# produced the binary currently running. Moving it is a deliberate piece of
+# work — rebuild and re-verify — not a side effect of editing this file.
+[toolchain]
+channel = "1.93.1"
+components = ["rustfmt", "clippy"]

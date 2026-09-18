@@ -1,0 +1,92 @@
+Secretly
+Copyright (C) 2025-2026 Yurii Arkhanhelskyi
+
+This product is distributed under the terms of the GNU Affero General Public
+License version 3 — full text in the file LICENSE — together with the
+additional permission for application stores in the file LICENSE-EXCEPTION.
+
+The application is published on the App Store and Google Play by
+SIA Secretly, Valmiera, Latvia.
+
+
+THIRD-PARTY COMPONENTS
+----------------------
+
+The application uses third-party software under its own licences. Listed below
+are the components whose terms require attribution.
+
+FFmpeg (via ffmpeg_kit_flutter_new)
+    GNU Lesser General Public License version 3.0
+    https://ffmpeg.org
+    Used for video processing. The library is linked dynamically and can be
+    replaced with your own build — the LGPL requires that this remain possible.
+    The build with the "-gpl" suffix is deliberately not used.
+
+whisper_cpp_flutter_plus
+    MIT License, Copyright (c) 2026 Gurwinder Singh
+    https://github.com/47gurvinder/whisper_cpp_flutter
+    Offline speech recognition. Vendored in third_party/ together with the
+    native sources it wraps:
+
+    whisper.cpp and ggml
+        MIT License, Copyright (c) 2023-2026 The ggml authors
+        https://github.com/ggerganov/whisper.cpp
+        Full text in third_party/whisper_cpp_flutter_plus/ios/
+        whisper_cpp_flutter_plus/Sources/WhisperCppCore/LICENSE.
+        Includes the NTK-aware scaled RoPE implementation,
+        Copyright (c) 2023 Jeffrey Quesnelle and Bowen Peng (MIT).
+
+    No speech models are distributed with this repository. Transcription runs
+    on a model the user's device downloads separately; the models carry their
+    own terms.
+
+liquid_glass_widgets
+    MIT License, Copyright (c) 2024 Sebastian Degenaar
+
+audiotags
+    MIT License, Copyright (c) 2023 Erikas Taroza
+
+SQLCipher (via sqflite_sqlcipher)
+    BSD-style license, Zetetic LLC
+
+flutter_secure_storage — BSD 3-Clause
+flutter_webrtc — MIT
+cryptography — Apache License 2.0
+Firebase SDK — Apache License 2.0
+
+Full licence texts for the vendored components are in the third_party/
+directories alongside their source.
+
+
+FONTS
+-----
+
+Anton, Bangers, Bebas Neue, Creepster, Inter, Kalam, Lobster, Monoton,
+Pacifico, Press Start 2P, Righteous, Roboto —
+SIL Open Font License 1.1 or Apache License 2.0 (Google Fonts).
+
+Per-file attribution, together with the full licence texts, is in
+apps/flutter/secretly_app/assets/fonts/ (LICENSES.md, OFL.txt,
+LICENSE-APACHE-2.0.txt).
+
+DiceBear avatar collection — assets/avatars/dicebear/LICENSE.txt.
+
+
+OUR OWN WORK
+------------
+
+The shaders in apps/flutter/secretly_app/assets/shaders/ (black_hole.frag,
+wallpaper_pulse.frag) are original work of the copyright holder and carry no
+third-party terms.
+
+
+WHAT IS NOT HERE
+----------------
+
+Art assets — icons, stickers, profile decoration, wallpapers — are not part of
+this repository. Their licences permit use inside the application but not
+redistribution as files. A build from this repository runs; some decoration
+will be empty. This is expected, not a defect.
+
+Trademarks: the name "Secretly" and the Secretly logo are not covered by the
+AGPL. Forks are welcome under a different name and icon.

@@ -1,0 +1,53 @@
+ADDITIONAL PERMISSION UNDER SECTION 7 OF THE GNU AFFERO GENERAL PUBLIC LICENSE
+VERSION 3 — APPLICATION STORE DISTRIBUTION
+
+Copyright (C) 2025-2026 Yurii Arkhanhelskyi
+
+--------------------------------------------------------------------------------
+
+WHY THIS EXISTS
+--------------------------------------------------------------------------------
+
+Application stores — Apple's App Store, Google Play, and others — require
+distributors to accept terms that place restrictions on end users beyond those in
+the AGPL. Section 6 of the AGPL forbids imposing further restrictions on the
+rights it grants, which makes distribution through such stores legally uncertain.
+
+Without an explicit exception, anyone who forks this project cannot ship their
+fork through an application store — even though we can, as the copyright holder.
+That is not the outcome we want. This permission removes the obstacle for
+everyone.
+
+
+THE PERMISSION
+--------------------------------------------------------------------------------
+
+As an additional permission under section 7 of the GNU Affero General Public
+License version 3, you are granted permission to convey the Program, and works
+based on it, through an application store or comparable distribution channel,
+even where the operator of that channel imposes terms on recipients that would
+otherwise conflict with sections 4, 5, 6 or 10 of the License.
+
+This permission applies on the following condition:
+
+    The complete Corresponding Source for the version you distribute must
+    remain available under the GNU Affero General Public License version 3,
+    through a channel that imposes no such additional restrictions, and the
+    store listing or the application itself must tell recipients where to
+    obtain it.
+
+Everything else in the License continues to apply unchanged. In particular, the
+network-use requirement of section 13 is not affected: if you run a modified
+version as a network service, you must still offer its source to its users.
+
+If you choose to remove this additional permission from any covered work, you
+may do so — section 7 of the License allows it.
+
+
+WHAT THIS DOES NOT COVER
+--------------------------------------------------------------------------------
+
+The name "Secretly" and the Secretly logo are trademarks and are not licensed
+under the AGPL or under this permission. A fork may be
+distributed freely, including through application stores, but not under this name
+or with this mark.

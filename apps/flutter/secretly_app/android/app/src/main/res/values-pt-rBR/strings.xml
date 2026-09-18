@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">Secretly</string>
+    <string name="notification_channel_messages_name">Mensagens</string>
+    <string name="notification_channel_messages_description">Mensagens recebidas do Secretly</string>
+    <string name="notification_action_reply">Responder</string>
+    <string name="notification_action_mark_read">Marcar como lida</string>
+    <string name="notification_message_new">Nova mensagem</string>
+    <string name="notification_channel_media_name">Reprodução de mídia</string>
+    <string name="notification_channel_media_description">Controles de áudio do Secretly</string>
+    <string name="notification_media_previous">Anterior</string>
+    <string name="notification_media_play">Reproduzir</string>
+    <string name="notification_media_pause">Pausar</string>
+    <string name="notification_media_next">Próxima</string>
+    <string name="notification_media_stop">Parar</string>
+    <string name="notification_channel_incoming_calls_name">Chamadas recebidas</string>
+    <string name="notification_channel_incoming_calls_description">Alertas de chamadas recebidas do Secretly</string>
+    <string name="notification_channel_ongoing_calls_name">Chamadas em andamento</string>
+    <string name="notification_channel_ongoing_calls_description">Status da chamada ativa do Secretly na barra de notificações</string>
+    <string name="notification_channel_active_call_name">Chamada ativa</string>
+    <string name="notification_channel_active_call_description">Mantém as chamadas do Secretly ativas em segundo plano</string>
+    <string name="notification_action_decline">Recusar</string>
+    <string name="notification_action_answer">Atender</string>
+    <string name="notification_action_hang_up">Encerrar</string>
+    <string name="call_unknown">Desconhecido</string>
+    <string name="call_incoming_voice">Chamada de voz recebida</string>
+    <string name="call_incoming_video">Chamada de vídeo recebida</string>
+    <string name="call_ongoing_voice">Chamada de voz - toque para voltar</string>
+    <string name="call_ongoing_video">Chamada de vídeo - toque para voltar</string>
+    <string name="call_active">Chamada ativa</string>
+    <string name="call_voice">Chamada de voz</string>
+    <string name="call_video">Chamada de vídeo</string>
+</resources>

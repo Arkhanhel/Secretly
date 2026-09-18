@@ -1,0 +1,7 @@
+"CFBundleDisplayName" = "Secretly";
+"NSCameraUsageDescription" = "Використовуйте камеру для сканування QR-кодів, відеодзвінків і зйомки медіа для чатів.";
+"NSPhotoLibraryUsageDescription" = "Дозвольте Secretly показувати останні фото безпосередньо у виборі вкладень чату.";
+"NSContactsUsageDescription" = "Зберігайте контакти Secretly в адресну книгу пристрою, коли синхронізацію контактів увімкнено.";
+"NSFaceIDUsageDescription" = "Використовуйте Face ID для розблокування Secretly і захищених особистих чатів.";
+"NSMicrophoneUsageDescription" = "Використовуйте мікрофон для захищених голосових і відеодзвінків.";
+"NSLocalNetworkUsageDescription" = "Secretly може використовувати локальну мережу для покращення голосових і відеодзвінків, коли це доступно.";

@@ -1,0 +1,7 @@
+"CFBundleDisplayName" = "Secretly";
+"NSCameraUsageDescription" = "Use camera to scan QR codes, make video calls, and capture media for chats.";
+"NSPhotoLibraryUsageDescription" = "Allow Secretly to show your recent photos directly in the chat attachment picker.";
+"NSContactsUsageDescription" = "Save your Secretly contacts to this device address book when contact sync is enabled.";
+"NSFaceIDUsageDescription" = "Use Face ID to unlock Secretly and protected personal chats.";
+"NSMicrophoneUsageDescription" = "Use microphone for secure voice and video calls.";
+"NSLocalNetworkUsageDescription" = "Secretly may use the local network to improve voice and video call connectivity when available.";

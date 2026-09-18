@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">Secretly</string>
+    <string name="notification_channel_messages_name">Nachrichten</string>
+    <string name="notification_channel_messages_description">Eingehende Secretly-Nachrichten</string>
+    <string name="notification_action_reply">Antworten</string>
+    <string name="notification_action_mark_read">Als gelesen markieren</string>
+    <string name="notification_message_new">Neue Nachricht</string>
+    <string name="notification_channel_media_name">Medienwiedergabe</string>
+    <string name="notification_channel_media_description">Audiosteuerung für Secretly</string>
+    <string name="notification_media_previous">Zurück</string>
+    <string name="notification_media_play">Wiedergeben</string>
+    <string name="notification_media_pause">Pause</string>
+    <string name="notification_media_next">Weiter</string>
+    <string name="notification_media_stop">Stopp</string>
+    <string name="notification_channel_incoming_calls_name">Eingehende Anrufe</string>
+    <string name="notification_channel_incoming_calls_description">Benachrichtigungen für eingehende Secretly-Anrufe</string>
+    <string name="notification_channel_ongoing_calls_name">Laufende Anrufe</string>
+    <string name="notification_channel_ongoing_calls_description">Status des aktiven Secretly-Anrufs in der Benachrichtigungsleiste</string>
+    <string name="notification_channel_active_call_name">Aktiver Anruf</string>
+    <string name="notification_channel_active_call_description">Hält Secretly-Anrufe im Hintergrund aktiv</string>
+    <string name="notification_action_decline">Ablehnen</string>
+    <string name="notification_action_answer">Annehmen</string>
+    <string name="notification_action_hang_up">Auflegen</string>
+    <string name="call_unknown">Unbekannt</string>
+    <string name="call_incoming_voice">Eingehender Sprachanruf</string>
+    <string name="call_incoming_video">Eingehender Videoanruf</string>
+    <string name="call_ongoing_voice">Sprachanruf - zum Zurückkehren tippen</string>
+    <string name="call_ongoing_video">Videoanruf - zum Zurückkehren tippen</string>
+    <string name="call_active">Aktiver Anruf</string>
+    <string name="call_voice">Sprachanruf</string>
+    <string name="call_video">Videoanruf</string>
+</resources>

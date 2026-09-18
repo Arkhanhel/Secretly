@@ -1,0 +1,6 @@
+analyzer:
+  exclude:
+    - "**/.dart_tool/**"
+    - "**/build/**"
+    - "**/build*/**"
+    - "apps/flutter/secretly_app/third_party/audiotags/**"

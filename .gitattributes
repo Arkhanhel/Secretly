@@ -1,0 +1,32 @@
+# Нормализация переводов строк. Без этого правка, сделанная на Windows,
+# приходит с CRLF и выглядит как переписанный целиком файл.
+* text=auto eol=lf
+
+# Бинарные файлы не трогать.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.m4a binary
+*.zip binary
+*.jar binary
+*.keystore binary
+*.jks binary
+
+# Скрипты всегда с LF, иначе не запускаются на macOS и Linux.
+*.sh text eol=lf
+*.py text eol=lf
+
+# Файлы блокировок не показывать в обзоре правок — они машинные.
+Cargo.lock linguist-generated=true
+pubspec.lock linguist-generated=true

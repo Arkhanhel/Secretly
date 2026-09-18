@@ -1,0 +1,90 @@
+name: Bug report
+description: Something does not work the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Not for security problems.** If what you found lets someone read,
+        alter or link messages that should be private, email
+        support@secretlyapp.com instead — see `SECURITY.md`.
+
+        Please do not put anything private in this form. It is public, and it
+        stays public. Redact contact names, profile identifiers and message
+        content before pasting a log.
+
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: What happens
+      description: And what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version and build number
+      description: Settings → Diagnostics shows both.
+      placeholder: "1.8.39 (588)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Android
+        - iOS
+        - macOS
+        - Windows
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device and OS version
+      placeholder: "Xiaomi Redmi Note 12, Android 14"
+
+  - type: dropdown
+    id: build-source
+    attributes:
+      label: Where the build came from
+      options:
+        - App Store
+        - Google Play
+        - APK from the site
+        - Built from source
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Optional. Redact first — see the note at the top.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: This is not a security vulnerability.
+          required: true
+        - label: I searched existing issues.
+          required: true
+        - label: I removed private information from anything I pasted.
+          required: true

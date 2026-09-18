@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">Secretly</string>
+    <string name="notification_channel_messages_name">Messages</string>
+    <string name="notification_channel_messages_description">Incoming Secretly messages</string>
+    <string name="notification_action_reply">Reply</string>
+    <string name="notification_action_mark_read">Mark Read</string>
+    <string name="notification_message_new">New message</string>
+    <string name="notification_channel_media_name">Media playback</string>
+    <string name="notification_channel_media_description">Playback controls for Secretly audio</string>
+    <string name="notification_media_previous">Previous</string>
+    <string name="notification_media_play">Play</string>
+    <string name="notification_media_pause">Pause</string>
+    <string name="notification_media_next">Next</string>
+    <string name="notification_media_stop">Stop</string>
+    <string name="notification_channel_incoming_calls_name">Incoming calls</string>
+    <string name="notification_channel_incoming_calls_description">Secretly incoming call alerts</string>
+    <string name="notification_channel_ongoing_calls_name">Ongoing calls</string>
+    <string name="notification_channel_ongoing_calls_description">Secretly active call status in the notification bar</string>
+    <string name="notification_channel_active_call_name">Active call</string>
+    <string name="notification_channel_active_call_description">Keeps Secretly calls alive while the app is in background</string>
+    <string name="notification_action_decline">Decline</string>
+    <string name="notification_action_answer">Answer</string>
+    <string name="notification_action_hang_up">Hang up</string>
+    <string name="call_unknown">Unknown</string>
+    <string name="call_incoming_voice">Incoming voice call</string>
+    <string name="call_incoming_video">Incoming video call</string>
+    <string name="call_ongoing_voice">Voice call - tap to return</string>
+    <string name="call_ongoing_video">Video call - tap to return</string>
+    <string name="call_active">Active call</string>
+    <string name="call_voice">Voice call</string>
+    <string name="call_video">Video call</string>
+</resources>
