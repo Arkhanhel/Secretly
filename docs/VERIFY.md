@@ -62,7 +62,7 @@ These are SHA-256 sums of the exact files we handed to Apple and Google.
 | 1.8.39 (588) | Android | `secretly-production-1.8.39-588-store588.aab` | 2026-09-05 | `0441577c7ee0161acfcba4d4c40d90b5eedbf96395a7f05c8de0eff8dd57e31a` |
 | 1.8.39 (588) | iOS | `secretly-production-1.8.39-588-store588.ipa` | 2026-09-05 | `049d83a97a81090d5b983f4e45a2884bfaf91b875e4eea8bd96de412de146f15` |
 
-🔴 **Read this before you try to compare them with what you installed.**
+**Read this before you try to compare them with what you installed.**
 
 You will not get a match, and that is not a sign of tampering:
 
@@ -108,7 +108,7 @@ Planned, in this order:
 
 If you rebuild from source and find behaviour that contradicts anything in the
 threat model or on this page, that is a finding and we want it:
-**support@secretlyapp.com**, `SECURITY` in the subject. See
+**security@secretlyapp.com**, `SECURITY` in the subject. See
 [`SECURITY.md`](../SECURITY.md) for what to expect and by when.
 
 We will publish the correction, including when it is embarrassing for us.

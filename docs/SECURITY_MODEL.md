@@ -4,7 +4,7 @@
 > against whom, and — importantly — what we do *not* claim. This file is the
 > engineering detail beneath it.
 >
-> 🔴 **Two claims in the table below were corrected on 25 August 2026 after being
+> **Two claims in the table below were corrected on 25 August 2026 after being
 > checked against the code:**
 >
 > - *"Backup leak — backup encrypted with identity key"* was wrong. The archive is

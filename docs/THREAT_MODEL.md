@@ -92,7 +92,7 @@ from a ratcheting chain; keys are discarded after use.
 - **Denial of service via skipped keys:** bounded at 200 per step; a message
   claiming a larger gap is rejected before any key is derived.
 
-🔴 **Note for auditors:** this is our own implementation of the Double Ratchet,
+**Note for auditors:** this is our own implementation of the Double Ratchet,
 not a binding to libsignal. That is the single largest thing worth your time.
 
 ### 3.2 Local storage
@@ -108,7 +108,7 @@ number is bound to the **device**, so a new device is visibly a new device.
 **Limit:** verification is opt-in and advisory by default. Users may enable
 strict mode, which blocks sending to unverified contacts.
 
-🔴 **Known gap (SEC-06):** strict mode is enforced on one-to-one paths only —
+**Known gap (SEC-06):** strict mode is enforced on one-to-one paths only —
 messages, stickers, attachments, resends and scheduled messages. **Group paths do
 not enforce it.** Since 28 August 2026 the setting text says so explicitly, in
 all eight languages; the behaviour on group paths is unchanged and remains a
@@ -121,7 +121,7 @@ Encrypted client-side with AES-256-GCM; the key is derived from a user-chosen
 password with PBKDF2-HMAC-SHA256 (400 000 iterations for new archives; archives
 written earlier at 200 000 remain readable).
 
-🔴 **Being remediated (SEC-01).** Until 25 August 2026 the archive could be
+**Being remediated (SEC-01).** Until 25 August 2026 the archive could be
 downloaded by **anyone who knew the profile identifier** — the signature check
 was applied only to requests that presented one. Password strength was therefore
 the only barrier, and it could be attacked offline.

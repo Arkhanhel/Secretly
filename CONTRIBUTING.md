@@ -8,7 +8,7 @@ Everyone taking part is expected to follow our
 
 Thank you for the interest. Here is what to know before your first change.
 
-## 🔴 First, about rights
+## First, about rights
 
 The project runs on an open-core model: the code is AGPL-3.0, and a commercial
 licence is sold to organisations for which AGPL does not work. Revenue from
@@ -45,7 +45,7 @@ implementation. Any change there must come with an analysis of what it changes
 in the protocol's properties. Cosmetic changes in that directory are not
 accepted.
 
-🔴 **Never create a second ratchet implementation.** Two implementations
+**Never create a second ratchet implementation.** Two implementations
 disagreeing is worse than one implementation's flaws.
 
 **A test must be able to fail.** We hold a rule: a guard test is validated by
@@ -87,7 +87,7 @@ Commit messages in Conventional Commits format, in English or Russian.
 ## What to discuss before writing code
 
 - Changes to the protocol or the storage format.
-- New dependencies, especially copyleft ones. 🔴 The FFmpeg package with the
+- New dependencies, especially copyleft ones. The FFmpeg package with the
   `-gpl` suffix cannot be used: it would make the commercial half of the model
   impossible, and that half funds the project.
 - Large interface rework.

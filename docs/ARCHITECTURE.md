@@ -94,7 +94,7 @@ the relay never stores the sender at all.
 | `entitlements`, `billing` | 3.2k | paid tier |
 | `push`, `sync`, `attachments`, `messages` | 4.7k | delivery support |
 
-🔴 **`ratchet` is the smallest security-critical module and the most important.**
+**`ratchet` is the smallest security-critical module and the most important.**
 It is our own implementation of the Double Ratchet in Dart, not a reviewed
 library. If you have limited time, spend it there — and see `THREAT_MODEL.md`
 §5.4 for why we consider this a known limitation rather than a feature.
@@ -170,7 +170,7 @@ already satisfy them."
 | Key storage | Keychain, `first_unlock_this_device` | KeyStore-wrapped | Keychain | DPAPI |
 | Screen privacy | cover view on resign-active | `FLAG_SECURE` | — | — |
 
-🔴 The iOS Notification Service Extension **must never write to the ratchet**.
+The iOS Notification Service Extension **must never write to the ratchet**.
 It decrypts for display only; a second writer would fork the chain.
 
 ## What is not in this repository
