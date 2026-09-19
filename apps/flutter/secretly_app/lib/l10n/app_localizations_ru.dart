@@ -2950,4 +2950,138 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get desktopNotifDndHint => 'Отключить все уведомления';
+
+  @override
+  String get desktopWallAnimContinuous => 'Постоянно';
+
+  @override
+  String get desktopWallAnimOnEnter => 'При открытии чата';
+
+  @override
+  String get desktopWallAnimTap => 'По клику по фону';
+
+  @override
+  String get desktopWallAnimOff => 'Не анимировать';
+
+  @override
+  String get desktopWallpaperNavy => 'Ночной синий';
+
+  @override
+  String get desktopWallpaperGraphite => 'Графит';
+
+  @override
+  String get desktopWallpaperTeal => 'Бирюза';
+
+  @override
+  String get desktopWallpaperPlum => 'Слива';
+
+  @override
+  String get desktopWallpaperWine => 'Вино';
+
+  @override
+  String get desktopWallpaperMint => 'Мята';
+
+  @override
+  String get desktopWallpaperLavender => 'Лаванда';
+
+  @override
+  String get desktopWallpaperSunset => 'Закат';
+
+  @override
+  String get desktopWallpaperPeach => 'Персик';
+
+  @override
+  String get desktopWallpaperSky => 'Небо';
+
+  @override
+  String get desktopWallpaperMidnight => 'Полночь';
+
+  @override
+  String get desktopAppearanceTitle => 'Оформление';
+
+  @override
+  String get desktopAppearanceHint => 'Схема этого окна. Телефон живёт со своей — эта настройка никуда не уезжает.';
+
+  @override
+  String get desktopAppearanceScheme => 'Схема';
+
+  @override
+  String get desktopAppearanceSchemeHint => 'Тёмная, светлая или по системной';
+
+  @override
+  String get desktopAppearanceDark => 'Тёмная';
+
+  @override
+  String get desktopAppearanceLight => 'Светлая';
+
+  @override
+  String get desktopAppearanceAuto => 'Авто';
+
+  @override
+  String get desktopAppearanceAccent => 'Акцент интерфейса';
+
+  @override
+  String get desktopAppearanceAccentHint => 'Кнопки, свои пузыри и выделения во всём приложении.';
+
+  @override
+  String get desktopAppearanceWallpaper => 'Обои чата';
+
+  @override
+  String get desktopAppearanceWallpaperHint => 'Фон чата для всех бесед.';
+
+  @override
+  String get desktopAppearanceLiveWallpaper => 'Живые обои';
+
+  @override
+  String get desktopAppearanceLiveWallpaperHint => 'Узор с мягким переливом. Тот же набор, что и на телефоне.';
+
+  @override
+  String get desktopAppearanceAnimBehaviour => 'Поведение анимации';
+
+  @override
+  String get desktopAppearanceAnimBehaviourHint => 'Когда узор оживает.';
+
+  @override
+  String get desktopAppearanceWallPulse => 'Обои проводят сообщение';
+
+  @override
+  String get desktopAppearanceWallPulseHint => 'Волна света идёт по узору: вверх — когда отправляете, вниз — когда получаете.';
+
+  @override
+  String get desktopAppearanceEnable => 'Включить';
+
+  @override
+  String get desktopAppearanceLiveOnly => 'Работает только на живых обоях';
+
+  @override
+  String get desktopAppearanceBubbleStyle => 'Стиль пузырей сообщений';
+
+  @override
+  String get desktopAppearanceBubbleStyleHint => 'Цвет ваших исходящих сообщений во всех чатах.';
+
+  @override
+  String get desktopAppearanceSenderColour => 'Цвет имени отправителя';
+
+  @override
+  String get desktopAppearanceSenderColourHint => 'Цвет ника собеседника в групповых чатах.';
+
+  @override
+  String get desktopAppearanceIndicatorColour => 'Цвет индикаторов';
+
+  @override
+  String get desktopAppearanceIndicatorColourHint => 'Галочки доставки и точка непрочитанного.';
+
+  @override
+  String get desktopAppearanceDemoMode => 'Демо-режим';
+
+  @override
+  String get desktopAppearanceDemoHint => 'Изменения внешнего вида сохранятся, когда профиль будет привязан.';
+
+  @override
+  String get desktopAppearanceCurrentChoice => 'Текущий выбор';
+
+  @override
+  String desktopAppearanceThemeIs(Object name) {
+    return 'Тема: $name';
+  }
 }

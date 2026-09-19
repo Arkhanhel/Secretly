@@ -5655,6 +5655,270 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Switch off every notification'**
   String get desktopNotifDndHint;
+
+  /// No description provided for @desktopWallAnimContinuous.
+  ///
+  /// In en, this message translates to:
+  /// **'Continuously'**
+  String get desktopWallAnimContinuous;
+
+  /// No description provided for @desktopWallAnimOnEnter.
+  ///
+  /// In en, this message translates to:
+  /// **'When a chat opens'**
+  String get desktopWallAnimOnEnter;
+
+  /// No description provided for @desktopWallAnimTap.
+  ///
+  /// In en, this message translates to:
+  /// **'On a click on the background'**
+  String get desktopWallAnimTap;
+
+  /// No description provided for @desktopWallAnimOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Do not animate'**
+  String get desktopWallAnimOff;
+
+  /// No description provided for @desktopWallpaperNavy.
+  ///
+  /// In en, this message translates to:
+  /// **'Midnight blue'**
+  String get desktopWallpaperNavy;
+
+  /// No description provided for @desktopWallpaperGraphite.
+  ///
+  /// In en, this message translates to:
+  /// **'Graphite'**
+  String get desktopWallpaperGraphite;
+
+  /// No description provided for @desktopWallpaperTeal.
+  ///
+  /// In en, this message translates to:
+  /// **'Teal'**
+  String get desktopWallpaperTeal;
+
+  /// No description provided for @desktopWallpaperPlum.
+  ///
+  /// In en, this message translates to:
+  /// **'Plum'**
+  String get desktopWallpaperPlum;
+
+  /// No description provided for @desktopWallpaperWine.
+  ///
+  /// In en, this message translates to:
+  /// **'Wine'**
+  String get desktopWallpaperWine;
+
+  /// No description provided for @desktopWallpaperMint.
+  ///
+  /// In en, this message translates to:
+  /// **'Mint'**
+  String get desktopWallpaperMint;
+
+  /// No description provided for @desktopWallpaperLavender.
+  ///
+  /// In en, this message translates to:
+  /// **'Lavender'**
+  String get desktopWallpaperLavender;
+
+  /// No description provided for @desktopWallpaperSunset.
+  ///
+  /// In en, this message translates to:
+  /// **'Sunset'**
+  String get desktopWallpaperSunset;
+
+  /// No description provided for @desktopWallpaperPeach.
+  ///
+  /// In en, this message translates to:
+  /// **'Peach'**
+  String get desktopWallpaperPeach;
+
+  /// No description provided for @desktopWallpaperSky.
+  ///
+  /// In en, this message translates to:
+  /// **'Sky'**
+  String get desktopWallpaperSky;
+
+  /// No description provided for @desktopWallpaperMidnight.
+  ///
+  /// In en, this message translates to:
+  /// **'Midnight'**
+  String get desktopWallpaperMidnight;
+
+  /// No description provided for @desktopAppearanceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get desktopAppearanceTitle;
+
+  /// No description provided for @desktopAppearanceHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The scheme of this window. The phone has its own — this setting does not travel anywhere.'**
+  String get desktopAppearanceHint;
+
+  /// No description provided for @desktopAppearanceScheme.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheme'**
+  String get desktopAppearanceScheme;
+
+  /// No description provided for @desktopAppearanceSchemeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark, light or follow the system'**
+  String get desktopAppearanceSchemeHint;
+
+  /// No description provided for @desktopAppearanceDark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get desktopAppearanceDark;
+
+  /// No description provided for @desktopAppearanceLight.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get desktopAppearanceLight;
+
+  /// No description provided for @desktopAppearanceAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto'**
+  String get desktopAppearanceAuto;
+
+  /// No description provided for @desktopAppearanceAccent.
+  ///
+  /// In en, this message translates to:
+  /// **'Interface accent'**
+  String get desktopAppearanceAccent;
+
+  /// No description provided for @desktopAppearanceAccentHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Buttons, your own bubbles and selections across the application.'**
+  String get desktopAppearanceAccentHint;
+
+  /// No description provided for @desktopAppearanceWallpaper.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat wallpaper'**
+  String get desktopAppearanceWallpaper;
+
+  /// No description provided for @desktopAppearanceWallpaperHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The chat background for every conversation.'**
+  String get desktopAppearanceWallpaperHint;
+
+  /// No description provided for @desktopAppearanceLiveWallpaper.
+  ///
+  /// In en, this message translates to:
+  /// **'Live wallpaper'**
+  String get desktopAppearanceLiveWallpaper;
+
+  /// No description provided for @desktopAppearanceLiveWallpaperHint.
+  ///
+  /// In en, this message translates to:
+  /// **'A pattern with a soft shimmer. The same set as on the phone.'**
+  String get desktopAppearanceLiveWallpaperHint;
+
+  /// No description provided for @desktopAppearanceAnimBehaviour.
+  ///
+  /// In en, this message translates to:
+  /// **'Animation behaviour'**
+  String get desktopAppearanceAnimBehaviour;
+
+  /// No description provided for @desktopAppearanceAnimBehaviourHint.
+  ///
+  /// In en, this message translates to:
+  /// **'When the pattern comes alive.'**
+  String get desktopAppearanceAnimBehaviourHint;
+
+  /// No description provided for @desktopAppearanceWallPulse.
+  ///
+  /// In en, this message translates to:
+  /// **'The wallpaper carries the message'**
+  String get desktopAppearanceWallPulse;
+
+  /// No description provided for @desktopAppearanceWallPulseHint.
+  ///
+  /// In en, this message translates to:
+  /// **'A wave of light runs along the pattern: upwards when you send, downwards when you receive.'**
+  String get desktopAppearanceWallPulseHint;
+
+  /// No description provided for @desktopAppearanceEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch on'**
+  String get desktopAppearanceEnable;
+
+  /// No description provided for @desktopAppearanceLiveOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Works only on live wallpaper'**
+  String get desktopAppearanceLiveOnly;
+
+  /// No description provided for @desktopAppearanceBubbleStyle.
+  ///
+  /// In en, this message translates to:
+  /// **'Message bubble style'**
+  String get desktopAppearanceBubbleStyle;
+
+  /// No description provided for @desktopAppearanceBubbleStyleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The colour of your outgoing messages in every chat.'**
+  String get desktopAppearanceBubbleStyleHint;
+
+  /// No description provided for @desktopAppearanceSenderColour.
+  ///
+  /// In en, this message translates to:
+  /// **'Sender name colour'**
+  String get desktopAppearanceSenderColour;
+
+  /// No description provided for @desktopAppearanceSenderColourHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The colour of the other person’s nickname in group chats.'**
+  String get desktopAppearanceSenderColourHint;
+
+  /// No description provided for @desktopAppearanceIndicatorColour.
+  ///
+  /// In en, this message translates to:
+  /// **'Indicator colour'**
+  String get desktopAppearanceIndicatorColour;
+
+  /// No description provided for @desktopAppearanceIndicatorColourHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The delivery ticks and the unread dot.'**
+  String get desktopAppearanceIndicatorColourHint;
+
+  /// No description provided for @desktopAppearanceDemoMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Demo mode'**
+  String get desktopAppearanceDemoMode;
+
+  /// No description provided for @desktopAppearanceDemoHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance changes will be kept once a profile is linked.'**
+  String get desktopAppearanceDemoHint;
+
+  /// No description provided for @desktopAppearanceCurrentChoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Current choice'**
+  String get desktopAppearanceCurrentChoice;
+
+  /// No description provided for @desktopAppearanceThemeIs.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme: {name}'**
+  String desktopAppearanceThemeIs(Object name);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

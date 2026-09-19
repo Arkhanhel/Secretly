@@ -2944,4 +2944,138 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get desktopNotifDndHint => 'Alle Benachrichtigungen abschalten';
+
+  @override
+  String get desktopWallAnimContinuous => 'Dauerhaft';
+
+  @override
+  String get desktopWallAnimOnEnter => 'Beim Öffnen eines Chats';
+
+  @override
+  String get desktopWallAnimTap => 'Bei Klick auf den Hintergrund';
+
+  @override
+  String get desktopWallAnimOff => 'Nicht animieren';
+
+  @override
+  String get desktopWallpaperNavy => 'Mitternachtsblau';
+
+  @override
+  String get desktopWallpaperGraphite => 'Graphit';
+
+  @override
+  String get desktopWallpaperTeal => 'Petrol';
+
+  @override
+  String get desktopWallpaperPlum => 'Pflaume';
+
+  @override
+  String get desktopWallpaperWine => 'Wein';
+
+  @override
+  String get desktopWallpaperMint => 'Minze';
+
+  @override
+  String get desktopWallpaperLavender => 'Lavendel';
+
+  @override
+  String get desktopWallpaperSunset => 'Sonnenuntergang';
+
+  @override
+  String get desktopWallpaperPeach => 'Pfirsich';
+
+  @override
+  String get desktopWallpaperSky => 'Himmel';
+
+  @override
+  String get desktopWallpaperMidnight => 'Mitternacht';
+
+  @override
+  String get desktopAppearanceTitle => 'Erscheinungsbild';
+
+  @override
+  String get desktopAppearanceHint => 'Das Schema dieses Fensters. Das Telefon hat sein eigenes – diese Einstellung reist nirgendwohin.';
+
+  @override
+  String get desktopAppearanceScheme => 'Schema';
+
+  @override
+  String get desktopAppearanceSchemeHint => 'Dunkel, hell oder wie im System';
+
+  @override
+  String get desktopAppearanceDark => 'Dunkel';
+
+  @override
+  String get desktopAppearanceLight => 'Hell';
+
+  @override
+  String get desktopAppearanceAuto => 'Auto';
+
+  @override
+  String get desktopAppearanceAccent => 'Akzent der Oberfläche';
+
+  @override
+  String get desktopAppearanceAccentHint => 'Schaltflächen, eigene Blasen und Markierungen in der ganzen App.';
+
+  @override
+  String get desktopAppearanceWallpaper => 'Chat-Hintergrund';
+
+  @override
+  String get desktopAppearanceWallpaperHint => 'Der Chat-Hintergrund für alle Unterhaltungen.';
+
+  @override
+  String get desktopAppearanceLiveWallpaper => 'Lebendiger Hintergrund';
+
+  @override
+  String get desktopAppearanceLiveWallpaperHint => 'Ein Muster mit sanftem Schimmern. Dieselbe Auswahl wie am Telefon.';
+
+  @override
+  String get desktopAppearanceAnimBehaviour => 'Verhalten der Animation';
+
+  @override
+  String get desktopAppearanceAnimBehaviourHint => 'Wann das Muster lebendig wird.';
+
+  @override
+  String get desktopAppearanceWallPulse => 'Der Hintergrund begleitet die Nachricht';
+
+  @override
+  String get desktopAppearanceWallPulseHint => 'Eine Lichtwelle läuft über das Muster: nach oben beim Senden, nach unten beim Empfangen.';
+
+  @override
+  String get desktopAppearanceEnable => 'Einschalten';
+
+  @override
+  String get desktopAppearanceLiveOnly => 'Funktioniert nur beim lebendigen Hintergrund';
+
+  @override
+  String get desktopAppearanceBubbleStyle => 'Stil der Nachrichtenblasen';
+
+  @override
+  String get desktopAppearanceBubbleStyleHint => 'Die Farbe deiner ausgehenden Nachrichten in allen Chats.';
+
+  @override
+  String get desktopAppearanceSenderColour => 'Farbe des Absendernamens';
+
+  @override
+  String get desktopAppearanceSenderColourHint => 'Die Farbe des Spitznamens der anderen Person in Gruppenchats.';
+
+  @override
+  String get desktopAppearanceIndicatorColour => 'Farbe der Anzeigen';
+
+  @override
+  String get desktopAppearanceIndicatorColourHint => 'Die Zustellhaken und der Punkt für Ungelesenes.';
+
+  @override
+  String get desktopAppearanceDemoMode => 'Demomodus';
+
+  @override
+  String get desktopAppearanceDemoHint => 'Änderungen am Aussehen werden gespeichert, sobald ein Profil verbunden ist.';
+
+  @override
+  String get desktopAppearanceCurrentChoice => 'Aktuelle Auswahl';
+
+  @override
+  String desktopAppearanceThemeIs(Object name) {
+    return 'Thema: $name';
+  }
 }

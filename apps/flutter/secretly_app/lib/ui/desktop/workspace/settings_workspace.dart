@@ -750,16 +750,16 @@ class _AppearancePane extends StatefulWidget {
 }
 
 class _AppearancePaneState extends State<_AppearancePane> {
-  static String _animModeLabel(ChatWallpaperAnimMode m) {
+  static String _animModeLabel(ChatWallpaperAnimMode m, AppLocalizations l10n) {
     switch (m) {
       case ChatWallpaperAnimMode.continuous:
-        return 'Постоянно';
+        return l10n.desktopWallAnimContinuous;
       case ChatWallpaperAnimMode.onEnter:
-        return 'При открытии чата';
+        return l10n.desktopWallAnimOnEnter;
       case ChatWallpaperAnimMode.tap:
-        return 'По клику по фону';
+        return l10n.desktopWallAnimTap;
       case ChatWallpaperAnimMode.off:
-        return 'Не анимировать';
+        return l10n.desktopWallAnimOff;
     }
   }
 
@@ -770,29 +770,50 @@ class _AppearancePaneState extends State<_AppearancePane> {
   /// hardcoded copy meant desktop silently lacked four wallpapers and would
   /// have missed any future addition. Names come from the basename so a new
   /// asset needs no desktop edit at all.
-  static const Map<String, String> _wallpaperTitles = <String, String>{
-    'wallpaper_dark_navy.jpg': 'Ночной синий',
-    'wallpaper_dark_graphite.jpg': 'Графит',
-    'wallpaper_dark_teal.jpg': 'Бирюза',
-    'wallpaper_dark_plum.jpg': 'Слива',
-    'wallpaper_dark_wine.jpg': 'Вино',
-    'wallpaper_light_mint.jpg': 'Мята',
-    'wallpaper_light_lavender.jpg': 'Лаванда',
-    'wallpaper_light_sunset.jpg': 'Закат',
-    'wallpaper_light_peach.jpg': 'Персик',
-    'wallpaper_light_sky.jpg': 'Небо',
-  };
+  /// 🔴 НАЗВАНИЯ ОБОЕВ ПЕРЕВОДЯТСЯ — в отличие от названий языков. «Слива» и
+  /// «Бирюза» описывают ЦВЕТ, и человеку, который не читает по-русски, они не
+  /// говорят ничего; «Deutsch» же на любом языке остаётся «Deutsch».
+  static String _wallpaperTitle(String basename, AppLocalizations l10n) {
+    switch (basename) {
+      case 'wallpaper_dark_navy.jpg':
+        return l10n.desktopWallpaperNavy;
+      case 'wallpaper_dark_graphite.jpg':
+        return l10n.desktopWallpaperGraphite;
+      case 'wallpaper_dark_teal.jpg':
+        return l10n.desktopWallpaperTeal;
+      case 'wallpaper_dark_plum.jpg':
+        return l10n.desktopWallpaperPlum;
+      case 'wallpaper_dark_wine.jpg':
+        return l10n.desktopWallpaperWine;
+      case 'wallpaper_light_mint.jpg':
+        return l10n.desktopWallpaperMint;
+      case 'wallpaper_light_lavender.jpg':
+        return l10n.desktopWallpaperLavender;
+      case 'wallpaper_light_sunset.jpg':
+        return l10n.desktopWallpaperSunset;
+      case 'wallpaper_light_peach.jpg':
+        return l10n.desktopWallpaperPeach;
+      case 'wallpaper_light_sky.jpg':
+        return l10n.desktopWallpaperSky;
+      default:
+        return basename;
+    }
+  }
 
-  static List<_WallpaperChoice> get _wallpaperChoices {
+  static List<_WallpaperChoice> _wallpaperChoicesFor(AppLocalizations l10n) {
     final out = <_WallpaperChoice>[
       // `default` resolves to the navy asset; keep it first and named, since
       // it is what a fresh profile is already on.
-      const _WallpaperChoice(
+      _WallpaperChoice(
         id: 'default',
-        title: 'Ночной синий',
+        title: l10n.desktopWallpaperNavy,
         assetPath: '${kBundledChatWallpaperAssetRoot}wallpaper_dark_navy.jpg',
       ),
-      const _WallpaperChoice(id: 'midnight', title: 'Полночь', assetPath: null),
+      _WallpaperChoice(
+        id: 'midnight',
+        title: l10n.desktopWallpaperMidnight,
+        assetPath: null,
+      ),
     ];
     for (final base in kFeaturedChatWallpaperBasenames) {
       // Skip navy: it is already present above as `default`, and offering the
@@ -803,7 +824,7 @@ class _AppearancePaneState extends State<_AppearancePane> {
       out.add(
         _WallpaperChoice(
           id: encodeAssetChatWallpaperId(path),
-          title: _wallpaperTitles[base] ?? base,
+          title: _wallpaperTitle(base, l10n),
           assetPath: path,
         ),
       );
@@ -886,6 +907,7 @@ class _AppearancePaneState extends State<_AppearancePane> {
   }
 
   Widget _buildBody(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final ctrl = widget.controller;
     final c = DColors.of(context);
     final currentPresetId = ctrl?.appThemePresetId ?? kAppThemePresets.first.id;
@@ -893,13 +915,12 @@ class _AppearancePaneState extends State<_AppearancePane> {
     return _PaneScaffold(
       children: [
         WorkspaceCard(
-          title: 'Оформление',
+          title: l10n.desktopAppearanceTitle,
           description:
-              'Схема этого окна. Телефон живёт со своей — эта настройка '
-              'никуда не уезжает.',
+              l10n.desktopAppearanceHint,
           child: WorkspaceRow(
-            label: 'Схема',
-            description: 'Тёмная, светлая или по системной',
+            label: l10n.desktopAppearanceScheme,
+            description: l10n.desktopAppearanceSchemeHint,
             icon: FluentIcons.weather_moon_24_regular,
             // 🔴 ТРИ ЗНАЧЕНИЯ, А НЕ ТУМБЛЕР.
             //
@@ -911,7 +932,11 @@ class _AppearancePaneState extends State<_AppearancePane> {
               valueListenable: DesktopUiPrefs.themeMode,
               builder: (ctx, mode, _) => DesktopSegmented<String>(
                 values: const ['dark', 'light', 'auto'],
-                labels: const ['Тёмная', 'Светлая', 'Авто'],
+                labels: [
+                  l10n.desktopAppearanceDark,
+                  l10n.desktopAppearanceLight,
+                  l10n.desktopAppearanceAuto,
+                ],
                 value: mode,
                 onChanged: (v) {
                   unawaited(DesktopUiPrefs.setThemeMode(v));
@@ -923,8 +948,8 @@ class _AppearancePaneState extends State<_AppearancePane> {
           ),
         ),
         WorkspaceCard(
-          title: 'Акцент интерфейса',
-          description: 'Кнопки, свои пузыри и выделения во всём приложении.',
+          title: l10n.desktopAppearanceAccent,
+          description: l10n.desktopAppearanceAccentHint,
           // 🔴 ПОЛОСА ПЛИТОК, А НЕ СЕТКА КАРТОЧЕК.
           //
           // Одиннадцать пресетов лежали сеткой три в ряд, каждый — карточка с
@@ -963,16 +988,16 @@ class _AppearancePaneState extends State<_AppearancePane> {
           ),
         ),
         WorkspaceCard(
-          title: 'Обои чата',
+          title: l10n.desktopAppearanceWallpaper,
           // D-4: this used to promise a per-chat override via the details
           // drawer. No such override exists anywhere in the desktop tree — the
           // background is always the profile default. Claim removed rather
           // than left standing (P-5 extends to promises, not just controls).
-          description: 'Фон чата для всех бесед.',
+          description: l10n.desktopAppearanceWallpaperHint,
           child: GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            itemCount: _wallpaperChoices.length,
+            itemCount: _wallpaperChoicesFor(l10n).length,
             // 🔴 Плитки по МАКСИМАЛЬНОЙ ширине, а не «три в ряд».
             //
             // Три в ряд на широком окне настроек давали превью по 340 точек:
@@ -988,7 +1013,7 @@ class _AppearancePaneState extends State<_AppearancePane> {
               childAspectRatio: 1.3,
             ),
             itemBuilder: (ctx, i) {
-              final choice = _wallpaperChoices[i];
+              final choice = _wallpaperChoicesFor(l10n)[i];
               // For the "midnight" option, paint the deep solid as a swatch.
               final isMidnight = choice.id == 'midnight';
               return _WallpaperCard(
@@ -1004,9 +1029,9 @@ class _AppearancePaneState extends State<_AppearancePane> {
         // Animated styles, generated from the SHARED catalogue rather than a
         // desktop copy — a style added on mobile shows up here for free.
         WorkspaceCard(
-          title: 'Живые обои',
+          title: l10n.desktopAppearanceLiveWallpaper,
           description:
-              'Узор с мягким переливом. Тот же набор, что и на телефоне.',
+              l10n.desktopAppearanceLiveWallpaperHint,
           child: GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -1035,13 +1060,13 @@ class _AppearancePaneState extends State<_AppearancePane> {
         ),
         if (ctrl != null) ...[
           WorkspaceCard(
-            title: 'Поведение анимации',
-            description: 'Когда узор оживает.',
+            title: l10n.desktopAppearanceAnimBehaviour,
+            description: l10n.desktopAppearanceAnimBehaviourHint,
             child: Column(
               children: [
                 for (final m in ChatWallpaperAnimMode.values)
                   WorkspaceRow(
-                    label: _animModeLabel(m),
+                    label: _animModeLabel(m, l10n),
                     trailing: WorkspaceSwitch(
                       value: ctrl.chatWallpaperAnimMode == m,
                       onChanged: (v) {
@@ -1054,13 +1079,11 @@ class _AppearancePaneState extends State<_AppearancePane> {
             ),
           ),
           WorkspaceCard(
-            title: 'Обои проводят сообщение',
-            description:
-                'Волна света идёт по узору: вверх — когда отправляете, '
-                'вниз — когда получаете.',
+            title: l10n.desktopAppearanceWallPulse,
+            description: l10n.desktopAppearanceWallPulseHint,
             child: WorkspaceRow(
-              label: 'Включить',
-              description: 'Работает только на живых обоях',
+              label: l10n.desktopAppearanceEnable,
+              description: l10n.desktopAppearanceLiveOnly,
               trailing: WorkspaceSwitch(
                 value: ctrl.chatWallpaperConduct,
                 onChanged: (v) => unawaited(ctrl.setChatWallpaperConduct(v)),
@@ -1069,8 +1092,8 @@ class _AppearancePaneState extends State<_AppearancePane> {
           ),
         ],
         WorkspaceCard(
-          title: 'Стиль пузырей сообщений',
-          description: 'Цвет ваших исходящих сообщений во всех чатах.',
+          title: l10n.desktopAppearanceBubbleStyle,
+          description: l10n.desktopAppearanceBubbleStyleHint,
           child: GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -1101,8 +1124,8 @@ class _AppearancePaneState extends State<_AppearancePane> {
           ),
         ),
         WorkspaceCard(
-          title: 'Цвет имени отправителя',
-          description: 'Цвет ника собеседника в групповых чатах.',
+          title: l10n.desktopAppearanceSenderColour,
+          description: l10n.desktopAppearanceSenderColourHint,
           child: GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -1127,8 +1150,8 @@ class _AppearancePaneState extends State<_AppearancePane> {
           ),
         ),
         WorkspaceCard(
-          title: 'Цвет индикаторов',
-          description: 'Галочки доставки и точка непрочитанного.',
+          title: l10n.desktopAppearanceIndicatorColour,
+          description: l10n.desktopAppearanceIndicatorColourHint,
           child: GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
@@ -1162,13 +1185,13 @@ class _AppearancePaneState extends State<_AppearancePane> {
         ),
         if (ctrl == null)
           WorkspaceCard(
-            title: 'Демо-режим',
+            title: l10n.desktopAppearanceDemoMode,
             description:
-                'Изменения внешнего вида сохранятся, когда профиль будет привязан.',
+                l10n.desktopAppearanceDemoHint,
             child: const SizedBox.shrink(),
           ),
         WorkspaceCard(
-          title: 'Текущий выбор',
+          title: l10n.desktopAppearanceCurrentChoice,
           child: Row(
             children: [
               Icon(
@@ -1178,7 +1201,7 @@ class _AppearancePaneState extends State<_AppearancePane> {
               ),
               const SizedBox(width: DSpace.s),
               Text(
-                'Тема: ${resolveAppThemePreset(currentPresetId).nameRu}',
+                l10n.desktopAppearanceThemeIs(resolveAppThemePreset(currentPresetId).nameRu),
                 style: DType.body.copyWith(color: c.textPrimary),
               ),
               const Spacer(),

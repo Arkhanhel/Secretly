@@ -2944,6 +2944,140 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get desktopNotifDndHint => 'Desligar todas as notificações';
+
+  @override
+  String get desktopWallAnimContinuous => 'Sempre';
+
+  @override
+  String get desktopWallAnimOnEnter => 'Ao abrir uma conversa';
+
+  @override
+  String get desktopWallAnimTap => 'Ao clicar no fundo';
+
+  @override
+  String get desktopWallAnimOff => 'Não animar';
+
+  @override
+  String get desktopWallpaperNavy => 'Azul-noite';
+
+  @override
+  String get desktopWallpaperGraphite => 'Grafite';
+
+  @override
+  String get desktopWallpaperTeal => 'Turquesa';
+
+  @override
+  String get desktopWallpaperPlum => 'Ameixa';
+
+  @override
+  String get desktopWallpaperWine => 'Vinho';
+
+  @override
+  String get desktopWallpaperMint => 'Menta';
+
+  @override
+  String get desktopWallpaperLavender => 'Lavanda';
+
+  @override
+  String get desktopWallpaperSunset => 'Pôr do sol';
+
+  @override
+  String get desktopWallpaperPeach => 'Pêssego';
+
+  @override
+  String get desktopWallpaperSky => 'Céu';
+
+  @override
+  String get desktopWallpaperMidnight => 'Meia-noite';
+
+  @override
+  String get desktopAppearanceTitle => 'Aspeto';
+
+  @override
+  String get desktopAppearanceHint => 'O esquema desta janela. O telemóvel tem o seu — esta definição não viaja para lado nenhum.';
+
+  @override
+  String get desktopAppearanceScheme => 'Esquema';
+
+  @override
+  String get desktopAppearanceSchemeHint => 'Escuro, claro ou conforme o sistema';
+
+  @override
+  String get desktopAppearanceDark => 'Escuro';
+
+  @override
+  String get desktopAppearanceLight => 'Claro';
+
+  @override
+  String get desktopAppearanceAuto => 'Auto';
+
+  @override
+  String get desktopAppearanceAccent => 'Acento da interface';
+
+  @override
+  String get desktopAppearanceAccentHint => 'Botões, os seus balões e as seleções em toda a aplicação.';
+
+  @override
+  String get desktopAppearanceWallpaper => 'Fundo da conversa';
+
+  @override
+  String get desktopAppearanceWallpaperHint => 'O fundo da conversa para todas as conversas.';
+
+  @override
+  String get desktopAppearanceLiveWallpaper => 'Fundo animado';
+
+  @override
+  String get desktopAppearanceLiveWallpaperHint => 'Um padrão com um brilho suave. O mesmo conjunto do telemóvel.';
+
+  @override
+  String get desktopAppearanceAnimBehaviour => 'Comportamento da animação';
+
+  @override
+  String get desktopAppearanceAnimBehaviourHint => 'Quando o padrão ganha vida.';
+
+  @override
+  String get desktopAppearanceWallPulse => 'O fundo acompanha a mensagem';
+
+  @override
+  String get desktopAppearanceWallPulseHint => 'Uma onda de luz percorre o padrão: para cima ao enviar, para baixo ao receber.';
+
+  @override
+  String get desktopAppearanceEnable => 'Ligar';
+
+  @override
+  String get desktopAppearanceLiveOnly => 'Só funciona com o fundo animado';
+
+  @override
+  String get desktopAppearanceBubbleStyle => 'Estilo dos balões';
+
+  @override
+  String get desktopAppearanceBubbleStyleHint => 'A cor das suas mensagens enviadas em todas as conversas.';
+
+  @override
+  String get desktopAppearanceSenderColour => 'Cor do nome do remetente';
+
+  @override
+  String get desktopAppearanceSenderColourHint => 'A cor da alcunha da outra pessoa nas conversas de grupo.';
+
+  @override
+  String get desktopAppearanceIndicatorColour => 'Cor dos indicadores';
+
+  @override
+  String get desktopAppearanceIndicatorColourHint => 'As marcas de entrega e o ponto de não lido.';
+
+  @override
+  String get desktopAppearanceDemoMode => 'Modo de demonstração';
+
+  @override
+  String get desktopAppearanceDemoHint => 'As alterações de aspeto serão guardadas quando um perfil estiver ligado.';
+
+  @override
+  String get desktopAppearanceCurrentChoice => 'Escolha atual';
+
+  @override
+  String desktopAppearanceThemeIs(Object name) {
+    return 'Tema: $name';
+  }
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -5886,4 +6020,138 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopNotifDndHint => 'Desligar todas as notificações';
+
+  @override
+  String get desktopWallAnimContinuous => 'Sempre';
+
+  @override
+  String get desktopWallAnimOnEnter => 'Ao abrir uma conversa';
+
+  @override
+  String get desktopWallAnimTap => 'Ao clicar no fundo';
+
+  @override
+  String get desktopWallAnimOff => 'Não animar';
+
+  @override
+  String get desktopWallpaperNavy => 'Azul-noite';
+
+  @override
+  String get desktopWallpaperGraphite => 'Grafite';
+
+  @override
+  String get desktopWallpaperTeal => 'Turquesa';
+
+  @override
+  String get desktopWallpaperPlum => 'Ameixa';
+
+  @override
+  String get desktopWallpaperWine => 'Vinho';
+
+  @override
+  String get desktopWallpaperMint => 'Menta';
+
+  @override
+  String get desktopWallpaperLavender => 'Lavanda';
+
+  @override
+  String get desktopWallpaperSunset => 'Pôr do sol';
+
+  @override
+  String get desktopWallpaperPeach => 'Pêssego';
+
+  @override
+  String get desktopWallpaperSky => 'Céu';
+
+  @override
+  String get desktopWallpaperMidnight => 'Meia-noite';
+
+  @override
+  String get desktopAppearanceTitle => 'Aparência';
+
+  @override
+  String get desktopAppearanceHint => 'O esquema desta janela. O celular tem o seu — esta configuração não viaja para lugar nenhum.';
+
+  @override
+  String get desktopAppearanceScheme => 'Esquema';
+
+  @override
+  String get desktopAppearanceSchemeHint => 'Escuro, claro ou conforme o sistema';
+
+  @override
+  String get desktopAppearanceDark => 'Escuro';
+
+  @override
+  String get desktopAppearanceLight => 'Claro';
+
+  @override
+  String get desktopAppearanceAuto => 'Auto';
+
+  @override
+  String get desktopAppearanceAccent => 'Acento da interface';
+
+  @override
+  String get desktopAppearanceAccentHint => 'Botões, seus balões e as seleções em todo o aplicativo.';
+
+  @override
+  String get desktopAppearanceWallpaper => 'Papel de parede da conversa';
+
+  @override
+  String get desktopAppearanceWallpaperHint => 'O fundo da conversa para todas as conversas.';
+
+  @override
+  String get desktopAppearanceLiveWallpaper => 'Papel de parede animado';
+
+  @override
+  String get desktopAppearanceLiveWallpaperHint => 'Um padrão com brilho suave. O mesmo conjunto do celular.';
+
+  @override
+  String get desktopAppearanceAnimBehaviour => 'Comportamento da animação';
+
+  @override
+  String get desktopAppearanceAnimBehaviourHint => 'Quando o padrão ganha vida.';
+
+  @override
+  String get desktopAppearanceWallPulse => 'O fundo acompanha a mensagem';
+
+  @override
+  String get desktopAppearanceWallPulseHint => 'Uma onda de luz percorre o padrão: para cima ao enviar, para baixo ao receber.';
+
+  @override
+  String get desktopAppearanceEnable => 'Ligar';
+
+  @override
+  String get desktopAppearanceLiveOnly => 'Só funciona com o papel de parede animado';
+
+  @override
+  String get desktopAppearanceBubbleStyle => 'Estilo dos balões';
+
+  @override
+  String get desktopAppearanceBubbleStyleHint => 'A cor das suas mensagens enviadas em todas as conversas.';
+
+  @override
+  String get desktopAppearanceSenderColour => 'Cor do nome do remetente';
+
+  @override
+  String get desktopAppearanceSenderColourHint => 'A cor do apelido da outra pessoa nas conversas em grupo.';
+
+  @override
+  String get desktopAppearanceIndicatorColour => 'Cor dos indicadores';
+
+  @override
+  String get desktopAppearanceIndicatorColourHint => 'As marcas de entrega e o ponto de não lido.';
+
+  @override
+  String get desktopAppearanceDemoMode => 'Modo de demonstração';
+
+  @override
+  String get desktopAppearanceDemoHint => 'As mudanças de aparência serão salvas quando um perfil estiver conectado.';
+
+  @override
+  String get desktopAppearanceCurrentChoice => 'Escolha atual';
+
+  @override
+  String desktopAppearanceThemeIs(Object name) {
+    return 'Tema: $name';
+  }
 }
