@@ -12,8 +12,10 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_core
   flutter_secure_storage_windows
   flutter_webrtc
+  just_audio_windows
   livekit_client
   local_auth_windows
+  local_notifier
   pasteboard
   permission_handler_windows
   record_windows
@@ -23,6 +25,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
   sqlite3_flutter_libs
   tray_manager
   url_launcher_windows
+  video_player_win
   window_manager
 )
 

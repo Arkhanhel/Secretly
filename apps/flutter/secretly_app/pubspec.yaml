@@ -152,6 +152,9 @@ dependencies:
   # seam on long selected labels). Re-diff against upstream on any bump.
   liquid_glass_widgets:
     path: third_party/liquid_glass_widgets
+  just_audio_windows: ^0.2.3
+  video_player_win: ^3.3.0
+  local_notifier: ^0.1.6
 
 # Use SQLite3MultipleCiphers build of sqlite3 on desktop (enables `PRAGMA key`).
 hooks:

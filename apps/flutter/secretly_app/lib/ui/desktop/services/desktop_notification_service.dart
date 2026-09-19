@@ -8,6 +8,7 @@ import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/foundation.dart'
     show VoidCallback, kIsWeb, visibleForTesting;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:local_notifier/local_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../app/app_controller.dart';
@@ -165,6 +166,15 @@ class DesktopNotificationService {
       !kIsWeb &&
       (Platform.isMacOS || Platform.isWindows || Platform.isLinux);
 
+  /// 🔴 НА WINDOWS УВЕДОМЛЕНИЯ ПОКАЗЫВАЕТ ДРУГОЙ ПАКЕТ (19.09.2026).
+  ///
+  /// `flutter_local_notifications` 17-й версии Windows не поддерживает вовсе:
+  /// его `initialize` там падает «нет реализации», и дальше служба считала себя
+  /// неготовой — то есть на Windows не было НИ ОДНОГО уведомления. Поднимать
+  /// версию нельзя: пакет общий с выпущенной мобильной сборкой. Поэтому на
+  /// Windows показываем через `local_notifier`, на macOS — как раньше.
+  bool get _usesLocalNotifier => !kIsWeb && Platform.isWindows;
+
   Future<void> init({CallManager? callManager}) async {
     if (!_isDesktopOs) return;
     try {
@@ -182,6 +192,21 @@ class DesktopNotificationService {
       _doNotDisturb = prefs.getBool(_prefsDoNotDisturbKey) ?? false;
     } catch (_) {
       // fall back to in-memory defaults
+    }
+    if (_usesLocalNotifier) {
+      try {
+        // Имя нужно самой системе Windows: уведомления показываются от имени
+        // ярлыка приложения.
+        await localNotifier.setup(appName: 'Secretly');
+        _ready = true;
+      } catch (_) {
+        _ready = false;
+        return;
+      }
+      _inAppSub?.cancel();
+      _inAppSub = controller.inAppNotifications.listen(_onChatEvent);
+      _attachCallManager(callManager);
+      return;
     }
     try {
       const macSettings = DarwinInitializationSettings(
@@ -289,6 +314,35 @@ class DesktopNotificationService {
     final showText = _previewLevel >= 2;
     final title = showSender ? evt.title : _l10n.appTitle;
     final body = showText ? evt.body : _l10n.notificationBodyNewMessage;
+    await _present(id: id, title: title, body: body, payload: evt.convoId);
+  }
+
+  /// Показывает уведомление тем способом, который умеет эта система.
+  ///
+  /// Нажатие ведёт в ту же переписку обоими путями: полоса уведомлений
+  /// бесполезна, если по ней нельзя попасть в разговор.
+  Future<void> _present({
+    required int id,
+    required String title,
+    required String body,
+    required String payload,
+    bool timeSensitive = false,
+  }) async {
+    if (_usesLocalNotifier) {
+      try {
+        final notification = LocalNotification(
+          title: title,
+          body: body,
+          silent: !_soundEnabled,
+        );
+        notification.onClick = () => _tapController.add(payload);
+        await notification.show();
+      } catch (_) {
+        // Система могла отказать (нет ярлыка, выключены уведомления) — это не
+        // повод ронять приём сообщений.
+      }
+      return;
+    }
     try {
       await _plugin.show(
         id,
@@ -299,10 +353,13 @@ class DesktopNotificationService {
             presentAlert: true,
             presentBanner: true,
             presentSound: _soundEnabled,
+            interruptionLevel: timeSensitive
+                ? InterruptionLevel.timeSensitive
+                : null,
           ),
           linux: const LinuxNotificationDetails(),
         ),
-        payload: evt.convoId,
+        payload: payload,
       );
     } catch (_) {}
   }
@@ -327,20 +384,12 @@ class DesktopNotificationService {
     final title = s.isVideo ? 'Видеозвонок' : 'Входящий звонок';
     final id = (('call:${s.callId}').hashCode & 0x7fffffff);
     unawaited(
-      _plugin.show(
-        id,
-        title,
-        caller,
-        NotificationDetails(
-          macOS: DarwinNotificationDetails(
-            presentAlert: true,
-            presentBanner: true,
-            presentSound: _soundEnabled,
-            interruptionLevel: InterruptionLevel.timeSensitive,
-          ),
-          linux: const LinuxNotificationDetails(),
-        ),
+      _present(
+        id: id,
+        title: title,
+        body: caller,
         payload: 'call:${s.callId}',
+        timeSensitive: true,
       ),
     );
   }
