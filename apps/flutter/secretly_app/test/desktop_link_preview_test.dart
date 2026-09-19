@@ -430,7 +430,7 @@ void main() {
       final settings = File(
         'lib/ui/desktop/workspace/settings_workspace.dart',
       ).readAsStringSync();
-      expect(settings.contains("label: 'Превью ссылок'"), isTrue);
+      expect(settings.contains('label: l10n.desktopGeneralLinkPreviews'), isTrue);
       expect(settings.contains('DesktopUiPrefs.setLinkPreviews(v)'), isTrue);
     });
 

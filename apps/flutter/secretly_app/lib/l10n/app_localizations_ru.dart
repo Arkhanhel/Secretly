@@ -2842,4 +2842,112 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get desktopSettingsActive => 'активно';
+
+  @override
+  String get desktopGeneralSystemLanguage => 'Системный';
+
+  @override
+  String get desktopGeneralInterfaceLanguage => 'Язык интерфейса';
+
+  @override
+  String get desktopGeneralAppliesAtOnce => 'Применяется сразу';
+
+  @override
+  String get desktopGeneralBehaviour => 'Поведение';
+
+  @override
+  String get desktopGeneralEnterSends => 'Enter отправляет сообщение';
+
+  @override
+  String get desktopGeneralShiftEnterNewline => 'Shift+Enter — новая строка';
+
+  @override
+  String get desktopGeneralEnterNewline => 'Enter — новая строка, Shift+Enter отправляет';
+
+  @override
+  String get desktopGeneralHoverMenu => 'Меню при наведении на сообщение';
+
+  @override
+  String get desktopGeneralHoverMenuOn => 'Над сообщением появляются реакции и действия';
+
+  @override
+  String get desktopGeneralHoverMenuOff => 'Действия — по правой кнопке мыши';
+
+  @override
+  String get desktopGeneralLinkPreviews => 'Превью ссылок';
+
+  @override
+  String get desktopGeneralLinkPreviewsOn => 'Карточка ссылки уходит вместе с сообщением';
+
+  @override
+  String get desktopGeneralLinkPreviewsOff => 'Ссылки уходят без карточки, страницы не открываются';
+
+  @override
+  String get desktopPowerAnimations => 'Анимации';
+
+  @override
+  String get desktopPowerAnimationsHint => 'Всё включено по умолчанию. Выключайте сверху вниз, если ноутбук греется или садится батарея.';
+
+  @override
+  String get desktopPowerFramesTitle => 'Анимация рамок и статусов';
+
+  @override
+  String get desktopPowerFramesHint => 'Живые рамки аватаров и эмодзи-статусы у собеседников. Самая дорогая из трёх — выключайте первой.';
+
+  @override
+  String get desktopPowerGlassBubbles => 'Стеклянные пузыри';
+
+  @override
+  String get desktopPowerGlassBubblesHint => 'Размытие под входящими сообщениями';
+
+  @override
+  String get desktopPowerMattePanels => 'Матовые панели';
+
+  @override
+  String get desktopPowerMattePanelsHint => 'Размытие панелей и всплывающих окон';
+
+  @override
+  String get desktopPowerNotAffectedTitle => 'Что это не затрагивает';
+
+  @override
+  String get desktopPowerNotAffectedHint => 'Доставка сообщений, шифрование и уведомления работают одинаково при любых значениях. Эти настройки влияют только на отрисовку.';
+
+  @override
+  String get desktopNotifHidden => 'Скрыто';
+
+  @override
+  String get desktopNotifSenderOnly => 'Только отправитель';
+
+  @override
+  String get desktopNotifSenderAndText => 'Отправитель и текст';
+
+  @override
+  String get desktopNotifUnavailableHere => 'Недоступно на этой платформе.';
+
+  @override
+  String get desktopNotifShowPreview => 'Показывать превью сообщения';
+
+  @override
+  String get desktopNotifInSystem => 'В системных уведомлениях';
+
+  @override
+  String get desktopNotifDirectChats => 'Личные чаты';
+
+  @override
+  String get desktopNotifDirectChatsHint => 'Уведомления о сообщениях один на один';
+
+  @override
+  String get desktopNotifRooms => 'Комнаты';
+
+  @override
+  String get desktopNotifRoomsHint => 'Уведомления о сообщениях в комнатах';
+
+  @override
+  String get desktopNotifSound => 'Звук';
+
+  @override
+  String get desktopNotifDnd => 'Не беспокоить';
+
+  @override
+  String get desktopNotifDndHint => 'Отключить все уведомления';
 }

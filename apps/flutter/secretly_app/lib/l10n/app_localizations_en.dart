@@ -2836,4 +2836,112 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get desktopSettingsActive => 'active';
+
+  @override
+  String get desktopGeneralSystemLanguage => 'System';
+
+  @override
+  String get desktopGeneralInterfaceLanguage => 'Interface language';
+
+  @override
+  String get desktopGeneralAppliesAtOnce => 'Applies straight away';
+
+  @override
+  String get desktopGeneralBehaviour => 'Behaviour';
+
+  @override
+  String get desktopGeneralEnterSends => 'Enter sends the message';
+
+  @override
+  String get desktopGeneralShiftEnterNewline => 'Shift+Enter starts a new line';
+
+  @override
+  String get desktopGeneralEnterNewline => 'Enter starts a new line, Shift+Enter sends';
+
+  @override
+  String get desktopGeneralHoverMenu => 'Menu when hovering over a message';
+
+  @override
+  String get desktopGeneralHoverMenuOn => 'Reactions and actions appear above the message';
+
+  @override
+  String get desktopGeneralHoverMenuOff => 'Actions are on the right mouse button';
+
+  @override
+  String get desktopGeneralLinkPreviews => 'Link previews';
+
+  @override
+  String get desktopGeneralLinkPreviewsOn => 'The link card is sent together with the message';
+
+  @override
+  String get desktopGeneralLinkPreviewsOff => 'Links are sent without a card and no page is opened';
+
+  @override
+  String get desktopPowerAnimations => 'Animations';
+
+  @override
+  String get desktopPowerAnimationsHint => 'Everything is on by default. Switch off from the top down if the laptop gets hot or the battery drains.';
+
+  @override
+  String get desktopPowerFramesTitle => 'Animated frames and statuses';
+
+  @override
+  String get desktopPowerFramesHint => 'Live avatar frames and emoji statuses on other people. The most expensive of the three — switch this off first.';
+
+  @override
+  String get desktopPowerGlassBubbles => 'Glass bubbles';
+
+  @override
+  String get desktopPowerGlassBubblesHint => 'Blur behind incoming messages';
+
+  @override
+  String get desktopPowerMattePanels => 'Matte panels';
+
+  @override
+  String get desktopPowerMattePanelsHint => 'Blur on panels and popups';
+
+  @override
+  String get desktopPowerNotAffectedTitle => 'What this does not affect';
+
+  @override
+  String get desktopPowerNotAffectedHint => 'Message delivery, encryption and notifications work the same whatever you choose. These settings only affect drawing.';
+
+  @override
+  String get desktopNotifHidden => 'Hidden';
+
+  @override
+  String get desktopNotifSenderOnly => 'Sender only';
+
+  @override
+  String get desktopNotifSenderAndText => 'Sender and text';
+
+  @override
+  String get desktopNotifUnavailableHere => 'Not available on this platform.';
+
+  @override
+  String get desktopNotifShowPreview => 'Show a preview of the message';
+
+  @override
+  String get desktopNotifInSystem => 'In system notifications';
+
+  @override
+  String get desktopNotifDirectChats => 'One-to-one chats';
+
+  @override
+  String get desktopNotifDirectChatsHint => 'Notifications about one-to-one messages';
+
+  @override
+  String get desktopNotifRooms => 'Rooms';
+
+  @override
+  String get desktopNotifRoomsHint => 'Notifications about messages in rooms';
+
+  @override
+  String get desktopNotifSound => 'Sound';
+
+  @override
+  String get desktopNotifDnd => 'Do not disturb';
+
+  @override
+  String get desktopNotifDndHint => 'Switch off every notification';
 }

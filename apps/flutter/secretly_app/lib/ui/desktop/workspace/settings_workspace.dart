@@ -492,8 +492,13 @@ class _GeneralPane extends StatefulWidget {
 class _GeneralPaneState extends State<_GeneralPane> {
   /// Interface languages, in the order they are offered. Keys are the
   /// controller's locale-preference format; '' means "follow the system".
+  ///
+  /// 🔴 НАЗВАНИЯ ЯЗЫКОВ НЕ ПЕРЕВОДЯТСЯ. «Deutsch» остаётся «Deutsch» на любом
+  /// языке окна: человек ищет СВОЙ язык в списке и узнаёт его по родному
+  /// написанию, а не по переводу. Пустая подпись — «как в системе», её и
+  /// переводим.
   static const List<({String pref, String label})> _languages = [
-    (pref: '', label: 'Системный'),
+    (pref: '', label: ''),
     (pref: 'ru', label: 'Русский'),
     (pref: 'en', label: 'English'),
     (pref: 'uk', label: 'Українська'),
@@ -504,20 +509,25 @@ class _GeneralPaneState extends State<_GeneralPane> {
     (pref: 'pt_BR', label: 'Português (Brasil)'),
   ];
 
-  String _labelForPref(String pref) {
+  /// Подпись выбранного языка. Пустая в списке — «как в системе»: её берём из
+  /// переводов, остальные остаются самоназваниями.
+  String _labelForPref(String pref, AppLocalizations l10n) {
     for (final l in _languages) {
-      if (l.pref == pref) return l.label;
+      if (l.pref == pref) {
+        return l.label.isEmpty ? l10n.desktopGeneralSystemLanguage : l.label;
+      }
     }
-    return _languages.first.label;
+    return l10n.desktopGeneralSystemLanguage;
   }
 
   Future<void> _pickLanguage() async {
+    final l10n = AppLocalizations.of(context)!;
     final ctrl = widget.controller;
     if (ctrl == null) return;
     final current = ctrl.appLocalePreference;
     final picked = await DesktopDialog.show<String>(
       context,
-      title: 'Язык интерфейса',
+      title: l10n.desktopGeneralInterfaceLanguage,
       size: DDialogSize.small,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -527,7 +537,9 @@ class _GeneralPaneState extends State<_GeneralPane> {
             Padding(
               padding: const EdgeInsets.only(bottom: DSpace.xs),
               child: DesktopButton(
-                label: l.label,
+                label: l.label.isEmpty
+                    ? l10n.desktopGeneralSystemLanguage
+                    : l.label,
                 kind: l.pref == current
                     ? DButtonKind.filled
                     : DButtonKind.tonal,
@@ -538,7 +550,7 @@ class _GeneralPaneState extends State<_GeneralPane> {
         ],
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(),
       ),
     );
@@ -551,20 +563,21 @@ class _GeneralPaneState extends State<_GeneralPane> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final ctrl = widget.controller;
     return _PaneScaffold(
       children: [
         WorkspaceCard(
-          title: 'Поведение',
+          title: l10n.desktopGeneralBehaviour,
           child: Column(
             children: [
               ValueListenableBuilder<bool>(
                 valueListenable: DesktopUiPrefs.enterToSend,
                 builder: (ctx, enterToSend, _) => WorkspaceRow(
-                  label: 'Enter отправляет сообщение',
+                  label: l10n.desktopGeneralEnterSends,
                   description: enterToSend
-                      ? 'Shift+Enter — новая строка'
-                      : 'Enter — новая строка, Shift+Enter отправляет',
+                      ? l10n.desktopGeneralShiftEnterNewline
+                      : l10n.desktopGeneralEnterNewline,
                   trailing: WorkspaceSwitch(
                     value: enterToSend,
                     onChanged: (v) =>
@@ -575,10 +588,10 @@ class _GeneralPaneState extends State<_GeneralPane> {
               ValueListenableBuilder<bool>(
                 valueListenable: DesktopUiPrefs.messageHoverBar,
                 builder: (ctx, on, _) => WorkspaceRow(
-                  label: 'Меню при наведении на сообщение',
+                  label: l10n.desktopGeneralHoverMenu,
                   description: on
-                      ? 'Над сообщением появляются реакции и действия'
-                      : 'Действия — по правой кнопке мыши',
+                      ? l10n.desktopGeneralHoverMenuOn
+                      : l10n.desktopGeneralHoverMenuOff,
                   trailing: WorkspaceSwitch(
                     value: on,
                     onChanged: (v) =>
@@ -591,10 +604,10 @@ class _GeneralPaneState extends State<_GeneralPane> {
               ValueListenableBuilder<bool>(
                 valueListenable: DesktopUiPrefs.linkPreviews,
                 builder: (ctx, on, _) => WorkspaceRow(
-                  label: 'Превью ссылок',
+                  label: l10n.desktopGeneralLinkPreviews,
                   description: on
-                      ? 'Карточка ссылки уходит вместе с сообщением'
-                      : 'Ссылки уходят без карточки, страницы не открываются',
+                      ? l10n.desktopGeneralLinkPreviewsOn
+                      : l10n.desktopGeneralLinkPreviewsOff,
                   trailing: WorkspaceSwitch(
                     value: on,
                     onChanged: (v) =>
@@ -618,10 +631,10 @@ class _GeneralPaneState extends State<_GeneralPane> {
         // and L-3) and this row comes back with nothing else to change.
         if (ctrl != null && kDesktopUiLocalized)
           WorkspaceCard(
-            title: 'Язык интерфейса',
+            title: l10n.desktopGeneralInterfaceLanguage,
             child: WorkspaceRow(
-              label: _labelForPref(ctrl.appLocalePreference),
-              description: 'Применяется сразу',
+              label: _labelForPref(ctrl.appLocalePreference, l10n),
+              description: l10n.desktopGeneralAppliesAtOnce,
               icon: FluentIcons.local_language_24_regular,
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => unawaited(_pickLanguage()),
@@ -663,22 +676,19 @@ class _PowerPaneState extends State<_PowerPane> {
   }
 
   Widget _buildBody(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final ctrl = widget.controller;
     final c = DColors.of(context);
     return _PaneScaffold(
       children: [
         WorkspaceCard(
-          title: 'Анимации',
-          description:
-              'Всё включено по умолчанию. Выключайте сверху вниз, если '
-              'ноутбук греется или садится батарея.',
+          title: l10n.desktopPowerAnimations,
+          description: l10n.desktopPowerAnimationsHint,
           child: Column(
             children: [
               WorkspaceRow(
-                label: 'Анимация рамок и статусов',
-                description:
-                    'Живые рамки аватаров и эмодзи-статусы у собеседников. '
-                    'Самая дорогая из трёх — выключайте первой.',
+                label: l10n.desktopPowerFramesTitle,
+                description: l10n.desktopPowerFramesHint,
                 trailing: WorkspaceSwitch(
                   value: ctrl?.peerCosmeticAnimEnabled ?? true,
                   onChanged: (v) {
@@ -692,8 +702,8 @@ class _PowerPaneState extends State<_PowerPane> {
               // little here — but they are the SAME profile preference, and
               // hiding them would silently desync the phone.
               WorkspaceRow(
-                label: 'Стеклянные пузыри',
-                description: 'Размытие под входящими сообщениями',
+                label: l10n.desktopPowerGlassBubbles,
+                description: l10n.desktopPowerGlassBubblesHint,
                 trailing: WorkspaceSwitch(
                   value: ctrl?.bubbleGlassEnabled ?? true,
                   onChanged: (v) {
@@ -703,8 +713,8 @@ class _PowerPaneState extends State<_PowerPane> {
                 ),
               ),
               WorkspaceRow(
-                label: 'Матовые панели',
-                description: 'Размытие панелей и всплывающих окон',
+                label: l10n.desktopPowerMattePanels,
+                description: l10n.desktopPowerMattePanelsHint,
                 trailing: WorkspaceSwitch(
                   value: ctrl?.frostedPanelsEnabled ?? true,
                   onChanged: (v) {
@@ -717,10 +727,9 @@ class _PowerPaneState extends State<_PowerPane> {
           ),
         ),
         WorkspaceCard(
-          title: 'Что это не затрагивает',
+          title: l10n.desktopPowerNotAffectedTitle,
           child: Text(
-            'Доставка сообщений, шифрование и уведомления работают одинаково '
-            'при любых значениях. Эти настройки влияют только на отрисовку.',
+            l10n.desktopPowerNotAffectedHint,
             style: DType.caption.copyWith(color: c.textSecondary),
           ),
         ),
@@ -1717,19 +1726,20 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
 
   DesktopNotificationService? get _svc => DesktopNotificationService.instance;
 
-  String _previewLevelLabel(int level) {
+  String _previewLevelLabel(int level, AppLocalizations l10n) {
     switch (level) {
       case 0:
-        return 'Скрыто';
+        return l10n.desktopNotifHidden;
       case 1:
-        return 'Только отправитель';
+        return l10n.desktopNotifSenderOnly;
       default:
-        return 'Отправитель и текст';
+        return l10n.desktopNotifSenderAndText;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final svc = _svc;
     // No live service yet (e.g. not on a native desktop OS, or booting) —
     // show the same rows disabled rather than silently-fake local state.
@@ -1740,12 +1750,12 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
       children: [
         WorkspaceCard(
           title: 'Уведомления',
-          description: svc == null ? 'Недоступно на этой платформе.' : null,
+          description: svc == null ? l10n.desktopNotifUnavailableHere : null,
           child: Column(
             children: [
               WorkspaceRow(
-                label: 'Показывать превью сообщения',
-                description: 'В системных уведомлениях',
+                label: l10n.desktopNotifShowPreview,
+                description: l10n.desktopNotifInSystem,
                 trailing: DropdownButton<int>(
                   value: previewLevel,
                   underline: const SizedBox.shrink(),
@@ -1761,7 +1771,7 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
                     for (final level in _previewLevels)
                       DropdownMenuItem(
                         value: level,
-                        child: Text(_previewLevelLabel(level)),
+                        child: Text(_previewLevelLabel(level, l10n)),
                       ),
                   ],
                 ),
@@ -1771,8 +1781,8 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
               // would otherwise drown out everything else. Shared with the
               // phone, so the choice follows the profile.
               WorkspaceRow(
-                label: 'Личные чаты',
-                description: 'Уведомления о сообщениях один на один',
+                label: l10n.desktopNotifDirectChats,
+                description: l10n.desktopNotifDirectChatsHint,
                 trailing: WorkspaceSwitch(
                   value: _svc?.privateChatsEnabled ?? true,
                   onChanged: (v) {
@@ -1784,8 +1794,8 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
                 ),
               ),
               WorkspaceRow(
-                label: 'Комнаты',
-                description: 'Уведомления о сообщениях в комнатах',
+                label: l10n.desktopNotifRooms,
+                description: l10n.desktopNotifRoomsHint,
                 trailing: WorkspaceSwitch(
                   value: _svc?.groupsEnabled ?? true,
                   onChanged: (v) {
@@ -1797,7 +1807,7 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
                 ),
               ),
               WorkspaceRow(
-                label: 'Звук',
+                label: l10n.desktopNotifSound,
                 trailing: WorkspaceSwitch(
                   value: sound,
                   onChanged: (v) {
@@ -1809,8 +1819,8 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
                 ),
               ),
               WorkspaceRow(
-                label: 'Не беспокоить',
-                description: 'Отключить все уведомления',
+                label: l10n.desktopNotifDnd,
+                description: l10n.desktopNotifDndHint,
                 trailing: WorkspaceSwitch(
                   value: doNotDisturb,
                   onChanged: (v) {
@@ -3661,6 +3671,7 @@ class _SecurityPaneState extends State<_SecurityPane> {
   }
 
   Widget _buildBody(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final ctrl = widget.controller;
     return _PaneScaffold(
@@ -3727,7 +3738,7 @@ class _SecurityPaneState extends State<_SecurityPane> {
           _ScopeLockCard(
             controller: ctrl,
             scope: SecurityLockScope.personal,
-            title: 'Личные чаты',
+            title: l10n.desktopNotifDirectChats,
             description:
                 'Отдельный пароль на категорию «Личные». Без него личные чаты '
                 'открыты любому, у кого есть доступ к разблокированному '

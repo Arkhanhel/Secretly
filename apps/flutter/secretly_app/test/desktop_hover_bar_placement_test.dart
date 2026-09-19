@@ -147,7 +147,8 @@ void main() {
     final settings = File(
       'lib/ui/desktop/workspace/settings_workspace.dart',
     ).readAsStringSync();
-    expect(settings.contains("'Меню при наведении на сообщение'"), isTrue);
+    // 19.09.2026: подписи настроек уехали в переводы.
+    expect(settings.contains('l10n.desktopGeneralHoverMenu'), isTrue);
     expect(settings.contains('DesktopUiPrefs.setMessageHoverBar(v)'), isTrue);
     final prefs = File(
       'lib/ui/desktop/services/desktop_ui_prefs.dart',

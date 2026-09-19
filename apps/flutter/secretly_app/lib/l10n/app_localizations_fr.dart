@@ -2836,4 +2836,112 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get desktopSettingsActive => 'actif';
+
+  @override
+  String get desktopGeneralSystemLanguage => 'Système';
+
+  @override
+  String get desktopGeneralInterfaceLanguage => 'Langue de l’interface';
+
+  @override
+  String get desktopGeneralAppliesAtOnce => 'S’applique immédiatement';
+
+  @override
+  String get desktopGeneralBehaviour => 'Comportement';
+
+  @override
+  String get desktopGeneralEnterSends => 'Entrée envoie le message';
+
+  @override
+  String get desktopGeneralShiftEnterNewline => 'Maj+Entrée insère un saut de ligne';
+
+  @override
+  String get desktopGeneralEnterNewline => 'Entrée insère un saut de ligne, Maj+Entrée envoie';
+
+  @override
+  String get desktopGeneralHoverMenu => 'Menu au survol d’un message';
+
+  @override
+  String get desktopGeneralHoverMenuOn => 'Les réactions et les actions apparaissent au-dessus du message';
+
+  @override
+  String get desktopGeneralHoverMenuOff => 'Les actions sont sur le clic droit';
+
+  @override
+  String get desktopGeneralLinkPreviews => 'Aperçus de liens';
+
+  @override
+  String get desktopGeneralLinkPreviewsOn => 'La carte du lien part avec le message';
+
+  @override
+  String get desktopGeneralLinkPreviewsOff => 'Les liens partent sans carte, aucune page n’est ouverte';
+
+  @override
+  String get desktopPowerAnimations => 'Animations';
+
+  @override
+  String get desktopPowerAnimationsHint => 'Tout est activé par défaut. Désactivez de haut en bas si le portable chauffe ou si la batterie se vide.';
+
+  @override
+  String get desktopPowerFramesTitle => 'Animation des cadres et des statuts';
+
+  @override
+  String get desktopPowerFramesHint => 'Cadres d’avatar animés et statuts emoji des autres. La plus coûteuse des trois — désactivez-la en premier.';
+
+  @override
+  String get desktopPowerGlassBubbles => 'Bulles en verre';
+
+  @override
+  String get desktopPowerGlassBubblesHint => 'Flou derrière les messages reçus';
+
+  @override
+  String get desktopPowerMattePanels => 'Panneaux mats';
+
+  @override
+  String get desktopPowerMattePanelsHint => 'Flou des panneaux et des fenêtres surgissantes';
+
+  @override
+  String get desktopPowerNotAffectedTitle => 'Ce que cela ne touche pas';
+
+  @override
+  String get desktopPowerNotAffectedHint => 'La remise des messages, le chiffrement et les notifications fonctionnent de la même façon quelles que soient ces valeurs. Ces réglages ne touchent que l’affichage.';
+
+  @override
+  String get desktopNotifHidden => 'Masqué';
+
+  @override
+  String get desktopNotifSenderOnly => 'Expéditeur seulement';
+
+  @override
+  String get desktopNotifSenderAndText => 'Expéditeur et texte';
+
+  @override
+  String get desktopNotifUnavailableHere => 'Non disponible sur cette plateforme.';
+
+  @override
+  String get desktopNotifShowPreview => 'Afficher un aperçu du message';
+
+  @override
+  String get desktopNotifInSystem => 'Dans les notifications du système';
+
+  @override
+  String get desktopNotifDirectChats => 'Conversations privées';
+
+  @override
+  String get desktopNotifDirectChatsHint => 'Notifications des messages en tête-à-tête';
+
+  @override
+  String get desktopNotifRooms => 'Salons';
+
+  @override
+  String get desktopNotifRoomsHint => 'Notifications des messages dans les salons';
+
+  @override
+  String get desktopNotifSound => 'Son';
+
+  @override
+  String get desktopNotifDnd => 'Ne pas déranger';
+
+  @override
+  String get desktopNotifDndHint => 'Désactiver toutes les notifications';
 }

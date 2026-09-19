@@ -2836,6 +2836,114 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get desktopSettingsActive => 'ativo';
+
+  @override
+  String get desktopGeneralSystemLanguage => 'Do sistema';
+
+  @override
+  String get desktopGeneralInterfaceLanguage => 'Idioma da interface';
+
+  @override
+  String get desktopGeneralAppliesAtOnce => 'Aplica-se de imediato';
+
+  @override
+  String get desktopGeneralBehaviour => 'Comportamento';
+
+  @override
+  String get desktopGeneralEnterSends => 'Enter envia a mensagem';
+
+  @override
+  String get desktopGeneralShiftEnterNewline => 'Shift+Enter inicia uma nova linha';
+
+  @override
+  String get desktopGeneralEnterNewline => 'Enter inicia uma nova linha, Shift+Enter envia';
+
+  @override
+  String get desktopGeneralHoverMenu => 'Menu ao passar sobre uma mensagem';
+
+  @override
+  String get desktopGeneralHoverMenuOn => 'Acima da mensagem aparecem reações e ações';
+
+  @override
+  String get desktopGeneralHoverMenuOff => 'As ações estão no botão direito';
+
+  @override
+  String get desktopGeneralLinkPreviews => 'Pré-visualização de ligações';
+
+  @override
+  String get desktopGeneralLinkPreviewsOn => 'O cartão da ligação segue com a mensagem';
+
+  @override
+  String get desktopGeneralLinkPreviewsOff => 'As ligações seguem sem cartão e nenhuma página é aberta';
+
+  @override
+  String get desktopPowerAnimations => 'Animações';
+
+  @override
+  String get desktopPowerAnimationsHint => 'Está tudo ligado por omissão. Desligue de cima para baixo se o portátil aquecer ou a bateria descer.';
+
+  @override
+  String get desktopPowerFramesTitle => 'Animação de molduras e estados';
+
+  @override
+  String get desktopPowerFramesHint => 'Molduras de avatar animadas e estados com emoji dos outros. A mais pesada das três — desligue primeiro.';
+
+  @override
+  String get desktopPowerGlassBubbles => 'Balões de vidro';
+
+  @override
+  String get desktopPowerGlassBubblesHint => 'Desfoque por trás das mensagens recebidas';
+
+  @override
+  String get desktopPowerMattePanels => 'Painéis mate';
+
+  @override
+  String get desktopPowerMattePanelsHint => 'Desfoque em painéis e janelas emergentes';
+
+  @override
+  String get desktopPowerNotAffectedTitle => 'O que isto não afeta';
+
+  @override
+  String get desktopPowerNotAffectedHint => 'A entrega de mensagens, a cifra e as notificações funcionam da mesma forma com qualquer valor. Estas opções afetam apenas o desenho.';
+
+  @override
+  String get desktopNotifHidden => 'Oculto';
+
+  @override
+  String get desktopNotifSenderOnly => 'Apenas o remetente';
+
+  @override
+  String get desktopNotifSenderAndText => 'Remetente e texto';
+
+  @override
+  String get desktopNotifUnavailableHere => 'Não disponível nesta plataforma.';
+
+  @override
+  String get desktopNotifShowPreview => 'Mostrar uma pré-visualização da mensagem';
+
+  @override
+  String get desktopNotifInSystem => 'Nas notificações do sistema';
+
+  @override
+  String get desktopNotifDirectChats => 'Conversas individuais';
+
+  @override
+  String get desktopNotifDirectChatsHint => 'Avisos de mensagens individuais';
+
+  @override
+  String get desktopNotifRooms => 'Salas';
+
+  @override
+  String get desktopNotifRoomsHint => 'Avisos de mensagens nas salas';
+
+  @override
+  String get desktopNotifSound => 'Som';
+
+  @override
+  String get desktopNotifDnd => 'Não incomodar';
+
+  @override
+  String get desktopNotifDndHint => 'Desligar todas as notificações';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -5670,4 +5778,112 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopSettingsActive => 'ativo';
+
+  @override
+  String get desktopGeneralSystemLanguage => 'Do sistema';
+
+  @override
+  String get desktopGeneralInterfaceLanguage => 'Idioma da interface';
+
+  @override
+  String get desktopGeneralAppliesAtOnce => 'Aplica-se imediatamente';
+
+  @override
+  String get desktopGeneralBehaviour => 'Comportamento';
+
+  @override
+  String get desktopGeneralEnterSends => 'Enter envia a mensagem';
+
+  @override
+  String get desktopGeneralShiftEnterNewline => 'Shift+Enter inicia uma nova linha';
+
+  @override
+  String get desktopGeneralEnterNewline => 'Enter inicia uma nova linha, Shift+Enter envia';
+
+  @override
+  String get desktopGeneralHoverMenu => 'Menu ao passar sobre uma mensagem';
+
+  @override
+  String get desktopGeneralHoverMenuOn => 'Acima da mensagem aparecem reações e ações';
+
+  @override
+  String get desktopGeneralHoverMenuOff => 'As ações estão no botão direito';
+
+  @override
+  String get desktopGeneralLinkPreviews => 'Prévia de links';
+
+  @override
+  String get desktopGeneralLinkPreviewsOn => 'O cartão do link segue com a mensagem';
+
+  @override
+  String get desktopGeneralLinkPreviewsOff => 'Os links seguem sem cartão e nenhuma página é aberta';
+
+  @override
+  String get desktopPowerAnimations => 'Animações';
+
+  @override
+  String get desktopPowerAnimationsHint => 'Tudo está ligado por padrão. Desligue de cima para baixo se o notebook esquentar ou a bateria cair.';
+
+  @override
+  String get desktopPowerFramesTitle => 'Animação de molduras e status';
+
+  @override
+  String get desktopPowerFramesHint => 'Molduras de avatar animadas e status com emoji dos outros. A mais pesada das três — desligue primeiro.';
+
+  @override
+  String get desktopPowerGlassBubbles => 'Balões de vidro';
+
+  @override
+  String get desktopPowerGlassBubblesHint => 'Desfoque atrás das mensagens recebidas';
+
+  @override
+  String get desktopPowerMattePanels => 'Painéis foscos';
+
+  @override
+  String get desktopPowerMattePanelsHint => 'Desfoque em painéis e janelas pop-up';
+
+  @override
+  String get desktopPowerNotAffectedTitle => 'O que isto não afeta';
+
+  @override
+  String get desktopPowerNotAffectedHint => 'A entrega de mensagens, a criptografia e as notificações funcionam igual com qualquer valor. Estas opções afetam apenas o desenho.';
+
+  @override
+  String get desktopNotifHidden => 'Oculto';
+
+  @override
+  String get desktopNotifSenderOnly => 'Apenas o remetente';
+
+  @override
+  String get desktopNotifSenderAndText => 'Remetente e texto';
+
+  @override
+  String get desktopNotifUnavailableHere => 'Não disponível nesta plataforma.';
+
+  @override
+  String get desktopNotifShowPreview => 'Mostrar uma prévia da mensagem';
+
+  @override
+  String get desktopNotifInSystem => 'Nas notificações do sistema';
+
+  @override
+  String get desktopNotifDirectChats => 'Conversas individuais';
+
+  @override
+  String get desktopNotifDirectChatsHint => 'Avisos de mensagens individuais';
+
+  @override
+  String get desktopNotifRooms => 'Salas';
+
+  @override
+  String get desktopNotifRoomsHint => 'Avisos de mensagens nas salas';
+
+  @override
+  String get desktopNotifSound => 'Som';
+
+  @override
+  String get desktopNotifDnd => 'Não perturbe';
+
+  @override
+  String get desktopNotifDndHint => 'Desligar todas as notificações';
 }

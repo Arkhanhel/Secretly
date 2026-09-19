@@ -2836,4 +2836,112 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get desktopSettingsActive => 'aktiv';
+
+  @override
+  String get desktopGeneralSystemLanguage => 'System';
+
+  @override
+  String get desktopGeneralInterfaceLanguage => 'Sprache der Oberfläche';
+
+  @override
+  String get desktopGeneralAppliesAtOnce => 'Gilt sofort';
+
+  @override
+  String get desktopGeneralBehaviour => 'Verhalten';
+
+  @override
+  String get desktopGeneralEnterSends => 'Enter sendet die Nachricht';
+
+  @override
+  String get desktopGeneralShiftEnterNewline => 'Shift+Enter beginnt eine neue Zeile';
+
+  @override
+  String get desktopGeneralEnterNewline => 'Enter beginnt eine neue Zeile, Shift+Enter sendet';
+
+  @override
+  String get desktopGeneralHoverMenu => 'Menü beim Zeigen auf eine Nachricht';
+
+  @override
+  String get desktopGeneralHoverMenuOn => 'Über der Nachricht erscheinen Reaktionen und Aktionen';
+
+  @override
+  String get desktopGeneralHoverMenuOff => 'Aktionen liegen auf der rechten Maustaste';
+
+  @override
+  String get desktopGeneralLinkPreviews => 'Link-Vorschauen';
+
+  @override
+  String get desktopGeneralLinkPreviewsOn => 'Die Link-Karte wird zusammen mit der Nachricht gesendet';
+
+  @override
+  String get desktopGeneralLinkPreviewsOff => 'Links werden ohne Karte gesendet, keine Seite wird geöffnet';
+
+  @override
+  String get desktopPowerAnimations => 'Animationen';
+
+  @override
+  String get desktopPowerAnimationsHint => 'Standardmäßig ist alles an. Schalte von oben nach unten ab, wenn der Laptop heiß wird oder der Akku leerläuft.';
+
+  @override
+  String get desktopPowerFramesTitle => 'Animierte Rahmen und Status';
+
+  @override
+  String get desktopPowerFramesHint => 'Lebendige Avatar-Rahmen und Emoji-Status bei anderen. Die teuerste der drei – schalte sie zuerst ab.';
+
+  @override
+  String get desktopPowerGlassBubbles => 'Glasblasen';
+
+  @override
+  String get desktopPowerGlassBubblesHint => 'Unschärfe hinter eingehenden Nachrichten';
+
+  @override
+  String get desktopPowerMattePanels => 'Matte Flächen';
+
+  @override
+  String get desktopPowerMattePanelsHint => 'Unschärfe bei Flächen und Popups';
+
+  @override
+  String get desktopPowerNotAffectedTitle => 'Was davon nicht betroffen ist';
+
+  @override
+  String get desktopPowerNotAffectedHint => 'Zustellung, Verschlüsselung und Benachrichtigungen arbeiten bei jeder Einstellung gleich. Diese Optionen betreffen nur die Darstellung.';
+
+  @override
+  String get desktopNotifHidden => 'Verborgen';
+
+  @override
+  String get desktopNotifSenderOnly => 'Nur Absender';
+
+  @override
+  String get desktopNotifSenderAndText => 'Absender und Text';
+
+  @override
+  String get desktopNotifUnavailableHere => 'Auf dieser Plattform nicht verfügbar.';
+
+  @override
+  String get desktopNotifShowPreview => 'Vorschau der Nachricht zeigen';
+
+  @override
+  String get desktopNotifInSystem => 'In Systembenachrichtigungen';
+
+  @override
+  String get desktopNotifDirectChats => 'Einzelchats';
+
+  @override
+  String get desktopNotifDirectChatsHint => 'Benachrichtigungen über Einzelnachrichten';
+
+  @override
+  String get desktopNotifRooms => 'Räume';
+
+  @override
+  String get desktopNotifRoomsHint => 'Benachrichtigungen über Nachrichten in Räumen';
+
+  @override
+  String get desktopNotifSound => 'Ton';
+
+  @override
+  String get desktopNotifDnd => 'Nicht stören';
+
+  @override
+  String get desktopNotifDndHint => 'Alle Benachrichtigungen abschalten';
 }

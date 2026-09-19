@@ -5439,6 +5439,222 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'active'**
   String get desktopSettingsActive;
+
+  /// No description provided for @desktopGeneralSystemLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get desktopGeneralSystemLanguage;
+
+  /// No description provided for @desktopGeneralInterfaceLanguage.
+  ///
+  /// In en, this message translates to:
+  /// **'Interface language'**
+  String get desktopGeneralInterfaceLanguage;
+
+  /// No description provided for @desktopGeneralAppliesAtOnce.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies straight away'**
+  String get desktopGeneralAppliesAtOnce;
+
+  /// No description provided for @desktopGeneralBehaviour.
+  ///
+  /// In en, this message translates to:
+  /// **'Behaviour'**
+  String get desktopGeneralBehaviour;
+
+  /// No description provided for @desktopGeneralEnterSends.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter sends the message'**
+  String get desktopGeneralEnterSends;
+
+  /// No description provided for @desktopGeneralShiftEnterNewline.
+  ///
+  /// In en, this message translates to:
+  /// **'Shift+Enter starts a new line'**
+  String get desktopGeneralShiftEnterNewline;
+
+  /// No description provided for @desktopGeneralEnterNewline.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter starts a new line, Shift+Enter sends'**
+  String get desktopGeneralEnterNewline;
+
+  /// No description provided for @desktopGeneralHoverMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Menu when hovering over a message'**
+  String get desktopGeneralHoverMenu;
+
+  /// No description provided for @desktopGeneralHoverMenuOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Reactions and actions appear above the message'**
+  String get desktopGeneralHoverMenuOn;
+
+  /// No description provided for @desktopGeneralHoverMenuOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Actions are on the right mouse button'**
+  String get desktopGeneralHoverMenuOff;
+
+  /// No description provided for @desktopGeneralLinkPreviews.
+  ///
+  /// In en, this message translates to:
+  /// **'Link previews'**
+  String get desktopGeneralLinkPreviews;
+
+  /// No description provided for @desktopGeneralLinkPreviewsOn.
+  ///
+  /// In en, this message translates to:
+  /// **'The link card is sent together with the message'**
+  String get desktopGeneralLinkPreviewsOn;
+
+  /// No description provided for @desktopGeneralLinkPreviewsOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Links are sent without a card and no page is opened'**
+  String get desktopGeneralLinkPreviewsOff;
+
+  /// No description provided for @desktopPowerAnimations.
+  ///
+  /// In en, this message translates to:
+  /// **'Animations'**
+  String get desktopPowerAnimations;
+
+  /// No description provided for @desktopPowerAnimationsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything is on by default. Switch off from the top down if the laptop gets hot or the battery drains.'**
+  String get desktopPowerAnimationsHint;
+
+  /// No description provided for @desktopPowerFramesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Animated frames and statuses'**
+  String get desktopPowerFramesTitle;
+
+  /// No description provided for @desktopPowerFramesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Live avatar frames and emoji statuses on other people. The most expensive of the three — switch this off first.'**
+  String get desktopPowerFramesHint;
+
+  /// No description provided for @desktopPowerGlassBubbles.
+  ///
+  /// In en, this message translates to:
+  /// **'Glass bubbles'**
+  String get desktopPowerGlassBubbles;
+
+  /// No description provided for @desktopPowerGlassBubblesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Blur behind incoming messages'**
+  String get desktopPowerGlassBubblesHint;
+
+  /// No description provided for @desktopPowerMattePanels.
+  ///
+  /// In en, this message translates to:
+  /// **'Matte panels'**
+  String get desktopPowerMattePanels;
+
+  /// No description provided for @desktopPowerMattePanelsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Blur on panels and popups'**
+  String get desktopPowerMattePanelsHint;
+
+  /// No description provided for @desktopPowerNotAffectedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What this does not affect'**
+  String get desktopPowerNotAffectedTitle;
+
+  /// No description provided for @desktopPowerNotAffectedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Message delivery, encryption and notifications work the same whatever you choose. These settings only affect drawing.'**
+  String get desktopPowerNotAffectedHint;
+
+  /// No description provided for @desktopNotifHidden.
+  ///
+  /// In en, this message translates to:
+  /// **'Hidden'**
+  String get desktopNotifHidden;
+
+  /// No description provided for @desktopNotifSenderOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Sender only'**
+  String get desktopNotifSenderOnly;
+
+  /// No description provided for @desktopNotifSenderAndText.
+  ///
+  /// In en, this message translates to:
+  /// **'Sender and text'**
+  String get desktopNotifSenderAndText;
+
+  /// No description provided for @desktopNotifUnavailableHere.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available on this platform.'**
+  String get desktopNotifUnavailableHere;
+
+  /// No description provided for @desktopNotifShowPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Show a preview of the message'**
+  String get desktopNotifShowPreview;
+
+  /// No description provided for @desktopNotifInSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'In system notifications'**
+  String get desktopNotifInSystem;
+
+  /// No description provided for @desktopNotifDirectChats.
+  ///
+  /// In en, this message translates to:
+  /// **'One-to-one chats'**
+  String get desktopNotifDirectChats;
+
+  /// No description provided for @desktopNotifDirectChatsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications about one-to-one messages'**
+  String get desktopNotifDirectChatsHint;
+
+  /// No description provided for @desktopNotifRooms.
+  ///
+  /// In en, this message translates to:
+  /// **'Rooms'**
+  String get desktopNotifRooms;
+
+  /// No description provided for @desktopNotifRoomsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications about messages in rooms'**
+  String get desktopNotifRoomsHint;
+
+  /// No description provided for @desktopNotifSound.
+  ///
+  /// In en, this message translates to:
+  /// **'Sound'**
+  String get desktopNotifSound;
+
+  /// No description provided for @desktopNotifDnd.
+  ///
+  /// In en, this message translates to:
+  /// **'Do not disturb'**
+  String get desktopNotifDnd;
+
+  /// No description provided for @desktopNotifDndHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch off every notification'**
+  String get desktopNotifDndHint;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
