@@ -1359,5 +1359,54 @@
     "placeholders": {
       "name": {}
     }
+  },
+  "desktopBackupEvery6h": "Every 6 hours",
+  "desktopBackupEvery12h": "Every 12 hours",
+  "desktopBackupDaily": "Once a day",
+  "desktopBackupWeekly": "Once a week",
+  "desktopBackupOffWarning": "Automatic backup is off — there will be nothing to restore the history from",
+  "desktopBackupNeverRan": "On, but it has never run yet",
+  "desktopBackupLastFailedWith": "The last backup failed: {error}",
+  "desktopBackupLastFailed": "The last backup failed",
+  "desktopBackupStale": "The backup has not been updated for a while",
+  "desktopBackupFresh": "The backup is up to date",
+  "desktopBackupState": "State",
+  "desktopBackupAutomatic": "Automatic backup",
+  "desktopBackupAutomaticHint": "The backup is encrypted with your password. Without it neither we nor anyone else can restore it — so the password has to be remembered.",
+  "desktopBackupCreateAuto": "Create automatically",
+  "desktopBackupUploadServer": "Upload to the server",
+  "desktopBackupUploadServerHint": "Available from any device",
+  "desktopBackupKeepLocal": "Keep on this computer",
+  "desktopBackupKeepLocalHint": "Does not depend on the network",
+  "desktopBackupIncludeMedia": "Include media",
+  "desktopBackupIncludeMediaHint": "The backup will get noticeably bigger",
+  "desktopBackupFrequency": "Frequency",
+  "desktopBackupNowhereTitle": "The backup is saved nowhere",
+  "desktopBackupNowhereHint": "Automatic backup is on but both destinations are off, which means no backup is made. Switch on the server or this computer.",
+  "desktopBackupRecoveryKey": "Recovery key",
+  "desktopBackupCreateRecoveryKey": "Create a recovery key",
+  "desktopBackupRecoveryKeyHint": "You will need it if no device with Secretly is left. Keep it separately from the password.",
+  "desktopBackupKeyFailed": "Could not create the key: {error}",
+  "desktopBackupKeyPassword": "Password for the recovery key",
+  "desktopBackupPasswordsDiffer": "The passwords do not match.",
+  "desktopBackupKeyPasswordHint": "This password encrypts the key itself. It does not replace the application password and is stored nowhere — it cannot be recovered.",
+  "desktopBackupPasswordAgain": "Again",
+  "@desktopBackupLastFailedWith": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopBackupKeyFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "desktopUnblockTitle": "Unblock {name}?",
+  "desktopUnblockBody": "This person will be able to write to you and call you again.",
+  "desktopUnblockAction": "Unblock",
+  "@desktopUnblockTitle": {
+    "placeholders": {
+      "name": {}
+    }
   }
 }

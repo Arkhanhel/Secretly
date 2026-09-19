@@ -2957,6 +2957,7 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
   }
 
   Future<String?> _promptPassword(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
     final pw = TextEditingController();
     final confirm = TextEditingController();
     String? error;
@@ -2974,7 +2975,7 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
                 return;
               }
               if (a != b) {
-                setLocal(() => error = 'Пароли не совпадают.');
+                setLocal(() => error = l10n.desktopBackupPasswordsDiffer);
                 return;
               }
               Navigator.of(ctx).pop(a);
@@ -3135,6 +3136,7 @@ class _StoragePaneState extends State<_StoragePane> {
   /// clearMediaCache deliberately never touches it: it is ~140 MB and
   /// re-downloading is a deliberate act, not a side effect of tidying up.
   Future<void> _deleteVoiceModel() async {
+    final l10n = AppLocalizations.of(context)!;
     final ok = await DesktopDialog.show<bool>(
       context,
       title: 'Удалить модель распознавания?',
@@ -3150,7 +3152,7 @@ class _StoragePaneState extends State<_StoragePane> {
         onPressed: () => Navigator.of(context).maybePop(true),
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(false),
       ),
     );
@@ -4159,6 +4161,7 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
     required String hint,
     bool confirm = false,
   }) async {
+    final l10n = AppLocalizations.of(context)!;
     final first = TextEditingController();
     final second = TextEditingController();
     String? error;
@@ -4214,7 +4217,7 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
         ),
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(),
       ),
     );
@@ -4335,21 +4338,22 @@ class _BlockedPaneState extends State<_BlockedPane> {
   }
 
   Future<void> _unblock(String id) async {
+    final l10n = AppLocalizations.of(context)!;
     final name = _titles[id] ?? id;
     final ok = await DesktopDialog.show<bool>(
       context,
-      title: 'Разблокировать $name?',
+      title: l10n.desktopUnblockTitle(name),
       size: DDialogSize.small,
       body: Text(
-        'Этот человек снова сможет писать вам и звонить.',
+        l10n.desktopUnblockBody,
         style: DType.body.copyWith(color: DColors.of(context).textSecondary),
       ),
       primary: DDialogAction(
-        label: 'Разблокировать',
+        label: l10n.desktopUnblockAction,
         onPressed: () => Navigator.of(context).maybePop(true),
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(false),
       ),
     );
@@ -4475,51 +4479,55 @@ class _BackupPane extends StatefulWidget {
 class _BackupPaneState extends State<_BackupPane> {
   static const List<int> _intervals = <int>[360, 720, 1440, 10080];
 
-  static String _intervalLabel(int minutes) {
+  static String _intervalLabel(int minutes, AppLocalizations l10n) {
     switch (minutes) {
       case 360:
-        return 'Каждые 6 часов';
+        return l10n.desktopBackupEvery6h;
       case 720:
-        return 'Каждые 12 часов';
+        return l10n.desktopBackupEvery12h;
       case 1440:
-        return 'Раз в сутки';
+        return l10n.desktopBackupDaily;
       default:
-        return 'Раз в неделю';
+        return l10n.desktopBackupWeekly;
     }
   }
 
-  ({String text, Color color, IconData icon}) _health(DColorSet c) {
+  ({String text, Color color, IconData icon}) _health(
+    DColorSet c,
+    AppLocalizations l10n,
+  ) {
     switch (widget.controller.safeBackupHealth) {
       case SafeBackupHealth.off:
         return (
-          text: 'Автокопия выключена — восстановить историю будет нечем',
+          text: l10n.desktopBackupOffWarning,
           color: c.warning,
           icon: FluentIcons.warning_24_filled,
         );
       case SafeBackupHealth.pending:
         return (
-          text: 'Включена, но ещё ни разу не выполнялась',
+          text: l10n.desktopBackupNeverRan,
           color: c.textSecondary,
           icon: FluentIcons.clock_24_regular,
         );
       case SafeBackupHealth.failing:
         return (
           text: widget.controller.safeBackupLastAutoError.isNotEmpty
-              ? 'Последняя копия не удалась: '
-                    '${widget.controller.safeBackupLastAutoError}'
-              : 'Последняя копия не удалась',
+              ? l10n.desktopBackupLastFailedWith(
+                  widget.controller.safeBackupLastAutoError,
+                )
+              : l10n.desktopBackupLastFailed,
           color: c.danger,
           icon: FluentIcons.error_circle_24_filled,
         );
       case SafeBackupHealth.stale:
         return (
-          text: 'Копия давно не обновлялась',
+          text: l10n.desktopBackupStale,
           color: c.warning,
           icon: FluentIcons.warning_24_regular,
         );
       case SafeBackupHealth.ok:
         return (
-          text: 'Копия актуальна',
+          text: l10n.desktopBackupFresh,
           color: c.success,
           icon: FluentIcons.checkmark_circle_24_filled,
         );
@@ -4539,14 +4547,15 @@ class _BackupPaneState extends State<_BackupPane> {
   }
 
   Widget _buildBody(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final ctrl = widget.controller;
-    final h = _health(c);
+    final h = _health(c, l10n);
     final auto = ctrl.safeBackupAutoEnabled;
     return _PaneScaffold(
       children: [
         WorkspaceCard(
-          title: 'Состояние',
+          title: l10n.desktopBackupState,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -4565,14 +4574,13 @@ class _BackupPaneState extends State<_BackupPane> {
           ),
         ),
         WorkspaceCard(
-          title: 'Автоматическая копия',
+          title: l10n.desktopBackupAutomatic,
           description:
-              'Копия зашифрована вашим паролем. Без пароля её не восстановить '
-              'ни нам, ни кому-либо ещё — поэтому пароль нужно помнить.',
+              l10n.desktopBackupAutomaticHint,
           child: Column(
             children: [
               WorkspaceRow(
-                label: 'Создавать автоматически',
+                label: l10n.desktopBackupCreateAuto,
                 trailing: WorkspaceSwitch(
                   value: auto,
                   onChanged: (v) => unawaited(ctrl.setSafeBackupAutoEnabled(v)),
@@ -4580,8 +4588,8 @@ class _BackupPaneState extends State<_BackupPane> {
               ),
               if (auto) ...[
                 WorkspaceRow(
-                  label: 'Выгружать на сервер',
-                  description: 'Доступна с любого устройства',
+                  label: l10n.desktopBackupUploadServer,
+                  description: l10n.desktopBackupUploadServerHint,
                   trailing: WorkspaceSwitch(
                     value: ctrl.safeBackupAutoServerEnabled,
                     onChanged: (v) =>
@@ -4589,8 +4597,8 @@ class _BackupPaneState extends State<_BackupPane> {
                   ),
                 ),
                 WorkspaceRow(
-                  label: 'Сохранять на этом компьютере',
-                  description: 'Не зависит от сети',
+                  label: l10n.desktopBackupKeepLocal,
+                  description: l10n.desktopBackupKeepLocalHint,
                   trailing: WorkspaceSwitch(
                     value: ctrl.safeBackupAutoDeviceEnabled,
                     onChanged: (v) =>
@@ -4598,8 +4606,8 @@ class _BackupPaneState extends State<_BackupPane> {
                   ),
                 ),
                 WorkspaceRow(
-                  label: 'Включать медиа',
-                  description: 'Копия станет заметно больше',
+                  label: l10n.desktopBackupIncludeMedia,
+                  description: l10n.desktopBackupIncludeMediaHint,
                   trailing: WorkspaceSwitch(
                     value: ctrl.safeBackupIncludeMedia,
                     onChanged: (v) =>
@@ -4607,8 +4615,8 @@ class _BackupPaneState extends State<_BackupPane> {
                   ),
                 ),
                 WorkspaceRow(
-                  label: 'Частота',
-                  description: _intervalLabel(ctrl.safeBackupAutoIntervalMin),
+                  label: l10n.desktopBackupFrequency,
+                  description: _intervalLabel(ctrl.safeBackupAutoIntervalMin, l10n),
                   icon: FluentIcons.timer_24_regular,
                   trailing: DropdownButton<int>(
                     value: _intervals.contains(ctrl.safeBackupAutoIntervalMin)
@@ -4619,7 +4627,7 @@ class _BackupPaneState extends State<_BackupPane> {
                       for (final m in _intervals)
                         DropdownMenuItem(
                           value: m,
-                          child: Text(_intervalLabel(m)),
+                          child: Text(_intervalLabel(m, l10n)),
                         ),
                     ],
                     onChanged: (v) {
@@ -4636,16 +4644,14 @@ class _BackupPaneState extends State<_BackupPane> {
             !ctrl.safeBackupAutoServerEnabled &&
             !ctrl.safeBackupAutoDeviceEnabled)
           WorkspaceCard(
-            title: 'Копия никуда не сохраняется',
+            title: l10n.desktopBackupNowhereTitle,
             child: Row(
               children: [
                 Icon(FluentIcons.warning_24_filled, size: 18, color: c.warning),
                 const SizedBox(width: DSpace.m),
                 Expanded(
                   child: Text(
-                    'Автокопия включена, но оба места назначения выключены — '
-                    'значит копия не создаётся. Включите сервер или этот '
-                    'компьютер.',
+                    l10n.desktopBackupNowhereHint,
                     style: DType.label.copyWith(
                       color: c.textSecondary,
                       height: 1.4,
@@ -4668,13 +4674,11 @@ class _BackupPaneState extends State<_BackupPane> {
         // предупреждения и вид «бумажного» ключа, а сверх этого экран ничего не
         // делает — ему передают готовую строку.
         WorkspaceCard(
-          title: 'Ключ восстановления',
+          title: l10n.desktopBackupRecoveryKey,
           child: WorkspaceRow(
             icon: FluentIcons.key_24_regular,
-            label: 'Создать ключ восстановления',
-            description:
-                'Понадобится, если не останется ни одного устройства с '
-                'Secretly. Сохраните его отдельно от пароля.',
+            label: l10n.desktopBackupCreateRecoveryKey,
+            description: l10n.desktopBackupRecoveryKeyHint,
             onTap: () => unawaited(_exportRecoveryKit()),
           ),
         ),
@@ -4688,6 +4692,7 @@ class _BackupPaneState extends State<_BackupPane> {
   /// `createRecoveryKitPayload` → показ. Пароль здесь не тот, что от
   /// приложения: им шифруется сам ключ, и без него ключ бесполезен.
   Future<void> _exportRecoveryKit() async {
+    final l10n = AppLocalizations.of(context)!;
     final password = await _promptRecoveryPassword();
     if (password == null || password.isEmpty || !mounted) return;
     String payload;
@@ -4705,7 +4710,7 @@ class _BackupPaneState extends State<_BackupPane> {
       }
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось создать ключ: $text',
+        message: l10n.desktopBackupKeyFailed(text),
         kind: DSnackKind.error,
       );
       return;
@@ -4734,13 +4739,14 @@ class _BackupPaneState extends State<_BackupPane> {
   /// единственный момент, когда ключ понадобится, — когда устройств уже не
   /// осталось.
   Future<String?> _promptRecoveryPassword() async {
+    final l10n = AppLocalizations.of(context)!;
     final first = TextEditingController();
     final again = TextEditingController();
     String? error;
 
     final result = await DesktopDialog.show<String>(
       context,
-      title: 'Пароль ключа восстановления',
+      title: l10n.desktopBackupKeyPassword,
       size: DDialogSize.small,
       body: StatefulBuilder(
         builder: (ctx, setLocal) {
@@ -4754,7 +4760,7 @@ class _BackupPaneState extends State<_BackupPane> {
               return;
             }
             if (a != b) {
-              setLocal(() => error = 'Пароли не совпадают.');
+              setLocal(() => error = l10n.desktopBackupPasswordsDiffer);
               return;
             }
             Navigator.of(ctx).maybePop(a);
@@ -4765,21 +4771,20 @@ class _BackupPaneState extends State<_BackupPane> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Этим паролем шифруется сам ключ. Он не заменяет пароль от '
-                'приложения и не хранится нигде — восстановить его нельзя.',
+                l10n.desktopBackupKeyPasswordHint,
                 style: DType.body.copyWith(color: c.textSecondary),
               ),
               const SizedBox(height: DSpace.m),
               DesktopTextField(
                 controller: first,
-                hintText: 'Пароль',
+                hintText: l10n.password,
                 obscureText: true,
                 autofocus: true,
               ),
               const SizedBox(height: DSpace.s),
               DesktopTextField(
                 controller: again,
-                hintText: 'Ещё раз',
+                hintText: l10n.desktopBackupPasswordAgain,
                 obscureText: true,
                 onSubmitted: (_) => submit(),
               ),
@@ -4796,7 +4801,7 @@ class _BackupPaneState extends State<_BackupPane> {
               Align(
                 alignment: Alignment.centerRight,
                 child: DesktopButton(
-                  label: 'Создать',
+                  label: l10n.desktopListCreate,
                   kind: DButtonKind.filled,
                   onPressed: submit,
                 ),
@@ -4806,7 +4811,7 @@ class _BackupPaneState extends State<_BackupPane> {
         },
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(),
       ),
     );

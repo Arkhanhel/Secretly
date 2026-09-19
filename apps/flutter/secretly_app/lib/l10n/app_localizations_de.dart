@@ -3078,4 +3078,112 @@ class AppLocalizationsDe extends AppLocalizations {
   String desktopAppearanceThemeIs(Object name) {
     return 'Thema: $name';
   }
+
+  @override
+  String get desktopBackupEvery6h => 'Alle 6 Stunden';
+
+  @override
+  String get desktopBackupEvery12h => 'Alle 12 Stunden';
+
+  @override
+  String get desktopBackupDaily => 'Einmal am Tag';
+
+  @override
+  String get desktopBackupWeekly => 'Einmal pro Woche';
+
+  @override
+  String get desktopBackupOffWarning => 'Die automatische Sicherung ist aus – es gibt nichts, woraus der Verlauf wiederhergestellt werden könnte';
+
+  @override
+  String get desktopBackupNeverRan => 'Eingeschaltet, aber noch nie gelaufen';
+
+  @override
+  String desktopBackupLastFailedWith(Object error) {
+    return 'Die letzte Sicherung ist fehlgeschlagen: $error';
+  }
+
+  @override
+  String get desktopBackupLastFailed => 'Die letzte Sicherung ist fehlgeschlagen';
+
+  @override
+  String get desktopBackupStale => 'Die Sicherung wurde lange nicht aktualisiert';
+
+  @override
+  String get desktopBackupFresh => 'Die Sicherung ist aktuell';
+
+  @override
+  String get desktopBackupState => 'Zustand';
+
+  @override
+  String get desktopBackupAutomatic => 'Automatische Sicherung';
+
+  @override
+  String get desktopBackupAutomaticHint => 'Die Sicherung ist mit deinem Passwort verschlüsselt. Ohne das Passwort kann sie weder von uns noch von sonst jemandem wiederhergestellt werden – man muss es sich also merken.';
+
+  @override
+  String get desktopBackupCreateAuto => 'Automatisch erstellen';
+
+  @override
+  String get desktopBackupUploadServer => 'Auf den Server hochladen';
+
+  @override
+  String get desktopBackupUploadServerHint => 'Von jedem Gerät verfügbar';
+
+  @override
+  String get desktopBackupKeepLocal => 'Auf diesem Computer behalten';
+
+  @override
+  String get desktopBackupKeepLocalHint => 'Unabhängig vom Netz';
+
+  @override
+  String get desktopBackupIncludeMedia => 'Medien einschließen';
+
+  @override
+  String get desktopBackupIncludeMediaHint => 'Die Sicherung wird deutlich größer';
+
+  @override
+  String get desktopBackupFrequency => 'Häufigkeit';
+
+  @override
+  String get desktopBackupNowhereTitle => 'Die Sicherung wird nirgendwo gespeichert';
+
+  @override
+  String get desktopBackupNowhereHint => 'Die automatische Sicherung ist an, aber beide Ziele sind aus – es wird also keine Sicherung erstellt. Schalte den Server oder diesen Computer ein.';
+
+  @override
+  String get desktopBackupRecoveryKey => 'Wiederherstellungsschlüssel';
+
+  @override
+  String get desktopBackupCreateRecoveryKey => 'Wiederherstellungsschlüssel erstellen';
+
+  @override
+  String get desktopBackupRecoveryKeyHint => 'Du brauchst ihn, wenn kein Gerät mit Secretly mehr übrig ist. Bewahre ihn getrennt vom Passwort auf.';
+
+  @override
+  String desktopBackupKeyFailed(Object error) {
+    return 'Der Schlüssel konnte nicht erstellt werden: $error';
+  }
+
+  @override
+  String get desktopBackupKeyPassword => 'Passwort für den Wiederherstellungsschlüssel';
+
+  @override
+  String get desktopBackupPasswordsDiffer => 'Die Passwörter stimmen nicht überein.';
+
+  @override
+  String get desktopBackupKeyPasswordHint => 'Mit diesem Passwort wird der Schlüssel selbst verschlüsselt. Es ersetzt nicht das App-Passwort und wird nirgends gespeichert – es lässt sich nicht wiederherstellen.';
+
+  @override
+  String get desktopBackupPasswordAgain => 'Noch einmal';
+
+  @override
+  String desktopUnblockTitle(Object name) {
+    return '$name entsperren?';
+  }
+
+  @override
+  String get desktopUnblockBody => 'Diese Person kann dir wieder schreiben und dich anrufen.';
+
+  @override
+  String get desktopUnblockAction => 'Entsperren';
 }

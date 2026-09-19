@@ -5919,6 +5919,210 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Theme: {name}'**
   String desktopAppearanceThemeIs(Object name);
+
+  /// No description provided for @desktopBackupEvery6h.
+  ///
+  /// In en, this message translates to:
+  /// **'Every 6 hours'**
+  String get desktopBackupEvery6h;
+
+  /// No description provided for @desktopBackupEvery12h.
+  ///
+  /// In en, this message translates to:
+  /// **'Every 12 hours'**
+  String get desktopBackupEvery12h;
+
+  /// No description provided for @desktopBackupDaily.
+  ///
+  /// In en, this message translates to:
+  /// **'Once a day'**
+  String get desktopBackupDaily;
+
+  /// No description provided for @desktopBackupWeekly.
+  ///
+  /// In en, this message translates to:
+  /// **'Once a week'**
+  String get desktopBackupWeekly;
+
+  /// No description provided for @desktopBackupOffWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic backup is off — there will be nothing to restore the history from'**
+  String get desktopBackupOffWarning;
+
+  /// No description provided for @desktopBackupNeverRan.
+  ///
+  /// In en, this message translates to:
+  /// **'On, but it has never run yet'**
+  String get desktopBackupNeverRan;
+
+  /// No description provided for @desktopBackupLastFailedWith.
+  ///
+  /// In en, this message translates to:
+  /// **'The last backup failed: {error}'**
+  String desktopBackupLastFailedWith(Object error);
+
+  /// No description provided for @desktopBackupLastFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The last backup failed'**
+  String get desktopBackupLastFailed;
+
+  /// No description provided for @desktopBackupStale.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup has not been updated for a while'**
+  String get desktopBackupStale;
+
+  /// No description provided for @desktopBackupFresh.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup is up to date'**
+  String get desktopBackupFresh;
+
+  /// No description provided for @desktopBackupState.
+  ///
+  /// In en, this message translates to:
+  /// **'State'**
+  String get desktopBackupState;
+
+  /// No description provided for @desktopBackupAutomatic.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic backup'**
+  String get desktopBackupAutomatic;
+
+  /// No description provided for @desktopBackupAutomaticHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup is encrypted with your password. Without it neither we nor anyone else can restore it — so the password has to be remembered.'**
+  String get desktopBackupAutomaticHint;
+
+  /// No description provided for @desktopBackupCreateAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Create automatically'**
+  String get desktopBackupCreateAuto;
+
+  /// No description provided for @desktopBackupUploadServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload to the server'**
+  String get desktopBackupUploadServer;
+
+  /// No description provided for @desktopBackupUploadServerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Available from any device'**
+  String get desktopBackupUploadServerHint;
+
+  /// No description provided for @desktopBackupKeepLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep on this computer'**
+  String get desktopBackupKeepLocal;
+
+  /// No description provided for @desktopBackupKeepLocalHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Does not depend on the network'**
+  String get desktopBackupKeepLocalHint;
+
+  /// No description provided for @desktopBackupIncludeMedia.
+  ///
+  /// In en, this message translates to:
+  /// **'Include media'**
+  String get desktopBackupIncludeMedia;
+
+  /// No description provided for @desktopBackupIncludeMediaHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup will get noticeably bigger'**
+  String get desktopBackupIncludeMediaHint;
+
+  /// No description provided for @desktopBackupFrequency.
+  ///
+  /// In en, this message translates to:
+  /// **'Frequency'**
+  String get desktopBackupFrequency;
+
+  /// No description provided for @desktopBackupNowhereTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup is saved nowhere'**
+  String get desktopBackupNowhereTitle;
+
+  /// No description provided for @desktopBackupNowhereHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic backup is on but both destinations are off, which means no backup is made. Switch on the server or this computer.'**
+  String get desktopBackupNowhereHint;
+
+  /// No description provided for @desktopBackupRecoveryKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery key'**
+  String get desktopBackupRecoveryKey;
+
+  /// No description provided for @desktopBackupCreateRecoveryKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a recovery key'**
+  String get desktopBackupCreateRecoveryKey;
+
+  /// No description provided for @desktopBackupRecoveryKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'You will need it if no device with Secretly is left. Keep it separately from the password.'**
+  String get desktopBackupRecoveryKeyHint;
+
+  /// No description provided for @desktopBackupKeyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create the key: {error}'**
+  String desktopBackupKeyFailed(Object error);
+
+  /// No description provided for @desktopBackupKeyPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password for the recovery key'**
+  String get desktopBackupKeyPassword;
+
+  /// No description provided for @desktopBackupPasswordsDiffer.
+  ///
+  /// In en, this message translates to:
+  /// **'The passwords do not match.'**
+  String get desktopBackupPasswordsDiffer;
+
+  /// No description provided for @desktopBackupKeyPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'This password encrypts the key itself. It does not replace the application password and is stored nowhere — it cannot be recovered.'**
+  String get desktopBackupKeyPasswordHint;
+
+  /// No description provided for @desktopBackupPasswordAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Again'**
+  String get desktopBackupPasswordAgain;
+
+  /// No description provided for @desktopUnblockTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unblock {name}?'**
+  String desktopUnblockTitle(Object name);
+
+  /// No description provided for @desktopUnblockBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This person will be able to write to you and call you again.'**
+  String get desktopUnblockBody;
+
+  /// No description provided for @desktopUnblockAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Unblock'**
+  String get desktopUnblockAction;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

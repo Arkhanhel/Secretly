@@ -3078,4 +3078,112 @@ class AppLocalizationsEn extends AppLocalizations {
   String desktopAppearanceThemeIs(Object name) {
     return 'Theme: $name';
   }
+
+  @override
+  String get desktopBackupEvery6h => 'Every 6 hours';
+
+  @override
+  String get desktopBackupEvery12h => 'Every 12 hours';
+
+  @override
+  String get desktopBackupDaily => 'Once a day';
+
+  @override
+  String get desktopBackupWeekly => 'Once a week';
+
+  @override
+  String get desktopBackupOffWarning => 'Automatic backup is off — there will be nothing to restore the history from';
+
+  @override
+  String get desktopBackupNeverRan => 'On, but it has never run yet';
+
+  @override
+  String desktopBackupLastFailedWith(Object error) {
+    return 'The last backup failed: $error';
+  }
+
+  @override
+  String get desktopBackupLastFailed => 'The last backup failed';
+
+  @override
+  String get desktopBackupStale => 'The backup has not been updated for a while';
+
+  @override
+  String get desktopBackupFresh => 'The backup is up to date';
+
+  @override
+  String get desktopBackupState => 'State';
+
+  @override
+  String get desktopBackupAutomatic => 'Automatic backup';
+
+  @override
+  String get desktopBackupAutomaticHint => 'The backup is encrypted with your password. Without it neither we nor anyone else can restore it — so the password has to be remembered.';
+
+  @override
+  String get desktopBackupCreateAuto => 'Create automatically';
+
+  @override
+  String get desktopBackupUploadServer => 'Upload to the server';
+
+  @override
+  String get desktopBackupUploadServerHint => 'Available from any device';
+
+  @override
+  String get desktopBackupKeepLocal => 'Keep on this computer';
+
+  @override
+  String get desktopBackupKeepLocalHint => 'Does not depend on the network';
+
+  @override
+  String get desktopBackupIncludeMedia => 'Include media';
+
+  @override
+  String get desktopBackupIncludeMediaHint => 'The backup will get noticeably bigger';
+
+  @override
+  String get desktopBackupFrequency => 'Frequency';
+
+  @override
+  String get desktopBackupNowhereTitle => 'The backup is saved nowhere';
+
+  @override
+  String get desktopBackupNowhereHint => 'Automatic backup is on but both destinations are off, which means no backup is made. Switch on the server or this computer.';
+
+  @override
+  String get desktopBackupRecoveryKey => 'Recovery key';
+
+  @override
+  String get desktopBackupCreateRecoveryKey => 'Create a recovery key';
+
+  @override
+  String get desktopBackupRecoveryKeyHint => 'You will need it if no device with Secretly is left. Keep it separately from the password.';
+
+  @override
+  String desktopBackupKeyFailed(Object error) {
+    return 'Could not create the key: $error';
+  }
+
+  @override
+  String get desktopBackupKeyPassword => 'Password for the recovery key';
+
+  @override
+  String get desktopBackupPasswordsDiffer => 'The passwords do not match.';
+
+  @override
+  String get desktopBackupKeyPasswordHint => 'This password encrypts the key itself. It does not replace the application password and is stored nowhere — it cannot be recovered.';
+
+  @override
+  String get desktopBackupPasswordAgain => 'Again';
+
+  @override
+  String desktopUnblockTitle(Object name) {
+    return 'Unblock $name?';
+  }
+
+  @override
+  String get desktopUnblockBody => 'This person will be able to write to you and call you again.';
+
+  @override
+  String get desktopUnblockAction => 'Unblock';
 }

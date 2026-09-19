@@ -3078,6 +3078,114 @@ class AppLocalizationsPt extends AppLocalizations {
   String desktopAppearanceThemeIs(Object name) {
     return 'Tema: $name';
   }
+
+  @override
+  String get desktopBackupEvery6h => 'A cada 6 horas';
+
+  @override
+  String get desktopBackupEvery12h => 'A cada 12 horas';
+
+  @override
+  String get desktopBackupDaily => 'Uma vez por dia';
+
+  @override
+  String get desktopBackupWeekly => 'Uma vez por semana';
+
+  @override
+  String get desktopBackupOffWarning => 'A cópia automática está desligada — não haverá nada para restaurar o histórico';
+
+  @override
+  String get desktopBackupNeverRan => 'Ligada, mas ainda nunca foi executada';
+
+  @override
+  String desktopBackupLastFailedWith(Object error) {
+    return 'A última cópia falhou: $error';
+  }
+
+  @override
+  String get desktopBackupLastFailed => 'A última cópia falhou';
+
+  @override
+  String get desktopBackupStale => 'A cópia há muito que não é atualizada';
+
+  @override
+  String get desktopBackupFresh => 'A cópia está atualizada';
+
+  @override
+  String get desktopBackupState => 'Estado';
+
+  @override
+  String get desktopBackupAutomatic => 'Cópia automática';
+
+  @override
+  String get desktopBackupAutomaticHint => 'A cópia está cifrada com a sua palavra-passe. Sem ela, nem nós nem ninguém a consegue restaurar — por isso é preciso lembrá-la.';
+
+  @override
+  String get desktopBackupCreateAuto => 'Criar automaticamente';
+
+  @override
+  String get desktopBackupUploadServer => 'Carregar para o servidor';
+
+  @override
+  String get desktopBackupUploadServerHint => 'Disponível a partir de qualquer dispositivo';
+
+  @override
+  String get desktopBackupKeepLocal => 'Guardar neste computador';
+
+  @override
+  String get desktopBackupKeepLocalHint => 'Não depende da rede';
+
+  @override
+  String get desktopBackupIncludeMedia => 'Incluir a media';
+
+  @override
+  String get desktopBackupIncludeMediaHint => 'A cópia ficará bastante maior';
+
+  @override
+  String get desktopBackupFrequency => 'Frequência';
+
+  @override
+  String get desktopBackupNowhereTitle => 'A cópia não é guardada em lado nenhum';
+
+  @override
+  String get desktopBackupNowhereHint => 'A cópia automática está ligada mas ambos os destinos estão desligados — ou seja, não é criada nenhuma cópia. Ligue o servidor ou este computador.';
+
+  @override
+  String get desktopBackupRecoveryKey => 'Chave de recuperação';
+
+  @override
+  String get desktopBackupCreateRecoveryKey => 'Criar uma chave de recuperação';
+
+  @override
+  String get desktopBackupRecoveryKeyHint => 'Vai precisar dela se não restar nenhum dispositivo com o Secretly. Guarde-a separada da palavra-passe.';
+
+  @override
+  String desktopBackupKeyFailed(Object error) {
+    return 'Não foi possível criar a chave: $error';
+  }
+
+  @override
+  String get desktopBackupKeyPassword => 'Palavra-passe da chave de recuperação';
+
+  @override
+  String get desktopBackupPasswordsDiffer => 'As palavras-passe não coincidem.';
+
+  @override
+  String get desktopBackupKeyPasswordHint => 'Esta palavra-passe cifra a própria chave. Não substitui a da aplicação e não é guardada em lado nenhum — não pode ser recuperada.';
+
+  @override
+  String get desktopBackupPasswordAgain => 'Outra vez';
+
+  @override
+  String desktopUnblockTitle(Object name) {
+    return 'Desbloquear $name?';
+  }
+
+  @override
+  String get desktopUnblockBody => 'Esta pessoa poderá voltar a escrever-lhe e a ligar-lhe.';
+
+  @override
+  String get desktopUnblockAction => 'Desbloquear';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -6154,4 +6262,112 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String desktopAppearanceThemeIs(Object name) {
     return 'Tema: $name';
   }
+
+  @override
+  String get desktopBackupEvery6h => 'A cada 6 horas';
+
+  @override
+  String get desktopBackupEvery12h => 'A cada 12 horas';
+
+  @override
+  String get desktopBackupDaily => 'Uma vez por dia';
+
+  @override
+  String get desktopBackupWeekly => 'Uma vez por semana';
+
+  @override
+  String get desktopBackupOffWarning => 'O backup automático está desligado — não haverá nada para restaurar o histórico';
+
+  @override
+  String get desktopBackupNeverRan => 'Ligado, mas ainda nunca foi executado';
+
+  @override
+  String desktopBackupLastFailedWith(Object error) {
+    return 'O último backup falhou: $error';
+  }
+
+  @override
+  String get desktopBackupLastFailed => 'O último backup falhou';
+
+  @override
+  String get desktopBackupStale => 'O backup não é atualizado há um tempo';
+
+  @override
+  String get desktopBackupFresh => 'O backup está atualizado';
+
+  @override
+  String get desktopBackupState => 'Estado';
+
+  @override
+  String get desktopBackupAutomatic => 'Backup automático';
+
+  @override
+  String get desktopBackupAutomaticHint => 'O backup é criptografado com a sua senha. Sem ela, nem nós nem ninguém consegue restaurá-lo — por isso é preciso lembrá-la.';
+
+  @override
+  String get desktopBackupCreateAuto => 'Criar automaticamente';
+
+  @override
+  String get desktopBackupUploadServer => 'Enviar para o servidor';
+
+  @override
+  String get desktopBackupUploadServerHint => 'Disponível de qualquer dispositivo';
+
+  @override
+  String get desktopBackupKeepLocal => 'Salvar neste computador';
+
+  @override
+  String get desktopBackupKeepLocalHint => 'Não depende da rede';
+
+  @override
+  String get desktopBackupIncludeMedia => 'Incluir a mídia';
+
+  @override
+  String get desktopBackupIncludeMediaHint => 'O backup ficará bem maior';
+
+  @override
+  String get desktopBackupFrequency => 'Frequência';
+
+  @override
+  String get desktopBackupNowhereTitle => 'O backup não é salvo em lugar nenhum';
+
+  @override
+  String get desktopBackupNowhereHint => 'O backup automático está ligado mas ambos os destinos estão desligados — ou seja, nenhum backup é criado. Ligue o servidor ou este computador.';
+
+  @override
+  String get desktopBackupRecoveryKey => 'Chave de recuperação';
+
+  @override
+  String get desktopBackupCreateRecoveryKey => 'Criar uma chave de recuperação';
+
+  @override
+  String get desktopBackupRecoveryKeyHint => 'Você vai precisar dela se não restar nenhum dispositivo com o Secretly. Guarde-a separada da senha.';
+
+  @override
+  String desktopBackupKeyFailed(Object error) {
+    return 'Não foi possível criar a chave: $error';
+  }
+
+  @override
+  String get desktopBackupKeyPassword => 'Senha da chave de recuperação';
+
+  @override
+  String get desktopBackupPasswordsDiffer => 'As senhas não coincidem.';
+
+  @override
+  String get desktopBackupKeyPasswordHint => 'Esta senha criptografa a própria chave. Não substitui a do aplicativo e não é guardada em lugar nenhum — não pode ser recuperada.';
+
+  @override
+  String get desktopBackupPasswordAgain => 'De novo';
+
+  @override
+  String desktopUnblockTitle(Object name) {
+    return 'Desbloquear $name?';
+  }
+
+  @override
+  String get desktopUnblockBody => 'Esta pessoa poderá voltar a escrever e ligar para você.';
+
+  @override
+  String get desktopUnblockAction => 'Desbloquear';
 }

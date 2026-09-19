@@ -3084,4 +3084,112 @@ class AppLocalizationsUk extends AppLocalizations {
   String desktopAppearanceThemeIs(Object name) {
     return 'Тема: $name';
   }
+
+  @override
+  String get desktopBackupEvery6h => 'Кожні 6 годин';
+
+  @override
+  String get desktopBackupEvery12h => 'Кожні 12 годин';
+
+  @override
+  String get desktopBackupDaily => 'Раз на добу';
+
+  @override
+  String get desktopBackupWeekly => 'Раз на тиждень';
+
+  @override
+  String get desktopBackupOffWarning => 'Автокопію вимкнено — відновити історію не буде з чого';
+
+  @override
+  String get desktopBackupNeverRan => 'Увімкнено, але ще жодного разу не виконувалася';
+
+  @override
+  String desktopBackupLastFailedWith(Object error) {
+    return 'Остання копія не вдалася: $error';
+  }
+
+  @override
+  String get desktopBackupLastFailed => 'Остання копія не вдалася';
+
+  @override
+  String get desktopBackupStale => 'Копія давно не оновлювалася';
+
+  @override
+  String get desktopBackupFresh => 'Копія актуальна';
+
+  @override
+  String get desktopBackupState => 'Стан';
+
+  @override
+  String get desktopBackupAutomatic => 'Автоматична копія';
+
+  @override
+  String get desktopBackupAutomaticHint => 'Копія зашифрована вашим паролем. Без пароля її не відновити ні нам, ні будь-кому іншому — тому пароль треба пам’ятати.';
+
+  @override
+  String get desktopBackupCreateAuto => 'Створювати автоматично';
+
+  @override
+  String get desktopBackupUploadServer => 'Вивантажувати на сервер';
+
+  @override
+  String get desktopBackupUploadServerHint => 'Доступна з будь-якого пристрою';
+
+  @override
+  String get desktopBackupKeepLocal => 'Зберігати на цьому комп’ютері';
+
+  @override
+  String get desktopBackupKeepLocalHint => 'Не залежить від мережі';
+
+  @override
+  String get desktopBackupIncludeMedia => 'Включати медіа';
+
+  @override
+  String get desktopBackupIncludeMediaHint => 'Копія стане помітно більшою';
+
+  @override
+  String get desktopBackupFrequency => 'Частота';
+
+  @override
+  String get desktopBackupNowhereTitle => 'Копія нікуди не зберігається';
+
+  @override
+  String get desktopBackupNowhereHint => 'Автокопію ввімкнено, але обидва місця призначення вимкнені — отже копія не створюється. Увімкніть сервер або цей комп’ютер.';
+
+  @override
+  String get desktopBackupRecoveryKey => 'Ключ відновлення';
+
+  @override
+  String get desktopBackupCreateRecoveryKey => 'Створити ключ відновлення';
+
+  @override
+  String get desktopBackupRecoveryKeyHint => 'Знадобиться, якщо не залишиться жодного пристрою із Secretly. Зберігайте його окремо від пароля.';
+
+  @override
+  String desktopBackupKeyFailed(Object error) {
+    return 'Не вдалося створити ключ: $error';
+  }
+
+  @override
+  String get desktopBackupKeyPassword => 'Пароль ключа відновлення';
+
+  @override
+  String get desktopBackupPasswordsDiffer => 'Паролі не збігаються.';
+
+  @override
+  String get desktopBackupKeyPasswordHint => 'Цим паролем шифрується сам ключ. Він не замінює пароль застосунку і ніде не зберігається — відновити його не можна.';
+
+  @override
+  String get desktopBackupPasswordAgain => 'Ще раз';
+
+  @override
+  String desktopUnblockTitle(Object name) {
+    return 'Розблокувати $name?';
+  }
+
+  @override
+  String get desktopUnblockBody => 'Ця людина знову зможе писати вам і дзвонити.';
+
+  @override
+  String get desktopUnblockAction => 'Розблокувати';
 }
