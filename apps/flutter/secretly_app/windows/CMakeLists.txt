@@ -58,9 +58,101 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 add_subdirectory("runner")
 
 
+# === FFmpegKit: заготовка вне дерева плагинов ===
+#
+# 🔴 ЗАЧЕМ. Flutter подставляет плагины ССЫЛКАМИ (flutter/ephemeral/
+# .plugin_symlinks), а CMake отказывается распаковывать архив по ссылке:
+# «Cannot extract through symlink» — защита libarchive от выхода за пределы
+# каталога. Плагин ffmpeg_kit_flutter_new качает архив к себе, то есть через
+# ссылку, и сборка Windows падает ещё до компиляции — у всех, а не только на
+# сборочной машине.
+#
+# Поэтому достаём архив сюда, в каталог сборки: это настоящий путь, ссылок в
+# нём нет. Плагину показываем готовую распаковку его же штатным способом —
+# переменной FFMPEGKIT_LOCAL_DIR: по ней он КОПИРУЕТ файлы, а копирование
+# через ссылку работает.
+#
+# Если скачать не вышло (нет сети), ничего не подставляем: плагин попробует
+# сам и скажет об этом своими словами.
+set(FFMPEGKIT_VARIANT "full-gpl")
+set(FFMPEGKIT_RELEASE "8.0.0")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^([Aa][Rr][Mm]64|aarch64)$")
+  set(FFMPEGKIT_CPU "aarch64")
+else()
+  set(FFMPEGKIT_CPU "x86_64")
+endif()
+set(FFMPEGKIT_STAGE "${CMAKE_BINARY_DIR}/ffmpeg-kit-prebuilt")
+set(FFMPEGKIT_ARCHIVE_NAME
+    "ffmpeg-kit-windows-${FFMPEGKIT_CPU}-${FFMPEGKIT_VARIANT}-${FFMPEGKIT_RELEASE}.zip")
+set(FFMPEGKIT_ARCHIVE "${CMAKE_BINARY_DIR}/${FFMPEGKIT_ARCHIVE_NAME}")
+if(NOT EXISTS "${FFMPEGKIT_STAGE}/bin/libffmpegkit.dll")
+  if(NOT EXISTS "${FFMPEGKIT_ARCHIVE}")
+    message(STATUS "FFmpegKit: скачиваю ${FFMPEGKIT_ARCHIVE_NAME}")
+    file(DOWNLOAD
+      "https://github.com/sk3llo/ffmpeg_kit_flutter/releases/download/${FFMPEGKIT_RELEASE}-${FFMPEGKIT_VARIANT}-windows/${FFMPEGKIT_ARCHIVE_NAME}"
+      "${FFMPEGKIT_ARCHIVE}"
+      TLS_VERIFY ON
+      STATUS FFMPEGKIT_FETCH
+    )
+    list(GET FFMPEGKIT_FETCH 0 FFMPEGKIT_FETCH_CODE)
+    if(NOT FFMPEGKIT_FETCH_CODE EQUAL 0)
+      list(GET FFMPEGKIT_FETCH 1 FFMPEGKIT_FETCH_MSG)
+      message(WARNING "FFmpegKit: скачать не вышло (${FFMPEGKIT_FETCH_MSG})")
+      file(REMOVE "${FFMPEGKIT_ARCHIVE}")
+    endif()
+  endif()
+  if(EXISTS "${FFMPEGKIT_ARCHIVE}")
+    file(MAKE_DIRECTORY "${FFMPEGKIT_STAGE}")
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} -E tar xf "${FFMPEGKIT_ARCHIVE}"
+      WORKING_DIRECTORY "${FFMPEGKIT_STAGE}"
+      RESULT_VARIABLE FFMPEGKIT_UNTAR
+    )
+    if(NOT FFMPEGKIT_UNTAR EQUAL 0)
+      message(WARNING "FFmpegKit: распаковать не вышло, оставляю плагину")
+    endif()
+  endif()
+endif()
+if(EXISTS "${FFMPEGKIT_STAGE}/bin/libffmpegkit.dll")
+  set(ENV{FFMPEGKIT_LOCAL_DIR} "${FFMPEGKIT_STAGE}")
+  message(STATUS "FFmpegKit: беру готовое из ${FFMPEGKIT_STAGE}")
+endif()
+
+
+# 🔴 СТАРЫЕ СОПРОГРАММЫ У ЧУЖИХ ПЛАГИНОВ.
+#
+# MSVC 14.51 (Visual Studio 18) превратил <experimental/coroutine> из
+# предупреждения в ОШИБКУ (STL1011). На нём перестают собираться сразу три
+# чужих плагина: just_audio_windows, local_auth_windows и
+# permission_handler_windows — все они через C++/WinRT тянут старый заголовок.
+# Их код не наш, и ждать, пока каждый переедет на <coroutine>, мы не можем.
+# Microsoft для этого и оставил выключатель; он снимает именно эту проверку,
+# ничего больше.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
+
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
 include(flutter/generated_plugins.cmake)
+
+# 🔴 ОШИБКА УПАКОВКИ В ffmpeg_kit_flutter_new 4.2.1.
+#
+# Его собственный ffmpeg_kit_flutter_plugin_c_api.cpp подключает заголовок по
+# пути include/ffmpeg_kit_flutter_new_full/…, а его же CMakeLists создаёт этот
+# заголовок в include/ffmpeg_kit_flutter_new/… — без «_full». Пакет
+# опубликован в таком виде и под Windows не собирается ни у кого. Поднять
+# версию нельзя: тот же плагин стоит в ВЫПУЩЕННОЙ мобильной версии, а её мы не
+# трогаем. Поэтому кладём рядом переходник по ожидаемому пути: он лишь
+# отсылает к настоящему заголовку, ничего не объявляя сам.
+if(TARGET ffmpeg_kit_flutter_new_plugin)
+  set(FFMPEGKIT_SHIM_DIR
+      "${CMAKE_BINARY_DIR}/ffmpeg-kit-shim/include/ffmpeg_kit_flutter_new_full")
+  file(MAKE_DIRECTORY "${FFMPEGKIT_SHIM_DIR}")
+  file(WRITE "${FFMPEGKIT_SHIM_DIR}/f_fmpeg_kit_flutter_plugin.h"
+       "#include \"include/ffmpeg_kit_flutter_new/f_fmpeg_kit_flutter_plugin.h\"\n")
+  target_include_directories(ffmpeg_kit_flutter_new_plugin PRIVATE
+      "${CMAKE_BINARY_DIR}/ffmpeg-kit-shim")
+endif()
 
 
 # === Installation ===

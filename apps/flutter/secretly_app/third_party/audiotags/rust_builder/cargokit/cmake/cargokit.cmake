@@ -16,6 +16,21 @@ endif()
 #                    used on windows to force linking with library.
 function(apply_cargokit target manifest_dir lib_name any_symbol_name)
 
+    # 🔴 ПРАВКА SECRETLY. Flutter подставляет плагины ССЫЛКАМИ, а Windows
+    # сокращает «..» в пути ДО обращения к диску: шаги вверх уводят из
+    # каталога ссылок, а не из настоящего места плагина, и cargo не находит
+    # Cargo.toml. Разворачиваем ссылку тем же способом, каким cargokit уже
+    # разворачивает собственный корень (см. выше), и считаем manifest_dir от
+    # настоящего пути — тогда он один и тот же на всех платформах.
+    set(cargokit_plugin_dir "${CMAKE_CURRENT_SOURCE_DIR}")
+    if(WIN32)
+        execute_process(
+            COMMAND powershell -ExecutionPolicy Bypass -File "${cargokit_cmake_root}/cmake/resolve_symlinks.ps1" "${cargokit_plugin_dir}"
+            OUTPUT_VARIABLE cargokit_plugin_dir
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+    endif()
+
     set(CARGOKIT_LIB_NAME "${lib_name}")
     set(CARGOKIT_LIB_FULL_NAME "${CMAKE_SHARED_MODULE_PREFIX}${CARGOKIT_LIB_NAME}${CMAKE_SHARED_MODULE_SUFFIX}")
     if (CMAKE_CONFIGURATION_TYPES)
@@ -36,7 +51,7 @@ function(apply_cargokit target manifest_dir lib_name any_symbol_name)
     set(CARGOKIT_ENV
         "CARGOKIT_CMAKE=${CMAKE_COMMAND}"
         "CARGOKIT_CONFIGURATION=$<CONFIG>"
-        "CARGOKIT_MANIFEST_DIR=${CMAKE_CURRENT_SOURCE_DIR}/${manifest_dir}"
+        "CARGOKIT_MANIFEST_DIR=${cargokit_plugin_dir}/${manifest_dir}"
         "CARGOKIT_TARGET_TEMP_DIR=${CARGOKIT_TEMP_DIR}"
         "CARGOKIT_OUTPUT_DIR=${CARGOKIT_OUTPUT_DIR}"
         "CARGOKIT_TARGET_PLATFORM=${CARGOKIT_TARGET_PLATFORM}"

@@ -9,7 +9,12 @@ set(PROJECT_NAME "rust_lib_audiotags")
 project(${PROJECT_NAME} LANGUAGES CXX)
 
 include("../cargokit/cmake/cargokit.cmake")
-apply_cargokit(${PROJECT_NAME} ../../../../../../rust rust_lib_audiotags "")
+# 🔴 ПРАВКА SECRETLY: третий довод — ИМЯ КРЕЙТА, а не имя плагина.
+# Крейт называется audiotags (rust/Cargo.toml), и cargo делает audiotags.dll;
+# по этому же имени библиотеку ищет Dart (stem: 'audiotags'). Пока здесь
+# стояло rust_lib_audiotags, установка искала несуществующий файл и обрывала
+# сборку в самом конце.
+apply_cargokit(${PROJECT_NAME} ../../rust audiotags "")
 
 # List of absolute paths to libraries that should be bundled with the plugin.
 # This list could contain prebuilt libraries, or libraries created by an

@@ -44,28 +44,21 @@ target_include_directories(${PLUGIN_NAME} INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin)
 
-# Download the binary from GitHub.
-set(Version "1.4.5")
-set(LibPath "${CMAKE_CURRENT_SOURCE_DIR}/windows.tar.gz")
-if(NOT EXISTS ${LibPath})
-  file(DOWNLOAD
-    "https://github.com/erikas-taroza/audiotags/releases/download/v${Version}/windows.tar.gz"
-    ${LibPath}
-    TLS_VERIFY ON
-  )
-endif()
+# 🔴 ПРАВКА SECRETLY: ГОТОВУЮ БИБЛИОТЕКУ БОЛЬШЕ НЕ КАЧАЕМ.
+#
+# Здесь скачивался windows.tar.gz с чужого выпуска на GitHub — и распаковка
+# падала, потому что Flutter подставляет плагины ССЫЛКАМИ, а CMake не
+# распаковывает архив по ссылке. Но чинить было нечего: рядом, в
+# rust_builder, cargokit собирает ТОТ ЖЕ крейт из исходников, лежащих в этом
+# же дереве, и делает ровно тот же audiotags.dll. Скачанный двоичный файл был
+# вторым таким же — и именно он, а не наш исходник, попал бы в сборку.
+#
+# Для переписки, которую будут проверять построчно, это важнее удобства:
+# теперь под Windows в приложение идёт только то, что собрано из исходников
+# репозитория.
 
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/audiotags.dll")
-  execute_process(
-    COMMAND ${CMAKE_COMMAND} -E tar -xzf windows.tar.gz
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-  )
-endif()
-
-# List of absolute paths to libraries that should be bundled with the plugin.
-# This list could contain prebuilt libraries, or libraries created by an
-# external build triggered from this build file.
+# Библиотеку приносит rust_lib_audiotags (cargokit), здесь добавлять нечего.
 set(audiotags_bundled_libraries
-  "${CMAKE_CURRENT_SOURCE_DIR}/audiotags.dll"
+  ""
   PARENT_SCOPE
 )
