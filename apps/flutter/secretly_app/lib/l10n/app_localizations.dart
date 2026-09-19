@@ -4425,6 +4425,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The image was shrunk to fit'**
   String get desktopSupportShrunk;
+
+  /// No description provided for @desktopStickerPackTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sticker pack'**
+  String get desktopStickerPackTitle;
+
+  /// No description provided for @desktopStickerPackAddPlain.
+  ///
+  /// In en, this message translates to:
+  /// **'Add the pack'**
+  String get desktopStickerPackAddPlain;
+
+  /// No description provided for @desktopStickerPackInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Installed'**
+  String get desktopStickerPackInstalled;
+
+  /// No description provided for @desktopStickerPackInstalling.
+  ///
+  /// In en, this message translates to:
+  /// **'Installing…'**
+  String get desktopStickerPackInstalling;
+
+  /// No description provided for @desktopStickerPackOwn.
+  ///
+  /// In en, this message translates to:
+  /// **'This is your own pack'**
+  String get desktopStickerPackOwn;
+
+  /// No description provided for @desktopStickerPackNoAuthor.
+  ///
+  /// In en, this message translates to:
+  /// **'The pack\'s author is unknown — open the same sticker in a one-to-one chat'**
+  String get desktopStickerPackNoAuthor;
+
+  /// No description provided for @desktopStickerPackInstallingProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Installing… {done}/{total}'**
+  String desktopStickerPackInstallingProgress(Object done, Object total);
+
+  /// No description provided for @desktopStickerPackCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} sticker} other{{count} stickers}}'**
+  String desktopStickerPackCount(int count);
+
+  /// No description provided for @desktopStickerPackAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Add {count} sticker} other{Add {count} stickers}}'**
+  String desktopStickerPackAdd(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

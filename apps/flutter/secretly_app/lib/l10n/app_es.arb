@@ -1016,5 +1016,14 @@
   "desktopSupportRemoveAttachment": "Quitar el adjunto",
   "desktopSupportMegabytes": "{value} MB",
   "desktopSupportYou": "Tú",
-  "desktopSupportShrunk": "La imagen se redujo para que quepa"
+  "desktopSupportShrunk": "La imagen se redujo para que quepa",
+  "desktopStickerPackTitle": "Paquete de pegatinas",
+  "desktopStickerPackAddPlain": "Añadir el paquete",
+  "desktopStickerPackInstalled": "Instalado",
+  "desktopStickerPackInstalling": "Instalando…",
+  "desktopStickerPackOwn": "Este es tu propio paquete",
+  "desktopStickerPackNoAuthor": "Se desconoce el autor del paquete: abre la misma pegatina en un chat individual",
+  "desktopStickerPackInstallingProgress": "Instalando… {done}/{total}",
+  "desktopStickerPackCount": "{count, plural, one{{count} pegatina} other{{count} pegatinas}}",
+  "desktopStickerPackAdd": "{count, plural, one{Añadir {count} pegatina} other{Añadir {count} pegatinas}}"
 }

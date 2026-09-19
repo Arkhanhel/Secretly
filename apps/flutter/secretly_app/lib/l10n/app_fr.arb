@@ -1016,5 +1016,14 @@
   "desktopSupportRemoveAttachment": "Retirer la pièce jointe",
   "desktopSupportMegabytes": "{value} Mo",
   "desktopSupportYou": "Vous",
-  "desktopSupportShrunk": "L'image a été réduite pour tenir"
+  "desktopSupportShrunk": "L'image a été réduite pour tenir",
+  "desktopStickerPackTitle": "Pack d'autocollants",
+  "desktopStickerPackAddPlain": "Ajouter le pack",
+  "desktopStickerPackInstalled": "Installé",
+  "desktopStickerPackInstalling": "Installation…",
+  "desktopStickerPackOwn": "Ceci est votre propre pack",
+  "desktopStickerPackNoAuthor": "L'auteur du pack est inconnu — ouvrez le même autocollant dans une conversation privée",
+  "desktopStickerPackInstallingProgress": "Installation… {done}/{total}",
+  "desktopStickerPackCount": "{count, plural, one{{count} autocollant} other{{count} autocollants}}",
+  "desktopStickerPackAdd": "{count, plural, one{Ajouter {count} autocollant} other{Ajouter {count} autocollants}}"
 }

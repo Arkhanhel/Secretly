@@ -188,6 +188,7 @@ class ChatThreadPanel extends StatefulWidget {
     this.onOpenImage,
     this.onOpenVideo,
     this.onOpenFile,
+    this.onOpenStickerPack,
     this.onPollVote,
     this.onPollClose,
     this.onEventRsvp,
@@ -441,6 +442,9 @@ class ChatThreadPanel extends StatefulWidget {
   /// PR8: bubble's generic-file tap. Host reveals in Finder / opens
   /// with the default app.
   final ValueChanged<MessageData>? onOpenFile;
+
+  /// Нажали на стикер — показать набор, из которого он.
+  final ValueChanged<MessageData>? onOpenStickerPack;
 
   /// Нажали вариант опроса.
   final void Function(MessageData message, int optionIndex)? onPollVote;
@@ -1491,6 +1495,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                             onCancelUpload: widget.onCancelUpload,
                             onOpenVideo: widget.onOpenVideo,
                             onOpenFile: widget.onOpenFile,
+                            onOpenStickerPack: widget.onOpenStickerPack,
                             onPollVote: widget.onPollVote,
                             onPollClose: widget.onPollClose,
                             onEventRsvp: widget.onEventRsvp,

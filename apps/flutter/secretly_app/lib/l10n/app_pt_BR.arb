@@ -1016,5 +1016,14 @@
   "desktopSupportRemoveAttachment": "Remover o anexo",
   "desktopSupportMegabytes": "{value} MB",
   "desktopSupportYou": "Você",
-  "desktopSupportShrunk": "A imagem foi reduzida para caber"
+  "desktopSupportShrunk": "A imagem foi reduzida para caber",
+  "desktopStickerPackTitle": "Pacote de figurinhas",
+  "desktopStickerPackAddPlain": "Adicionar o pacote",
+  "desktopStickerPackInstalled": "Instalado",
+  "desktopStickerPackInstalling": "Instalando…",
+  "desktopStickerPackOwn": "Este é o seu próprio pacote",
+  "desktopStickerPackNoAuthor": "O autor do pacote é desconhecido — abra a mesma figurinha em uma conversa individual",
+  "desktopStickerPackInstallingProgress": "Instalando… {done}/{total}",
+  "desktopStickerPackCount": "{count, plural, one{{count} figurinha} other{{count} figurinhas}}",
+  "desktopStickerPackAdd": "{count, plural, one{Adicionar {count} figurinha} other{Adicionar {count} figurinhas}}"
 }

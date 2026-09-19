@@ -2285,4 +2285,49 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get desktopSupportShrunk => 'Das Bild wurde verkleinert, damit es passt';
+
+  @override
+  String get desktopStickerPackTitle => 'Sticker-Paket';
+
+  @override
+  String get desktopStickerPackAddPlain => 'Paket hinzufügen';
+
+  @override
+  String get desktopStickerPackInstalled => 'Installiert';
+
+  @override
+  String get desktopStickerPackInstalling => 'Wird installiert…';
+
+  @override
+  String get desktopStickerPackOwn => 'Das ist dein eigenes Paket';
+
+  @override
+  String get desktopStickerPackNoAuthor => 'Der Urheber des Pakets ist unbekannt – öffne denselben Sticker in einem Einzelchat';
+
+  @override
+  String desktopStickerPackInstallingProgress(Object done, Object total) {
+    return 'Wird installiert… $done/$total';
+  }
+
+  @override
+  String desktopStickerPackCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Sticker',
+      one: '$count Sticker',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopStickerPackAdd(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Sticker hinzufügen',
+      one: '$count Sticker hinzufügen',
+    );
+    return '$_temp0';
+  }
 }

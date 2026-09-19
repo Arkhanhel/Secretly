@@ -95,6 +95,7 @@ import '../chat/message_bubble.dart' hide MessageReaction;
 import '../chat/message_bubble.dart' as bubble
     show MessageReaction, ReactionActor;
 import '../chat/recent_reactions_store.dart';
+import '../chat/sticker_pack_dialog.dart';
 import '../../../app/chat_read_target.dart';
 import '../services/desktop_deleted_chats.dart';
 import '../services/desktop_ui_prefs.dart';
@@ -3647,6 +3648,14 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         isImage: false,
         authorSeed: event.senderDeviceId,
       );
+      // Откуда набор: отметка автора в самом стикере, а в личной переписке —
+      // собеседник, то есть тот, кто его и прислал. В группе без отметки
+      // спросить не у кого, и окно скажет об этом прямо, а не покажет кнопку,
+      // которая ничего не сделает.
+      final stampedOrigin = (payload.packOriginPid ?? '').trim();
+      final packOrigin = stampedOrigin.isNotEmpty
+          ? stampedOrigin
+          : (_isDirect ? (widget.conversation.peerProfileId ?? '').trim() : '');
       return MessageData(
         id: event.eventId,
         payloadId: payloadId,
@@ -3656,6 +3665,12 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         authorProfileId: authorProfileId,
         text: '',
         sticker: descriptor,
+        stickerPack: DesktopStickerPackRef(
+          packId: payload.packId,
+          originPid: packOrigin,
+          title: payload.packTitle ?? '',
+          stickerCount: payload.packStickerCount,
+        ),
         time: time,
         timestampMs: event.createdAtMs,
         isSelf: isSelf,
@@ -5473,6 +5488,63 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   }
 
   /// P2b: a sticker picked from the composer popover. 1:1 sends to the peer
+  /// Нажали на стикер — показать его набор и, если он чужой, предложить
+  /// поставить себе.
+  ///
+  /// 🔴 До этого нажатие не делало НИЧЕГО, и чужой набор на компьютере нельзя
+  /// было получить никак: приходилось брать телефон. Собирать состояние здесь,
+  /// а не в окне, — сознательно: окно не знает про контроллер, и связь с ним
+  /// остаётся в одном месте.
+  Future<void> _openStickerPack(MessageData m) async {
+    final ref = m.stickerPack;
+    if (ref == null || ref.packId.isEmpty) return;
+    final myPid = widget.controller.profileId;
+    final isOwn = ref.packId.startsWith('user:$myPid');
+    DesktopStickerPackView snapshot() {
+      final local = SecretlyStickerCatalog.pickerPackById(ref.packId);
+      final installed = local != null;
+      final stickers = <SecretlyStickerDescriptor>[
+        if (local != null)
+          ...local.stickers
+        else if (m.sticker != null)
+          m.sticker!,
+      ];
+      final total = installed
+          ? local.stickers.length
+          : (ref.stickerCount ?? stickers.length);
+      final progress = widget.controller.stickerPackInstallProgress(ref.packId);
+      final availability = installed
+          ? DesktopStickerPackAvailability.installed
+          : isOwn
+          ? DesktopStickerPackAvailability.own
+          : ref.originPid.isEmpty
+          ? DesktopStickerPackAvailability.noAuthor
+          : DesktopStickerPackAvailability.canInstall;
+      return DesktopStickerPackView(
+        title: (local != null && local.title.isNotEmpty)
+            ? local.title
+            : ref.title,
+        total: total,
+        stickers: stickers,
+        availability: availability,
+        inFlight: widget.controller.stickerPackFetchInFlight(ref.packId),
+        received: progress.$1,
+        expected: progress.$2,
+      );
+    }
+
+    await DesktopStickerPackDialog.show(
+      context: context,
+      changed: widget.controller.changed,
+      snapshot: snapshot,
+      onInstall: () => widget.controller.requestPeerStickerPack(
+        packId: ref.packId,
+        originPid: ref.originPid,
+      ),
+      onSend: _onSendSticker,
+    );
+  }
+
   /// profile id; groups use the `group:<convoId>` form sendSticker forwards to
   /// sendGroupSticker.
   Future<void> _onSendSticker(SecretlyStickerDescriptor sticker) async {
@@ -5969,6 +6041,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       onOpenImage: (m) => unawaited(_openImage(m)),
       onOpenVideo: (m) => unawaited(_openVideo(m)),
       onOpenFile: (m) => unawaited(_openFile(m)),
+      onOpenStickerPack: (m) => unawaited(_openStickerPack(m)),
       onPollVote: (m, index) => unawaited(_votePoll(m, index)),
       onPollClose: (m) => unawaited(_closePoll(m)),
       onEventRsvp: (m, status) => unawaited(_rsvpEvent(m, status)),

@@ -1051,5 +1051,17 @@
     "placeholders": {
       "value": {}
     }
-  }
+  },
+  "desktopStickerPackTitle": "Sticker pack",
+  "desktopStickerPackAddPlain": "Add the pack",
+  "desktopStickerPackInstalled": "Installed",
+  "desktopStickerPackInstalling": "Installing…",
+  "desktopStickerPackOwn": "This is your own pack",
+  "desktopStickerPackNoAuthor": "The pack's author is unknown — open the same sticker in a one-to-one chat",
+  "desktopStickerPackInstallingProgress": "Installing… {done}/{total}",
+  "desktopStickerPackCount": "{count, plural, one{{count} sticker} other{{count} stickers}}",
+  "desktopStickerPackAdd": "{count, plural, one{Add {count} sticker} other{Add {count} stickers}}",
+  "@desktopStickerPackCount": {"placeholders": {"count": {"type": "int"}}},
+  "@desktopStickerPackAdd": {"placeholders": {"count": {"type": "int"}}},
+  "@desktopStickerPackInstallingProgress": {"placeholders": {"done": {}, "total": {}}}
 }

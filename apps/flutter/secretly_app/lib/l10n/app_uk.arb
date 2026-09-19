@@ -1016,5 +1016,14 @@
   "desktopSupportRemoveAttachment": "Прибрати вкладення",
   "desktopSupportMegabytes": "{value} МБ",
   "desktopSupportYou": "Ви",
-  "desktopSupportShrunk": "Зображення стиснуто, щоб умістилося"
+  "desktopSupportShrunk": "Зображення стиснуто, щоб умістилося",
+  "desktopStickerPackTitle": "Набір стікерів",
+  "desktopStickerPackAddPlain": "Додати набір",
+  "desktopStickerPackInstalled": "Встановлено",
+  "desktopStickerPackInstalling": "Встановлення…",
+  "desktopStickerPackOwn": "Це ваш набір",
+  "desktopStickerPackNoAuthor": "Автор набору невідомий — відкрийте такий самий стікер в особистому листуванні",
+  "desktopStickerPackInstallingProgress": "Встановлення… {done}/{total}",
+  "desktopStickerPackCount": "{count, plural, one{{count} стікер} few{{count} стікери} many{{count} стікерів} other{{count} стікера}}",
+  "desktopStickerPackAdd": "{count, plural, one{Додати {count} стікер} few{Додати {count} стікери} many{Додати {count} стікерів} other{Додати {count} стікера}}"
 }

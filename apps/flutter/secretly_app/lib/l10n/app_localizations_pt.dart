@@ -2285,6 +2285,51 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get desktopSupportShrunk => 'A imagem foi reduzida para caber';
+
+  @override
+  String get desktopStickerPackTitle => 'Pacote de autocolantes';
+
+  @override
+  String get desktopStickerPackAddPlain => 'Adicionar o pacote';
+
+  @override
+  String get desktopStickerPackInstalled => 'Instalado';
+
+  @override
+  String get desktopStickerPackInstalling => 'A instalar…';
+
+  @override
+  String get desktopStickerPackOwn => 'Este é o seu próprio pacote';
+
+  @override
+  String get desktopStickerPackNoAuthor => 'O autor do pacote é desconhecido — abra o mesmo autocolante numa conversa individual';
+
+  @override
+  String desktopStickerPackInstallingProgress(Object done, Object total) {
+    return 'A instalar… $done/$total';
+  }
+
+  @override
+  String desktopStickerPackCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count autocolantes',
+      one: '$count autocolante',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopStickerPackAdd(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Adicionar $count autocolantes',
+      one: 'Adicionar $count autocolante',
+    );
+    return '$_temp0';
+  }
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -4568,4 +4613,49 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopSupportShrunk => 'A imagem foi reduzida para caber';
+
+  @override
+  String get desktopStickerPackTitle => 'Pacote de figurinhas';
+
+  @override
+  String get desktopStickerPackAddPlain => 'Adicionar o pacote';
+
+  @override
+  String get desktopStickerPackInstalled => 'Instalado';
+
+  @override
+  String get desktopStickerPackInstalling => 'Instalando…';
+
+  @override
+  String get desktopStickerPackOwn => 'Este é o seu próprio pacote';
+
+  @override
+  String get desktopStickerPackNoAuthor => 'O autor do pacote é desconhecido — abra a mesma figurinha em uma conversa individual';
+
+  @override
+  String desktopStickerPackInstallingProgress(Object done, Object total) {
+    return 'Instalando… $done/$total';
+  }
+
+  @override
+  String desktopStickerPackCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count figurinhas',
+      one: '$count figurinha',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopStickerPackAdd(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Adicionar $count figurinhas',
+      one: 'Adicionar $count figurinha',
+    );
+    return '$_temp0';
+  }
 }

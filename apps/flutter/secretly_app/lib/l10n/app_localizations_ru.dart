@@ -2285,4 +2285,53 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get desktopSupportShrunk => 'Изображение ужато, чтобы уместиться';
+
+  @override
+  String get desktopStickerPackTitle => 'Набор стикеров';
+
+  @override
+  String get desktopStickerPackAddPlain => 'Добавить набор';
+
+  @override
+  String get desktopStickerPackInstalled => 'Установлено';
+
+  @override
+  String get desktopStickerPackInstalling => 'Установка…';
+
+  @override
+  String get desktopStickerPackOwn => 'Это ваш набор';
+
+  @override
+  String get desktopStickerPackNoAuthor => 'Автор набора неизвестен — откройте такой же стикер в личной переписке';
+
+  @override
+  String desktopStickerPackInstallingProgress(Object done, Object total) {
+    return 'Установка… $done/$total';
+  }
+
+  @override
+  String desktopStickerPackCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count стикера',
+      many: '$count стикеров',
+      few: '$count стикера',
+      one: '$count стикер',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopStickerPackAdd(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Добавить $count стикера',
+      many: 'Добавить $count стикеров',
+      few: 'Добавить $count стикера',
+      one: 'Добавить $count стикер',
+    );
+    return '$_temp0';
+  }
 }

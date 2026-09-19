@@ -1016,5 +1016,14 @@
   "desktopSupportRemoveAttachment": "Anhang entfernen",
   "desktopSupportMegabytes": "{value} MB",
   "desktopSupportYou": "Sie",
-  "desktopSupportShrunk": "Das Bild wurde verkleinert, damit es passt"
+  "desktopSupportShrunk": "Das Bild wurde verkleinert, damit es passt",
+  "desktopStickerPackTitle": "Sticker-Paket",
+  "desktopStickerPackAddPlain": "Paket hinzufügen",
+  "desktopStickerPackInstalled": "Installiert",
+  "desktopStickerPackInstalling": "Wird installiert…",
+  "desktopStickerPackOwn": "Das ist dein eigenes Paket",
+  "desktopStickerPackNoAuthor": "Der Urheber des Pakets ist unbekannt – öffne denselben Sticker in einem Einzelchat",
+  "desktopStickerPackInstallingProgress": "Wird installiert… {done}/{total}",
+  "desktopStickerPackCount": "{count, plural, one{{count} Sticker} other{{count} Sticker}}",
+  "desktopStickerPackAdd": "{count, plural, one{{count} Sticker hinzufügen} other{{count} Sticker hinzufügen}}"
 }

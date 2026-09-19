@@ -2285,4 +2285,49 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get desktopSupportShrunk => 'The image was shrunk to fit';
+
+  @override
+  String get desktopStickerPackTitle => 'Sticker pack';
+
+  @override
+  String get desktopStickerPackAddPlain => 'Add the pack';
+
+  @override
+  String get desktopStickerPackInstalled => 'Installed';
+
+  @override
+  String get desktopStickerPackInstalling => 'Installing…';
+
+  @override
+  String get desktopStickerPackOwn => 'This is your own pack';
+
+  @override
+  String get desktopStickerPackNoAuthor => 'The pack\'s author is unknown — open the same sticker in a one-to-one chat';
+
+  @override
+  String desktopStickerPackInstallingProgress(Object done, Object total) {
+    return 'Installing… $done/$total';
+  }
+
+  @override
+  String desktopStickerPackCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count stickers',
+      one: '$count sticker',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopStickerPackAdd(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Add $count stickers',
+      one: 'Add $count sticker',
+    );
+    return '$_temp0';
+  }
 }

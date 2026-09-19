@@ -310,6 +310,26 @@ class MessageAttachment {
   }
 }
 
+/// Откуда стикер: набор, его автор и заголовок с числом — всё, что нужно,
+/// чтобы предложить поставить набор себе.
+@immutable
+class DesktopStickerPackRef {
+  const DesktopStickerPackRef({
+    required this.packId,
+    required this.originPid,
+    this.title = '',
+    this.stickerCount,
+  });
+
+  final String packId;
+
+  /// Профиль автора набора: у него и спрашиваем остальные стикеры. Пусто —
+  /// спросить не у кого (группа без отметки об авторе).
+  final String originPid;
+  final String title;
+  final int? stickerCount;
+}
+
 class MessageData {
   const MessageData({
     required this.id,
@@ -339,6 +359,7 @@ class MessageData {
     this.senderAvatarPath,
     this.forwardedFrom,
     this.sticker,
+    this.stickerPack,
     this.linkPreview,
     this.ownLinkPreviewTarget,
     this.mediaGroupId,
@@ -461,6 +482,10 @@ class MessageData {
   /// body. Resolved by the host (resolveEvent + ensureUserStickerCached).
   final SecretlyStickerDescriptor? sticker;
 
+  /// Набор, из которого стикер, — чтобы его можно было посмотреть и поставить
+  /// себе. Пусто у своих наборов и там, где автор не отмечен.
+  final DesktopStickerPackRef? stickerPack;
+
   /// Карточка ссылки, которую приготовил ОТПРАВИТЕЛЬ, — уже сверенная с
   /// текстом (`acceptIncomingLinkPreview`). За ней никто не ходит в сеть.
   final LinkPreviewV1? linkPreview;
@@ -534,6 +559,7 @@ class MessageData {
     String? senderAvatarPath,
     String? forwardedFrom,
     SecretlyStickerDescriptor? sticker,
+    DesktopStickerPackRef? stickerPack,
     LinkPreviewV1? linkPreview,
     Uri? ownLinkPreviewTarget,
     String? mediaGroupId,
@@ -567,6 +593,7 @@ class MessageData {
       senderAvatarPath: senderAvatarPath ?? this.senderAvatarPath,
       forwardedFrom: forwardedFrom ?? this.forwardedFrom,
       sticker: sticker ?? this.sticker,
+      stickerPack: stickerPack ?? this.stickerPack,
       linkPreview: linkPreview ?? this.linkPreview,
       ownLinkPreviewTarget: ownLinkPreviewTarget ?? this.ownLinkPreviewTarget,
       mediaGroupId: mediaGroupId ?? this.mediaGroupId,
@@ -613,6 +640,7 @@ class MessageBubble extends StatefulWidget {
     this.onSaveAttachment,
     this.onOpenVideo,
     this.onOpenFile,
+    this.onOpenStickerPack,
     this.onToggleVoice,
     this.onSeekVoice,
     this.onPollVote,
@@ -737,6 +765,12 @@ class MessageBubble extends StatefulWidget {
 
   /// Tap on a generic file attachment — host opens / reveals in Finder.
   final ValueChanged<MessageData>? onOpenFile;
+
+  /// Нажали на стикер: показать его набор.
+  ///
+  /// 🔴 На компьютере стикер был просто картинкой — нажатие не делало ничего,
+  /// и чужой набор нельзя было поставить себе вовсе.
+  final ValueChanged<MessageData>? onOpenStickerPack;
 
   /// Нажали вариант опроса.
   final void Function(MessageData message, int optionIndex)? onPollVote;
@@ -1432,7 +1466,9 @@ class _MessageBubbleState extends State<MessageBubble> {
     SecretlyStickerDescriptor sticker,
   ) {
     final m = widget.message;
+    final openPack = widget.onOpenStickerPack;
     return HoverListener(
+      onTap: openPack == null ? null : () => openPack(m),
       builder: (ctx, hovered, pressed) => IntrinsicWidth(
         // 🔴 IntrinsicWidth — ради ВРЕМЕНИ У ПРАВОГО КРАЯ. Без него `Align` в
         // подвале растянулся бы на всю доступную ширину и раздул бы пузырь до

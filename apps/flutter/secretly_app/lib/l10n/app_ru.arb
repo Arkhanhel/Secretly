@@ -1012,5 +1012,14 @@
   "desktopSupportRemoveAttachment": "Убрать вложение",
   "desktopSupportMegabytes": "{value} МБ",
   "desktopSupportYou": "Вы",
-  "desktopSupportShrunk": "Изображение ужато, чтобы уместиться"
+  "desktopSupportShrunk": "Изображение ужато, чтобы уместиться",
+  "desktopStickerPackTitle": "Набор стикеров",
+  "desktopStickerPackAddPlain": "Добавить набор",
+  "desktopStickerPackInstalled": "Установлено",
+  "desktopStickerPackInstalling": "Установка…",
+  "desktopStickerPackOwn": "Это ваш набор",
+  "desktopStickerPackNoAuthor": "Автор набора неизвестен — откройте такой же стикер в личной переписке",
+  "desktopStickerPackInstallingProgress": "Установка… {done}/{total}",
+  "desktopStickerPackCount": "{count, plural, one{{count} стикер} few{{count} стикера} many{{count} стикеров} other{{count} стикера}}",
+  "desktopStickerPackAdd": "{count, plural, one{Добавить {count} стикер} few{Добавить {count} стикера} many{Добавить {count} стикеров} other{Добавить {count} стикера}}"
 }

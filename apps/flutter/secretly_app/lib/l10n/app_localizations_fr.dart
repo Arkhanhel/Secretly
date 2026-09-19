@@ -2285,4 +2285,49 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get desktopSupportShrunk => 'L\'image a été réduite pour tenir';
+
+  @override
+  String get desktopStickerPackTitle => 'Pack d\'autocollants';
+
+  @override
+  String get desktopStickerPackAddPlain => 'Ajouter le pack';
+
+  @override
+  String get desktopStickerPackInstalled => 'Installé';
+
+  @override
+  String get desktopStickerPackInstalling => 'Installation…';
+
+  @override
+  String get desktopStickerPackOwn => 'Ceci est votre propre pack';
+
+  @override
+  String get desktopStickerPackNoAuthor => 'L\'auteur du pack est inconnu — ouvrez le même autocollant dans une conversation privée';
+
+  @override
+  String desktopStickerPackInstallingProgress(Object done, Object total) {
+    return 'Installation… $done/$total';
+  }
+
+  @override
+  String desktopStickerPackCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count autocollants',
+      one: '$count autocollant',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopStickerPackAdd(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ajouter $count autocollants',
+      one: 'Ajouter $count autocollant',
+    );
+    return '$_temp0';
+  }
 }

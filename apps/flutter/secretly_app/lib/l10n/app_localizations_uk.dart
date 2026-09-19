@@ -2285,4 +2285,53 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get desktopSupportShrunk => 'Зображення стиснуто, щоб умістилося';
+
+  @override
+  String get desktopStickerPackTitle => 'Набір стікерів';
+
+  @override
+  String get desktopStickerPackAddPlain => 'Додати набір';
+
+  @override
+  String get desktopStickerPackInstalled => 'Встановлено';
+
+  @override
+  String get desktopStickerPackInstalling => 'Встановлення…';
+
+  @override
+  String get desktopStickerPackOwn => 'Це ваш набір';
+
+  @override
+  String get desktopStickerPackNoAuthor => 'Автор набору невідомий — відкрийте такий самий стікер в особистому листуванні';
+
+  @override
+  String desktopStickerPackInstallingProgress(Object done, Object total) {
+    return 'Встановлення… $done/$total';
+  }
+
+  @override
+  String desktopStickerPackCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count стікера',
+      many: '$count стікерів',
+      few: '$count стікери',
+      one: '$count стікер',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopStickerPackAdd(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Додати $count стікера',
+      many: 'Додати $count стікерів',
+      few: 'Додати $count стікери',
+      one: 'Додати $count стікер',
+    );
+    return '$_temp0';
+  }
 }

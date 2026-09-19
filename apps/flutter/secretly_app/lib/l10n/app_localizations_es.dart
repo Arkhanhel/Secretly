@@ -2285,4 +2285,49 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get desktopSupportShrunk => 'La imagen se redujo para que quepa';
+
+  @override
+  String get desktopStickerPackTitle => 'Paquete de pegatinas';
+
+  @override
+  String get desktopStickerPackAddPlain => 'Añadir el paquete';
+
+  @override
+  String get desktopStickerPackInstalled => 'Instalado';
+
+  @override
+  String get desktopStickerPackInstalling => 'Instalando…';
+
+  @override
+  String get desktopStickerPackOwn => 'Este es tu propio paquete';
+
+  @override
+  String get desktopStickerPackNoAuthor => 'Se desconoce el autor del paquete: abre la misma pegatina en un chat individual';
+
+  @override
+  String desktopStickerPackInstallingProgress(Object done, Object total) {
+    return 'Instalando… $done/$total';
+  }
+
+  @override
+  String desktopStickerPackCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pegatinas',
+      one: '$count pegatina',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopStickerPackAdd(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Añadir $count pegatinas',
+      one: 'Añadir $count pegatina',
+    );
+    return '$_temp0';
+  }
 }

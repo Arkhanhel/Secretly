@@ -1016,5 +1016,14 @@
   "desktopSupportRemoveAttachment": "Remover o anexo",
   "desktopSupportMegabytes": "{value} MB",
   "desktopSupportYou": "Você",
-  "desktopSupportShrunk": "A imagem foi reduzida para caber"
+  "desktopSupportShrunk": "A imagem foi reduzida para caber",
+  "desktopStickerPackTitle": "Pacote de autocolantes",
+  "desktopStickerPackAddPlain": "Adicionar o pacote",
+  "desktopStickerPackInstalled": "Instalado",
+  "desktopStickerPackInstalling": "A instalar…",
+  "desktopStickerPackOwn": "Este é o seu próprio pacote",
+  "desktopStickerPackNoAuthor": "O autor do pacote é desconhecido — abra o mesmo autocolante numa conversa individual",
+  "desktopStickerPackInstallingProgress": "A instalar… {done}/{total}",
+  "desktopStickerPackCount": "{count, plural, one{{count} autocolante} other{{count} autocolantes}}",
+  "desktopStickerPackAdd": "{count, plural, one{Adicionar {count} autocolante} other{Adicionar {count} autocolantes}}"
 }
