@@ -45,7 +45,7 @@ class AttachmentSaveOutcome {
 Future<AttachmentSaveOutcome> saveAttachmentAs({
   required File? file,
   required String suggestedName,
-  String dialogTitle = 'Сохранить',
+  required String dialogTitle,
   FileType type = FileType.any,
 }) async {
   if (file == null || !await file.exists()) {

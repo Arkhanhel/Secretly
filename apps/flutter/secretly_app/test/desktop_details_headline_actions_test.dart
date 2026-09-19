@@ -14,6 +14,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -22,6 +23,9 @@ import 'package:secretly_app/ui/desktop/design/colors.dart';
 import 'package:secretly_app/ui/desktop/primitives/context_menu.dart';
 
 Widget host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: DColors(
     colors: kDColorsDark,
     child: Scaffold(

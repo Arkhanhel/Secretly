@@ -214,10 +214,10 @@ class DesktopNotificationService {
         requestBadgePermission: true,
         requestSoundPermission: true,
       );
-      const linuxSettings = LinuxInitializationSettings(
-        defaultActionName: 'Открыть',
+      final linuxSettings = LinuxInitializationSettings(
+        defaultActionName: _l10n.desktopNotifOpen,
       );
-      const initSettings = InitializationSettings(
+      final initSettings = InitializationSettings(
         macOS: macSettings,
         linux: linuxSettings,
       );
@@ -381,7 +381,9 @@ class DesktopNotificationService {
       knownName: desktopCallPeerKnownName(s),
       appTitle: _l10n.appTitle,
     );
-    final title = s.isVideo ? 'Видеозвонок' : 'Входящий звонок';
+    final title = s.isVideo
+        ? _l10n.callVideoCall
+        : _l10n.callRecordIncomingCall;
     final id = (('call:${s.callId}').hashCode & 0x7fffffff);
     unawaited(
       _present(

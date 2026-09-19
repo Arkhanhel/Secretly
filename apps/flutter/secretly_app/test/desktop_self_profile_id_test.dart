@@ -12,12 +12,16 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/chat/details/details_headline.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
 
 Widget host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: DColors(
     colors: kDColorsDark,
     child: Scaffold(body: SizedBox(width: 330, child: child)),
@@ -89,7 +93,7 @@ void main() {
     final view = File(
       'lib/ui/desktop/chat/details/self_profile_view.dart',
     ).readAsStringSync();
-    final i = view.indexOf("label: 'Редактировать'");
+    final i = view.indexOf('label: l10n.desktopProfileEdit');
     final body = view.substring(i, (i + 500).clamp(0, view.length));
     expect(body.contains('_editLine('), isTrue);
     expect(body.contains('save: (v) => _c.setMyNickname(v)'), isTrue);

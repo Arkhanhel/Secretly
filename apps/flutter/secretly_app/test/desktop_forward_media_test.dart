@@ -117,7 +117,7 @@ void main() {
 
     test('🔴 нечего слать — говорим вслух, а не молчим', () {
       expect(body.contains('_CopyOutcome.noFile'), isTrue);
-      expect(flow.contains('Вложение не скачано — переслать нечего'), isTrue);
+      expect(flow.contains('desktopChatsNothingToForward'), isTrue);
     });
 
     test('получатель выбирается один раз на всю пачку', () {
@@ -143,7 +143,7 @@ void main() {
     });
 
     test('нечего сохранять — говорим вслух', () {
-      expect(body.contains('Вложение не скачано — сохранять нечего'), isTrue);
+      expect(body.contains('desktopChatsNothingToSave'), isTrue);
     });
   });
 
@@ -168,13 +168,8 @@ void main() {
   });
 
   test('проверка приватности осталась на обоих путях', () {
-    expect(
-      section.contains('Это сообщение нельзя переслать из-за ограничений приватности.'),
-      isTrue,
-    );
-    expect(
-      section.contains('Это сообщение нельзя сохранить из-за ограничений приватности.'),
-      isTrue,
-    );
+    // 19.09.2026: подписи уехали в переводы — проверяем ключи.
+    expect(section.contains('desktopChatsForwardPrivacyBlocked'), isTrue);
+    expect(section.contains('desktopChatsSavePrivacyBlocked'), isTrue);
   });
 }

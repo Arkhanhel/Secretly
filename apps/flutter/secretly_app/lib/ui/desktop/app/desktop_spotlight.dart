@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -15,7 +16,7 @@ import 'desktop_file_match.dart';
 import '../design/tokens.dart';
 import '../primitives/avatar.dart';
 import '../shell/sidebar.dart' show DesktopSection;
-import '../shell/window_chrome.dart' show kDesktopSearchScopeLabel;
+import '../shell/window_chrome.dart' show desktopSearchScopeLabel;
 
 /// Cmd+K spotlight palette: a modal overlay that lets the user fuzzy-find
 /// across conversations and section shortcuts, then jumps to the picked
@@ -60,6 +61,9 @@ class SpotlightPalette extends StatefulWidget {
 }
 
 class _SpotlightPaletteState extends State<SpotlightPalette> {
+  /// Подписи окна поиска.
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   final TextEditingController _searchCtl = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
   final FocusNode _rootFocus = FocusNode();
@@ -206,7 +210,7 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
           final snippet = _snippet(m.text, m.matchStart);
           if (snippet.isEmpty) continue;
           hits.add(
-            _SpotlightEntry.message(conversation: convo, snippet: snippet),
+            _SpotlightEntry.message(l10n: l10n, conversation: convo, snippet: snippet),
           );
         }
       } catch (_) {
@@ -267,9 +271,10 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
           if (name.isEmpty) continue;
           hits.add(
             _SpotlightEntry.file(
+              l10n: l10n,
               conversation: convo,
               name: name,
-              meta: attachmentMetaLine(attachment),
+              meta: attachmentMetaLine(attachment, l10n),
             ),
           );
         }
@@ -348,7 +353,7 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
     // Cap chat results so the action rows always remain visible/searchable.
     final maxChats = q.isEmpty ? 8 : 20;
     for (final c in chats.take(maxChats)) {
-      out.add(_SpotlightEntry.chat(c));
+      out.add(_SpotlightEntry.chat(c, l10n));
     }
 
     // Люди из контактов, с которыми переписки ещё НЕТ. Те, с кем есть, уже
@@ -366,6 +371,7 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
         shown++;
         out.add(
           _SpotlightEntry.contact(
+            l10n: l10n,
             profileId: pid,
             name: name.isEmpty ? pid : name,
             onActivate: () {
@@ -393,6 +399,7 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
       if (q.isNotEmpty && !label.toLowerCase().contains(q)) return;
       out.add(
         _SpotlightEntry.action(
+          l10n: l10n,
           label: label,
           icon: icon,
           onActivate: onActivate,
@@ -401,28 +408,28 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
     }
 
     addAction(
-      label: 'Перейти к чатам',
+      label: l10n.desktopSpotlightGoChats,
       icon: FluentIcons.chat_24_regular,
       onActivate: () => _jumpToSection(DesktopSection.chats),
     );
     addAction(
-      label: 'Перейти к комнатам',
+      label: l10n.desktopSpotlightGoRooms,
       icon: FluentIcons.people_24_regular,
       onActivate: () => _jumpToSection(DesktopSection.rooms),
     );
     addAction(
-      label: 'Перейти к контактам',
+      label: l10n.desktopSpotlightGoContacts,
       icon: FluentIcons.person_24_regular,
       onActivate: () => _jumpToSection(DesktopSection.contacts),
     );
     addAction(
-      label: 'Перейти к звонкам',
+      label: l10n.desktopSpotlightGoCalls,
       icon: FluentIcons.call_24_regular,
       onActivate: () => _jumpToSection(DesktopSection.calls),
     );
     if (widget.onOpenSettings != null) {
       addAction(
-        label: 'Настройки',
+        label: l10n.desktopSettingsTitle,
         icon: FluentIcons.settings_24_regular,
         onActivate: () {
           widget.onClose();
@@ -432,7 +439,7 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
     }
     if (widget.onOpenProfile != null) {
       addAction(
-        label: 'Профиль',
+        label: l10n.desktopAccountProfile,
         icon: FluentIcons.person_circle_24_regular,
         onActivate: () {
           widget.onClose();
@@ -639,7 +646,7 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
               decoration: InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
-                hintText: '$kDesktopSearchScopeLabel…',
+                hintText: '${desktopSearchScopeLabel(l10n)}…',
                 hintStyle: DType.bodyStrong.copyWith(
                   color: c.textSecondary,
                   fontWeight: FontWeight.w400,
@@ -679,7 +686,7 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
       padding: const EdgeInsets.symmetric(vertical: DSpace.xl),
       child: Center(
         child: Text(
-          'Ничего не найдено',
+          l10n.desktopListNothingFound,
           style: DType.body.copyWith(color: c.textSecondary),
         ),
       ),
@@ -694,11 +701,11 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
       ),
       child: Row(
         children: [
-          _hint(c, '↑ ↓', 'выбор'),
+          _hint(c, '↑ ↓', l10n.desktopSpotlightSelect),
           const SizedBox(width: DSpace.m),
-          _hint(c, 'Enter', 'открыть'),
+          _hint(c, 'Enter', l10n.desktopSpotlightOpen),
           const Spacer(),
-          _hint(c, 'Esc', 'закрыть'),
+          _hint(c, 'Esc', l10n.desktopSpotlightClose),
         ],
       ),
     );
@@ -742,11 +749,11 @@ class _SpotlightEntry {
     this.conversation,
   });
 
-  factory _SpotlightEntry.chat(Conversation c) {
+  factory _SpotlightEntry.chat(Conversation c, AppLocalizations l10n) {
     return _SpotlightEntry._(
       kind: _SpotlightKind.chat,
       title: c.title.isEmpty ? '—' : c.title,
-      subtitle: c.peerProfileId == null ? 'Комната' : 'Чат',
+      subtitle: c.peerProfileId == null ? l10n.desktopSpotlightRoom : l10n.contactDetailsChat,
       icon: c.peerProfileId == null
           ? FluentIcons.people_24_regular
           : FluentIcons.chat_24_regular,
@@ -758,13 +765,14 @@ class _SpotlightEntry {
   /// F-04: a message-body hit. Carries its conversation so activating it opens
   /// the chat the message lives in.
   factory _SpotlightEntry.message({
+    required AppLocalizations l10n,
     required Conversation conversation,
     required String snippet,
   }) {
     return _SpotlightEntry._(
       kind: _SpotlightKind.message,
       title: snippet,
-      subtitle: conversation.title.isEmpty ? 'Сообщение' : conversation.title,
+      subtitle: conversation.title.isEmpty ? l10n.desktopSpotlightMessage : conversation.title,
       icon: FluentIcons.search_24_regular,
       onActivate: () {},
       conversation: conversation,
@@ -773,11 +781,12 @@ class _SpotlightEntry {
 
   /// Вложение: имя файла, под ним тип с размером и переписка, где он лежит.
   factory _SpotlightEntry.file({
+    required AppLocalizations l10n,
     required Conversation conversation,
     required String name,
     required String meta,
   }) {
-    final where = conversation.title.isEmpty ? 'Файл' : conversation.title;
+    final where = conversation.title.isEmpty ? l10n.file : conversation.title;
     return _SpotlightEntry._(
       kind: _SpotlightKind.message,
       title: name,
@@ -790,6 +799,7 @@ class _SpotlightEntry {
 
   /// Человек из контактов, с которым переписки ещё нет.
   factory _SpotlightEntry.contact({
+    required AppLocalizations l10n,
     required String profileId,
     required String name,
     required VoidCallback onActivate,
@@ -797,13 +807,14 @@ class _SpotlightEntry {
     return _SpotlightEntry._(
       kind: _SpotlightKind.action,
       title: name,
-      subtitle: 'Контакт',
+      subtitle: l10n.desktopMenuContact,
       icon: FluentIcons.person_24_regular,
       onActivate: onActivate,
     );
   }
 
   factory _SpotlightEntry.action({
+    required AppLocalizations l10n,
     required String label,
     required IconData icon,
     required VoidCallback onActivate,
@@ -811,7 +822,7 @@ class _SpotlightEntry {
     return _SpotlightEntry._(
       kind: _SpotlightKind.action,
       title: label,
-      subtitle: 'Команда',
+      subtitle: l10n.desktopSpotlightCommand,
       icon: icon,
       onActivate: onActivate,
     );

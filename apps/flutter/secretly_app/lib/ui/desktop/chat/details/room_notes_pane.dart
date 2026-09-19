@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../../l10n/app_localizations.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -133,6 +134,7 @@ class _RoomNotesPaneState extends State<RoomNotesPane> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     if (widget.convoId.isEmpty) return const SizedBox.shrink();
     if (_loading) {
@@ -141,7 +143,7 @@ class _RoomNotesPaneState extends State<RoomNotesPane> {
 
     final field = DesktopTextField(
       controller: _text,
-      hintText: 'Что запомнить из этого разговора…',
+      hintText: l10n.desktopNotesHint,
       onChanged: _onChanged,
       maxLines: widget.expand ? null : 6,
       minLines: widget.expand ? null : 3,
@@ -154,9 +156,7 @@ class _RoomNotesPaneState extends State<RoomNotesPane> {
         const SizedBox(width: DSpace.p6),
         Expanded(
           child: Text(
-            'Видно только вам. Не отправляется, не попадает в переписку и '
-            'не входит в резервную копию — живёт на этом компьютере, в той же '
-            'зашифрованной базе, что и сообщения.',
+            l10n.desktopNotesPrivate,
             style: DType.caption.copyWith(color: c.textTertiary, height: 1.4),
           ),
         ),

@@ -106,23 +106,24 @@ class _OneToOneCallScreenState extends State<OneToOneCallScreen> {
   );
 
   String _statusLabel(CallState s) {
+    final l10n = AppLocalizations.of(context)!;
     switch (s.phase) {
       case CallPhase.ringingOutgoing:
-        return 'Вызов…';
+        return l10n.desktopCallDialing;
       case CallPhase.connecting:
-        return 'Соединение…';
+        return l10n.desktopCallConnecting;
       case CallPhase.reconnecting:
-        return 'Переподключение…';
+        return l10n.desktopCallReconnecting;
       case CallPhase.connected:
         final started = s.connectedAtMs ?? s.startedAtMs;
-        if (started == null) return 'Зашифровано';
+        if (started == null) return l10n.desktopCallEncrypted;
         final ms = DateTime.now().millisecondsSinceEpoch - started;
-        return 'Зашифровано · ${_fmtDuration(ms)}';
+        return l10n.desktopCallEncryptedFor(_fmtDuration(ms));
       case CallPhase.ended:
-        return 'Завершено';
+        return l10n.desktopCallEnded;
       case CallPhase.ringingIncoming:
       case CallPhase.idle:
-        return 'Зашифровано';
+        return l10n.desktopCallEncrypted;
     }
   }
 
@@ -142,6 +143,7 @@ class _OneToOneCallScreenState extends State<OneToOneCallScreen> {
   }
 
   Widget _buildForState(BuildContext context, CallState s) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final cm = widget.callManager;
     final session = cm.session;
@@ -236,8 +238,8 @@ class _OneToOneCallScreenState extends State<OneToOneCallScreen> {
                               ? FluentIcons.full_screen_minimize_24_regular
                               : FluentIcons.full_screen_maximize_24_regular,
                           tooltip: _fullScreen
-                              ? 'Выйти из полноэкранного'
-                              : 'Во весь экран',
+                              ? l10n.desktopCallExitFullscreen
+                              : l10n.desktopCallFullscreen,
                           onTap: _toggleFullScreen,
                         ),
                       ],

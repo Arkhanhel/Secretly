@@ -16,6 +16,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/app/message_command_utils.dart' show RoomTopicRef;
@@ -26,6 +27,9 @@ void main() {
   testWidgets('· подписи «ТЕМЫ» в полосе нет', (t) async {
     await t.pumpWidget(
       MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: DColors(
           colors: kDColorsDark,
           child: Scaffold(

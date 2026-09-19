@@ -7,6 +7,7 @@
 // closes, ←/→ seek ±5s, ↑/↓ volume, M mutes, click the frame to play/pause,
 // and the control bar auto-hides while playing.
 
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -88,7 +89,9 @@ class _DesktopVideoViewerState extends State<DesktopVideoViewer> {
       _armHide();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = 'Не удалось воспроизвести видео');
+      setState(
+        () => _error = AppLocalizations.of(context)!.desktopVideoPlayFailed,
+      );
     }
   }
 
@@ -261,6 +264,7 @@ class _DesktopVideoViewerState extends State<DesktopVideoViewer> {
   }
 
   Widget _header() {
+    final l10n = AppLocalizations.of(context)!;
     return Positioned(
       top: 0,
       left: 0,
@@ -285,7 +289,7 @@ class _DesktopVideoViewerState extends State<DesktopVideoViewer> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      widget.authorName.isEmpty ? 'Видео' : widget.authorName,
+                      widget.authorName.isEmpty ? l10n.desktopVideoTitle : widget.authorName,
                       style: const TextStyle(
                           color: Colors.white,
                           fontFamily: DType.family,
@@ -301,11 +305,11 @@ class _DesktopVideoViewerState extends State<DesktopVideoViewer> {
                   ],
                 ),
               ),
-              _GlyphButton(icon: FluentIcons.save_24_regular, tooltip: 'Сохранить', onTap: _save),
-              _GlyphButton(icon: FluentIcons.folder_24_regular, tooltip: 'Показать в Finder', onTap: _reveal),
+              _GlyphButton(icon: FluentIcons.save_24_regular, tooltip: l10n.saveAction, onTap: _save),
+              _GlyphButton(icon: FluentIcons.folder_24_regular, tooltip: l10n.desktopGalleryRevealFinder, onTap: _reveal),
               _GlyphButton(
                   icon: FluentIcons.dismiss_24_regular,
-                  tooltip: 'Закрыть  Esc',
+                  tooltip: l10n.desktopViewerCloseEsc,
                   onTap: () => Navigator.of(context).maybePop()),
             ],
           ),
@@ -315,6 +319,7 @@ class _DesktopVideoViewerState extends State<DesktopVideoViewer> {
   }
 
   Widget _bottomBar() {
+    final l10n = AppLocalizations.of(context)!;
     final pos = _ctl.value.position;
     final dur = _ctl.value.duration;
     return Positioned(
@@ -339,7 +344,7 @@ class _DesktopVideoViewerState extends State<DesktopVideoViewer> {
                 icon: _ctl.value.isPlaying
                     ? FluentIcons.pause_24_filled
                     : FluentIcons.play_24_filled,
-                tooltip: 'Пробел',
+                tooltip: l10n.desktopKeySpace,
                 onTap: _togglePlay,
               ),
               const SizedBox(width: DSpace.s),

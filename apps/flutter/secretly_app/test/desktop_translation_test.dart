@@ -21,12 +21,16 @@
 // приватность, разбор настроек (общих с телефоном) и то, что каждый отказ
 // получает ВНЯТНОЕ объяснение вместо тишины.
 
+import 'package:flutter/widgets.dart';
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/services/desktop_translation_prefs.dart';
 import 'package:secretly_app/ui/desktop/services/desktop_translation_service.dart';
+
+final _ru = lookupAppLocalizations(const Locale('ru'));
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -176,7 +180,7 @@ void main() {
     test('у всякого исхода, кроме удачи и «нечего делать», есть слова', () {
       for (final outcome in DesktopTranslationOutcome.values) {
         final r = DesktopTranslationResult(outcome, 'x');
-        final message = r.userMessage;
+        final message = r.userMessage(_ru);
         if (outcome == DesktopTranslationOutcome.ok ||
             outcome == DesktopTranslationOutcome.sameLanguage) {
           expect(message, isNull, reason: 'тут говорить нечего');
@@ -194,8 +198,8 @@ void main() {
       const r = DesktopTranslationResult(
         DesktopTranslationOutcome.needsDownload,
       );
-      expect(r.userMessage, contains('Системные настройки'));
-      expect(r.userMessage, contains('Языки перевода'));
+      expect(r.userMessage(_ru), contains('Системные настройки'));
+      expect(r.userMessage(_ru), contains('Языки перевода'));
     });
   });
 
@@ -466,7 +470,11 @@ void main() {
       // Системная служба отвечает не мгновенно. Нажатие, проваливающееся в
       // пустоту, неотличимо от нерабочей кнопки.
       expect(bubble.contains('final bool translating;'), isTrue);
-      expect(bubble.contains("'Переводим…'"), isTrue);
+      expect(bubble.contains('l10n.desktopBubbleTranslating'), isTrue);
+      expect(
+        File('lib/l10n/app_ru.arb').readAsStringSync().contains('Переводим…'),
+        isTrue,
+      );
       expect(panel.contains('translating: _translateInFlight.contains(m.id)'),
           isTrue);
     });

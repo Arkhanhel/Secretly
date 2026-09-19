@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -239,6 +240,7 @@ class MediaUploadRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final value = progress <= 0.01 ? null : progress.clamp(0.0, 1.0);
     final ring = Container(
       key: const ValueKey('media-upload-ring'),
@@ -269,7 +271,7 @@ class MediaUploadRing extends StatelessWidget {
     final cancel = onCancel;
     if (cancel == null) return ring;
     return DesktopTooltip(
-      message: 'Отменить отправку',
+      message: l10n.desktopMediaCancelSend,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
@@ -283,12 +285,12 @@ class MediaUploadRing extends StatelessWidget {
 }
 
 /// Сколько ушло: «1.2 МБ / 4.5 МБ».
-String uploadStatusText(MessageAttachment a) {
-  final total = formatAttachmentSize(a.sizeBytes);
+String uploadStatusText(MessageAttachment a, AppLocalizations l10n) {
+  final total = formatAttachmentSize(a.sizeBytes, l10n);
   final fraction = (a.uploadProgress ?? 0).clamp(0.0, 1.0);
   final sent = (a.sizeBytes * fraction).round();
-  if (sent <= 0) return total.isEmpty ? 'Отправка…' : 'Отправка… · $total';
-  return '${formatAttachmentSize(sent)} / $total';
+  if (sent <= 0) return total.isEmpty ? l10n.desktopMediaSending : l10n.desktopMediaSendingOf(total);
+  return '${formatAttachmentSize(sent, l10n)} / $total';
 }
 
 /// «00:15» — минуты всегда двумя цифрами, как в Telegram.
@@ -306,14 +308,18 @@ String formatMediaDuration(int ms) {
 ///
 /// [durationMs] — длительность, узнанная по самому файлу: у обычного ролика
 /// её в сообщении нет (поле заполняют только кружки и голосовые).
-String videoBadgeText(MessageAttachment a, {int? durationMs}) {
+String videoBadgeText(
+  MessageAttachment a,
+  AppLocalizations l10n, {
+  int? durationMs,
+}) {
   final parts = <String>[];
   final ms = a.durationMs ?? durationMs;
   if (ms != null && ms > 0) parts.add(formatMediaDuration(ms));
   if (a.filePath == null && a.sizeBytes > 0) {
-    parts.add(formatAttachmentSize(a.sizeBytes));
+    parts.add(formatAttachmentSize(a.sizeBytes, l10n));
   }
-  return parts.isEmpty ? 'Видео' : parts.join(', ');
+  return parts.isEmpty ? l10n.desktopChatsVideo : parts.join(', ');
 }
 
 /// Одна плитка медиа: снимок или ролик заданного размера.
@@ -354,6 +360,7 @@ class DesktopMediaTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final a = attachment;
     final bg = placeholder ?? const Color(0xFF1B1E25);
     final failed = a.failed;
@@ -394,7 +401,7 @@ class DesktopMediaTile extends StatelessWidget {
     } else if (failed) {
       center = MediaCenterButton(
         icon: FluentIcons.arrow_clockwise_24_regular,
-        tooltip: 'Повторить загрузку',
+        tooltip: l10n.desktopMediaRetryDownload,
         onTap: onRetry,
       );
     } else if (a.loading || (!ready && a.downloadProgress != null)) {
@@ -497,8 +504,9 @@ class _VideoBadgeState extends State<_VideoBadge> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return MediaBadge(
-      child: Text(videoBadgeText(widget.attachment, durationMs: _probed)),
+      child: Text(videoBadgeText(widget.attachment, l10n, durationMs: _probed)),
     );
   }
 }
@@ -829,21 +837,22 @@ class DesktopFileRow extends StatelessWidget {
           _downloaded ||
           (_uploading && attachment.filePath != null));
 
-  String get _name {
+  String _nameOf(AppLocalizations l10n) {
     final n = (attachment.fileName ?? '').trim();
     if (n.isNotEmpty) return n;
     return switch (attachment.kind) {
-      MessageAttachmentKind.image => 'Изображение',
-      MessageAttachmentKind.video => 'Видео',
-      MessageAttachmentKind.audio => 'Аудиофайл',
-      _ => 'Файл',
+      MessageAttachmentKind.image => l10n.desktopMediaImage,
+      MessageAttachmentKind.video => l10n.desktopChatsVideo,
+      MessageAttachmentKind.audio => l10n.desktopBubbleAudioFile,
+      _ => l10n.file,
     };
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final a = attachment;
-    final size = formatAttachmentSize(a.sizeBytes);
+    final size = formatAttachmentSize(a.sizeBytes, l10n);
     final statusStyle = DType.caption.copyWith(color: fgSoft);
     final linkStyle = DType.caption.copyWith(
       color: accent,
@@ -852,24 +861,24 @@ class DesktopFileRow extends StatelessWidget {
 
     final Widget status;
     if (_uploading) {
-      status = Text(uploadStatusText(a), style: statusStyle);
+      status = Text(uploadStatusText(a, l10n), style: statusStyle);
     } else if (a.failed) {
       status = _StatusLine(
-        prefix: 'Не удалось загрузить',
-        link: 'Повторить',
+        prefix: l10n.desktopPhotoLoadFailed,
+        link: l10n.desktopDevicesRetry,
         style: statusStyle,
         linkStyle: linkStyle,
         onLink: onDownload,
       );
     } else if (_busy) {
       status = Text(
-        size.isEmpty ? 'Загрузка…' : 'Загрузка… · $size',
+        size.isEmpty ? l10n.desktopServerBackupLoading : l10n.desktopMediaDownloading(size),
         style: statusStyle,
       );
     } else if (_downloaded) {
       status = _StatusLine(
         prefix: size,
-        link: onReveal == null ? null : 'Показать в Finder',
+        link: onReveal == null ? null : l10n.desktopGalleryRevealFinder,
         style: statusStyle,
         linkStyle: linkStyle,
         onLink: onReveal,
@@ -877,7 +886,7 @@ class DesktopFileRow extends StatelessWidget {
     } else {
       status = _StatusLine(
         prefix: size,
-        link: onDownload == null ? null : 'Загрузить',
+        link: onDownload == null ? null : l10n.desktopMediaDownload,
         style: statusStyle,
         linkStyle: linkStyle,
         onLink: onDownload,
@@ -912,7 +921,7 @@ class DesktopFileRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 MiddleEllipsisText(
-                  _name,
+                  _nameOf(l10n),
                   style: DType.bodyStrong.copyWith(color: fg),
                 ),
                 const SizedBox(height: 3),

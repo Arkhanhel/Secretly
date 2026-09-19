@@ -26,8 +26,8 @@ void main() {
   ).readAsStringSync();
 
   test('группы со счётчиками есть', () {
-    expect(view.contains("_GroupHeading(label: 'В СЕТИ'"), isTrue);
-    expect(view.contains("_GroupHeading(label: 'НЕ В СЕТИ'"), isTrue);
+    expect(view.contains('_GroupHeading(label: l10n.desktopRoomOnline'), isTrue);
+    expect(view.contains('_GroupHeading(label: l10n.desktopRoomOffline'), isTrue);
     expect(
       view.contains("'\$label · \$count'"),
       isTrue,

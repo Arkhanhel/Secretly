@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
@@ -17,6 +18,7 @@ class AttachmentsDropZone extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return IgnorePointer(
       ignoring: !visible,
@@ -40,12 +42,12 @@ class AttachmentsDropZone extends StatelessWidget {
                       size: 56, color: c.accentPrimary),
                   const SizedBox(height: DSpace.m),
                   Text(
-                    message ?? 'Отпустите, чтобы отправить',
+                    message ?? l10n.desktopDropToSend,
                     style: DType.title.copyWith(color: c.accentPrimary),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Файлы будут зашифрованы перед отправкой',
+                    l10n.desktopDropEncrypted,
                     style: DType.caption.copyWith(color: c.textSecondary),
                   ),
                 ],

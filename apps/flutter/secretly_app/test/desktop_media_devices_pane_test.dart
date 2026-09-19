@@ -59,8 +59,12 @@ void main() {
   test('«Как выбрано в системе» — первым и достижимо после любого выбора', () {
     final i = pane.indexOf('final rows = <Widget>[');
     final body = pane.substring(i, (i + 500).clamp(0, pane.length));
-    expect(body.contains("label: 'Как выбрано в системе'"), isTrue);
-    expect(body.indexOf('Как выбрано') < body.indexOf('for (final d in devices)'), isTrue);
+    expect(body.contains('label: l10n.desktopDevicesSystemDefault'), isTrue);
+    expect(
+      body.indexOf('desktopDevicesSystemDefault') <
+          body.indexOf('for (final d in devices)'),
+      isTrue,
+    );
     expect(body.contains("onTap: () => onPick('')"), isTrue);
   });
 
@@ -102,7 +106,13 @@ void main() {
     // Им распоряжается `CallAudioRouteController` во время созвона: он сам
     // переключается на наушники. Второй хозяин у той же настройки означал бы,
     // что она меняется в двух местах и разъезжается.
-    expect(pane.contains('выбирается в самом созвоне'), isTrue);
+    expect(pane.contains('l10n.desktopDevicesOutputHint'), isTrue);
+    expect(
+      File('lib/l10n/app_ru.arb')
+          .readAsStringSync()
+          .contains('выбирается в самом созвоне'),
+      isTrue,
+    );
     expect(pane.contains('selectAudioOutput'), isFalse);
   });
 

@@ -16,6 +16,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:secretly_app/l10n/app_localizations_ru.dart';
 import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/gestures.dart';
@@ -162,6 +163,8 @@ PendingAttachmentBatchUpload _batch(
   targetId: convoId,
 );
 
+final _ru = lookupAppLocalizations(const Locale('ru'));
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -253,7 +256,7 @@ void main() {
 
     test('заголовок окна', () {
       String t(List<OutgoingFile> f, {bool asFiles = false}) =>
-          outgoingDialogTitle(f, sendAsFiles: asFiles);
+          outgoingDialogTitle(f, sendAsFiles: asFiles, l10n: AppLocalizationsRu());
       expect(t([_photo('a.jpg')]), 'Фото');
       expect(t([_photo('a.jpg'), _photo('b.jpg'), _photo('c.jpg')]), '3 фото');
       expect(t([_video('a.mp4')]), 'Видео');
@@ -337,7 +340,7 @@ void main() {
       expect(intake.empty, ['empty.txt']);
       expect(intake.tooLarge, ['big.bin']);
       expect(intake.unreadable, ['missing.jpg']);
-      final text = intake.rejectionText(maxBytes: 1024 * 1024)!;
+      final text = intake.rejectionText(maxBytes: 1024 * 1024, l10n: AppLocalizationsRu())!;
       expect(text, startsWith('Папку «Фото» отправить нельзя'));
       expect(text, contains('«big.bin» больше 1 МБ'));
       expect(text, contains('«empty.txt» пустой'));
@@ -349,7 +352,7 @@ void main() {
         alreadyAdded: {ok.path},
       );
       expect(again.files, isEmpty);
-      expect(again.rejectionText(maxBytes: 0), isNull);
+      expect(again.rejectionText(maxBytes: 0, l10n: AppLocalizationsRu()), isNull);
     });
   });
 
@@ -933,7 +936,7 @@ void main() {
       expect(find.byKey(const ValueKey('media-upload-ring')), findsOneWidget);
       expect(
         find.text(
-          '${formatAttachmentSize(2048)} / ${formatAttachmentSize(4096)}',
+          '${formatAttachmentSize(2048, _ru)} / ${formatAttachmentSize(4096, _ru)}',
         ),
         findsOneWidget,
       );

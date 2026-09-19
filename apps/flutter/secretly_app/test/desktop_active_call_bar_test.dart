@@ -13,12 +13,16 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/calls/active_call_bar.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
 
 Widget host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: DColors(
     colors: kDColorsDark,
     child: Scaffold(body: SizedBox(width: 900, child: child)),
@@ -67,7 +71,8 @@ void main() {
     });
 
     test('не нашли имя комнаты — показываем без имени, а не идентификатор', () {
-      expect(src.contains("title.isEmpty ? 'Идёт созвон' :"), isTrue);
+      expect(src.contains('title.isEmpty'), isTrue);
+      expect(src.contains('l10n.desktopCallInProgress'), isTrue);
       final app = File(
         'lib/ui/desktop/app/desktop_production_app.dart',
       ).readAsStringSync();
@@ -130,7 +135,10 @@ void main() {
 
     test('кнопка есть и называет состояние', () {
       expect(src.contains('mic_off_24_filled'), isTrue);
-      expect(src.contains("'Включить микрофон' : 'Выключить микрофон'"), isTrue);
+      expect(
+        src.contains('l10n.desktopCallMicOn : l10n.desktopCallMicOff'),
+        isTrue,
+      );
     });
 
     test('🔴 состояние читается у СЕССИИ, а не из своего поля', () {

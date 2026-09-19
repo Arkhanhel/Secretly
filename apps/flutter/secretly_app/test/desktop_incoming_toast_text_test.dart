@@ -10,12 +10,16 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/calls/incoming_call_toast.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
 
 Widget host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: DColors(
     colors: kDColorsDark,
     child: Scaffold(body: Center(child: child)),
@@ -85,7 +89,7 @@ void main() {
 
     test('«Текстом» приглушена, «Ответить» — сплошная', () {
       // Это не главное действие всплывашки, а третий честный ответ рядом.
-      final i = toast.indexOf("label: 'Текстом'");
+      final i = toast.indexOf('label: l10n.desktopCallAnswerText');
       final body = toast.substring(i, (i + 400).clamp(0, toast.length));
       expect(body.contains("Colors.white.withValues(alpha: 0.06)"), isTrue);
       expect(body.contains('fg: c.textSecondary'), isTrue);

@@ -128,6 +128,9 @@ class RoomDetailsView extends StatefulWidget {
 }
 
 class _RoomDetailsViewState extends State<RoomDetailsView> {
+  /// Подписи экрана комнаты.
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   bool _muted = false;
   bool _pinned = false;
   bool _archived = false;
@@ -451,20 +454,20 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
         profileId: m.profileId,
         avatarPath: m.avatarPath,
         isOnline: m.isOnline,
-        roleLabel: roomMemberRoleSubtitle(m.role),
+        roleLabel: roomMemberRoleSubtitle(m.role, l10n),
         statusNote: _membershipNote(m),
         onWrite: () {
           Navigator.of(rowContext).maybePop();
           final open = widget.onOpenProfileChat;
           if (open == null) {
-            _toast('Открыть переписку отсюда нельзя', danger: true);
+            _toast(l10n.desktopRoomNoOpenHere, danger: true);
             return;
           }
           open(m.profileId);
         },
         onCopyId: () {
           Clipboard.setData(ClipboardData(text: m.profileId));
-          _toast('ID скопирован');
+          _toast(l10n.desktopRoomIdCopied);
         },
       ),
     );
@@ -475,8 +478,8 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
   /// Карточка предлагает написать человеку; если он ещё ждёт одобрения или
   /// уже заблокирован, молчать об этом нельзя.
   String? _membershipNote(RoomMember m) {
-    if (m.isPending) return 'Ждёт одобрения';
-    if (m.isBanned) return 'Заблокирован';
+    if (m.isPending) return l10n.desktopRoomAwaiting;
+    if (m.isBanned) return l10n.desktopRoomBlocked;
     return null;
   }
 
@@ -497,11 +500,11 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
     if (!hadLink && result.ok) unawaited(_loadInviteLinks());
     if (!mounted) return;
     if (!result.ok) {
-      _toast(result.error ?? 'Не удалось', danger: true);
+      _toast(result.error ?? l10n.desktopCallFailed, danger: true);
       return;
     }
     // Та же подпись, что у копирования любой строки в этой панели.
-    _toast('Скопировано');
+    _toast(l10n.desktopRoomCopied);
   }
 
   /// Человеческий текст отказа — тем же разбором, что и на телефоне.
@@ -582,7 +585,7 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
     if (roles.isNotEmpty) {
       sections.add(<CtxMenuItem>[
         CtxMenuItem(
-          label: 'Изменить роль',
+          label: l10n.desktopRoomChangeRole,
           icon: FluentIcons.shield_24_regular,
           onTap: () => unawaited(_pickRole(member, roles)),
         ),
@@ -591,20 +594,20 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
     final danger = <CtxMenuItem>[
       if (canTransfer)
         CtxMenuItem(
-          label: 'Передать владение',
+          label: l10n.desktopRoomTransfer,
           icon: FluentIcons.key_24_regular,
           onTap: () => unawaited(_transferOwnership(member)),
         ),
       if (canBan)
         CtxMenuItem(
-          label: 'Заблокировать',
+          label: l10n.desktopRoomBlockMember,
           icon: FluentIcons.shield_dismiss_24_regular,
           onTap: () => unawaited(_banMember(member)),
           isDanger: true,
         ),
       if (canRemove)
         CtxMenuItem(
-          label: 'Исключить',
+          label: l10n.desktopRoomKick,
           icon: FluentIcons.person_delete_24_regular,
           onTap: () => unawaited(_removeMember(member)),
           isDanger: true,
@@ -617,7 +620,7 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
   Future<void> _pickRole(RoomMember member, List<RoomMemberRole> roles) async {
     final picked = await DesktopDialog.show<RoomMemberRole>(
       context,
-      title: 'Изменить роль',
+      title: l10n.desktopRoomChangeRole,
       size: DDialogSize.small,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -625,7 +628,7 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
         children: [
           for (final role in roles) ...[
             DesktopButton(
-              label: roomMemberRoleLabelRu(role),
+              label: roomMemberRoleLabelRu(role, l10n),
               // Текущая роль выделена: человек должен видеть, где он стоит,
               // до того как нажмёт.
               kind: role == member.role
@@ -639,7 +642,7 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
         ],
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(),
       ),
     );
@@ -655,11 +658,10 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
 
   Future<void> _removeMember(RoomMember member) async {
     final ok = await _confirm(
-      title: 'Исключить участника?',
+      title: l10n.desktopRoomKickTitle,
       body:
-          '${_memberName(member)} потеряет доступ к комнате. Вернуть его можно '
-          'новым приглашением.',
-      okLabel: 'Исключить',
+          l10n.desktopRoomKickBody(_memberName(member)),
+      okLabel: l10n.desktopRoomKick,
       danger: true,
     );
     if (ok != true) return;
@@ -673,11 +675,10 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
 
   Future<void> _banMember(RoomMember member) async {
     final ok = await _confirm(
-      title: 'Заблокировать участника?',
+      title: l10n.desktopRoomBlockTitle,
       body:
-          '${_memberName(member)} не сможет вернуться в комнату даже по '
-          'приглашению, пока блокировку не снимут.',
-      okLabel: 'Заблокировать',
+          l10n.desktopRoomBlockBody(_memberName(member)),
+      okLabel: l10n.desktopRoomBlockMember,
       danger: true,
     );
     if (ok != true) return;
@@ -702,11 +703,10 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
     final ok = await _confirm(
       // 🔴 Единственное НЕОБРАТИМОЕ действие в этой панели: владельцем станет
       // другой человек, и вернуть себе комнату он должен будет сам.
-      title: 'Передать владение комнатой?',
+      title: l10n.desktopRoomTransferTitle,
       body:
-          '${_memberName(member)} станет владельцем, а вы — администратором. '
-          'Отменить это сможет только новый владелец.',
-      okLabel: 'Передать',
+          l10n.desktopRoomTransferBody(_memberName(member)),
+      okLabel: l10n.desktopRoomTransferAction,
       danger: true,
     );
     if (ok != true) return;
@@ -766,7 +766,7 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _pinned = !next);
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
@@ -783,34 +783,34 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _archived = !next);
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
   Future<void> _clearHistory() async {
     final ok = await _confirm(
-      title: 'Очистить историю?',
-      body: 'Все сообщения комнаты на этом устройстве будут удалены.',
-      okLabel: 'Очистить',
+      title: l10n.desktopRoomClearTitle,
+      body: l10n.desktopRoomClearBody,
+      okLabel: l10n.desktopChatsClear,
       danger: true,
     );
     if (ok != true) return;
     try {
       await widget.controller.clearChatHistory(convoId: _groupId);
       if (!mounted) return;
-      _toast('История очищена');
+      _toast(l10n.desktopChatsHistoryCleared);
     } catch (e) {
       if (!mounted) return;
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
   Future<void> _leaveRoom() async {
     final ok = await _confirm(
-      title: 'Покинуть комнату?',
+      title: l10n.desktopRoomLeaveTitle,
       body:
-          'Вы перестанете получать сообщения. Чтобы вернуться, понадобится новое приглашение.',
-      okLabel: 'Покинуть',
+          l10n.desktopRoomLeaveBody,
+      okLabel: l10n.desktopRoomLeave,
       danger: true,
     );
     if (ok != true) return;
@@ -820,7 +820,7 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
       widget.onClose();
     } catch (e) {
       if (!mounted) return;
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
@@ -848,7 +848,7 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
               child: Text(
-                'Отмена',
+                l10n.cancel,
                 style: DType.label.copyWith(color: cc.textPrimary),
               ),
             ),
@@ -909,34 +909,34 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
       [
         if (_canManageInvites)
           CtxMenuItem(
-            label: 'Пригласить',
+            label: l10n.desktopRoomInvite,
             icon: FluentIcons.person_add_24_regular,
             onTap: _invite,
           ),
         CtxMenuItem(
-          label: 'Копировать ID комнаты',
+          label: l10n.desktopRoomCopyId,
           icon: FluentIcons.copy_24_regular,
           onTap: () {
             Clipboard.setData(ClipboardData(text: _groupId));
-            _toast('ID скопирован');
+            _toast(l10n.desktopRoomIdCopied);
           },
         ),
         CtxMenuItem(
-          label: _muted ? 'Включить уведомления' : 'Отключить уведомления',
+          label: _muted ? l10n.unmuteNotifications : l10n.desktopRoomMuteOff,
           icon: _muted
               ? FluentIcons.alert_24_regular
               : FluentIcons.alert_off_24_regular,
           onTap: _toggleMute,
         ),
         CtxMenuItem(
-          label: _pinned ? 'Убрать из избранного' : 'В избранное',
+          label: _pinned ? l10n.desktopListRemoveFavourite : l10n.desktopListAddFavourite,
           icon: _pinned
               ? FluentIcons.pin_off_24_regular
               : FluentIcons.pin_24_regular,
           onTap: _togglePinned,
         ),
         CtxMenuItem(
-          label: _archived ? 'Вернуть из архива' : 'В архив',
+          label: _archived ? l10n.desktopRoomUnarchive : l10n.desktopListArchive,
           icon: _archived
               ? FluentIcons.archive_arrow_back_24_regular
               : FluentIcons.archive_24_regular,
@@ -951,13 +951,13 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
           onTap: _report,
         ),
         CtxMenuItem(
-          label: 'Очистить историю',
+          label: l10n.clearHistory,
           icon: FluentIcons.broom_24_regular,
           onTap: _clearHistory,
           isDanger: true,
         ),
         CtxMenuItem(
-          label: 'Покинуть комнату',
+          label: l10n.desktopRoomLeaveRoom,
           icon: FluentIcons.sign_out_24_regular,
           onTap: _leaveRoom,
           isDanger: true,
@@ -980,10 +980,11 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final convo = widget.conversation;
-    final title = convo.title.isEmpty ? 'Без названия' : convo.title;
+    final title = convo.title.isEmpty ? l10n.desktopRoomUntitled : convo.title;
     final memberCount = _members.length;
-    final memberText = _formatMemberCount(memberCount);
+    final memberText = _formatMemberCount(memberCount, l10n);
     final description = _settings?.description?.trim() ?? '';
     final avatarPath = convo.avatarPath?.trim() ?? '';
     final hasAvatarFile =
@@ -1015,7 +1016,7 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
               DetailsHeadline(
                 name: title,
                 cover: coverWidgetFor(widget.conversation.coverId),
-                presence: !_room.hasLoaded ? 'Загрузка…' : memberText,
+                presence: !_room.hasLoaded ? l10n.desktopServerBackupLoading : memberText,
                 emojiStatus: widget.conversation.emojiStatus,
                 premiumBadge: widget.conversation.premiumBadge,
                 frameId: widget.conversation.frameId,
@@ -1024,7 +1025,7 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
                 // на сервере такой комнаты нет, и запрос вернёт 404. Кнопки
                 // там нет вовсе — см. [isDemoRoomId].
                 onShare: isDemoRoomId(_groupId) ? null : _invite,
-                shareTooltip: 'Скопировать приглашение',
+                shareTooltip: l10n.desktopRoomCopyInvite,
                 menuSections: _menuSections(),
                 avatar: HoverListener(
                   onTap: () => showAvatarPreviewDialog(
@@ -1059,18 +1060,18 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
                     icon: _muted
                         ? FluentIcons.alert_off_24_regular
                         : FluentIcons.alert_24_regular,
-                    label: _muted ? 'Без звука' : 'Звук',
+                    label: _muted ? l10n.desktopChatsSoundOff : l10n.desktopRoomSound,
                     onPressed: _toggleMute,
                     active: _muted,
                   ),
                   DetailsActionItem(
                     icon: FluentIcons.broom_24_regular,
-                    label: 'Очистить',
+                    label: l10n.desktopChatsClear,
                     onPressed: _clearHistory,
                   ),
                   DetailsActionItem(
                     icon: FluentIcons.sign_out_24_regular,
-                    label: 'Выйти',
+                    label: l10n.desktopCallLeave,
                     onPressed: _leaveRoom,
                     danger: true,
                   ),
@@ -1082,7 +1083,11 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
               // в самом низу: чтобы дойти до медиа, нужно было проехать мимо
               // всех участников. См. [DetailsTabs].
               DetailsTabs(
-                tabs: const ['Инфо', 'Участники', 'Медиа'],
+                tabs: [
+                  l10n.desktopRoomTabInfo,
+                  l10n.desktopRoomTabMembers,
+                  l10n.desktopRoomTabMedia,
+                ],
                 index: _tab,
                 onChanged: (i) => setState(() => _tab = i),
               ),
@@ -1128,10 +1133,10 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
             // его и ищут.
             DetailsListSection(
               title: widget.topics.isEmpty
-                  ? 'ТЕМЫ'
-                  : 'ТЕМЫ · ${widget.topics.length + 1}',
+                  ? l10n.desktopRoomTopics
+                  : l10n.desktopRoomTopicsCount(widget.topics.length + 1),
               actionIcon: FluentIcons.add_24_regular,
-              actionTooltip: 'Новая тема',
+              actionTooltip: l10n.desktopChatsNewTopic,
               // У комнаты БЕЗ тем значка в заголовке нет: там внизу стоит
               // строка со словами «Новая тема», и два входа в одно действие
               // рядом друг с другом читаются как два разных действия.
@@ -1169,11 +1174,11 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
             ),
           if (description.isNotEmpty)
             DetailsInfoSection(
-              title: 'Описание',
+              title: l10n.desktopRoomDescription,
               children: [
                 DetailsInfoRow(
                   icon: FluentIcons.info_24_regular,
-                  label: 'Описание',
+                  label: l10n.desktopRoomDescription,
                   value: description,
                   multiline: true,
                 ),
@@ -1188,7 +1193,7 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
           //
           // Это та же самая панель и та же самая запись — не копия.
           DetailsInfoSection(
-            title: 'ЗАМЕТКИ',
+            title: l10n.desktopRoomNotes,
             children: [
               RoomNotesPane(
                 convoId: _groupId,
@@ -1199,11 +1204,11 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
             ],
           ),
           DetailsInfoSection(
-            title: 'Информация',
+            title: l10n.desktopRoomInformation,
             children: [
               DetailsInfoRow(
                 icon: FluentIcons.people_24_regular,
-                label: 'Участники',
+                label: l10n.desktopRoomTabMembers,
                 value: memberText,
               ),
               DetailsInfoRow(
@@ -1211,14 +1216,14 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
                 // делать: «копировать» теперь рисуется справа само, и два
                 // одинаковых значка в одной строке читались бы как ошибка.
                 icon: FluentIcons.people_team_24_regular,
-                label: 'ID комнаты',
+                label: l10n.desktopRoomId,
                 value: _groupId,
                 copyValue: _groupId,
               ),
               if (inviteUrl != null && inviteUrl.isNotEmpty)
                 DetailsInfoRow(
                   icon: FluentIcons.link_24_regular,
-                  label: 'Ссылка-приглашение · нажмите, чтобы скопировать',
+                  label: l10n.desktopRoomInviteLink,
                   // Показываем узнаваемое начало, копируем ссылку целиком:
                   // см. [DetailsInfoRow.shortUrl]. Полная ссылка занимала в
                   // панели пять строк — больше, чем весь остальной раздел.
@@ -1229,19 +1234,19 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
           ),
           const SizedBox(height: DSpace.s),
           DetailsInfoSection(
-            title: 'Чат',
+            title: l10n.contactDetailsChat,
             children: [
               DetailsToggleRow(
                 icon: FluentIcons.pin_24_regular,
-                label: 'В избранное',
-                subtitle: 'Плитка на рейке и место вверху списка',
+                label: l10n.desktopListAddFavourite,
+                subtitle: l10n.desktopRoomFavouriteHint,
                 value: _pinned,
                 onChanged: (_) => _togglePinned(),
               ),
               DetailsToggleRow(
                 icon: FluentIcons.archive_24_regular,
-                label: 'В архив',
-                subtitle: 'Скрыть комнату из основного списка',
+                label: l10n.desktopListArchive,
+                subtitle: l10n.desktopRoomArchiveHint,
                 value: _archived,
                 onChanged: (_) => _toggleArchived(),
               ),
@@ -1308,16 +1313,11 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
     );
   }
 
-  String _formatMemberCount(int n) {
-    if (n == 0) return 'Нет участников';
-    final mod10 = n % 10;
-    final mod100 = n % 100;
-    if (mod10 == 1 && mod100 != 11) return '$n участник';
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
-      return '$n участника';
-    }
-    return '$n участников';
-  }
+  /// 🔴 Русские формы числительного считались ЗДЕСЬ, вручную. Теперь их
+  /// берёт правило множественного числа из переводов — в каждом языке своё,
+  /// а не подогнанное под русское.
+  String _formatMemberCount(int n, AppLocalizations l10n) =>
+      n == 0 ? l10n.desktopRoomNoMembers : l10n.desktopRoomMembersCount(n);
 }
 
 class _MembersSection extends StatelessWidget {
@@ -1357,6 +1357,7 @@ class _MembersSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
 
     // 🔴 УЧАСТНИКИ РАЗЛОЖЕНЫ ПО ПРИСУТСТВИЮ, А НЕ СЛОЖЕНЫ В ОДНУ КУЧУ.
@@ -1435,14 +1436,14 @@ class _MembersSection extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.all(DSpace.m),
           child: Text(
-            hasQuery ? 'Никто не найден' : 'Список участников недоступен.',
+            hasQuery ? l10n.desktopRoomNobodyFound : l10n.desktopRoomMembersUnavailable,
             style: DType.caption.copyWith(color: c.textSecondary),
           ),
         ),
       );
     } else if (grouped) {
       if (call.isNotEmpty) {
-        children.add(_GroupHeading(label: 'В СОЗВОНЕ', count: call.length));
+        children.add(_GroupHeading(label: l10n.desktopRoomInCall, count: call.length));
         children.addAll(
           call.map(
             (m) => _MemberRow(
@@ -1455,7 +1456,7 @@ class _MembersSection extends StatelessWidget {
         );
       }
       if (online.isNotEmpty) {
-        children.add(_GroupHeading(label: 'В СЕТИ', count: online.length));
+        children.add(_GroupHeading(label: l10n.desktopRoomOnline, count: online.length));
         children.addAll(
           online.map(
             (m) => _MemberRow(
@@ -1467,7 +1468,7 @@ class _MembersSection extends StatelessWidget {
         );
       }
       if (offline.isNotEmpty) {
-        children.add(_GroupHeading(label: 'НЕ В СЕТИ', count: offline.length));
+        children.add(_GroupHeading(label: l10n.desktopRoomOffline, count: offline.length));
         children.addAll(
           visibleOffline.map(
             (m) => _MemberRow(
@@ -1515,7 +1516,7 @@ class _MembersSection extends StatelessWidget {
                   // Было «управление с телефона» — с 13.09 это неправда:
                   // управление здесь же. Осталось сказать, как добраться до
                   // остальных, а не куда идти за возможностями.
-                  'Ещё $hiddenTail — найдите поиском выше',
+                  l10n.desktopRoomMoreHidden(hiddenTail),
                   style: DType.caption.copyWith(color: c.textSecondary),
                 ),
               ),
@@ -1562,6 +1563,7 @@ class _SearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -1577,7 +1579,7 @@ class _SearchField extends StatelessWidget {
           style: DType.body.copyWith(color: c.textPrimary),
           cursorColor: c.accentPrimary,
           decoration: InputDecoration(
-            hintText: 'Поиск участника',
+            hintText: l10n.desktopRoomSearchMember,
             hintStyle: DType.body.copyWith(color: c.textSecondary),
             prefixIcon: Icon(
               FluentIcons.search_24_regular,
@@ -1600,7 +1602,7 @@ class _SearchField extends StatelessWidget {
                     minWidth: 28,
                     minHeight: 28,
                   ),
-                  tooltip: 'Очистить',
+                  tooltip: l10n.desktopChatsClear,
                   icon: Icon(
                     FluentIcons.dismiss_circle_24_regular,
                     color: c.textSecondary,
@@ -1670,11 +1672,12 @@ class _MemberRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final name = member.displayName.trim().isEmpty
         ? member.profileId
         : member.displayName.trim();
-    final role = roomMemberRoleSubtitle(member.role);
+    final role = roomMemberRoleSubtitle(member.role, l10n);
     final hasMenu = menuSections.isNotEmpty;
     return HoverListener(
       cursor: SystemMouseCursors.click,
@@ -1732,7 +1735,7 @@ class _MemberRow extends StatelessWidget {
                     // заглядывают во время созвона.
                     if (call?.screenShareEnabled ?? false)
                       Text(
-                        'показывает экран',
+                        l10n.desktopCallSharingShort,
                         style: DType.caption.copyWith(color: c.success),
                       )
                     else if (role != null)
@@ -1849,14 +1852,15 @@ class _PendingSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return DetailsInfoSection(
-      title: 'Заявки на вступление',
+      title: l10n.desktopRoomJoinRequests,
       children: <Widget>[
         for (final m in members)
           _DecisionRow(
             member: m,
-            primaryLabel: 'Принять',
-            secondaryLabel: 'Отклонить',
+            primaryLabel: l10n.desktopRoomAccept,
+            secondaryLabel: l10n.desktopRoomDecline,
             onPrimary: () => onApprove(m),
             onSecondary: () => onDecline(m),
           ),
@@ -1874,13 +1878,14 @@ class _BannedSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return DetailsInfoSection(
-      title: 'Заблокированные',
+      title: l10n.desktopBlockedTitle,
       children: <Widget>[
         for (final m in members)
           _DecisionRow(
             member: m,
-            primaryLabel: 'Разблокировать',
+            primaryLabel: l10n.desktopUnblockAction,
             onPrimary: () => onUnban(m),
           ),
       ],
@@ -1949,20 +1954,20 @@ class _DecisionRow extends StatelessWidget {
 }
 
 /// Название роли — для ВЫБОРА, где безымянных вариантов быть не может.
-String roomMemberRoleLabelRu(RoomMemberRole role) {
+String roomMemberRoleLabelRu(RoomMemberRole role, AppLocalizations l10n) {
   switch (role) {
     case RoomMemberRole.owner:
-      return 'Владелец';
+      return l10n.desktopRoomRoleOwner;
     case RoomMemberRole.admin:
-      return 'Администратор';
+      return l10n.desktopRoomRoleAdmin;
     case RoomMemberRole.moderator:
-      return 'Модератор';
+      return l10n.desktopRoomRoleModerator;
     case RoomMemberRole.member:
-      return 'Участник';
+      return l10n.desktopChatsMember;
     case RoomMemberRole.restricted:
-      return 'Ограниченный';
+      return l10n.desktopRoomRoleRestricted;
     case RoomMemberRole.guest:
-      return 'Гость';
+      return l10n.desktopRoomRoleGuest;
   }
 }
 
@@ -1970,8 +1975,8 @@ String roomMemberRoleLabelRu(RoomMemberRole role) {
 ///
 /// У обычного участника её нет намеренно: подписать «Участник» каждого значит
 /// утопить в шуме тех немногих, у кого роль вправду есть.
-String? roomMemberRoleSubtitle(RoomMemberRole role) =>
-    role == RoomMemberRole.member ? null : roomMemberRoleLabelRu(role);
+String? roomMemberRoleSubtitle(RoomMemberRole role, AppLocalizations l10n) =>
+    role == RoomMemberRole.member ? null : roomMemberRoleLabelRu(role, l10n);
 
 /// Одна тема в списке правой панели.
 ///
@@ -1985,6 +1990,7 @@ class _CreateTopicRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return HoverListener(
       onTap: onTap,
@@ -2000,7 +2006,7 @@ class _CreateTopicRow extends StatelessWidget {
             Icon(FluentIcons.add_24_regular, size: 15, color: c.accentPrimary),
             const SizedBox(width: DSpace.s),
             Text(
-              'Новая тема',
+              l10n.desktopChatsNewTopic,
               style: DType.body.copyWith(
                 color: c.accentPrimary,
                 fontWeight: FontWeight.w600,
@@ -2044,8 +2050,9 @@ class _TopicRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
-    final time = desktopTimeLabel(lastActivityMs ?? 0);
+    final time = desktopTimeLabel(lastActivityMs ?? 0, l10n);
     return HoverListener(
       onTap: onTap,
       cursor: SystemMouseCursors.click,

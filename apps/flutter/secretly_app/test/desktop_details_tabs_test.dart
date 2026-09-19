@@ -14,6 +14,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/chat/details/details_info_section.dart';
@@ -21,6 +22,9 @@ import 'package:secretly_app/ui/desktop/chat/details/details_tabs.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
 
 Widget host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: DColors(
         colors: kDColorsDark,
         child: Scaffold(
@@ -91,8 +95,12 @@ void main() {
       expect(src.contains('IndexedStack('), isTrue,
           reason: 'вкладка обязана сохранять прокрутку, а не строиться заново');
     }
-    expect(room.contains("tabs: const ['Инфо', 'Участники', 'Медиа']"), isTrue);
-    expect(contact.contains("tabs: const ['Инфо', 'Медиа']"), isTrue);
+    // 19.09.2026: подписи вкладок уехали в переводы — проверяем ключи.
+    expect(room.contains('l10n.desktopRoomTabInfo'), isTrue);
+    expect(room.contains('l10n.desktopRoomTabMembers'), isTrue);
+    expect(room.contains('l10n.desktopRoomTabMedia'), isTrue);
+    expect(contact.contains('l10n.desktopRoomTabInfo'), isTrue);
+    expect(contact.contains('l10n.desktopRoomTabMedia'), isTrue);
     // Галерея лежит ВНУТРИ своей вкладки, а не в конце общей ленты.
     expect(
       room.contains('Widget _mediaTab()') &&

@@ -25,6 +25,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/widgets/avatar_initials.dart';
@@ -75,6 +76,9 @@ void main() {
     for (final n in names) {
       await t.pumpWidget(
         MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: Center(
               child: Text(AvatarInitials.label(displayName: n)),

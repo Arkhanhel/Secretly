@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../../l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -66,6 +67,8 @@ class DesktopMediaGallery extends StatefulWidget {
 }
 
 class _DesktopMediaGalleryState extends State<DesktopMediaGallery> {
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   Future<ConversationMediaGalleryVm>? _future;
 
   @override
@@ -86,6 +89,7 @@ class _DesktopMediaGalleryState extends State<DesktopMediaGallery> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return DefaultTabController(
       length: 4,
@@ -118,11 +122,11 @@ class _DesktopMediaGalleryState extends State<DesktopMediaGallery> {
             // ней, а не переключателем.
             dividerColor: c.borderSubtle,
             dividerHeight: 1,
-            tabs: const [
-              _GalleryTab('Медиа'),
-              _GalleryTab('Файлы'),
-              _GalleryTab('Ссылки'),
-              _GalleryTab('Аудио'),
+            tabs: [
+              _GalleryTab(l10n.desktopGalleryMedia),
+              _GalleryTab(l10n.desktopGalleryFiles),
+              _GalleryTab(l10n.desktopGalleryLinks),
+              _GalleryTab(l10n.desktopChatsAudio),
             ],
           ),
           SizedBox(
@@ -154,19 +158,19 @@ class _DesktopMediaGalleryState extends State<DesktopMediaGallery> {
                     _DesktopMediaGrid(
                       items: media,
                       controller: widget.controller,
-                      emptyLabel: 'Нет медиа',
+                      emptyLabel: l10n.desktopGalleryNoMedia,
                     ),
                     _DesktopFilesList(
                       items: vm.files,
                       controller: widget.controller,
-                      emptyLabel: 'Нет файлов',
+                      emptyLabel: l10n.desktopGalleryNoFiles,
                       kind: _ListKind.file,
                     ),
                     _DesktopLinksList(items: vm.links),
                     _DesktopFilesList(
                       items: vm.music,
                       controller: widget.controller,
-                      emptyLabel: 'Нет аудио',
+                      emptyLabel: l10n.desktopGalleryNoAudio,
                       kind: _ListKind.audio,
                     ),
                   ],
@@ -216,11 +220,12 @@ class _DesktopLinksList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     if (items.isEmpty) {
       return Center(
         child: Text(
-          'Нет ссылок',
+          l10n.desktopGalleryNoLinks,
           style: DType.body.copyWith(color: c.textSecondary),
         ),
       );
@@ -377,6 +382,8 @@ class _MediaTile extends StatefulWidget {
 }
 
 class _MediaTileState extends State<_MediaTile> {
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   File? _file;
   _TilePhase _phase = _TilePhase.loading;
 
@@ -521,10 +528,11 @@ class _MediaTileState extends State<_MediaTile> {
   }
 
   Future<void> _openInDefaultApp(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
     final f = await loadConversationAttachmentFile(controller, item.attachment);
     if (!context.mounted) return;
     if (f == null || !f.existsSync()) {
-      _toast(context, 'Файл недоступен', danger: true);
+      _toast(context, l10n.desktopChatsFileUnavailable, danger: true);
       return;
     }
     try {
@@ -533,19 +541,20 @@ class _MediaTileState extends State<_MediaTile> {
         mode: LaunchMode.externalApplication,
       );
       if (!ok && context.mounted) {
-        _toast(context, 'Не удалось открыть файл', danger: true);
+        _toast(context, l10n.desktopChatsOpenFailed, danger: true);
       }
     } catch (e) {
       if (!context.mounted) return;
-      _toast(context, 'Не удалось открыть: $e', danger: true);
+      _toast(context, l10n.desktopChatsOpenFailedShort('$e'), danger: true);
     }
   }
 
   Future<void> _revealInFinder(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
     final f = await loadConversationAttachmentFile(controller, item.attachment);
     if (!context.mounted) return;
     if (f == null || !f.existsSync()) {
-      _toast(context, 'Файл недоступен', danger: true);
+      _toast(context, l10n.desktopChatsFileUnavailable, danger: true);
       return;
     }
     try {
@@ -559,37 +568,39 @@ class _MediaTileState extends State<_MediaTile> {
       }
     } catch (e) {
       if (!context.mounted) return;
-      _toast(context, 'Не удалось: $e', danger: true);
+      _toast(context, l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
   Future<void> _copyPath(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
     final f = await loadConversationAttachmentFile(controller, item.attachment);
     if (!context.mounted) return;
     if (f == null) {
-      _toast(context, 'Файл недоступен', danger: true);
+      _toast(context, l10n.desktopChatsFileUnavailable, danger: true);
       return;
     }
     await Clipboard.setData(ClipboardData(text: f.path));
     if (!context.mounted) return;
-    _toast(context, 'Путь скопирован');
+    _toast(context, l10n.desktopGalleryPathCopied);
   }
 
   Future<void> _openMenu(BuildContext context, Offset globalPos) async {
+    final l10n = AppLocalizations.of(context)!;
     await ContextMenu.show(
       context,
       globalPosition: globalPos,
       sections: <List<CtxMenuItem>>[
         [
           CtxMenuItem(
-            label: _isVideo ? 'Открыть' : 'Просмотр',
+            label: _isVideo ? l10n.desktopGalleryOpen : l10n.desktopGalleryView,
             icon: _isVideo
                 ? FluentIcons.open_24_regular
                 : FluentIcons.eye_24_regular,
             onTap: () => _primaryTap(context),
           ),
           CtxMenuItem(
-            label: 'Открыть в системе',
+            label: l10n.desktopGalleryOpenInSystem,
             icon: FluentIcons.window_apps_24_regular,
             onTap: () => _openInDefaultApp(context),
           ),
@@ -597,15 +608,15 @@ class _MediaTileState extends State<_MediaTile> {
         [
           CtxMenuItem(
             label: Platform.isMacOS
-                ? 'Показать в Finder'
+                ? l10n.desktopGalleryRevealFinder
                 : (Platform.isWindows
-                      ? 'Показать в проводнике'
-                      : 'Открыть папку'),
+                      ? l10n.desktopGalleryRevealExplorer
+                      : l10n.desktopGalleryOpenFolder),
             icon: FluentIcons.folder_open_24_regular,
             onTap: () => _revealInFinder(context),
           ),
           CtxMenuItem(
-            label: 'Копировать путь',
+            label: l10n.desktopGalleryCopyPath,
             icon: FluentIcons.copy_24_regular,
             onTap: () => _copyPath(context),
           ),
@@ -659,6 +670,7 @@ class _DesktopFilesList extends StatelessWidget {
 }
 
 class _FileTile extends StatelessWidget {
+
   const _FileTile({
     required this.item,
     required this.controller,
@@ -671,6 +683,7 @@ class _FileTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final mime = (item.attachment.mime ?? '').toLowerCase();
     final isVoice =
@@ -679,13 +692,13 @@ class _FileTile extends StatelessWidget {
         mime.startsWith('audio/webm') ||
         mime == 'audio/3gpp' ||
         mime == 'audio/amr';
-    final title = _title(mime, isVoice);
+    final title = _title(mime, isVoice, l10n);
     final dt = DateTime.fromMillisecondsSinceEpoch(item.createdAtMs);
     final hh = dt.hour.toString().padLeft(2, '0');
     final mm = dt.minute.toString().padLeft(2, '0');
     final dd = dt.day.toString().padLeft(2, '0');
     final mo = dt.month.toString().padLeft(2, '0');
-    final size = _formatSize(item.attachment.sizeBytes);
+    final size = _formatSize(item.attachment.sizeBytes, l10n);
     final icon = kind == _ListKind.audio
         ? FluentIcons.music_note_2_24_regular
         : FluentIcons.document_24_regular;
@@ -747,10 +760,11 @@ class _FileTile extends StatelessWidget {
   }
 
   Future<void> _openInDefaultApp(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
     final f = await loadConversationAttachmentFile(controller, item.attachment);
     if (!context.mounted) return;
     if (f == null || !f.existsSync()) {
-      _toast(context, 'Файл недоступен', danger: true);
+      _toast(context, l10n.desktopChatsFileUnavailable, danger: true);
       return;
     }
     try {
@@ -759,19 +773,20 @@ class _FileTile extends StatelessWidget {
         mode: LaunchMode.externalApplication,
       );
       if (!ok && context.mounted) {
-        _toast(context, 'Не удалось открыть файл', danger: true);
+        _toast(context, l10n.desktopChatsOpenFailed, danger: true);
       }
     } catch (e) {
       if (!context.mounted) return;
-      _toast(context, 'Не удалось открыть: $e', danger: true);
+      _toast(context, l10n.desktopChatsOpenFailedShort('$e'), danger: true);
     }
   }
 
   Future<void> _revealInFinder(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
     final f = await loadConversationAttachmentFile(controller, item.attachment);
     if (!context.mounted) return;
     if (f == null || !f.existsSync()) {
-      _toast(context, 'Файл недоступен', danger: true);
+      _toast(context, l10n.desktopChatsFileUnavailable, danger: true);
       return;
     }
     try {
@@ -784,30 +799,32 @@ class _FileTile extends StatelessWidget {
       }
     } catch (e) {
       if (!context.mounted) return;
-      _toast(context, 'Не удалось: $e', danger: true);
+      _toast(context, l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
   Future<void> _copyPath(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
     final f = await loadConversationAttachmentFile(controller, item.attachment);
     if (!context.mounted) return;
     if (f == null) {
-      _toast(context, 'Файл недоступен', danger: true);
+      _toast(context, l10n.desktopChatsFileUnavailable, danger: true);
       return;
     }
     await Clipboard.setData(ClipboardData(text: f.path));
     if (!context.mounted) return;
-    _toast(context, 'Путь скопирован');
+    _toast(context, l10n.desktopGalleryPathCopied);
   }
 
   Future<void> _openMenu(BuildContext context, Offset globalPos) async {
+    final l10n = AppLocalizations.of(context)!;
     await ContextMenu.show(
       context,
       globalPosition: globalPos,
       sections: <List<CtxMenuItem>>[
         [
           CtxMenuItem(
-            label: 'Открыть',
+            label: l10n.desktopGalleryOpen,
             icon: FluentIcons.open_24_regular,
             onTap: () => _openInDefaultApp(context),
           ),
@@ -815,15 +832,15 @@ class _FileTile extends StatelessWidget {
         [
           CtxMenuItem(
             label: Platform.isMacOS
-                ? 'Показать в Finder'
+                ? l10n.desktopGalleryRevealFinder
                 : (Platform.isWindows
-                      ? 'Показать в проводнике'
-                      : 'Открыть папку'),
+                      ? l10n.desktopGalleryRevealExplorer
+                      : l10n.desktopGalleryOpenFolder),
             icon: FluentIcons.folder_open_24_regular,
             onTap: () => _revealInFinder(context),
           ),
           CtxMenuItem(
-            label: 'Копировать путь',
+            label: l10n.desktopGalleryCopyPath,
             icon: FluentIcons.copy_24_regular,
             onTap: () => _copyPath(context),
           ),
@@ -832,25 +849,30 @@ class _FileTile extends StatelessWidget {
     );
   }
 
-  String _title(String mime, bool isVoice) {
+  String _title(String mime, bool isVoice, AppLocalizations l10n) {
     if (kind == _ListKind.audio) {
-      if (isVoice) return 'Голосовое сообщение';
-      return mime.isEmpty ? 'Аудио' : mime;
+      if (isVoice) return l10n.desktopChatsVoiceMessage;
+      return mime.isEmpty ? l10n.desktopChatsAudio : mime;
     }
-    return mime.isEmpty ? 'Файл' : mime;
+    return mime.isEmpty ? l10n.file : mime;
   }
 
-  String _formatSize(int bytes) {
-    if (bytes <= 0) return '0 Б';
-    const units = ['Б', 'КБ', 'МБ', 'ГБ'];
+  String _formatSize(int bytes, AppLocalizations l10n) {
+    if (bytes <= 0) return l10n.desktopGalleryZeroBytes;
     var u = 0;
     var v = bytes.toDouble();
-    while (v >= 1024 && u < units.length - 1) {
+    while (v >= 1024 && u < 3) {
       v /= 1024;
       u++;
     }
     final fmt = v >= 10 ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
-    return '$fmt ${units[u]}';
+    // Единица измерения — часть языка, а не приписка к числу.
+    return switch (u) {
+      0 => l10n.desktopGalleryBytes(fmt),
+      1 => l10n.desktopStorageKb(fmt),
+      2 => l10n.desktopStorageMb(fmt),
+      _ => l10n.desktopStorageGb(fmt),
+    };
   }
 }
 

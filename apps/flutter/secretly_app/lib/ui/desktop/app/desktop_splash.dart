@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 import '../design/tokens.dart';
@@ -15,6 +16,7 @@ class DesktopSplash extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Container(
       color: c.bg,
@@ -50,7 +52,7 @@ class DesktopSplash extends StatelessWidget {
           ),
           const SizedBox(height: DSpace.xs),
           Text(
-            'Загрузка профиля…',
+            l10n.desktopSplashLoading,
             style: DType.caption.copyWith(color: c.textSecondary),
           ),
           if (error != null) ...[

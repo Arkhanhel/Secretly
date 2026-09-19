@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -61,7 +62,7 @@ class Composer extends StatefulWidget {
     this.onClearContext,
     this.attachAnchorKey,
     this.emojiAnchorKey,
-    this.placeholder = 'Сообщение…',
+    this.placeholder,
     this.topicTitle,
     this.mentionTargets = const <DesktopMentionTarget>[],
     this.autofocus = false,
@@ -98,7 +99,8 @@ class Composer extends StatefulWidget {
   final VoidCallback? onClearContext;
   final GlobalKey? attachAnchorKey;
   final GlobalKey? emojiAnchorKey;
-  final String placeholder;
+  /// Пусто — берём подпись из переводов при отрисовке.
+  final String? placeholder;
 
   /// Тема, в которую уходит сообщение. `null` — «Общий» или личная переписка.
   ///
@@ -123,6 +125,9 @@ class Composer extends StatefulWidget {
 }
 
 class _ComposerState extends State<Composer> {
+  /// Подписи поля ввода.
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   final _focus = FocusNode();
   bool _hasText = false;
 
@@ -467,7 +472,7 @@ class _ComposerState extends State<Composer> {
         children: [
           DesktopIconButton(
             icon: FluentIcons.delete_24_regular,
-            tooltip: 'Отменить запись',
+            tooltip: l10n.desktopComposerCancelRec,
             onPressed: () => unawaited(_stopRecording(send: false)),
           ),
           const SizedBox(width: 8),
@@ -478,14 +483,14 @@ class _ComposerState extends State<Composer> {
           ),
           const SizedBox(width: 10),
           Text(
-            'Запись  ${_fmtRec(_recMs)}',
+            l10n.desktopComposerRecording(_fmtRec(_recMs)),
             style: DType.body.copyWith(color: c.textPrimary),
           ),
           const Spacer(),
           _RoundIcon(
             icon: FluentIcons.send_24_filled,
             color: c.accentPrimary,
-            tooltip: 'Отправить голосовое',
+            tooltip: l10n.desktopComposerSendVoice,
             onTap: () => unawaited(_stopRecording(send: true)),
           ),
         ],
@@ -495,6 +500,7 @@ class _ComposerState extends State<Composer> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return AnimatedContainer(
       duration: DMotion.fast,
@@ -582,7 +588,7 @@ class _ComposerState extends State<Composer> {
                           // именно плюс. Скрепка обещает только файл, плюс —
                           // всё, что можно добавить (фото, файл, и дальше).
                           icon: FluentIcons.add_24_regular,
-                          tooltip: 'Прикрепить',
+                          tooltip: l10n.desktopComposerAttach,
                           onPressed: widget.onAttach,
                         ),
                       ),
@@ -607,7 +613,7 @@ class _ComposerState extends State<Composer> {
                               decoration: InputDecoration(
                                 isCollapsed: true,
                                 border: InputBorder.none,
-                                hintText: widget.placeholder,
+                                hintText: widget.placeholder ?? l10n.desktopThreadMessageHint,
                                 hintStyle: DType.body.copyWith(
                                   color: c.textSecondary,
                                 ),
@@ -624,7 +630,7 @@ class _ComposerState extends State<Composer> {
                         child: DesktopIconButton(
                           key: widget.emojiAnchorKey,
                           icon: FluentIcons.emoji_24_regular,
-                          tooltip: 'Эмодзи и стикеры',
+                          tooltip: l10n.desktopComposerEmoji,
                           onPressed: widget.onEmoji,
                         ),
                       ),
@@ -660,7 +666,7 @@ class _ComposerState extends State<Composer> {
                               // голосовое на компьютере пишут не
                               // пятисекундное. Поэтому исправлена подпись, а
                               // не поведение.
-                              tooltip: 'Записать голосовое',
+                              tooltip: l10n.desktopComposerRecordVoice,
                               onTap: widget.onSendVoice != null
                                   ? () => unawaited(_startRecording())
                                   : widget.onVoice,
@@ -704,8 +710,8 @@ class _ComposerState extends State<Composer> {
                     valueListenable: DesktopUiPrefs.enterToSend,
                     builder: (ctx, enterToSend, _) => Text(
                       enterToSend
-                          ? 'Enter — отправить · Shift+Enter — перенос'
-                          : 'Enter — перенос · Shift+Enter — отправить',
+                          ? l10n.desktopComposerEnterSends
+                          : l10n.desktopComposerEnterNewline,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: DType.tiny.copyWith(color: c.textDisabled),
@@ -726,7 +732,7 @@ class _ComposerState extends State<Composer> {
                 // замка, то есть ровно туда, куда потянется тот, кто хочет
                 // проверить.
                 DesktopTooltip(
-                  message: 'Сквозное шифрование',
+                  message: l10n.desktopSecurityE2ee,
                   child: Icon(
                     FluentIcons.lock_closed_16_filled,
                     size: 13,
@@ -762,7 +768,7 @@ class _ComposerState extends State<Composer> {
         : FluentIcons.arrow_reply_24_regular;
     // Средняя точка, а не тире: в макете «Ответ · Игорь». Тире между словом
     // и именем читается как «Ответ минус Игорь».
-    final title = ctx.isEdit ? 'Редактирование' : 'Ответ · ${ctx.authorName}';
+    final title = ctx.isEdit ? l10n.desktopComposerEditing : l10n.desktopComposerReplyTo(ctx.authorName);
     return AnimatedSize(
       duration: DMotion.fast,
       child: Container(
@@ -835,7 +841,7 @@ class _ComposerState extends State<Composer> {
               const SizedBox(width: 9),
               DesktopIconButton(
                 icon: FluentIcons.dismiss_24_regular,
-                tooltip: 'Отменить',
+                tooltip: l10n.desktopComposerCancelAction,
                 size: 26,
                 iconSize: 16,
                 // · Скруглённый квадрат, а не таблетка (макет): значок стоит
@@ -876,12 +882,13 @@ class _SendButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final enabled = onTap != null;
     return DesktopTooltip(
       message: enabled
-          ? 'Отправить · Enter\nПравая кнопка — отправить позже'
-          : 'Сначала напишите сообщение',
+          ? l10n.desktopComposerSendHint
+          : l10n.desktopComposerWriteFirst,
       child: HoverListener(
         onTap: onTap,
         onSecondaryTapDown: (enabled && onScheduleTap != null)
@@ -989,6 +996,7 @@ class _TopicChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Container(
       height: 22,
@@ -1007,7 +1015,7 @@ class _TopicChip extends StatelessWidget {
           ),
           const SizedBox(width: 5),
           Text(
-            'в тему «$title»',
+            l10n.desktopComposerToTopic(title),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: DType.tiny.copyWith(color: c.textSecondary),

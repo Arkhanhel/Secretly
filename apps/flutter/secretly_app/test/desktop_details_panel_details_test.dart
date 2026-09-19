@@ -6,6 +6,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -13,6 +14,9 @@ import 'package:secretly_app/ui/desktop/chat/details/details_info_section.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
 
 Widget host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: DColors(
     colors: kDColorsDark,
     child: Scaffold(body: SizedBox(width: 330, child: child)),
@@ -76,7 +80,7 @@ void main() {
     final room = File(
       'lib/ui/desktop/chat/details/room_details_view.dart',
     ).readAsStringSync();
-    final i = room.indexOf("label: 'ID комнаты'");
+    final i = room.indexOf('label: l10n.desktopRoomId');
     expect(room.substring(i - 300, i).contains('copy_24_regular'), isFalse);
   });
 

@@ -65,7 +65,7 @@ void main() {
     final auth = _FakeAuth(succeeds: true);
     final svc = await serviceWith(auth);
 
-    final applied = await svc.setEnabled(true);
+    final applied = await svc.setEnabled(true, armReason: 'x');
 
     expect(applied, isTrue);
     expect(svc.enabled.value, isTrue);
@@ -77,7 +77,7 @@ void main() {
     final auth = _FakeAuth(succeeds: false);
     final svc = await serviceWith(auth);
 
-    final applied = await svc.setEnabled(true);
+    final applied = await svc.setEnabled(true, armReason: 'x');
 
     expect(applied, isFalse);
     expect(svc.enabled.value, isFalse);
@@ -88,7 +88,7 @@ void main() {
     final auth = _FakeAuth(missingPlugin: true);
     final svc = await serviceWith(auth);
 
-    final applied = await svc.setEnabled(true);
+    final applied = await svc.setEnabled(true, armReason: 'x');
 
     // This is the whole point: arming here would brick the app, because
     // requestUnlock could never succeed afterwards.
@@ -102,12 +102,12 @@ void main() {
   test('disarming never requires authentication', () async {
     final auth = _FakeAuth(succeeds: true);
     final svc = await serviceWith(auth);
-    await svc.setEnabled(true);
+    await svc.setEnabled(true, armReason: 'x');
     final callsAfterArming = auth.authenticateCalls;
 
     // Now make authentication impossible and disarm anyway.
     auth.missingPlugin = true;
-    final applied = await svc.setEnabled(false);
+    final applied = await svc.setEnabled(false, armReason: 'x');
 
     expect(applied, isTrue);
     expect(svc.enabled.value, isFalse);
@@ -119,15 +119,15 @@ void main() {
   test('unlocking clears the lock only on success', () async {
     final auth = _FakeAuth(succeeds: true);
     final svc = await serviceWith(auth);
-    await svc.setEnabled(true);
+    await svc.setEnabled(true, armReason: 'x');
     expect(svc.locked.value, isTrue);
 
     auth.succeeds = false;
-    expect(await svc.requestUnlock(), isFalse);
+    expect(await svc.requestUnlock(reason: 'x'), isFalse);
     expect(svc.locked.value, isTrue, reason: 'fail-closed');
 
     auth.succeeds = true;
-    expect(await svc.requestUnlock(), isTrue);
+    expect(await svc.requestUnlock(reason: 'x'), isTrue);
     expect(svc.locked.value, isFalse);
   });
 
@@ -136,7 +136,7 @@ void main() {
     final auth = _FakeAuth(succeeds: false);
     final svc = await serviceWith(auth);
 
-    await svc.setEnabled(true);
+    await svc.setEnabled(true, armReason: 'x');
 
     expect(svc.unlockUnavailable.value, isFalse,
         reason: 'user declined — the machine can still authenticate');

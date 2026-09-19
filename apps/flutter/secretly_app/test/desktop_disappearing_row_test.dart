@@ -24,7 +24,7 @@ void main() {
   ).readAsStringSync();
 
   test('· строка стала настройкой: название сверху, состояние снизу', () {
-    expect(view.contains("label: 'Исчезающие сообщения',"), isTrue);
+    expect(view.contains('label: l10n.desktopContactDisappearing,'), isTrue);
     expect(view.contains('subtitle: _autoDeleteLabel(),'), isTrue);
     // Строкой фактов она больше не строится.
     expect(view.contains("label: 'Автоудаление',\n                value:"), isFalse);
@@ -50,7 +50,7 @@ void main() {
     // В меню чата настройка называлась «Автоудаление», в панели — иначе. Два
     // имени у одной настройки человек читает как две разные.
     expect(view.contains("label: 'Автоудаление',"), isFalse);
-    expect(view.contains("return 'Выключено';"), isTrue);
+    expect(view.contains('return l10n.desktopContactOff;'), isTrue);
   });
 
   test('нажатие на строку-переключатель — добавочная возможность', () {

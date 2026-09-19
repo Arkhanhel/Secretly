@@ -20,6 +20,7 @@
 // macOS. If we ever wire `multi_window` we can host the same widget
 // inside a real NSWindow.
 
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -101,6 +102,8 @@ class DesktopPhotoViewer extends StatefulWidget {
 }
 
 class _DesktopPhotoViewerState extends State<DesktopPhotoViewer> {
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   late final PageController _page;
   late final FocusNode _focusNode;
   late int _index;
@@ -272,7 +275,7 @@ class _DesktopPhotoViewerState extends State<DesktopPhotoViewer> {
   Future<void> _copyToClipboard(DesktopPhotoItem item) async {
     final file = _files[item.attachment.blobId]?.file ?? await _resolve(item);
     if (file == null) {
-      _showToast('Файл недоступен');
+      _showToast(l10n.desktopChatsFileUnavailable);
       return;
     }
     // Flutter's `Clipboard` doesn't accept raw bytes — to interop with the
@@ -286,15 +289,15 @@ class _DesktopPhotoViewerState extends State<DesktopPhotoViewer> {
           '-e',
           'set the clipboard to (read (POSIX file "$esc") as «class PNGf»)',
         ]);
-        _showToast('Скопировано');
+        _showToast(l10n.desktopRoomCopied);
       } catch (e) {
-        _showToast('Не удалось скопировать: $e');
+        _showToast(l10n.desktopPhotoCopyFailed('$e'));
       }
       return;
     }
     // Fallback: copy the path so other apps can paste it.
     await Clipboard.setData(ClipboardData(text: file.path));
-    _showToast('Путь скопирован');
+    _showToast(l10n.desktopGalleryPathCopied);
   }
 
   Future<void> _saveAs(DesktopPhotoItem item) async {
@@ -306,16 +309,16 @@ class _DesktopPhotoViewerState extends State<DesktopPhotoViewer> {
     final outcome = await saveAttachmentAs(
       file: file,
       suggestedName: _suggestedFileName(item),
-      dialogTitle: 'Сохранить фото',
+      dialogTitle: l10n.desktopPhotoSave,
       type: FileType.image,
     );
     switch (outcome.result) {
       case AttachmentSaveResult.saved:
-        _showToast('Сохранено');
+        _showToast(l10n.desktopPhotoSaved);
       case AttachmentSaveResult.unavailable:
-        _showToast('Файл недоступен');
+        _showToast(l10n.desktopChatsFileUnavailable);
       case AttachmentSaveResult.failed:
-        _showToast('Не удалось сохранить: ${outcome.error}');
+        _showToast(l10n.desktopChatsSaveFailed('${outcome.error}'));
       case AttachmentSaveResult.cancelled:
         break;
     }
@@ -324,7 +327,7 @@ class _DesktopPhotoViewerState extends State<DesktopPhotoViewer> {
   Future<void> _revealInFinder(DesktopPhotoItem item) async {
     final file = _files[item.attachment.blobId]?.file ?? await _resolve(item);
     if (file == null) {
-      _showToast('Файл недоступен');
+      _showToast(l10n.desktopChatsFileUnavailable);
       return;
     }
     try {
@@ -338,7 +341,7 @@ class _DesktopPhotoViewerState extends State<DesktopPhotoViewer> {
         await launchUrl(Uri.file(file.parent.path));
       }
     } catch (e) {
-      _showToast('Не удалось показать в Finder: $e');
+      _showToast(l10n.desktopPhotoRevealFailed('$e'));
     }
   }
 
@@ -545,6 +548,7 @@ class _PhotoPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     // Fire the resolve future as a side effect on first build — the
     // parent will rebuild us with `state` populated once the future
     // completes.
@@ -574,7 +578,7 @@ class _PhotoPage extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              state!.error == null ? 'Загрузка…' : 'Не удалось загрузить',
+              state!.error == null ? l10n.desktopServerBackupLoading : l10n.desktopPhotoLoadFailed,
               style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
           ],
@@ -631,6 +635,7 @@ class _Toolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -671,39 +676,39 @@ class _Toolbar extends StatelessWidget {
           ),
           _ToolbarButton(
             icon: FluentIcons.zoom_out_24_regular,
-            tooltip: 'Уменьшить',
+            tooltip: l10n.desktopPhotoZoomOut,
             onTap: onZoomOut,
           ),
           _ToolbarButton(
             icon: FluentIcons.full_screen_minimize_24_regular,
-            tooltip: 'Сбросить масштаб',
+            tooltip: l10n.desktopPhotoZoomReset,
             onTap: onZoomReset,
           ),
           _ToolbarButton(
             icon: FluentIcons.zoom_in_24_regular,
-            tooltip: 'Увеличить',
+            tooltip: l10n.desktopPhotoZoomIn,
             onTap: onZoomIn,
           ),
           const SizedBox(width: 16),
           _ToolbarButton(
             icon: FluentIcons.copy_24_regular,
-            tooltip: 'Скопировать',
+            tooltip: l10n.desktopPhotoCopy,
             onTap: onCopy,
           ),
           _ToolbarButton(
             icon: FluentIcons.save_24_regular,
-            tooltip: 'Сохранить как…',
+            tooltip: l10n.desktopViewerSaveAs,
             onTap: onSave,
           ),
           _ToolbarButton(
             icon: FluentIcons.folder_24_regular,
-            tooltip: 'Показать в Finder',
+            tooltip: l10n.desktopGalleryRevealFinder,
             onTap: onReveal,
           ),
           const SizedBox(width: 16),
           _ToolbarButton(
             icon: FluentIcons.dismiss_24_regular,
-            tooltip: 'Закрыть (Esc)',
+            tooltip: l10n.desktopThreadCloseEsc,
             onTap: onClose,
           ),
         ],

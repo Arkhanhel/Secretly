@@ -31,6 +31,7 @@
 //     widget so the right-click `ContextMenu` can mount it above the menu
 //     items without the wrapper popover (mobile / Telegram parity).
 
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -571,6 +572,7 @@ class _ExpandedGridState extends State<_ExpandedGrid> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final searching = _q.isNotEmpty;
     return Column(
@@ -617,11 +619,12 @@ class _ExpandedGridState extends State<_ExpandedGrid> {
                           onChanged: (v) => setState(() => _q = v),
                           style: DType.caption.copyWith(color: c.textPrimary),
                           cursorColor: c.accentPrimary,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             isDense: true,
                             border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(vertical: 6),
-                            hintText: 'Поиск эмодзи…',
+                            contentPadding:
+                                const EdgeInsets.symmetric(vertical: 6),
+                            hintText: l10n.desktopEmojiSearchShort,
                           ),
                         ),
                       ),
@@ -662,6 +665,7 @@ class _ExpandedGridState extends State<_ExpandedGrid> {
   }
 
   List<Widget> _buildSlivers(DColorSet c, bool searching) {
+    final l10n = AppLocalizations.of(context)!;
     if (searching) {
       // PR3.10 (SPRINT2_AUDIT §15): sectioned search. Group matches by
       // their category slug so the user can tell `🐶 dog` from `🌭 hot dog`
@@ -676,7 +680,7 @@ class _ExpandedGridState extends State<_ExpandedGrid> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Ничего не найдено',
+                  l10n.desktopListNothingFound,
                   style: DType.caption.copyWith(color: c.textSecondary),
                 ),
               ),
@@ -688,19 +692,19 @@ class _ExpandedGridState extends State<_ExpandedGrid> {
       for (final slug in kDesktopNotoCategoryOrder) {
         final list = groups[slug];
         if (list == null || list.isEmpty) continue;
-        final label = kDesktopNotoCategoryLabelsRu[slug] ?? slug;
+        final label = desktopNotoCategoryLabel(slug, l10n);
         slivers.addAll(_sectionSlivers(c, label, list));
       }
       return slivers;
     }
     final slivers = <Widget>[];
     if (_recents.isNotEmpty) {
-      slivers.addAll(_sectionSlivers(c, 'Недавние', _recents));
+      slivers.addAll(_sectionSlivers(c, l10n.desktopEmojiRecents, _recents));
     }
     for (final slug in kDesktopNotoCategoryOrder) {
       final list = _bySlug[slug] ?? const <String>[];
       if (list.isEmpty) continue;
-      final label = kDesktopNotoCategoryLabelsRu[slug] ?? slug;
+      final label = desktopNotoCategoryLabel(slug, l10n);
       slivers.addAll(_sectionSlivers(c, label, list));
     }
     return slivers;
@@ -833,6 +837,7 @@ class _RailBtnState extends State<_RailBtn> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
@@ -841,7 +846,7 @@ class _RailBtnState extends State<_RailBtn> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: Tooltip(
-          message: kDesktopNotoCategoryLabelsRu[widget.slug] ?? widget.slug,
+          message: desktopNotoCategoryLabel(widget.slug, l10n),
           waitDuration: const Duration(milliseconds: 400),
           child: Container(
             width: 30,

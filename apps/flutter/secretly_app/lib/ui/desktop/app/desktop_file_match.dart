@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import '../../../models/e2e_payload_v1.dart';
 
 /// Поиск ПО ФАЙЛАМ: чем именно вложение отвечает на запрос.
@@ -60,9 +61,9 @@ bool attachmentMatchesQuery(AttachmentEventV1 a, String query) {
 }
 
 /// Подпись под именем файла в строке выдачи: «PDF · 2,4 МБ».
-String attachmentMetaLine(AttachmentEventV1 a) {
+String attachmentMetaLine(AttachmentEventV1 a, AppLocalizations l10n) {
   final ext = _extensionLabel(a);
-  final size = formatAttachmentSize(a.sizeBytes);
+  final size = formatAttachmentSize(a.sizeBytes, l10n);
   if (ext.isEmpty) return size.isEmpty ? '—' : size;
   return size.isEmpty ? ext : '$ext · $size';
 }
@@ -88,9 +89,15 @@ String _extensionLabel(AttachmentEventV1 a) {
 ///
 /// Пустая строка при нулевом и отрицательном размере — так строка под кадром
 /// просто не рисует размер, вместо того чтобы писать «0 Б».
-String formatAttachmentSize(int n) {
+String formatAttachmentSize(int n, AppLocalizations l10n) {
   if (n <= 0) return '';
-  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+  final units = <String>[
+    l10n.desktopUnitB,
+    l10n.desktopUnitKb,
+    l10n.desktopUnitMb,
+    l10n.desktopUnitGb,
+    l10n.desktopUnitTb,
+  ];
   var v = n.toDouble();
   var i = 0;
   while (v >= 1024 && i < units.length - 1) {

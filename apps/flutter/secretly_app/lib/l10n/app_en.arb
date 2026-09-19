@@ -1408,5 +1408,1312 @@
     "placeholders": {
       "name": {}
     }
-  }
+  },
+  "desktopPrivacyLastSeen": "Last seen",
+  "desktopPrivacyProfilePhoto": "Profile photos",
+  "desktopPrivacyForwarding": "Message forwarding",
+  "desktopPrivacyCalls": "Calls",
+  "desktopPrivacyVoice": "Voice messages",
+  "desktopPrivacyMessages": "Messages",
+  "desktopPrivacyNobody": "Nobody",
+  "desktopPrivacyEverybody": "Everybody",
+  "desktopPrivacyContacts": "Contacts",
+  "desktopPrivacyEncryption": "Encryption",
+  "desktopPrivacyEncryptionHint": "Every message and call is end-to-end encrypted. The keys live only on your devices.",
+  "desktopPrivacyE2eeActive": "End-to-end encryption is active",
+  "desktopPrivacyWhoSees": "Who sees",
+  "desktopPrivacyWhoSeesHint": "The same visibility settings as in the mobile application.",
+  "desktopPrivacyVisibility": "Visibility",
+  "desktopPrivacyByNickname": "Findable by nickname",
+  "desktopPrivacyByNicknameHint": "Let people find you by your nickname",
+  "desktopPrivacySuggest": "Suggest people in search",
+  "desktopPrivacyStrangers": "New chats from strangers",
+  "desktopPrivacyStrangersHint": "To the archive and without notifications",
+  "desktopPrivacyAutoDelete": "Delete my account",
+  "desktopPrivacyAutoDeleteHint": "If you do not sign in for longer than the chosen period, the account and every message are deleted automatically. The countdown resets on each sign-in.",
+  "desktopPrivacyIfAbsent": "If I do not sign in",
+  "desktopPrivacyIn1Month": "After 1 month",
+  "desktopPrivacyIn3Months": "After 3 months",
+  "desktopPrivacyIn6Months": "After 6 months",
+  "desktopPrivacyIn1Year": "After a year",
+  "desktopPrivacyIn2Years": "After 2 years",
+  "desktopLockImmediately": "As soon as focus is lost",
+  "desktopLockSeconds": "{value} s",
+  "desktopLockMinutes": "{value} min",
+  "desktopLockHours": "{value} h",
+  "desktopLockNoIdentityService": "The identity-check service is unavailable — the lock was not switched on.",
+  "desktopLockNotConfirmed": "The lock was not switched on: the confirmation did not pass.",
+  "desktopLockTitle": "Application lock",
+  "desktopLockTouchIdHint": "Ask for Touch ID to get back in after focus is lost.",
+  "desktopLockPasswordHint": "Ask for the device password to get back in after focus is lost.",
+  "desktopLockEnableTouchId": "Switch on Touch ID",
+  "desktopLockEnableLock": "Switch on the lock",
+  "desktopLockDevicePassword": "Device password",
+  "desktopLockAfter": "Lock after",
+  "desktopLockNow": "Lock now",
+  "desktopDevicesEndSessionTitle": "End the session?",
+  "desktopDevicesEndSessionBody": "Device {id} will be disconnected from your profile. Getting access back needs a new QR scan. Continue?",
+  "desktopDevicesEnd": "End",
+  "desktopDevicesEndFailed": "Could not end the session: {error}",
+  "desktopDevicesEnded": "The device session has ended.",
+  "desktopDevicesActiveSessions": "Active sessions",
+  "desktopDevicesDemoHint": "Demo mode · real devices will appear once a profile is connected",
+  "desktopDevicesThisComputer": "macOS · This computer",
+  "desktopDevicesDemoMac": "MacBook Pro · Active now",
+  "desktopDevicesDemoIphone": "iOS 18.2 · 2 hours ago (demo)",
+  "desktopDevicesDemoIpad": "iPadOS 18 · yesterday (demo)",
+  "desktopDevicesThisDevice": "This device",
+  "desktopDevicesRemoteDevice": "Remote device",
+  "desktopDevicesDisconnect": "Disconnect",
+  "desktopDevicesTitle": "Devices",
+  "desktopDevicesTitleCount": "Devices · {count}",
+  "desktopDevicesHint": "The devices linked to this profile on the key server.",
+  "desktopDevicesLoadFailed": "Could not load",
+  "desktopDevicesRetry": "Try again",
+  "desktopDevicesNone": "No devices found",
+  "desktopDevicesNotLinked": "The profile is not linked to the server yet.",
+  "desktopDevicesRefresh": "Refresh the list",
+  "@desktopLockSeconds": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "@desktopLockMinutes": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "@desktopLockHours": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "@desktopDevicesEndSessionBody": {
+    "placeholders": {
+      "id": {}
+    }
+  },
+  "@desktopDevicesEndFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopDevicesTitleCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "desktopAccentCustom": "Custom colour",
+  "desktopAccentCustomChange": "Custom colour — change",
+  "desktopPairTitle": "Link a device",
+  "desktopPairHint": "Show the QR code on the new device or scan it from the phone",
+  "desktopPairRequestFailed": "Could not create the link request",
+  "desktopPairCodeCopied": "The QR contents were copied",
+  "desktopPairNewTitle": "Link a new device",
+  "desktopPairNewHint": "On the new device open Secretly and choose “Connect by QR”. Then scan the code below.",
+  "desktopPairClose": "Close",
+  "desktopPairCopyCode": "Copy the code",
+  "desktopPairRefreshQr": "Refresh the QR",
+  "desktopSyncPulled": "New events pulled: {count}",
+  "desktopSyncTooOften": "Too many requests — try again later",
+  "desktopSyncNothingNew": "Done · no new events",
+  "desktopSyncDemoUnavailable": "Not available in demo mode",
+  "desktopSyncBlobsPulled": "Attachments pulled: {blobs} (chats: {convos})",
+  "desktopSyncNoBlobs": "Done · no new attachments (chats: {convos})",
+  "desktopSyncTitle": "History from other devices",
+  "desktopSyncHint": "Ask the mobile device for the recent chat history. Used when the desktop has been offline for more than 7 days or has just been linked by QR.",
+  "desktopSyncRunning": "Syncing…",
+  "desktopSyncAskHistory": "Ask for the history",
+  "desktopSyncAsk": "Ask",
+  "desktopSyncBlobsRunning": "Downloading attachments…",
+  "desktopSyncBlobsAction": "Fetch the attachments",
+  "desktopSyncBlobsHint": "Downloads media from recent chats when the files are missing locally (after re-linking or a long time offline).",
+  "desktopSyncBlobsShort": "Fetch",
+  "@desktopSyncPulled": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@desktopSyncBlobsPulled": {
+    "placeholders": {
+      "blobs": {},
+      "convos": {}
+    }
+  },
+  "@desktopSyncNoBlobs": {
+    "placeholders": {
+      "convos": {}
+    }
+  },
+  "desktopServerBackupOk": "Backup on the server ✓ · {stamp} · {size} KB · profile {profile}",
+  "desktopServerBackupPassword": "Backup password",
+  "desktopServerBackupPasswordHint": "This password encrypts the backup and restores it on any device. Remember it — without it the backup is useless, and it cannot be recovered.",
+  "desktopServerBackupRepeat": "Repeat the password",
+  "desktopServerBackupCreate": "Create the backup",
+  "desktopServerBackupTitle": "Backup to the server",
+  "desktopServerBackupHint": "An encrypted copy of the account on the Secretly server. It is restored on any device through “Restore from the server” with your Secretly ID and password.",
+  "desktopServerBackupLoading": "Uploading…",
+  "desktopServerBackupCreateOnServer": "Create a backup on the server",
+  "desktopServerBackupUpdate": "Update the backup",
+  "desktopFailedWith": "It did not work: {error}",
+  "desktopStorageDeleteModelTitle": "Delete the recognition model?",
+  "desktopStorageDeleteModelBody": "Transcribing voice messages will stop working until the model is downloaded again.",
+  "desktopStorageModelDeleted": "The model was deleted",
+  "desktopStorageDeleteFailed": "Could not delete: {error}",
+  "desktopStorageKb": "{value} KB",
+  "desktopStorageMb": "{value} MB",
+  "desktopStorageGb": "{value} GB",
+  "desktopStorageUsage": "Usage",
+  "desktopStorageUsageHint": "Cache and media on this device",
+  "desktopStorageClearHint": "{size} will be freed. Messages, files you sent and the recent ones are not deleted — there would be nowhere to restore them from.",
+  "desktopStorageClear": "Clear the cache",
+  "desktopStorageCounting": "Counting…",
+  "desktopStorageSpeechModel": "Speech-recognition model",
+  "desktopStorageSpeechModelHint": "Used to transcribe voice messages on this computer, without sending the audio anywhere. A normal cache clear does NOT remove it — it is large and downloaded separately.",
+  "desktopStorageDeleteModel": "Delete the model",
+  "desktopStorageMedia": "Media · {size}",
+  "desktopStorageVoice": "Voice · {size}",
+  "desktopStorageOther": "Other · {size}",
+  "desktopStorageFree": "Free",
+  "desktopStorageTotal": "Total · {size}",
+  "@desktopServerBackupOk": {
+    "placeholders": {
+      "stamp": {},
+      "size": {},
+      "profile": {}
+    }
+  },
+  "@desktopFailedWith": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopStorageDeleteFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopStorageKb": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "@desktopStorageMb": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "@desktopStorageGb": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "@desktopStorageClearHint": {
+    "placeholders": {
+      "size": {}
+    }
+  },
+  "@desktopStorageMedia": {
+    "placeholders": {
+      "size": {}
+    }
+  },
+  "@desktopStorageVoice": {
+    "placeholders": {
+      "size": {}
+    }
+  },
+  "@desktopStorageOther": {
+    "placeholders": {
+      "size": {}
+    }
+  },
+  "@desktopStorageTotal": {
+    "placeholders": {
+      "size": {}
+    }
+  },
+  "desktopAboutVersion": "Version {version} · build {build}",
+  "desktopAboutTagline": "A secure messenger with end-to-end encryption. No cloud. No advertising. Open source.",
+  "desktopAboutLicences": "Licences",
+  "desktopAboutWebsite": "Website",
+  "desktopDangerTitle": "Delete the account irreversibly?",
+  "desktopDangerBody": "The profile, the keys, the local data and the message history will be deleted on this and other devices. There is no way back.",
+  "desktopDangerDeleting": "Deleting the account…",
+  "desktopDangerFailed": "Could not delete the account: {error}",
+  "desktopDangerSection": "Deleting the account",
+  "desktopDangerDemo": "Demo mode · deleting is unavailable without a connected profile.",
+  "desktopDangerEnterId": "Type your Secretly ID to confirm",
+  "desktopDangerEnterIdExact": "Type {id} to confirm",
+  "desktopDangerAction": "Delete the account",
+  "desktopDangerIrreversible": "This is irreversible. All your data, the message history and the keys will be deleted. There is no way back.",
+  "desktopSecurityE2ee": "End-to-end encryption",
+  "desktopSecurityE2eeHint": "Every message, call and file is encrypted on your device. The keys never leave your devices — the server sees only ciphertext.",
+  "desktopSecurityVerifiedDevices": "Verified devices",
+  "desktopSecurityVerifiedHint": "While this is on, messages are not sent to the other person’s unconfirmed devices. It guards against substitution, but a message may not arrive until they confirm a new device. One-to-one chats only: it does not apply to groups.",
+  "desktopSecurityOnlyVerified": "Verified devices only",
+  "desktopSecurityBlocked": "Unverified devices are blocked",
+  "desktopSecurityAllDevices": "Messages go to all of the other person’s devices",
+  "desktopSecurityAppEntry": "Entry to the application",
+  "desktopSecurityAppEntryHint": "A password when Secretly opens and after the window has been hidden for more than a minute. It applies to this computer.",
+  "desktopSecurityPersonalScopeHint": "A separate password for the “Personal” category. Without it, personal chats are open to anyone with access to an unlocked computer.",
+  "@desktopAboutVersion": {
+    "placeholders": {
+      "version": {},
+      "build": {}
+    }
+  },
+  "@desktopDangerFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopDangerEnterIdExact": {
+    "placeholders": {
+      "id": {}
+    }
+  },
+  "desktopCallsInApp": "Calls in the application",
+  "desktopCallsInAppHint": "Switch off to disable calls entirely",
+  "desktopCallsAccept": "Accept incoming calls",
+  "desktopCallsAcceptHint": "People will be able to call you",
+  "desktopCallsDisabledHint": "Unavailable while calls are off",
+  "desktopCallsScreenShare": "Screen sharing",
+  "desktopCallsScreenShareHint": "Receiving someone else’s screen is a separate permission: what appears there may not be what you expected to see.",
+  "desktopCallsAcceptScreenShare": "Accept screen sharing",
+  "desktopAccountIdCopied": "The Secretly ID was copied",
+  "desktopAccountIdHint": "This identifier is what you share so people can find you. It carries neither a phone number nor an email address.",
+  "desktopAccountCopy": "Copy",
+  "desktopAccountProfile": "Profile",
+  "desktopAccountProfileHint": "Name, photo, status",
+  "desktopAccountOpenProfile": "Open the profile page",
+  "desktopScopePasswordFor": "Password for “{name}”",
+  "desktopScopeMin4": "At least 4 characters",
+  "desktopScopeOn": "Protection is on",
+  "desktopScopeOnFailed": "Could not switch on: {error}",
+  "desktopScopeOff": "Protection is off",
+  "desktopScopeOffFailed": "Could not switch off: {error}",
+  "desktopScopePasswordsDiffer": "The passwords do not match",
+  "desktopScopeTitle": "Password protection",
+  "desktopScopeOnWithPassword": "On — password",
+  "desktopScopeEnabled": "On",
+  "desktopScopeDisabled": "Off",
+  "desktopScopeChangePassword": "Change the password",
+  "desktopScopeLockNow": "Lock",
+  "desktopBlockedUnblocked": "{name} was unblocked",
+  "desktopBlockedUnblockFailed": "Could not unblock: {error}",
+  "desktopBlockedTitle": "Blocked",
+  "desktopBlockedEmptyHint": "The list is empty. Blocking is done from a chat’s menu.",
+  "desktopBlockedHint": "These people cannot write to you or call you.",
+  "desktopBlockedNone": "Nobody is blocked",
+  "desktopSupportSent": "The message was sent",
+  "desktopSupportSendFailed": "Could not send. Check your connection.",
+  "desktopSupportUnavailable": "Support is unavailable",
+  "desktopSupportUnavailableHint": "The support service is switched off right now. Try later or write from the phone.",
+  "desktopSupportThread": "The conversation with support",
+  "desktopSupportThreadHint": "Messages are encrypted on your device. The server keeps only ciphertext — only support can read the conversation.",
+  "desktopSupportNoReplies": "No replies yet. Describe the problem — the answer will arrive here.",
+  "desktopSupportWrite": "Write to support",
+  "desktopSupportWriteHint": "The build version and the device identifier are attached automatically — without them the problem is nearly impossible to reproduce.",
+  "desktopSupportDescribe": "Describe what happened",
+  "desktopSupportSending": "Sending…",
+  "desktopSupportSend": "Send",
+  "@desktopScopePasswordFor": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopScopeOnFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopScopeOffFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopBlockedUnblocked": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopBlockedUnblockFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "desktopChatsEmptyHint": "Start a conversation from the phone — chats sync to the desktop automatically",
+  "desktopChatsPickOne": "Pick a chat on the left",
+  "desktopChatsSendFailed": "Could not send: {error}",
+  "desktopChatsSendingTo": "Sending to “{title}”",
+  "desktopChatsFilterAll": "All",
+  "desktopChatsFilterUnread": "Unread",
+  "desktopChatsFilterGroups": "Groups",
+  "desktopChatsFilterArchive": "Archive",
+  "desktopChatsFilterPersonal": "Personal",
+  "desktopChatsRenameFolder": "Rename the folder",
+  "desktopChatsDeleteFolder": "Delete the folder",
+  "desktopChatsRenameFailed": "Could not rename: {error}",
+  "desktopChatsDeleteFolderTitle": "Delete the folder “{name}”?",
+  "desktopChatsDeleteFolderBody": "The chats stay where they are — only the folder is deleted.",
+  "desktopChatsDeleteFailed": "Could not delete: {error}",
+  "desktopChatsAddedToFolder": "Added to “{name}”",
+  "desktopChatsRemovedFromFolder": "Removed from “{name}”",
+  "desktopChatsFolderChangeFailed": "Could not change the folder: {error}",
+  "desktopChatsFolderCreated": "The folder “{name}” was created",
+  "desktopChatsFolderCreateFailed": "Could not create the folder: {error}",
+  "desktopChatsNewFolder": "New folder",
+  "desktopChatsFolderName": "Folder name",
+  "desktopChatsRemoveFromFolder": "Remove from “{name}”",
+  "desktopChatsAddToFolder": "To the folder “{name}”",
+  "desktopChatsNewFolderWithChat": "New folder with this chat…",
+  "desktopChatsRemoveFromPersonal": "Remove from personal",
+  "desktopChatsAddToPersonal": "To personal",
+  "desktopChatsArchiveEmpty": "The archive is empty",
+  "desktopChatsNoPersonal": "There are no personal chats",
+  "desktopChatsPersonalLocked": "Personal chats are password-protected",
+  "desktopChatsAllRead": "Everything is read",
+  "desktopChatsFolderEmpty": "This folder is empty for now",
+  "desktopChatsNewChat": "New chat",
+  "desktopChatsNewRoom": "New room",
+  "desktopChatsStartFailed": "Could not start the chat: the profile is unavailable",
+  "@desktopChatsSendFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsSendingTo": {
+    "placeholders": {
+      "title": {}
+    }
+  },
+  "@desktopChatsRenameFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsDeleteFolderTitle": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopChatsDeleteFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsAddedToFolder": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopChatsRemovedFromFolder": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopChatsFolderChangeFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsFolderCreated": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopChatsFolderCreateFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsRemoveFromFolder": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopChatsAddToFolder": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "desktopChatsPhoto": "Photo",
+  "desktopChatsVideo": "Video",
+  "desktopChatsAudio": "Audio",
+  "desktopChatsVoiceMessage": "Voice message",
+  "desktopChatsVoiceShort": "Voice",
+  "desktopChatsLink": "Link",
+  "desktopChatsSticker": "Sticker",
+  "desktopChatsStickerWith": "Sticker {label}",
+  "desktopChatsPoll": "📊 Poll: {question}",
+  "desktopChatsUnknown": "unknown",
+  "desktopChatsMember": "Member",
+  "desktopChatsSoundOn": "Switch the sound on",
+  "desktopChatsSoundOff": "Muted",
+  "desktopChatsClearHistoryTitle": "Clear the history?",
+  "desktopChatsClearHistoryBody": "Every message of the chat “{title}” will be deleted on this device.",
+  "desktopChatsClear": "Clear",
+  "desktopChatsHistoryClearedBoth": "The history was cleared for both",
+  "desktopChatsHistoryCleared": "The history was cleared",
+  "desktopChatsDeleteChatTitle": "Delete the chat?",
+  "desktopChatsDeleteChatBody": "The chat “{title}” will be removed from this device entirely.",
+  "desktopChatsRooms": "Rooms",
+  "desktopChatsGeneralTopic": "General",
+  "desktopChatsNewTopicEllipsis": "New topic…",
+  "desktopChatsBranch": "Branch “{title}”",
+  "desktopChatsRename": "Rename",
+  "desktopChatsIcon": "Icon",
+  "desktopChatsDeleteBranch": "Delete the branch",
+  "desktopChatsBranchIcon": "Branch icon",
+  "desktopChatsBranchIconHint": "The icon replaces the hash before the name. Coloured ones promise what is inside: green a call, red something urgent. The rest are grey so they do not argue with the name.",
+  "desktopChatsHash": "Hash",
+  "desktopChatsBranchFailed": "Could not change the branches: {error}",
+  "desktopChatsNewTopic": "New topic",
+  "desktopChatsRenameTopic": "Rename the topic",
+  "desktopChatsTopicName": "Topic name",
+  "@desktopChatsStickerWith": {
+    "placeholders": {
+      "label": {}
+    }
+  },
+  "@desktopChatsPoll": {
+    "placeholders": {
+      "question": {}
+    }
+  },
+  "@desktopChatsClearHistoryBody": {
+    "placeholders": {
+      "title": {}
+    }
+  },
+  "@desktopChatsDeleteChatBody": {
+    "placeholders": {
+      "title": {}
+    }
+  },
+  "@desktopChatsBranch": {
+    "placeholders": {
+      "title": {}
+    }
+  },
+  "@desktopChatsBranchFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "desktopChatsReactionFailed": "Could not save the reaction: {error}",
+  "desktopChatsReactionLocal": "The reaction was applied locally but not delivered to the other person: {error}",
+  "desktopChatsRevealFailed": "Could not show the file in Finder",
+  "desktopChatsVideoOpenFailed": "Could not open the video: {error}",
+  "desktopChatsVideoUnavailable": "The video is unavailable",
+  "desktopChatsFileFetchFailed": "Could not fetch the file: {error}",
+  "desktopChatsSaveAttachment": "Save the attachment",
+  "desktopChatsFileUnavailable": "The file is unavailable",
+  "desktopChatsSaveFailed": "Could not save: {error}",
+  "desktopChatsOpenFailedWith": "Could not open the file: {error}",
+  "desktopChatsOpenFailed": "Could not open the file",
+  "desktopChatsOpenFailedShort": "Could not open: {error}",
+  "desktopChatsPlayFailed": "Could not play: {error}",
+  "desktopChatsNoCallPeer": "Could not work out who to call.",
+  "desktopChatsCallsNotReady": "The call service is not ready.",
+  "desktopChatsCallInProgress": "A call is already under way.",
+  "desktopChatsEditFailed": "Could not edit the message.",
+  "desktopChatsNoRecipient": "Could not work out the recipient.",
+  "desktopChatsDeleteMessageTitle": "Delete the message?",
+  "desktopChatsDeleteMessagesTitle": "Delete the selected messages?",
+  "desktopChatsDeleteOthersHint": "Other people’s messages will be deleted only for you.",
+  "desktopChatsDeleteForAll": "Delete for everyone",
+  "desktopChatsDeleteForMeOnly": "Delete only for me",
+  "desktopChatsDeleteForMe": "Delete for me",
+  "desktopChatsSavePrivacyBlocked": "This message cannot be saved because of privacy restrictions.",
+  "desktopChatsNothingToSave": "The attachment was not downloaded — there is nothing to save",
+  "desktopChatsSavedPartly": "Saved to Favourites, but not all of it",
+  "desktopChatsSaved": "Saved to Favourites",
+  "desktopChatsForwardPrivacyBlocked": "This message cannot be forwarded because of privacy restrictions.",
+  "desktopChatsForwardFailed": "Could not forward: {error}",
+  "desktopChatsNothingToForward": "The attachment was not downloaded — there is nothing to forward",
+  "desktopChatsForwardedPartly": "Forwarded to “{title}”, but not all of it",
+  "desktopChatsForwarded": "Forwarded to “{title}”",
+  "desktopChatsFileNotSentElsewhere": "The file was not sent to the other conversation: {text}",
+  "desktopChatsFileSendFailed": "Could not send the file.",
+  "desktopChatsPremiumFiles": "{text} With Premium you can send files of up to 1 GB.",
+  "desktopChatsTypingEllipsis": "typing…",
+  "desktopChatsOnline": "online",
+  "desktopChatsSomeoneTyping": "{name} is typing",
+  "desktopChatsLoadingList": "Pulling the list from local storage.",
+  "desktopChatsWillAppear": "Messages and calls will appear here as soon as you open a chat.",
+  "@desktopChatsReactionFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsReactionLocal": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsVideoOpenFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsFileFetchFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsSaveFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsOpenFailedWith": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsOpenFailedShort": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsPlayFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsForwardFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopChatsForwardedPartly": {
+    "placeholders": {
+      "title": {}
+    }
+  },
+  "@desktopChatsForwarded": {
+    "placeholders": {
+      "title": {}
+    }
+  },
+  "@desktopChatsFileNotSentElsewhere": {
+    "placeholders": {
+      "text": {}
+    }
+  },
+  "@desktopChatsPremiumFiles": {
+    "placeholders": {
+      "text": {}
+    }
+  },
+  "@desktopChatsSomeoneTyping": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "desktopRoomNoOpenHere": "A chat cannot be opened from here",
+  "desktopRoomIdCopied": "The ID was copied",
+  "desktopRoomAwaiting": "Awaiting approval",
+  "desktopRoomBlocked": "Blocked",
+  "desktopRoomCopied": "Copied",
+  "desktopRoomChangeRole": "Change the role",
+  "desktopRoomTransfer": "Transfer ownership",
+  "desktopRoomBlockMember": "Block",
+  "desktopRoomKick": "Remove",
+  "desktopRoomKickTitle": "Remove the member?",
+  "desktopRoomKickBody": "{name} will lose access to the room. A new invitation brings them back.",
+  "desktopRoomBlockTitle": "Block the member?",
+  "desktopRoomBlockBody": "{name} will not be able to come back to the room even with an invitation until the block is lifted.",
+  "desktopRoomTransferTitle": "Transfer ownership of the room?",
+  "desktopRoomTransferBody": "{name} becomes the owner and you become an administrator. Only the new owner can undo it.",
+  "desktopRoomTransferAction": "Transfer",
+  "desktopRoomClearTitle": "Clear the history?",
+  "desktopRoomClearBody": "Every message of the room will be deleted on this device.",
+  "desktopRoomLeaveTitle": "Leave the room?",
+  "desktopRoomLeaveBody": "You will stop receiving messages. Coming back needs a new invitation.",
+  "desktopRoomLeave": "Leave",
+  "desktopRoomInvite": "Invite",
+  "desktopRoomCopyId": "Copy the room ID",
+  "desktopRoomMuteOff": "Switch notifications off",
+  "desktopRoomUnarchive": "Bring back from the archive",
+  "desktopRoomLeaveRoom": "Leave the room",
+  "desktopRoomUntitled": "Untitled",
+  "desktopRoomCopyInvite": "Copy the invitation",
+  "desktopRoomSound": "Sound",
+  "desktopRoomTabInfo": "Info",
+  "desktopRoomTabMembers": "Members",
+  "desktopRoomTabMedia": "Media",
+  "desktopRoomTopics": "TOPICS",
+  "desktopRoomTopicsCount": "TOPICS · {count}",
+  "desktopRoomDescription": "Description",
+  "desktopRoomNotes": "NOTES",
+  "desktopRoomInformation": "Information",
+  "desktopRoomId": "Room ID",
+  "desktopRoomInviteLink": "Invitation link · click to copy",
+  "desktopRoomFavouriteHint": "A tile on the rail and a place at the top of the list",
+  "desktopRoomArchiveHint": "Hide the room from the main list",
+  "desktopRoomNoMembers": "No members",
+  "desktopRoomMembersCount": "{count, plural, one{{count} member} other{{count} members}}",
+  "desktopRoomNobodyFound": "Nobody found",
+  "desktopRoomMembersUnavailable": "The member list is unavailable.",
+  "desktopRoomInCall": "IN THE CALL",
+  "desktopRoomOnline": "ONLINE",
+  "desktopRoomOffline": "OFFLINE",
+  "desktopRoomMoreHidden": "{count} more — use the search above",
+  "desktopRoomSearchMember": "Search for a member",
+  "desktopRoomJoinRequests": "Join requests",
+  "desktopRoomAccept": "Accept",
+  "desktopRoomDecline": "Decline",
+  "desktopRoomRoleOwner": "Owner",
+  "desktopRoomRoleAdmin": "Administrator",
+  "desktopRoomRoleModerator": "Moderator",
+  "desktopRoomRoleRestricted": "Restricted",
+  "desktopRoomRoleGuest": "Guest",
+  "@desktopRoomKickBody": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopRoomBlockBody": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopRoomTransferBody": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopRoomTopicsCount": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@desktopRoomMoreHidden": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@desktopRoomMembersCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "desktopContactBlockTitle": "Block?",
+  "desktopContactUnblockTitle": "Unblock?",
+  "desktopContactBlockBody": "This person will no longer be able to send you messages or call you.",
+  "desktopContactUnblockBody": "This person will be able to reach you again.",
+  "desktopContactBlock": "Block",
+  "desktopContactCallsNotReady": "The call service is not ready yet",
+  "desktopContactCallInProgress": "A call is already under way",
+  "desktopContactCallFailed": "Could not start the call: {error}",
+  "desktopContactAutoDelete": "Automatic message deletion",
+  "desktopContactAutoDeleteUpdated": "Automatic deletion was updated",
+  "desktopContactClearBody": "Every message of this chat will be deleted on this device.",
+  "desktopContactDeleteBody": "The chat will be removed from this device entirely.",
+  "desktopContactOff": "Off",
+  "desktopContactDisable": "Switch off",
+  "desktopContactDay1": "1 day",
+  "desktopContactDays7": "7 days",
+  "desktopContactDays30": "30 days",
+  "desktopContactHour1": "1 hour",
+  "desktopContactMinutes": "{value} min",
+  "desktopContactOffline": "offline",
+  "desktopContactSeenAt": "last seen at {time}",
+  "desktopContactSeenYesterday": "last seen yesterday",
+  "desktopContactSeenOn": "last seen on {date}",
+  "desktopContactCopyId": "Copy the ID",
+  "desktopContactCopyIdShort": "Copy ID",
+  "desktopContactDisappearing": "Disappearing messages",
+  "desktopContactDeleteChat": "Delete the chat",
+  "desktopContactCall": "Call",
+  "desktopContactBlockShort": "Block",
+  "desktopContactSecurity": "Security",
+  "desktopContactVerify": "Verify the contact",
+  "desktopContactArchiveHint": "Hide the chat from the main list",
+  "@desktopContactCallFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopContactMinutes": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "@desktopContactSeenAt": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "@desktopContactSeenOn": {
+    "placeholders": {
+      "date": {}
+    }
+  },
+  "desktopThreadMessageHint": "Message…",
+  "desktopThreadPasteFailed": "Could not paste the picture",
+  "desktopThreadNoScheduleEdit": "An edit cannot be scheduled — it changes something already sent",
+  "desktopThreadWillLeave": "Will go out {when}",
+  "desktopThreadSeconds": "{value} s",
+  "desktopThreadMinutes": "{value} min",
+  "desktopThreadHours": "{value} h",
+  "desktopThreadDays": "{value} d",
+  "desktopThreadWeeks": "{value} w",
+  "desktopThreadSelected": "Selected: {count}",
+  "desktopThreadDisappearingOn": "Disappearing messages are on",
+  "desktopThreadCallAction": "Call",
+  "desktopThreadCallRoom": "Group call",
+  "desktopThreadVideoCall": "Video call",
+  "desktopThreadSearchShortcut": "Search in the chat  Cmd F",
+  "desktopThreadHideDetails": "Hide the details",
+  "desktopThreadShowDetails": "Show the details",
+  "desktopThreadMore": "More",
+  "desktopThreadPinned": "Pinned message",
+  "desktopThreadNoMatches": "no matches",
+  "desktopThreadSearchHint": "Search in the chat…",
+  "desktopThreadPrevMatch": "Previous (Shift F3)",
+  "desktopThreadNextMatch": "Next (F3)",
+  "desktopThreadCloseEsc": "Close (Esc)",
+  "desktopThreadNewMessages": "New messages",
+  "desktopThreadUnreadCount": "{count, plural, one{{count} unread} other{{count} unread}}",
+  "desktopThreadToday": "Today",
+  "desktopThreadYesterday": "Yesterday",
+  "@desktopThreadWillLeave": {
+    "placeholders": {
+      "when": {}
+    }
+  },
+  "@desktopThreadSeconds": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "@desktopThreadMinutes": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "@desktopThreadHours": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "@desktopThreadDays": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "@desktopThreadWeeks": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "@desktopThreadSelected": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@desktopThreadUnreadCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "desktopProfileEmojiStatus": "Emoji status",
+  "desktopProfileClearStatus": "Clear the status",
+  "desktopProfileApplyFailed": "Could not apply: {error}",
+  "desktopProfileAvatarFrame": "Avatar frame",
+  "desktopProfileCover": "Profile cover",
+  "desktopProfileNoFrame": "No frame",
+  "desktopProfileNoCover": "No cover",
+  "desktopProfileReadFailed": "Could not read the file",
+  "desktopProfilePhotoUpdated": "The profile photo was updated",
+  "desktopProfilePhotoFailed": "Could not update the photo: {error}",
+  "desktopProfilePhotoRemoveFailed": "Could not remove the photo: {error}",
+  "desktopProfileMine": "My profile",
+  "desktopProfileEdit": "Edit",
+  "desktopProfileName": "Name",
+  "desktopProfileChangePhoto": "Change the photo",
+  "desktopProfileFrameShort": "Frame",
+  "desktopProfileCoverShort": "Cover",
+  "desktopProfileStatus": "Status",
+  "desktopProfileAppearanceHint": "Theme, accent and chat wallpaper",
+  "desktopProfileAbout": "About me",
+  "desktopProfileEmpty": "Not filled in",
+  "desktopProfilePhoto": "Profile photo",
+  "desktopProfileReplacePhoto": "Replace the photo",
+  "desktopProfilePickPhoto": "Choose a photo",
+  "desktopProfilePickedHere": "Chosen on this computer",
+  "desktopProfileSyncedWithPhone": "Synced with the phone",
+  "desktopProfileNotPicked": "Not chosen",
+  "desktopProfileRemovePhoto": "Remove the photo",
+  "desktopProfileInitialsStay": "The initials remain",
+  "desktopProfileAccount": "Account",
+  "desktopProfileRecovery": "Recovery",
+  "desktopProfileRecoveryHint": "This computer is linked to the phone and keeps no recovery phrase of its own: the backup and the recovery key bring the account back.",
+  "desktopProfileDevicesHint": "Connected computers and phones",
+  "desktopProfileFrameCaps": "AVATAR FRAME",
+  "@desktopProfileApplyFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopProfilePhotoFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopProfilePhotoRemoveFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "desktopGalleryMedia": "Media",
+  "desktopGalleryFiles": "Files",
+  "desktopGalleryLinks": "Links",
+  "desktopGalleryNoMedia": "No media",
+  "desktopGalleryNoFiles": "No files",
+  "desktopGalleryNoAudio": "No audio",
+  "desktopGalleryNoLinks": "No links",
+  "desktopGalleryPathCopied": "The path was copied",
+  "desktopGalleryOpen": "Open",
+  "desktopGalleryView": "View",
+  "desktopGalleryOpenInSystem": "Open in the system",
+  "desktopGalleryRevealFinder": "Show in Finder",
+  "desktopGalleryRevealExplorer": "Show in Explorer",
+  "desktopGalleryOpenFolder": "Open the folder",
+  "desktopGalleryCopyPath": "Copy the path",
+  "desktopGalleryBytes": "{value} B",
+  "desktopGalleryZeroBytes": "0 B",
+  "desktopOutgoingFolderSingle": "the folder “{name}” cannot be sent",
+  "desktopOutgoingFoldersMany": "folders cannot be sent",
+  "desktopOutgoingTooLargeOne": "“{name}” is larger than {limit} MB",
+  "desktopOutgoingTooLargeMany": "{count, plural, one{{count} file is larger than {limit} MB} other{{count} files are larger than {limit} MB}}",
+  "desktopOutgoingEmptyOne": "“{name}” is empty",
+  "desktopOutgoingEmptyMany": "{count, plural, one{{count} file is empty} other{{count} files are empty}}",
+  "desktopOutgoingUnreadableOne": "“{name}” could not be read",
+  "desktopOutgoingUnreadableMany": "{count, plural, one{{count} file could not be read} other{{count} files could not be read}}",
+  "desktopOutgoingSending": "Sending",
+  "desktopOutgoingPhotos": "{count, plural, one{{count} photos} other{{count} photos}}",
+  "desktopOutgoingVideos": "{count, plural, one{{count} videos} other{{count} videos}}",
+  "desktopOutgoingMedia": "{count} media items",
+  "desktopOutgoingAudios": "{count, plural, one{{count} audio files} other{{count} audio files}}",
+  "desktopOutgoingFiles": "{count, plural, one{{count} files} other{{count} files}}",
+  "@desktopGalleryBytes": {
+    "placeholders": {
+      "value": {}
+    }
+  },
+  "@desktopOutgoingFolderSingle": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopOutgoingTooLargeOne": {
+    "placeholders": {
+      "name": {},
+      "limit": {}
+    }
+  },
+  "@desktopOutgoingEmptyOne": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopOutgoingUnreadableOne": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopOutgoingMedia": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@desktopOutgoingTooLargeMany": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "limit": {}
+    }
+  },
+  "@desktopOutgoingEmptyMany": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "@desktopOutgoingUnreadableMany": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "@desktopOutgoingPhotos": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "@desktopOutgoingVideos": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "@desktopOutgoingAudios": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "@desktopOutgoingFiles": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "desktopCallsPickOne": "Pick a call on the left",
+  "desktopCallsPickHint": "The details and a call-back button will appear here",
+  "desktopCallsNone": "No calls yet",
+  "desktopCallsNoneHint": "The history appears after the first call",
+  "desktopCallsOutgoing": "Outgoing",
+  "desktopCallsIncoming": "Incoming",
+  "desktopCallsGroup": "group",
+  "desktopCallsVideoKind": "video",
+  "desktopCallsAudioKind": "audio",
+  "desktopCallsMissed": "missed",
+  "desktopPhotoCopyFailed": "Could not copy: {error}",
+  "desktopPhotoSave": "Save the photo",
+  "desktopPhotoSaved": "Saved",
+  "desktopPhotoRevealFailed": "Could not show in Finder: {error}",
+  "desktopPhotoLoadFailed": "Could not load",
+  "desktopPhotoZoomOut": "Zoom out",
+  "desktopPhotoZoomReset": "Reset the zoom",
+  "desktopPhotoZoomIn": "Zoom in",
+  "desktopPhotoCopy": "Copy",
+  "desktopBubbleForwardedFrom": "Forwarded from {from}",
+  "desktopBubbleAudioFile": "Audio file",
+  "desktopBubbleTranslating": "Translating…",
+  "desktopBubbleTranslation": "TRANSLATION",
+  "desktopBubbleEdited": "edited",
+  "desktopBubbleMoreReactions": "More reactions",
+  "desktopBubbleRoleOwner": "owner",
+  "desktopBubbleRoleAdmin": "admin",
+  "desktopBubbleRoleMod": "mod",
+  "desktopBubbleSpeed": "Playback speed",
+  "@desktopPhotoCopyFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopPhotoRevealFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopBubbleForwardedFrom": {
+    "placeholders": {
+      "from": {}
+    }
+  },
+  "desktopSpotlightGoChats": "Go to chats",
+  "desktopSpotlightGoRooms": "Go to rooms",
+  "desktopSpotlightGoContacts": "Go to contacts",
+  "desktopSpotlightGoCalls": "Go to calls",
+  "desktopSpotlightSelect": "select",
+  "desktopSpotlightOpen": "open",
+  "desktopSpotlightClose": "close",
+  "desktopSpotlightRoom": "Room",
+  "desktopSpotlightMessage": "Message",
+  "desktopSpotlightCommand": "Command",
+  "desktopComposerCancelRec": "Cancel the recording",
+  "desktopComposerRecording": "Recording  {time}",
+  "desktopComposerSendVoice": "Send the voice message",
+  "desktopComposerAttach": "Attach",
+  "desktopComposerEmoji": "Emoji and stickers",
+  "desktopComposerRecordVoice": "Record a voice message",
+  "desktopComposerEnterSends": "Enter sends · Shift+Enter makes a new line",
+  "desktopComposerEnterNewline": "Enter makes a new line · Shift+Enter sends",
+  "desktopComposerEditing": "Editing",
+  "desktopComposerReplyTo": "Reply · {name}",
+  "desktopComposerCancelAction": "Cancel",
+  "desktopComposerSendHint": "Send · Enter\nRight click to send later",
+  "desktopComposerWriteFirst": "Write a message first",
+  "desktopComposerToTopic": "to the topic “{title}”",
+  "desktopShortcutsNavigation": "Navigation",
+  "desktopShortcutsTabs": "Chats · Rooms · Calls · Contacts",
+  "desktopShortcutsSearchAll": "Search chats and messages",
+  "desktopShortcutsPrevNext": "Previous / next chat",
+  "desktopShortcutsInChat": "In a conversation",
+  "desktopShortcutsFindHere": "Find in this conversation",
+  "desktopShortcutsSend": "Send (configurable)",
+  "desktopShortcutsNewline": "New line",
+  "desktopShortcutsPaste": "Paste an image from the clipboard",
+  "desktopShortcutsApp": "Application",
+  "desktopShortcutsThisHelp": "This help",
+  "desktopShortcutsCloseWindow": "Close the window or the search",
+  "desktopShortcutsTray": "Minimise to the tray",
+  "desktopShortcutsTitle": "Keyboard shortcuts",
+  "@desktopComposerRecording": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "@desktopComposerReplyTo": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopComposerToTopic": {
+    "placeholders": {
+      "title": {}
+    }
+  },
+  "desktopMediaCancelSend": "Cancel the send",
+  "desktopMediaSending": "Sending…",
+  "desktopMediaSendingOf": "Sending… · {total}",
+  "desktopMediaRetryDownload": "Retry the download",
+  "desktopMediaImage": "Image",
+  "desktopMediaDownloading": "Downloading… · {size}",
+  "desktopMediaDownload": "Download",
+  "desktopSendAsMedia": "Send as media",
+  "desktopSendAsFiles": "Send as files",
+  "desktopSendUngroup": "Do not group",
+  "desktopSendGroup": "Group",
+  "desktopSendAddFiles": "Add files…",
+  "desktopSendDropHere": "Release to add",
+  "desktopSendCloseEsc": "Close · Esc",
+  "desktopSendToDestination": "to “{destination}”",
+  "desktopSendCaptionHint": "Add a caption…",
+  "desktopSendEmoji": "Emoji",
+  "desktopSendRemove": "Remove",
+  "desktopSendEnter": "Send · Enter",
+  "desktopSendShiftEnter": "Send · Shift+Enter",
+  "desktopCallCtlMicOff": "Turn the microphone off   ⌘D",
+  "desktopCallCtlMicOn": "Turn the microphone on   ⌘D",
+  "desktopCallCtlCamOff": "Turn the camera off   ⌘E",
+  "desktopCallCtlCamOn": "Turn the camera on   ⌘E",
+  "desktopCallCtlShareStop": "Stop the screen share",
+  "desktopCallCtlShare": "Screen sharing",
+  "desktopCallCtlHandDown": "Lower the hand",
+  "desktopCallCtlHandUp": "Raise the hand",
+  "desktopCallCtlHangUp": "Hang up   ⌘W",
+  "desktopAbsenceDays": "{count, plural, one{{count} day} other{{count} days}}",
+  "desktopAbsencePastFanout": "This computer has been out of touch for {days}. In that time senders stopped encrypting messages for it, and part of the history will not arrive here. It is intact on the phone — open the chats you need there and the recent history will follow.",
+  "desktopAbsenceWithinWindow": "This computer has been out of touch for {days}. Messages are kept on the server for a week, so some of them may not have survived for it. On the phone they are intact.",
+  "desktopAbsenceGotIt": "Got it",
+  "@desktopMediaSendingOf": {
+    "placeholders": {
+      "total": {}
+    }
+  },
+  "@desktopMediaDownloading": {
+    "placeholders": {
+      "size": {}
+    }
+  },
+  "@desktopSendToDestination": {
+    "placeholders": {
+      "destination": {}
+    }
+  },
+  "@desktopAbsencePastFanout": {
+    "placeholders": {
+      "days": {}
+    }
+  },
+  "@desktopAbsenceWithinWindow": {
+    "placeholders": {
+      "days": {}
+    }
+  },
+  "@desktopAbsenceDays": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "desktopNavContacts": "Contacts",
+  "desktopChatNotFound": "The conversation was not found",
+  "desktopUnreadTitle": "Secretly — {count} unread",
+  "desktopRoomsNone": "No rooms yet",
+  "desktopRoomsNoneHint": "Create a room on the phone — it will appear here automatically",
+  "desktopRoomsPickOne": "Pick a room on the left",
+  "desktopScheduleTitle": "Send later",
+  "desktopScheduleInHour": "In an hour",
+  "desktopScheduleTonight": "Today at 19:00",
+  "desktopScheduleTomorrow": "Tomorrow at 9:00",
+  "desktopScheduleInWeek": "In a week",
+  "desktopScheduleTodayAt": "today at {time}",
+  "desktopScheduleTomorrowAt": "tomorrow at {time}",
+  "desktopScheduleOnAt": "{date} at {time}",
+  "desktopScheduleHint": "The message goes out on its own at the chosen time — even with the window closed it will be sent at the next start.",
+  "desktopSchedulePickTime": "Pick a time…",
+  "desktopDevicesSearching": "Looking for devices…",
+  "desktopDevicesNoCameras": "No cameras found. The application may not have been given access to them in the system settings.",
+  "desktopDevicesNoMics": "No microphones found. The application may not have been given access to them in the system settings.",
+  "desktopDevicesOutputHint": "Where the sound goes is chosen inside the call — by the chevron next to “Microphone”. That is also where the application switches to headphones on its own when they are plugged in.",
+  "desktopDevicesSystemDefault": "As chosen in the system",
+  "desktopRailSettings": "Settings   Cmd ,",
+  "desktopRailConnected": "Connected",
+  "desktopRailConnecting": "Connecting…",
+  "desktopRailOffline": "No connection",
+  "desktopRailProfile": "Profile   Cmd P   ·   {status}",
+  "desktopEmojiSmileys": "Smileys and emotion",
+  "desktopEmojiPeople": "People and body",
+  "desktopEmojiNature": "Nature",
+  "desktopEmojiFood": "Food and drink",
+  "desktopEmojiTravel": "Travel",
+  "desktopEmojiActivities": "Activities",
+  "desktopEmojiObjects": "Objects",
+  "desktopEmojiSymbols": "Symbols",
+  "desktopEmojiFlags": "Flags",
+  "desktopEmojiOther": "Other",
+  "@desktopUnreadTitle": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@desktopScheduleTodayAt": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "@desktopScheduleTomorrowAt": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "@desktopScheduleOnAt": {
+    "placeholders": {
+      "date": {},
+      "time": {}
+    }
+  },
+  "@desktopRailProfile": {
+    "placeholders": {
+      "status": {}
+    }
+  },
+  "desktopLockedTitle": "Secretly is locked",
+  "desktopLockedTouchIdPrompt": "Confirm your identity with Touch ID to continue.",
+  "desktopLockedPasswordPrompt": "Confirm with your device password to continue.",
+  "desktopLockedUnlock": "Unlock",
+  "desktopLockedWaiting": "Waiting for confirmation…",
+  "desktopLockedFailed": "Could not confirm your identity.",
+  "desktopLockedNoService": "The identity service is unavailable on this computer. Restart Secretly or the computer. If that doesn't help, write to support from your phone.",
+  "desktopEmojiTabEmoji": "Emoji",
+  "desktopEmojiTabStickers": "Stickers",
+  "desktopEmojiRecents": "Recent",
+  "desktopEmojiNothingFound": "Nothing found",
+  "desktopEmojiSearchHint": "Search emoji",
+  "desktopStickersSearchHint": "Search stickers",
+  "desktopGifSearchHint": "Search GIFs",
+  "desktopGifUnavailable": "GIFs aren't available in this window",
+  "desktopStickerPacksSoon": "Sticker packs coming soon",
+  "desktopCallFullscreen": "Full screen",
+  "desktopCallExitFullscreen": "Exit full screen",
+  "desktopCallDialing": "Calling…",
+  "desktopCallEnded": "Ended",
+  "desktopCallEncryptedFor": "Encrypted · {duration}",
+  "@desktopCallEncryptedFor": {
+    "placeholders": {
+      "duration": {}
+    }
+  },
+  "desktopCallReturn": "Return",
+  "desktopCallInProgress": "Call in progress",
+  "desktopCallInProgressWith": "Call in progress · {title}",
+  "@desktopCallInProgressWith": {
+    "placeholders": {
+      "title": {}
+    }
+  },
+  "desktopCallAnswer": "Answer",
+  "desktopCallAnswerVideo": "Answer with video",
+  "desktopCallAnswerText": "By text",
+  "desktopTimeYesterday": "yesterday",
+  "desktopForwardTitle": "Forward to…",
+  "desktopForwardSearchHint": "Search chats and rooms",
+  "desktopForwardNoChats": "No chats available",
+  "desktopForwardKindDirect": "Direct chat",
+  "desktopContactsSearchHint": "Search contacts",
+  "desktopContactsEmpty": "Contacts will appear after syncing.",
+  "desktopContactsNothingFor": "Nothing found for “{query}”.",
+  "@desktopContactsNothingFor": {
+    "placeholders": {
+      "query": {}
+    }
+  },
+  "desktopContactsPick": "Pick a contact",
+  "desktopContactsCardRight": "The card will open on the right.",
+  "desktopContactsWrite": "Send a message",
+  "desktopVideoTitle": "Video",
+  "desktopViewerCloseEsc": "Close  Esc",
+  "desktopVideoPlayFailed": "Could not play the video",
+  "desktopKeySpace": "Space",
+  "desktopWindowMinimize": "Minimise",
+  "desktopWindowMaximize": "Maximise",
+  "desktopWindowClose": "Close",
+  "desktopWindowBack": "Back",
+  "desktopWindowForward": "Forward",
+  "desktopSearchEverything": "Chats, people, messages, files",
+  "desktopUnitB": "B",
+  "desktopUnitKb": "KB",
+  "desktopUnitMb": "MB",
+  "desktopUnitGb": "GB",
+  "desktopUnitTb": "TB",
+  "desktopSyncDone": "Synced",
+  "desktopSyncSyncing": "Syncing…",
+  "desktopSyncReconnecting": "Reconnecting…",
+  "desktopDetailsShare": "Share",
+  "desktopDetailsHide": "Hide",
+  "desktopDetailsMore": "More",
+  "desktopDetailsChangeCover": "Change cover",
+  "desktopDetailsFrame": "“{name}” frame",
+  "@desktopDetailsFrame": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "desktopApply": "Apply",
+  "desktopAccentAppliesTo": "Buttons, selections and rings. The bubble keeps its own style — you pick that below.",
+  "desktopTranslateUnknownSource": "Couldn't detect the message language",
+  "desktopTranslateUnsupported": "The system translator doesn't know this language pair",
+  "desktopTranslateNeedsDownload": "The language isn’t downloaded. System Settings → General → Language & Region → Translation Languages",
+  "desktopTranslateFailed": "Couldn't translate",
+  "desktopNewChatSearchHint": "Search contacts",
+  "desktopNewChatNoContacts": "No contacts yet",
+  "desktopNewChatNobodyFound": "Nobody found",
+  "desktopMentionEveryone": "Everyone",
+  "desktopMentionAdmins": "Admins",
+  "desktopMentionEveryoneHint": "Call everyone in the room",
+  "desktopMentionAdminsHint": "Call the owner and admins",
+  "desktopClearForPeer": "Clear the history on {name}’s side too",
+  "@desktopClearForPeer": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "desktopClearForPeerHint": "Messages will vanish on their device and on all of yours. This cannot be undone.",
+  "desktopGifNoKey": "GIFs unavailable: this build has no GIPHY key",
+  "desktopGifConnectionLost": "The connection dropped. Try again",
+  "desktopNotesHint": "What to remember from this conversation…",
+  "desktopNotesPrivate": "Visible only to you. It is never sent, never appears in the conversation and is not part of the backup — it lives on this computer, in the same encrypted database as the messages.",
+  "desktopEmojiSearchShort": "Search emoji…",
+  "desktopNotifOpen": "Open",
+  "desktopLinkPreviewLoading": "Link preview…",
+  "desktopLinkPreviewOff": "No preview",
+  "desktopDropToSend": "Drop to send",
+  "desktopDropEncrypted": "Files are encrypted before they are sent",
+  "desktopDetailsPickChat": "Pick a chat",
+  "desktopDetailsEmptyHint": "Details about the person or room\nwill appear here.",
+  "desktopMemberWrite": "Message",
+  "desktopShowPanel": "Show the panel",
+  "desktopHidePanel": "Hide the panel",
+  "desktopNotifOff": "Notifications are off",
+  "desktopSettingsSearchHint": "Find a setting",
+  "desktopUnlockPrompt": "Unlock Secretly",
+  "desktopEnableLockPrompt": "Confirm to turn on the Secretly lock",
+  "desktopRoomsNoneHintDot": "Create a room on your phone — it will show up here by itself.",
+  "desktopSplashLoading": "Loading your profile…",
+  "desktopOutgoingOnePhoto": "Photo",
+  "desktopOutgoingOneVideo": "Video",
+  "desktopOutgoingOneAudio": "Audio",
+  "desktopOutgoingOneFile": "File"
 }

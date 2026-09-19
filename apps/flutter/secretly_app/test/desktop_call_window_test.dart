@@ -57,9 +57,9 @@ void main() {
   });
 
   test('🔴 отклонить — узкая кнопка, ответить — широкая', () {
-    final i = toast.indexOf("label: 'Отклонить'");
+    final i = toast.indexOf('label: l10n.callDecline');
     expect(i, -1, reason: 'у отклонения больше нет подписи — оно узкое');
-    expect(toast.contains("tooltip: 'Отклонить'"), isTrue,
+    expect(toast.contains('tooltip: l10n.callDecline'), isTrue,
         reason: 'значок без слова обязан называть себя хотя бы по наведению');
     // Отклонение стоит фиксированной ширины, ответ — в Expanded.
     final decline = toast.indexOf('call_end_24_filled');

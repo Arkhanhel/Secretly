@@ -50,7 +50,7 @@ void main() {
     expect(code.contains('expand_more'), isFalse);
     // Вместо стрелки — настоящее действие, и только тому, кому комната его
     // позволяет.
-    expect(panel.contains("tooltip: 'Открепить'"), isTrue);
+    expect(panel.contains('tooltip: l10n.unpin'), isTrue);
     expect(panel.contains('if (onUnpin != null)'), isTrue);
   });
 
@@ -72,7 +72,7 @@ void main() {
   test('🔴 подпись светлее заливки, а не тем же акцентом', () {
     // Сам `accentPrimary` на своей же заливке в 8 % почти сливается с ней:
     // это цвет для сплошного, а не для текста поверх собственной тени.
-    final i = panel.indexOf("'Закреплённое сообщение'");
+    final i = panel.indexOf('l10n.desktopThreadPinned');
     final body = panel.substring(i, i + 420);
     expect(body.contains('color: c.accentSoft'), isTrue);
     expect(body.contains('fontSize: 11.5'), isTrue);

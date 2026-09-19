@@ -108,7 +108,10 @@ class DesktopAppLockService {
   /// the lock for everyone.
   ///
   /// Disarming is always allowed — it never needs to be gated.
-  Future<bool> setEnabled(bool value) async {
+  /// [armReason] — что система напишет в своём окне подтверждения.
+  /// Подпись приходит СНАРУЖИ: служба не знает языка окна, а системное
+  /// окно показывается человеку.
+  Future<bool> setEnabled(bool value, {required String armReason}) async {
     if (!_isDesktopOs) return false;
 
     if (!value) {
@@ -120,9 +123,7 @@ class DesktopAppLockService {
     }
 
     // Arming: prove the user can actually get back in.
-    final proven = await _authenticate(
-      reason: 'Подтвердите, чтобы включить блокировку Secretly',
-    );
+    final proven = await _authenticate(reason: armReason);
     if (!proven) return false;
 
     enabled.value = true;
@@ -208,9 +209,7 @@ class DesktopAppLockService {
 
   /// Triggers the unlock prompt. Returns true on success.
   /// Safe to call when not enabled (no-op) or already unlocked.
-  Future<bool> requestUnlock({
-    String reason = 'Разблокировать Secretly',
-  }) async {
+  Future<bool> requestUnlock({required String reason}) async {
     if (!_isDesktopOs) return true;
     if (!enabled.value || !locked.value) return true;
     final ok = await _authenticate(reason: reason);

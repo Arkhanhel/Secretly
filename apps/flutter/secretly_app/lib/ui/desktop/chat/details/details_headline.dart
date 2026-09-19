@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
@@ -46,7 +47,7 @@ class DetailsHeadline extends StatelessWidget {
     this.frameId,
     this.onClose,
     this.onShare,
-    this.shareTooltip = 'Поделиться',
+    this.shareTooltip,
     this.onChangeCover,
     this.menuSections = const <List<CtxMenuItem>>[],
     this.idLine,
@@ -82,7 +83,8 @@ class DetailsHeadline extends StatelessWidget {
 
   /// Что именно делает «поделиться» — подпись должна называть действие, а не
   /// намерение: у комнаты это ссылка-приглашение, у человека — его ID.
-  final String shareTooltip;
+  /// `null` — подпись по умолчанию («Поделиться») на языке окна.
+  final String? shareTooltip;
 
   /// Сменить обложку — кнопка ПОВЕРХ самой обложки, как в макете.
   ///
@@ -115,6 +117,7 @@ class DetailsHeadline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final frame = frameById(frameId);
     final status = (emojiStatus ?? '').trim();
@@ -220,7 +223,7 @@ class DetailsHeadline extends StatelessWidget {
                     ),
                   if (frame != null)
                     _Badge(
-                      label: 'Рамка «${frame.nameRu}»',
+                      label: l10n.desktopDetailsFrame(frame.nameRu),
                       icon: Icons.bolt_rounded,
                       color: c.warning,
                     ),
@@ -255,7 +258,7 @@ class DetailsHeadline extends StatelessWidget {
                 if (onClose != null)
                   _CoverAction(
                     icon: FluentIcons.dismiss_24_regular,
-                    tooltip: 'Скрыть',
+                    tooltip: l10n.desktopDetailsHide,
                     onPressed: onClose!,
                     onCover: cover != null,
                   ),
@@ -276,7 +279,7 @@ class DetailsHeadline extends StatelessWidget {
                 if (onChangeCover != null) ...[
                   _CoverAction(
                     icon: FluentIcons.image_24_regular,
-                    tooltip: 'Сменить обложку',
+                    tooltip: l10n.desktopDetailsChangeCover,
                     onPressed: onChangeCover!,
                     onCover: cover != null,
                   ),
@@ -285,7 +288,7 @@ class DetailsHeadline extends StatelessWidget {
                 if (onShare != null)
                   _CoverAction(
                     icon: FluentIcons.share_24_regular,
-                    tooltip: shareTooltip,
+                    tooltip: shareTooltip ?? l10n.desktopDetailsShare,
                     onPressed: onShare!,
                     onCover: cover != null,
                   ),
@@ -403,9 +406,10 @@ class _CoverMenuActionState extends State<_CoverMenuAction> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return _CoverAction(
       icon: FluentIcons.more_vertical_24_regular,
-      tooltip: 'Дополнительно',
+      tooltip: l10n.desktopDetailsMore,
       onCover: widget.onCover,
       anchorKey: _anchor,
       onPressed: _open,

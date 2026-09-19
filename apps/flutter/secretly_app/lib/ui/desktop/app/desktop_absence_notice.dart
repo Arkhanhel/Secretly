@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
@@ -48,35 +49,18 @@ class _Notice extends StatelessWidget {
   /// overstate the other.
   bool get _pastFanoutWindow => days >= DesktopAbsence.fanoutWindowDays;
 
-  String get _body {
-    if (_pastFanoutWindow) {
-      return 'Этот компьютер не выходил на связь $days ${_dayWord(days)}. '
-          'За это время отправители перестали шифровать сообщения для него, '
-          'и часть переписки сюда не придёт. Она цела на телефоне — '
-          'откройте там нужные чаты, и свежая история подтянется.';
-    }
-    return 'Этот компьютер не выходил на связь $days ${_dayWord(days)}. '
-        'Сообщения хранятся на сервере неделю, поэтому часть из них могла '
-        'не сохраниться для него. На телефоне они целы.';
-  }
-
-  static String _dayWord(int n) {
-    final mod100 = n % 100;
-    if (mod100 >= 11 && mod100 <= 14) return 'дней';
-    switch (n % 10) {
-      case 1:
-        return 'день';
-      case 2:
-      case 3:
-      case 4:
-        return 'дня';
-      default:
-        return 'дней';
-    }
+  /// Склонение «день / дня / дней» считает ICU внутри ключа: своя лесенка
+  /// «11..14» повторяла бы то, что intl уже знает про каждый из языков.
+  String _body(AppLocalizations l10n) {
+    final period = l10n.desktopAbsenceDays(days);
+    return _pastFanoutWindow
+        ? l10n.desktopAbsencePastFanout(period)
+        : l10n.desktopAbsenceWithinWindow(period);
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final accent = _pastFanoutWindow ? c.danger : c.warning;
     return Container(
@@ -108,7 +92,7 @@ class _Notice extends StatelessWidget {
           const SizedBox(width: DSpace.m),
           Expanded(
             child: Text(
-              _body,
+              _body(l10n),
               style: DType.caption.copyWith(color: c.textPrimary, height: 1.45),
             ),
           ),
@@ -116,7 +100,7 @@ class _Notice extends StatelessWidget {
           // A plain, obvious dismissal. The notice is about something the user
           // cannot act on here, so the only honest control is "I have read it".
           IconButton(
-            tooltip: 'Понятно',
+            tooltip: l10n.desktopAbsenceGotIt,
             icon: Icon(
               FluentIcons.dismiss_24_regular,
               size: 16,

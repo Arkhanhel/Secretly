@@ -23,6 +23,7 @@
 /// исключение в переписку.
 library;
 
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 
@@ -60,22 +61,21 @@ class DesktopTranslationResult {
 
   /// Что сказать человеку, когда перевода не будет. `null` — сказать нечего
   /// (перевод состоялся или переводить было нечего).
-  String? get userMessage {
+  String? userMessage(AppLocalizations l10n) {
     switch (outcome) {
       case DesktopTranslationOutcome.ok:
       case DesktopTranslationOutcome.sameLanguage:
         return null;
       case DesktopTranslationOutcome.unknownSource:
-        return 'Не удалось определить язык сообщения';
+        return l10n.desktopTranslateUnknownSource;
       case DesktopTranslationOutcome.unsupported:
-        return 'Системный переводчик не знает этой пары языков';
+        return l10n.desktopTranslateUnsupported;
       case DesktopTranslationOutcome.needsDownload:
         // Ровно то место, куда идти: без этого совет «скачайте модель»
         // отправляет человека искать её по всей системе.
-        return 'Язык не скачан. Системные настройки → Основные → Язык и '
-            'регион → Языки перевода';
+        return l10n.desktopTranslateNeedsDownload;
       case DesktopTranslationOutcome.failed:
-        return 'Перевести не удалось';
+        return l10n.desktopTranslateFailed;
     }
   }
 }

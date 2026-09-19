@@ -15,6 +15,7 @@
 // проверка сторожит не только то, что плашка показывает, но и то, чего она
 // показывать НЕ должна.
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/rooms/room_call_state.dart';
@@ -64,6 +65,9 @@ CachedRoomCall _call({
 );
 
 Widget _host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(
     body: DColors(
       colors: kDColorsDark,
@@ -74,6 +78,8 @@ Widget _host(Widget child) => MaterialApp(
     ),
   ),
 );
+
+final _ru = lookupAppLocalizations(const Locale('ru'));
 
 void main() {
   group('что плашка показывает', () {
@@ -219,21 +225,21 @@ void main() {
 
   group('склонение участников', () {
     test('обычные случаи', () {
-      expect(formatParticipantsRu(1), '1 участник');
-      expect(formatParticipantsRu(2), '2 участника');
-      expect(formatParticipantsRu(4), '4 участника');
-      expect(formatParticipantsRu(5), '5 участников');
-      expect(formatParticipantsRu(21), '21 участник');
-      expect(formatParticipantsRu(22), '22 участника');
+      expect(formatParticipants(1, _ru), '1 участник');
+      expect(formatParticipants(2, _ru), '2 участника');
+      expect(formatParticipants(4, _ru), '4 участника');
+      expect(formatParticipants(5, _ru), '5 участников');
+      expect(formatParticipants(21, _ru), '21 участник');
+      expect(formatParticipants(22, _ru), '22 участника');
     });
 
     test('🔴 подростковые числа — исключение из правила', () {
       // 11–14 склоняются как «много», хотя оканчиваются на 1–4. Классическая
       // ошибка в русских счётчиках: «11 участник».
-      expect(formatParticipantsRu(11), '11 участников');
-      expect(formatParticipantsRu(12), '12 участников');
-      expect(formatParticipantsRu(14), '14 участников');
-      expect(formatParticipantsRu(111), '111 участников');
+      expect(formatParticipants(11, _ru), '11 участников');
+      expect(formatParticipants(12, _ru), '12 участников');
+      expect(formatParticipants(14, _ru), '14 участников');
+      expect(formatParticipants(111, _ru), '111 участников');
     });
   });
 

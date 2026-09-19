@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
@@ -104,6 +105,7 @@ class _EmojiPanelState extends State<_EmojiPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return SizedBox(
       width: 360,
@@ -123,8 +125,10 @@ class _EmojiPanelState extends State<_EmojiPanel> {
               child: DesktopTextField(
                 controller: _query,
                 hintText: _tab == _Tab.emoji
-                    ? 'Поиск эмодзи'
-                    : (_tab == _Tab.stickers ? 'Поиск стикеров' : 'Поиск GIF'),
+                    ? l10n.desktopEmojiSearchHint
+                    : (_tab == _Tab.stickers
+                        ? l10n.desktopStickersSearchHint
+                        : l10n.desktopGifSearchHint),
                 prefixIcon: FluentIcons.search_24_regular,
                 onChanged: (v) => setState(() => _q = v),
               ),
@@ -136,6 +140,7 @@ class _EmojiPanelState extends State<_EmojiPanel> {
   }
 
   Widget _tabsRow(DColorSet c) {
+    final l10n = AppLocalizations.of(context)!;
     Widget tab(_Tab t, IconData ic, String label) {
       final active = _tab == t;
       return Expanded(
@@ -170,13 +175,15 @@ class _EmojiPanelState extends State<_EmojiPanel> {
     }
 
     return Row(children: [
-      tab(_Tab.emoji, FluentIcons.emoji_24_regular, 'Эмодзи'),
-      tab(_Tab.stickers, FluentIcons.sticker_24_regular, 'Стикеры'),
+      tab(_Tab.emoji, FluentIcons.emoji_24_regular, l10n.desktopEmojiTabEmoji),
+      tab(_Tab.stickers, FluentIcons.sticker_24_regular,
+          l10n.desktopEmojiTabStickers),
       tab(_Tab.gifs, FluentIcons.gif_24_regular, 'GIF'),
     ]);
   }
 
   Widget _body(DColorSet c) {
+    final l10n = AppLocalizations.of(context)!;
     switch (_tab) {
       case _Tab.emoji:
         return _emojiBody(c);
@@ -184,7 +191,7 @@ class _EmojiPanelState extends State<_EmojiPanel> {
         final ctl = widget.stickerController;
         if (ctl == null) {
           return _stubBody(
-              c, FluentIcons.sticker_24_regular, 'Стикерпаки скоро');
+              c, FluentIcons.sticker_24_regular, l10n.desktopStickerPacksSoon);
         }
         return SecretlyStickerPickerTab(
           controller: ctl,
@@ -203,7 +210,7 @@ class _EmojiPanelState extends State<_EmojiPanel> {
           return _stubBody(
             c,
             FluentIcons.gif_24_regular,
-            'GIF недоступны в этом окне',
+            l10n.desktopGifUnavailable,
           );
         }
         return DesktopGifPickerTab(
@@ -237,9 +244,11 @@ class _EmojiPanelState extends State<_EmojiPanel> {
   /// Lottie в одном окне — это восемьсот запросов кадра. Ровно так же
   /// поступает телефон; оживают эмодзи уже в переписке.
   Widget _emojiBody(DColorSet c) {
+    final l10n = AppLocalizations.of(context)!;
     final groups = _catalogGroups(_q);
     if (groups.isEmpty) {
-      return _stubBody(c, FluentIcons.emoji_24_regular, 'Ничего не нашлось');
+      return _stubBody(c, FluentIcons.emoji_24_regular,
+          l10n.desktopEmojiNothingFound);
     }
     return SingleChildScrollView(
       padding: const EdgeInsets.all(DSpace.s),
@@ -247,7 +256,7 @@ class _EmojiPanelState extends State<_EmojiPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (widget.recents.isNotEmpty && _q.isEmpty) ...[
-            _label(c, 'Недавние'),
+            _label(c, l10n.desktopEmojiRecents),
             Wrap(
               spacing: 4,
               runSpacing: 4,

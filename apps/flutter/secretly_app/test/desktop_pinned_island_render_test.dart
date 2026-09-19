@@ -8,6 +8,7 @@
 // Полоса раньше была без скругления и с рамкой только снизу — при переезде в
 // островок это как раз то место, где легко получить исключение вместо плашки.
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -28,6 +29,9 @@ void main() {
   testWidgets('· закреплённое рисуется островком и не падает', (t) async {
     await t.pumpWidget(
       MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: DColors(
           colors: kDColorsDark,
           child: Scaffold(

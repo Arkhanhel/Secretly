@@ -10,6 +10,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/chat/composer.dart';
@@ -17,6 +18,7 @@ import 'package:secretly_app/ui/desktop/chat/desktop_mentions.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
 
 final _targets = desktopMentionTargets(
+      l10n: _ru,
   members: [
     (profileId: 'p1', displayName: 'Игорь Петров', avatarPath: null, role: null),
     (profileId: 'p2', displayName: 'Анна', avatarPath: null, role: 'Владелец'),
@@ -26,6 +28,9 @@ final _targets = desktopMentionTargets(
 
 Widget host(TextEditingController ctl, {List<DesktopMentionTarget>? targets}) =>
     MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: DColors(
         colors: kDColorsDark,
         child: Scaffold(
@@ -44,6 +49,8 @@ Widget host(TextEditingController ctl, {List<DesktopMentionTarget>? targets}) =>
         ),
       ),
     );
+
+final _ru = lookupAppLocalizations(const Locale('ru'));
 
 void main() {
   testWidgets('🔴 «@» открывает список, ярлык виден заранее', (t) async {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 import '../design/tokens.dart';
@@ -27,6 +28,7 @@ Future<({bool alsoForPeer})?> confirmClearWithPeer(
     return showDialog<({bool alsoForPeer})>(
       context: context,
       builder: (ctx) {
+        final l10n = AppLocalizations.of(ctx)!;
         final cc = DColors.of(ctx);
         return StatefulBuilder(
           builder: (ctx, setLocalState) {
@@ -68,8 +70,7 @@ Future<({bool alsoForPeer})?> confirmClearWithPeer(
                               child: Padding(
                                 padding: const EdgeInsets.only(top: 10),
                                 child: Text(
-                                  'Очистить историю у собеседника '
-                                  '($peerTitle)',
+                                  l10n.desktopClearForPeer(peerTitle),
                                   style: DType.body.copyWith(
                                     color: cc.textPrimary,
                                   ),
@@ -83,8 +84,7 @@ Future<({bool alsoForPeer})?> confirmClearWithPeer(
                     Padding(
                       padding: const EdgeInsets.only(left: DSpace.xs),
                       child: Text(
-                        'Сообщения пропадут и на его устройстве, и на всех '
-                        'ваших. Отменить это нельзя.',
+                        l10n.desktopClearForPeerHint,
                         style: DType.caption.copyWith(color: cc.textSecondary),
                       ),
                     ),
@@ -95,7 +95,7 @@ Future<({bool alsoForPeer})?> confirmClearWithPeer(
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(),
                   child: Text(
-                    'Отмена',
+                    l10n.cancel,
                     style: DType.label.copyWith(color: cc.textPrimary),
                   ),
                 ),

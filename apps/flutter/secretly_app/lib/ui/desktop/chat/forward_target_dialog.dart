@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
@@ -42,18 +43,18 @@ class ForwardTargetDialog extends StatefulWidget {
     BuildContext context, {
     required AppController controller,
     String? excludeConvoId,
-    String title = 'Переслать в…',
+    String? title,
   }) {
     return DesktopDialog.show<Conversation>(
       context,
-      title: title,
+      title: title ?? AppLocalizations.of(context)!.desktopForwardTitle,
       size: DDialogSize.medium,
       body: ForwardTargetDialog(
         controller: controller,
         excludeConvoId: excludeConvoId,
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: AppLocalizations.of(context)!.cancel,
         onPressed: () => Navigator.of(context).maybePop(),
       ),
     );
@@ -115,6 +116,7 @@ class _ForwardTargetDialogState extends State<ForwardTargetDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return SizedBox(
       height: 420,
@@ -123,7 +125,7 @@ class _ForwardTargetDialogState extends State<ForwardTargetDialog> {
         children: [
           DesktopTextField(
             controller: _search,
-            hintText: 'Поиск чата или комнаты',
+            hintText: l10n.desktopForwardSearchHint,
             prefixIcon: FluentIcons.search_24_regular,
             autofocus: true,
             onChanged: (_) => setState(() {}),
@@ -149,13 +151,14 @@ class _ForwardTargetDialogState extends State<ForwardTargetDialog> {
   }
 
   Widget _buildList(DColorSet c) {
+    final l10n = AppLocalizations.of(context)!;
     final items = _filtered;
     if (items.isEmpty) {
       return Center(
         child: Text(
           _search.text.trim().isEmpty
-              ? 'Нет доступных чатов'
-              : 'Ничего не найдено',
+              ? l10n.desktopForwardNoChats
+              : l10n.desktopListNothingFound,
           style: TextStyle(
             fontFamily: DType.family,
             fontSize: 13,
@@ -172,6 +175,7 @@ class _ForwardTargetDialogState extends State<ForwardTargetDialog> {
   }
 
   Widget _row(DColorSet c, Conversation convo) {
+    final l10n = AppLocalizations.of(context)!;
     final isGroup = convo.peerProfileId == null;
     return HoverListener(
       onTap: () => Navigator.of(context).maybePop(convo),
@@ -214,7 +218,7 @@ class _ForwardTargetDialogState extends State<ForwardTargetDialog> {
                   ),
                   const SizedBox(height: 1),
                   Text(
-                    isGroup ? 'Комната' : 'Личный чат',
+                    isGroup ? l10n.desktopSpotlightRoom : l10n.desktopForwardKindDirect,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

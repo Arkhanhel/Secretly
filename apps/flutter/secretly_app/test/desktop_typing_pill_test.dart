@@ -64,13 +64,17 @@ void main() {
   test('🔴 в комнате плашка БЕЗ имени — автора протокол не передаёт', () {
     // Признак «кто-то печатает» комната шлёт, а кто именно — нет. Выдуманное
     // имя здесь было бы прямой ложью о том, кто сейчас пишет.
-    expect(section.contains("? '\${convo.title.trim()} печатает'"), isTrue);
-    expect(section.contains(": 'печатает')"), isTrue);
+    // 19.09.2026: подписи уехали в переводы — проверяем ключи.
+    expect(section.contains('desktopChatsSomeoneTyping('), isTrue);
+    expect(section.contains('l10n.desktopListTyping'), isTrue);
     expect(section.contains('_isDirect && convo.title.trim().isNotEmpty'), isTrue);
   });
 
   test('подпись в шапке никуда не делась', () {
     // Плашка её не заменяет: в шапке видно и при прокрутке наверх.
-    expect(section.contains("if (typing) return 'печатает…';"), isTrue);
+    expect(
+      section.contains('if (typing) return l10n.desktopChatsTypingEllipsis;'),
+      isTrue,
+    );
   });
 }

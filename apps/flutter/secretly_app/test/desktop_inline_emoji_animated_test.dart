@@ -18,6 +18,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -95,6 +96,9 @@ void main() {
   testWidgets('сообщение с эмодзи рисуется без исключения', (t) async {
     await t.pumpWidget(
       MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Text.rich(
             TextSpan(

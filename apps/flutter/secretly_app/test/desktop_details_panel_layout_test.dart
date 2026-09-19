@@ -14,6 +14,7 @@
 // ни строки. Поэтому здесь живут дешёвые проверки «оно вообще строится» на те
 // части панели, у которых своя геометрия.
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/chat/details/details_action_row.dart';
@@ -22,6 +23,9 @@ import 'package:secretly_app/ui/desktop/design/colors.dart';
 import 'package:secretly_app/ui/desktop/primitives/desktop_switch.dart';
 
 Widget host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: DColors(
         colors: kDColorsDark,
         child: Scaffold(

@@ -22,6 +22,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
@@ -127,6 +128,9 @@ void main() {
       required ValueChanged<double> onResize,
       VoidCallback? onReset,
     }) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: DColors(
         colors: kDColorsDark,
         child: Scaffold(
@@ -186,6 +190,9 @@ void main() {
       addTearDown(t.view.resetPhysicalSize);
       await t.pumpWidget(
         MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
           home: DColors(
             colors: kDColorsDark,
             child: DesktopShell(

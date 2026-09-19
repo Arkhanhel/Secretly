@@ -1305,10 +1305,11 @@ class _CustomAccentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final picked = color;
     return DesktopTooltip(
-      message: picked == null ? 'Свой цвет' : 'Свой цвет — изменить',
+      message: picked == null ? l10n.desktopAccentCustom : l10n.desktopAccentCustomChange,
       child: HoverListener(
         onTap: onTap,
         cursor: onTap == null
@@ -1772,7 +1773,7 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
     return _PaneScaffold(
       children: [
         WorkspaceCard(
-          title: 'Уведомления',
+          title: l10n.desktopSettingsNotificationsLabel,
           description: svc == null ? l10n.desktopNotifUnavailableHere : null,
           child: Column(
             children: [
@@ -1877,24 +1878,34 @@ class _PrivacyPane extends StatefulWidget {
 /// Privacy-audience categories — mirrors mobile's settings_screen.dart 1:1 so
 /// "who can see this" means the same thing on both platforms. Keys + default
 /// fallback match AppController._privacyAudienceKeys.
-const List<(String key, String title)> _kAudienceCategories = [
-  ('last_seen', 'Время захода'),
-  ('photo', 'Фотографии профиля'),
-  ('forwards', 'Пересылка сообщений'),
-  ('calls', 'Звонки'),
-  ('voice_messages', 'Голосовые сообщения'),
-  ('messages', 'Сообщения'),
+const List<String> _kAudienceCategories = [
+  'last_seen',
+  'photo',
+  'forwards',
+  'calls',
+  'voice_messages',
+  'messages',
 ];
 
+/// Подпись категории. Ключ остаётся ключом — по нему сверяются с телефоном.
+String _audienceTitle(String key, AppLocalizations l10n) => switch (key) {
+  'last_seen' => l10n.desktopPrivacyLastSeen,
+  'photo' => l10n.desktopPrivacyProfilePhoto,
+  'forwards' => l10n.desktopPrivacyForwarding,
+  'calls' => l10n.desktopPrivacyCalls,
+  'voice_messages' => l10n.desktopPrivacyVoice,
+  _ => l10n.desktopPrivacyMessages,
+};
+
 class _PrivacyPaneState extends State<_PrivacyPane> {
-  String _audienceLabel(String value) {
+  String _audienceLabel(String value, AppLocalizations l10n) {
     switch (value) {
       case 'nobody':
-        return 'Никто';
+        return l10n.desktopPrivacyNobody;
       case 'everyone':
-        return 'Все';
+        return l10n.desktopPrivacyEverybody;
       default:
-        return 'Контакты';
+        return l10n.desktopPrivacyContacts;
     }
   }
 
@@ -1911,18 +1922,18 @@ class _PrivacyPaneState extends State<_PrivacyPane> {
   }
 
   Widget _buildBody(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final ctrl = widget.controller;
     return _PaneScaffold(
       children: [
         WorkspaceCard(
-          title: 'Шифрование',
+          title: l10n.desktopPrivacyEncryption,
           description:
-              'Все сообщения и звонки защищены сквозным шифрованием. '
-              'Ключи находятся только на ваших устройствах.',
+              l10n.desktopPrivacyEncryptionHint,
           // Honest status instead of a dead «verify» nav — per-contact
           // fingerprint verification lives in each contact's details.
-          child: const WorkspaceRow(
-            label: 'Сквозное шифрование активно',
+          child: WorkspaceRow(
+            label: l10n.desktopPrivacyE2eeActive,
             icon: FluentIcons.shield_checkmark_24_regular,
           ),
         ),
@@ -1936,16 +1947,16 @@ class _PrivacyPaneState extends State<_PrivacyPane> {
         // setting. Re-add only once a real on/off exists to back it.
         if (ctrl != null) ...[
           WorkspaceCard(
-            title: 'Кто видит',
+            title: l10n.desktopPrivacyWhoSees,
             description:
-                'Те же настройки видимости, что и в мобильном приложении.',
+                l10n.desktopPrivacyWhoSeesHint,
             child: Column(
               children: [
-                for (final (key, title) in _kAudienceCategories) ...[
-                  if (key != _kAudienceCategories.first.$1)
+                for (final key in _kAudienceCategories) ...[
+                  if (key != _kAudienceCategories.first)
                     const Divider(height: 1),
                   WorkspaceRow(
-                    label: title,
+                    label: _audienceTitle(key, l10n),
                     trailing: DropdownButton<String>(
                       value: ctrl.privacyAudience[key] ?? 'contacts',
                       underline: const SizedBox.shrink(),
@@ -1957,7 +1968,7 @@ class _PrivacyPaneState extends State<_PrivacyPane> {
                         ])
                           DropdownMenuItem(
                             value: v,
-                            child: Text(_audienceLabel(v)),
+                            child: Text(_audienceLabel(v, l10n)),
                           ),
                       ],
                       onChanged: (v) {
@@ -1971,12 +1982,12 @@ class _PrivacyPaneState extends State<_PrivacyPane> {
             ),
           ),
           WorkspaceCard(
-            title: 'Видимость',
+            title: l10n.desktopPrivacyVisibility,
             child: Column(
               children: [
                 WorkspaceRow(
-                  label: 'Видимость по никнейму',
-                  description: 'Позволить находить вас по никнейму',
+                  label: l10n.desktopPrivacyByNickname,
+                  description: l10n.desktopPrivacyByNicknameHint,
                   trailing: WorkspaceSwitch(
                     value: ctrl.discoverableByNickname,
                     onChanged: (v) =>
@@ -1985,7 +1996,7 @@ class _PrivacyPaneState extends State<_PrivacyPane> {
                 ),
                 const Divider(height: 1),
                 WorkspaceRow(
-                  label: 'Подсказка людей при поиске',
+                  label: l10n.desktopPrivacySuggest,
                   trailing: WorkspaceSwitch(
                     value: ctrl.allowNicknameLookup,
                     onChanged: (v) => unawaited(ctrl.setAllowNicknameLookup(v)),
@@ -1995,9 +2006,9 @@ class _PrivacyPaneState extends State<_PrivacyPane> {
             ),
           ),
           WorkspaceCard(
-            title: 'Новые чаты с незнакомцами',
+            title: l10n.desktopPrivacyStrangers,
             child: WorkspaceRow(
-              label: 'В архив и без уведомлений',
+              label: l10n.desktopPrivacyStrangersHint,
               trailing: WorkspaceSwitch(
                 value: ctrl.privacyArchiveUnknownChats,
                 onChanged: (v) =>
@@ -2006,14 +2017,12 @@ class _PrivacyPaneState extends State<_PrivacyPane> {
             ),
           ),
           WorkspaceCard(
-            title: 'Удалить мой аккаунт',
+            title: l10n.desktopPrivacyAutoDelete,
             description:
-                'Если вы не заходите дольше выбранного срока, аккаунт и все '
-                'сообщения удаляются автоматически. Отсчёт сбрасывается при '
-                'каждом входе.',
+                l10n.desktopPrivacyAutoDeleteHint,
             child: WorkspaceRow(
-              label: 'Если не захожу',
-              description: _deleteMonthsLabel(ctrl.privacyDeleteAccountMonths),
+              label: l10n.desktopPrivacyIfAbsent,
+              description: _deleteMonthsLabel(ctrl.privacyDeleteAccountMonths, l10n),
               icon: FluentIcons.timer_24_regular,
               trailing: DropdownButton<int>(
                 value:
@@ -2027,7 +2036,7 @@ class _PrivacyPaneState extends State<_PrivacyPane> {
                   for (final m in _kDeleteMonthOptions)
                     DropdownMenuItem(
                       value: m,
-                      child: Text(_deleteMonthsLabel(m)),
+                      child: Text(_deleteMonthsLabel(m, l10n)),
                     ),
                 ],
                 onChanged: (v) {
@@ -2046,18 +2055,18 @@ class _PrivacyPaneState extends State<_PrivacyPane> {
 /// Inactivity windows offered for automatic account deletion, in months.
 const List<int> _kDeleteMonthOptions = <int>[1, 3, 6, 12, 24];
 
-String _deleteMonthsLabel(int months) {
+String _deleteMonthsLabel(int months, AppLocalizations l10n) {
   switch (months) {
     case 1:
-      return 'Через 1 месяц';
+      return l10n.desktopPrivacyIn1Month;
     case 3:
-      return 'Через 3 месяца';
+      return l10n.desktopPrivacyIn3Months;
     case 6:
-      return 'Через 6 месяцев';
+      return l10n.desktopPrivacyIn6Months;
     case 12:
-      return 'Через год';
+      return l10n.desktopPrivacyIn1Year;
     default:
-      return 'Через 2 года';
+      return l10n.desktopPrivacyIn2Years;
   }
 }
 
@@ -2092,11 +2101,11 @@ class _AppLockCardState extends State<_AppLockCard> {
     if (mounted) setState(() {});
   }
 
-  String _graceLabel(int s) {
-    if (s == 0) return 'Сразу при потере фокуса';
-    if (s < 60) return '$s сек.';
-    if (s < 3600) return '${s ~/ 60} мин.';
-    return '${s ~/ 3600} ч.';
+  String _graceLabel(int s, AppLocalizations l10n) {
+    if (s == 0) return l10n.desktopLockImmediately;
+    if (s < 60) return l10n.desktopLockSeconds('$s');
+    if (s < 3600) return l10n.desktopLockMinutes('${s ~/ 60}');
+    return l10n.desktopLockHours('${s ~/ 3600}');
   }
 
   /// Applies the lock toggle and explains it when the change does not stick.
@@ -2107,29 +2116,34 @@ class _AppLockCardState extends State<_AppLockCard> {
   /// machine has no authenticator at all — the switch must stay off AND say
   /// why, instead of silently snapping back.
   Future<void> _toggleLock(bool value) async {
+    final l10n = AppLocalizations.of(context)!;
     final svc = widget.service;
-    final applied = await svc.setEnabled(value);
+    final applied = await svc.setEnabled(
+      value,
+      armReason: l10n.desktopEnableLockPrompt,
+    );
     if (!mounted || applied || !value) return;
     DesktopSnackbar.show(
       context,
       message: svc.unlockUnavailable.value
-          ? 'Служба проверки личности недоступна — блокировка не включена.'
-          : 'Блокировка не включена: подтверждение не пройдено.',
+          ? l10n.desktopLockNoIdentityService
+          : l10n.desktopLockNotConfirmed,
       kind: DSnackKind.warning,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final svc = widget.service;
     final supported = svc.biometricSupported.value;
     final enabled = svc.enabled.value;
     final grace = svc.graceSeconds.value;
     return WorkspaceCard(
-      title: 'Блокировка приложения',
+      title: l10n.desktopLockTitle,
       description: supported
-          ? 'Запрашивать Touch ID для входа после потери фокуса.'
-          : 'Запрашивать пароль устройства для входа после потери фокуса.',
+          ? l10n.desktopLockTouchIdHint
+          : l10n.desktopLockPasswordHint,
       child: Column(
         children: [
           WorkspaceRow(
@@ -2137,8 +2151,8 @@ class _AppLockCardState extends State<_AppLockCard> {
             // `biometricOnly: false`, so a Mac without Touch ID authenticates
             // with the device password — gating the switch on biometric
             // support made the lock unavailable to those machines entirely.
-            label: supported ? 'Включить Touch ID' : 'Включить блокировку',
-            description: supported ? null : 'Пароль устройства',
+            label: supported ? l10n.desktopLockEnableTouchId : l10n.desktopLockEnableLock,
+            description: supported ? null : l10n.desktopLockDevicePassword,
             trailing: WorkspaceSwitch(
               value: enabled,
               onChanged: (v) => unawaited(_toggleLock(v)),
@@ -2146,8 +2160,8 @@ class _AppLockCardState extends State<_AppLockCard> {
           ),
           if (enabled)
             WorkspaceRow(
-              label: 'Блокировать через',
-              description: _graceLabel(grace),
+              label: l10n.desktopLockAfter,
+              description: _graceLabel(grace, l10n),
               trailing: DropdownButton<int>(
                 value: _graceOptions.contains(grace)
                     ? grace
@@ -2155,7 +2169,7 @@ class _AppLockCardState extends State<_AppLockCard> {
                 underline: const SizedBox.shrink(),
                 items: [
                   for (final s in _graceOptions)
-                    DropdownMenuItem(value: s, child: Text(_graceLabel(s))),
+                    DropdownMenuItem(value: s, child: Text(_graceLabel(s, l10n))),
                 ],
                 onChanged: (v) {
                   if (v != null) unawaited(svc.setGraceSeconds(v));
@@ -2164,7 +2178,7 @@ class _AppLockCardState extends State<_AppLockCard> {
             ),
           if (enabled)
             WorkspaceRow(
-              label: 'Заблокировать сейчас',
+              label: l10n.desktopLockNow,
               icon: FluentIcons.lock_closed_24_regular,
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: svc.lock,
@@ -2236,6 +2250,7 @@ class _DevicesPaneState extends State<_DevicesPane> {
     BuildContext ctx,
     String targetDeviceId,
   ) async {
+    final l10n = AppLocalizations.of(ctx)!;
     final controller = widget.controller;
     if (controller == null) return;
     if (_endingDeviceId != null) return;
@@ -2246,19 +2261,18 @@ class _DevicesPaneState extends State<_DevicesPane> {
       context: ctx,
       builder: (dialogCtx) {
         return AlertDialog(
-          title: const Text('Завершить сеанс?'),
+          title: Text(l10n.desktopDevicesEndSessionTitle),
           content: Text(
-            'Устройство ${_shortId(targetDeviceId)} будет отключено от вашего профиля. '
-            'Чтобы вернуть доступ, потребуется повторное сканирование QR. Продолжить?',
+            l10n.desktopDevicesEndSessionBody(_shortId(targetDeviceId)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogCtx).pop(false),
-              child: const Text('Отмена'),
+              child: Text(l10n.cancel),
             ),
             FilledButton.tonal(
               onPressed: () => Navigator.of(dialogCtx).pop(true),
-              child: const Text('Завершить'),
+              child: Text(l10n.desktopDevicesEnd),
             ),
           ],
         );
@@ -2284,11 +2298,11 @@ class _DevicesPaneState extends State<_DevicesPane> {
     if (!mounted) return;
     if (errorMsg != null) {
       messenger?.showSnackBar(
-        SnackBar(content: Text('Не удалось завершить сеанс: $errorMsg')),
+        SnackBar(content: Text(l10n.desktopDevicesEndFailed(errorMsg))),
       );
     } else {
       messenger?.showSnackBar(
-        const SnackBar(content: Text('Сеанс устройства завершён.')),
+        SnackBar(content: Text(l10n.desktopDevicesEnded)),
       );
     }
     await _load();
@@ -2296,6 +2310,7 @@ class _DevicesPaneState extends State<_DevicesPane> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     // `controller` is `vm?.controller` at the call site, so guarding on the
     // view model gives both without a bang operator.
     final vm = widget.vm;
@@ -2308,24 +2323,24 @@ class _DevicesPaneState extends State<_DevicesPane> {
       return _PaneScaffold(
         children: [
           WorkspaceCard(
-            title: 'Активные сессии',
+            title: l10n.desktopDevicesActiveSessions,
             description:
-                'Демо-режим · реальные устройства появятся после подключения профиля',
+                l10n.desktopDevicesDemoHint,
             child: Column(
-              children: const [
+              children: [
                 WorkspaceRow(
-                  label: 'macOS · Этот компьютер',
-                  description: 'MacBook Pro · Сейчас активен',
+                  label: l10n.desktopDevicesThisComputer,
+                  description: l10n.desktopDevicesDemoMac,
                   icon: FluentIcons.laptop_24_regular,
                 ),
                 WorkspaceRow(
                   label: 'iPhone 15 Pro',
-                  description: 'iOS 18.2 · 2 часа назад (демо)',
+                  description: l10n.desktopDevicesDemoIphone,
                   icon: FluentIcons.phone_24_regular,
                 ),
                 WorkspaceRow(
                   label: 'iPad Air',
-                  description: 'iPadOS 18 · вчера (демо)',
+                  description: l10n.desktopDevicesDemoIpad,
                   icon: FluentIcons.tablet_24_regular,
                 ),
               ],
@@ -2342,10 +2357,10 @@ class _DevicesPaneState extends State<_DevicesPane> {
       final isBusy = _endingDeviceId == id;
       rows.add(
         WorkspaceRow(
-          label: isThis ? 'Это устройство' : _shortId(id),
+          label: isThis ? l10n.desktopDevicesThisDevice : _shortId(id),
           description: isThis
               ? '${Platform.operatingSystem} · ${_shortId(id)}'
-              : 'Удалённое устройство',
+              : l10n.desktopDevicesRemoteDevice,
           icon: isThis
               ? (Platform.isMacOS
                     ? FluentIcons.laptop_24_regular
@@ -2371,7 +2386,7 @@ class _DevicesPaneState extends State<_DevicesPane> {
                         child: CircularProgressIndicator(strokeWidth: 2.2),
                       )
                     : DesktopButton(
-                        label: 'Отключить',
+                        label: l10n.desktopDevicesDisconnect,
                         kind: DButtonKind.danger,
                         onPressed: _endingDeviceId != null
                             ? null
@@ -2388,10 +2403,10 @@ class _DevicesPaneState extends State<_DevicesPane> {
           // вопрос безопасности, и ответ на него должен быть виден до того,
           // как человек начнёт считать строки глазами.
           title: _deviceIds.isEmpty
-              ? 'Устройства'
-              : 'Устройства · ${_deviceIds.length}',
+              ? l10n.desktopDevicesTitle
+              : l10n.desktopDevicesTitleCount(_deviceIds.length),
           description:
-              'Список устройств, привязанных к этому профилю на сервере ключей.',
+              l10n.desktopDevicesHint,
           child: Column(
             children: [
               if (_loading)
@@ -2407,19 +2422,19 @@ class _DevicesPaneState extends State<_DevicesPane> {
                 )
               else if (_error != null)
                 WorkspaceRow(
-                  label: 'Не удалось загрузить',
+                  label: l10n.desktopDevicesLoadFailed,
                   description: _error!,
                   icon: FluentIcons.warning_24_regular,
                   trailing: DesktopButton(
-                    label: 'Повторить',
+                    label: l10n.desktopDevicesRetry,
                     kind: DButtonKind.tonal,
                     onPressed: _load,
                   ),
                 )
               else if (rows.isEmpty)
                 WorkspaceRow(
-                  label: 'Устройств не найдено',
-                  description: 'Профиль ещё не привязан к серверу.',
+                  label: l10n.desktopDevicesNone,
+                  description: l10n.desktopDevicesNotLinked,
                   icon: FluentIcons.phone_laptop_24_regular,
                 )
               else
@@ -2429,7 +2444,7 @@ class _DevicesPaneState extends State<_DevicesPane> {
         ),
         WorkspaceCard(
           child: WorkspaceRow(
-            label: 'Обновить список',
+            label: l10n.desktopDevicesRefresh,
             icon: FluentIcons.arrow_clockwise_24_regular,
             onTap: _loading ? null : _load,
           ),
@@ -2475,11 +2490,12 @@ class _PairNewDeviceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return WorkspaceCard(
       child: WorkspaceRow(
-        label: 'Подключить устройство',
+        label: l10n.desktopPairTitle,
         description:
-            'Покажите QR-код на новом устройстве или отсканируйте его с телефона',
+            l10n.desktopPairHint,
         icon: FluentIcons.qr_code_24_regular,
         trailing: const Icon(Icons.chevron_right_rounded),
         onTap: () async {
@@ -2560,6 +2576,7 @@ class _PairDeviceSheetState extends State<_PairDeviceSheet> {
   }
 
   Future<void> _start() async {
+    final l10n = AppLocalizations.of(context)!;
     if (_busy) return;
     setState(() {
       _busy = true;
@@ -2582,7 +2599,7 @@ class _PairDeviceSheetState extends State<_PairDeviceSheet> {
         _busy = false;
         _errorMessage = (msg.isNotEmpty)
             ? msg
-            : 'Не удалось создать запрос на подключение';
+            : l10n.desktopPairRequestFailed;
       });
     } catch (e) {
       if (!mounted) return;
@@ -2593,8 +2610,7 @@ class _PairDeviceSheetState extends State<_PairDeviceSheet> {
         // печатаются своим текстом выше; остальное честнее назвать общим
         // словом и оставить подробность журналу.
         _errorMessage =
-            'Не удалось подготовить код. Проверьте подключение к '
-            'интернету и попробуйте ещё раз.';
+            l10n.desktopPairingPrepareFailed;
       });
     }
   }
@@ -2615,13 +2631,14 @@ class _PairDeviceSheetState extends State<_PairDeviceSheet> {
   }
 
   Future<void> _copyPayload() async {
+    final l10n = AppLocalizations.of(context)!;
     final payload = _qrPayload;
     if (payload == null) return;
     await Clipboard.setData(ClipboardData(text: payload));
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Содержимое QR скопировано')));
+    ).showSnackBar(SnackBar(content: Text(l10n.desktopPairCodeCopied)));
   }
 
   @override
@@ -2637,6 +2654,7 @@ class _PairDeviceSheetState extends State<_PairDeviceSheet> {
   }
 
   Widget _buildBody(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final payload = _qrPayload;
     return Padding(
@@ -2662,14 +2680,13 @@ class _PairDeviceSheetState extends State<_PairDeviceSheet> {
             ),
             const SizedBox(height: DSpace.l),
             Text(
-              'Подключить новое устройство',
+              l10n.desktopPairNewTitle,
               style: DType.title.copyWith(color: c.textPrimary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: DSpace.s),
             Text(
-              'На новом устройстве откройте Secretly и выберите '
-              '«Подключиться по QR». Затем отсканируйте код ниже.',
+              l10n.desktopPairNewHint,
               style: DType.body.copyWith(color: c.textSecondary),
               textAlign: TextAlign.center,
             ),
@@ -2702,7 +2719,7 @@ class _PairDeviceSheetState extends State<_PairDeviceSheet> {
                           ),
                         const SizedBox(height: DSpace.s),
                         Text(
-                          _busy ? 'Готовим QR…' : 'QR недоступен',
+                          _busy ? l10n.desktopPairingPreparingQr : l10n.desktopPairingQrUnavailable,
                           style: DType.caption.copyWith(color: Colors.black54),
                         ),
                       ],
@@ -2727,17 +2744,17 @@ class _PairDeviceSheetState extends State<_PairDeviceSheet> {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 DesktopButton(
-                  label: 'Закрыть',
+                  label: l10n.desktopPairClose,
                   kind: DButtonKind.tonal,
                   onPressed: () => Navigator.of(context).maybePop(),
                 ),
                 DesktopButton(
-                  label: 'Скопировать код',
+                  label: l10n.desktopPairCopyCode,
                   kind: DButtonKind.tonal,
                   onPressed: payload == null ? null : _copyPayload,
                 ),
                 DesktopButton(
-                  label: 'Обновить QR',
+                  label: l10n.desktopPairRefreshQr,
                   kind: DButtonKind.filled,
                   onPressed: _busy ? null : _retry,
                 ),
@@ -2764,6 +2781,7 @@ class _HistorySyncCardState extends State<_HistorySyncCard> {
   String? _rehydrateFeedback;
 
   Future<void> _trigger() async {
+    final l10n = AppLocalizations.of(context)!;
     if (_running) return;
     setState(() {
       _running = true;
@@ -2783,12 +2801,12 @@ class _HistorySyncCardState extends State<_HistorySyncCard> {
     setState(() {
       _running = false;
       if (delta > 0) {
-        _feedback = 'Подгружено новых событий: $delta';
+        _feedback = l10n.desktopSyncPulled(delta);
       } else if (service.requestsRejected > 0 &&
           service.requestsCompleted == 0) {
-        _feedback = 'Слишком частые запросы — попробуйте позже';
+        _feedback = l10n.desktopSyncTooOften;
       } else {
-        _feedback = 'Готово · новых событий нет';
+        _feedback = l10n.desktopSyncNothingNew;
       }
     });
   }
@@ -2798,11 +2816,12 @@ class _HistorySyncCardState extends State<_HistorySyncCard> {
   /// that isn't on disk yet. Safe to spam — `ensureCachedAttachmentFile`
   /// short-circuits if the file already exists.
   Future<void> _triggerRehydrate() async {
+    final l10n = AppLocalizations.of(context)!;
     if (_rehydrating) return;
     final controller = widget.controller;
     if (controller == null) {
       setState(() {
-        _rehydrateFeedback = 'Недоступно в демо-режиме';
+        _rehydrateFeedback = l10n.desktopSyncDemoUnavailable;
       });
       return;
     }
@@ -2816,35 +2835,34 @@ class _HistorySyncCardState extends State<_HistorySyncCard> {
       setState(() {
         _rehydrating = false;
         if (result.blobsDownloaded > 0) {
-          _rehydrateFeedback =
-              'Подгружено вложений: ${result.blobsDownloaded} '
-              '(чатов: ${result.convosScanned})';
+          _rehydrateFeedback = l10n.desktopSyncBlobsPulled(
+            result.blobsDownloaded,
+            result.convosScanned,
+          );
         } else {
           _rehydrateFeedback =
-              'Готово · новых вложений нет (чатов: ${result.convosScanned})';
+              l10n.desktopSyncNoBlobs(result.convosScanned);
         }
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _rehydrating = false;
-        _rehydrateFeedback = 'Не удалось: $e';
+        _rehydrateFeedback = l10n.desktopFailedWith('$e');
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return WorkspaceCard(
-      title: 'История с других устройств',
-      description:
-          'Запросить недавнюю историю чатов у мобильного устройства. '
-          'Используется, если десктоп был офлайн дольше 7 дней или только '
-          'что был привязан по QR-коду.',
+      title: l10n.desktopSyncTitle,
+      description: l10n.desktopSyncHint,
       child: Column(
         children: [
           WorkspaceRow(
-            label: _running ? 'Синхронизация…' : 'Запросить историю',
+            label: _running ? l10n.desktopSyncRunning : l10n.desktopSyncAskHistory,
             description: _feedback,
             icon: FluentIcons.history_24_regular,
             trailing: _running
@@ -2854,18 +2872,15 @@ class _HistorySyncCardState extends State<_HistorySyncCard> {
                     child: CircularProgressIndicator(strokeWidth: 2.2),
                   )
                 : DesktopButton(
-                    label: 'Запросить',
+                    label: l10n.desktopSyncAsk,
                     kind: DButtonKind.tonal,
                     onPressed: _trigger,
                   ),
           ),
           WorkspaceRow(
-            label: _rehydrating ? 'Загрузка вложений…' : 'Подкачать вложения',
+            label: _rehydrating ? l10n.desktopSyncBlobsRunning : l10n.desktopSyncBlobsAction,
             description:
-                _rehydrateFeedback ??
-                'Скачивает медиа из недавних чатов, если файлы '
-                    'отсутствуют локально (после повторной привязки '
-                    'или долгого офлайна).',
+                _rehydrateFeedback ?? l10n.desktopSyncBlobsHint,
             icon: FluentIcons.cloud_arrow_down_24_regular,
             trailing: _rehydrating
                 ? const SizedBox(
@@ -2874,7 +2889,7 @@ class _HistorySyncCardState extends State<_HistorySyncCard> {
                     child: CircularProgressIndicator(strokeWidth: 2.2),
                   )
                 : DesktopButton(
-                    label: 'Подкачать',
+                    label: l10n.desktopSyncBlobsShort,
                     kind: DButtonKind.tonal,
                     onPressed: widget.controller == null
                         ? null
@@ -2907,6 +2922,7 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
   bool _ok = false;
 
   Future<void> _run(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
     final controller = widget.controller;
     if (controller == null || _running) return;
 
@@ -2934,17 +2950,18 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
       setState(() {
         _running = false;
         _ok = true;
-        _feedback =
-            'Копия на сервере ✓ · $stamp · '
-            '${result.payloadKilobytes.toStringAsFixed(0)} КБ · '
-            'профиль ${result.profileId}';
+        _feedback = l10n.desktopServerBackupOk(
+          stamp,
+          result.payloadKilobytes.toStringAsFixed(0),
+          result.profileId,
+        );
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _running = false;
         _ok = false;
-        _feedback = 'Не удалось: ${_short(e)}';
+        _feedback = l10n.desktopFailedWith(_short(e));
       });
     }
   }
@@ -2982,15 +2999,13 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
             }
 
             return AlertDialog(
-              title: const Text('Пароль резервной копии'),
+              title: Text(l10n.desktopServerBackupPassword),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Этим паролем копия шифруется и восстанавливается на любом '
-                    'устройстве. Запомните его — без пароля копия бесполезна, '
-                    'восстановить его нельзя.',
+                    l10n.desktopServerBackupPasswordHint,
                     style: Theme.of(ctx).textTheme.bodySmall,
                   ),
                   const SizedBox(height: 12),
@@ -2998,15 +3013,15 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
                     controller: pw,
                     autofocus: true,
                     obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Пароль'),
+                    decoration: InputDecoration(labelText: l10n.password),
                   ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: confirm,
                     obscureText: true,
                     onSubmitted: (_) => submit(),
-                    decoration: const InputDecoration(
-                      labelText: 'Повторите пароль',
+                    decoration: InputDecoration(
+                      labelText: l10n.desktopServerBackupRepeat,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -3023,11 +3038,11 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Отмена'),
+                  child: Text(l10n.cancel),
                 ),
                 FilledButton(
                   onPressed: submit,
-                  child: const Text('Создать копию'),
+                  child: Text(l10n.desktopServerBackupCreate),
                 ),
               ],
             );
@@ -3042,12 +3057,10 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return WorkspaceCard(
-      title: 'Резервная копия на сервер',
-      description:
-          'Зашифрованная копия аккаунта на сервере Secretly. '
-          'Восстанавливается на любом устройстве через '
-          '«Восстановить с сервера» по вашему Secretly ID и паролю.',
+      title: l10n.desktopServerBackupTitle,
+      description: l10n.desktopServerBackupHint,
       child: Column(
         children: [
           // SEC-01, как на телефоне (`a00ae2a7`): копия на сервере без опоры
@@ -3073,8 +3086,9 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
   }
 
   Widget _serverBackupRow(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return WorkspaceRow(
-        label: _running ? 'Загрузка…' : 'Создать копию на сервере',
+        label: _running ? l10n.desktopServerBackupLoading : l10n.desktopServerBackupCreateOnServer,
         description: _feedback,
         icon: FluentIcons.cloud_arrow_up_24_regular,
         trailing: _running
@@ -3084,7 +3098,7 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
                 child: CircularProgressIndicator(strokeWidth: 2.2),
               )
             : DesktopButton(
-                label: _ok ? 'Обновить копию' : 'Создать',
+                label: _ok ? l10n.desktopServerBackupUpdate : l10n.desktopListCreate,
                 kind: DButtonKind.tonal,
                 icon: FluentIcons.cloud_arrow_up_24_regular,
                 onPressed: widget.controller == null
@@ -3139,15 +3153,14 @@ class _StoragePaneState extends State<_StoragePane> {
     final l10n = AppLocalizations.of(context)!;
     final ok = await DesktopDialog.show<bool>(
       context,
-      title: 'Удалить модель распознавания?',
+      title: l10n.desktopStorageDeleteModelTitle,
       size: DDialogSize.small,
       body: Text(
-        'Расшифровка голосовых сообщений перестанет работать, пока модель не '
-        'скачается заново.',
+        l10n.desktopStorageDeleteModelBody,
         style: DType.body.copyWith(color: DColors.of(context).textSecondary),
       ),
       primary: DDialogAction(
-        label: 'Удалить',
+        label: l10n.delete,
         kind: DButtonKind.danger,
         onPressed: () => Navigator.of(context).maybePop(true),
       ),
@@ -3163,36 +3176,37 @@ class _StoragePaneState extends State<_StoragePane> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Модель удалена',
+        message: l10n.desktopStorageModelDeleted,
         kind: DSnackKind.success,
       );
     } catch (e) {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось удалить: $e',
+        message: l10n.desktopStorageDeleteFailed('$e'),
         kind: DSnackKind.error,
       );
     }
   }
 
-  static String fmtBytes(int bytes) {
-    if (bytes <= 0) return '0 КБ';
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} КБ';
+  static String fmtBytes(int bytes, AppLocalizations l10n) {
+    if (bytes <= 0) return l10n.desktopStorageKb('0');
+    if (bytes < 1024 * 1024) return l10n.desktopStorageKb((bytes / 1024).toStringAsFixed(0));
     if (bytes < 1024 * 1024 * 1024) {
-      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} МБ';
+      return l10n.desktopStorageMb((bytes / (1024 * 1024)).toStringAsFixed(1));
     }
-    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} ГБ';
+    return l10n.desktopStorageGb((bytes / (1024 * 1024 * 1024)).toStringAsFixed(2));
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final usage = _usage;
     return _PaneScaffold(
       children: [
         WorkspaceCard(
-          title: 'Использование',
-          description: 'Кеш и медиа на этом устройстве',
+          title: l10n.desktopStorageUsage,
+          description: l10n.desktopStorageUsageHint,
           child: _StorageBar(usage: usage),
         ),
         WorkspaceCard(
@@ -3201,14 +3215,12 @@ class _StoragePaneState extends State<_StoragePane> {
           // to know why the number did not drop as far as they expected.
           description: usage == null
               ? null
-              : 'Освободится ${fmtBytes(usage.clearableBytes)}. '
-                    'Сообщения, отправленные вами файлы и «недавние» не '
-                    'удаляются — их неоткуда восстановить.',
+              : l10n.desktopStorageClearHint(fmtBytes(usage.clearableBytes, l10n)),
           child: WorkspaceRow(
-            label: 'Очистить кеш',
+            label: l10n.desktopStorageClear,
             description: usage == null
-                ? 'Подсчёт…'
-                : fmtBytes(usage.clearableBytes),
+                ? l10n.desktopStorageCounting
+                : fmtBytes(usage.clearableBytes, l10n),
             icon: FluentIcons.broom_24_regular,
             trailing: _clearing
                 ? const SizedBox(
@@ -3222,17 +3234,15 @@ class _StoragePaneState extends State<_StoragePane> {
         ),
         if ((usage?.whisperModelBytes ?? 0) > 0)
           WorkspaceCard(
-            title: 'Модель распознавания речи',
+            title: l10n.desktopStorageSpeechModel,
             description:
-                'Используется для расшифровки голосовых сообщений на этом '
-                'компьютере, без отправки звука куда-либо. Обычная очистка '
-                'кеша её НЕ удаляет — она большая и качается отдельно.',
+                l10n.desktopStorageSpeechModelHint,
             child: WorkspaceRow(
-              label: 'Удалить модель',
-              description: fmtBytes(usage?.whisperModelBytes ?? 0),
+              label: l10n.desktopStorageDeleteModel,
+              description: fmtBytes(usage?.whisperModelBytes ?? 0, l10n),
               icon: FluentIcons.mic_off_24_regular,
               trailing: DesktopButton(
-                label: 'Удалить',
+                label: l10n.delete,
                 kind: DButtonKind.tonal,
                 size: DButtonSize.small,
                 onPressed: () => unawaited(_deleteVoiceModel()),
@@ -3250,6 +3260,7 @@ class _StorageBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final u = usage;
     final media = u?.mediaBytes ?? 0;
@@ -3305,12 +3316,12 @@ class _StorageBar extends StatelessWidget {
           spacing: 12,
           runSpacing: 4,
           children: [
-            _legend(c.accentPrimary, 'Медиа · ${f(media)}'),
-            _legend(c.warning, 'Голос · ${f(voice)}'),
-            _legend(c.success, 'Прочее · ${f(other)}'),
+            _legend(c.accentPrimary, l10n.desktopStorageMedia(f(media, l10n))),
+            _legend(c.warning, l10n.desktopStorageVoice(f(voice, l10n))),
+            _legend(c.success, l10n.desktopStorageOther(f(other, l10n))),
             _legend(
               c.borderDivider,
-              u == null ? 'Свободно' : 'Всего · ${f(u.total)}',
+              u == null ? l10n.desktopStorageFree : l10n.desktopStorageTotal(f(u.total, l10n)),
             ),
           ],
         ),
@@ -3376,6 +3387,7 @@ class _AboutPaneState extends State<_AboutPane> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return _PaneScaffold(
       children: [
@@ -3394,22 +3406,21 @@ class _AboutPaneState extends State<_AboutPane> {
                 builder: (ctx, snap) {
                   final info = snap.data ?? AppPackageInfo.fallback;
                   return Text(
-                    'Версия ${info.version} · сборка ${info.buildNumber}',
+                    l10n.desktopAboutVersion(info.version, info.buildNumber),
                     style: DType.label.copyWith(color: c.textSecondary),
                   );
                 },
               ),
               const SizedBox(height: DSpace.m),
               Text(
-                'Защищённый мессенджер с end-to-end шифрованием. Без облака. '
-                'Без рекламы. Открытый исходный код.',
+                l10n.desktopAboutTagline,
                 style: DType.body.copyWith(color: c.textSecondary, height: 1.5),
               ),
               const SizedBox(height: DSpace.l),
               Row(
                 children: [
                   DesktopButton(
-                    label: 'Лицензии',
+                    label: l10n.desktopAboutLicences,
                     kind: DButtonKind.tonal,
                     onPressed: () => showLicensePage(
                       context: context,
@@ -3418,7 +3429,7 @@ class _AboutPaneState extends State<_AboutPane> {
                   ),
                   const SizedBox(width: DSpace.s),
                   DesktopButton(
-                    label: 'Сайт',
+                    label: l10n.desktopAboutWebsite,
                     kind: DButtonKind.ghost,
                     icon: FluentIcons.open_24_regular,
                     onPressed: () => unawaited(_openWebsite()),
@@ -3490,6 +3501,7 @@ class _DangerPaneState extends State<_DangerPane> {
   }
 
   Future<void> _runDelete(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
     final controller = widget.controller;
     if (controller == null) return;
 
@@ -3504,7 +3516,7 @@ class _DangerPaneState extends State<_DangerPane> {
     final cm = CallManager.instance;
     if (cm != null && cm.state.value.isActive) {
       messenger?.showSnackBar(
-        const SnackBar(content: Text('Сначала завершите активный звонок.')),
+        SnackBar(content: Text(l10n.desktopSettingsEndCallFirst)),
       );
       return;
     }
@@ -3514,15 +3526,12 @@ class _DangerPaneState extends State<_DangerPane> {
       useRootNavigator: true,
       builder: (dialogCtx) {
         return AlertDialog(
-          title: const Text('Удалить аккаунт безвозвратно?'),
-          content: const Text(
-            'Профиль, ключи, локальные данные и история сообщений будут '
-            'удалены на этом и других устройствах. Восстановление невозможно.',
-          ),
+          title: Text(l10n.desktopDangerTitle),
+          content: Text(l10n.desktopDangerBody),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogCtx).pop(false),
-              child: const Text('Отмена'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
@@ -3530,7 +3539,7 @@ class _DangerPaneState extends State<_DangerPane> {
                 foregroundColor: Theme.of(dialogCtx).colorScheme.onError,
               ),
               onPressed: () => Navigator.of(dialogCtx).pop(true),
-              child: const Text('Удалить'),
+              child: Text(l10n.delete),
             ),
           ],
         );
@@ -3548,18 +3557,18 @@ class _DangerPaneState extends State<_DangerPane> {
         context: navigator.context,
         barrierDismissible: false,
         useRootNavigator: true,
-        builder: (_) => const PopScope(
+        builder: (_) => PopScope(
           canPop: false,
           child: AlertDialog(
             content: Row(
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 22,
                   height: 22,
                   child: CircularProgressIndicator(strokeWidth: 2.4),
                 ),
-                SizedBox(width: 16),
-                Expanded(child: Text('Удаление аккаунта…')),
+                const SizedBox(width: 16),
+                Expanded(child: Text(l10n.desktopDangerDeleting)),
               ],
             ),
           ),
@@ -3583,7 +3592,7 @@ class _DangerPaneState extends State<_DangerPane> {
 
     if (error != null) {
       messenger?.showSnackBar(
-        SnackBar(content: Text('Не удалось удалить аккаунт: $error')),
+        SnackBar(content: Text(l10n.desktopDangerFailed(error))),
       );
     }
     // On success `deleteAccountEverywhere` fires `restartRequested`, which
@@ -3593,6 +3602,7 @@ class _DangerPaneState extends State<_DangerPane> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final controller = widget.controller;
     if (controller == null) {
       // Demo (controller-less) mode: render the same layout but mark the
@@ -3600,20 +3610,20 @@ class _DangerPaneState extends State<_DangerPane> {
       return _PaneScaffold(
         children: [
           WorkspaceCard(
-            title: 'Удаление аккаунта',
+            title: l10n.desktopDangerSection,
             description:
-                'Демо-режим · удаление недоступно без подключённого профиля.',
+                l10n.desktopDangerDemo,
             child: Column(
               children: [
                 const SizedBox(height: DSpace.s),
-                const DesktopTextField(
-                  hintText: 'Введите ваш Secretly ID для подтверждения',
+                DesktopTextField(
+                  hintText: l10n.desktopDangerEnterId,
                 ),
                 const SizedBox(height: DSpace.m),
                 Align(
                   alignment: Alignment.centerRight,
                   child: DesktopButton(
-                    label: 'Удалить аккаунт',
+                    label: l10n.desktopDangerAction,
                     kind: DButtonKind.danger,
                     icon: FluentIcons.delete_24_regular,
                     onPressed: null,
@@ -3628,16 +3638,15 @@ class _DangerPaneState extends State<_DangerPane> {
 
     final pid = controller.profileId.trim();
     final hint = pid.isEmpty || pid == 'unknown'
-        ? 'Введите ваш Secretly ID для подтверждения'
-        : 'Введите $pid для подтверждения';
+        ? l10n.desktopDangerEnterId
+        : l10n.desktopDangerEnterIdExact(pid);
 
     return _PaneScaffold(
       children: [
         WorkspaceCard(
-          title: 'Удаление аккаунта',
+          title: l10n.desktopDangerSection,
           description:
-              'Это действие необратимо. Удалятся все ваши данные, '
-              'история сообщений и ключи. Восстановление невозможно.',
+              l10n.desktopDangerIrreversible,
           child: Column(
             children: [
               const SizedBox(height: DSpace.s),
@@ -3652,7 +3661,7 @@ class _DangerPaneState extends State<_DangerPane> {
                         child: CircularProgressIndicator(strokeWidth: 2.4),
                       )
                     : DesktopButton(
-                        label: 'Удалить аккаунт',
+                        label: l10n.desktopDangerAction,
                         kind: DButtonKind.danger,
                         icon: FluentIcons.delete_24_regular,
                         onPressed: _canDelete
@@ -3702,7 +3711,7 @@ class _SecurityPaneState extends State<_SecurityPane> {
     return _PaneScaffold(
       children: [
         WorkspaceCard(
-          title: 'Сквозное шифрование',
+          title: l10n.desktopSecurityE2ee,
           child: Row(
             children: [
               Icon(
@@ -3713,8 +3722,7 @@ class _SecurityPaneState extends State<_SecurityPane> {
               const SizedBox(width: DSpace.m),
               Expanded(
                 child: Text(
-                  'Все сообщения, звонки и файлы шифруются на вашем устройстве. '
-                  'Ключи не покидают ваши устройства — сервер видит только шифртекст.',
+                  l10n.desktopSecurityE2eeHint,
                   style: DType.label.copyWith(
                     color: c.textSecondary,
                     height: 1.4,
@@ -3726,22 +3734,19 @@ class _SecurityPaneState extends State<_SecurityPane> {
         ),
         if (ctrl != null)
           WorkspaceCard(
-            title: 'Проверенные устройства',
+            title: l10n.desktopSecurityVerifiedDevices,
             description:
                 // SEC-06: оговорка про группы обязана быть — привратник в них
                 // не работает. Текст переписан, а не дополнен: ратчет
                 // `desktop_l10n_ratchet_test` держит число зашитых русских
                 // литералов, и две новые строки его подняли бы. Литералов
                 // по-прежнему четыре.
-                'Пока настройка включена, сообщения не уходят на '
-                'неподтверждённые устройства собеседника. Это защита от '
-                'подмены, но сообщение может не дойти, пока он не подтвердит '
-                'новое. Только личная переписка: на группы не действует.',
+                l10n.desktopSecurityVerifiedHint,
             child: WorkspaceRow(
-              label: 'Только проверенные устройства',
+              label: l10n.desktopSecurityOnlyVerified,
               description: ctrl.blockUnverified
-                  ? 'Непроверенные устройства блокируются'
-                  : 'Сообщения уходят на все устройства собеседника',
+                  ? l10n.desktopSecurityBlocked
+                  : l10n.desktopSecurityAllDevices,
               trailing: WorkspaceSwitch(
                 value: ctrl.blockUnverified,
                 onChanged: (v) => unawaited(ctrl.setBlockUnverified(v)),
@@ -3752,12 +3757,11 @@ class _SecurityPaneState extends State<_SecurityPane> {
           _ScopeLockCard(
             controller: ctrl,
             scope: SecurityLockScope.app,
-            title: 'Вход в приложение',
+            title: l10n.desktopSecurityAppEntry,
             // Замки хранятся на каждом устройстве отдельно — «общая с
             // телефоном» было неправдой (17.09.2026).
             description:
-                'Пароль при открытии Secretly и после того, как окно было '
-                'скрыто дольше минуты. Действует на этом компьютере.',
+                l10n.desktopSecurityAppEntryHint,
           ),
           const WorkspaceCard(child: _OfflineLockRow()),
           _ScopeLockCard(
@@ -3765,9 +3769,7 @@ class _SecurityPaneState extends State<_SecurityPane> {
             scope: SecurityLockScope.personal,
             title: l10n.desktopNotifDirectChats,
             description:
-                'Отдельный пароль на категорию «Личные». Без него личные чаты '
-                'открыты любому, у кого есть доступ к разблокированному '
-                'компьютеру.',
+                l10n.desktopSecurityPersonalScopeHint,
           ),
         ],
         // Touch ID gate for THIS Mac only — deliberately separate from the
@@ -3880,27 +3882,28 @@ class _CallsPaneState extends State<_CallsPane> {
   }
 
   Widget _buildBody(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final ctrl = widget.controller;
     if (ctrl == null) return const _PaneScaffold(children: []);
     return _PaneScaffold(
       children: [
         WorkspaceCard(
-          title: 'Звонки',
+          title: l10n.desktopPrivacyCalls,
           child: Column(
             children: [
               WorkspaceRow(
-                label: 'Звонки в приложении',
-                description: 'Выключите, чтобы полностью отключить звонки',
+                label: l10n.desktopCallsInApp,
+                description: l10n.desktopCallsInAppHint,
                 trailing: WorkspaceSwitch(
                   value: ctrl.callsEnabled,
                   onChanged: (v) => unawaited(ctrl.setCallsEnabled(v)),
                 ),
               ),
               WorkspaceRow(
-                label: 'Принимать входящие',
+                label: l10n.desktopCallsAccept,
                 description: ctrl.callsEnabled
-                    ? 'Вам смогут звонить'
-                    : 'Недоступно, пока звонки выключены',
+                    ? l10n.desktopCallsAcceptHint
+                    : l10n.desktopCallsDisabledHint,
                 trailing: WorkspaceSwitch(
                   value: ctrl.incomingCallsEnabled && ctrl.callsEnabled,
                   onChanged: (v) {
@@ -3927,12 +3930,11 @@ class _CallsPaneState extends State<_CallsPane> {
           ),
         ),
         WorkspaceCard(
-          title: 'Демонстрация экрана',
+          title: l10n.desktopCallsScreenShare,
           description:
-              'Приём чужой демонстрации — отдельное разрешение: на экране может '
-              'оказаться то, чего вы не ожидали увидеть.',
+              l10n.desktopCallsScreenShareHint,
           child: WorkspaceRow(
-            label: 'Принимать демонстрацию экрана',
+            label: l10n.desktopCallsAcceptScreenShare,
             trailing: WorkspaceSwitch(
               value: ctrl.incomingScreenShareEnabled,
               onChanged: (v) =>
@@ -3962,13 +3964,14 @@ class _AccountPane extends StatefulWidget {
 
 class _AccountPaneState extends State<_AccountPane> {
   Future<void> _copyId() async {
+    final l10n = AppLocalizations.of(context)!;
     final ctrl = widget.controller;
     if (ctrl == null) return;
     await Clipboard.setData(ClipboardData(text: ctrl.profileId));
     if (!mounted) return;
     DesktopSnackbar.show(
       context,
-      message: 'Secretly ID скопирован',
+      message: l10n.desktopAccountIdCopied,
       kind: DSnackKind.success,
     );
   }
@@ -3986,6 +3989,7 @@ class _AccountPaneState extends State<_AccountPane> {
   }
 
   Widget _buildBody(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final ctrl = widget.controller;
     if (ctrl == null) return const _PaneScaffold(children: []);
@@ -3994,13 +3998,12 @@ class _AccountPaneState extends State<_AccountPane> {
         WorkspaceCard(
           title: 'Secretly ID',
           description:
-              'Этим идентификатором делятся, чтобы вас нашли. Он не содержит '
-              'ни номера телефона, ни почты.',
+              l10n.desktopAccountIdHint,
           child: WorkspaceRow(
             label: ctrl.profileId,
             icon: FluentIcons.fingerprint_24_regular,
             trailing: DesktopButton(
-              label: 'Копировать',
+              label: l10n.desktopAccountCopy,
               kind: DButtonKind.ghost,
               icon: FluentIcons.copy_24_regular,
               size: DButtonSize.small,
@@ -4018,10 +4021,10 @@ class _AccountPaneState extends State<_AccountPane> {
         // указателя.
         if (widget.onOpenProfile != null)
           WorkspaceCard(
-            title: 'Профиль',
+            title: l10n.desktopAccountProfile,
             child: WorkspaceRow(
-              label: 'Имя, фото, статус',
-              description: 'Открыть страницу профиля',
+              label: l10n.desktopAccountProfileHint,
+              description: l10n.desktopAccountOpenProfile,
               icon: FluentIcons.person_24_regular,
               trailing: Icon(
                 Icons.chevron_right_rounded,
@@ -4084,9 +4087,10 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
   AppSecurityManager get _sec => widget.controller.security;
 
   Future<void> _enable() async {
+    final l10n = AppLocalizations.of(context)!;
     final password = await _promptPassword(
-      title: 'Пароль для «${widget.title}»',
-      hint: 'Минимум 4 символа',
+      title: l10n.desktopScopePasswordFor(widget.title),
+      hint: l10n.desktopScopeMin4,
       confirm: true,
     );
     if (password == null || !mounted) return;
@@ -4103,20 +4107,21 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Защита включена',
+        message: l10n.desktopScopeOn,
         kind: DSnackKind.success,
       );
     } catch (e) {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось включить: $e',
+        message: l10n.desktopScopeOnFailed('$e'),
         kind: DSnackKind.error,
       );
     }
   }
 
   Future<void> _disable() async {
+    final l10n = AppLocalizations.of(context)!;
     // Turning protection OFF must prove you can already get IN — otherwise
     // anyone at an unlocked desktop could strip the lock from the phone too,
     // since the scope config is shared.
@@ -4132,14 +4137,14 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Защита выключена',
+        message: l10n.desktopScopeOff,
         kind: DSnackKind.info,
       );
     } catch (e) {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось выключить: $e',
+        message: l10n.desktopScopeOffFailed('$e'),
         kind: DSnackKind.error,
       );
     }
@@ -4184,7 +4189,7 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
               const SizedBox(height: DSpace.s),
               DesktopTextField(
                 controller: second,
-                hintText: 'Повторите пароль',
+                hintText: l10n.desktopServerBackupRepeat,
                 obscureText: true,
               ),
             ],
@@ -4197,17 +4202,17 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
             ],
             const SizedBox(height: DSpace.m),
             DesktopButton(
-              label: 'Сохранить',
+              label: l10n.saveAction,
               expand: true,
               onPressed: () {
                 final a = first.text;
                 final b = second.text;
                 if (a.length < 4) {
-                  setLocal(() => error = 'Минимум 4 символа');
+                  setLocal(() => error = l10n.desktopScopeMin4);
                   return;
                 }
                 if (confirm && a != b) {
-                  setLocal(() => error = 'Пароли не совпадают');
+                  setLocal(() => error = l10n.desktopScopePasswordsDiffer);
                   return;
                 }
                 Navigator.of(ctx).maybePop(a);
@@ -4228,6 +4233,7 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final enabled = _sec.isEnabled(widget.scope);
     final cfg = _sec.scopeConfig(widget.scope);
@@ -4237,12 +4243,12 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
       child: Column(
         children: [
           WorkspaceRow(
-            label: 'Защита паролем',
+            label: l10n.desktopScopeTitle,
             description: enabled
                 ? (cfg.method == SecurityLockMethod.password
-                      ? 'Включена — пароль'
-                      : 'Включена')
-                : 'Выключена',
+                      ? l10n.desktopScopeOnWithPassword
+                      : l10n.desktopScopeEnabled)
+                : l10n.desktopScopeDisabled,
             trailing: WorkspaceSwitch(
               value: enabled,
               onChanged: (v) => unawaited(v ? _enable() : _disable()),
@@ -4250,7 +4256,7 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
           ),
           if (enabled) ...[
             WorkspaceRow(
-              label: 'Сменить пароль',
+              label: l10n.desktopScopeChangePassword,
               icon: FluentIcons.key_24_regular,
               trailing: Icon(
                 Icons.chevron_right_rounded,
@@ -4260,10 +4266,10 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
               onTap: () => unawaited(_changePassword()),
             ),
             WorkspaceRow(
-              label: 'Заблокировать сейчас',
+              label: l10n.desktopLockNow,
               icon: FluentIcons.lock_closed_24_regular,
               trailing: DesktopButton(
-                label: 'Заблокировать',
+                label: l10n.desktopScopeLockNow,
                 kind: DButtonKind.tonal,
                 size: DButtonSize.small,
                 onPressed: () => unawaited(_sec.lockNow(widget.scope)),
@@ -4371,14 +4377,14 @@ class _BlockedPaneState extends State<_BlockedPane> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: '$name разблокирован',
+        message: l10n.desktopBlockedUnblocked(name),
         kind: DSnackKind.success,
       );
     } catch (e) {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось разблокировать: $e',
+        message: l10n.desktopBlockedUnblockFailed('$e'),
         kind: DSnackKind.error,
       );
     }
@@ -4394,6 +4400,7 @@ class _BlockedPaneState extends State<_BlockedPane> {
 
   Widget _buildBody(BuildContext context, List<String> ids) {
     final c = DColors.of(context);
+    final l10n = AppLocalizations.of(context)!;
     // An empty list before the first load means "still reading", not "nobody
     // is blocked" — saying the latter would be untrue for the length of the
     // query.
@@ -4412,10 +4419,10 @@ class _BlockedPaneState extends State<_BlockedPane> {
     return _PaneScaffold(
       children: [
         WorkspaceCard(
-          title: 'Заблокированные',
+          title: l10n.desktopBlockedTitle,
           description: ids.isEmpty
-              ? 'Список пуст. Заблокировать можно из меню чата.'
-              : 'Эти люди не могут писать вам и звонить.',
+              ? l10n.desktopBlockedEmptyHint
+              : l10n.desktopBlockedHint,
           child: ids.isEmpty
               ? Row(
                   children: [
@@ -4427,7 +4434,7 @@ class _BlockedPaneState extends State<_BlockedPane> {
                     const SizedBox(width: DSpace.m),
                     Expanded(
                       child: Text(
-                        'Никто не заблокирован',
+                        l10n.desktopBlockedNone,
                         style: DType.label.copyWith(color: c.textSecondary),
                       ),
                     ),
@@ -4441,7 +4448,7 @@ class _BlockedPaneState extends State<_BlockedPane> {
                         description: (_titles[id] ?? id) == id ? null : id,
                         icon: FluentIcons.person_prohibited_24_regular,
                         trailing: DesktopButton(
-                          label: 'Разблокировать',
+                          label: l10n.desktopUnblockAction,
                           kind: DButtonKind.tonal,
                           size: DButtonSize.small,
                           onPressed: () => unawaited(_unblock(id)),
@@ -4975,6 +4982,7 @@ class _SupportPaneState extends State<_SupportPane> {
   }
 
   Future<void> _send() async {
+    final l10n = AppLocalizations.of(context)!;
     final text = _text.text.trim();
     final att = _attachment;
     if (text.isEmpty || _sending) return;
@@ -5006,7 +5014,7 @@ class _SupportPaneState extends State<_SupportPane> {
       });
       DesktopSnackbar.show(
         context,
-        message: 'Сообщение отправлено',
+        message: l10n.desktopSupportSent,
         kind: DSnackKind.success,
       );
       await _load();
@@ -5017,7 +5025,7 @@ class _SupportPaneState extends State<_SupportPane> {
         // `submitSupportMessage` throws StateError when support is switched
         // off server-side or the relay is unreachable — say which, rather
         // than leaving the message apparently sent.
-        _error = 'Не удалось отправить. Проверьте подключение.';
+        _error = l10n.desktopSupportSendFailed;
       });
     }
   }
@@ -5039,10 +5047,9 @@ class _SupportPaneState extends State<_SupportPane> {
       return _PaneScaffold(
         children: [
           WorkspaceCard(
-            title: 'Поддержка недоступна',
+            title: l10n.desktopSupportUnavailable,
             child: Text(
-              'Служба поддержки сейчас отключена. Попробуйте позже или '
-              'напишите с телефона.',
+              l10n.desktopSupportUnavailableHint,
               style: DType.label.copyWith(color: c.textSecondary, height: 1.4),
             ),
           ),
@@ -5053,10 +5060,9 @@ class _SupportPaneState extends State<_SupportPane> {
     return _PaneScaffold(
       children: [
         WorkspaceCard(
-          title: 'Переписка с поддержкой',
+          title: l10n.desktopSupportThread,
           description:
-              'Сообщения шифруются на вашем устройстве. Сервер хранит только '
-              'шифртекст — прочитать переписку может лишь поддержка.',
+              l10n.desktopSupportThreadHint,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -5078,7 +5084,7 @@ class _SupportPaneState extends State<_SupportPane> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: DSpace.m),
                   child: Text(
-                    'Ответов пока нет. Опишите проблему — ответ придёт сюда.',
+                    l10n.desktopSupportNoReplies,
                     style: DType.label.copyWith(color: c.textSecondary),
                   ),
                 )
@@ -5096,17 +5102,15 @@ class _SupportPaneState extends State<_SupportPane> {
           ),
         ),
         WorkspaceCard(
-          title: 'Написать в поддержку',
+          title: l10n.desktopSupportWrite,
           description:
-              'К сообщению автоматически прикладываются версия сборки и '
-              'идентификатор устройства — без них воспроизвести проблему почти '
-              'невозможно.',
+              l10n.desktopSupportWriteHint,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               DesktopTextField(
                 controller: _text,
-                hintText: 'Опишите, что произошло',
+                hintText: l10n.desktopSupportDescribe,
                 maxLines: 6,
                 minLines: 3,
               ),
@@ -5118,7 +5122,7 @@ class _SupportPaneState extends State<_SupportPane> {
               ],
               const SizedBox(height: DSpace.m),
               DesktopButton(
-                label: _sending ? 'Отправляем…' : 'Отправить',
+                label: _sending ? l10n.desktopSupportSending : l10n.desktopSupportSend,
                 icon: FluentIcons.send_24_regular,
                 onPressed: (_sending || _text.text.trim().isEmpty)
                     ? null

@@ -81,6 +81,8 @@ class DesktopProductionApp extends StatefulWidget {
 
 class _DesktopProductionAppState extends State<DesktopProductionApp>
     with WindowListener {
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   AppController _controller = AppController();
   CallManager? _callManager;
 
@@ -700,10 +702,10 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       _ => null,
     };
     final sectionName = switch (section) {
-      DesktopSection.chats => 'Чаты',
-      DesktopSection.rooms => 'Комнаты',
-      DesktopSection.calls => 'Звонки',
-      DesktopSection.contacts => 'Контакты',
+      DesktopSection.chats => l10n.chatsTitle,
+      DesktopSection.rooms => l10n.desktopChatsRooms,
+      DesktopSection.calls => l10n.desktopPrivacyCalls,
+      DesktopSection.contacts => l10n.desktopNavContacts,
     };
     if (store == null) {
       return DesktopBreadcrumbs(crumbs: <String>[sectionName]);
@@ -824,7 +826,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       // Ровно та же подпись, что у выбора человека в «Новом чате»: причина
       // одна и та же — профиля нет на сервере ключей либо переписку не удалось
       // подготовить к отправке.
-      _reportOpenChatFailed('Не удалось начать чат: профиль недоступен');
+      _reportOpenChatFailed(l10n.desktopChatsStartFailed);
       return;
     }
     await _openConvoOrReport(convoId);
@@ -838,7 +840,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   Future<void> _openConvoOrReport(String convoId) async {
     final opened = await _openConvoByIdFromDeepLink(convoId);
     if (!opened && mounted) {
-      _reportOpenChatFailed('Переписка не найдена');
+      _reportOpenChatFailed(l10n.desktopChatNotFound);
     }
   }
 
@@ -928,7 +930,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       _lastTrayUnread = total;
       try {
         await trayManager.setToolTip(
-          total > 0 ? 'Secretly — $total непрочитанных' : 'Secretly',
+          total > 0 ? l10n.desktopUnreadTitle(total) : 'Secretly',
         );
       } catch (_) {
         // Tray may be unavailable (headless, CI); never let it break the app.
@@ -1290,7 +1292,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     final convo = await ForwardTargetDialog.show(
       _navigatorKey.currentContext ?? context,
       controller: _controller,
-      title: 'В избранное',
+      title: l10n.desktopListAddFavourite,
     );
     if (convo == null) return;
     try {
@@ -1618,10 +1620,10 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
               selection: _roomsSelection,
               filter: ConversationFilter.groups,
               syncStatus: _syncStatus,
-              emptyTitleNoItems: 'Комнат пока нет',
+              emptyTitleNoItems: l10n.desktopRoomsNone,
               emptySubtitleNoItems:
-                  'Создайте комнату с телефона — она появится здесь автоматически.',
-              emptyTitleSelect: 'Выберите комнату слева',
+                  l10n.desktopRoomsNoneHintDot,
+              emptyTitleSelect: l10n.desktopRoomsPickOne,
             );
           case DesktopSection.calls:
             if (vm == null) return const SizedBox.shrink();

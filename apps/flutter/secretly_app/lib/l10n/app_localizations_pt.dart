@@ -3186,6 +3186,2458 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get desktopUnblockAction => 'Desbloquear';
+
+  @override
+  String get desktopPrivacyLastSeen => 'Visto por último';
+
+  @override
+  String get desktopPrivacyProfilePhoto => 'Fotos de perfil';
+
+  @override
+  String get desktopPrivacyForwarding => 'Reencaminhamento de mensagens';
+
+  @override
+  String get desktopPrivacyCalls => 'Chamadas';
+
+  @override
+  String get desktopPrivacyVoice => 'Mensagens de voz';
+
+  @override
+  String get desktopPrivacyMessages => 'Mensagens';
+
+  @override
+  String get desktopPrivacyNobody => 'Ninguém';
+
+  @override
+  String get desktopPrivacyEverybody => 'Todos';
+
+  @override
+  String get desktopPrivacyContacts => 'Contactos';
+
+  @override
+  String get desktopPrivacyEncryption => 'Cifra';
+
+  @override
+  String get desktopPrivacyEncryptionHint => 'Todas as mensagens e chamadas são cifradas de ponta a ponta. As chaves estão apenas nos seus dispositivos.';
+
+  @override
+  String get desktopPrivacyE2eeActive => 'A cifra de ponta a ponta está ativa';
+
+  @override
+  String get desktopPrivacyWhoSees => 'Quem vê';
+
+  @override
+  String get desktopPrivacyWhoSeesHint => 'As mesmas definições de visibilidade da aplicação móvel.';
+
+  @override
+  String get desktopPrivacyVisibility => 'Visibilidade';
+
+  @override
+  String get desktopPrivacyByNickname => 'Visível pela alcunha';
+
+  @override
+  String get desktopPrivacyByNicknameHint => 'Permitir que o encontrem pela alcunha';
+
+  @override
+  String get desktopPrivacySuggest => 'Sugerir pessoas na procura';
+
+  @override
+  String get desktopPrivacyStrangers => 'Conversas novas de desconhecidos';
+
+  @override
+  String get desktopPrivacyStrangersHint => 'Para o arquivo e sem notificações';
+
+  @override
+  String get desktopPrivacyAutoDelete => 'Eliminar a minha conta';
+
+  @override
+  String get desktopPrivacyAutoDeleteHint => 'Se não iniciar sessão durante mais tempo do que o prazo escolhido, a conta e todas as mensagens são eliminadas automaticamente. A contagem reinicia a cada início de sessão.';
+
+  @override
+  String get desktopPrivacyIfAbsent => 'Se não iniciar sessão';
+
+  @override
+  String get desktopPrivacyIn1Month => 'Ao fim de 1 mês';
+
+  @override
+  String get desktopPrivacyIn3Months => 'Ao fim de 3 meses';
+
+  @override
+  String get desktopPrivacyIn6Months => 'Ao fim de 6 meses';
+
+  @override
+  String get desktopPrivacyIn1Year => 'Ao fim de um ano';
+
+  @override
+  String get desktopPrivacyIn2Years => 'Ao fim de 2 anos';
+
+  @override
+  String get desktopLockImmediately => 'Assim que o foco é perdido';
+
+  @override
+  String desktopLockSeconds(Object value) {
+    return '$value s';
+  }
+
+  @override
+  String desktopLockMinutes(Object value) {
+    return '$value min';
+  }
+
+  @override
+  String desktopLockHours(Object value) {
+    return '$value h';
+  }
+
+  @override
+  String get desktopLockNoIdentityService => 'O serviço de verificação de identidade está indisponível — o bloqueio não foi ligado.';
+
+  @override
+  String get desktopLockNotConfirmed => 'O bloqueio não foi ligado: a confirmação não passou.';
+
+  @override
+  String get desktopLockTitle => 'Bloqueio da aplicação';
+
+  @override
+  String get desktopLockTouchIdHint => 'Pedir Touch ID para voltar a entrar depois de perder o foco.';
+
+  @override
+  String get desktopLockPasswordHint => 'Pedir a palavra-passe do dispositivo para voltar a entrar depois de perder o foco.';
+
+  @override
+  String get desktopLockEnableTouchId => 'Ligar o Touch ID';
+
+  @override
+  String get desktopLockEnableLock => 'Ligar o bloqueio';
+
+  @override
+  String get desktopLockDevicePassword => 'Palavra-passe do dispositivo';
+
+  @override
+  String get desktopLockAfter => 'Bloquear ao fim de';
+
+  @override
+  String get desktopLockNow => 'Bloquear agora';
+
+  @override
+  String get desktopDevicesEndSessionTitle => 'Terminar a sessão?';
+
+  @override
+  String desktopDevicesEndSessionBody(Object id) {
+    return 'O dispositivo $id será desligado do seu perfil. Para recuperar o acesso é preciso ler o QR outra vez. Continuar?';
+  }
+
+  @override
+  String get desktopDevicesEnd => 'Terminar';
+
+  @override
+  String desktopDevicesEndFailed(Object error) {
+    return 'Não foi possível terminar a sessão: $error';
+  }
+
+  @override
+  String get desktopDevicesEnded => 'A sessão do dispositivo terminou.';
+
+  @override
+  String get desktopDevicesActiveSessions => 'Sessões ativas';
+
+  @override
+  String get desktopDevicesDemoHint => 'Modo de demonstração · os dispositivos reais aparecem depois de ligar um perfil';
+
+  @override
+  String get desktopDevicesThisComputer => 'macOS · Este computador';
+
+  @override
+  String get desktopDevicesDemoMac => 'MacBook Pro · Ativo agora';
+
+  @override
+  String get desktopDevicesDemoIphone => 'iOS 18.2 · há 2 horas (demo)';
+
+  @override
+  String get desktopDevicesDemoIpad => 'iPadOS 18 · ontem (demo)';
+
+  @override
+  String get desktopDevicesThisDevice => 'Este dispositivo';
+
+  @override
+  String get desktopDevicesRemoteDevice => 'Dispositivo remoto';
+
+  @override
+  String get desktopDevicesDisconnect => 'Desligar';
+
+  @override
+  String get desktopDevicesTitle => 'Dispositivos';
+
+  @override
+  String desktopDevicesTitleCount(Object count) {
+    return 'Dispositivos · $count';
+  }
+
+  @override
+  String get desktopDevicesHint => 'Os dispositivos associados a este perfil no servidor de chaves.';
+
+  @override
+  String get desktopDevicesLoadFailed => 'Não foi possível carregar';
+
+  @override
+  String get desktopDevicesRetry => 'Tentar de novo';
+
+  @override
+  String get desktopDevicesNone => 'Não foram encontrados dispositivos';
+
+  @override
+  String get desktopDevicesNotLinked => 'O perfil ainda não está associado ao servidor.';
+
+  @override
+  String get desktopDevicesRefresh => 'Atualizar a lista';
+
+  @override
+  String get desktopAccentCustom => 'Cor própria';
+
+  @override
+  String get desktopAccentCustomChange => 'Cor própria — alterar';
+
+  @override
+  String get desktopPairTitle => 'Ligar um dispositivo';
+
+  @override
+  String get desktopPairHint => 'Mostre o código QR no dispositivo novo ou leia-o a partir do telemóvel';
+
+  @override
+  String get desktopPairRequestFailed => 'Não foi possível criar o pedido de ligação';
+
+  @override
+  String get desktopPairCodeCopied => 'O conteúdo do QR foi copiado';
+
+  @override
+  String get desktopPairNewTitle => 'Ligar um novo dispositivo';
+
+  @override
+  String get desktopPairNewHint => 'No dispositivo novo abra o Secretly e escolha «Ligar por QR». Depois leia o código abaixo.';
+
+  @override
+  String get desktopPairClose => 'Fechar';
+
+  @override
+  String get desktopPairCopyCode => 'Copiar o código';
+
+  @override
+  String get desktopPairRefreshQr => 'Atualizar o QR';
+
+  @override
+  String desktopSyncPulled(Object count) {
+    return 'Novos eventos obtidos: $count';
+  }
+
+  @override
+  String get desktopSyncTooOften => 'Pedidos a mais — tente mais tarde';
+
+  @override
+  String get desktopSyncNothingNew => 'Concluído · não há eventos novos';
+
+  @override
+  String get desktopSyncDemoUnavailable => 'Não disponível no modo de demonstração';
+
+  @override
+  String desktopSyncBlobsPulled(Object blobs, Object convos) {
+    return 'Anexos obtidos: $blobs (conversas: $convos)';
+  }
+
+  @override
+  String desktopSyncNoBlobs(Object convos) {
+    return 'Concluído · não há anexos novos (conversas: $convos)';
+  }
+
+  @override
+  String get desktopSyncTitle => 'Histórico de outros dispositivos';
+
+  @override
+  String get desktopSyncHint => 'Pedir ao telemóvel o histórico recente das conversas. Usa-se se o computador esteve offline mais de 7 dias ou acabou de ser ligado por QR.';
+
+  @override
+  String get desktopSyncRunning => 'A sincronizar…';
+
+  @override
+  String get desktopSyncAskHistory => 'Pedir o histórico';
+
+  @override
+  String get desktopSyncAsk => 'Pedir';
+
+  @override
+  String get desktopSyncBlobsRunning => 'A transferir anexos…';
+
+  @override
+  String get desktopSyncBlobsAction => 'Obter os anexos';
+
+  @override
+  String get desktopSyncBlobsHint => 'Transfere a media das conversas recentes quando os ficheiros faltam localmente (após nova ligação ou muito tempo offline).';
+
+  @override
+  String get desktopSyncBlobsShort => 'Obter';
+
+  @override
+  String desktopServerBackupOk(Object stamp, Object size, Object profile) {
+    return 'Cópia no servidor ✓ · $stamp · $size KB · perfil $profile';
+  }
+
+  @override
+  String get desktopServerBackupPassword => 'Palavra-passe da cópia';
+
+  @override
+  String get desktopServerBackupPasswordHint => 'Com esta palavra-passe a cópia é cifrada e restaurada em qualquer dispositivo. Memorize-a — sem ela a cópia é inútil e não pode ser recuperada.';
+
+  @override
+  String get desktopServerBackupRepeat => 'Repita a palavra-passe';
+
+  @override
+  String get desktopServerBackupCreate => 'Criar a cópia';
+
+  @override
+  String get desktopServerBackupTitle => 'Cópia de segurança no servidor';
+
+  @override
+  String get desktopServerBackupHint => 'Uma cópia cifrada da conta no servidor do Secretly. Restaura-se em qualquer dispositivo através de «Restaurar do servidor» com o seu Secretly ID e a palavra-passe.';
+
+  @override
+  String get desktopServerBackupLoading => 'A carregar…';
+
+  @override
+  String get desktopServerBackupCreateOnServer => 'Criar uma cópia no servidor';
+
+  @override
+  String get desktopServerBackupUpdate => 'Atualizar a cópia';
+
+  @override
+  String desktopFailedWith(Object error) {
+    return 'Não foi possível: $error';
+  }
+
+  @override
+  String get desktopStorageDeleteModelTitle => 'Eliminar o modelo de reconhecimento?';
+
+  @override
+  String get desktopStorageDeleteModelBody => 'A transcrição de mensagens de voz deixará de funcionar até o modelo ser transferido de novo.';
+
+  @override
+  String get desktopStorageModelDeleted => 'O modelo foi eliminado';
+
+  @override
+  String desktopStorageDeleteFailed(Object error) {
+    return 'Não foi possível eliminar: $error';
+  }
+
+  @override
+  String desktopStorageKb(Object value) {
+    return '$value KB';
+  }
+
+  @override
+  String desktopStorageMb(Object value) {
+    return '$value MB';
+  }
+
+  @override
+  String desktopStorageGb(Object value) {
+    return '$value GB';
+  }
+
+  @override
+  String get desktopStorageUsage => 'Utilização';
+
+  @override
+  String get desktopStorageUsageHint => 'Cache e media neste dispositivo';
+
+  @override
+  String desktopStorageClearHint(Object size) {
+    return 'Serão libertados $size. As mensagens, os ficheiros que enviou e os recentes não são eliminados — não haveria de onde os recuperar.';
+  }
+
+  @override
+  String get desktopStorageClear => 'Limpar a cache';
+
+  @override
+  String get desktopStorageCounting => 'A calcular…';
+
+  @override
+  String get desktopStorageSpeechModel => 'Modelo de reconhecimento de fala';
+
+  @override
+  String get desktopStorageSpeechModelHint => 'Serve para transcrever mensagens de voz neste computador, sem enviar o áudio para lado nenhum. Uma limpeza normal da cache NÃO o remove — é grande e transfere-se à parte.';
+
+  @override
+  String get desktopStorageDeleteModel => 'Eliminar o modelo';
+
+  @override
+  String desktopStorageMedia(Object size) {
+    return 'Media · $size';
+  }
+
+  @override
+  String desktopStorageVoice(Object size) {
+    return 'Voz · $size';
+  }
+
+  @override
+  String desktopStorageOther(Object size) {
+    return 'Outros · $size';
+  }
+
+  @override
+  String get desktopStorageFree => 'Livre';
+
+  @override
+  String desktopStorageTotal(Object size) {
+    return 'Total · $size';
+  }
+
+  @override
+  String desktopAboutVersion(Object version, Object build) {
+    return 'Versão $version · compilação $build';
+  }
+
+  @override
+  String get desktopAboutTagline => 'Um mensageiro seguro com cifra de ponta a ponta. Sem nuvem. Sem publicidade. Código aberto.';
+
+  @override
+  String get desktopAboutLicences => 'Licenças';
+
+  @override
+  String get desktopAboutWebsite => 'Site';
+
+  @override
+  String get desktopDangerTitle => 'Eliminar a conta de forma irreversível?';
+
+  @override
+  String get desktopDangerBody => 'O perfil, as chaves, os dados locais e o histórico de mensagens serão eliminados neste e noutros dispositivos. Não há retorno.';
+
+  @override
+  String get desktopDangerDeleting => 'A eliminar a conta…';
+
+  @override
+  String desktopDangerFailed(Object error) {
+    return 'Não foi possível eliminar a conta: $error';
+  }
+
+  @override
+  String get desktopDangerSection => 'Eliminação da conta';
+
+  @override
+  String get desktopDangerDemo => 'Modo de demonstração · a eliminação não está disponível sem um perfil ligado.';
+
+  @override
+  String get desktopDangerEnterId => 'Escreva o seu Secretly ID para confirmar';
+
+  @override
+  String desktopDangerEnterIdExact(Object id) {
+    return 'Escreva $id para confirmar';
+  }
+
+  @override
+  String get desktopDangerAction => 'Eliminar a conta';
+
+  @override
+  String get desktopDangerIrreversible => 'Esta ação é irreversível. Serão eliminados todos os seus dados, o histórico de mensagens e as chaves. Não há retorno.';
+
+  @override
+  String get desktopSecurityE2ee => 'Cifra de ponta a ponta';
+
+  @override
+  String get desktopSecurityE2eeHint => 'Todas as mensagens, chamadas e ficheiros são cifrados no seu dispositivo. As chaves nunca saem dos seus dispositivos — o servidor vê apenas texto cifrado.';
+
+  @override
+  String get desktopSecurityVerifiedDevices => 'Dispositivos verificados';
+
+  @override
+  String get desktopSecurityVerifiedHint => 'Enquanto estiver ligado, as mensagens não seguem para os dispositivos não confirmados da outra pessoa. Protege contra substituição, mas uma mensagem pode não chegar até ela confirmar um novo. Só conversas individuais: não se aplica a grupos.';
+
+  @override
+  String get desktopSecurityOnlyVerified => 'Apenas dispositivos verificados';
+
+  @override
+  String get desktopSecurityBlocked => 'Os dispositivos não verificados são bloqueados';
+
+  @override
+  String get desktopSecurityAllDevices => 'As mensagens seguem para todos os dispositivos da outra pessoa';
+
+  @override
+  String get desktopSecurityAppEntry => 'Entrada na aplicação';
+
+  @override
+  String get desktopSecurityAppEntryHint => 'Uma palavra-passe ao abrir o Secretly e depois de a janela ter estado escondida mais de um minuto. Aplica-se a este computador.';
+
+  @override
+  String get desktopSecurityPersonalScopeHint => 'Uma palavra-passe à parte para a categoria «Pessoais». Sem ela, as conversas pessoais ficam abertas a quem tenha acesso a um computador desbloqueado.';
+
+  @override
+  String get desktopCallsInApp => 'Chamadas na aplicação';
+
+  @override
+  String get desktopCallsInAppHint => 'Desligue para desativar as chamadas por completo';
+
+  @override
+  String get desktopCallsAccept => 'Aceitar chamadas recebidas';
+
+  @override
+  String get desktopCallsAcceptHint => 'Poderão ligar-lhe';
+
+  @override
+  String get desktopCallsDisabledHint => 'Indisponível enquanto as chamadas estiverem desligadas';
+
+  @override
+  String get desktopCallsScreenShare => 'Partilha de ecrã';
+
+  @override
+  String get desktopCallsScreenShareHint => 'Receber o ecrã de outra pessoa é uma permissão à parte: pode aparecer algo que não esperava ver.';
+
+  @override
+  String get desktopCallsAcceptScreenShare => 'Aceitar partilha de ecrã';
+
+  @override
+  String get desktopAccountIdCopied => 'O Secretly ID foi copiado';
+
+  @override
+  String get desktopAccountIdHint => 'Este identificador é o que partilha para o encontrarem. Não contém número de telefone nem e-mail.';
+
+  @override
+  String get desktopAccountCopy => 'Copiar';
+
+  @override
+  String get desktopAccountProfile => 'Perfil';
+
+  @override
+  String get desktopAccountProfileHint => 'Nome, foto, estado';
+
+  @override
+  String get desktopAccountOpenProfile => 'Abrir a página do perfil';
+
+  @override
+  String desktopScopePasswordFor(Object name) {
+    return 'Palavra-passe para «$name»';
+  }
+
+  @override
+  String get desktopScopeMin4 => 'Pelo menos 4 caracteres';
+
+  @override
+  String get desktopScopeOn => 'A proteção está ligada';
+
+  @override
+  String desktopScopeOnFailed(Object error) {
+    return 'Não foi possível ligar: $error';
+  }
+
+  @override
+  String get desktopScopeOff => 'A proteção está desligada';
+
+  @override
+  String desktopScopeOffFailed(Object error) {
+    return 'Não foi possível desligar: $error';
+  }
+
+  @override
+  String get desktopScopePasswordsDiffer => 'As palavras-passe não coincidem';
+
+  @override
+  String get desktopScopeTitle => 'Proteção por palavra-passe';
+
+  @override
+  String get desktopScopeOnWithPassword => 'Ligada — palavra-passe';
+
+  @override
+  String get desktopScopeEnabled => 'Ligada';
+
+  @override
+  String get desktopScopeDisabled => 'Desligada';
+
+  @override
+  String get desktopScopeChangePassword => 'Mudar a palavra-passe';
+
+  @override
+  String get desktopScopeLockNow => 'Bloquear';
+
+  @override
+  String desktopBlockedUnblocked(Object name) {
+    return '$name foi desbloqueado';
+  }
+
+  @override
+  String desktopBlockedUnblockFailed(Object error) {
+    return 'Não foi possível desbloquear: $error';
+  }
+
+  @override
+  String get desktopBlockedTitle => 'Bloqueados';
+
+  @override
+  String get desktopBlockedEmptyHint => 'A lista está vazia. Bloqueia-se a partir do menu de uma conversa.';
+
+  @override
+  String get desktopBlockedHint => 'Estas pessoas não lhe podem escrever nem ligar.';
+
+  @override
+  String get desktopBlockedNone => 'Ninguém está bloqueado';
+
+  @override
+  String get desktopSupportSent => 'A mensagem foi enviada';
+
+  @override
+  String get desktopSupportSendFailed => 'Não foi possível enviar. Verifique a sua ligação.';
+
+  @override
+  String get desktopSupportUnavailable => 'O apoio está indisponível';
+
+  @override
+  String get desktopSupportUnavailableHint => 'O serviço de apoio está desligado neste momento. Tente mais tarde ou escreva do telemóvel.';
+
+  @override
+  String get desktopSupportThread => 'A conversa com o apoio';
+
+  @override
+  String get desktopSupportThreadHint => 'As mensagens são cifradas no seu dispositivo. O servidor guarda apenas texto cifrado — só o apoio pode ler a conversa.';
+
+  @override
+  String get desktopSupportNoReplies => 'Ainda não há respostas. Descreva o problema — a resposta chega aqui.';
+
+  @override
+  String get desktopSupportWrite => 'Escrever ao apoio';
+
+  @override
+  String get desktopSupportWriteHint => 'A versão da compilação e o identificador do dispositivo são anexados automaticamente — sem eles o problema é quase impossível de reproduzir.';
+
+  @override
+  String get desktopSupportDescribe => 'Descreva o que aconteceu';
+
+  @override
+  String get desktopSupportSending => 'A enviar…';
+
+  @override
+  String get desktopSupportSend => 'Enviar';
+
+  @override
+  String get desktopChatsEmptyHint => 'Comece a conversar no telemóvel — as conversas sincronizam sozinhas para o computador';
+
+  @override
+  String get desktopChatsPickOne => 'Escolha uma conversa à esquerda';
+
+  @override
+  String desktopChatsSendFailed(Object error) {
+    return 'Não foi possível enviar: $error';
+  }
+
+  @override
+  String desktopChatsSendingTo(Object title) {
+    return 'A enviar para «$title»';
+  }
+
+  @override
+  String get desktopChatsFilterAll => 'Todos';
+
+  @override
+  String get desktopChatsFilterUnread => 'Não lidos';
+
+  @override
+  String get desktopChatsFilterGroups => 'Grupos';
+
+  @override
+  String get desktopChatsFilterArchive => 'Arquivo';
+
+  @override
+  String get desktopChatsFilterPersonal => 'Pessoais';
+
+  @override
+  String get desktopChatsRenameFolder => 'Mudar o nome da pasta';
+
+  @override
+  String get desktopChatsDeleteFolder => 'Eliminar a pasta';
+
+  @override
+  String desktopChatsRenameFailed(Object error) {
+    return 'Não foi possível mudar o nome: $error';
+  }
+
+  @override
+  String desktopChatsDeleteFolderTitle(Object name) {
+    return 'Eliminar a pasta «$name»?';
+  }
+
+  @override
+  String get desktopChatsDeleteFolderBody => 'As conversas ficam onde estão — só a pasta é eliminada.';
+
+  @override
+  String desktopChatsDeleteFailed(Object error) {
+    return 'Não foi possível eliminar: $error';
+  }
+
+  @override
+  String desktopChatsAddedToFolder(Object name) {
+    return 'Adicionado a «$name»';
+  }
+
+  @override
+  String desktopChatsRemovedFromFolder(Object name) {
+    return 'Removido de «$name»';
+  }
+
+  @override
+  String desktopChatsFolderChangeFailed(Object error) {
+    return 'Não foi possível mudar a pasta: $error';
+  }
+
+  @override
+  String desktopChatsFolderCreated(Object name) {
+    return 'A pasta «$name» foi criada';
+  }
+
+  @override
+  String desktopChatsFolderCreateFailed(Object error) {
+    return 'Não foi possível criar a pasta: $error';
+  }
+
+  @override
+  String get desktopChatsNewFolder => 'Pasta nova';
+
+  @override
+  String get desktopChatsFolderName => 'Nome da pasta';
+
+  @override
+  String desktopChatsRemoveFromFolder(Object name) {
+    return 'Remover de «$name»';
+  }
+
+  @override
+  String desktopChatsAddToFolder(Object name) {
+    return 'Para a pasta «$name»';
+  }
+
+  @override
+  String get desktopChatsNewFolderWithChat => 'Pasta nova com esta conversa…';
+
+  @override
+  String get desktopChatsRemoveFromPersonal => 'Remover de pessoais';
+
+  @override
+  String get desktopChatsAddToPersonal => 'Para pessoais';
+
+  @override
+  String get desktopChatsArchiveEmpty => 'O arquivo está vazio';
+
+  @override
+  String get desktopChatsNoPersonal => 'Não há conversas pessoais';
+
+  @override
+  String get desktopChatsPersonalLocked => 'As conversas pessoais estão protegidas por palavra-passe';
+
+  @override
+  String get desktopChatsAllRead => 'Tudo lido';
+
+  @override
+  String get desktopChatsFolderEmpty => 'Esta pasta ainda está vazia';
+
+  @override
+  String get desktopChatsNewChat => 'Conversa nova';
+
+  @override
+  String get desktopChatsNewRoom => 'Sala nova';
+
+  @override
+  String get desktopChatsStartFailed => 'Não foi possível iniciar a conversa: o perfil está indisponível';
+
+  @override
+  String get desktopChatsPhoto => 'Foto';
+
+  @override
+  String get desktopChatsVideo => 'Vídeo';
+
+  @override
+  String get desktopChatsAudio => 'Áudio';
+
+  @override
+  String get desktopChatsVoiceMessage => 'Mensagem de voz';
+
+  @override
+  String get desktopChatsVoiceShort => 'Voz';
+
+  @override
+  String get desktopChatsLink => 'Ligação';
+
+  @override
+  String get desktopChatsSticker => 'Autocolante';
+
+  @override
+  String desktopChatsStickerWith(Object label) {
+    return 'Autocolante $label';
+  }
+
+  @override
+  String desktopChatsPoll(Object question) {
+    return '📊 Sondagem: $question';
+  }
+
+  @override
+  String get desktopChatsUnknown => 'desconhecido';
+
+  @override
+  String get desktopChatsMember => 'Membro';
+
+  @override
+  String get desktopChatsSoundOn => 'Ligar o som';
+
+  @override
+  String get desktopChatsSoundOff => 'Sem som';
+
+  @override
+  String get desktopChatsClearHistoryTitle => 'Limpar o histórico?';
+
+  @override
+  String desktopChatsClearHistoryBody(Object title) {
+    return 'Todas as mensagens da conversa «$title» serão eliminadas neste dispositivo.';
+  }
+
+  @override
+  String get desktopChatsClear => 'Limpar';
+
+  @override
+  String get desktopChatsHistoryClearedBoth => 'O histórico foi limpo em ambos';
+
+  @override
+  String get desktopChatsHistoryCleared => 'O histórico foi limpo';
+
+  @override
+  String get desktopChatsDeleteChatTitle => 'Eliminar a conversa?';
+
+  @override
+  String desktopChatsDeleteChatBody(Object title) {
+    return 'A conversa «$title» será totalmente removida deste dispositivo.';
+  }
+
+  @override
+  String get desktopChatsRooms => 'Salas';
+
+  @override
+  String get desktopChatsGeneralTopic => 'Geral';
+
+  @override
+  String get desktopChatsNewTopicEllipsis => 'Tópico novo…';
+
+  @override
+  String desktopChatsBranch(Object title) {
+    return 'Ramo «$title»';
+  }
+
+  @override
+  String get desktopChatsRename => 'Mudar o nome';
+
+  @override
+  String get desktopChatsIcon => 'Ícone';
+
+  @override
+  String get desktopChatsDeleteBranch => 'Eliminar o ramo';
+
+  @override
+  String get desktopChatsBranchIcon => 'Ícone do ramo';
+
+  @override
+  String get desktopChatsBranchIconHint => 'O ícone substitui o cardinal antes do nome. Os coloridos prometem o que há dentro: verde uma chamada, vermelho algo urgente. Os restantes são cinzentos para não competir com o nome.';
+
+  @override
+  String get desktopChatsHash => 'Cardinal';
+
+  @override
+  String desktopChatsBranchFailed(Object error) {
+    return 'Não foi possível alterar os ramos: $error';
+  }
+
+  @override
+  String get desktopChatsNewTopic => 'Tópico novo';
+
+  @override
+  String get desktopChatsRenameTopic => 'Mudar o nome do tópico';
+
+  @override
+  String get desktopChatsTopicName => 'Nome do tópico';
+
+  @override
+  String desktopChatsReactionFailed(Object error) {
+    return 'Não foi possível guardar a reação: $error';
+  }
+
+  @override
+  String desktopChatsReactionLocal(Object error) {
+    return 'A reação foi aplicada localmente mas não chegou à outra pessoa: $error';
+  }
+
+  @override
+  String get desktopChatsRevealFailed => 'Não foi possível mostrar o ficheiro no Finder';
+
+  @override
+  String desktopChatsVideoOpenFailed(Object error) {
+    return 'Não foi possível abrir o vídeo: $error';
+  }
+
+  @override
+  String get desktopChatsVideoUnavailable => 'O vídeo está indisponível';
+
+  @override
+  String desktopChatsFileFetchFailed(Object error) {
+    return 'Não foi possível obter o ficheiro: $error';
+  }
+
+  @override
+  String get desktopChatsSaveAttachment => 'Guardar o anexo';
+
+  @override
+  String get desktopChatsFileUnavailable => 'O ficheiro está indisponível';
+
+  @override
+  String desktopChatsSaveFailed(Object error) {
+    return 'Não foi possível guardar: $error';
+  }
+
+  @override
+  String desktopChatsOpenFailedWith(Object error) {
+    return 'Não foi possível abrir o ficheiro: $error';
+  }
+
+  @override
+  String get desktopChatsOpenFailed => 'Não foi possível abrir o ficheiro';
+
+  @override
+  String desktopChatsOpenFailedShort(Object error) {
+    return 'Não foi possível abrir: $error';
+  }
+
+  @override
+  String desktopChatsPlayFailed(Object error) {
+    return 'Não foi possível reproduzir: $error';
+  }
+
+  @override
+  String get desktopChatsNoCallPeer => 'Não foi possível determinar a quem ligar.';
+
+  @override
+  String get desktopChatsCallsNotReady => 'O serviço de chamadas não está pronto.';
+
+  @override
+  String get desktopChatsCallInProgress => 'Já está uma chamada a decorrer.';
+
+  @override
+  String get desktopChatsEditFailed => 'Não foi possível editar a mensagem.';
+
+  @override
+  String get desktopChatsNoRecipient => 'Não foi possível determinar o destinatário.';
+
+  @override
+  String get desktopChatsDeleteMessageTitle => 'Eliminar a mensagem?';
+
+  @override
+  String get desktopChatsDeleteMessagesTitle => 'Eliminar as mensagens selecionadas?';
+
+  @override
+  String get desktopChatsDeleteOthersHint => 'As mensagens de outras pessoas serão eliminadas apenas para si.';
+
+  @override
+  String get desktopChatsDeleteForAll => 'Eliminar para todos';
+
+  @override
+  String get desktopChatsDeleteForMeOnly => 'Eliminar apenas para mim';
+
+  @override
+  String get desktopChatsDeleteForMe => 'Eliminar para mim';
+
+  @override
+  String get desktopChatsSavePrivacyBlocked => 'Esta mensagem não pode ser guardada por restrições de privacidade.';
+
+  @override
+  String get desktopChatsNothingToSave => 'O anexo não foi transferido — não há nada para guardar';
+
+  @override
+  String get desktopChatsSavedPartly => 'Guardado nos Favoritos, mas não tudo';
+
+  @override
+  String get desktopChatsSaved => 'Guardado nos Favoritos';
+
+  @override
+  String get desktopChatsForwardPrivacyBlocked => 'Esta mensagem não pode ser reencaminhada por restrições de privacidade.';
+
+  @override
+  String desktopChatsForwardFailed(Object error) {
+    return 'Não foi possível reencaminhar: $error';
+  }
+
+  @override
+  String get desktopChatsNothingToForward => 'O anexo não foi transferido — não há nada para reencaminhar';
+
+  @override
+  String desktopChatsForwardedPartly(Object title) {
+    return 'Reencaminhado para «$title», mas não tudo';
+  }
+
+  @override
+  String desktopChatsForwarded(Object title) {
+    return 'Reencaminhado para «$title»';
+  }
+
+  @override
+  String desktopChatsFileNotSentElsewhere(Object text) {
+    return 'O ficheiro não foi enviado para a outra conversa: $text';
+  }
+
+  @override
+  String get desktopChatsFileSendFailed => 'Não foi possível enviar o ficheiro.';
+
+  @override
+  String desktopChatsPremiumFiles(Object text) {
+    return '$text Com o Premium pode enviar ficheiros até 1 GB.';
+  }
+
+  @override
+  String get desktopChatsTypingEllipsis => 'a escrever…';
+
+  @override
+  String get desktopChatsOnline => 'em linha';
+
+  @override
+  String desktopChatsSomeoneTyping(Object name) {
+    return '$name está a escrever';
+  }
+
+  @override
+  String get desktopChatsLoadingList => 'A obter a lista do armazenamento local.';
+
+  @override
+  String get desktopChatsWillAppear => 'As mensagens e chamadas aparecem aqui assim que abrir uma conversa.';
+
+  @override
+  String get desktopRoomNoOpenHere => 'Não é possível abrir uma conversa a partir daqui';
+
+  @override
+  String get desktopRoomIdCopied => 'O ID foi copiado';
+
+  @override
+  String get desktopRoomAwaiting => 'À espera de aprovação';
+
+  @override
+  String get desktopRoomBlocked => 'Bloqueado';
+
+  @override
+  String get desktopRoomCopied => 'Copiado';
+
+  @override
+  String get desktopRoomChangeRole => 'Mudar o papel';
+
+  @override
+  String get desktopRoomTransfer => 'Transferir a propriedade';
+
+  @override
+  String get desktopRoomBlockMember => 'Bloquear';
+
+  @override
+  String get desktopRoomKick => 'Remover';
+
+  @override
+  String get desktopRoomKickTitle => 'Remover o membro?';
+
+  @override
+  String desktopRoomKickBody(Object name) {
+    return '$name perderá o acesso à sala. Um novo convite trá-lo de volta.';
+  }
+
+  @override
+  String get desktopRoomBlockTitle => 'Bloquear o membro?';
+
+  @override
+  String desktopRoomBlockBody(Object name) {
+    return '$name não poderá voltar à sala, mesmo com convite, enquanto o bloqueio durar.';
+  }
+
+  @override
+  String get desktopRoomTransferTitle => 'Transferir a propriedade da sala?';
+
+  @override
+  String desktopRoomTransferBody(Object name) {
+    return '$name passa a proprietário e você a administrador. Só o novo proprietário pode desfazer.';
+  }
+
+  @override
+  String get desktopRoomTransferAction => 'Transferir';
+
+  @override
+  String get desktopRoomClearTitle => 'Limpar o histórico?';
+
+  @override
+  String get desktopRoomClearBody => 'Todas as mensagens da sala serão eliminadas neste dispositivo.';
+
+  @override
+  String get desktopRoomLeaveTitle => 'Sair da sala?';
+
+  @override
+  String get desktopRoomLeaveBody => 'Deixará de receber mensagens. Para voltar é preciso um novo convite.';
+
+  @override
+  String get desktopRoomLeave => 'Sair';
+
+  @override
+  String get desktopRoomInvite => 'Convidar';
+
+  @override
+  String get desktopRoomCopyId => 'Copiar o ID da sala';
+
+  @override
+  String get desktopRoomMuteOff => 'Desligar as notificações';
+
+  @override
+  String get desktopRoomUnarchive => 'Tirar do arquivo';
+
+  @override
+  String get desktopRoomLeaveRoom => 'Sair da sala';
+
+  @override
+  String get desktopRoomUntitled => 'Sem nome';
+
+  @override
+  String get desktopRoomCopyInvite => 'Copiar o convite';
+
+  @override
+  String get desktopRoomSound => 'Som';
+
+  @override
+  String get desktopRoomTabInfo => 'Info';
+
+  @override
+  String get desktopRoomTabMembers => 'Membros';
+
+  @override
+  String get desktopRoomTabMedia => 'Media';
+
+  @override
+  String get desktopRoomTopics => 'TÓPICOS';
+
+  @override
+  String desktopRoomTopicsCount(Object count) {
+    return 'TÓPICOS · $count';
+  }
+
+  @override
+  String get desktopRoomDescription => 'Descrição';
+
+  @override
+  String get desktopRoomNotes => 'NOTAS';
+
+  @override
+  String get desktopRoomInformation => 'Informação';
+
+  @override
+  String get desktopRoomId => 'ID da sala';
+
+  @override
+  String get desktopRoomInviteLink => 'Ligação de convite · clique para copiar';
+
+  @override
+  String get desktopRoomFavouriteHint => 'Um mosaico na barra e um lugar no topo da lista';
+
+  @override
+  String get desktopRoomArchiveHint => 'Ocultar a sala da lista principal';
+
+  @override
+  String get desktopRoomNoMembers => 'Sem membros';
+
+  @override
+  String desktopRoomMembersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count membros',
+      one: '$count membro',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get desktopRoomNobodyFound => 'Ninguém encontrado';
+
+  @override
+  String get desktopRoomMembersUnavailable => 'A lista de membros está indisponível.';
+
+  @override
+  String get desktopRoomInCall => 'NA CHAMADA';
+
+  @override
+  String get desktopRoomOnline => 'EM LINHA';
+
+  @override
+  String get desktopRoomOffline => 'SEM LIGAÇÃO';
+
+  @override
+  String desktopRoomMoreHidden(Object count) {
+    return 'Mais $count — use a procura acima';
+  }
+
+  @override
+  String get desktopRoomSearchMember => 'Procurar um membro';
+
+  @override
+  String get desktopRoomJoinRequests => 'Pedidos de adesão';
+
+  @override
+  String get desktopRoomAccept => 'Aceitar';
+
+  @override
+  String get desktopRoomDecline => 'Recusar';
+
+  @override
+  String get desktopRoomRoleOwner => 'Proprietário';
+
+  @override
+  String get desktopRoomRoleAdmin => 'Administrador';
+
+  @override
+  String get desktopRoomRoleModerator => 'Moderador';
+
+  @override
+  String get desktopRoomRoleRestricted => 'Restrito';
+
+  @override
+  String get desktopRoomRoleGuest => 'Convidado';
+
+  @override
+  String get desktopContactBlockTitle => 'Bloquear?';
+
+  @override
+  String get desktopContactUnblockTitle => 'Desbloquear?';
+
+  @override
+  String get desktopContactBlockBody => 'Esta pessoa deixará de poder enviar-lhe mensagens e ligar-lhe.';
+
+  @override
+  String get desktopContactUnblockBody => 'Esta pessoa poderá voltar a contactá-lo.';
+
+  @override
+  String get desktopContactBlock => 'Bloquear';
+
+  @override
+  String get desktopContactCallsNotReady => 'O serviço de chamadas ainda não está pronto';
+
+  @override
+  String get desktopContactCallInProgress => 'Já está uma chamada a decorrer';
+
+  @override
+  String desktopContactCallFailed(Object error) {
+    return 'Não foi possível iniciar a chamada: $error';
+  }
+
+  @override
+  String get desktopContactAutoDelete => 'Eliminação automática de mensagens';
+
+  @override
+  String get desktopContactAutoDeleteUpdated => 'A eliminação automática foi atualizada';
+
+  @override
+  String get desktopContactClearBody => 'Todas as mensagens desta conversa serão eliminadas neste dispositivo.';
+
+  @override
+  String get desktopContactDeleteBody => 'A conversa será totalmente removida deste dispositivo.';
+
+  @override
+  String get desktopContactOff => 'Desligado';
+
+  @override
+  String get desktopContactDisable => 'Desligar';
+
+  @override
+  String get desktopContactDay1 => '1 dia';
+
+  @override
+  String get desktopContactDays7 => '7 dias';
+
+  @override
+  String get desktopContactDays30 => '30 dias';
+
+  @override
+  String get desktopContactHour1 => '1 hora';
+
+  @override
+  String desktopContactMinutes(Object value) {
+    return '$value min';
+  }
+
+  @override
+  String get desktopContactOffline => 'sem ligação';
+
+  @override
+  String desktopContactSeenAt(Object time) {
+    return 'visto às $time';
+  }
+
+  @override
+  String get desktopContactSeenYesterday => 'visto ontem';
+
+  @override
+  String desktopContactSeenOn(Object date) {
+    return 'visto a $date';
+  }
+
+  @override
+  String get desktopContactCopyId => 'Copiar o ID';
+
+  @override
+  String get desktopContactCopyIdShort => 'Copiar ID';
+
+  @override
+  String get desktopContactDisappearing => 'Mensagens que desaparecem';
+
+  @override
+  String get desktopContactDeleteChat => 'Eliminar a conversa';
+
+  @override
+  String get desktopContactCall => 'Chamada';
+
+  @override
+  String get desktopContactBlockShort => 'Bloq.';
+
+  @override
+  String get desktopContactSecurity => 'Segurança';
+
+  @override
+  String get desktopContactVerify => 'Verificar o contacto';
+
+  @override
+  String get desktopContactArchiveHint => 'Ocultar a conversa da lista principal';
+
+  @override
+  String get desktopThreadMessageHint => 'Mensagem…';
+
+  @override
+  String get desktopThreadPasteFailed => 'Não foi possível colar a imagem';
+
+  @override
+  String get desktopThreadNoScheduleEdit => 'Uma edição não pode ser agendada — altera algo já enviado';
+
+  @override
+  String desktopThreadWillLeave(Object when) {
+    return 'Sairá $when';
+  }
+
+  @override
+  String desktopThreadSeconds(Object value) {
+    return '$value s';
+  }
+
+  @override
+  String desktopThreadMinutes(Object value) {
+    return '$value min';
+  }
+
+  @override
+  String desktopThreadHours(Object value) {
+    return '$value h';
+  }
+
+  @override
+  String desktopThreadDays(Object value) {
+    return '$value d';
+  }
+
+  @override
+  String desktopThreadWeeks(Object value) {
+    return '$value sem';
+  }
+
+  @override
+  String desktopThreadSelected(Object count) {
+    return 'Selecionados: $count';
+  }
+
+  @override
+  String get desktopThreadDisappearingOn => 'As mensagens que desaparecem estão ligadas';
+
+  @override
+  String get desktopThreadCallAction => 'Ligar';
+
+  @override
+  String get desktopThreadCallRoom => 'Chamada em grupo';
+
+  @override
+  String get desktopThreadVideoCall => 'Videochamada';
+
+  @override
+  String get desktopThreadSearchShortcut => 'Procurar na conversa  Cmd F';
+
+  @override
+  String get desktopThreadHideDetails => 'Ocultar os detalhes';
+
+  @override
+  String get desktopThreadShowDetails => 'Mostrar os detalhes';
+
+  @override
+  String get desktopThreadMore => 'Mais';
+
+  @override
+  String get desktopThreadPinned => 'Mensagem afixada';
+
+  @override
+  String get desktopThreadNoMatches => 'sem correspondências';
+
+  @override
+  String get desktopThreadSearchHint => 'Procurar na conversa…';
+
+  @override
+  String get desktopThreadPrevMatch => 'Anterior (Shift F3)';
+
+  @override
+  String get desktopThreadNextMatch => 'Seguinte (F3)';
+
+  @override
+  String get desktopThreadCloseEsc => 'Fechar (Esc)';
+
+  @override
+  String get desktopThreadNewMessages => 'Mensagens novas';
+
+  @override
+  String desktopThreadUnreadCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count por ler',
+      one: '$count por ler',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get desktopThreadToday => 'Hoje';
+
+  @override
+  String get desktopThreadYesterday => 'Ontem';
+
+  @override
+  String get desktopProfileEmojiStatus => 'Estado com emoji';
+
+  @override
+  String get desktopProfileClearStatus => 'Remover o estado';
+
+  @override
+  String desktopProfileApplyFailed(Object error) {
+    return 'Não foi possível aplicar: $error';
+  }
+
+  @override
+  String get desktopProfileAvatarFrame => 'Moldura do avatar';
+
+  @override
+  String get desktopProfileCover => 'Capa do perfil';
+
+  @override
+  String get desktopProfileNoFrame => 'Sem moldura';
+
+  @override
+  String get desktopProfileNoCover => 'Sem capa';
+
+  @override
+  String get desktopProfileReadFailed => 'Não foi possível ler o ficheiro';
+
+  @override
+  String get desktopProfilePhotoUpdated => 'A foto de perfil foi atualizada';
+
+  @override
+  String desktopProfilePhotoFailed(Object error) {
+    return 'Não foi possível atualizar a foto: $error';
+  }
+
+  @override
+  String desktopProfilePhotoRemoveFailed(Object error) {
+    return 'Não foi possível remover a foto: $error';
+  }
+
+  @override
+  String get desktopProfileMine => 'O meu perfil';
+
+  @override
+  String get desktopProfileEdit => 'Editar';
+
+  @override
+  String get desktopProfileName => 'Nome';
+
+  @override
+  String get desktopProfileChangePhoto => 'Mudar a foto';
+
+  @override
+  String get desktopProfileFrameShort => 'Moldura';
+
+  @override
+  String get desktopProfileCoverShort => 'Capa';
+
+  @override
+  String get desktopProfileStatus => 'Estado';
+
+  @override
+  String get desktopProfileAppearanceHint => 'Tema, acento e fundo da conversa';
+
+  @override
+  String get desktopProfileAbout => 'Sobre mim';
+
+  @override
+  String get desktopProfileEmpty => 'Por preencher';
+
+  @override
+  String get desktopProfilePhoto => 'Foto de perfil';
+
+  @override
+  String get desktopProfileReplacePhoto => 'Substituir a foto';
+
+  @override
+  String get desktopProfilePickPhoto => 'Escolher uma foto';
+
+  @override
+  String get desktopProfilePickedHere => 'Escolhida neste computador';
+
+  @override
+  String get desktopProfileSyncedWithPhone => 'Sincronizada com o telemóvel';
+
+  @override
+  String get desktopProfileNotPicked => 'Por escolher';
+
+  @override
+  String get desktopProfileRemovePhoto => 'Remover a foto';
+
+  @override
+  String get desktopProfileInitialsStay => 'Ficam as iniciais';
+
+  @override
+  String get desktopProfileAccount => 'Conta';
+
+  @override
+  String get desktopProfileRecovery => 'Recuperação';
+
+  @override
+  String get desktopProfileRecoveryHint => 'Este computador está ligado ao telemóvel e não guarda a sua própria frase de recuperação: a cópia e a chave de recuperação devolvem a conta.';
+
+  @override
+  String get desktopProfileDevicesHint => 'Computadores e telemóveis ligados';
+
+  @override
+  String get desktopProfileFrameCaps => 'MOLDURA DO AVATAR';
+
+  @override
+  String get desktopGalleryMedia => 'Media';
+
+  @override
+  String get desktopGalleryFiles => 'Ficheiros';
+
+  @override
+  String get desktopGalleryLinks => 'Ligações';
+
+  @override
+  String get desktopGalleryNoMedia => 'Sem media';
+
+  @override
+  String get desktopGalleryNoFiles => 'Sem ficheiros';
+
+  @override
+  String get desktopGalleryNoAudio => 'Sem áudio';
+
+  @override
+  String get desktopGalleryNoLinks => 'Sem ligações';
+
+  @override
+  String get desktopGalleryPathCopied => 'O caminho foi copiado';
+
+  @override
+  String get desktopGalleryOpen => 'Abrir';
+
+  @override
+  String get desktopGalleryView => 'Ver';
+
+  @override
+  String get desktopGalleryOpenInSystem => 'Abrir no sistema';
+
+  @override
+  String get desktopGalleryRevealFinder => 'Mostrar no Finder';
+
+  @override
+  String get desktopGalleryRevealExplorer => 'Mostrar no Explorador';
+
+  @override
+  String get desktopGalleryOpenFolder => 'Abrir a pasta';
+
+  @override
+  String get desktopGalleryCopyPath => 'Copiar o caminho';
+
+  @override
+  String desktopGalleryBytes(Object value) {
+    return '$value B';
+  }
+
+  @override
+  String get desktopGalleryZeroBytes => '0 B';
+
+  @override
+  String desktopOutgoingFolderSingle(Object name) {
+    return 'a pasta «$name» não pode ser enviada';
+  }
+
+  @override
+  String get desktopOutgoingFoldersMany => 'as pastas não podem ser enviadas';
+
+  @override
+  String desktopOutgoingTooLargeOne(Object name, Object limit) {
+    return '«$name» é maior do que $limit MB';
+  }
+
+  @override
+  String desktopOutgoingTooLargeMany(int count, Object limit) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ficheiros são maiores do que $limit MB',
+      one: '$count ficheiro é maior do que $limit MB',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingEmptyOne(Object name) {
+    return '«$name» está vazio';
+  }
+
+  @override
+  String desktopOutgoingEmptyMany(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ficheiros estão vazios',
+      one: '$count ficheiro está vazio',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingUnreadableOne(Object name) {
+    return 'não foi possível ler «$name»';
+  }
+
+  @override
+  String desktopOutgoingUnreadableMany(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ficheiros não puderam ser lidos',
+      one: '$count ficheiro não pôde ser lido',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get desktopOutgoingSending => 'Envio';
+
+  @override
+  String desktopOutgoingPhotos(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count fotos',
+      one: '$count fotos',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingVideos(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vídeos',
+      one: '$count vídeos',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingMedia(Object count) {
+    return '$count media';
+  }
+
+  @override
+  String desktopOutgoingAudios(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count áudios',
+      one: '$count áudios',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ficheiros',
+      one: '$count ficheiros',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get desktopCallsPickOne => 'Escolha uma chamada à esquerda';
+
+  @override
+  String get desktopCallsPickHint => 'Aqui aparecem os detalhes e um botão para ligar de volta';
+
+  @override
+  String get desktopCallsNone => 'Ainda não há chamadas';
+
+  @override
+  String get desktopCallsNoneHint => 'O histórico aparece depois da primeira chamada';
+
+  @override
+  String get desktopCallsOutgoing => 'Efetuada';
+
+  @override
+  String get desktopCallsIncoming => 'Recebida';
+
+  @override
+  String get desktopCallsGroup => 'em grupo';
+
+  @override
+  String get desktopCallsVideoKind => 'vídeo';
+
+  @override
+  String get desktopCallsAudioKind => 'áudio';
+
+  @override
+  String get desktopCallsMissed => 'perdida';
+
+  @override
+  String desktopPhotoCopyFailed(Object error) {
+    return 'Não foi possível copiar: $error';
+  }
+
+  @override
+  String get desktopPhotoSave => 'Guardar a foto';
+
+  @override
+  String get desktopPhotoSaved => 'Guardado';
+
+  @override
+  String desktopPhotoRevealFailed(Object error) {
+    return 'Não foi possível mostrar no Finder: $error';
+  }
+
+  @override
+  String get desktopPhotoLoadFailed => 'Não foi possível carregar';
+
+  @override
+  String get desktopPhotoZoomOut => 'Reduzir';
+
+  @override
+  String get desktopPhotoZoomReset => 'Repor o zoom';
+
+  @override
+  String get desktopPhotoZoomIn => 'Ampliar';
+
+  @override
+  String get desktopPhotoCopy => 'Copiar';
+
+  @override
+  String desktopBubbleForwardedFrom(Object from) {
+    return 'Reencaminhado de $from';
+  }
+
+  @override
+  String get desktopBubbleAudioFile => 'Ficheiro de áudio';
+
+  @override
+  String get desktopBubbleTranslating => 'A traduzir…';
+
+  @override
+  String get desktopBubbleTranslation => 'TRADUÇÃO';
+
+  @override
+  String get desktopBubbleEdited => 'editado';
+
+  @override
+  String get desktopBubbleMoreReactions => 'Mais reações';
+
+  @override
+  String get desktopBubbleRoleOwner => 'proprietário';
+
+  @override
+  String get desktopBubbleRoleAdmin => 'admin';
+
+  @override
+  String get desktopBubbleRoleMod => 'mod';
+
+  @override
+  String get desktopBubbleSpeed => 'Velocidade de reprodução';
+
+  @override
+  String get desktopSpotlightGoChats => 'Ir para as conversas';
+
+  @override
+  String get desktopSpotlightGoRooms => 'Ir para as salas';
+
+  @override
+  String get desktopSpotlightGoContacts => 'Ir para os contactos';
+
+  @override
+  String get desktopSpotlightGoCalls => 'Ir para as chamadas';
+
+  @override
+  String get desktopSpotlightSelect => 'selecionar';
+
+  @override
+  String get desktopSpotlightOpen => 'abrir';
+
+  @override
+  String get desktopSpotlightClose => 'fechar';
+
+  @override
+  String get desktopSpotlightRoom => 'Sala';
+
+  @override
+  String get desktopSpotlightMessage => 'Mensagem';
+
+  @override
+  String get desktopSpotlightCommand => 'Comando';
+
+  @override
+  String get desktopComposerCancelRec => 'Cancelar a gravação';
+
+  @override
+  String desktopComposerRecording(Object time) {
+    return 'A gravar  $time';
+  }
+
+  @override
+  String get desktopComposerSendVoice => 'Enviar a mensagem de voz';
+
+  @override
+  String get desktopComposerAttach => 'Anexar';
+
+  @override
+  String get desktopComposerEmoji => 'Emoji e autocolantes';
+
+  @override
+  String get desktopComposerRecordVoice => 'Gravar uma mensagem de voz';
+
+  @override
+  String get desktopComposerEnterSends => 'Enter envia · Shift+Enter quebra a linha';
+
+  @override
+  String get desktopComposerEnterNewline => 'Enter quebra a linha · Shift+Enter envia';
+
+  @override
+  String get desktopComposerEditing => 'Edição';
+
+  @override
+  String desktopComposerReplyTo(Object name) {
+    return 'Resposta · $name';
+  }
+
+  @override
+  String get desktopComposerCancelAction => 'Cancelar';
+
+  @override
+  String get desktopComposerSendHint => 'Enviar · Enter\nBotão direito para enviar mais tarde';
+
+  @override
+  String get desktopComposerWriteFirst => 'Escreva primeiro uma mensagem';
+
+  @override
+  String desktopComposerToTopic(Object title) {
+    return 'para o tópico «$title»';
+  }
+
+  @override
+  String get desktopShortcutsNavigation => 'Navegação';
+
+  @override
+  String get desktopShortcutsTabs => 'Conversas · Salas · Chamadas · Contactos';
+
+  @override
+  String get desktopShortcutsSearchAll => 'Procurar em conversas e mensagens';
+
+  @override
+  String get desktopShortcutsPrevNext => 'Conversa anterior / seguinte';
+
+  @override
+  String get desktopShortcutsInChat => 'Numa conversa';
+
+  @override
+  String get desktopShortcutsFindHere => 'Procurar nesta conversa';
+
+  @override
+  String get desktopShortcutsSend => 'Enviar (configurável)';
+
+  @override
+  String get desktopShortcutsNewline => 'Quebra de linha';
+
+  @override
+  String get desktopShortcutsPaste => 'Colar uma imagem da área de transferência';
+
+  @override
+  String get desktopShortcutsApp => 'Aplicação';
+
+  @override
+  String get desktopShortcutsThisHelp => 'Esta ajuda';
+
+  @override
+  String get desktopShortcutsCloseWindow => 'Fechar a janela ou a procura';
+
+  @override
+  String get desktopShortcutsTray => 'Minimizar para a bandeja';
+
+  @override
+  String get desktopShortcutsTitle => 'Atalhos de teclado';
+
+  @override
+  String get desktopMediaCancelSend => 'Cancelar o envio';
+
+  @override
+  String get desktopMediaSending => 'A enviar…';
+
+  @override
+  String desktopMediaSendingOf(Object total) {
+    return 'A enviar… · $total';
+  }
+
+  @override
+  String get desktopMediaRetryDownload => 'Repetir a transferência';
+
+  @override
+  String get desktopMediaImage => 'Imagem';
+
+  @override
+  String desktopMediaDownloading(Object size) {
+    return 'A transferir… · $size';
+  }
+
+  @override
+  String get desktopMediaDownload => 'Transferir';
+
+  @override
+  String get desktopSendAsMedia => 'Enviar como media';
+
+  @override
+  String get desktopSendAsFiles => 'Enviar como ficheiros';
+
+  @override
+  String get desktopSendUngroup => 'Não agrupar';
+
+  @override
+  String get desktopSendGroup => 'Agrupar';
+
+  @override
+  String get desktopSendAddFiles => 'Adicionar ficheiros…';
+
+  @override
+  String get desktopSendDropHere => 'Largue para adicionar';
+
+  @override
+  String get desktopSendCloseEsc => 'Fechar · Esc';
+
+  @override
+  String desktopSendToDestination(Object destination) {
+    return 'para «$destination»';
+  }
+
+  @override
+  String get desktopSendCaptionHint => 'Adicionar uma legenda…';
+
+  @override
+  String get desktopSendEmoji => 'Emoji';
+
+  @override
+  String get desktopSendRemove => 'Remover';
+
+  @override
+  String get desktopSendEnter => 'Enviar · Enter';
+
+  @override
+  String get desktopSendShiftEnter => 'Enviar · Shift+Enter';
+
+  @override
+  String get desktopCallCtlMicOff => 'Desligar o microfone   ⌘D';
+
+  @override
+  String get desktopCallCtlMicOn => 'Ligar o microfone   ⌘D';
+
+  @override
+  String get desktopCallCtlCamOff => 'Desligar a câmara   ⌘E';
+
+  @override
+  String get desktopCallCtlCamOn => 'Ligar a câmara   ⌘E';
+
+  @override
+  String get desktopCallCtlShareStop => 'Parar a partilha';
+
+  @override
+  String get desktopCallCtlShare => 'Partilha de ecrã';
+
+  @override
+  String get desktopCallCtlHandDown => 'Baixar a mão';
+
+  @override
+  String get desktopCallCtlHandUp => 'Levantar a mão';
+
+  @override
+  String get desktopCallCtlHangUp => 'Desligar   ⌘W';
+
+  @override
+  String desktopAbsenceDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dias',
+      one: '$count dia',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopAbsencePastFanout(Object days) {
+    return 'Este computador esteve sem ligação $days. Nesse tempo os remetentes deixaram de cifrar mensagens para ele, e parte do histórico não chegará aqui. No telemóvel está intacto — abra lá as conversas necessárias e o histórico recente é sincronizado.';
+  }
+
+  @override
+  String desktopAbsenceWithinWindow(Object days) {
+    return 'Este computador esteve sem ligação $days. As mensagens ficam uma semana no servidor, por isso parte delas pode não se ter conservado para ele. No telemóvel estão intactas.';
+  }
+
+  @override
+  String get desktopAbsenceGotIt => 'Entendido';
+
+  @override
+  String get desktopNavContacts => 'Contactos';
+
+  @override
+  String get desktopChatNotFound => 'A conversa não foi encontrada';
+
+  @override
+  String desktopUnreadTitle(Object count) {
+    return 'Secretly — $count por ler';
+  }
+
+  @override
+  String get desktopRoomsNone => 'Ainda não há salas';
+
+  @override
+  String get desktopRoomsNoneHint => 'Crie uma sala no telemóvel — aparece aqui automaticamente';
+
+  @override
+  String get desktopRoomsPickOne => 'Escolha uma sala à esquerda';
+
+  @override
+  String get desktopScheduleTitle => 'Enviar mais tarde';
+
+  @override
+  String get desktopScheduleInHour => 'Daqui a uma hora';
+
+  @override
+  String get desktopScheduleTonight => 'Hoje às 19:00';
+
+  @override
+  String get desktopScheduleTomorrow => 'Amanhã às 9:00';
+
+  @override
+  String get desktopScheduleInWeek => 'Daqui a uma semana';
+
+  @override
+  String desktopScheduleTodayAt(Object time) {
+    return 'hoje às $time';
+  }
+
+  @override
+  String desktopScheduleTomorrowAt(Object time) {
+    return 'amanhã às $time';
+  }
+
+  @override
+  String desktopScheduleOnAt(Object date, Object time) {
+    return '$date às $time';
+  }
+
+  @override
+  String get desktopScheduleHint => 'A mensagem sai sozinha à hora escolhida — mesmo com a janela fechada, será enviada no próximo arranque.';
+
+  @override
+  String get desktopSchedulePickTime => 'Escolher a hora…';
+
+  @override
+  String get desktopDevicesSearching => 'A procurar dispositivos…';
+
+  @override
+  String get desktopDevicesNoCameras => 'Não foram encontradas câmaras. Talvez a aplicação não tenha acesso nas definições do sistema.';
+
+  @override
+  String get desktopDevicesNoMics => 'Não foram encontrados microfones. Talvez a aplicação não tenha acesso nas definições do sistema.';
+
+  @override
+  String get desktopDevicesOutputHint => 'Para onde sai o som escolhe-se dentro da chamada — pelo sinal junto a «Microfone». É aí que a aplicação muda sozinha para os auscultadores quando os ligam.';
+
+  @override
+  String get desktopDevicesSystemDefault => 'Como no sistema';
+
+  @override
+  String get desktopRailSettings => 'Definições   Cmd ,';
+
+  @override
+  String get desktopRailConnected => 'Ligado';
+
+  @override
+  String get desktopRailConnecting => 'A ligar…';
+
+  @override
+  String get desktopRailOffline => 'Sem ligação';
+
+  @override
+  String desktopRailProfile(Object status) {
+    return 'Perfil   Cmd P   ·   $status';
+  }
+
+  @override
+  String get desktopEmojiSmileys => 'Sorrisos e emoções';
+
+  @override
+  String get desktopEmojiPeople => 'Pessoas e corpo';
+
+  @override
+  String get desktopEmojiNature => 'Natureza';
+
+  @override
+  String get desktopEmojiFood => 'Comida e bebida';
+
+  @override
+  String get desktopEmojiTravel => 'Viagens';
+
+  @override
+  String get desktopEmojiActivities => 'Atividades';
+
+  @override
+  String get desktopEmojiObjects => 'Objetos';
+
+  @override
+  String get desktopEmojiSymbols => 'Símbolos';
+
+  @override
+  String get desktopEmojiFlags => 'Bandeiras';
+
+  @override
+  String get desktopEmojiOther => 'Outros';
+
+  @override
+  String get desktopLockedTitle => 'O Secretly está bloqueado';
+
+  @override
+  String get desktopLockedTouchIdPrompt => 'Confirme a sua identidade com o Touch ID para continuar.';
+
+  @override
+  String get desktopLockedPasswordPrompt => 'Confirme com a palavra-passe do dispositivo para continuar.';
+
+  @override
+  String get desktopLockedUnlock => 'Desbloquear';
+
+  @override
+  String get desktopLockedWaiting => 'A aguardar confirmação…';
+
+  @override
+  String get desktopLockedFailed => 'Não foi possível confirmar a sua identidade.';
+
+  @override
+  String get desktopLockedNoService => 'O serviço de identidade não está disponível neste computador. Reinicie o Secretly ou o computador. Se não resolver, escreva ao suporte a partir do telemóvel.';
+
+  @override
+  String get desktopEmojiTabEmoji => 'Emojis';
+
+  @override
+  String get desktopEmojiTabStickers => 'Autocolantes';
+
+  @override
+  String get desktopEmojiRecents => 'Recentes';
+
+  @override
+  String get desktopEmojiNothingFound => 'Nada encontrado';
+
+  @override
+  String get desktopEmojiSearchHint => 'Procurar emojis';
+
+  @override
+  String get desktopStickersSearchHint => 'Procurar autocolantes';
+
+  @override
+  String get desktopGifSearchHint => 'Procurar GIFs';
+
+  @override
+  String get desktopGifUnavailable => 'Os GIFs não estão disponíveis nesta janela';
+
+  @override
+  String get desktopStickerPacksSoon => 'Packs de autocolantes em breve';
+
+  @override
+  String get desktopCallFullscreen => 'Ecrã inteiro';
+
+  @override
+  String get desktopCallExitFullscreen => 'Sair do ecrã inteiro';
+
+  @override
+  String get desktopCallDialing => 'A chamar…';
+
+  @override
+  String get desktopCallEnded => 'Terminada';
+
+  @override
+  String desktopCallEncryptedFor(Object duration) {
+    return 'Encriptada · $duration';
+  }
+
+  @override
+  String get desktopCallReturn => 'Voltar';
+
+  @override
+  String get desktopCallInProgress => 'Chamada a decorrer';
+
+  @override
+  String desktopCallInProgressWith(Object title) {
+    return 'Chamada a decorrer · $title';
+  }
+
+  @override
+  String get desktopCallAnswer => 'Atender';
+
+  @override
+  String get desktopCallAnswerVideo => 'Atender com vídeo';
+
+  @override
+  String get desktopCallAnswerText => 'Por texto';
+
+  @override
+  String get desktopTimeYesterday => 'ontem';
+
+  @override
+  String get desktopForwardTitle => 'Reencaminhar para…';
+
+  @override
+  String get desktopForwardSearchHint => 'Procurar conversa ou sala';
+
+  @override
+  String get desktopForwardNoChats => 'Sem conversas disponíveis';
+
+  @override
+  String get desktopForwardKindDirect => 'Conversa direta';
+
+  @override
+  String get desktopContactsSearchHint => 'Procurar contactos';
+
+  @override
+  String get desktopContactsEmpty => 'Os contactos vão aparecer após a sincronização.';
+
+  @override
+  String desktopContactsNothingFor(Object query) {
+    return 'Nada encontrado para «$query».';
+  }
+
+  @override
+  String get desktopContactsPick => 'Escolha um contacto';
+
+  @override
+  String get desktopContactsCardRight => 'O cartão vai aparecer à direita.';
+
+  @override
+  String get desktopContactsWrite => 'Escrever mensagem';
+
+  @override
+  String get desktopVideoTitle => 'Vídeo';
+
+  @override
+  String get desktopViewerCloseEsc => 'Fechar  Esc';
+
+  @override
+  String get desktopVideoPlayFailed => 'Não foi possível reproduzir o vídeo';
+
+  @override
+  String get desktopKeySpace => 'Espaço';
+
+  @override
+  String get desktopWindowMinimize => 'Minimizar';
+
+  @override
+  String get desktopWindowMaximize => 'Maximizar';
+
+  @override
+  String get desktopWindowClose => 'Fechar';
+
+  @override
+  String get desktopWindowBack => 'Anterior';
+
+  @override
+  String get desktopWindowForward => 'Seguinte';
+
+  @override
+  String get desktopSearchEverything => 'Conversas, pessoas, mensagens, ficheiros';
+
+  @override
+  String get desktopUnitB => 'B';
+
+  @override
+  String get desktopUnitKb => 'KB';
+
+  @override
+  String get desktopUnitMb => 'MB';
+
+  @override
+  String get desktopUnitGb => 'GB';
+
+  @override
+  String get desktopUnitTb => 'TB';
+
+  @override
+  String get desktopSyncDone => 'Sincronizado';
+
+  @override
+  String get desktopSyncSyncing => 'A sincronizar…';
+
+  @override
+  String get desktopSyncReconnecting => 'A reconectar…';
+
+  @override
+  String get desktopDetailsShare => 'Partilhar';
+
+  @override
+  String get desktopDetailsHide => 'Ocultar';
+
+  @override
+  String get desktopDetailsMore => 'Mais';
+
+  @override
+  String get desktopDetailsChangeCover => 'Mudar a capa';
+
+  @override
+  String desktopDetailsFrame(Object name) {
+    return 'Moldura «$name»';
+  }
+
+  @override
+  String get desktopApply => 'Aplicar';
+
+  @override
+  String get desktopAccentAppliesTo => 'Botões, seleções e anéis. O balão mantém o seu estilo — escolhe-se abaixo.';
+
+  @override
+  String get desktopTranslateUnknownSource => 'Não foi possível detetar o idioma da mensagem';
+
+  @override
+  String get desktopTranslateUnsupported => 'O tradutor do sistema não conhece este par de idiomas';
+
+  @override
+  String get desktopTranslateNeedsDownload => 'O idioma não foi transferido. Definições do Sistema → Geral → Idioma e região → Idiomas de tradução';
+
+  @override
+  String get desktopTranslateFailed => 'Não foi possível traduzir';
+
+  @override
+  String get desktopNewChatSearchHint => 'Procurar nos contactos';
+
+  @override
+  String get desktopNewChatNoContacts => 'Ainda sem contactos';
+
+  @override
+  String get desktopNewChatNobodyFound => 'Ninguém encontrado';
+
+  @override
+  String get desktopMentionEveryone => 'Todos os participantes';
+
+  @override
+  String get desktopMentionAdmins => 'Administradores';
+
+  @override
+  String get desktopMentionEveryoneHint => 'Chamar todos na sala';
+
+  @override
+  String get desktopMentionAdminsHint => 'Chamar o dono e os administradores';
+
+  @override
+  String desktopClearForPeer(Object name) {
+    return 'Limpar também o histórico de $name';
+  }
+
+  @override
+  String get desktopClearForPeerHint => 'As mensagens vão desaparecer no dispositivo dele e em todos os seus. Isto não pode ser anulado.';
+
+  @override
+  String get desktopGifNoKey => 'GIFs indisponíveis: compilação sem chave GIPHY';
+
+  @override
+  String get desktopGifConnectionLost => 'A ligação caiu. Tente novamente';
+
+  @override
+  String get desktopNotesHint => 'O que reter desta conversa…';
+
+  @override
+  String get desktopNotesPrivate => 'Visível apenas para si. Não é enviado, não aparece na conversa e não entra na cópia de segurança — fica neste computador, na mesma base encriptada das mensagens.';
+
+  @override
+  String get desktopEmojiSearchShort => 'Procurar emojis…';
+
+  @override
+  String get desktopNotifOpen => 'Abrir';
+
+  @override
+  String get desktopLinkPreviewLoading => 'Pré-visualização do link…';
+
+  @override
+  String get desktopLinkPreviewOff => 'Sem pré-visualização';
+
+  @override
+  String get desktopDropToSend => 'Largue para enviar';
+
+  @override
+  String get desktopDropEncrypted => 'Os ficheiros são encriptados antes do envio';
+
+  @override
+  String get desktopDetailsPickChat => 'Escolha uma conversa';
+
+  @override
+  String get desktopDetailsEmptyHint => 'Os dados da pessoa ou da sala\nvão aparecer aqui.';
+
+  @override
+  String get desktopMemberWrite => 'Escrever';
+
+  @override
+  String get desktopShowPanel => 'Mostrar o painel';
+
+  @override
+  String get desktopHidePanel => 'Ocultar o painel';
+
+  @override
+  String get desktopNotifOff => 'As notificações estão desligadas';
+
+  @override
+  String get desktopSettingsSearchHint => 'Encontrar uma definição';
+
+  @override
+  String get desktopUnlockPrompt => 'Desbloquear o Secretly';
+
+  @override
+  String get desktopEnableLockPrompt => 'Confirme para ativar o bloqueio do Secretly';
+
+  @override
+  String get desktopRoomsNoneHintDot => 'Crie uma sala no telemóvel — vai aparecer aqui sozinha.';
+
+  @override
+  String get desktopSplashLoading => 'A carregar o perfil…';
+
+  @override
+  String get desktopOutgoingOnePhoto => 'Foto';
+
+  @override
+  String get desktopOutgoingOneVideo => 'Vídeo';
+
+  @override
+  String get desktopOutgoingOneAudio => 'Áudio';
+
+  @override
+  String get desktopOutgoingOneFile => 'Ficheiro';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -6370,4 +8822,2456 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopUnblockAction => 'Desbloquear';
+
+  @override
+  String get desktopPrivacyLastSeen => 'Visto por último';
+
+  @override
+  String get desktopPrivacyProfilePhoto => 'Fotos de perfil';
+
+  @override
+  String get desktopPrivacyForwarding => 'Encaminhamento de mensagens';
+
+  @override
+  String get desktopPrivacyCalls => 'Chamadas';
+
+  @override
+  String get desktopPrivacyVoice => 'Mensagens de voz';
+
+  @override
+  String get desktopPrivacyMessages => 'Mensagens';
+
+  @override
+  String get desktopPrivacyNobody => 'Ninguém';
+
+  @override
+  String get desktopPrivacyEverybody => 'Todos';
+
+  @override
+  String get desktopPrivacyContacts => 'Contatos';
+
+  @override
+  String get desktopPrivacyEncryption => 'Criptografia';
+
+  @override
+  String get desktopPrivacyEncryptionHint => 'Todas as mensagens e chamadas são criptografadas de ponta a ponta. As chaves ficam apenas nos seus dispositivos.';
+
+  @override
+  String get desktopPrivacyE2eeActive => 'A criptografia de ponta a ponta está ativa';
+
+  @override
+  String get desktopPrivacyWhoSees => 'Quem vê';
+
+  @override
+  String get desktopPrivacyWhoSeesHint => 'As mesmas configurações de visibilidade do aplicativo móvel.';
+
+  @override
+  String get desktopPrivacyVisibility => 'Visibilidade';
+
+  @override
+  String get desktopPrivacyByNickname => 'Visível pelo apelido';
+
+  @override
+  String get desktopPrivacyByNicknameHint => 'Permitir que encontrem você pelo apelido';
+
+  @override
+  String get desktopPrivacySuggest => 'Sugerir pessoas na busca';
+
+  @override
+  String get desktopPrivacyStrangers => 'Conversas novas de desconhecidos';
+
+  @override
+  String get desktopPrivacyStrangersHint => 'Para o arquivo e sem notificações';
+
+  @override
+  String get desktopPrivacyAutoDelete => 'Excluir minha conta';
+
+  @override
+  String get desktopPrivacyAutoDeleteHint => 'Se você não entrar por mais tempo que o prazo escolhido, a conta e todas as mensagens são excluídas automaticamente. A contagem reinicia a cada entrada.';
+
+  @override
+  String get desktopPrivacyIfAbsent => 'Se eu não entrar';
+
+  @override
+  String get desktopPrivacyIn1Month => 'Após 1 mês';
+
+  @override
+  String get desktopPrivacyIn3Months => 'Após 3 meses';
+
+  @override
+  String get desktopPrivacyIn6Months => 'Após 6 meses';
+
+  @override
+  String get desktopPrivacyIn1Year => 'Após um ano';
+
+  @override
+  String get desktopPrivacyIn2Years => 'Após 2 anos';
+
+  @override
+  String get desktopLockImmediately => 'Assim que o foco é perdido';
+
+  @override
+  String desktopLockSeconds(Object value) {
+    return '$value s';
+  }
+
+  @override
+  String desktopLockMinutes(Object value) {
+    return '$value min';
+  }
+
+  @override
+  String desktopLockHours(Object value) {
+    return '$value h';
+  }
+
+  @override
+  String get desktopLockNoIdentityService => 'O serviço de verificação de identidade está indisponível — o bloqueio não foi ligado.';
+
+  @override
+  String get desktopLockNotConfirmed => 'O bloqueio não foi ligado: a confirmação não passou.';
+
+  @override
+  String get desktopLockTitle => 'Bloqueio do aplicativo';
+
+  @override
+  String get desktopLockTouchIdHint => 'Pedir Touch ID para voltar a entrar depois de perder o foco.';
+
+  @override
+  String get desktopLockPasswordHint => 'Pedir a senha do dispositivo para voltar a entrar depois de perder o foco.';
+
+  @override
+  String get desktopLockEnableTouchId => 'Ligar o Touch ID';
+
+  @override
+  String get desktopLockEnableLock => 'Ligar o bloqueio';
+
+  @override
+  String get desktopLockDevicePassword => 'Senha do dispositivo';
+
+  @override
+  String get desktopLockAfter => 'Bloquear após';
+
+  @override
+  String get desktopLockNow => 'Bloquear agora';
+
+  @override
+  String get desktopDevicesEndSessionTitle => 'Encerrar a sessão?';
+
+  @override
+  String desktopDevicesEndSessionBody(Object id) {
+    return 'O dispositivo $id será desconectado do seu perfil. Para recuperar o acesso será preciso escanear o QR de novo. Continuar?';
+  }
+
+  @override
+  String get desktopDevicesEnd => 'Encerrar';
+
+  @override
+  String desktopDevicesEndFailed(Object error) {
+    return 'Não foi possível encerrar a sessão: $error';
+  }
+
+  @override
+  String get desktopDevicesEnded => 'A sessão do dispositivo foi encerrada.';
+
+  @override
+  String get desktopDevicesActiveSessions => 'Sessões ativas';
+
+  @override
+  String get desktopDevicesDemoHint => 'Modo de demonstração · os dispositivos reais aparecem depois de conectar um perfil';
+
+  @override
+  String get desktopDevicesThisComputer => 'macOS · Este computador';
+
+  @override
+  String get desktopDevicesDemoMac => 'MacBook Pro · Ativo agora';
+
+  @override
+  String get desktopDevicesDemoIphone => 'iOS 18.2 · há 2 horas (demo)';
+
+  @override
+  String get desktopDevicesDemoIpad => 'iPadOS 18 · ontem (demo)';
+
+  @override
+  String get desktopDevicesThisDevice => 'Este dispositivo';
+
+  @override
+  String get desktopDevicesRemoteDevice => 'Dispositivo remoto';
+
+  @override
+  String get desktopDevicesDisconnect => 'Desconectar';
+
+  @override
+  String get desktopDevicesTitle => 'Dispositivos';
+
+  @override
+  String desktopDevicesTitleCount(Object count) {
+    return 'Dispositivos · $count';
+  }
+
+  @override
+  String get desktopDevicesHint => 'Os dispositivos vinculados a este perfil no servidor de chaves.';
+
+  @override
+  String get desktopDevicesLoadFailed => 'Não foi possível carregar';
+
+  @override
+  String get desktopDevicesRetry => 'Tentar de novo';
+
+  @override
+  String get desktopDevicesNone => 'Nenhum dispositivo encontrado';
+
+  @override
+  String get desktopDevicesNotLinked => 'O perfil ainda não está vinculado ao servidor.';
+
+  @override
+  String get desktopDevicesRefresh => 'Atualizar a lista';
+
+  @override
+  String get desktopAccentCustom => 'Cor própria';
+
+  @override
+  String get desktopAccentCustomChange => 'Cor própria — alterar';
+
+  @override
+  String get desktopPairTitle => 'Conectar um dispositivo';
+
+  @override
+  String get desktopPairHint => 'Mostre o QR code no dispositivo novo ou escaneie-o pelo celular';
+
+  @override
+  String get desktopPairRequestFailed => 'Não foi possível criar a solicitação de conexão';
+
+  @override
+  String get desktopPairCodeCopied => 'O conteúdo do QR foi copiado';
+
+  @override
+  String get desktopPairNewTitle => 'Conectar um novo dispositivo';
+
+  @override
+  String get desktopPairNewHint => 'No dispositivo novo abra o Secretly e escolha “Conectar por QR”. Depois escaneie o código abaixo.';
+
+  @override
+  String get desktopPairClose => 'Fechar';
+
+  @override
+  String get desktopPairCopyCode => 'Copiar o código';
+
+  @override
+  String get desktopPairRefreshQr => 'Atualizar o QR';
+
+  @override
+  String desktopSyncPulled(Object count) {
+    return 'Novos eventos obtidos: $count';
+  }
+
+  @override
+  String get desktopSyncTooOften => 'Solicitações demais — tente mais tarde';
+
+  @override
+  String get desktopSyncNothingNew => 'Concluído · não há eventos novos';
+
+  @override
+  String get desktopSyncDemoUnavailable => 'Não disponível no modo de demonstração';
+
+  @override
+  String desktopSyncBlobsPulled(Object blobs, Object convos) {
+    return 'Anexos obtidos: $blobs (conversas: $convos)';
+  }
+
+  @override
+  String desktopSyncNoBlobs(Object convos) {
+    return 'Concluído · não há anexos novos (conversas: $convos)';
+  }
+
+  @override
+  String get desktopSyncTitle => 'Histórico de outros dispositivos';
+
+  @override
+  String get desktopSyncHint => 'Pedir ao celular o histórico recente das conversas. Usado se o computador ficou offline mais de 7 dias ou acabou de ser conectado por QR.';
+
+  @override
+  String get desktopSyncRunning => 'Sincronizando…';
+
+  @override
+  String get desktopSyncAskHistory => 'Pedir o histórico';
+
+  @override
+  String get desktopSyncAsk => 'Pedir';
+
+  @override
+  String get desktopSyncBlobsRunning => 'Baixando anexos…';
+
+  @override
+  String get desktopSyncBlobsAction => 'Obter os anexos';
+
+  @override
+  String get desktopSyncBlobsHint => 'Baixa a mídia das conversas recentes quando os arquivos faltam localmente (após reconectar ou muito tempo offline).';
+
+  @override
+  String get desktopSyncBlobsShort => 'Obter';
+
+  @override
+  String desktopServerBackupOk(Object stamp, Object size, Object profile) {
+    return 'Backup no servidor ✓ · $stamp · $size KB · perfil $profile';
+  }
+
+  @override
+  String get desktopServerBackupPassword => 'Senha do backup';
+
+  @override
+  String get desktopServerBackupPasswordHint => 'Com esta senha o backup é criptografado e restaurado em qualquer dispositivo. Memorize-a — sem ela o backup é inútil e não pode ser recuperada.';
+
+  @override
+  String get desktopServerBackupRepeat => 'Repita a senha';
+
+  @override
+  String get desktopServerBackupCreate => 'Criar o backup';
+
+  @override
+  String get desktopServerBackupTitle => 'Backup no servidor';
+
+  @override
+  String get desktopServerBackupHint => 'Uma cópia criptografada da conta no servidor do Secretly. É restaurada em qualquer dispositivo por “Restaurar do servidor” com o seu Secretly ID e a senha.';
+
+  @override
+  String get desktopServerBackupLoading => 'Enviando…';
+
+  @override
+  String get desktopServerBackupCreateOnServer => 'Criar um backup no servidor';
+
+  @override
+  String get desktopServerBackupUpdate => 'Atualizar o backup';
+
+  @override
+  String desktopFailedWith(Object error) {
+    return 'Não foi possível: $error';
+  }
+
+  @override
+  String get desktopStorageDeleteModelTitle => 'Excluir o modelo de reconhecimento?';
+
+  @override
+  String get desktopStorageDeleteModelBody => 'A transcrição de mensagens de voz vai parar de funcionar até o modelo ser baixado de novo.';
+
+  @override
+  String get desktopStorageModelDeleted => 'O modelo foi excluído';
+
+  @override
+  String desktopStorageDeleteFailed(Object error) {
+    return 'Não foi possível excluir: $error';
+  }
+
+  @override
+  String desktopStorageKb(Object value) {
+    return '$value KB';
+  }
+
+  @override
+  String desktopStorageMb(Object value) {
+    return '$value MB';
+  }
+
+  @override
+  String desktopStorageGb(Object value) {
+    return '$value GB';
+  }
+
+  @override
+  String get desktopStorageUsage => 'Uso';
+
+  @override
+  String get desktopStorageUsageHint => 'Cache e mídia neste dispositivo';
+
+  @override
+  String desktopStorageClearHint(Object size) {
+    return 'Serão liberados $size. As mensagens, os arquivos que você enviou e os recentes não são excluídos — não haveria de onde recuperá-los.';
+  }
+
+  @override
+  String get desktopStorageClear => 'Limpar o cache';
+
+  @override
+  String get desktopStorageCounting => 'Calculando…';
+
+  @override
+  String get desktopStorageSpeechModel => 'Modelo de reconhecimento de fala';
+
+  @override
+  String get desktopStorageSpeechModelHint => 'Serve para transcrever mensagens de voz neste computador, sem enviar o áudio para lugar nenhum. Uma limpeza normal do cache NÃO o remove — é grande e é baixado à parte.';
+
+  @override
+  String get desktopStorageDeleteModel => 'Excluir o modelo';
+
+  @override
+  String desktopStorageMedia(Object size) {
+    return 'Mídia · $size';
+  }
+
+  @override
+  String desktopStorageVoice(Object size) {
+    return 'Voz · $size';
+  }
+
+  @override
+  String desktopStorageOther(Object size) {
+    return 'Outros · $size';
+  }
+
+  @override
+  String get desktopStorageFree => 'Livre';
+
+  @override
+  String desktopStorageTotal(Object size) {
+    return 'Total · $size';
+  }
+
+  @override
+  String desktopAboutVersion(Object version, Object build) {
+    return 'Versão $version · compilação $build';
+  }
+
+  @override
+  String get desktopAboutTagline => 'Um mensageiro seguro com criptografia de ponta a ponta. Sem nuvem. Sem publicidade. Código aberto.';
+
+  @override
+  String get desktopAboutLicences => 'Licenças';
+
+  @override
+  String get desktopAboutWebsite => 'Site';
+
+  @override
+  String get desktopDangerTitle => 'Excluir a conta de forma irreversível?';
+
+  @override
+  String get desktopDangerBody => 'O perfil, as chaves, os dados locais e o histórico de mensagens serão excluídos neste e em outros dispositivos. Não há volta.';
+
+  @override
+  String get desktopDangerDeleting => 'Excluindo a conta…';
+
+  @override
+  String desktopDangerFailed(Object error) {
+    return 'Não foi possível excluir a conta: $error';
+  }
+
+  @override
+  String get desktopDangerSection => 'Exclusão da conta';
+
+  @override
+  String get desktopDangerDemo => 'Modo de demonstração · a exclusão não está disponível sem um perfil conectado.';
+
+  @override
+  String get desktopDangerEnterId => 'Digite o seu Secretly ID para confirmar';
+
+  @override
+  String desktopDangerEnterIdExact(Object id) {
+    return 'Digite $id para confirmar';
+  }
+
+  @override
+  String get desktopDangerAction => 'Excluir a conta';
+
+  @override
+  String get desktopDangerIrreversible => 'Esta ação é irreversível. Serão excluídos todos os seus dados, o histórico de mensagens e as chaves. Não há volta.';
+
+  @override
+  String get desktopSecurityE2ee => 'Criptografia de ponta a ponta';
+
+  @override
+  String get desktopSecurityE2eeHint => 'Todas as mensagens, chamadas e arquivos são criptografados no seu dispositivo. As chaves nunca saem dos seus dispositivos — o servidor vê apenas texto cifrado.';
+
+  @override
+  String get desktopSecurityVerifiedDevices => 'Dispositivos verificados';
+
+  @override
+  String get desktopSecurityVerifiedHint => 'Enquanto estiver ligado, as mensagens não vão para os dispositivos não confirmados da outra pessoa. Protege contra substituição, mas uma mensagem pode não chegar até ela confirmar um novo. Só conversas individuais: não vale para grupos.';
+
+  @override
+  String get desktopSecurityOnlyVerified => 'Apenas dispositivos verificados';
+
+  @override
+  String get desktopSecurityBlocked => 'Os dispositivos não verificados são bloqueados';
+
+  @override
+  String get desktopSecurityAllDevices => 'As mensagens vão para todos os dispositivos da outra pessoa';
+
+  @override
+  String get desktopSecurityAppEntry => 'Entrada no aplicativo';
+
+  @override
+  String get desktopSecurityAppEntryHint => 'Uma senha ao abrir o Secretly e depois de a janela ficar escondida por mais de um minuto. Vale para este computador.';
+
+  @override
+  String get desktopSecurityPersonalScopeHint => 'Uma senha à parte para a categoria “Pessoais”. Sem ela, as conversas pessoais ficam abertas a quem tiver acesso a um computador desbloqueado.';
+
+  @override
+  String get desktopCallsInApp => 'Chamadas no aplicativo';
+
+  @override
+  String get desktopCallsInAppHint => 'Desligue para desativar as chamadas por completo';
+
+  @override
+  String get desktopCallsAccept => 'Aceitar chamadas recebidas';
+
+  @override
+  String get desktopCallsAcceptHint => 'Poderão ligar para você';
+
+  @override
+  String get desktopCallsDisabledHint => 'Indisponível enquanto as chamadas estiverem desligadas';
+
+  @override
+  String get desktopCallsScreenShare => 'Compartilhamento de tela';
+
+  @override
+  String get desktopCallsScreenShareHint => 'Receber a tela de outra pessoa é uma permissão à parte: pode aparecer algo que você não esperava ver.';
+
+  @override
+  String get desktopCallsAcceptScreenShare => 'Aceitar compartilhamento de tela';
+
+  @override
+  String get desktopAccountIdCopied => 'O Secretly ID foi copiado';
+
+  @override
+  String get desktopAccountIdHint => 'Este identificador é o que você compartilha para te encontrarem. Não contém número de telefone nem e-mail.';
+
+  @override
+  String get desktopAccountCopy => 'Copiar';
+
+  @override
+  String get desktopAccountProfile => 'Perfil';
+
+  @override
+  String get desktopAccountProfileHint => 'Nome, foto, status';
+
+  @override
+  String get desktopAccountOpenProfile => 'Abrir a página do perfil';
+
+  @override
+  String desktopScopePasswordFor(Object name) {
+    return 'Senha para “$name”';
+  }
+
+  @override
+  String get desktopScopeMin4 => 'Pelo menos 4 caracteres';
+
+  @override
+  String get desktopScopeOn => 'A proteção está ligada';
+
+  @override
+  String desktopScopeOnFailed(Object error) {
+    return 'Não foi possível ligar: $error';
+  }
+
+  @override
+  String get desktopScopeOff => 'A proteção está desligada';
+
+  @override
+  String desktopScopeOffFailed(Object error) {
+    return 'Não foi possível desligar: $error';
+  }
+
+  @override
+  String get desktopScopePasswordsDiffer => 'As senhas não coincidem';
+
+  @override
+  String get desktopScopeTitle => 'Proteção por senha';
+
+  @override
+  String get desktopScopeOnWithPassword => 'Ligada — senha';
+
+  @override
+  String get desktopScopeEnabled => 'Ligada';
+
+  @override
+  String get desktopScopeDisabled => 'Desligada';
+
+  @override
+  String get desktopScopeChangePassword => 'Trocar a senha';
+
+  @override
+  String get desktopScopeLockNow => 'Bloquear';
+
+  @override
+  String desktopBlockedUnblocked(Object name) {
+    return '$name foi desbloqueado';
+  }
+
+  @override
+  String desktopBlockedUnblockFailed(Object error) {
+    return 'Não foi possível desbloquear: $error';
+  }
+
+  @override
+  String get desktopBlockedTitle => 'Bloqueados';
+
+  @override
+  String get desktopBlockedEmptyHint => 'A lista está vazia. O bloqueio é feito pelo menu de uma conversa.';
+
+  @override
+  String get desktopBlockedHint => 'Estas pessoas não podem escrever nem ligar para você.';
+
+  @override
+  String get desktopBlockedNone => 'Ninguém está bloqueado';
+
+  @override
+  String get desktopSupportSent => 'A mensagem foi enviada';
+
+  @override
+  String get desktopSupportSendFailed => 'Não foi possível enviar. Verifique sua conexão.';
+
+  @override
+  String get desktopSupportUnavailable => 'O suporte está indisponível';
+
+  @override
+  String get desktopSupportUnavailableHint => 'O serviço de suporte está desligado agora. Tente mais tarde ou escreva pelo celular.';
+
+  @override
+  String get desktopSupportThread => 'A conversa com o suporte';
+
+  @override
+  String get desktopSupportThreadHint => 'As mensagens são criptografadas no seu dispositivo. O servidor guarda apenas texto cifrado — só o suporte pode ler a conversa.';
+
+  @override
+  String get desktopSupportNoReplies => 'Ainda não há respostas. Descreva o problema — a resposta chega aqui.';
+
+  @override
+  String get desktopSupportWrite => 'Escrever ao suporte';
+
+  @override
+  String get desktopSupportWriteHint => 'A versão da compilação e o identificador do dispositivo são anexados automaticamente — sem eles o problema é quase impossível de reproduzir.';
+
+  @override
+  String get desktopSupportDescribe => 'Descreva o que aconteceu';
+
+  @override
+  String get desktopSupportSending => 'Enviando…';
+
+  @override
+  String get desktopSupportSend => 'Enviar';
+
+  @override
+  String get desktopChatsEmptyHint => 'Comece a conversar no celular — as conversas sincronizam sozinhas para o computador';
+
+  @override
+  String get desktopChatsPickOne => 'Escolha uma conversa à esquerda';
+
+  @override
+  String desktopChatsSendFailed(Object error) {
+    return 'Não foi possível enviar: $error';
+  }
+
+  @override
+  String desktopChatsSendingTo(Object title) {
+    return 'Enviando para “$title”';
+  }
+
+  @override
+  String get desktopChatsFilterAll => 'Todos';
+
+  @override
+  String get desktopChatsFilterUnread => 'Não lidos';
+
+  @override
+  String get desktopChatsFilterGroups => 'Grupos';
+
+  @override
+  String get desktopChatsFilterArchive => 'Arquivo';
+
+  @override
+  String get desktopChatsFilterPersonal => 'Pessoais';
+
+  @override
+  String get desktopChatsRenameFolder => 'Renomear a pasta';
+
+  @override
+  String get desktopChatsDeleteFolder => 'Excluir a pasta';
+
+  @override
+  String desktopChatsRenameFailed(Object error) {
+    return 'Não foi possível renomear: $error';
+  }
+
+  @override
+  String desktopChatsDeleteFolderTitle(Object name) {
+    return 'Excluir a pasta “$name”?';
+  }
+
+  @override
+  String get desktopChatsDeleteFolderBody => 'As conversas ficam onde estão — só a pasta é excluída.';
+
+  @override
+  String desktopChatsDeleteFailed(Object error) {
+    return 'Não foi possível excluir: $error';
+  }
+
+  @override
+  String desktopChatsAddedToFolder(Object name) {
+    return 'Adicionado a “$name”';
+  }
+
+  @override
+  String desktopChatsRemovedFromFolder(Object name) {
+    return 'Removido de “$name”';
+  }
+
+  @override
+  String desktopChatsFolderChangeFailed(Object error) {
+    return 'Não foi possível mudar a pasta: $error';
+  }
+
+  @override
+  String desktopChatsFolderCreated(Object name) {
+    return 'A pasta “$name” foi criada';
+  }
+
+  @override
+  String desktopChatsFolderCreateFailed(Object error) {
+    return 'Não foi possível criar a pasta: $error';
+  }
+
+  @override
+  String get desktopChatsNewFolder => 'Pasta nova';
+
+  @override
+  String get desktopChatsFolderName => 'Nome da pasta';
+
+  @override
+  String desktopChatsRemoveFromFolder(Object name) {
+    return 'Remover de “$name”';
+  }
+
+  @override
+  String desktopChatsAddToFolder(Object name) {
+    return 'Para a pasta “$name”';
+  }
+
+  @override
+  String get desktopChatsNewFolderWithChat => 'Pasta nova com esta conversa…';
+
+  @override
+  String get desktopChatsRemoveFromPersonal => 'Remover de pessoais';
+
+  @override
+  String get desktopChatsAddToPersonal => 'Para pessoais';
+
+  @override
+  String get desktopChatsArchiveEmpty => 'O arquivo está vazio';
+
+  @override
+  String get desktopChatsNoPersonal => 'Não há conversas pessoais';
+
+  @override
+  String get desktopChatsPersonalLocked => 'As conversas pessoais estão protegidas por senha';
+
+  @override
+  String get desktopChatsAllRead => 'Tudo lido';
+
+  @override
+  String get desktopChatsFolderEmpty => 'Esta pasta ainda está vazia';
+
+  @override
+  String get desktopChatsNewChat => 'Conversa nova';
+
+  @override
+  String get desktopChatsNewRoom => 'Sala nova';
+
+  @override
+  String get desktopChatsStartFailed => 'Não foi possível iniciar a conversa: o perfil está indisponível';
+
+  @override
+  String get desktopChatsPhoto => 'Foto';
+
+  @override
+  String get desktopChatsVideo => 'Vídeo';
+
+  @override
+  String get desktopChatsAudio => 'Áudio';
+
+  @override
+  String get desktopChatsVoiceMessage => 'Mensagem de voz';
+
+  @override
+  String get desktopChatsVoiceShort => 'Voz';
+
+  @override
+  String get desktopChatsLink => 'Link';
+
+  @override
+  String get desktopChatsSticker => 'Figurinha';
+
+  @override
+  String desktopChatsStickerWith(Object label) {
+    return 'Figurinha $label';
+  }
+
+  @override
+  String desktopChatsPoll(Object question) {
+    return '📊 Enquete: $question';
+  }
+
+  @override
+  String get desktopChatsUnknown => 'desconhecido';
+
+  @override
+  String get desktopChatsMember => 'Membro';
+
+  @override
+  String get desktopChatsSoundOn => 'Ligar o som';
+
+  @override
+  String get desktopChatsSoundOff => 'Sem som';
+
+  @override
+  String get desktopChatsClearHistoryTitle => 'Limpar o histórico?';
+
+  @override
+  String desktopChatsClearHistoryBody(Object title) {
+    return 'Todas as mensagens da conversa “$title” serão excluídas neste dispositivo.';
+  }
+
+  @override
+  String get desktopChatsClear => 'Limpar';
+
+  @override
+  String get desktopChatsHistoryClearedBoth => 'O histórico foi limpo em ambos';
+
+  @override
+  String get desktopChatsHistoryCleared => 'O histórico foi limpo';
+
+  @override
+  String get desktopChatsDeleteChatTitle => 'Excluir a conversa?';
+
+  @override
+  String desktopChatsDeleteChatBody(Object title) {
+    return 'A conversa “$title” será totalmente removida deste dispositivo.';
+  }
+
+  @override
+  String get desktopChatsRooms => 'Salas';
+
+  @override
+  String get desktopChatsGeneralTopic => 'Geral';
+
+  @override
+  String get desktopChatsNewTopicEllipsis => 'Tópico novo…';
+
+  @override
+  String desktopChatsBranch(Object title) {
+    return 'Ramo “$title”';
+  }
+
+  @override
+  String get desktopChatsRename => 'Renomear';
+
+  @override
+  String get desktopChatsIcon => 'Ícone';
+
+  @override
+  String get desktopChatsDeleteBranch => 'Excluir o ramo';
+
+  @override
+  String get desktopChatsBranchIcon => 'Ícone do ramo';
+
+  @override
+  String get desktopChatsBranchIconHint => 'O ícone substitui a cerquilha antes do nome. Os coloridos prometem o que há dentro: verde uma chamada, vermelho algo urgente. Os demais são cinzas para não competir com o nome.';
+
+  @override
+  String get desktopChatsHash => 'Cerquilha';
+
+  @override
+  String desktopChatsBranchFailed(Object error) {
+    return 'Não foi possível alterar os ramos: $error';
+  }
+
+  @override
+  String get desktopChatsNewTopic => 'Tópico novo';
+
+  @override
+  String get desktopChatsRenameTopic => 'Renomear o tópico';
+
+  @override
+  String get desktopChatsTopicName => 'Nome do tópico';
+
+  @override
+  String desktopChatsReactionFailed(Object error) {
+    return 'Não foi possível salvar a reação: $error';
+  }
+
+  @override
+  String desktopChatsReactionLocal(Object error) {
+    return 'A reação foi aplicada localmente mas não chegou à outra pessoa: $error';
+  }
+
+  @override
+  String get desktopChatsRevealFailed => 'Não foi possível mostrar o arquivo no Finder';
+
+  @override
+  String desktopChatsVideoOpenFailed(Object error) {
+    return 'Não foi possível abrir o vídeo: $error';
+  }
+
+  @override
+  String get desktopChatsVideoUnavailable => 'O vídeo está indisponível';
+
+  @override
+  String desktopChatsFileFetchFailed(Object error) {
+    return 'Não foi possível obter o arquivo: $error';
+  }
+
+  @override
+  String get desktopChatsSaveAttachment => 'Salvar o anexo';
+
+  @override
+  String get desktopChatsFileUnavailable => 'O arquivo está indisponível';
+
+  @override
+  String desktopChatsSaveFailed(Object error) {
+    return 'Não foi possível salvar: $error';
+  }
+
+  @override
+  String desktopChatsOpenFailedWith(Object error) {
+    return 'Não foi possível abrir o arquivo: $error';
+  }
+
+  @override
+  String get desktopChatsOpenFailed => 'Não foi possível abrir o arquivo';
+
+  @override
+  String desktopChatsOpenFailedShort(Object error) {
+    return 'Não foi possível abrir: $error';
+  }
+
+  @override
+  String desktopChatsPlayFailed(Object error) {
+    return 'Não foi possível reproduzir: $error';
+  }
+
+  @override
+  String get desktopChatsNoCallPeer => 'Não foi possível determinar para quem ligar.';
+
+  @override
+  String get desktopChatsCallsNotReady => 'O serviço de chamadas não está pronto.';
+
+  @override
+  String get desktopChatsCallInProgress => 'Já há uma chamada em andamento.';
+
+  @override
+  String get desktopChatsEditFailed => 'Não foi possível editar a mensagem.';
+
+  @override
+  String get desktopChatsNoRecipient => 'Não foi possível determinar o destinatário.';
+
+  @override
+  String get desktopChatsDeleteMessageTitle => 'Excluir a mensagem?';
+
+  @override
+  String get desktopChatsDeleteMessagesTitle => 'Excluir as mensagens selecionadas?';
+
+  @override
+  String get desktopChatsDeleteOthersHint => 'As mensagens de outras pessoas serão excluídas apenas para você.';
+
+  @override
+  String get desktopChatsDeleteForAll => 'Excluir para todos';
+
+  @override
+  String get desktopChatsDeleteForMeOnly => 'Excluir apenas para mim';
+
+  @override
+  String get desktopChatsDeleteForMe => 'Excluir para mim';
+
+  @override
+  String get desktopChatsSavePrivacyBlocked => 'Esta mensagem não pode ser salva por restrições de privacidade.';
+
+  @override
+  String get desktopChatsNothingToSave => 'O anexo não foi baixado — não há nada para salvar';
+
+  @override
+  String get desktopChatsSavedPartly => 'Salvo nos Favoritos, mas não tudo';
+
+  @override
+  String get desktopChatsSaved => 'Salvo nos Favoritos';
+
+  @override
+  String get desktopChatsForwardPrivacyBlocked => 'Esta mensagem não pode ser encaminhada por restrições de privacidade.';
+
+  @override
+  String desktopChatsForwardFailed(Object error) {
+    return 'Não foi possível encaminhar: $error';
+  }
+
+  @override
+  String get desktopChatsNothingToForward => 'O anexo não foi baixado — não há nada para encaminhar';
+
+  @override
+  String desktopChatsForwardedPartly(Object title) {
+    return 'Encaminhado para “$title”, mas não tudo';
+  }
+
+  @override
+  String desktopChatsForwarded(Object title) {
+    return 'Encaminhado para “$title”';
+  }
+
+  @override
+  String desktopChatsFileNotSentElsewhere(Object text) {
+    return 'O arquivo não foi enviado para a outra conversa: $text';
+  }
+
+  @override
+  String get desktopChatsFileSendFailed => 'Não foi possível enviar o arquivo.';
+
+  @override
+  String desktopChatsPremiumFiles(Object text) {
+    return '$text Com o Premium você pode enviar arquivos de até 1 GB.';
+  }
+
+  @override
+  String get desktopChatsTypingEllipsis => 'digitando…';
+
+  @override
+  String get desktopChatsOnline => 'on-line';
+
+  @override
+  String desktopChatsSomeoneTyping(Object name) {
+    return '$name está digitando';
+  }
+
+  @override
+  String get desktopChatsLoadingList => 'Obtendo a lista do armazenamento local.';
+
+  @override
+  String get desktopChatsWillAppear => 'As mensagens e chamadas aparecem aqui assim que você abrir uma conversa.';
+
+  @override
+  String get desktopRoomNoOpenHere => 'Não é possível abrir uma conversa daqui';
+
+  @override
+  String get desktopRoomIdCopied => 'O ID foi copiado';
+
+  @override
+  String get desktopRoomAwaiting => 'Aguardando aprovação';
+
+  @override
+  String get desktopRoomBlocked => 'Bloqueado';
+
+  @override
+  String get desktopRoomCopied => 'Copiado';
+
+  @override
+  String get desktopRoomChangeRole => 'Mudar o papel';
+
+  @override
+  String get desktopRoomTransfer => 'Transferir a propriedade';
+
+  @override
+  String get desktopRoomBlockMember => 'Bloquear';
+
+  @override
+  String get desktopRoomKick => 'Remover';
+
+  @override
+  String get desktopRoomKickTitle => 'Remover o membro?';
+
+  @override
+  String desktopRoomKickBody(Object name) {
+    return '$name perderá o acesso à sala. Um novo convite o traz de volta.';
+  }
+
+  @override
+  String get desktopRoomBlockTitle => 'Bloquear o membro?';
+
+  @override
+  String desktopRoomBlockBody(Object name) {
+    return '$name não poderá voltar à sala, mesmo com convite, enquanto o bloqueio durar.';
+  }
+
+  @override
+  String get desktopRoomTransferTitle => 'Transferir a propriedade da sala?';
+
+  @override
+  String desktopRoomTransferBody(Object name) {
+    return '$name passa a proprietário e você a administrador. Só o novo proprietário pode desfazer.';
+  }
+
+  @override
+  String get desktopRoomTransferAction => 'Transferir';
+
+  @override
+  String get desktopRoomClearTitle => 'Limpar o histórico?';
+
+  @override
+  String get desktopRoomClearBody => 'Todas as mensagens da sala serão excluídas neste dispositivo.';
+
+  @override
+  String get desktopRoomLeaveTitle => 'Sair da sala?';
+
+  @override
+  String get desktopRoomLeaveBody => 'Você deixará de receber mensagens. Para voltar é preciso um novo convite.';
+
+  @override
+  String get desktopRoomLeave => 'Sair';
+
+  @override
+  String get desktopRoomInvite => 'Convidar';
+
+  @override
+  String get desktopRoomCopyId => 'Copiar o ID da sala';
+
+  @override
+  String get desktopRoomMuteOff => 'Desligar as notificações';
+
+  @override
+  String get desktopRoomUnarchive => 'Tirar do arquivo';
+
+  @override
+  String get desktopRoomLeaveRoom => 'Sair da sala';
+
+  @override
+  String get desktopRoomUntitled => 'Sem nome';
+
+  @override
+  String get desktopRoomCopyInvite => 'Copiar o convite';
+
+  @override
+  String get desktopRoomSound => 'Som';
+
+  @override
+  String get desktopRoomTabInfo => 'Info';
+
+  @override
+  String get desktopRoomTabMembers => 'Membros';
+
+  @override
+  String get desktopRoomTabMedia => 'Mídia';
+
+  @override
+  String get desktopRoomTopics => 'TÓPICOS';
+
+  @override
+  String desktopRoomTopicsCount(Object count) {
+    return 'TÓPICOS · $count';
+  }
+
+  @override
+  String get desktopRoomDescription => 'Descrição';
+
+  @override
+  String get desktopRoomNotes => 'NOTAS';
+
+  @override
+  String get desktopRoomInformation => 'Informação';
+
+  @override
+  String get desktopRoomId => 'ID da sala';
+
+  @override
+  String get desktopRoomInviteLink => 'Link de convite · clique para copiar';
+
+  @override
+  String get desktopRoomFavouriteHint => 'Um bloco na barra e um lugar no topo da lista';
+
+  @override
+  String get desktopRoomArchiveHint => 'Ocultar a sala da lista principal';
+
+  @override
+  String get desktopRoomNoMembers => 'Sem membros';
+
+  @override
+  String desktopRoomMembersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count membros',
+      one: '$count membro',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get desktopRoomNobodyFound => 'Ninguém encontrado';
+
+  @override
+  String get desktopRoomMembersUnavailable => 'A lista de membros está indisponível.';
+
+  @override
+  String get desktopRoomInCall => 'NA CHAMADA';
+
+  @override
+  String get desktopRoomOnline => 'ON-LINE';
+
+  @override
+  String get desktopRoomOffline => 'OFF-LINE';
+
+  @override
+  String desktopRoomMoreHidden(Object count) {
+    return 'Mais $count — use a busca acima';
+  }
+
+  @override
+  String get desktopRoomSearchMember => 'Buscar um membro';
+
+  @override
+  String get desktopRoomJoinRequests => 'Pedidos de entrada';
+
+  @override
+  String get desktopRoomAccept => 'Aceitar';
+
+  @override
+  String get desktopRoomDecline => 'Recusar';
+
+  @override
+  String get desktopRoomRoleOwner => 'Proprietário';
+
+  @override
+  String get desktopRoomRoleAdmin => 'Administrador';
+
+  @override
+  String get desktopRoomRoleModerator => 'Moderador';
+
+  @override
+  String get desktopRoomRoleRestricted => 'Restrito';
+
+  @override
+  String get desktopRoomRoleGuest => 'Convidado';
+
+  @override
+  String get desktopContactBlockTitle => 'Bloquear?';
+
+  @override
+  String get desktopContactUnblockTitle => 'Desbloquear?';
+
+  @override
+  String get desktopContactBlockBody => 'Esta pessoa não poderá mais enviar mensagens nem ligar para você.';
+
+  @override
+  String get desktopContactUnblockBody => 'Esta pessoa poderá voltar a falar com você.';
+
+  @override
+  String get desktopContactBlock => 'Bloquear';
+
+  @override
+  String get desktopContactCallsNotReady => 'O serviço de chamadas ainda não está pronto';
+
+  @override
+  String get desktopContactCallInProgress => 'Já há uma chamada em andamento';
+
+  @override
+  String desktopContactCallFailed(Object error) {
+    return 'Não foi possível iniciar a chamada: $error';
+  }
+
+  @override
+  String get desktopContactAutoDelete => 'Exclusão automática de mensagens';
+
+  @override
+  String get desktopContactAutoDeleteUpdated => 'A exclusão automática foi atualizada';
+
+  @override
+  String get desktopContactClearBody => 'Todas as mensagens desta conversa serão excluídas neste dispositivo.';
+
+  @override
+  String get desktopContactDeleteBody => 'A conversa será totalmente removida deste dispositivo.';
+
+  @override
+  String get desktopContactOff => 'Desligado';
+
+  @override
+  String get desktopContactDisable => 'Desligar';
+
+  @override
+  String get desktopContactDay1 => '1 dia';
+
+  @override
+  String get desktopContactDays7 => '7 dias';
+
+  @override
+  String get desktopContactDays30 => '30 dias';
+
+  @override
+  String get desktopContactHour1 => '1 hora';
+
+  @override
+  String desktopContactMinutes(Object value) {
+    return '$value min';
+  }
+
+  @override
+  String get desktopContactOffline => 'off-line';
+
+  @override
+  String desktopContactSeenAt(Object time) {
+    return 'visto às $time';
+  }
+
+  @override
+  String get desktopContactSeenYesterday => 'visto ontem';
+
+  @override
+  String desktopContactSeenOn(Object date) {
+    return 'visto em $date';
+  }
+
+  @override
+  String get desktopContactCopyId => 'Copiar o ID';
+
+  @override
+  String get desktopContactCopyIdShort => 'Copiar ID';
+
+  @override
+  String get desktopContactDisappearing => 'Mensagens que desaparecem';
+
+  @override
+  String get desktopContactDeleteChat => 'Excluir a conversa';
+
+  @override
+  String get desktopContactCall => 'Chamada';
+
+  @override
+  String get desktopContactBlockShort => 'Bloq.';
+
+  @override
+  String get desktopContactSecurity => 'Segurança';
+
+  @override
+  String get desktopContactVerify => 'Verificar o contato';
+
+  @override
+  String get desktopContactArchiveHint => 'Ocultar a conversa da lista principal';
+
+  @override
+  String get desktopThreadMessageHint => 'Mensagem…';
+
+  @override
+  String get desktopThreadPasteFailed => 'Não foi possível colar a imagem';
+
+  @override
+  String get desktopThreadNoScheduleEdit => 'Uma edição não pode ser agendada — altera algo já enviado';
+
+  @override
+  String desktopThreadWillLeave(Object when) {
+    return 'Sairá $when';
+  }
+
+  @override
+  String desktopThreadSeconds(Object value) {
+    return '$value s';
+  }
+
+  @override
+  String desktopThreadMinutes(Object value) {
+    return '$value min';
+  }
+
+  @override
+  String desktopThreadHours(Object value) {
+    return '$value h';
+  }
+
+  @override
+  String desktopThreadDays(Object value) {
+    return '$value d';
+  }
+
+  @override
+  String desktopThreadWeeks(Object value) {
+    return '$value sem';
+  }
+
+  @override
+  String desktopThreadSelected(Object count) {
+    return 'Selecionados: $count';
+  }
+
+  @override
+  String get desktopThreadDisappearingOn => 'As mensagens que desaparecem estão ligadas';
+
+  @override
+  String get desktopThreadCallAction => 'Ligar';
+
+  @override
+  String get desktopThreadCallRoom => 'Chamada em grupo';
+
+  @override
+  String get desktopThreadVideoCall => 'Videochamada';
+
+  @override
+  String get desktopThreadSearchShortcut => 'Buscar na conversa  Cmd F';
+
+  @override
+  String get desktopThreadHideDetails => 'Ocultar os detalhes';
+
+  @override
+  String get desktopThreadShowDetails => 'Mostrar os detalhes';
+
+  @override
+  String get desktopThreadMore => 'Mais';
+
+  @override
+  String get desktopThreadPinned => 'Mensagem fixada';
+
+  @override
+  String get desktopThreadNoMatches => 'sem correspondências';
+
+  @override
+  String get desktopThreadSearchHint => 'Buscar na conversa…';
+
+  @override
+  String get desktopThreadPrevMatch => 'Anterior (Shift F3)';
+
+  @override
+  String get desktopThreadNextMatch => 'Próximo (F3)';
+
+  @override
+  String get desktopThreadCloseEsc => 'Fechar (Esc)';
+
+  @override
+  String get desktopThreadNewMessages => 'Mensagens novas';
+
+  @override
+  String desktopThreadUnreadCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count não lidas',
+      one: '$count não lida',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get desktopThreadToday => 'Hoje';
+
+  @override
+  String get desktopThreadYesterday => 'Ontem';
+
+  @override
+  String get desktopProfileEmojiStatus => 'Status com emoji';
+
+  @override
+  String get desktopProfileClearStatus => 'Remover o status';
+
+  @override
+  String desktopProfileApplyFailed(Object error) {
+    return 'Não foi possível aplicar: $error';
+  }
+
+  @override
+  String get desktopProfileAvatarFrame => 'Moldura do avatar';
+
+  @override
+  String get desktopProfileCover => 'Capa do perfil';
+
+  @override
+  String get desktopProfileNoFrame => 'Sem moldura';
+
+  @override
+  String get desktopProfileNoCover => 'Sem capa';
+
+  @override
+  String get desktopProfileReadFailed => 'Não foi possível ler o arquivo';
+
+  @override
+  String get desktopProfilePhotoUpdated => 'A foto de perfil foi atualizada';
+
+  @override
+  String desktopProfilePhotoFailed(Object error) {
+    return 'Não foi possível atualizar a foto: $error';
+  }
+
+  @override
+  String desktopProfilePhotoRemoveFailed(Object error) {
+    return 'Não foi possível remover a foto: $error';
+  }
+
+  @override
+  String get desktopProfileMine => 'Meu perfil';
+
+  @override
+  String get desktopProfileEdit => 'Editar';
+
+  @override
+  String get desktopProfileName => 'Nome';
+
+  @override
+  String get desktopProfileChangePhoto => 'Trocar a foto';
+
+  @override
+  String get desktopProfileFrameShort => 'Moldura';
+
+  @override
+  String get desktopProfileCoverShort => 'Capa';
+
+  @override
+  String get desktopProfileStatus => 'Status';
+
+  @override
+  String get desktopProfileAppearanceHint => 'Tema, acento e papel de parede da conversa';
+
+  @override
+  String get desktopProfileAbout => 'Sobre mim';
+
+  @override
+  String get desktopProfileEmpty => 'Não preenchido';
+
+  @override
+  String get desktopProfilePhoto => 'Foto de perfil';
+
+  @override
+  String get desktopProfileReplacePhoto => 'Substituir a foto';
+
+  @override
+  String get desktopProfilePickPhoto => 'Escolher uma foto';
+
+  @override
+  String get desktopProfilePickedHere => 'Escolhida neste computador';
+
+  @override
+  String get desktopProfileSyncedWithPhone => 'Sincronizada com o celular';
+
+  @override
+  String get desktopProfileNotPicked => 'Não escolhida';
+
+  @override
+  String get desktopProfileRemovePhoto => 'Remover a foto';
+
+  @override
+  String get desktopProfileInitialsStay => 'Ficam as iniciais';
+
+  @override
+  String get desktopProfileAccount => 'Conta';
+
+  @override
+  String get desktopProfileRecovery => 'Recuperação';
+
+  @override
+  String get desktopProfileRecoveryHint => 'Este computador está conectado ao celular e não guarda a própria frase de recuperação: o backup e a chave de recuperação devolvem a conta.';
+
+  @override
+  String get desktopProfileDevicesHint => 'Computadores e celulares conectados';
+
+  @override
+  String get desktopProfileFrameCaps => 'MOLDURA DO AVATAR';
+
+  @override
+  String get desktopGalleryMedia => 'Mídia';
+
+  @override
+  String get desktopGalleryFiles => 'Arquivos';
+
+  @override
+  String get desktopGalleryLinks => 'Links';
+
+  @override
+  String get desktopGalleryNoMedia => 'Sem mídia';
+
+  @override
+  String get desktopGalleryNoFiles => 'Sem arquivos';
+
+  @override
+  String get desktopGalleryNoAudio => 'Sem áudio';
+
+  @override
+  String get desktopGalleryNoLinks => 'Sem links';
+
+  @override
+  String get desktopGalleryPathCopied => 'O caminho foi copiado';
+
+  @override
+  String get desktopGalleryOpen => 'Abrir';
+
+  @override
+  String get desktopGalleryView => 'Ver';
+
+  @override
+  String get desktopGalleryOpenInSystem => 'Abrir no sistema';
+
+  @override
+  String get desktopGalleryRevealFinder => 'Mostrar no Finder';
+
+  @override
+  String get desktopGalleryRevealExplorer => 'Mostrar no Explorador';
+
+  @override
+  String get desktopGalleryOpenFolder => 'Abrir a pasta';
+
+  @override
+  String get desktopGalleryCopyPath => 'Copiar o caminho';
+
+  @override
+  String desktopGalleryBytes(Object value) {
+    return '$value B';
+  }
+
+  @override
+  String get desktopGalleryZeroBytes => '0 B';
+
+  @override
+  String desktopOutgoingFolderSingle(Object name) {
+    return 'a pasta “$name” não pode ser enviada';
+  }
+
+  @override
+  String get desktopOutgoingFoldersMany => 'as pastas não podem ser enviadas';
+
+  @override
+  String desktopOutgoingTooLargeOne(Object name, Object limit) {
+    return '“$name” é maior que $limit MB';
+  }
+
+  @override
+  String desktopOutgoingTooLargeMany(int count, Object limit) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count arquivos são maiores que $limit MB',
+      one: '$count arquivo é maior que $limit MB',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingEmptyOne(Object name) {
+    return '“$name” está vazio';
+  }
+
+  @override
+  String desktopOutgoingEmptyMany(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count arquivos estão vazios',
+      one: '$count arquivo está vazio',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingUnreadableOne(Object name) {
+    return 'não foi possível ler “$name”';
+  }
+
+  @override
+  String desktopOutgoingUnreadableMany(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count arquivos não puderam ser lidos',
+      one: '$count arquivo não pôde ser lido',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get desktopOutgoingSending => 'Envio';
+
+  @override
+  String desktopOutgoingPhotos(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count fotos',
+      one: '$count fotos',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingVideos(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vídeos',
+      one: '$count vídeos',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingMedia(Object count) {
+    return '$count mídias';
+  }
+
+  @override
+  String desktopOutgoingAudios(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count áudios',
+      one: '$count áudios',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count arquivos',
+      one: '$count arquivos',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get desktopCallsPickOne => 'Escolha uma chamada à esquerda';
+
+  @override
+  String get desktopCallsPickHint => 'Aqui aparecem os detalhes e um botão para ligar de volta';
+
+  @override
+  String get desktopCallsNone => 'Ainda não há chamadas';
+
+  @override
+  String get desktopCallsNoneHint => 'O histórico aparece depois da primeira chamada';
+
+  @override
+  String get desktopCallsOutgoing => 'Efetuada';
+
+  @override
+  String get desktopCallsIncoming => 'Recebida';
+
+  @override
+  String get desktopCallsGroup => 'em grupo';
+
+  @override
+  String get desktopCallsVideoKind => 'vídeo';
+
+  @override
+  String get desktopCallsAudioKind => 'áudio';
+
+  @override
+  String get desktopCallsMissed => 'perdida';
+
+  @override
+  String desktopPhotoCopyFailed(Object error) {
+    return 'Não foi possível copiar: $error';
+  }
+
+  @override
+  String get desktopPhotoSave => 'Salvar a foto';
+
+  @override
+  String get desktopPhotoSaved => 'Salvo';
+
+  @override
+  String desktopPhotoRevealFailed(Object error) {
+    return 'Não foi possível mostrar no Finder: $error';
+  }
+
+  @override
+  String get desktopPhotoLoadFailed => 'Não foi possível carregar';
+
+  @override
+  String get desktopPhotoZoomOut => 'Reduzir';
+
+  @override
+  String get desktopPhotoZoomReset => 'Redefinir o zoom';
+
+  @override
+  String get desktopPhotoZoomIn => 'Ampliar';
+
+  @override
+  String get desktopPhotoCopy => 'Copiar';
+
+  @override
+  String desktopBubbleForwardedFrom(Object from) {
+    return 'Encaminhado de $from';
+  }
+
+  @override
+  String get desktopBubbleAudioFile => 'Arquivo de áudio';
+
+  @override
+  String get desktopBubbleTranslating => 'Traduzindo…';
+
+  @override
+  String get desktopBubbleTranslation => 'TRADUÇÃO';
+
+  @override
+  String get desktopBubbleEdited => 'editado';
+
+  @override
+  String get desktopBubbleMoreReactions => 'Mais reações';
+
+  @override
+  String get desktopBubbleRoleOwner => 'proprietário';
+
+  @override
+  String get desktopBubbleRoleAdmin => 'admin';
+
+  @override
+  String get desktopBubbleRoleMod => 'mod';
+
+  @override
+  String get desktopBubbleSpeed => 'Velocidade de reprodução';
+
+  @override
+  String get desktopSpotlightGoChats => 'Ir para as conversas';
+
+  @override
+  String get desktopSpotlightGoRooms => 'Ir para as salas';
+
+  @override
+  String get desktopSpotlightGoContacts => 'Ir para os contatos';
+
+  @override
+  String get desktopSpotlightGoCalls => 'Ir para as chamadas';
+
+  @override
+  String get desktopSpotlightSelect => 'selecionar';
+
+  @override
+  String get desktopSpotlightOpen => 'abrir';
+
+  @override
+  String get desktopSpotlightClose => 'fechar';
+
+  @override
+  String get desktopSpotlightRoom => 'Sala';
+
+  @override
+  String get desktopSpotlightMessage => 'Mensagem';
+
+  @override
+  String get desktopSpotlightCommand => 'Comando';
+
+  @override
+  String get desktopComposerCancelRec => 'Cancelar a gravação';
+
+  @override
+  String desktopComposerRecording(Object time) {
+    return 'Gravando  $time';
+  }
+
+  @override
+  String get desktopComposerSendVoice => 'Enviar a mensagem de voz';
+
+  @override
+  String get desktopComposerAttach => 'Anexar';
+
+  @override
+  String get desktopComposerEmoji => 'Emoji e figurinhas';
+
+  @override
+  String get desktopComposerRecordVoice => 'Gravar uma mensagem de voz';
+
+  @override
+  String get desktopComposerEnterSends => 'Enter envia · Shift+Enter quebra a linha';
+
+  @override
+  String get desktopComposerEnterNewline => 'Enter quebra a linha · Shift+Enter envia';
+
+  @override
+  String get desktopComposerEditing => 'Edição';
+
+  @override
+  String desktopComposerReplyTo(Object name) {
+    return 'Resposta · $name';
+  }
+
+  @override
+  String get desktopComposerCancelAction => 'Cancelar';
+
+  @override
+  String get desktopComposerSendHint => 'Enviar · Enter\nBotão direito para enviar depois';
+
+  @override
+  String get desktopComposerWriteFirst => 'Escreva primeiro uma mensagem';
+
+  @override
+  String desktopComposerToTopic(Object title) {
+    return 'para o tópico “$title”';
+  }
+
+  @override
+  String get desktopShortcutsNavigation => 'Navegação';
+
+  @override
+  String get desktopShortcutsTabs => 'Conversas · Salas · Chamadas · Contatos';
+
+  @override
+  String get desktopShortcutsSearchAll => 'Buscar em conversas e mensagens';
+
+  @override
+  String get desktopShortcutsPrevNext => 'Conversa anterior / próxima';
+
+  @override
+  String get desktopShortcutsInChat => 'Em uma conversa';
+
+  @override
+  String get desktopShortcutsFindHere => 'Buscar nesta conversa';
+
+  @override
+  String get desktopShortcutsSend => 'Enviar (configurável)';
+
+  @override
+  String get desktopShortcutsNewline => 'Quebra de linha';
+
+  @override
+  String get desktopShortcutsPaste => 'Colar uma imagem da área de transferência';
+
+  @override
+  String get desktopShortcutsApp => 'Aplicativo';
+
+  @override
+  String get desktopShortcutsThisHelp => 'Esta ajuda';
+
+  @override
+  String get desktopShortcutsCloseWindow => 'Fechar a janela ou a busca';
+
+  @override
+  String get desktopShortcutsTray => 'Minimizar para a bandeja';
+
+  @override
+  String get desktopShortcutsTitle => 'Atalhos de teclado';
+
+  @override
+  String get desktopMediaCancelSend => 'Cancelar o envio';
+
+  @override
+  String get desktopMediaSending => 'Enviando…';
+
+  @override
+  String desktopMediaSendingOf(Object total) {
+    return 'Enviando… · $total';
+  }
+
+  @override
+  String get desktopMediaRetryDownload => 'Repetir o download';
+
+  @override
+  String get desktopMediaImage => 'Imagem';
+
+  @override
+  String desktopMediaDownloading(Object size) {
+    return 'Baixando… · $size';
+  }
+
+  @override
+  String get desktopMediaDownload => 'Baixar';
+
+  @override
+  String get desktopSendAsMedia => 'Enviar como mídia';
+
+  @override
+  String get desktopSendAsFiles => 'Enviar como arquivos';
+
+  @override
+  String get desktopSendUngroup => 'Não agrupar';
+
+  @override
+  String get desktopSendGroup => 'Agrupar';
+
+  @override
+  String get desktopSendAddFiles => 'Adicionar arquivos…';
+
+  @override
+  String get desktopSendDropHere => 'Solte para adicionar';
+
+  @override
+  String get desktopSendCloseEsc => 'Fechar · Esc';
+
+  @override
+  String desktopSendToDestination(Object destination) {
+    return 'para “$destination”';
+  }
+
+  @override
+  String get desktopSendCaptionHint => 'Adicionar uma legenda…';
+
+  @override
+  String get desktopSendEmoji => 'Emoji';
+
+  @override
+  String get desktopSendRemove => 'Remover';
+
+  @override
+  String get desktopSendEnter => 'Enviar · Enter';
+
+  @override
+  String get desktopSendShiftEnter => 'Enviar · Shift+Enter';
+
+  @override
+  String get desktopCallCtlMicOff => 'Desligar o microfone   ⌘D';
+
+  @override
+  String get desktopCallCtlMicOn => 'Ligar o microfone   ⌘D';
+
+  @override
+  String get desktopCallCtlCamOff => 'Desligar a câmera   ⌘E';
+
+  @override
+  String get desktopCallCtlCamOn => 'Ligar a câmera   ⌘E';
+
+  @override
+  String get desktopCallCtlShareStop => 'Parar o compartilhamento';
+
+  @override
+  String get desktopCallCtlShare => 'Compartilhamento de tela';
+
+  @override
+  String get desktopCallCtlHandDown => 'Baixar a mão';
+
+  @override
+  String get desktopCallCtlHandUp => 'Levantar a mão';
+
+  @override
+  String get desktopCallCtlHangUp => 'Encerrar   ⌘W';
+
+  @override
+  String desktopAbsenceDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dias',
+      one: '$count dia',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopAbsencePastFanout(Object days) {
+    return 'Este computador ficou sem conexão $days. Nesse tempo os remetentes pararam de criptografar mensagens para ele, e parte do histórico não vai chegar aqui. No celular está intacto — abra lá as conversas necessárias e o histórico recente é sincronizado.';
+  }
+
+  @override
+  String desktopAbsenceWithinWindow(Object days) {
+    return 'Este computador ficou sem conexão $days. As mensagens ficam uma semana no servidor, então parte delas pode não ter sido preservada para ele. No celular estão intactas.';
+  }
+
+  @override
+  String get desktopAbsenceGotIt => 'Entendi';
+
+  @override
+  String get desktopNavContacts => 'Contatos';
+
+  @override
+  String get desktopChatNotFound => 'A conversa não foi encontrada';
+
+  @override
+  String desktopUnreadTitle(Object count) {
+    return 'Secretly — $count não lidas';
+  }
+
+  @override
+  String get desktopRoomsNone => 'Ainda não há salas';
+
+  @override
+  String get desktopRoomsNoneHint => 'Crie uma sala no celular — ela aparece aqui automaticamente';
+
+  @override
+  String get desktopRoomsPickOne => 'Escolha uma sala à esquerda';
+
+  @override
+  String get desktopScheduleTitle => 'Enviar depois';
+
+  @override
+  String get desktopScheduleInHour => 'Daqui a uma hora';
+
+  @override
+  String get desktopScheduleTonight => 'Hoje às 19:00';
+
+  @override
+  String get desktopScheduleTomorrow => 'Amanhã às 9:00';
+
+  @override
+  String get desktopScheduleInWeek => 'Daqui a uma semana';
+
+  @override
+  String desktopScheduleTodayAt(Object time) {
+    return 'hoje às $time';
+  }
+
+  @override
+  String desktopScheduleTomorrowAt(Object time) {
+    return 'amanhã às $time';
+  }
+
+  @override
+  String desktopScheduleOnAt(Object date, Object time) {
+    return '$date às $time';
+  }
+
+  @override
+  String get desktopScheduleHint => 'A mensagem sai sozinha no horário escolhido — mesmo com a janela fechada, será enviada na próxima inicialização.';
+
+  @override
+  String get desktopSchedulePickTime => 'Escolher o horário…';
+
+  @override
+  String get desktopDevicesSearching => 'Procurando dispositivos…';
+
+  @override
+  String get desktopDevicesNoCameras => 'Nenhuma câmera encontrada. Talvez o aplicativo não tenha acesso nas configurações do sistema.';
+
+  @override
+  String get desktopDevicesNoMics => 'Nenhum microfone encontrado. Talvez o aplicativo não tenha acesso nas configurações do sistema.';
+
+  @override
+  String get desktopDevicesOutputHint => 'Para onde sai o som se escolhe dentro da chamada — pelo sinal ao lado de “Microfone”. É aí que o aplicativo muda sozinho para os fones quando são conectados.';
+
+  @override
+  String get desktopDevicesSystemDefault => 'Como no sistema';
+
+  @override
+  String get desktopRailSettings => 'Configurações   Cmd ,';
+
+  @override
+  String get desktopRailConnected => 'Conectado';
+
+  @override
+  String get desktopRailConnecting => 'Conectando…';
+
+  @override
+  String get desktopRailOffline => 'Sem conexão';
+
+  @override
+  String desktopRailProfile(Object status) {
+    return 'Perfil   Cmd P   ·   $status';
+  }
+
+  @override
+  String get desktopEmojiSmileys => 'Sorrisos e emoções';
+
+  @override
+  String get desktopEmojiPeople => 'Pessoas e corpo';
+
+  @override
+  String get desktopEmojiNature => 'Natureza';
+
+  @override
+  String get desktopEmojiFood => 'Comida e bebida';
+
+  @override
+  String get desktopEmojiTravel => 'Viagens';
+
+  @override
+  String get desktopEmojiActivities => 'Atividades';
+
+  @override
+  String get desktopEmojiObjects => 'Objetos';
+
+  @override
+  String get desktopEmojiSymbols => 'Símbolos';
+
+  @override
+  String get desktopEmojiFlags => 'Bandeiras';
+
+  @override
+  String get desktopEmojiOther => 'Outros';
+
+  @override
+  String get desktopLockedTitle => 'O Secretly está bloqueado';
+
+  @override
+  String get desktopLockedTouchIdPrompt => 'Confirme a sua identidade com o Touch ID para continuar.';
+
+  @override
+  String get desktopLockedPasswordPrompt => 'Confirme com a palavra-passe do dispositivo para continuar.';
+
+  @override
+  String get desktopLockedUnlock => 'Desbloquear';
+
+  @override
+  String get desktopLockedWaiting => 'A aguardar confirmação…';
+
+  @override
+  String get desktopLockedFailed => 'Não foi possível confirmar a sua identidade.';
+
+  @override
+  String get desktopLockedNoService => 'O serviço de identidade não está disponível neste computador. Reinicie o Secretly ou o computador. Se não resolver, escreva ao suporte a partir do telemóvel.';
+
+  @override
+  String get desktopEmojiTabEmoji => 'Emojis';
+
+  @override
+  String get desktopEmojiTabStickers => 'Autocolantes';
+
+  @override
+  String get desktopEmojiRecents => 'Recentes';
+
+  @override
+  String get desktopEmojiNothingFound => 'Nada encontrado';
+
+  @override
+  String get desktopEmojiSearchHint => 'Procurar emojis';
+
+  @override
+  String get desktopStickersSearchHint => 'Procurar autocolantes';
+
+  @override
+  String get desktopGifSearchHint => 'Procurar GIFs';
+
+  @override
+  String get desktopGifUnavailable => 'Os GIFs não estão disponíveis nesta janela';
+
+  @override
+  String get desktopStickerPacksSoon => 'Packs de autocolantes em breve';
+
+  @override
+  String get desktopCallFullscreen => 'Ecrã inteiro';
+
+  @override
+  String get desktopCallExitFullscreen => 'Sair do ecrã inteiro';
+
+  @override
+  String get desktopCallDialing => 'A chamar…';
+
+  @override
+  String get desktopCallEnded => 'Terminada';
+
+  @override
+  String desktopCallEncryptedFor(Object duration) {
+    return 'Encriptada · $duration';
+  }
+
+  @override
+  String get desktopCallReturn => 'Voltar';
+
+  @override
+  String get desktopCallInProgress => 'Chamada a decorrer';
+
+  @override
+  String desktopCallInProgressWith(Object title) {
+    return 'Chamada a decorrer · $title';
+  }
+
+  @override
+  String get desktopCallAnswer => 'Atender';
+
+  @override
+  String get desktopCallAnswerVideo => 'Atender com vídeo';
+
+  @override
+  String get desktopCallAnswerText => 'Por texto';
+
+  @override
+  String get desktopTimeYesterday => 'ontem';
+
+  @override
+  String get desktopForwardTitle => 'Reencaminhar para…';
+
+  @override
+  String get desktopForwardSearchHint => 'Procurar conversa ou sala';
+
+  @override
+  String get desktopForwardNoChats => 'Sem conversas disponíveis';
+
+  @override
+  String get desktopForwardKindDirect => 'Conversa direta';
+
+  @override
+  String get desktopContactsSearchHint => 'Procurar contactos';
+
+  @override
+  String get desktopContactsEmpty => 'Os contactos vão aparecer após a sincronização.';
+
+  @override
+  String desktopContactsNothingFor(Object query) {
+    return 'Nada encontrado para «$query».';
+  }
+
+  @override
+  String get desktopContactsPick => 'Escolha um contacto';
+
+  @override
+  String get desktopContactsCardRight => 'O cartão vai aparecer à direita.';
+
+  @override
+  String get desktopContactsWrite => 'Escrever mensagem';
+
+  @override
+  String get desktopVideoTitle => 'Vídeo';
+
+  @override
+  String get desktopViewerCloseEsc => 'Fechar  Esc';
+
+  @override
+  String get desktopVideoPlayFailed => 'Não foi possível reproduzir o vídeo';
+
+  @override
+  String get desktopKeySpace => 'Espaço';
+
+  @override
+  String get desktopWindowMinimize => 'Minimizar';
+
+  @override
+  String get desktopWindowMaximize => 'Maximizar';
+
+  @override
+  String get desktopWindowClose => 'Fechar';
+
+  @override
+  String get desktopWindowBack => 'Anterior';
+
+  @override
+  String get desktopWindowForward => 'Seguinte';
+
+  @override
+  String get desktopSearchEverything => 'Conversas, pessoas, mensagens, ficheiros';
+
+  @override
+  String get desktopUnitB => 'B';
+
+  @override
+  String get desktopUnitKb => 'KB';
+
+  @override
+  String get desktopUnitMb => 'MB';
+
+  @override
+  String get desktopUnitGb => 'GB';
+
+  @override
+  String get desktopUnitTb => 'TB';
+
+  @override
+  String get desktopSyncDone => 'Sincronizado';
+
+  @override
+  String get desktopSyncSyncing => 'A sincronizar…';
+
+  @override
+  String get desktopSyncReconnecting => 'A reconectar…';
+
+  @override
+  String get desktopDetailsShare => 'Partilhar';
+
+  @override
+  String get desktopDetailsHide => 'Ocultar';
+
+  @override
+  String get desktopDetailsMore => 'Mais';
+
+  @override
+  String get desktopDetailsChangeCover => 'Mudar a capa';
+
+  @override
+  String desktopDetailsFrame(Object name) {
+    return 'Moldura «$name»';
+  }
+
+  @override
+  String get desktopApply => 'Aplicar';
+
+  @override
+  String get desktopAccentAppliesTo => 'Botões, seleções e anéis. O balão mantém o seu estilo — escolhe-se abaixo.';
+
+  @override
+  String get desktopTranslateUnknownSource => 'Não foi possível detetar o idioma da mensagem';
+
+  @override
+  String get desktopTranslateUnsupported => 'O tradutor do sistema não conhece este par de idiomas';
+
+  @override
+  String get desktopTranslateNeedsDownload => 'O idioma não foi transferido. Definições do Sistema → Geral → Idioma e região → Idiomas de tradução';
+
+  @override
+  String get desktopTranslateFailed => 'Não foi possível traduzir';
+
+  @override
+  String get desktopNewChatSearchHint => 'Procurar nos contactos';
+
+  @override
+  String get desktopNewChatNoContacts => 'Ainda sem contactos';
+
+  @override
+  String get desktopNewChatNobodyFound => 'Ninguém encontrado';
+
+  @override
+  String get desktopMentionEveryone => 'Todos os participantes';
+
+  @override
+  String get desktopMentionAdmins => 'Administradores';
+
+  @override
+  String get desktopMentionEveryoneHint => 'Chamar todos na sala';
+
+  @override
+  String get desktopMentionAdminsHint => 'Chamar o dono e os administradores';
+
+  @override
+  String desktopClearForPeer(Object name) {
+    return 'Limpar também o histórico de $name';
+  }
+
+  @override
+  String get desktopClearForPeerHint => 'As mensagens vão desaparecer no dispositivo dele e em todos os seus. Isto não pode ser anulado.';
+
+  @override
+  String get desktopGifNoKey => 'GIFs indisponíveis: compilação sem chave GIPHY';
+
+  @override
+  String get desktopGifConnectionLost => 'A ligação caiu. Tente novamente';
+
+  @override
+  String get desktopNotesHint => 'O que reter desta conversa…';
+
+  @override
+  String get desktopNotesPrivate => 'Visível apenas para si. Não é enviado, não aparece na conversa e não entra na cópia de segurança — fica neste computador, na mesma base encriptada das mensagens.';
+
+  @override
+  String get desktopEmojiSearchShort => 'Procurar emojis…';
+
+  @override
+  String get desktopNotifOpen => 'Abrir';
+
+  @override
+  String get desktopLinkPreviewLoading => 'Pré-visualização do link…';
+
+  @override
+  String get desktopLinkPreviewOff => 'Sem pré-visualização';
+
+  @override
+  String get desktopDropToSend => 'Largue para enviar';
+
+  @override
+  String get desktopDropEncrypted => 'Os ficheiros são encriptados antes do envio';
+
+  @override
+  String get desktopDetailsPickChat => 'Escolha uma conversa';
+
+  @override
+  String get desktopDetailsEmptyHint => 'Os dados da pessoa ou da sala\nvão aparecer aqui.';
+
+  @override
+  String get desktopMemberWrite => 'Escrever';
+
+  @override
+  String get desktopShowPanel => 'Mostrar o painel';
+
+  @override
+  String get desktopHidePanel => 'Ocultar o painel';
+
+  @override
+  String get desktopNotifOff => 'As notificações estão desligadas';
+
+  @override
+  String get desktopSettingsSearchHint => 'Encontrar uma definição';
+
+  @override
+  String get desktopUnlockPrompt => 'Desbloquear o Secretly';
+
+  @override
+  String get desktopEnableLockPrompt => 'Confirme para ativar o bloqueio do Secretly';
+
+  @override
+  String get desktopRoomsNoneHintDot => 'Crie uma sala no telemóvel — vai aparecer aqui sozinha.';
+
+  @override
+  String get desktopSplashLoading => 'A carregar o perfil…';
+
+  @override
+  String get desktopOutgoingOnePhoto => 'Foto';
+
+  @override
+  String get desktopOutgoingOneVideo => 'Vídeo';
+
+  @override
+  String get desktopOutgoingOneAudio => 'Áudio';
+
+  @override
+  String get desktopOutgoingOneFile => 'Arquivo';
 }

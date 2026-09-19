@@ -22,6 +22,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
@@ -33,6 +34,9 @@ void main() {
 
     await t.pumpWidget(
       MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         navigatorKey: navKey,
         home: DColors(
           colors: kDColorsDark,
@@ -67,6 +71,9 @@ void main() {
 
     await t.pumpWidget(
       MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         navigatorKey: navKey,
         home: DColors(
           colors: kDColorsDark,

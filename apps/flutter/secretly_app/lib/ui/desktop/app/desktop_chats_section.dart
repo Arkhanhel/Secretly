@@ -117,7 +117,7 @@ enum _CopyOutcome { sent, noFile, empty }
 
 /// Подпись своего сообщения — одна на файл: и у пузыря в ленте, и у автора
 /// в превью списка. Две копии этой строки однажды разошлись бы.
-const String _kSelfAuthorRu = 'Вы';
+String _selfAuthor(AppLocalizations l10n) => l10n.desktopSupportYou;
 
 /// Filter mode for [DesktopChatsSection].
 enum ConversationFilter {
@@ -169,10 +169,9 @@ class DesktopChatsSection extends StatefulWidget {
     this.selection,
     this.syncStatus,
     this.filter = ConversationFilter.directs,
-    this.emptyTitleNoItems = 'Чатов пока нет',
-    this.emptySubtitleNoItems =
-        'Начните общение с телефона — чаты автоматически синхронизируются на десктопе.',
-    this.emptyTitleSelect = 'Выберите чат слева',
+    this.emptyTitleNoItems,
+    this.emptySubtitleNoItems,
+    this.emptyTitleSelect,
   });
 
   /// The controller seam. [controller] is derived from it, so every
@@ -193,15 +192,22 @@ class DesktopChatsSection extends StatefulWidget {
   /// details panel stays in sync with the list.
   final DesktopChatSelectionStore? selection;
   final ConversationFilter filter;
-  final String emptyTitleNoItems;
-  final String emptySubtitleNoItems;
-  final String emptyTitleSelect;
+  /// Подписи пустого экрана. Пусто — берём из переводов при отрисовке:
+  /// значение по умолчанию у поля не может обратиться к языку окна.
+  final String? emptyTitleNoItems;
+  final String? emptySubtitleNoItems;
+  final String? emptyTitleSelect;
 
   @override
   State<DesktopChatsSection> createState() => _DesktopChatsSectionState();
 }
 
 class _DesktopChatsSectionState extends State<DesktopChatsSection> {
+  /// Подписи экрана. Короткая дорога: переписка собирается из десятков
+  /// мест, и `AppLocalizations.of(context)!` в каждом читался бы хуже
+  /// самой подписи.
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   Timer? _previewRefresh;
 
   /// The chat list, loaded once per settled burst of controller ticks and
@@ -392,7 +398,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
   ) async {
     final limit = widget.controller.effectiveAttachmentMaxBytes;
     final intake = intakeOutgoingPaths(paths, maxBytes: limit);
-    final notice = intake.rejectionText(maxBytes: limit);
+    final notice = intake.rejectionText(maxBytes: limit, l10n: l10n);
     if (intake.files.isEmpty) {
       if (notice != null && mounted) {
         DesktopSnackbar.show(
@@ -439,7 +445,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось отправить: $e',
+        message: l10n.desktopChatsSendFailed('$e'),
         kind: DSnackKind.error,
       );
       return;
@@ -449,7 +455,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     // попал ли он в нужную.
     DesktopSnackbar.show(
       context,
-      message: 'Отправляется в «${convo.title}»',
+      message: l10n.desktopChatsSendingTo(convo.title),
       kind: DSnackKind.success,
     );
   }
@@ -602,7 +608,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     return <ChatCategory>[
       ChatCategory(
         id: ChatCategoryIds.all,
-        label: 'Все',
+        label: l10n.desktopChatsFilterAll,
         icon: FluentIcons.chat_24_regular,
       ),
       if (unread > 0)
@@ -626,7 +632,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
           // выбранный фильтр сам подтягивается в видимую часть
           // (`chat_category_bar.dart`). Это про удобство с первого взгляда,
           // а не про работоспособность.
-          label: 'Непрочит.',
+          label: l10n.desktopChatsFilterUnread,
           icon: FluentIcons.mail_unread_24_regular,
           badge: unread,
         ),
@@ -637,7 +643,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       if (hasGroups)
         ChatCategory(
           id: ChatCategoryIds.groups,
-          label: 'Группы',
+          label: l10n.desktopChatsFilterGroups,
           icon: FluentIcons.people_24_regular,
           badge: groupUnread,
         ),
@@ -668,14 +674,14 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       if (hasArchived)
         ChatCategory(
           id: ChatCategoryIds.archive,
-          label: 'Архив',
+          label: l10n.desktopChatsFilterArchive,
           icon: FluentIcons.archive_24_regular,
           badge: archiveUnread,
         ),
       if (hasPersonal || _personalLockEnabled)
         ChatCategory(
           id: ChatCategoryIds.personal,
-          label: 'Личные',
+          label: l10n.desktopChatsFilterPersonal,
           icon: FluentIcons.lock_closed_24_regular,
           // Only count what the user is allowed to see; a badge on a locked
           // category would leak how much is hidden behind the password.
@@ -726,12 +732,12 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       sections: [
         [
           CtxMenuItem(
-            label: 'Переименовать папку',
+            label: l10n.desktopChatsRenameFolder,
             icon: FluentIcons.edit_24_regular,
             onTap: () => unawaited(_renameFolder(cat)),
           ),
           CtxMenuItem(
-            label: 'Удалить папку',
+            label: l10n.desktopChatsDeleteFolder,
             icon: FluentIcons.delete_24_regular,
             isDanger: true,
             onTap: () => unawaited(_deleteFolder(cat)),
@@ -762,7 +768,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось переименовать: $e',
+        message: l10n.desktopChatsRenameFailed('$e'),
         kind: DSnackKind.error,
       );
     }
@@ -771,19 +777,19 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
   Future<void> _deleteFolder(ChatCategory cat) async {
     final ok = await DesktopDialog.show<bool>(
       context,
-      title: 'Удалить папку «${cat.label}»?',
+      title: l10n.desktopChatsDeleteFolderTitle(cat.label),
       size: DDialogSize.small,
       body: Text(
-        'Чаты останутся на месте — удалится только папка.',
+        l10n.desktopChatsDeleteFolderBody,
         style: DType.body.copyWith(color: DColors.of(context).textSecondary),
       ),
       primary: DDialogAction(
-        label: 'Удалить',
+        label: l10n.delete,
         kind: DButtonKind.danger,
         onPressed: () => Navigator.of(context).maybePop(true),
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(false),
       ),
     );
@@ -801,7 +807,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось удалить: $e',
+        message: l10n.desktopChatsDeleteFailed('$e'),
         kind: DSnackKind.error,
       );
     }
@@ -830,15 +836,15 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       DesktopSnackbar.show(
         context,
         message: adding
-            ? 'Добавлено в «${folder.name}»'
-            : 'Убрано из «${folder.name}»',
+            ? l10n.desktopChatsAddedToFolder(folder.name)
+            : l10n.desktopChatsRemovedFromFolder(folder.name),
         kind: DSnackKind.success,
       );
     } catch (e) {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось изменить папку: $e',
+        message: l10n.desktopChatsFolderChangeFailed('$e'),
         kind: DSnackKind.error,
       );
     }
@@ -857,14 +863,14 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Папка «$name» создана',
+        message: l10n.desktopChatsFolderCreated(name),
         kind: DSnackKind.success,
       );
     } catch (e) {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось создать папку: $e',
+        message: l10n.desktopChatsFolderCreateFailed('$e'),
         kind: DSnackKind.error,
       );
     }
@@ -874,20 +880,20 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     final ctl = TextEditingController(text: initial ?? '');
     final result = await DesktopDialog.show<String>(
       context,
-      title: initial == null ? 'Новая папка' : 'Переименовать папку',
+      title: initial == null ? l10n.desktopChatsNewFolder : l10n.desktopChatsRenameFolder,
       size: DDialogSize.small,
       body: DesktopTextField(
         controller: ctl,
-        hintText: 'Название папки',
+        hintText: l10n.desktopChatsFolderName,
         autofocus: true,
         onSubmitted: (v) => Navigator.of(context).maybePop(v.trim()),
       ),
       primary: DDialogAction(
-        label: 'Сохранить',
+        label: l10n.saveAction,
         onPressed: () => Navigator.of(context).maybePop(ctl.text.trim()),
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(),
       ),
     );
@@ -907,13 +913,13 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
         for (final f in folders)
           CtxMenuItem(
             label: (_folderMembers[f.id]?.contains(convoId) ?? false)
-                ? 'Убрать из «${f.name}»'
-                : 'В папку «${f.name}»',
+                ? l10n.desktopChatsRemoveFromFolder(f.name)
+                : l10n.desktopChatsAddToFolder(f.name),
             icon: FluentIcons.folder_24_regular,
             onTap: () => unawaited(_toggleChatInFolder(convoId, f)),
           ),
         CtxMenuItem(
-          label: 'Новая папка с этим чатом…',
+          label: l10n.desktopChatsNewFolderWithChat,
           icon: FluentIcons.folder_add_24_regular,
           onTap: () => unawaited(_createFolderWith(convoId)),
         ),
@@ -931,7 +937,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
         // дела сразу. «В личные» остаётся здесь: это другое место назначения,
         // и путать их не с чем.
         CtxMenuItem(
-          label: isPersonal ? 'Убрать из личных' : 'В личные',
+          label: isPersonal ? l10n.desktopChatsRemoveFromPersonal : l10n.desktopChatsAddToPersonal,
           icon: FluentIcons.lock_closed_24_regular,
           onTap: () => unawaited(_setPersonal(convoId, !isPersonal)),
         ),
@@ -958,7 +964,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось: $e',
+        message: l10n.desktopFailedWith('$e'),
         kind: DSnackKind.error,
       );
     }
@@ -967,17 +973,17 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
   String? _emptyCategoryText() {
     switch (_category) {
       case ChatCategoryIds.archive:
-        return 'В архиве пусто';
+        return l10n.desktopChatsArchiveEmpty;
       case ChatCategoryIds.personal:
         return _personalVisible
-            ? 'Личных чатов нет'
-            : 'Личные чаты защищены паролем';
+            ? l10n.desktopChatsNoPersonal
+            : l10n.desktopChatsPersonalLocked;
       case ChatCategoryIds.unread:
-        return 'Всё прочитано';
+        return l10n.desktopChatsAllRead;
       case ChatCategoryIds.all:
         return null;
       default:
-        return 'В этой папке пока пусто';
+        return l10n.desktopChatsFolderEmpty;
     }
   }
 
@@ -1154,12 +1160,12 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       sections: [
         [
           CtxMenuItem(
-            label: 'Новый чат',
+            label: l10n.desktopChatsNewChat,
             icon: FluentIcons.person_add_24_regular,
             onTap: () => unawaited(_startNewChat()),
           ),
           CtxMenuItem(
-            label: 'Новая комната',
+            label: l10n.desktopChatsNewRoom,
             icon: FluentIcons.people_add_24_regular,
             onTap: _startNewRoom,
           ),
@@ -1215,7 +1221,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     if (convoId == null || convoId.isEmpty) {
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось начать чат: профиль недоступен',
+        message: l10n.desktopChatsStartFailed,
         kind: DSnackKind.error,
       );
       return;
@@ -1310,7 +1316,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       sections: [
         [
           CtxMenuItem(
-            label: 'Новая папка',
+            label: l10n.desktopChatsNewFolder,
             icon: FluentIcons.folder_add_24_regular,
             onTap: () => unawaited(_createEmptyFolder()),
           ),
@@ -1341,7 +1347,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       setState(() {});
       DesktopSnackbar.show(
         context,
-        message: 'Папка «$name» создана',
+        message: l10n.desktopChatsFolderCreated(name),
         kind: DSnackKind.success,
       );
     } catch (_) {
@@ -1350,6 +1356,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
   }
 
   ChatListItem _toItem(Conversation c) {
+    final l10n = AppLocalizations.of(context)!;
     final preview = _previews[c.convoId];
     final previewText = _previewText(preview);
     return ChatListItem(
@@ -1360,7 +1367,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       seed: c.peerProfileId ?? c.convoId,
       name: c.title.isEmpty ? '—' : c.title,
       preview: previewText,
-      time: _formatTime(c.lastEventAtMs),
+      time: _formatTime(c.lastEventAtMs, l10n),
       unread: c.unreadCount,
       kind: c.peerProfileId == null ? ChatKind.group : ChatKind.direct,
       online: c.isOnline,
@@ -1411,7 +1418,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     final name = p?.senderName;
     final deviceId = p?.senderDeviceId;
     if (name == null || deviceId == null) return name;
-    return widget.controller.isOwnDeviceId(deviceId) ? _kSelfAuthorRu : name;
+    return widget.controller.isOwnDeviceId(deviceId) ? _selfAuthor(l10n) : name;
   }
 
   /// Знак доставки для СТРОКИ списка.
@@ -1460,15 +1467,15 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       case ChatListPreviewKind.text:
         return text;
       case ChatListPreviewKind.photo:
-        return text.isNotEmpty ? text : 'Фото';
+        return text.isNotEmpty ? text : l10n.desktopChatsPhoto;
       case ChatListPreviewKind.music:
-        return text.isNotEmpty ? text : 'Аудио';
+        return text.isNotEmpty ? text : l10n.desktopChatsAudio;
       case ChatListPreviewKind.voice:
-        return text.isNotEmpty ? text : 'Голосовое сообщение';
+        return text.isNotEmpty ? text : l10n.desktopChatsVoiceMessage;
       case ChatListPreviewKind.file:
-        return text.isNotEmpty ? text : 'Файл';
+        return text.isNotEmpty ? text : l10n.file;
       case ChatListPreviewKind.link:
-        return text.isNotEmpty ? text : 'Ссылка';
+        return text.isNotEmpty ? text : l10n.desktopChatsLink;
     }
   }
 
@@ -1537,27 +1544,27 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
           // То же действие и то же слово, что в меню строки списка: два имени
           // у одного действия — это два действия в голове человека.
           CtxMenuItem(
-            label: pinned ? 'Убрать из избранного' : 'В избранное',
+            label: pinned ? l10n.desktopListRemoveFavourite : l10n.desktopListAddFavourite,
             icon: pinned
                 ? FluentIcons.star_off_24_regular
                 : FluentIcons.star_24_regular,
             onTap: () => unawaited(_togglePinned(convoId)),
           ),
           CtxMenuItem(
-            label: muted ? 'Включить звук' : 'Без звука',
+            label: muted ? l10n.desktopChatsSoundOn : l10n.desktopChatsSoundOff,
             icon: muted
                 ? FluentIcons.alert_24_regular
                 : FluentIcons.alert_off_24_regular,
             onTap: () => unawaited(_toggleMuted(convoId)),
           ),
           CtxMenuItem(
-            label: 'Отметить прочитанным',
+            label: l10n.desktopListMarkRead,
             icon: FluentIcons.checkmark_circle_24_regular,
             enabled: unread,
             onTap: () => unawaited(_markRead(convoId)),
           ),
           CtxMenuItem(
-            label: archived ? 'Из архива' : 'В архив',
+            label: archived ? l10n.unarchive : l10n.desktopListArchive,
             icon: archived
                 ? FluentIcons.archive_arrow_back_24_regular
                 : FluentIcons.archive_24_regular,
@@ -1567,13 +1574,13 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
         ..._chatFolderActions(convoId),
         [
           CtxMenuItem(
-            label: 'Очистить историю',
+            label: l10n.clearHistory,
             icon: FluentIcons.broom_24_regular,
             isDanger: true,
             onTap: () => unawaited(_clearHistory(convoId)),
           ),
           CtxMenuItem(
-            label: 'Удалить',
+            label: l10n.delete,
             icon: FluentIcons.delete_24_regular,
             isDanger: true,
             onTap: () => unawaited(_deleteChat(convoId)),
@@ -1590,7 +1597,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     try {
       await widget.controller.setChatPinned(convoId: id, pinned: next);
     } catch (e) {
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
@@ -1601,7 +1608,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     try {
       await widget.controller.setChatMuted(convoId: id, muted: next);
     } catch (e) {
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
@@ -1633,7 +1640,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       }
       await _convos.refresh();
     } catch (e) {
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
@@ -1654,7 +1661,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       // Don't wait out the debounce for something the user just asked for.
       await _convos.refresh();
     } catch (e) {
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
@@ -1683,9 +1690,9 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     final peer = _clearForPeerTarget(c);
     final result = await confirmClearWithPeer(
       context,
-      title: 'Очистить историю?',
-      body: 'Все сообщения чата «$title» на этом устройстве будут удалены.',
-      okLabel: 'Очистить',
+      title: l10n.desktopChatsClearHistoryTitle,
+      body: l10n.desktopChatsClearHistoryBody(title),
+      okLabel: l10n.desktopChatsClear,
       peerTitle: peer == null ? null : title,
     );
     if (result == null) return;
@@ -1695,14 +1702,14 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
           convoId: id,
           directPeerProfileId: peer,
         );
-        _toast('История очищена у обоих');
+        _toast(l10n.desktopChatsHistoryClearedBoth);
       } else {
         await widget.controller.clearChatHistory(convoId: id);
-        _toast('История очищена');
+        _toast(l10n.desktopChatsHistoryCleared);
       }
       await _convos.refresh();
     } catch (e) {
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
@@ -1713,9 +1720,9 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     final peer = _clearForPeerTarget(c);
     final result = await confirmClearWithPeer(
       context,
-      title: 'Удалить чат?',
-      body: 'Чат «$title» полностью удалится с этого устройства.',
-      okLabel: 'Удалить',
+      title: l10n.desktopChatsDeleteChatTitle,
+      body: l10n.desktopChatsDeleteChatBody(title),
+      okLabel: l10n.delete,
       peerTitle: peer == null ? null : title,
     );
     if (result == null) return;
@@ -1758,7 +1765,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       }
       await _convos.refresh();
     } catch (e) {
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
@@ -1783,10 +1790,12 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
   /// Та же подпись, что у темы в подробностях комнаты, — см.
   /// [desktopTimeLabel]. Одна на весь десктоп: две разошлись бы на первой же
   /// правке, а человек читает их рядом.
-  String _formatTime(int ms) => desktopTimeLabel(ms);
+  String _formatTime(int ms, AppLocalizations l10n) =>
+      desktopTimeLabel(ms, l10n);
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     // The Rooms tab has no category strip, so it must not be filtered by one.
     final scoped = widget.filter == ConversationFilter.groups
         ? _conversations
@@ -1818,7 +1827,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
         // тянут через неё, и во всех разделах вид один.
         compact: widget.shellApi.listCompact,
         onExpand: widget.shellApi.onListExpand,
-        title: widget.filter == ConversationFilter.groups ? 'Комнаты' : 'Чаты',
+        title: widget.filter == ConversationFilter.groups ? l10n.desktopChatsRooms : l10n.chatsTitle,
         onCompose: _composeMenu,
         // Папки — понятие раздела «Чаты». В комнатах полосы категорий нет
         // вовсе, и кнопка вела бы в пустоту.
@@ -1915,9 +1924,11 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
           ? _EmptyThread(
               loading: !_convos.hasLoaded,
               hasItems: items.isNotEmpty,
-              titleNoItems: widget.emptyTitleNoItems,
-              subtitleNoItems: widget.emptySubtitleNoItems,
-              titleSelect: widget.emptyTitleSelect,
+              titleNoItems: widget.emptyTitleNoItems ?? l10n.noChatsYet,
+              subtitleNoItems:
+                  widget.emptySubtitleNoItems ?? l10n.desktopChatsEmptyHint,
+              titleSelect:
+                  widget.emptyTitleSelect ?? l10n.desktopChatsPickOne,
             )
           : _ChatThreadHost(
               key: ValueKey('thread-${selected.convoId}'),
@@ -2025,6 +2036,11 @@ DeliveryStatus deliveryStatusFor(String localState, {required bool isSelf}) {
 
 
 class _ChatThreadHostState extends State<_ChatThreadHost> {
+  /// Подписи экрана. Короткая дорога: переписка собирается из десятков
+  /// мест, и `AppLocalizations.of(context)!` в каждом читался бы хуже
+  /// самой подписи.
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   /// Превью ссылки в поле ввода — своё у каждой открытой переписки (хост
   /// создаётся заново при смене чата). Отключено в настройках — панель его
   /// не получает вовсе, и окно не открывает страниц.
@@ -2254,7 +2270,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       sections: <List<CtxMenuItem>>[
         <CtxMenuItem>[
           CtxMenuItem(
-            label: 'Общий',
+            label: l10n.desktopChatsGeneralTopic,
             icon: FluentIcons.chat_24_regular,
             // Ветку, в которой стоим, выбирать незачем — переключать нечего.
             enabled: _currentTopicId != null,
@@ -2271,7 +2287,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         if (_canManageTopics)
           <CtxMenuItem>[
             CtxMenuItem(
-              label: 'Новая тема…',
+              label: l10n.desktopChatsNewTopicEllipsis,
               icon: FluentIcons.add_24_regular,
               onTap: () => picked = _kNewTopicSentinel,
             ),
@@ -2333,14 +2349,14 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   Future<void> _manageTopic(RoomTopicRef topic) async {
     final action = await DesktopDialog.show<String>(
       context,
-      title: 'Ветка «${roomTopicDisplayTitle(topic)}»',
+      title: l10n.desktopChatsBranch(roomTopicDisplayTitle(topic)),
       size: DDialogSize.small,
       body: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           DesktopButton(
-            label: 'Переименовать',
+            label: l10n.desktopChatsRename,
             kind: DButtonKind.tonal,
             expand: true,
             onPressed: () => Navigator.of(context).maybePop('rename'),
@@ -2349,7 +2365,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
           // ◆ Знак ветки — тот же набор, что и на телефоне, и меняется с
           // обеих сторон: знак едет в той же рассылке, что имя.
           DesktopButton(
-            label: 'Значок',
+            label: l10n.desktopChatsIcon,
             icon: FluentIcons.number_symbol_24_regular,
             kind: DButtonKind.tonal,
             expand: true,
@@ -2357,7 +2373,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
           ),
           const SizedBox(height: DSpace.s),
           DesktopButton(
-            label: 'Удалить ветку',
+            label: l10n.desktopChatsDeleteBranch,
             kind: DButtonKind.danger,
             expand: true,
             onPressed: () => Navigator.of(context).maybePop('delete'),
@@ -2365,7 +2381,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         ],
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(),
       ),
     );
@@ -2412,7 +2428,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     final c = DColors.of(context);
     return DesktopDialog.show<String>(
       context,
-      title: 'Значок ветки',
+      title: l10n.desktopChatsBranchIcon,
       size: DDialogSize.medium,
       body: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2421,9 +2437,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
           Padding(
             padding: const EdgeInsets.only(bottom: DSpace.m),
             child: Text(
-              'Значок заменяет решётку перед названием. Цветные обещают, что '
-              'внутри: зелёный — созвон, красный — срочное. Остальные серые, '
-              'чтобы не спорить с именем.',
+              l10n.desktopChatsBranchIconHint,
               style: DType.caption.copyWith(
                 color: c.textTertiary,
                 height: 1.4,
@@ -2437,7 +2451,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
               _MarkCell(
                 icon: kRoomTopicHashIcon,
                 color: null,
-                tooltip: 'Решётка',
+                tooltip: l10n.desktopChatsHash,
                 selected: current.trim().isEmpty,
                 onTap: () => Navigator.of(context).maybePop('-'),
               ),
@@ -2454,7 +2468,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         ],
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(),
       ),
     );
@@ -2486,7 +2500,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       // a real error here rather than a silently-ignored tap.
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось изменить ветки: $e',
+        message: l10n.desktopChatsBranchFailed('$e'),
         kind: DSnackKind.error,
       );
     }
@@ -2499,20 +2513,20 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       // «Тема», а не «ветка»: во всём остальном окне — полосе под шапкой,
       // разделе правой панели, подписи у поля ввода — сказано «тема». Два
       // названия одного предмета человек читает как два разных предмета.
-      title: initial == null ? 'Новая тема' : 'Переименовать тему',
+      title: initial == null ? l10n.desktopChatsNewTopic : l10n.desktopChatsRenameTopic,
       size: DDialogSize.small,
       body: DesktopTextField(
         controller: ctl,
-        hintText: 'Название темы',
+        hintText: l10n.desktopChatsTopicName,
         autofocus: true,
         onSubmitted: (v) => Navigator.of(context).maybePop(v.trim()),
       ),
       primary: DDialogAction(
-        label: 'Сохранить',
+        label: l10n.saveAction,
         onPressed: () => Navigator.of(context).maybePop(ctl.text.trim()),
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(),
       ),
     );
@@ -3329,6 +3343,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     final time = event.localState == MessageLocalState.scheduled
         ? formatScheduleMoment(
             DateTime.fromMillisecondsSinceEpoch(event.createdAtMs),
+            l10n,
           )
         : _hhmm(event.createdAtMs);
     // E6: in a ROOM the incoming author is the real sender (resolved from the
@@ -3336,7 +3351,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     // group message was attributed to the room name. 1:1 keeps the peer title.
     final String author;
     if (isSelf) {
-      author = _kSelfAuthorRu;
+      author = _selfAuthor(l10n);
     } else if (_isDirect) {
       author = widget.conversation.title.isEmpty
           ? '—'
@@ -3431,7 +3446,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
           reactions: reactions,
           forwardedFrom: fwd.authorName.isNotEmpty
               ? fwd.authorName
-              : 'неизвестно',
+              : l10n.desktopChatsUnknown,
           senderAvatarPath: senderAvatarPath,
         );
       }
@@ -3442,7 +3457,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         _pollIdByMessageId[event.eventId] = poll.pollId;
         // Подпись остаётся для ответов и списка чатов: карточку рисует пузырь,
         // а цитата и строка чата — это текст.
-        final label = '📊 Опрос: ${poll.question}';
+        final label = l10n.desktopChatsPoll(poll.question);
         _registerReplyPreview(
           payloadId,
           author,
@@ -3593,12 +3608,12 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         payloadId,
         author,
         isImage
-            ? 'Фото'
+            ? l10n.desktopChatsPhoto
             : mime.startsWith('video/')
-            ? 'Видео'
+            ? l10n.desktopChatsVideo
             : mime.startsWith('audio/')
-            ? 'Голосовое сообщение'
-            : 'Файл',
+            ? l10n.desktopChatsVoiceMessage
+            : l10n.file,
         isImage: isImage,
         authorSeed: event.senderDeviceId,
       );
@@ -3628,7 +3643,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     if (payload is StickerEventV1) {
       final label = payload.emojiHint.isNotEmpty
           ? payload.emojiHint
-          : (payload.label.isNotEmpty ? payload.label : 'Стикер');
+          : (payload.label.isNotEmpty ? payload.label : l10n.desktopChatsSticker);
       // Resolve real artwork: catalog stickers resolve synchronously; user
       // stickers (E2EE blob) are downloaded + decrypted on demand. A missing
       // descriptor still renders the emoji/label fallback in the bubble.
@@ -3644,7 +3659,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       _registerReplyPreview(
         payloadId,
         author,
-        'Стикер $label',
+        l10n.desktopChatsStickerWith(label),
         isImage: false,
         authorSeed: event.senderDeviceId,
       );
@@ -4007,6 +4022,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         if (dn.isNotEmpty) map[member.profileId] = dn;
       }
       _mentionTargets = desktopMentionTargets(
+        l10n: l10n,
         members: members.map(
           (m) => (
             profileId: m.profileId,
@@ -4014,7 +4030,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
             avatarPath: m.avatarPath,
             // Подпись роли только тем, у кого она вправду есть: «участник»
             // у каждого второго — шум, который топит владельца и админов.
-            role: roomMemberRoleSubtitle(m.role),
+            role: roomMemberRoleSubtitle(m.role, l10n),
           ),
         ),
         selfProfileId: widget.controller.profileId,
@@ -4033,7 +4049,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   /// senders stay visually separable instead of collapsing to one label.
   String _deviceFallbackName(String deviceId) {
     final t = deviceId.trim();
-    if (t.isEmpty) return 'Участник';
+    if (t.isEmpty) return l10n.desktopChatsMember;
     if (t.length <= 10) return t;
     return '${t.substring(0, 6)}…${t.substring(t.length - 4)}';
   }
@@ -4124,7 +4140,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
           m.id,
           (cur) => cur.copyWith(reactions: originalReactions),
         );
-        setState(() => _sendError = 'Не удалось сохранить реакцию: $e');
+        setState(() => _sendError = l10n.desktopChatsReactionFailed('$e'));
       }
       return;
     }
@@ -4142,8 +4158,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       if (!mounted) return;
       setState(
         () => _sendError =
-            'Реакция применена локально, '
-            'но не доставлена собеседнику: $e',
+            l10n.desktopChatsReactionLocal('$e'),
       );
     }
     // Full re-sync from storage to pick up authoritative counts (covers
@@ -4378,7 +4393,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось показать файл в Finder',
+        message: l10n.desktopChatsRevealFailed,
         kind: DSnackKind.error,
       );
     }
@@ -4401,9 +4416,9 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         return artist.isNotEmpty ? '$artist — $title' : title;
       }
       final fn = (payload.filename ?? '').trim();
-      return fn.isNotEmpty ? fn : 'Аудио';
+      return fn.isNotEmpty ? fn : l10n.desktopChatsAudio;
     }
-    return 'Голосовое';
+    return l10n.desktopChatsVoiceShort;
   }
 
   ({List<SharedAudioTrack> queue, int index}) _buildVoiceQueueFor(
@@ -4513,12 +4528,12 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       file = await widget.controller.ensureCachedAttachmentFile(payload);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sendError = 'Не удалось открыть видео: $e');
+      setState(() => _sendError = l10n.desktopChatsVideoOpenFailed('$e'));
       return;
     }
     if (!mounted) return;
     if (!file.existsSync()) {
-      setState(() => _sendError = 'Видео недоступно');
+      setState(() => _sendError = l10n.desktopChatsVideoUnavailable);
       return;
     }
     await DesktopVideoViewer.show(
@@ -4548,7 +4563,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       file = await widget.controller.ensureCachedAttachmentFile(payload);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sendError = 'Не удалось получить файл: $e');
+      setState(() => _sendError = l10n.desktopChatsFileFetchFailed('$e'));
       return;
     }
     if (!mounted) return;
@@ -4559,14 +4574,14 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         mime: att.mime,
         blobId: att.blobId,
       ),
-      dialogTitle: 'Сохранить вложение',
+      dialogTitle: l10n.desktopChatsSaveAttachment,
     );
     if (!mounted) return;
     switch (outcome.result) {
       case AttachmentSaveResult.unavailable:
-        setState(() => _sendError = 'Файл недоступен');
+        setState(() => _sendError = l10n.desktopChatsFileUnavailable);
       case AttachmentSaveResult.failed:
-        setState(() => _sendError = 'Не удалось сохранить: ${outcome.error}');
+        setState(() => _sendError = l10n.desktopChatsSaveFailed('${outcome.error}'));
       case AttachmentSaveResult.saved:
       case AttachmentSaveResult.cancelled:
         break;
@@ -4583,12 +4598,12 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       file = await widget.controller.ensureCachedAttachmentFile(payload);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sendError = 'Не удалось открыть файл: $e');
+      setState(() => _sendError = l10n.desktopChatsOpenFailedWith('$e'));
       return;
     }
     if (!mounted) return;
     if (!file.existsSync()) {
-      setState(() => _sendError = 'Файл недоступен');
+      setState(() => _sendError = l10n.desktopChatsFileUnavailable);
       return;
     }
     // 🔴 СВОЙ ПРОСМОТР ВПЕРЕДИ ЧУЖОЙ ПРОГРАММЫ (19.09.2026). Отдать документ
@@ -4642,11 +4657,11 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         mode: LaunchMode.externalApplication,
       );
       if (!ok && mounted) {
-        setState(() => _sendError = 'Не удалось открыть файл');
+        setState(() => _sendError = l10n.desktopChatsOpenFailed);
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sendError = 'Не удалось открыть: $e');
+      setState(() => _sendError = l10n.desktopChatsOpenFailedShort('$e'));
     }
   }
 
@@ -4684,7 +4699,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sendError = 'Не удалось воспроизвести: $e');
+      setState(() => _sendError = l10n.desktopChatsPlayFailed('$e'));
     }
   }
 
@@ -4719,17 +4734,17 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         return;
       }
       setState(() {
-        _sendError = 'Не удалось определить собеседника для звонка.';
+        _sendError = l10n.desktopChatsNoCallPeer;
       });
       return;
     }
     final cm = CallManager.instance;
     if (cm == null) {
-      setState(() => _sendError = 'Сервис звонков не готов.');
+      setState(() => _sendError = l10n.desktopChatsCallsNotReady);
       return;
     }
     if (cm.state.value.isActive) {
-      setState(() => _sendError = 'Звонок уже идёт.');
+      setState(() => _sendError = l10n.desktopChatsCallInProgress);
       return;
     }
     setState(() => _sendError = null);
@@ -4818,7 +4833,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
           ),
         );
         if (!ok && mounted) {
-          setState(() => _sendError = 'Не удалось изменить сообщение.');
+          setState(() => _sendError = l10n.desktopChatsEditFailed);
         }
       } catch (e) {
         if (!mounted) return;
@@ -4832,7 +4847,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       if (_isDirect) {
         final pid = _peerProfileId;
         if (pid == null || pid.isEmpty) {
-          setState(() => _sendError = 'Не удалось определить получателя.');
+          setState(() => _sendError = l10n.desktopChatsNoRecipient);
           return;
         }
         await widget.controller.sendMessage(
@@ -5030,7 +5045,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
 
     final choice = await DesktopDialog.show<String>(
       context,
-      title: single ? 'Удалить сообщение?' : 'Удалить выбранные сообщения?',
+      title: single ? l10n.desktopChatsDeleteMessageTitle : l10n.desktopChatsDeleteMessagesTitle,
       size: DDialogSize.small,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -5038,7 +5053,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         children: [
           if (mixed) ...[
             Text(
-              'Чужие сообщения удалятся только у вас.',
+              l10n.desktopChatsDeleteOthersHint,
               style: DType.caption.copyWith(
                 color: DColors.of(context).textSecondary,
               ),
@@ -5047,7 +5062,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
           ],
           if (canForEveryone) ...[
             DesktopButton(
-              label: 'Удалить у всех',
+              label: l10n.desktopChatsDeleteForAll,
               kind: DButtonKind.danger,
               expand: true,
               onPressed: () => Navigator.of(context).maybePop('all'),
@@ -5055,7 +5070,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
             const SizedBox(height: DSpace.s),
           ],
           DesktopButton(
-            label: canForEveryone ? 'Удалить только у меня' : 'Удалить у меня',
+            label: canForEveryone ? l10n.desktopChatsDeleteForMeOnly : l10n.desktopChatsDeleteForMe,
             kind: DButtonKind.tonal,
             expand: true,
             onPressed: () => Navigator.of(context).maybePop('me'),
@@ -5063,7 +5078,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         ],
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(),
       ),
     );
@@ -5136,7 +5151,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         DesktopSnackbar.show(
           context,
           message:
-              'Это сообщение нельзя сохранить из-за ограничений приватности.',
+              l10n.desktopChatsSavePrivacyBlocked,
           kind: DSnackKind.warning,
         );
       }
@@ -5152,7 +5167,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось сохранить: $e',
+        message: l10n.desktopChatsSaveFailed('$e'),
         kind: DSnackKind.error,
       );
       return;
@@ -5161,7 +5176,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     if (noFile == r.allowed.length) {
       DesktopSnackbar.show(
         context,
-        message: 'Вложение не скачано — сохранять нечего',
+        message: l10n.desktopChatsNothingToSave,
         kind: DSnackKind.warning,
       );
       return;
@@ -5170,8 +5185,8 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     DesktopSnackbar.show(
       context,
       message: partial
-          ? 'Сохранено в «Избранное», но не всё'
-          : 'Сохранено в «Избранное»',
+          ? l10n.desktopChatsSavedPartly
+          : l10n.desktopChatsSaved,
       kind: partial ? DSnackKind.warning : DSnackKind.success,
     );
   }
@@ -5208,7 +5223,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         DesktopSnackbar.show(
           context,
           message:
-              'Это сообщение нельзя переслать из-за ограничений приватности.',
+              l10n.desktopChatsForwardPrivacyBlocked,
           kind: DSnackKind.warning,
         );
       }
@@ -5238,7 +5253,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось переслать: $e',
+        message: l10n.desktopChatsForwardFailed('$e'),
         kind: DSnackKind.error,
       );
       return;
@@ -5249,7 +5264,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       // этом честнее, чем отправить пустоту.
       DesktopSnackbar.show(
         context,
-        message: 'Вложение не скачано — переслать нечего',
+        message: l10n.desktopChatsNothingToForward,
         kind: DSnackKind.warning,
       );
       return;
@@ -5258,8 +5273,8 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     DesktopSnackbar.show(
       context,
       message: partial
-          ? 'Переслано в «${target.title}», но не всё'
-          : 'Переслано в «${target.title}»',
+          ? l10n.desktopChatsForwardedPartly(target.title)
+          : l10n.desktopChatsForwarded(target.title),
       kind: partial ? DSnackKind.warning : DSnackKind.success,
     );
   }
@@ -5737,7 +5752,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     if (batches.isEmpty) return const <MessageData>[];
     return desktopUploadRows(
       batches,
-      selfName: _kSelfAuthorRu,
+      selfName: _selfAuthor(l10n),
       timeLabel: _hhmm,
       replyPreview: _resolveReplyPreview,
     );
@@ -5772,7 +5787,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       context,
       message: event.convoId == _convoId
           ? text
-          : 'Файл в другую переписку не отправлен: $text',
+          : l10n.desktopChatsFileNotSentElsewhere(text),
       kind: DSnackKind.error,
     );
   }
@@ -5780,13 +5795,13 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   /// Текст ошибки вложения — тот же, что у телефона.
   String _attachmentErrorMessage(Object error) {
     final l10n = AppLocalizations.of(context);
-    if (l10n == null) return 'Не удалось отправить файл.';
+    if (l10n == null) return this.l10n.desktopChatsFileSendFailed;
     var text = attachmentErrorText(l10n, error);
     final failure = describeAttachmentFailure(error);
     if (failure.code == AttachmentFailureCode.tooLarge) {
       final bytes = failure.bytes ?? parseAttachmentFailureBytes(error) ?? 0;
       if (bytes > 0 && widget.controller.attachmentTooLargeUpsell(bytes)) {
-        text = '$text С Premium можно отправлять файлы до 1 ГБ.';
+        text = l10n.desktopChatsPremiumFiles(text);
       }
     }
     return text;
@@ -5798,7 +5813,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     required Conversation convo,
     required bool typing,
   }) {
-    if (typing) return 'печатает…';
+    if (typing) return l10n.desktopChatsTypingEllipsis;
     if (!_isDirect) {
       final count = _roomMemberCount;
       if (count == null || count <= 0) return null;
@@ -5806,10 +5821,10 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       // «3 участников» не бросается в глаза. В шапке бросается, поэтому
       // по-русски считаем по-русски, а всем остальным отдаём общий текст.
       return chatLocaleIsRussian(context)
-          ? formatParticipantsRu(count)
+          ? formatParticipants(count, l10n)
           : chatRoomInviteMembersText(context, memberCount: count);
     }
-    if (convo.isOnline) return 'в сети';
+    if (convo.isOnline) return l10n.desktopChatsOnline;
     return chatLastSeenText(
       context,
       timestampMs: convo.peerLastSeenAtMs,
@@ -5819,6 +5834,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final convo = widget.conversation;
     // E9 typing-in: show «печатает…» while the peer is typing (updates live via
@@ -5985,8 +6001,8 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       typingLabel: !peerTyping
           ? null
           : (_isDirect && convo.title.trim().isNotEmpty
-                ? '${convo.title.trim()} печатает'
-                : 'печатает'),
+                ? l10n.desktopChatsSomeoneTyping(convo.title.trim())
+                : l10n.desktopListTyping),
       onSetVoiceSpeed: (v) =>
           unawaited(widget.controller.setSharedAudioSpeed(v)),
       onTypingActivity: _onTypingActivity,
@@ -6143,6 +6159,7 @@ class _EmptyThread extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Container(
       color: c.thread,
@@ -6177,7 +6194,7 @@ class _EmptyThread extends StatelessWidget {
           ),
           const SizedBox(height: DSpace.l),
           Text(
-            loading ? 'Загрузка…' : (hasItems ? titleSelect : titleNoItems),
+            loading ? l10n.desktopServerBackupLoading : (hasItems ? titleSelect : titleNoItems),
             style: DType.title.copyWith(color: c.textPrimary),
           ),
           const SizedBox(height: DSpace.xs),
@@ -6185,9 +6202,9 @@ class _EmptyThread extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 420),
             child: Text(
               loading
-                  ? 'Подтягиваем список из локального хранилища.'
+                  ? l10n.desktopChatsLoadingList
                   : (hasItems
-                        ? 'Сообщения и звонки появятся здесь, как только вы откроете чат.'
+                        ? l10n.desktopChatsWillAppear
                         : subtitleNoItems),
               textAlign: TextAlign.center,
               style: DType.body.copyWith(color: c.textSecondary),

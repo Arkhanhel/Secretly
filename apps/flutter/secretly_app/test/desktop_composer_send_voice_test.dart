@@ -30,7 +30,7 @@ void main() {
   });
 
   test('микрофон и отправка стоят рядом', () {
-    expect(composer.contains("tooltip: 'Записать голосовое'"), isTrue);
+    expect(composer.contains('tooltip: l10n.desktopComposerRecordVoice'), isTrue);
     expect(composer.contains('_SendButton(\n                              onTap: _hasText ? _trySend : null,'), isTrue);
   });
 
@@ -41,8 +41,8 @@ void main() {
     // 16.09.2026 в подсказку добавилась вторая строка — про отложенную
     // отправку правой кнопкой; сама подпись и правило «видна, но погашена» те
     // же.
-    expect(composer.contains("'Отправить · Enter"), isTrue);
-    expect(composer.contains("'Сначала напишите сообщение'"), isTrue);
+    expect(composer.contains('l10n.desktopComposerSendHint'), isTrue);
+    expect(composer.contains('l10n.desktopComposerWriteFirst'), isTrue);
     expect(composer.contains(': [c.elevated, c.elevated],'), isTrue);
   });
 

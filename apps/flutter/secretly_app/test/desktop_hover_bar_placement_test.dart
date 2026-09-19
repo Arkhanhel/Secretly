@@ -15,6 +15,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:secretly_app/l10n/app_localizations_ru.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -43,6 +44,9 @@ Future<void> _hover(WidgetTester t) async {
 }
 
 Widget _host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: DColors(
     colors: kDColorsDark,
     child: Scaffold(
@@ -164,7 +168,7 @@ void main() {
     ]) {
       final src = File(path).readAsStringSync();
       expect(src.contains('online: false,'), isTrue, reason: path);
-      expect(src.contains("'в сети'"), isTrue, reason: path);
+      expect(src.contains('desktopChatsOnline'), isTrue, reason: path);
     }
   });
 }

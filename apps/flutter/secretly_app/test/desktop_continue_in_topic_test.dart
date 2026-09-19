@@ -17,6 +17,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,6 +28,9 @@ import 'package:secretly_app/ui/desktop/design/colors.dart';
 /// Отступ сверху — не украшение теста: строка действий встаёт НАД пузырём, и
 /// у самого верха окна ей просто некуда встать.
 Widget host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: DColors(
     colors: kDColorsDark,
     child: Scaffold(
@@ -95,7 +99,7 @@ void main() {
     ).readAsStringSync();
 
     test('🔴 подпись обещает ровно то, что происходит', () {
-      expect(bubble.contains("tooltip: 'Продолжить в теме'"), isTrue);
+      expect(bubble.contains('tooltip: l10n.desktopMenuContinueInTopic'), isTrue);
       // Макетной подписи в коде нет: она обещала бы невозможное.
       final code = bubble
           .split('\n')
@@ -106,9 +110,9 @@ void main() {
     });
 
     test('кнопка стоит рядом с «Ответить», как в макете', () {
-      final reply = bubble.indexOf("tooltip: 'Ответить'");
-      final forum = bubble.indexOf("tooltip: 'Продолжить в теме'");
-      final more = bubble.indexOf("tooltip: 'Ещё',");
+      final reply = bubble.indexOf('tooltip: l10n.chatMenuReply');
+      final forum = bubble.indexOf('tooltip: l10n.desktopMenuContinueInTopic');
+      final more = bubble.indexOf('tooltip: l10n.desktopThreadMore');
       expect(reply, greaterThan(0));
       expect(forum, greaterThan(reply));
       expect(more, greaterThan(forum));

@@ -12,12 +12,16 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
 import 'package:secretly_app/ui/desktop/shell/sidebar.dart';
 
 Widget host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: DColors(
     colors: kDColorsDark,
     child: Scaffold(body: SizedBox(height: 900, child: child)),
@@ -102,7 +106,7 @@ void main() {
     });
 
     test('подсказка не потерялась вместе с точкой', () {
-      expect(src.contains(r"message: 'Профиль   Cmd P   ·   $statusLabel'"), isTrue);
+      expect(src.contains('message: l10n.desktopRailProfile(statusLabel)'), isTrue);
     });
 
     testWidgets('нет связи — точка красная', (t) async {

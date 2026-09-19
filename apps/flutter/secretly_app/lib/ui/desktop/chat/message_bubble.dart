@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
@@ -803,6 +804,9 @@ class MessageBubble extends StatefulWidget {
 }
 
 class _MessageBubbleState extends State<MessageBubble> {
+  /// Подписи пузыря.
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   // Two MouseRegions share this state: the bubble itself, and the hover
   // bar positioned above it. Either one being entered keeps the bar visible.
   bool _bubbleHovered = false;
@@ -1694,7 +1698,7 @@ class _MessageBubbleState extends State<MessageBubble> {
         const SizedBox(width: 4),
         Flexible(
           child: Text(
-            'Переслано от $from',
+            l10n.desktopBubbleForwardedFrom(from),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: DType.caption.copyWith(
@@ -2152,8 +2156,8 @@ class _MessageBubbleState extends State<MessageBubble> {
                         duration > Duration.zero
                             ? '${_fmtMmSs(isActive ? position : Duration.zero)} / ${_fmtMmSs(duration)}'
                             : (att.sizeBytes > 0
-                                  ? _fmtBytes(att.sizeBytes)
-                                  : 'Голосовое'),
+                                  ? _fmtBytes(att.sizeBytes, l10n)
+                                  : l10n.desktopChatsVoiceShort),
                         // Моноширинным, как в макете: секунды одинаковой
                         // ширины не дёргают соседние знаки при каждом тике.
                         style: DType.mono.copyWith(fontSize: 11, color: fgSoft),
@@ -2279,21 +2283,22 @@ class _MessageBubbleState extends State<MessageBubble> {
         ? (artist.isNotEmpty ? '$artist – $songTitle' : songTitle)
         : ((att.fileName ?? '').trim().isNotEmpty
               ? att.fileName!.trim()
-              : 'Аудиофайл');
+              : l10n.desktopBubbleAudioFile);
     // Как в Telegram: пока не играет — «03:25, 4,5 МБ»; играет — «01:02 /
     // 03:25»; уходит — «1.2 МБ / 4.5 МБ».
     final uploading = att.uploadProgress != null;
     final String status;
     if (uploading) {
-      status = uploadStatusText(att);
+      status = uploadStatusText(att, l10n);
     } else if (isActive && duration > Duration.zero) {
       status = '${_fmtMmSs(position)} / ${_fmtMmSs(duration)}';
     } else {
       final parts = <String>[
         if (duration > Duration.zero) _fmtMmSs(duration),
-        if (att.filePath == null && att.sizeBytes > 0) _fmtBytes(att.sizeBytes),
+        if (att.filePath == null && att.sizeBytes > 0)
+          _fmtBytes(att.sizeBytes, l10n),
       ];
-      status = parts.isEmpty ? 'Аудио' : parts.join(', ');
+      status = parts.isEmpty ? l10n.desktopChatsAudio : parts.join(', ');
     }
 
     final btnBg = isSelf
@@ -2389,7 +2394,7 @@ class _MessageBubbleState extends State<MessageBubble> {
             ),
             const SizedBox(width: 6),
             Text(
-              'Переводим…',
+              l10n.desktopBubbleTranslating,
               style: DType.tiny.copyWith(color: fg.withValues(alpha: 0.55)),
             ),
           ],
@@ -2410,7 +2415,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           Padding(
             padding: const EdgeInsets.only(bottom: 2),
             child: Text(
-              'ПЕРЕВОД',
+              l10n.desktopBubbleTranslation,
               style: DType.tiny.copyWith(
                 color: fg.withValues(alpha: 0.55),
                 fontWeight: FontWeight.w700,
@@ -2574,7 +2579,7 @@ class _MessageBubbleState extends State<MessageBubble> {
         Text(m.time, style: DType.tiny.copyWith(color: fgSoft)),
         if (m.edited) ...[
           const SizedBox(width: 6),
-          Text('изменено', style: DType.tiny.copyWith(color: fgSoft)),
+          Text(l10n.desktopBubbleEdited, style: DType.tiny.copyWith(color: fgSoft)),
         ],
         if (isSelf) ...[
           const SizedBox(width: 4),
@@ -2598,7 +2603,7 @@ class _MessageBubbleState extends State<MessageBubble> {
         Text(m.time, style: DType.tiny.copyWith(color: fgSoft)),
         if (m.edited) ...[
           const SizedBox(width: 6),
-          Text('изменено', style: DType.tiny.copyWith(color: fgSoft)),
+          Text(l10n.desktopBubbleEdited, style: DType.tiny.copyWith(color: fgSoft)),
         ],
         if (isSelf) ...[
           const SizedBox(width: 4),
@@ -2720,7 +2725,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Фото',
+                        l10n.desktopChatsPhoto,
                         style: DType.caption.copyWith(color: textColor),
                       ),
                     ])
@@ -2837,7 +2842,7 @@ class _MessageBubbleState extends State<MessageBubble> {
             ),
           _MiniIconBtn(
             icon: FluentIcons.emoji_add_24_regular,
-            tooltip: 'Ещё реакции',
+            tooltip: l10n.desktopBubbleMoreReactions,
             onTap: () => widget.onReact?.call(kReactionPickerSentinel),
           ),
           Container(
@@ -2848,7 +2853,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           ),
           _MiniIconBtn(
             icon: FluentIcons.arrow_reply_24_regular,
-            tooltip: 'Ответить',
+            tooltip: l10n.chatMenuReply,
             onTap: widget.onReply,
           ),
           // Четвёртая кнопка строки — из макета, рядом с «Ответить». Её нет
@@ -2858,7 +2863,7 @@ class _MessageBubbleState extends State<MessageBubble> {
             Builder(
               builder: (ctx) => _MiniIconBtn(
                 icon: FluentIcons.comment_multiple_24_regular,
-                tooltip: 'Продолжить в теме',
+                tooltip: l10n.desktopMenuContinueInTopic,
                 onTap: () {
                   final rb = ctx.findRenderObject() as RenderBox?;
                   final pos = rb?.localToGlobal(Offset.zero) ?? Offset.zero;
@@ -2869,7 +2874,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           Builder(builder: (ctx) {
             return _MiniIconBtn(
               icon: FluentIcons.more_horizontal_24_regular,
-              tooltip: 'Ещё',
+              tooltip: l10n.desktopThreadMore,
               onTap: () {
                 final rb = ctx.findRenderObject() as RenderBox?;
                 final pos = rb?.localToGlobal(Offset.zero) ?? Offset.zero;
@@ -2889,7 +2894,7 @@ class _MessageBubbleState extends State<MessageBubble> {
   /// восемь раз — а потом восемь раз не забыть при следующей правке.
   Widget _authorLine(DColorSet c) {
     final color = _authorColor(c);
-    final chip = _roleChipLabel(widget.message.authorRole);
+    final chip = _roleChipLabel(widget.message.authorRole, l10n);
     final name = Text(
       widget.message.authorName,
       style: DType.label.copyWith(color: color, fontWeight: FontWeight.w700),
@@ -2957,16 +2962,16 @@ class _MessageBubbleState extends State<MessageBubble> {
   /// Короткая метка роли рядом с именем — только у тех, чья роль МЕНЯЕТ вес
   /// сказанного: владелец и администраторы. Чип у каждого второго превращается
   /// в шум и перестаёт что-либо значить.
-  static String? _roleChipLabel(String? role) {
+  static String? _roleChipLabel(String? role, AppLocalizations l10n) {
     switch ((role ?? '').trim()) {
       // Строчными, как в телеграме: прописные читаются как крик, а роль
       // сообщают, а не выкрикивают.
       case 'owner':
-        return 'владелец';
+        return l10n.desktopBubbleRoleOwner;
       case 'admin':
-        return 'админ';
+        return l10n.desktopBubbleRoleAdmin;
       case 'moderator':
-        return 'модер';
+        return l10n.desktopBubbleRoleMod;
       default:
         return null;
     }
@@ -3023,7 +3028,7 @@ class _MiniEmojiBtnState extends State<_MiniEmojiBtn> {
 ///
 /// Сам размер считает общая [formatAttachmentSize]: ту же строку показывает
 /// выдача поиска по файлам, и разъехаться им нельзя.
-String _fmtBytes(int n) => formatAttachmentSize(n);
+String _fmtBytes(int n, AppLocalizations l10n) => formatAttachmentSize(n, l10n);
 
 class _MiniIconBtn extends StatefulWidget {
   const _MiniIconBtn({required this.icon, this.tooltip, this.onTap});
@@ -3389,6 +3394,7 @@ class _MetaPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     const fg = Color(0xFFFFFFFF);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -3410,8 +3416,8 @@ class _MetaPill extends StatelessWidget {
           ),
           if (edited) ...[
             const SizedBox(width: 6),
-            const Text(
-              'изменено',
+            Text(
+              l10n.desktopBubbleEdited,
               style: TextStyle(
                 color: fg,
                 fontSize: 11,
@@ -3662,13 +3668,14 @@ class _SpeedButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     // «1.5», а не «1.50»: лишний ноль в подписи шириной в три знака заметен.
     final label = speed == speed.roundToDouble()
         ? '${speed.toInt()}×'
         : '${speed.toStringAsFixed(1)}×';
     return DesktopTooltip(
-      message: 'Скорость воспроизведения',
+      message: l10n.desktopBubbleSpeed,
       child: HoverListener(
         onTap: onTap,
         cursor: SystemMouseCursors.click,

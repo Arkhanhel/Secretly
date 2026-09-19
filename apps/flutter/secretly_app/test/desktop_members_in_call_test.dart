@@ -23,9 +23,9 @@ void main() {
 
   test('🔴 группа «В СОЗВОНЕ» есть и стоит первой', () {
     // Она про то, что происходит СЕЙЧАС: остальные группы про состояние.
-    final call = src.indexOf("label: 'В СОЗВОНЕ'");
-    final online = src.indexOf("label: 'В СЕТИ'");
-    final offline = src.indexOf("label: 'НЕ В СЕТИ'");
+    final call = src.indexOf('label: l10n.desktopRoomInCall');
+    final online = src.indexOf('label: l10n.desktopRoomOnline');
+    final offline = src.indexOf('label: l10n.desktopRoomOffline');
     expect(call, greaterThan(0));
     expect(call, lessThan(online));
     expect(online, lessThan(offline));
@@ -62,7 +62,7 @@ void main() {
   test('«показывает экран» важнее подписи роли', () {
     // Роль постоянна, а показ идёт прямо сейчас.
     expect(src.contains("if (call?.screenShareEnabled ?? false)"), isTrue);
-    expect(src.contains("'показывает экран',"), isTrue);
+    expect(src.contains('l10n.desktopCallSharingShort'), isTrue);
   });
 
   test('строка в созвоне подсвечена зелёной плёнкой', () {

@@ -3,6 +3,7 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -29,6 +30,9 @@ void main() {
 
   Widget host(List<ChatCategory> cats, {String selected = ChatCategoryIds.all}) {
     return MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: ChatCategoryBar(
           categories: cats,
@@ -90,6 +94,9 @@ void main() {
   testWidgets('tapping a chip reports its id', (tester) async {
     String? picked;
     await tester.pumpWidget(MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: ChatCategoryBar(
           categories: const [

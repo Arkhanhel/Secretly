@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -84,13 +85,14 @@ class _MediaDevicesPaneState extends State<MediaDevicesPane> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     if (_loading) {
       return widget.body([
         Padding(
           padding: const EdgeInsets.all(DSpace.l),
           child: Text(
-            'Ищем устройства…',
+            l10n.desktopDevicesSearching,
             style: DType.body.copyWith(color: c.textSecondary),
           ),
         ),
@@ -98,22 +100,20 @@ class _MediaDevicesPaneState extends State<MediaDevicesPane> {
     }
     return widget.body([
       _DeviceCard(
-        title: 'Камера',
+        title: l10n.callControlCamera,
         icon: FluentIcons.video_24_regular,
         devices: _cameras,
         selectedId: DesktopUiPrefs.preferredCameraId.value,
         onPick: (id) => unawaited(_pickCamera(id)),
-        emptyLabel: 'Камер не найдено. Возможно, приложению не дали к ним '
-            'доступ в настройках системы.',
+        emptyLabel: l10n.desktopDevicesNoCameras,
       ),
       _DeviceCard(
-        title: 'Микрофон',
+        title: l10n.callControlMute,
         icon: FluentIcons.mic_24_regular,
         devices: _mics,
         selectedId: DesktopUiPrefs.preferredMicId.value,
         onPick: (id) => unawaited(_pickMic(id)),
-        emptyLabel: 'Микрофонов не найдено. Возможно, приложению не дали к ним '
-            'доступ в настройках системы.',
+        emptyLabel: l10n.desktopDevicesNoMics,
       ),
       // 🔴 ВЫВОД ЗВУКА ЗДЕСЬ НЕ ВЫБИРАЕТСЯ, И ЭТО НЕ ЗАБЫВЧИВОСТЬ.
       //
@@ -134,9 +134,7 @@ class _MediaDevicesPaneState extends State<MediaDevicesPane> {
             const SizedBox(width: DSpace.s),
             Expanded(
               child: Text(
-                'Куда выводить звук, выбирается в самом созвоне — шевроном у '
-                '«Микрофона». Там же приложение само переключается на '
-                'наушники, когда их подключают.',
+                l10n.desktopDevicesOutputHint,
                 style: DType.caption.copyWith(
                   color: c.textTertiary,
                   height: 1.45,
@@ -169,6 +167,7 @@ class _DeviceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     if (devices.isEmpty) {
       return Padding(
@@ -195,7 +194,7 @@ class _DeviceCard extends StatelessWidget {
     // одним движением после любого выбора.
     final rows = <Widget>[
       _DeviceRow(
-        label: 'Как выбрано в системе',
+        label: l10n.desktopDevicesSystemDefault,
         selected: selectedId.isEmpty,
         onTap: () => onPick(''),
       ),

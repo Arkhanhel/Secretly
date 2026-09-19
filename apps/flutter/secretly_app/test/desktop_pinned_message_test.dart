@@ -15,6 +15,7 @@
 // рисуется по идентификатору закреплённого и нажатие ведёт к самому сообщению,
 // а пункт меню появляется только когда действие вправду доступно.
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/chat/chat_thread_panel.dart';
@@ -38,6 +39,9 @@ Future<void> _pump(
 }) async {
   await tester.pumpWidget(
     MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: DColors(
         colors: kDColorsDark,
         child: Scaffold(

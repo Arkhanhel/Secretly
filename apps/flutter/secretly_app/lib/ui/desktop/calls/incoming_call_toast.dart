@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
@@ -18,7 +19,7 @@ class IncomingCallToast extends StatelessWidget {
     this.avatarName,
     this.callerSeed,
     this.callerImage,
-    this.subtitle = 'Входящий звонок',
+    this.subtitle,
     this.video = false,
     required this.onAccept,
     required this.onDecline,
@@ -35,7 +36,8 @@ class IncomingCallToast extends StatelessWidget {
   final String? callerSeed;
 
   final ImageProvider? callerImage;
-  final String subtitle;
+  /// `null` — подпись по умолчанию («Входящий звонок») на языке окна.
+  final String? subtitle;
   final bool video;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
@@ -59,7 +61,7 @@ class IncomingCallToast extends StatelessWidget {
     String? avatarName,
     String? callerSeed,
     ImageProvider? callerImage,
-    String subtitle = 'Входящий звонок',
+    String? subtitle,
     bool video = false,
     required VoidCallback onAccept,
     required VoidCallback onDecline,
@@ -94,6 +96,7 @@ class IncomingCallToast extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Material(
       color: Colors.transparent,
@@ -140,7 +143,7 @@ class IncomingCallToast extends StatelessWidget {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            subtitle,
+                            subtitle ?? l10n.callRecordIncomingCall,
                             style: DType.label.copyWith(color: c.textSecondary),
                           ),
                         ],
@@ -169,7 +172,7 @@ class IncomingCallToast extends StatelessWidget {
                   bg: c.danger.withValues(alpha: 0.16),
                   fg: c.danger,
                   width: 46,
-                  tooltip: 'Отклонить',
+                  tooltip: l10n.callDecline,
                   onTap: onDecline,
                 ),
                 if (onReplyWithText != null) ...[
@@ -177,7 +180,7 @@ class IncomingCallToast extends StatelessWidget {
                   Expanded(
                     child: _ToastAction(
                       icon: FluentIcons.chat_24_filled,
-                      label: 'Текстом',
+                      label: l10n.desktopCallAnswerText,
                       // Приглушённая, а не сплошная: это не главное действие
                       // всплывашки, а третий честный ответ рядом с ним.
                       bg: Colors.white.withValues(alpha: 0.06),
@@ -190,7 +193,7 @@ class IncomingCallToast extends StatelessWidget {
                 Expanded(
                   child: _ToastAction(
                     icon: FluentIcons.call_24_filled,
-                    label: video ? 'Ответить с видео' : 'Ответить',
+                    label: video ? l10n.desktopCallAnswerVideo : l10n.desktopCallAnswer,
                     bg: c.voice,
                     fg: Colors.white,
                     onTap: onAccept,

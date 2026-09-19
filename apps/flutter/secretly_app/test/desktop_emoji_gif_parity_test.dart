@@ -30,6 +30,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/gifs/gif_api.dart';
 import 'package:secretly_app/ui/emoji/noto_emoji_catalog.dart';
 
+final _ru = File('lib/l10n/app_ru.arb').readAsStringSync();
+
 void main() {
   final popover = File(
     'lib/ui/desktop/chat/emoji_popover.dart',
@@ -93,8 +95,10 @@ void main() {
     });
 
     test('🔴 «нет связи» и «ничего не нашлось» — разные сообщения', () {
-      expect(gifTab.contains('Связь прервалась'), isTrue);
-      expect(gifTab.contains('Ничего не нашлось'), isTrue);
+      expect(gifTab.contains('desktopGifConnectionLost'), isTrue);
+      expect(_ru.contains('Связь прервалась'), isTrue);
+      expect(gifTab.contains('desktopEmojiNothingFound'), isTrue);
+      expect(_ru.contains('Ничего не нашлось'), isTrue);
     });
 
     test('🔴 курсор считается по отданному, а не по показанному', () {
@@ -139,7 +143,8 @@ void main() {
 
     test('без ключа — честная надпись, а не пустая сетка', () {
       expect(gifTab.contains('kGiphyApiKey.isEmpty'), isTrue);
-      expect(gifTab.contains('сборка без ключа GIPHY'), isTrue);
+      expect(gifTab.contains('l10n.desktopGifNoKey'), isTrue);
+      expect(_ru.contains('сборка без ключа GIPHY'), isTrue);
     });
   });
 

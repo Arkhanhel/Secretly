@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -201,35 +202,35 @@ class OutgoingIntake {
       unreadable.isNotEmpty;
 
   /// Одна строка о том, что не взято, — или `null`.
-  String? rejectionText({required int maxBytes}) {
+  String? rejectionText({required int maxBytes, required AppLocalizations l10n}) {
     final parts = <String>[];
     if (folders.isNotEmpty) {
       parts.add(
         folders.length == 1
-            ? 'папку «${folders.single}» отправить нельзя'
-            : 'папки отправить нельзя',
+            ? l10n.desktopOutgoingFolderSingle(folders.single)
+            : l10n.desktopOutgoingFoldersMany,
       );
     }
     if (tooLarge.isNotEmpty) {
       final limit = (maxBytes / (1024 * 1024)).round();
       parts.add(
         tooLarge.length == 1
-            ? '«${tooLarge.single}» больше $limit МБ'
-            : '${tooLarge.length} ${_plural(tooLarge.length, 'файл', 'файла', 'файлов')} больше $limit МБ',
+            ? l10n.desktopOutgoingTooLargeOne(tooLarge.single, '$limit')
+            : l10n.desktopOutgoingTooLargeMany(tooLarge.length, '$limit'),
       );
     }
     if (empty.isNotEmpty) {
       parts.add(
         empty.length == 1
-            ? '«${empty.single}» пустой'
-            : '${empty.length} ${_plural(empty.length, 'файл', 'файла', 'файлов')} пустые',
+            ? l10n.desktopOutgoingEmptyOne(empty.single)
+            : l10n.desktopOutgoingEmptyMany(empty.length),
       );
     }
     if (unreadable.isNotEmpty) {
       parts.add(
         unreadable.length == 1
-            ? '«${unreadable.single}» не удалось прочитать'
-            : '${unreadable.length} ${_plural(unreadable.length, 'файл', 'файла', 'файлов')} не удалось прочитать',
+            ? l10n.desktopOutgoingUnreadableOne(unreadable.single)
+            : l10n.desktopOutgoingUnreadableMany(unreadable.length),
       );
     }
     if (parts.isEmpty) return null;
@@ -346,9 +347,13 @@ List<OutgoingGroup> planOutgoingGroups(
 bool captionTravelsSeparately(List<OutgoingGroup> groups) => groups.length > 1;
 
 /// Заголовок окна: «Фото», «3 фото», «2 медиа», «5 файлов».
-String outgoingDialogTitle(List<OutgoingFile> files, {required bool sendAsFiles}) {
+String outgoingDialogTitle(
+  List<OutgoingFile> files, {
+  required bool sendAsFiles,
+  required AppLocalizations l10n,
+}) {
   final n = files.length;
-  if (n == 0) return 'Отправка';
+  if (n == 0) return l10n.desktopOutgoingSending;
   final visual = files.every(
     (f) => f.canBeMedia && (f.kind == OutgoingKind.photo || f.kind == OutgoingKind.gif),
   );
@@ -361,19 +366,20 @@ String outgoingDialogTitle(List<OutgoingFile> files, {required bool sendAsFiles}
             f.kind == OutgoingKind.gif),
   );
   final music = files.every((f) => f.kind == OutgoingKind.audio);
-  if (!sendAsFiles && visual) return n == 1 ? 'Фото' : '$n фото';
-  if (!sendAsFiles && videos) return n == 1 ? 'Видео' : '$n видео';
-  if (!sendAsFiles && media) return '$n медиа';
-  if (music) return n == 1 ? 'Аудио' : '$n аудио';
-  return n == 1 ? 'Файл' : '$n ${_plural(n, 'файл', 'файла', 'файлов')}';
-}
-
-String _plural(int n, String one, String few, String many) {
-  final mod10 = n % 10;
-  final mod100 = n % 100;
-  if (mod10 == 1 && mod100 != 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
-  return many;
+  // Одиночное «Фото» — отдельным ключом, а не веткой `one`: по-русски в `one`
+  // попадают и 21, и 31, и заголовок на двадцать одном файле читался бы
+  // «Файл». Множественные ключи поэтому ВСЕГДА идут с числом.
+  if (!sendAsFiles && visual) {
+    return n == 1 ? l10n.desktopOutgoingOnePhoto : l10n.desktopOutgoingPhotos(n);
+  }
+  if (!sendAsFiles && videos) {
+    return n == 1 ? l10n.desktopOutgoingOneVideo : l10n.desktopOutgoingVideos(n);
+  }
+  if (!sendAsFiles && media) return l10n.desktopOutgoingMedia(n);
+  if (music) {
+    return n == 1 ? l10n.desktopOutgoingOneAudio : l10n.desktopOutgoingAudios(n);
+  }
+  return n == 1 ? l10n.desktopOutgoingOneFile : l10n.desktopOutgoingFiles(n);
 }
 
 /// Подготовка файлов для окна и для отправки.

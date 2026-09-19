@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
@@ -28,28 +29,28 @@ class _Shortcut {
 /// Таблица написана руками, а не выведена из карты сочетаний: выведенный
 /// список называл бы намерения, а смысл — объяснить, что клавиша ДЕЛАЕТ. Цена
 /// — обновлять вместе с картой; она видна в обзоре.
-Map<String, List<_Shortcut>> _shortcutGroups() {
+Map<String, List<_Shortcut>> _shortcutGroups(AppLocalizations l10n) {
   // macOS says ⌘; Windows and Linux say Ctrl. Showing the wrong one is a small
   // lie that makes the whole panel feel unfinished.
   final mod = Platform.isMacOS ? '⌘' : 'Ctrl';
   final alt = Platform.isMacOS ? '⌥' : 'Alt';
   return <String, List<_Shortcut>>{
-    'Навигация': [
-      _Shortcut('$mod 1 … 4', 'Чаты · Комнаты · Звонки · Контакты'),
-      _Shortcut('$mod K', 'Поиск по чатам и сообщениям'),
-      _Shortcut('$alt ↑ / ↓', 'Предыдущий / следующий чат'),
+    l10n.desktopShortcutsNavigation: [
+      _Shortcut('$mod 1 … 4', l10n.desktopShortcutsTabs),
+      _Shortcut('$mod K', l10n.desktopShortcutsSearchAll),
+      _Shortcut('$alt ↑ / ↓', l10n.desktopShortcutsPrevNext),
     ],
-    'В переписке': [
-      _Shortcut('$mod F', 'Найти в этой переписке'),
-      _Shortcut('Enter', 'Отправить (настраивается)'),
-      _Shortcut('Shift Enter', 'Перенос строки'),
-      _Shortcut('$mod V', 'Вставить изображение из буфера'),
+    l10n.desktopShortcutsInChat: [
+      _Shortcut('$mod F', l10n.desktopShortcutsFindHere),
+      _Shortcut('Enter', l10n.desktopShortcutsSend),
+      _Shortcut('Shift Enter', l10n.desktopShortcutsNewline),
+      _Shortcut('$mod V', l10n.desktopShortcutsPaste),
     ],
-    'Приложение': [
-      _Shortcut('$mod ,', 'Настройки'),
-      _Shortcut('$mod /', 'Эта справка'),
-      _Shortcut('Esc', 'Закрыть окно или поиск'),
-      _Shortcut('$mod W', 'Свернуть в трей'),
+    l10n.desktopShortcutsApp: [
+      _Shortcut('$mod ,', l10n.desktopSettingsTitle),
+      _Shortcut('$mod /', l10n.desktopShortcutsThisHelp),
+      _Shortcut('Esc', l10n.desktopShortcutsCloseWindow),
+      _Shortcut('$mod W', l10n.desktopShortcutsTray),
     ],
   };
 }
@@ -60,8 +61,9 @@ class ShortcutsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
-    final groups = _shortcutGroups();
+    final groups = _shortcutGroups(l10n);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -107,16 +109,17 @@ class ShortcutsList extends StatelessWidget {
 /// to explain what each key DOES. The cost is that this must be updated
 /// alongside the map — cheap, and visible in review.
 Future<void> showShortcutsHelp(BuildContext context) {
+  final l10n = AppLocalizations.of(context)!;
   return DesktopDialog.show<void>(
     context,
-    title: 'Горячие клавиши',
+    title: l10n.desktopShortcutsTitle,
     size: DDialogSize.medium,
     body: const SizedBox(
       height: 420,
       child: SingleChildScrollView(child: ShortcutsList()),
     ),
     secondary: DDialogAction(
-      label: 'Закрыть',
+      label: l10n.desktopPairClose,
       onPressed: () => Navigator.of(context).maybePop(),
     ),
   );

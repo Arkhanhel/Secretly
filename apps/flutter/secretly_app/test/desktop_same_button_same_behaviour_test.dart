@@ -45,7 +45,7 @@ void main() {
     expect(i, greaterThan(0));
     final body = card.substring(i, i + 1800);
     expect(body.contains('clearChatHistoryEverywhere('), isTrue);
-    expect(body.contains('История очищена у обоих'), isTrue);
+    expect(body.contains('desktopChatsHistoryClearedBoth'), isTrue);
   });
 
   test('🔴 себе самому чистить «у собеседника» не предлагают', () {
@@ -62,9 +62,11 @@ void main() {
   });
 
   test('предупреждение о необратимости на месте', () {
-    expect(dialog.contains('Отменить это нельзя'), isTrue);
+    expect(dialog.contains('l10n.desktopClearForPeerHint'), isTrue);
+    final ru = File('lib/l10n/app_ru.arb').readAsStringSync();
+    expect(ru.contains('Отменить это нельзя'), isTrue);
     expect(
-      dialog.contains('и на его устройстве, и на всех'),
+      ru.contains('и на его устройстве, и на всех'),
       isTrue,
       reason: 'человек должен понимать, что стирает не только у себя',
     );

@@ -20,6 +20,7 @@
 //   3. Фишка реакции была крупнее телеграмной: 18-й знак и поля 7×3 против
 //      15-го и 6×2. Внутри пузыря это заметно — фишка спорила с самим текстом.
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/chat/message_bubble.dart';
@@ -50,6 +51,9 @@ Finder _body(String part) => find.textContaining(part);
 Finder _time() => find.text('20:38').last;
 
 Widget _host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: DColors(
     colors: kDColorsDark,
     child: Scaffold(

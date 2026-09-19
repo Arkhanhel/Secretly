@@ -15,12 +15,16 @@
 // появился лишь 13.09 («Новый чат»). Все прежние пункты тихо что-то делали и с
 // меню не спорили, поэтому дефект дожил до первого же нового пункта.
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
 import 'package:secretly_app/ui/desktop/primitives/context_menu.dart';
 
 Widget _host(void Function(BuildContext) onReady) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: DColors(
     colors: kDColorsDark,
     child: Scaffold(

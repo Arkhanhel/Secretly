@@ -33,13 +33,14 @@
 //   travel_and_places, activities_and_events, objects, symbols, flags
 //
 // `kDesktopNotoCategoryOrder` preserves first-appearance order from the
-// manifest, and `kDesktopNotoCategoryLabelsRu` gives human-readable
+// manifest, and `desktopNotoCategoryLabel` gives human-readable
 // Russian display names for the picker section headers.
 //
 // Disk caching reuses the same `noto_emoji_{codepoint}.json` filename in
 // the system temp dir, so once mobile downloads an emoji the desktop picks
 // it up for free (and vice versa).
 
+import '../../../l10n/app_localizations.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -1824,21 +1825,36 @@ const Map<String, String> kDesktopNotoCategories = <String, String>{
   '🏳️': 'flags',
 };
 
-/// Human-readable Russian display name per category slug — what the
-/// picker shows as the section header. Slugs that don't appear in the
-/// manifest can be safely added here with a fallback label.
-const Map<String, String> kDesktopNotoCategoryLabelsRu = <String, String>{
-  'smileys_and_emotions': 'Смайлики и эмоции',
-  'people': 'Люди и тело',
-  'animals_and_nature': 'Природа',
-  'food_and_drink': 'Еда и напитки',
-  'travel_and_places': 'Путешествия',
-  'activities_and_events': 'Активности',
-  'objects': 'Предметы',
-  'symbols': 'Символы',
-  'flags': 'Флаги',
-  'other': 'Прочее',
-};
+/// Display name per category slug — what the picker shows as the section
+/// header. Unknown slugs fall back to the slug itself.
+String desktopNotoCategoryLabel(String slug, AppLocalizations l10n) {
+  switch (slug) {
+    case 'smileys_and_emotions':
+      return l10n.desktopEmojiSmileys;
+    case 'people':
+      return l10n.desktopEmojiPeople;
+    case 'animals_and_nature':
+      return l10n.desktopEmojiNature;
+    case 'food_and_drink':
+      return l10n.desktopEmojiFood;
+    case 'travel_and_places':
+      return l10n.desktopEmojiTravel;
+    case 'activities_and_events':
+      return l10n.desktopEmojiActivities;
+    case 'objects':
+      return l10n.desktopEmojiObjects;
+    case 'symbols':
+      return l10n.desktopEmojiSymbols;
+    case 'flags':
+      return l10n.desktopEmojiFlags;
+    case 'other':
+      return l10n.desktopEmojiOther;
+    default:
+      // Незнакомый раздел из будущего манифеста: лучше показать его слуг,
+      // чем пустую строку.
+      return slug;
+  }
+}
 
 /// Ordered list of category slugs (for left-rail jump order and section
 /// rendering order). MUST match the order categories first appear in the

@@ -6123,6 +6123,4326 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unblock'**
   String get desktopUnblockAction;
+
+  /// No description provided for @desktopPrivacyLastSeen.
+  ///
+  /// In en, this message translates to:
+  /// **'Last seen'**
+  String get desktopPrivacyLastSeen;
+
+  /// No description provided for @desktopPrivacyProfilePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile photos'**
+  String get desktopPrivacyProfilePhoto;
+
+  /// No description provided for @desktopPrivacyForwarding.
+  ///
+  /// In en, this message translates to:
+  /// **'Message forwarding'**
+  String get desktopPrivacyForwarding;
+
+  /// No description provided for @desktopPrivacyCalls.
+  ///
+  /// In en, this message translates to:
+  /// **'Calls'**
+  String get desktopPrivacyCalls;
+
+  /// No description provided for @desktopPrivacyVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice messages'**
+  String get desktopPrivacyVoice;
+
+  /// No description provided for @desktopPrivacyMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages'**
+  String get desktopPrivacyMessages;
+
+  /// No description provided for @desktopPrivacyNobody.
+  ///
+  /// In en, this message translates to:
+  /// **'Nobody'**
+  String get desktopPrivacyNobody;
+
+  /// No description provided for @desktopPrivacyEverybody.
+  ///
+  /// In en, this message translates to:
+  /// **'Everybody'**
+  String get desktopPrivacyEverybody;
+
+  /// No description provided for @desktopPrivacyContacts.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts'**
+  String get desktopPrivacyContacts;
+
+  /// No description provided for @desktopPrivacyEncryption.
+  ///
+  /// In en, this message translates to:
+  /// **'Encryption'**
+  String get desktopPrivacyEncryption;
+
+  /// No description provided for @desktopPrivacyEncryptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Every message and call is end-to-end encrypted. The keys live only on your devices.'**
+  String get desktopPrivacyEncryptionHint;
+
+  /// No description provided for @desktopPrivacyE2eeActive.
+  ///
+  /// In en, this message translates to:
+  /// **'End-to-end encryption is active'**
+  String get desktopPrivacyE2eeActive;
+
+  /// No description provided for @desktopPrivacyWhoSees.
+  ///
+  /// In en, this message translates to:
+  /// **'Who sees'**
+  String get desktopPrivacyWhoSees;
+
+  /// No description provided for @desktopPrivacyWhoSeesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The same visibility settings as in the mobile application.'**
+  String get desktopPrivacyWhoSeesHint;
+
+  /// No description provided for @desktopPrivacyVisibility.
+  ///
+  /// In en, this message translates to:
+  /// **'Visibility'**
+  String get desktopPrivacyVisibility;
+
+  /// No description provided for @desktopPrivacyByNickname.
+  ///
+  /// In en, this message translates to:
+  /// **'Findable by nickname'**
+  String get desktopPrivacyByNickname;
+
+  /// No description provided for @desktopPrivacyByNicknameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Let people find you by your nickname'**
+  String get desktopPrivacyByNicknameHint;
+
+  /// No description provided for @desktopPrivacySuggest.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggest people in search'**
+  String get desktopPrivacySuggest;
+
+  /// No description provided for @desktopPrivacyStrangers.
+  ///
+  /// In en, this message translates to:
+  /// **'New chats from strangers'**
+  String get desktopPrivacyStrangers;
+
+  /// No description provided for @desktopPrivacyStrangersHint.
+  ///
+  /// In en, this message translates to:
+  /// **'To the archive and without notifications'**
+  String get desktopPrivacyStrangersHint;
+
+  /// No description provided for @desktopPrivacyAutoDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete my account'**
+  String get desktopPrivacyAutoDelete;
+
+  /// No description provided for @desktopPrivacyAutoDeleteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'If you do not sign in for longer than the chosen period, the account and every message are deleted automatically. The countdown resets on each sign-in.'**
+  String get desktopPrivacyAutoDeleteHint;
+
+  /// No description provided for @desktopPrivacyIfAbsent.
+  ///
+  /// In en, this message translates to:
+  /// **'If I do not sign in'**
+  String get desktopPrivacyIfAbsent;
+
+  /// No description provided for @desktopPrivacyIn1Month.
+  ///
+  /// In en, this message translates to:
+  /// **'After 1 month'**
+  String get desktopPrivacyIn1Month;
+
+  /// No description provided for @desktopPrivacyIn3Months.
+  ///
+  /// In en, this message translates to:
+  /// **'After 3 months'**
+  String get desktopPrivacyIn3Months;
+
+  /// No description provided for @desktopPrivacyIn6Months.
+  ///
+  /// In en, this message translates to:
+  /// **'After 6 months'**
+  String get desktopPrivacyIn6Months;
+
+  /// No description provided for @desktopPrivacyIn1Year.
+  ///
+  /// In en, this message translates to:
+  /// **'After a year'**
+  String get desktopPrivacyIn1Year;
+
+  /// No description provided for @desktopPrivacyIn2Years.
+  ///
+  /// In en, this message translates to:
+  /// **'After 2 years'**
+  String get desktopPrivacyIn2Years;
+
+  /// No description provided for @desktopLockImmediately.
+  ///
+  /// In en, this message translates to:
+  /// **'As soon as focus is lost'**
+  String get desktopLockImmediately;
+
+  /// No description provided for @desktopLockSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} s'**
+  String desktopLockSeconds(Object value);
+
+  /// No description provided for @desktopLockMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} min'**
+  String desktopLockMinutes(Object value);
+
+  /// No description provided for @desktopLockHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} h'**
+  String desktopLockHours(Object value);
+
+  /// No description provided for @desktopLockNoIdentityService.
+  ///
+  /// In en, this message translates to:
+  /// **'The identity-check service is unavailable — the lock was not switched on.'**
+  String get desktopLockNoIdentityService;
+
+  /// No description provided for @desktopLockNotConfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'The lock was not switched on: the confirmation did not pass.'**
+  String get desktopLockNotConfirmed;
+
+  /// No description provided for @desktopLockTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Application lock'**
+  String get desktopLockTitle;
+
+  /// No description provided for @desktopLockTouchIdHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask for Touch ID to get back in after focus is lost.'**
+  String get desktopLockTouchIdHint;
+
+  /// No description provided for @desktopLockPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask for the device password to get back in after focus is lost.'**
+  String get desktopLockPasswordHint;
+
+  /// No description provided for @desktopLockEnableTouchId.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch on Touch ID'**
+  String get desktopLockEnableTouchId;
+
+  /// No description provided for @desktopLockEnableLock.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch on the lock'**
+  String get desktopLockEnableLock;
+
+  /// No description provided for @desktopLockDevicePassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Device password'**
+  String get desktopLockDevicePassword;
+
+  /// No description provided for @desktopLockAfter.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock after'**
+  String get desktopLockAfter;
+
+  /// No description provided for @desktopLockNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock now'**
+  String get desktopLockNow;
+
+  /// No description provided for @desktopDevicesEndSessionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'End the session?'**
+  String get desktopDevicesEndSessionTitle;
+
+  /// No description provided for @desktopDevicesEndSessionBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Device {id} will be disconnected from your profile. Getting access back needs a new QR scan. Continue?'**
+  String desktopDevicesEndSessionBody(Object id);
+
+  /// No description provided for @desktopDevicesEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'End'**
+  String get desktopDevicesEnd;
+
+  /// No description provided for @desktopDevicesEndFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not end the session: {error}'**
+  String desktopDevicesEndFailed(Object error);
+
+  /// No description provided for @desktopDevicesEnded.
+  ///
+  /// In en, this message translates to:
+  /// **'The device session has ended.'**
+  String get desktopDevicesEnded;
+
+  /// No description provided for @desktopDevicesActiveSessions.
+  ///
+  /// In en, this message translates to:
+  /// **'Active sessions'**
+  String get desktopDevicesActiveSessions;
+
+  /// No description provided for @desktopDevicesDemoHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Demo mode · real devices will appear once a profile is connected'**
+  String get desktopDevicesDemoHint;
+
+  /// No description provided for @desktopDevicesThisComputer.
+  ///
+  /// In en, this message translates to:
+  /// **'macOS · This computer'**
+  String get desktopDevicesThisComputer;
+
+  /// No description provided for @desktopDevicesDemoMac.
+  ///
+  /// In en, this message translates to:
+  /// **'MacBook Pro · Active now'**
+  String get desktopDevicesDemoMac;
+
+  /// No description provided for @desktopDevicesDemoIphone.
+  ///
+  /// In en, this message translates to:
+  /// **'iOS 18.2 · 2 hours ago (demo)'**
+  String get desktopDevicesDemoIphone;
+
+  /// No description provided for @desktopDevicesDemoIpad.
+  ///
+  /// In en, this message translates to:
+  /// **'iPadOS 18 · yesterday (demo)'**
+  String get desktopDevicesDemoIpad;
+
+  /// No description provided for @desktopDevicesThisDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'This device'**
+  String get desktopDevicesThisDevice;
+
+  /// No description provided for @desktopDevicesRemoteDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote device'**
+  String get desktopDevicesRemoteDevice;
+
+  /// No description provided for @desktopDevicesDisconnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnect'**
+  String get desktopDevicesDisconnect;
+
+  /// No description provided for @desktopDevicesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Devices'**
+  String get desktopDevicesTitle;
+
+  /// No description provided for @desktopDevicesTitleCount.
+  ///
+  /// In en, this message translates to:
+  /// **'Devices · {count}'**
+  String desktopDevicesTitleCount(Object count);
+
+  /// No description provided for @desktopDevicesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The devices linked to this profile on the key server.'**
+  String get desktopDevicesHint;
+
+  /// No description provided for @desktopDevicesLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load'**
+  String get desktopDevicesLoadFailed;
+
+  /// No description provided for @desktopDevicesRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get desktopDevicesRetry;
+
+  /// No description provided for @desktopDevicesNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No devices found'**
+  String get desktopDevicesNone;
+
+  /// No description provided for @desktopDevicesNotLinked.
+  ///
+  /// In en, this message translates to:
+  /// **'The profile is not linked to the server yet.'**
+  String get desktopDevicesNotLinked;
+
+  /// No description provided for @desktopDevicesRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh the list'**
+  String get desktopDevicesRefresh;
+
+  /// No description provided for @desktopAccentCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom colour'**
+  String get desktopAccentCustom;
+
+  /// No description provided for @desktopAccentCustomChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom colour — change'**
+  String get desktopAccentCustomChange;
+
+  /// No description provided for @desktopPairTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Link a device'**
+  String get desktopPairTitle;
+
+  /// No description provided for @desktopPairHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Show the QR code on the new device or scan it from the phone'**
+  String get desktopPairHint;
+
+  /// No description provided for @desktopPairRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create the link request'**
+  String get desktopPairRequestFailed;
+
+  /// No description provided for @desktopPairCodeCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'The QR contents were copied'**
+  String get desktopPairCodeCopied;
+
+  /// No description provided for @desktopPairNewTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Link a new device'**
+  String get desktopPairNewTitle;
+
+  /// No description provided for @desktopPairNewHint.
+  ///
+  /// In en, this message translates to:
+  /// **'On the new device open Secretly and choose “Connect by QR”. Then scan the code below.'**
+  String get desktopPairNewHint;
+
+  /// No description provided for @desktopPairClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get desktopPairClose;
+
+  /// No description provided for @desktopPairCopyCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the code'**
+  String get desktopPairCopyCode;
+
+  /// No description provided for @desktopPairRefreshQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh the QR'**
+  String get desktopPairRefreshQr;
+
+  /// No description provided for @desktopSyncPulled.
+  ///
+  /// In en, this message translates to:
+  /// **'New events pulled: {count}'**
+  String desktopSyncPulled(Object count);
+
+  /// No description provided for @desktopSyncTooOften.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many requests — try again later'**
+  String get desktopSyncTooOften;
+
+  /// No description provided for @desktopSyncNothingNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Done · no new events'**
+  String get desktopSyncNothingNew;
+
+  /// No description provided for @desktopSyncDemoUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available in demo mode'**
+  String get desktopSyncDemoUnavailable;
+
+  /// No description provided for @desktopSyncBlobsPulled.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachments pulled: {blobs} (chats: {convos})'**
+  String desktopSyncBlobsPulled(Object blobs, Object convos);
+
+  /// No description provided for @desktopSyncNoBlobs.
+  ///
+  /// In en, this message translates to:
+  /// **'Done · no new attachments (chats: {convos})'**
+  String desktopSyncNoBlobs(Object convos);
+
+  /// No description provided for @desktopSyncTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'History from other devices'**
+  String get desktopSyncTitle;
+
+  /// No description provided for @desktopSyncHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask the mobile device for the recent chat history. Used when the desktop has been offline for more than 7 days or has just been linked by QR.'**
+  String get desktopSyncHint;
+
+  /// No description provided for @desktopSyncRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing…'**
+  String get desktopSyncRunning;
+
+  /// No description provided for @desktopSyncAskHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask for the history'**
+  String get desktopSyncAskHistory;
+
+  /// No description provided for @desktopSyncAsk.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask'**
+  String get desktopSyncAsk;
+
+  /// No description provided for @desktopSyncBlobsRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading attachments…'**
+  String get desktopSyncBlobsRunning;
+
+  /// No description provided for @desktopSyncBlobsAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch the attachments'**
+  String get desktopSyncBlobsAction;
+
+  /// No description provided for @desktopSyncBlobsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads media from recent chats when the files are missing locally (after re-linking or a long time offline).'**
+  String get desktopSyncBlobsHint;
+
+  /// No description provided for @desktopSyncBlobsShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetch'**
+  String get desktopSyncBlobsShort;
+
+  /// No description provided for @desktopServerBackupOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup on the server ✓ · {stamp} · {size} KB · profile {profile}'**
+  String desktopServerBackupOk(Object stamp, Object size, Object profile);
+
+  /// No description provided for @desktopServerBackupPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup password'**
+  String get desktopServerBackupPassword;
+
+  /// No description provided for @desktopServerBackupPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'This password encrypts the backup and restores it on any device. Remember it — without it the backup is useless, and it cannot be recovered.'**
+  String get desktopServerBackupPasswordHint;
+
+  /// No description provided for @desktopServerBackupRepeat.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat the password'**
+  String get desktopServerBackupRepeat;
+
+  /// No description provided for @desktopServerBackupCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create the backup'**
+  String get desktopServerBackupCreate;
+
+  /// No description provided for @desktopServerBackupTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup to the server'**
+  String get desktopServerBackupTitle;
+
+  /// No description provided for @desktopServerBackupHint.
+  ///
+  /// In en, this message translates to:
+  /// **'An encrypted copy of the account on the Secretly server. It is restored on any device through “Restore from the server” with your Secretly ID and password.'**
+  String get desktopServerBackupHint;
+
+  /// No description provided for @desktopServerBackupLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading…'**
+  String get desktopServerBackupLoading;
+
+  /// No description provided for @desktopServerBackupCreateOnServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a backup on the server'**
+  String get desktopServerBackupCreateOnServer;
+
+  /// No description provided for @desktopServerBackupUpdate.
+  ///
+  /// In en, this message translates to:
+  /// **'Update the backup'**
+  String get desktopServerBackupUpdate;
+
+  /// No description provided for @desktopFailedWith.
+  ///
+  /// In en, this message translates to:
+  /// **'It did not work: {error}'**
+  String desktopFailedWith(Object error);
+
+  /// No description provided for @desktopStorageDeleteModelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the recognition model?'**
+  String get desktopStorageDeleteModelTitle;
+
+  /// No description provided for @desktopStorageDeleteModelBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing voice messages will stop working until the model is downloaded again.'**
+  String get desktopStorageDeleteModelBody;
+
+  /// No description provided for @desktopStorageModelDeleted.
+  ///
+  /// In en, this message translates to:
+  /// **'The model was deleted'**
+  String get desktopStorageModelDeleted;
+
+  /// No description provided for @desktopStorageDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete: {error}'**
+  String desktopStorageDeleteFailed(Object error);
+
+  /// No description provided for @desktopStorageKb.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} KB'**
+  String desktopStorageKb(Object value);
+
+  /// No description provided for @desktopStorageMb.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} MB'**
+  String desktopStorageMb(Object value);
+
+  /// No description provided for @desktopStorageGb.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} GB'**
+  String desktopStorageGb(Object value);
+
+  /// No description provided for @desktopStorageUsage.
+  ///
+  /// In en, this message translates to:
+  /// **'Usage'**
+  String get desktopStorageUsage;
+
+  /// No description provided for @desktopStorageUsageHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Cache and media on this device'**
+  String get desktopStorageUsageHint;
+
+  /// No description provided for @desktopStorageClearHint.
+  ///
+  /// In en, this message translates to:
+  /// **'{size} will be freed. Messages, files you sent and the recent ones are not deleted — there would be nowhere to restore them from.'**
+  String desktopStorageClearHint(Object size);
+
+  /// No description provided for @desktopStorageClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear the cache'**
+  String get desktopStorageClear;
+
+  /// No description provided for @desktopStorageCounting.
+  ///
+  /// In en, this message translates to:
+  /// **'Counting…'**
+  String get desktopStorageCounting;
+
+  /// No description provided for @desktopStorageSpeechModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Speech-recognition model'**
+  String get desktopStorageSpeechModel;
+
+  /// No description provided for @desktopStorageSpeechModelHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Used to transcribe voice messages on this computer, without sending the audio anywhere. A normal cache clear does NOT remove it — it is large and downloaded separately.'**
+  String get desktopStorageSpeechModelHint;
+
+  /// No description provided for @desktopStorageDeleteModel.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the model'**
+  String get desktopStorageDeleteModel;
+
+  /// No description provided for @desktopStorageMedia.
+  ///
+  /// In en, this message translates to:
+  /// **'Media · {size}'**
+  String desktopStorageMedia(Object size);
+
+  /// No description provided for @desktopStorageVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice · {size}'**
+  String desktopStorageVoice(Object size);
+
+  /// No description provided for @desktopStorageOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other · {size}'**
+  String desktopStorageOther(Object size);
+
+  /// No description provided for @desktopStorageFree.
+  ///
+  /// In en, this message translates to:
+  /// **'Free'**
+  String get desktopStorageFree;
+
+  /// No description provided for @desktopStorageTotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Total · {size}'**
+  String desktopStorageTotal(Object size);
+
+  /// No description provided for @desktopAboutVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version} · build {build}'**
+  String desktopAboutVersion(Object version, Object build);
+
+  /// No description provided for @desktopAboutTagline.
+  ///
+  /// In en, this message translates to:
+  /// **'A secure messenger with end-to-end encryption. No cloud. No advertising. Open source.'**
+  String get desktopAboutTagline;
+
+  /// No description provided for @desktopAboutLicences.
+  ///
+  /// In en, this message translates to:
+  /// **'Licences'**
+  String get desktopAboutLicences;
+
+  /// No description provided for @desktopAboutWebsite.
+  ///
+  /// In en, this message translates to:
+  /// **'Website'**
+  String get desktopAboutWebsite;
+
+  /// No description provided for @desktopDangerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the account irreversibly?'**
+  String get desktopDangerTitle;
+
+  /// No description provided for @desktopDangerBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The profile, the keys, the local data and the message history will be deleted on this and other devices. There is no way back.'**
+  String get desktopDangerBody;
+
+  /// No description provided for @desktopDangerDeleting.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting the account…'**
+  String get desktopDangerDeleting;
+
+  /// No description provided for @desktopDangerFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete the account: {error}'**
+  String desktopDangerFailed(Object error);
+
+  /// No description provided for @desktopDangerSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleting the account'**
+  String get desktopDangerSection;
+
+  /// No description provided for @desktopDangerDemo.
+  ///
+  /// In en, this message translates to:
+  /// **'Demo mode · deleting is unavailable without a connected profile.'**
+  String get desktopDangerDemo;
+
+  /// No description provided for @desktopDangerEnterId.
+  ///
+  /// In en, this message translates to:
+  /// **'Type your Secretly ID to confirm'**
+  String get desktopDangerEnterId;
+
+  /// No description provided for @desktopDangerEnterIdExact.
+  ///
+  /// In en, this message translates to:
+  /// **'Type {id} to confirm'**
+  String desktopDangerEnterIdExact(Object id);
+
+  /// No description provided for @desktopDangerAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the account'**
+  String get desktopDangerAction;
+
+  /// No description provided for @desktopDangerIrreversible.
+  ///
+  /// In en, this message translates to:
+  /// **'This is irreversible. All your data, the message history and the keys will be deleted. There is no way back.'**
+  String get desktopDangerIrreversible;
+
+  /// No description provided for @desktopSecurityE2ee.
+  ///
+  /// In en, this message translates to:
+  /// **'End-to-end encryption'**
+  String get desktopSecurityE2ee;
+
+  /// No description provided for @desktopSecurityE2eeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Every message, call and file is encrypted on your device. The keys never leave your devices — the server sees only ciphertext.'**
+  String get desktopSecurityE2eeHint;
+
+  /// No description provided for @desktopSecurityVerifiedDevices.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified devices'**
+  String get desktopSecurityVerifiedDevices;
+
+  /// No description provided for @desktopSecurityVerifiedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'While this is on, messages are not sent to the other person’s unconfirmed devices. It guards against substitution, but a message may not arrive until they confirm a new device. One-to-one chats only: it does not apply to groups.'**
+  String get desktopSecurityVerifiedHint;
+
+  /// No description provided for @desktopSecurityOnlyVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Verified devices only'**
+  String get desktopSecurityOnlyVerified;
+
+  /// No description provided for @desktopSecurityBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Unverified devices are blocked'**
+  String get desktopSecurityBlocked;
+
+  /// No description provided for @desktopSecurityAllDevices.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages go to all of the other person’s devices'**
+  String get desktopSecurityAllDevices;
+
+  /// No description provided for @desktopSecurityAppEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Entry to the application'**
+  String get desktopSecurityAppEntry;
+
+  /// No description provided for @desktopSecurityAppEntryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'A password when Secretly opens and after the window has been hidden for more than a minute. It applies to this computer.'**
+  String get desktopSecurityAppEntryHint;
+
+  /// No description provided for @desktopSecurityPersonalScopeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'A separate password for the “Personal” category. Without it, personal chats are open to anyone with access to an unlocked computer.'**
+  String get desktopSecurityPersonalScopeHint;
+
+  /// No description provided for @desktopCallsInApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Calls in the application'**
+  String get desktopCallsInApp;
+
+  /// No description provided for @desktopCallsInAppHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch off to disable calls entirely'**
+  String get desktopCallsInAppHint;
+
+  /// No description provided for @desktopCallsAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept incoming calls'**
+  String get desktopCallsAccept;
+
+  /// No description provided for @desktopCallsAcceptHint.
+  ///
+  /// In en, this message translates to:
+  /// **'People will be able to call you'**
+  String get desktopCallsAcceptHint;
+
+  /// No description provided for @desktopCallsDisabledHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable while calls are off'**
+  String get desktopCallsDisabledHint;
+
+  /// No description provided for @desktopCallsScreenShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen sharing'**
+  String get desktopCallsScreenShare;
+
+  /// No description provided for @desktopCallsScreenShareHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Receiving someone else’s screen is a separate permission: what appears there may not be what you expected to see.'**
+  String get desktopCallsScreenShareHint;
+
+  /// No description provided for @desktopCallsAcceptScreenShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept screen sharing'**
+  String get desktopCallsAcceptScreenShare;
+
+  /// No description provided for @desktopAccountIdCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'The Secretly ID was copied'**
+  String get desktopAccountIdCopied;
+
+  /// No description provided for @desktopAccountIdHint.
+  ///
+  /// In en, this message translates to:
+  /// **'This identifier is what you share so people can find you. It carries neither a phone number nor an email address.'**
+  String get desktopAccountIdHint;
+
+  /// No description provided for @desktopAccountCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get desktopAccountCopy;
+
+  /// No description provided for @desktopAccountProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile'**
+  String get desktopAccountProfile;
+
+  /// No description provided for @desktopAccountProfileHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Name, photo, status'**
+  String get desktopAccountProfileHint;
+
+  /// No description provided for @desktopAccountOpenProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the profile page'**
+  String get desktopAccountOpenProfile;
+
+  /// No description provided for @desktopScopePasswordFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Password for “{name}”'**
+  String desktopScopePasswordFor(Object name);
+
+  /// No description provided for @desktopScopeMin4.
+  ///
+  /// In en, this message translates to:
+  /// **'At least 4 characters'**
+  String get desktopScopeMin4;
+
+  /// No description provided for @desktopScopeOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Protection is on'**
+  String get desktopScopeOn;
+
+  /// No description provided for @desktopScopeOnFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not switch on: {error}'**
+  String desktopScopeOnFailed(Object error);
+
+  /// No description provided for @desktopScopeOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Protection is off'**
+  String get desktopScopeOff;
+
+  /// No description provided for @desktopScopeOffFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not switch off: {error}'**
+  String desktopScopeOffFailed(Object error);
+
+  /// No description provided for @desktopScopePasswordsDiffer.
+  ///
+  /// In en, this message translates to:
+  /// **'The passwords do not match'**
+  String get desktopScopePasswordsDiffer;
+
+  /// No description provided for @desktopScopeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Password protection'**
+  String get desktopScopeTitle;
+
+  /// No description provided for @desktopScopeOnWithPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'On — password'**
+  String get desktopScopeOnWithPassword;
+
+  /// No description provided for @desktopScopeEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get desktopScopeEnabled;
+
+  /// No description provided for @desktopScopeDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get desktopScopeDisabled;
+
+  /// No description provided for @desktopScopeChangePassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Change the password'**
+  String get desktopScopeChangePassword;
+
+  /// No description provided for @desktopScopeLockNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Lock'**
+  String get desktopScopeLockNow;
+
+  /// No description provided for @desktopBlockedUnblocked.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} was unblocked'**
+  String desktopBlockedUnblocked(Object name);
+
+  /// No description provided for @desktopBlockedUnblockFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not unblock: {error}'**
+  String desktopBlockedUnblockFailed(Object error);
+
+  /// No description provided for @desktopBlockedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked'**
+  String get desktopBlockedTitle;
+
+  /// No description provided for @desktopBlockedEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The list is empty. Blocking is done from a chat’s menu.'**
+  String get desktopBlockedEmptyHint;
+
+  /// No description provided for @desktopBlockedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'These people cannot write to you or call you.'**
+  String get desktopBlockedHint;
+
+  /// No description provided for @desktopBlockedNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Nobody is blocked'**
+  String get desktopBlockedNone;
+
+  /// No description provided for @desktopSupportSent.
+  ///
+  /// In en, this message translates to:
+  /// **'The message was sent'**
+  String get desktopSupportSent;
+
+  /// No description provided for @desktopSupportSendFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not send. Check your connection.'**
+  String get desktopSupportSendFailed;
+
+  /// No description provided for @desktopSupportUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Support is unavailable'**
+  String get desktopSupportUnavailable;
+
+  /// No description provided for @desktopSupportUnavailableHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The support service is switched off right now. Try later or write from the phone.'**
+  String get desktopSupportUnavailableHint;
+
+  /// No description provided for @desktopSupportThread.
+  ///
+  /// In en, this message translates to:
+  /// **'The conversation with support'**
+  String get desktopSupportThread;
+
+  /// No description provided for @desktopSupportThreadHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages are encrypted on your device. The server keeps only ciphertext — only support can read the conversation.'**
+  String get desktopSupportThreadHint;
+
+  /// No description provided for @desktopSupportNoReplies.
+  ///
+  /// In en, this message translates to:
+  /// **'No replies yet. Describe the problem — the answer will arrive here.'**
+  String get desktopSupportNoReplies;
+
+  /// No description provided for @desktopSupportWrite.
+  ///
+  /// In en, this message translates to:
+  /// **'Write to support'**
+  String get desktopSupportWrite;
+
+  /// No description provided for @desktopSupportWriteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The build version and the device identifier are attached automatically — without them the problem is nearly impossible to reproduce.'**
+  String get desktopSupportWriteHint;
+
+  /// No description provided for @desktopSupportDescribe.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe what happened'**
+  String get desktopSupportDescribe;
+
+  /// No description provided for @desktopSupportSending.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending…'**
+  String get desktopSupportSending;
+
+  /// No description provided for @desktopSupportSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get desktopSupportSend;
+
+  /// No description provided for @desktopChatsEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Start a conversation from the phone — chats sync to the desktop automatically'**
+  String get desktopChatsEmptyHint;
+
+  /// No description provided for @desktopChatsPickOne.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a chat on the left'**
+  String get desktopChatsPickOne;
+
+  /// No description provided for @desktopChatsSendFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not send: {error}'**
+  String desktopChatsSendFailed(Object error);
+
+  /// No description provided for @desktopChatsSendingTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending to “{title}”'**
+  String desktopChatsSendingTo(Object title);
+
+  /// No description provided for @desktopChatsFilterAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get desktopChatsFilterAll;
+
+  /// No description provided for @desktopChatsFilterUnread.
+  ///
+  /// In en, this message translates to:
+  /// **'Unread'**
+  String get desktopChatsFilterUnread;
+
+  /// No description provided for @desktopChatsFilterGroups.
+  ///
+  /// In en, this message translates to:
+  /// **'Groups'**
+  String get desktopChatsFilterGroups;
+
+  /// No description provided for @desktopChatsFilterArchive.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive'**
+  String get desktopChatsFilterArchive;
+
+  /// No description provided for @desktopChatsFilterPersonal.
+  ///
+  /// In en, this message translates to:
+  /// **'Personal'**
+  String get desktopChatsFilterPersonal;
+
+  /// No description provided for @desktopChatsRenameFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename the folder'**
+  String get desktopChatsRenameFolder;
+
+  /// No description provided for @desktopChatsDeleteFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the folder'**
+  String get desktopChatsDeleteFolder;
+
+  /// No description provided for @desktopChatsRenameFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not rename: {error}'**
+  String desktopChatsRenameFailed(Object error);
+
+  /// No description provided for @desktopChatsDeleteFolderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the folder “{name}”?'**
+  String desktopChatsDeleteFolderTitle(Object name);
+
+  /// No description provided for @desktopChatsDeleteFolderBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The chats stay where they are — only the folder is deleted.'**
+  String get desktopChatsDeleteFolderBody;
+
+  /// No description provided for @desktopChatsDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete: {error}'**
+  String desktopChatsDeleteFailed(Object error);
+
+  /// No description provided for @desktopChatsAddedToFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Added to “{name}”'**
+  String desktopChatsAddedToFolder(Object name);
+
+  /// No description provided for @desktopChatsRemovedFromFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed from “{name}”'**
+  String desktopChatsRemovedFromFolder(Object name);
+
+  /// No description provided for @desktopChatsFolderChangeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not change the folder: {error}'**
+  String desktopChatsFolderChangeFailed(Object error);
+
+  /// No description provided for @desktopChatsFolderCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'The folder “{name}” was created'**
+  String desktopChatsFolderCreated(Object name);
+
+  /// No description provided for @desktopChatsFolderCreateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create the folder: {error}'**
+  String desktopChatsFolderCreateFailed(Object error);
+
+  /// No description provided for @desktopChatsNewFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'New folder'**
+  String get desktopChatsNewFolder;
+
+  /// No description provided for @desktopChatsFolderName.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder name'**
+  String get desktopChatsFolderName;
+
+  /// No description provided for @desktopChatsRemoveFromFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from “{name}”'**
+  String desktopChatsRemoveFromFolder(Object name);
+
+  /// No description provided for @desktopChatsAddToFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'To the folder “{name}”'**
+  String desktopChatsAddToFolder(Object name);
+
+  /// No description provided for @desktopChatsNewFolderWithChat.
+  ///
+  /// In en, this message translates to:
+  /// **'New folder with this chat…'**
+  String get desktopChatsNewFolderWithChat;
+
+  /// No description provided for @desktopChatsRemoveFromPersonal.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from personal'**
+  String get desktopChatsRemoveFromPersonal;
+
+  /// No description provided for @desktopChatsAddToPersonal.
+  ///
+  /// In en, this message translates to:
+  /// **'To personal'**
+  String get desktopChatsAddToPersonal;
+
+  /// No description provided for @desktopChatsArchiveEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'The archive is empty'**
+  String get desktopChatsArchiveEmpty;
+
+  /// No description provided for @desktopChatsNoPersonal.
+  ///
+  /// In en, this message translates to:
+  /// **'There are no personal chats'**
+  String get desktopChatsNoPersonal;
+
+  /// No description provided for @desktopChatsPersonalLocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Personal chats are password-protected'**
+  String get desktopChatsPersonalLocked;
+
+  /// No description provided for @desktopChatsAllRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything is read'**
+  String get desktopChatsAllRead;
+
+  /// No description provided for @desktopChatsFolderEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'This folder is empty for now'**
+  String get desktopChatsFolderEmpty;
+
+  /// No description provided for @desktopChatsNewChat.
+  ///
+  /// In en, this message translates to:
+  /// **'New chat'**
+  String get desktopChatsNewChat;
+
+  /// No description provided for @desktopChatsNewRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'New room'**
+  String get desktopChatsNewRoom;
+
+  /// No description provided for @desktopChatsStartFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start the chat: the profile is unavailable'**
+  String get desktopChatsStartFailed;
+
+  /// No description provided for @desktopChatsPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo'**
+  String get desktopChatsPhoto;
+
+  /// No description provided for @desktopChatsVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get desktopChatsVideo;
+
+  /// No description provided for @desktopChatsAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get desktopChatsAudio;
+
+  /// No description provided for @desktopChatsVoiceMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice message'**
+  String get desktopChatsVoiceMessage;
+
+  /// No description provided for @desktopChatsVoiceShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice'**
+  String get desktopChatsVoiceShort;
+
+  /// No description provided for @desktopChatsLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Link'**
+  String get desktopChatsLink;
+
+  /// No description provided for @desktopChatsSticker.
+  ///
+  /// In en, this message translates to:
+  /// **'Sticker'**
+  String get desktopChatsSticker;
+
+  /// No description provided for @desktopChatsStickerWith.
+  ///
+  /// In en, this message translates to:
+  /// **'Sticker {label}'**
+  String desktopChatsStickerWith(Object label);
+
+  /// No description provided for @desktopChatsPoll.
+  ///
+  /// In en, this message translates to:
+  /// **'📊 Poll: {question}'**
+  String desktopChatsPoll(Object question);
+
+  /// No description provided for @desktopChatsUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'unknown'**
+  String get desktopChatsUnknown;
+
+  /// No description provided for @desktopChatsMember.
+  ///
+  /// In en, this message translates to:
+  /// **'Member'**
+  String get desktopChatsMember;
+
+  /// No description provided for @desktopChatsSoundOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch the sound on'**
+  String get desktopChatsSoundOn;
+
+  /// No description provided for @desktopChatsSoundOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Muted'**
+  String get desktopChatsSoundOff;
+
+  /// No description provided for @desktopChatsClearHistoryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear the history?'**
+  String get desktopChatsClearHistoryTitle;
+
+  /// No description provided for @desktopChatsClearHistoryBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Every message of the chat “{title}” will be deleted on this device.'**
+  String desktopChatsClearHistoryBody(Object title);
+
+  /// No description provided for @desktopChatsClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get desktopChatsClear;
+
+  /// No description provided for @desktopChatsHistoryClearedBoth.
+  ///
+  /// In en, this message translates to:
+  /// **'The history was cleared for both'**
+  String get desktopChatsHistoryClearedBoth;
+
+  /// No description provided for @desktopChatsHistoryCleared.
+  ///
+  /// In en, this message translates to:
+  /// **'The history was cleared'**
+  String get desktopChatsHistoryCleared;
+
+  /// No description provided for @desktopChatsDeleteChatTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the chat?'**
+  String get desktopChatsDeleteChatTitle;
+
+  /// No description provided for @desktopChatsDeleteChatBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The chat “{title}” will be removed from this device entirely.'**
+  String desktopChatsDeleteChatBody(Object title);
+
+  /// No description provided for @desktopChatsRooms.
+  ///
+  /// In en, this message translates to:
+  /// **'Rooms'**
+  String get desktopChatsRooms;
+
+  /// No description provided for @desktopChatsGeneralTopic.
+  ///
+  /// In en, this message translates to:
+  /// **'General'**
+  String get desktopChatsGeneralTopic;
+
+  /// No description provided for @desktopChatsNewTopicEllipsis.
+  ///
+  /// In en, this message translates to:
+  /// **'New topic…'**
+  String get desktopChatsNewTopicEllipsis;
+
+  /// No description provided for @desktopChatsBranch.
+  ///
+  /// In en, this message translates to:
+  /// **'Branch “{title}”'**
+  String desktopChatsBranch(Object title);
+
+  /// No description provided for @desktopChatsRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get desktopChatsRename;
+
+  /// No description provided for @desktopChatsIcon.
+  ///
+  /// In en, this message translates to:
+  /// **'Icon'**
+  String get desktopChatsIcon;
+
+  /// No description provided for @desktopChatsDeleteBranch.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the branch'**
+  String get desktopChatsDeleteBranch;
+
+  /// No description provided for @desktopChatsBranchIcon.
+  ///
+  /// In en, this message translates to:
+  /// **'Branch icon'**
+  String get desktopChatsBranchIcon;
+
+  /// No description provided for @desktopChatsBranchIconHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The icon replaces the hash before the name. Coloured ones promise what is inside: green a call, red something urgent. The rest are grey so they do not argue with the name.'**
+  String get desktopChatsBranchIconHint;
+
+  /// No description provided for @desktopChatsHash.
+  ///
+  /// In en, this message translates to:
+  /// **'Hash'**
+  String get desktopChatsHash;
+
+  /// No description provided for @desktopChatsBranchFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not change the branches: {error}'**
+  String desktopChatsBranchFailed(Object error);
+
+  /// No description provided for @desktopChatsNewTopic.
+  ///
+  /// In en, this message translates to:
+  /// **'New topic'**
+  String get desktopChatsNewTopic;
+
+  /// No description provided for @desktopChatsRenameTopic.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename the topic'**
+  String get desktopChatsRenameTopic;
+
+  /// No description provided for @desktopChatsTopicName.
+  ///
+  /// In en, this message translates to:
+  /// **'Topic name'**
+  String get desktopChatsTopicName;
+
+  /// No description provided for @desktopChatsReactionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save the reaction: {error}'**
+  String desktopChatsReactionFailed(Object error);
+
+  /// No description provided for @desktopChatsReactionLocal.
+  ///
+  /// In en, this message translates to:
+  /// **'The reaction was applied locally but not delivered to the other person: {error}'**
+  String desktopChatsReactionLocal(Object error);
+
+  /// No description provided for @desktopChatsRevealFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not show the file in Finder'**
+  String get desktopChatsRevealFailed;
+
+  /// No description provided for @desktopChatsVideoOpenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the video: {error}'**
+  String desktopChatsVideoOpenFailed(Object error);
+
+  /// No description provided for @desktopChatsVideoUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The video is unavailable'**
+  String get desktopChatsVideoUnavailable;
+
+  /// No description provided for @desktopChatsFileFetchFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not fetch the file: {error}'**
+  String desktopChatsFileFetchFailed(Object error);
+
+  /// No description provided for @desktopChatsSaveAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Save the attachment'**
+  String get desktopChatsSaveAttachment;
+
+  /// No description provided for @desktopChatsFileUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is unavailable'**
+  String get desktopChatsFileUnavailable;
+
+  /// No description provided for @desktopChatsSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save: {error}'**
+  String desktopChatsSaveFailed(Object error);
+
+  /// No description provided for @desktopChatsOpenFailedWith.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the file: {error}'**
+  String desktopChatsOpenFailedWith(Object error);
+
+  /// No description provided for @desktopChatsOpenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the file'**
+  String get desktopChatsOpenFailed;
+
+  /// No description provided for @desktopChatsOpenFailedShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open: {error}'**
+  String desktopChatsOpenFailedShort(Object error);
+
+  /// No description provided for @desktopChatsPlayFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not play: {error}'**
+  String desktopChatsPlayFailed(Object error);
+
+  /// No description provided for @desktopChatsNoCallPeer.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not work out who to call.'**
+  String get desktopChatsNoCallPeer;
+
+  /// No description provided for @desktopChatsCallsNotReady.
+  ///
+  /// In en, this message translates to:
+  /// **'The call service is not ready.'**
+  String get desktopChatsCallsNotReady;
+
+  /// No description provided for @desktopChatsCallInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'A call is already under way.'**
+  String get desktopChatsCallInProgress;
+
+  /// No description provided for @desktopChatsEditFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not edit the message.'**
+  String get desktopChatsEditFailed;
+
+  /// No description provided for @desktopChatsNoRecipient.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not work out the recipient.'**
+  String get desktopChatsNoRecipient;
+
+  /// No description provided for @desktopChatsDeleteMessageTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the message?'**
+  String get desktopChatsDeleteMessageTitle;
+
+  /// No description provided for @desktopChatsDeleteMessagesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the selected messages?'**
+  String get desktopChatsDeleteMessagesTitle;
+
+  /// No description provided for @desktopChatsDeleteOthersHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Other people’s messages will be deleted only for you.'**
+  String get desktopChatsDeleteOthersHint;
+
+  /// No description provided for @desktopChatsDeleteForAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete for everyone'**
+  String get desktopChatsDeleteForAll;
+
+  /// No description provided for @desktopChatsDeleteForMeOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete only for me'**
+  String get desktopChatsDeleteForMeOnly;
+
+  /// No description provided for @desktopChatsDeleteForMe.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete for me'**
+  String get desktopChatsDeleteForMe;
+
+  /// No description provided for @desktopChatsSavePrivacyBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'This message cannot be saved because of privacy restrictions.'**
+  String get desktopChatsSavePrivacyBlocked;
+
+  /// No description provided for @desktopChatsNothingToSave.
+  ///
+  /// In en, this message translates to:
+  /// **'The attachment was not downloaded — there is nothing to save'**
+  String get desktopChatsNothingToSave;
+
+  /// No description provided for @desktopChatsSavedPartly.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to Favourites, but not all of it'**
+  String get desktopChatsSavedPartly;
+
+  /// No description provided for @desktopChatsSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to Favourites'**
+  String get desktopChatsSaved;
+
+  /// No description provided for @desktopChatsForwardPrivacyBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'This message cannot be forwarded because of privacy restrictions.'**
+  String get desktopChatsForwardPrivacyBlocked;
+
+  /// No description provided for @desktopChatsForwardFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not forward: {error}'**
+  String desktopChatsForwardFailed(Object error);
+
+  /// No description provided for @desktopChatsNothingToForward.
+  ///
+  /// In en, this message translates to:
+  /// **'The attachment was not downloaded — there is nothing to forward'**
+  String get desktopChatsNothingToForward;
+
+  /// No description provided for @desktopChatsForwardedPartly.
+  ///
+  /// In en, this message translates to:
+  /// **'Forwarded to “{title}”, but not all of it'**
+  String desktopChatsForwardedPartly(Object title);
+
+  /// No description provided for @desktopChatsForwarded.
+  ///
+  /// In en, this message translates to:
+  /// **'Forwarded to “{title}”'**
+  String desktopChatsForwarded(Object title);
+
+  /// No description provided for @desktopChatsFileNotSentElsewhere.
+  ///
+  /// In en, this message translates to:
+  /// **'The file was not sent to the other conversation: {text}'**
+  String desktopChatsFileNotSentElsewhere(Object text);
+
+  /// No description provided for @desktopChatsFileSendFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not send the file.'**
+  String get desktopChatsFileSendFailed;
+
+  /// No description provided for @desktopChatsPremiumFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'{text} With Premium you can send files of up to 1 GB.'**
+  String desktopChatsPremiumFiles(Object text);
+
+  /// No description provided for @desktopChatsTypingEllipsis.
+  ///
+  /// In en, this message translates to:
+  /// **'typing…'**
+  String get desktopChatsTypingEllipsis;
+
+  /// No description provided for @desktopChatsOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'online'**
+  String get desktopChatsOnline;
+
+  /// No description provided for @desktopChatsSomeoneTyping.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is typing'**
+  String desktopChatsSomeoneTyping(Object name);
+
+  /// No description provided for @desktopChatsLoadingList.
+  ///
+  /// In en, this message translates to:
+  /// **'Pulling the list from local storage.'**
+  String get desktopChatsLoadingList;
+
+  /// No description provided for @desktopChatsWillAppear.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages and calls will appear here as soon as you open a chat.'**
+  String get desktopChatsWillAppear;
+
+  /// No description provided for @desktopRoomNoOpenHere.
+  ///
+  /// In en, this message translates to:
+  /// **'A chat cannot be opened from here'**
+  String get desktopRoomNoOpenHere;
+
+  /// No description provided for @desktopRoomIdCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'The ID was copied'**
+  String get desktopRoomIdCopied;
+
+  /// No description provided for @desktopRoomAwaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Awaiting approval'**
+  String get desktopRoomAwaiting;
+
+  /// No description provided for @desktopRoomBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked'**
+  String get desktopRoomBlocked;
+
+  /// No description provided for @desktopRoomCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get desktopRoomCopied;
+
+  /// No description provided for @desktopRoomChangeRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Change the role'**
+  String get desktopRoomChangeRole;
+
+  /// No description provided for @desktopRoomTransfer.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer ownership'**
+  String get desktopRoomTransfer;
+
+  /// No description provided for @desktopRoomBlockMember.
+  ///
+  /// In en, this message translates to:
+  /// **'Block'**
+  String get desktopRoomBlockMember;
+
+  /// No description provided for @desktopRoomKick.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get desktopRoomKick;
+
+  /// No description provided for @desktopRoomKickTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the member?'**
+  String get desktopRoomKickTitle;
+
+  /// No description provided for @desktopRoomKickBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} will lose access to the room. A new invitation brings them back.'**
+  String desktopRoomKickBody(Object name);
+
+  /// No description provided for @desktopRoomBlockTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Block the member?'**
+  String get desktopRoomBlockTitle;
+
+  /// No description provided for @desktopRoomBlockBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} will not be able to come back to the room even with an invitation until the block is lifted.'**
+  String desktopRoomBlockBody(Object name);
+
+  /// No description provided for @desktopRoomTransferTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer ownership of the room?'**
+  String get desktopRoomTransferTitle;
+
+  /// No description provided for @desktopRoomTransferBody.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} becomes the owner and you become an administrator. Only the new owner can undo it.'**
+  String desktopRoomTransferBody(Object name);
+
+  /// No description provided for @desktopRoomTransferAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer'**
+  String get desktopRoomTransferAction;
+
+  /// No description provided for @desktopRoomClearTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear the history?'**
+  String get desktopRoomClearTitle;
+
+  /// No description provided for @desktopRoomClearBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Every message of the room will be deleted on this device.'**
+  String get desktopRoomClearBody;
+
+  /// No description provided for @desktopRoomLeaveTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave the room?'**
+  String get desktopRoomLeaveTitle;
+
+  /// No description provided for @desktopRoomLeaveBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You will stop receiving messages. Coming back needs a new invitation.'**
+  String get desktopRoomLeaveBody;
+
+  /// No description provided for @desktopRoomLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave'**
+  String get desktopRoomLeave;
+
+  /// No description provided for @desktopRoomInvite.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite'**
+  String get desktopRoomInvite;
+
+  /// No description provided for @desktopRoomCopyId.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the room ID'**
+  String get desktopRoomCopyId;
+
+  /// No description provided for @desktopRoomMuteOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch notifications off'**
+  String get desktopRoomMuteOff;
+
+  /// No description provided for @desktopRoomUnarchive.
+  ///
+  /// In en, this message translates to:
+  /// **'Bring back from the archive'**
+  String get desktopRoomUnarchive;
+
+  /// No description provided for @desktopRoomLeaveRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave the room'**
+  String get desktopRoomLeaveRoom;
+
+  /// No description provided for @desktopRoomUntitled.
+  ///
+  /// In en, this message translates to:
+  /// **'Untitled'**
+  String get desktopRoomUntitled;
+
+  /// No description provided for @desktopRoomCopyInvite.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the invitation'**
+  String get desktopRoomCopyInvite;
+
+  /// No description provided for @desktopRoomSound.
+  ///
+  /// In en, this message translates to:
+  /// **'Sound'**
+  String get desktopRoomSound;
+
+  /// No description provided for @desktopRoomTabInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Info'**
+  String get desktopRoomTabInfo;
+
+  /// No description provided for @desktopRoomTabMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'Members'**
+  String get desktopRoomTabMembers;
+
+  /// No description provided for @desktopRoomTabMedia.
+  ///
+  /// In en, this message translates to:
+  /// **'Media'**
+  String get desktopRoomTabMedia;
+
+  /// No description provided for @desktopRoomTopics.
+  ///
+  /// In en, this message translates to:
+  /// **'TOPICS'**
+  String get desktopRoomTopics;
+
+  /// No description provided for @desktopRoomTopicsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'TOPICS · {count}'**
+  String desktopRoomTopicsCount(Object count);
+
+  /// No description provided for @desktopRoomDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get desktopRoomDescription;
+
+  /// No description provided for @desktopRoomNotes.
+  ///
+  /// In en, this message translates to:
+  /// **'NOTES'**
+  String get desktopRoomNotes;
+
+  /// No description provided for @desktopRoomInformation.
+  ///
+  /// In en, this message translates to:
+  /// **'Information'**
+  String get desktopRoomInformation;
+
+  /// No description provided for @desktopRoomId.
+  ///
+  /// In en, this message translates to:
+  /// **'Room ID'**
+  String get desktopRoomId;
+
+  /// No description provided for @desktopRoomInviteLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Invitation link · click to copy'**
+  String get desktopRoomInviteLink;
+
+  /// No description provided for @desktopRoomFavouriteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'A tile on the rail and a place at the top of the list'**
+  String get desktopRoomFavouriteHint;
+
+  /// No description provided for @desktopRoomArchiveHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide the room from the main list'**
+  String get desktopRoomArchiveHint;
+
+  /// No description provided for @desktopRoomNoMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'No members'**
+  String get desktopRoomNoMembers;
+
+  /// No description provided for @desktopRoomMembersCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} member} other{{count} members}}'**
+  String desktopRoomMembersCount(int count);
+
+  /// No description provided for @desktopRoomNobodyFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Nobody found'**
+  String get desktopRoomNobodyFound;
+
+  /// No description provided for @desktopRoomMembersUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The member list is unavailable.'**
+  String get desktopRoomMembersUnavailable;
+
+  /// No description provided for @desktopRoomInCall.
+  ///
+  /// In en, this message translates to:
+  /// **'IN THE CALL'**
+  String get desktopRoomInCall;
+
+  /// No description provided for @desktopRoomOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'ONLINE'**
+  String get desktopRoomOnline;
+
+  /// No description provided for @desktopRoomOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'OFFLINE'**
+  String get desktopRoomOffline;
+
+  /// No description provided for @desktopRoomMoreHidden.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} more — use the search above'**
+  String desktopRoomMoreHidden(Object count);
+
+  /// No description provided for @desktopRoomSearchMember.
+  ///
+  /// In en, this message translates to:
+  /// **'Search for a member'**
+  String get desktopRoomSearchMember;
+
+  /// No description provided for @desktopRoomJoinRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'Join requests'**
+  String get desktopRoomJoinRequests;
+
+  /// No description provided for @desktopRoomAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept'**
+  String get desktopRoomAccept;
+
+  /// No description provided for @desktopRoomDecline.
+  ///
+  /// In en, this message translates to:
+  /// **'Decline'**
+  String get desktopRoomDecline;
+
+  /// No description provided for @desktopRoomRoleOwner.
+  ///
+  /// In en, this message translates to:
+  /// **'Owner'**
+  String get desktopRoomRoleOwner;
+
+  /// No description provided for @desktopRoomRoleAdmin.
+  ///
+  /// In en, this message translates to:
+  /// **'Administrator'**
+  String get desktopRoomRoleAdmin;
+
+  /// No description provided for @desktopRoomRoleModerator.
+  ///
+  /// In en, this message translates to:
+  /// **'Moderator'**
+  String get desktopRoomRoleModerator;
+
+  /// No description provided for @desktopRoomRoleRestricted.
+  ///
+  /// In en, this message translates to:
+  /// **'Restricted'**
+  String get desktopRoomRoleRestricted;
+
+  /// No description provided for @desktopRoomRoleGuest.
+  ///
+  /// In en, this message translates to:
+  /// **'Guest'**
+  String get desktopRoomRoleGuest;
+
+  /// No description provided for @desktopContactBlockTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Block?'**
+  String get desktopContactBlockTitle;
+
+  /// No description provided for @desktopContactUnblockTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Unblock?'**
+  String get desktopContactUnblockTitle;
+
+  /// No description provided for @desktopContactBlockBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This person will no longer be able to send you messages or call you.'**
+  String get desktopContactBlockBody;
+
+  /// No description provided for @desktopContactUnblockBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This person will be able to reach you again.'**
+  String get desktopContactUnblockBody;
+
+  /// No description provided for @desktopContactBlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Block'**
+  String get desktopContactBlock;
+
+  /// No description provided for @desktopContactCallsNotReady.
+  ///
+  /// In en, this message translates to:
+  /// **'The call service is not ready yet'**
+  String get desktopContactCallsNotReady;
+
+  /// No description provided for @desktopContactCallInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'A call is already under way'**
+  String get desktopContactCallInProgress;
+
+  /// No description provided for @desktopContactCallFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start the call: {error}'**
+  String desktopContactCallFailed(Object error);
+
+  /// No description provided for @desktopContactAutoDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic message deletion'**
+  String get desktopContactAutoDelete;
+
+  /// No description provided for @desktopContactAutoDeleteUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic deletion was updated'**
+  String get desktopContactAutoDeleteUpdated;
+
+  /// No description provided for @desktopContactClearBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Every message of this chat will be deleted on this device.'**
+  String get desktopContactClearBody;
+
+  /// No description provided for @desktopContactDeleteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The chat will be removed from this device entirely.'**
+  String get desktopContactDeleteBody;
+
+  /// No description provided for @desktopContactOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get desktopContactOff;
+
+  /// No description provided for @desktopContactDisable.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch off'**
+  String get desktopContactDisable;
+
+  /// No description provided for @desktopContactDay1.
+  ///
+  /// In en, this message translates to:
+  /// **'1 day'**
+  String get desktopContactDay1;
+
+  /// No description provided for @desktopContactDays7.
+  ///
+  /// In en, this message translates to:
+  /// **'7 days'**
+  String get desktopContactDays7;
+
+  /// No description provided for @desktopContactDays30.
+  ///
+  /// In en, this message translates to:
+  /// **'30 days'**
+  String get desktopContactDays30;
+
+  /// No description provided for @desktopContactHour1.
+  ///
+  /// In en, this message translates to:
+  /// **'1 hour'**
+  String get desktopContactHour1;
+
+  /// No description provided for @desktopContactMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} min'**
+  String desktopContactMinutes(Object value);
+
+  /// No description provided for @desktopContactOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'offline'**
+  String get desktopContactOffline;
+
+  /// No description provided for @desktopContactSeenAt.
+  ///
+  /// In en, this message translates to:
+  /// **'last seen at {time}'**
+  String desktopContactSeenAt(Object time);
+
+  /// No description provided for @desktopContactSeenYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'last seen yesterday'**
+  String get desktopContactSeenYesterday;
+
+  /// No description provided for @desktopContactSeenOn.
+  ///
+  /// In en, this message translates to:
+  /// **'last seen on {date}'**
+  String desktopContactSeenOn(Object date);
+
+  /// No description provided for @desktopContactCopyId.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the ID'**
+  String get desktopContactCopyId;
+
+  /// No description provided for @desktopContactCopyIdShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy ID'**
+  String get desktopContactCopyIdShort;
+
+  /// No description provided for @desktopContactDisappearing.
+  ///
+  /// In en, this message translates to:
+  /// **'Disappearing messages'**
+  String get desktopContactDisappearing;
+
+  /// No description provided for @desktopContactDeleteChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the chat'**
+  String get desktopContactDeleteChat;
+
+  /// No description provided for @desktopContactCall.
+  ///
+  /// In en, this message translates to:
+  /// **'Call'**
+  String get desktopContactCall;
+
+  /// No description provided for @desktopContactBlockShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Block'**
+  String get desktopContactBlockShort;
+
+  /// No description provided for @desktopContactSecurity.
+  ///
+  /// In en, this message translates to:
+  /// **'Security'**
+  String get desktopContactSecurity;
+
+  /// No description provided for @desktopContactVerify.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify the contact'**
+  String get desktopContactVerify;
+
+  /// No description provided for @desktopContactArchiveHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide the chat from the main list'**
+  String get desktopContactArchiveHint;
+
+  /// No description provided for @desktopThreadMessageHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Message…'**
+  String get desktopThreadMessageHint;
+
+  /// No description provided for @desktopThreadPasteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not paste the picture'**
+  String get desktopThreadPasteFailed;
+
+  /// No description provided for @desktopThreadNoScheduleEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'An edit cannot be scheduled — it changes something already sent'**
+  String get desktopThreadNoScheduleEdit;
+
+  /// No description provided for @desktopThreadWillLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'Will go out {when}'**
+  String desktopThreadWillLeave(Object when);
+
+  /// No description provided for @desktopThreadSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} s'**
+  String desktopThreadSeconds(Object value);
+
+  /// No description provided for @desktopThreadMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} min'**
+  String desktopThreadMinutes(Object value);
+
+  /// No description provided for @desktopThreadHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} h'**
+  String desktopThreadHours(Object value);
+
+  /// No description provided for @desktopThreadDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} d'**
+  String desktopThreadDays(Object value);
+
+  /// No description provided for @desktopThreadWeeks.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} w'**
+  String desktopThreadWeeks(Object value);
+
+  /// No description provided for @desktopThreadSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected: {count}'**
+  String desktopThreadSelected(Object count);
+
+  /// No description provided for @desktopThreadDisappearingOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Disappearing messages are on'**
+  String get desktopThreadDisappearingOn;
+
+  /// No description provided for @desktopThreadCallAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Call'**
+  String get desktopThreadCallAction;
+
+  /// No description provided for @desktopThreadCallRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'Group call'**
+  String get desktopThreadCallRoom;
+
+  /// No description provided for @desktopThreadVideoCall.
+  ///
+  /// In en, this message translates to:
+  /// **'Video call'**
+  String get desktopThreadVideoCall;
+
+  /// No description provided for @desktopThreadSearchShortcut.
+  ///
+  /// In en, this message translates to:
+  /// **'Search in the chat  Cmd F'**
+  String get desktopThreadSearchShortcut;
+
+  /// No description provided for @desktopThreadHideDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide the details'**
+  String get desktopThreadHideDetails;
+
+  /// No description provided for @desktopThreadShowDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Show the details'**
+  String get desktopThreadShowDetails;
+
+  /// No description provided for @desktopThreadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get desktopThreadMore;
+
+  /// No description provided for @desktopThreadPinned.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned message'**
+  String get desktopThreadPinned;
+
+  /// No description provided for @desktopThreadNoMatches.
+  ///
+  /// In en, this message translates to:
+  /// **'no matches'**
+  String get desktopThreadNoMatches;
+
+  /// No description provided for @desktopThreadSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search in the chat…'**
+  String get desktopThreadSearchHint;
+
+  /// No description provided for @desktopThreadPrevMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous (Shift F3)'**
+  String get desktopThreadPrevMatch;
+
+  /// No description provided for @desktopThreadNextMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Next (F3)'**
+  String get desktopThreadNextMatch;
+
+  /// No description provided for @desktopThreadCloseEsc.
+  ///
+  /// In en, this message translates to:
+  /// **'Close (Esc)'**
+  String get desktopThreadCloseEsc;
+
+  /// No description provided for @desktopThreadNewMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'New messages'**
+  String get desktopThreadNewMessages;
+
+  /// No description provided for @desktopThreadUnreadCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} unread} other{{count} unread}}'**
+  String desktopThreadUnreadCount(int count);
+
+  /// No description provided for @desktopThreadToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get desktopThreadToday;
+
+  /// No description provided for @desktopThreadYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday'**
+  String get desktopThreadYesterday;
+
+  /// No description provided for @desktopProfileEmojiStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Emoji status'**
+  String get desktopProfileEmojiStatus;
+
+  /// No description provided for @desktopProfileClearStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear the status'**
+  String get desktopProfileClearStatus;
+
+  /// No description provided for @desktopProfileApplyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not apply: {error}'**
+  String desktopProfileApplyFailed(Object error);
+
+  /// No description provided for @desktopProfileAvatarFrame.
+  ///
+  /// In en, this message translates to:
+  /// **'Avatar frame'**
+  String get desktopProfileAvatarFrame;
+
+  /// No description provided for @desktopProfileCover.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile cover'**
+  String get desktopProfileCover;
+
+  /// No description provided for @desktopProfileNoFrame.
+  ///
+  /// In en, this message translates to:
+  /// **'No frame'**
+  String get desktopProfileNoFrame;
+
+  /// No description provided for @desktopProfileNoCover.
+  ///
+  /// In en, this message translates to:
+  /// **'No cover'**
+  String get desktopProfileNoCover;
+
+  /// No description provided for @desktopProfileReadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the file'**
+  String get desktopProfileReadFailed;
+
+  /// No description provided for @desktopProfilePhotoUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'The profile photo was updated'**
+  String get desktopProfilePhotoUpdated;
+
+  /// No description provided for @desktopProfilePhotoFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not update the photo: {error}'**
+  String desktopProfilePhotoFailed(Object error);
+
+  /// No description provided for @desktopProfilePhotoRemoveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not remove the photo: {error}'**
+  String desktopProfilePhotoRemoveFailed(Object error);
+
+  /// No description provided for @desktopProfileMine.
+  ///
+  /// In en, this message translates to:
+  /// **'My profile'**
+  String get desktopProfileMine;
+
+  /// No description provided for @desktopProfileEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get desktopProfileEdit;
+
+  /// No description provided for @desktopProfileName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get desktopProfileName;
+
+  /// No description provided for @desktopProfileChangePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Change the photo'**
+  String get desktopProfileChangePhoto;
+
+  /// No description provided for @desktopProfileFrameShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Frame'**
+  String get desktopProfileFrameShort;
+
+  /// No description provided for @desktopProfileCoverShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Cover'**
+  String get desktopProfileCoverShort;
+
+  /// No description provided for @desktopProfileStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get desktopProfileStatus;
+
+  /// No description provided for @desktopProfileAppearanceHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme, accent and chat wallpaper'**
+  String get desktopProfileAppearanceHint;
+
+  /// No description provided for @desktopProfileAbout.
+  ///
+  /// In en, this message translates to:
+  /// **'About me'**
+  String get desktopProfileAbout;
+
+  /// No description provided for @desktopProfileEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Not filled in'**
+  String get desktopProfileEmpty;
+
+  /// No description provided for @desktopProfilePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile photo'**
+  String get desktopProfilePhoto;
+
+  /// No description provided for @desktopProfileReplacePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace the photo'**
+  String get desktopProfileReplacePhoto;
+
+  /// No description provided for @desktopProfilePickPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a photo'**
+  String get desktopProfilePickPhoto;
+
+  /// No description provided for @desktopProfilePickedHere.
+  ///
+  /// In en, this message translates to:
+  /// **'Chosen on this computer'**
+  String get desktopProfilePickedHere;
+
+  /// No description provided for @desktopProfileSyncedWithPhone.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced with the phone'**
+  String get desktopProfileSyncedWithPhone;
+
+  /// No description provided for @desktopProfileNotPicked.
+  ///
+  /// In en, this message translates to:
+  /// **'Not chosen'**
+  String get desktopProfileNotPicked;
+
+  /// No description provided for @desktopProfileRemovePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the photo'**
+  String get desktopProfileRemovePhoto;
+
+  /// No description provided for @desktopProfileInitialsStay.
+  ///
+  /// In en, this message translates to:
+  /// **'The initials remain'**
+  String get desktopProfileInitialsStay;
+
+  /// No description provided for @desktopProfileAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get desktopProfileAccount;
+
+  /// No description provided for @desktopProfileRecovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery'**
+  String get desktopProfileRecovery;
+
+  /// No description provided for @desktopProfileRecoveryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'This computer is linked to the phone and keeps no recovery phrase of its own: the backup and the recovery key bring the account back.'**
+  String get desktopProfileRecoveryHint;
+
+  /// No description provided for @desktopProfileDevicesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected computers and phones'**
+  String get desktopProfileDevicesHint;
+
+  /// No description provided for @desktopProfileFrameCaps.
+  ///
+  /// In en, this message translates to:
+  /// **'AVATAR FRAME'**
+  String get desktopProfileFrameCaps;
+
+  /// No description provided for @desktopGalleryMedia.
+  ///
+  /// In en, this message translates to:
+  /// **'Media'**
+  String get desktopGalleryMedia;
+
+  /// No description provided for @desktopGalleryFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get desktopGalleryFiles;
+
+  /// No description provided for @desktopGalleryLinks.
+  ///
+  /// In en, this message translates to:
+  /// **'Links'**
+  String get desktopGalleryLinks;
+
+  /// No description provided for @desktopGalleryNoMedia.
+  ///
+  /// In en, this message translates to:
+  /// **'No media'**
+  String get desktopGalleryNoMedia;
+
+  /// No description provided for @desktopGalleryNoFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'No files'**
+  String get desktopGalleryNoFiles;
+
+  /// No description provided for @desktopGalleryNoAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'No audio'**
+  String get desktopGalleryNoAudio;
+
+  /// No description provided for @desktopGalleryNoLinks.
+  ///
+  /// In en, this message translates to:
+  /// **'No links'**
+  String get desktopGalleryNoLinks;
+
+  /// No description provided for @desktopGalleryPathCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'The path was copied'**
+  String get desktopGalleryPathCopied;
+
+  /// No description provided for @desktopGalleryOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get desktopGalleryOpen;
+
+  /// No description provided for @desktopGalleryView.
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get desktopGalleryView;
+
+  /// No description provided for @desktopGalleryOpenInSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in the system'**
+  String get desktopGalleryOpenInSystem;
+
+  /// No description provided for @desktopGalleryRevealFinder.
+  ///
+  /// In en, this message translates to:
+  /// **'Show in Finder'**
+  String get desktopGalleryRevealFinder;
+
+  /// No description provided for @desktopGalleryRevealExplorer.
+  ///
+  /// In en, this message translates to:
+  /// **'Show in Explorer'**
+  String get desktopGalleryRevealExplorer;
+
+  /// No description provided for @desktopGalleryOpenFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the folder'**
+  String get desktopGalleryOpenFolder;
+
+  /// No description provided for @desktopGalleryCopyPath.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the path'**
+  String get desktopGalleryCopyPath;
+
+  /// No description provided for @desktopGalleryBytes.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} B'**
+  String desktopGalleryBytes(Object value);
+
+  /// No description provided for @desktopGalleryZeroBytes.
+  ///
+  /// In en, this message translates to:
+  /// **'0 B'**
+  String get desktopGalleryZeroBytes;
+
+  /// No description provided for @desktopOutgoingFolderSingle.
+  ///
+  /// In en, this message translates to:
+  /// **'the folder “{name}” cannot be sent'**
+  String desktopOutgoingFolderSingle(Object name);
+
+  /// No description provided for @desktopOutgoingFoldersMany.
+  ///
+  /// In en, this message translates to:
+  /// **'folders cannot be sent'**
+  String get desktopOutgoingFoldersMany;
+
+  /// No description provided for @desktopOutgoingTooLargeOne.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” is larger than {limit} MB'**
+  String desktopOutgoingTooLargeOne(Object name, Object limit);
+
+  /// No description provided for @desktopOutgoingTooLargeMany.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} file is larger than {limit} MB} other{{count} files are larger than {limit} MB}}'**
+  String desktopOutgoingTooLargeMany(int count, Object limit);
+
+  /// No description provided for @desktopOutgoingEmptyOne.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” is empty'**
+  String desktopOutgoingEmptyOne(Object name);
+
+  /// No description provided for @desktopOutgoingEmptyMany.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} file is empty} other{{count} files are empty}}'**
+  String desktopOutgoingEmptyMany(int count);
+
+  /// No description provided for @desktopOutgoingUnreadableOne.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” could not be read'**
+  String desktopOutgoingUnreadableOne(Object name);
+
+  /// No description provided for @desktopOutgoingUnreadableMany.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} file could not be read} other{{count} files could not be read}}'**
+  String desktopOutgoingUnreadableMany(int count);
+
+  /// No description provided for @desktopOutgoingSending.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending'**
+  String get desktopOutgoingSending;
+
+  /// No description provided for @desktopOutgoingPhotos.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} photos} other{{count} photos}}'**
+  String desktopOutgoingPhotos(int count);
+
+  /// No description provided for @desktopOutgoingVideos.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} videos} other{{count} videos}}'**
+  String desktopOutgoingVideos(int count);
+
+  /// No description provided for @desktopOutgoingMedia.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} media items'**
+  String desktopOutgoingMedia(Object count);
+
+  /// No description provided for @desktopOutgoingAudios.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} audio files} other{{count} audio files}}'**
+  String desktopOutgoingAudios(int count);
+
+  /// No description provided for @desktopOutgoingFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} files} other{{count} files}}'**
+  String desktopOutgoingFiles(int count);
+
+  /// No description provided for @desktopCallsPickOne.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a call on the left'**
+  String get desktopCallsPickOne;
+
+  /// No description provided for @desktopCallsPickHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The details and a call-back button will appear here'**
+  String get desktopCallsPickHint;
+
+  /// No description provided for @desktopCallsNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No calls yet'**
+  String get desktopCallsNone;
+
+  /// No description provided for @desktopCallsNoneHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The history appears after the first call'**
+  String get desktopCallsNoneHint;
+
+  /// No description provided for @desktopCallsOutgoing.
+  ///
+  /// In en, this message translates to:
+  /// **'Outgoing'**
+  String get desktopCallsOutgoing;
+
+  /// No description provided for @desktopCallsIncoming.
+  ///
+  /// In en, this message translates to:
+  /// **'Incoming'**
+  String get desktopCallsIncoming;
+
+  /// No description provided for @desktopCallsGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'group'**
+  String get desktopCallsGroup;
+
+  /// No description provided for @desktopCallsVideoKind.
+  ///
+  /// In en, this message translates to:
+  /// **'video'**
+  String get desktopCallsVideoKind;
+
+  /// No description provided for @desktopCallsAudioKind.
+  ///
+  /// In en, this message translates to:
+  /// **'audio'**
+  String get desktopCallsAudioKind;
+
+  /// No description provided for @desktopCallsMissed.
+  ///
+  /// In en, this message translates to:
+  /// **'missed'**
+  String get desktopCallsMissed;
+
+  /// No description provided for @desktopPhotoCopyFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not copy: {error}'**
+  String desktopPhotoCopyFailed(Object error);
+
+  /// No description provided for @desktopPhotoSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save the photo'**
+  String get desktopPhotoSave;
+
+  /// No description provided for @desktopPhotoSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved'**
+  String get desktopPhotoSaved;
+
+  /// No description provided for @desktopPhotoRevealFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not show in Finder: {error}'**
+  String desktopPhotoRevealFailed(Object error);
+
+  /// No description provided for @desktopPhotoLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load'**
+  String get desktopPhotoLoadFailed;
+
+  /// No description provided for @desktopPhotoZoomOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Zoom out'**
+  String get desktopPhotoZoomOut;
+
+  /// No description provided for @desktopPhotoZoomReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset the zoom'**
+  String get desktopPhotoZoomReset;
+
+  /// No description provided for @desktopPhotoZoomIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Zoom in'**
+  String get desktopPhotoZoomIn;
+
+  /// No description provided for @desktopPhotoCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get desktopPhotoCopy;
+
+  /// No description provided for @desktopBubbleForwardedFrom.
+  ///
+  /// In en, this message translates to:
+  /// **'Forwarded from {from}'**
+  String desktopBubbleForwardedFrom(Object from);
+
+  /// No description provided for @desktopBubbleAudioFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio file'**
+  String get desktopBubbleAudioFile;
+
+  /// No description provided for @desktopBubbleTranslating.
+  ///
+  /// In en, this message translates to:
+  /// **'Translating…'**
+  String get desktopBubbleTranslating;
+
+  /// No description provided for @desktopBubbleTranslation.
+  ///
+  /// In en, this message translates to:
+  /// **'TRANSLATION'**
+  String get desktopBubbleTranslation;
+
+  /// No description provided for @desktopBubbleEdited.
+  ///
+  /// In en, this message translates to:
+  /// **'edited'**
+  String get desktopBubbleEdited;
+
+  /// No description provided for @desktopBubbleMoreReactions.
+  ///
+  /// In en, this message translates to:
+  /// **'More reactions'**
+  String get desktopBubbleMoreReactions;
+
+  /// No description provided for @desktopBubbleRoleOwner.
+  ///
+  /// In en, this message translates to:
+  /// **'owner'**
+  String get desktopBubbleRoleOwner;
+
+  /// No description provided for @desktopBubbleRoleAdmin.
+  ///
+  /// In en, this message translates to:
+  /// **'admin'**
+  String get desktopBubbleRoleAdmin;
+
+  /// No description provided for @desktopBubbleRoleMod.
+  ///
+  /// In en, this message translates to:
+  /// **'mod'**
+  String get desktopBubbleRoleMod;
+
+  /// No description provided for @desktopBubbleSpeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback speed'**
+  String get desktopBubbleSpeed;
+
+  /// No description provided for @desktopSpotlightGoChats.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to chats'**
+  String get desktopSpotlightGoChats;
+
+  /// No description provided for @desktopSpotlightGoRooms.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to rooms'**
+  String get desktopSpotlightGoRooms;
+
+  /// No description provided for @desktopSpotlightGoContacts.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to contacts'**
+  String get desktopSpotlightGoContacts;
+
+  /// No description provided for @desktopSpotlightGoCalls.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to calls'**
+  String get desktopSpotlightGoCalls;
+
+  /// No description provided for @desktopSpotlightSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'select'**
+  String get desktopSpotlightSelect;
+
+  /// No description provided for @desktopSpotlightOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'open'**
+  String get desktopSpotlightOpen;
+
+  /// No description provided for @desktopSpotlightClose.
+  ///
+  /// In en, this message translates to:
+  /// **'close'**
+  String get desktopSpotlightClose;
+
+  /// No description provided for @desktopSpotlightRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'Room'**
+  String get desktopSpotlightRoom;
+
+  /// No description provided for @desktopSpotlightMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Message'**
+  String get desktopSpotlightMessage;
+
+  /// No description provided for @desktopSpotlightCommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Command'**
+  String get desktopSpotlightCommand;
+
+  /// No description provided for @desktopComposerCancelRec.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel the recording'**
+  String get desktopComposerCancelRec;
+
+  /// No description provided for @desktopComposerRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording  {time}'**
+  String desktopComposerRecording(Object time);
+
+  /// No description provided for @desktopComposerSendVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Send the voice message'**
+  String get desktopComposerSendVoice;
+
+  /// No description provided for @desktopComposerAttach.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach'**
+  String get desktopComposerAttach;
+
+  /// No description provided for @desktopComposerEmoji.
+  ///
+  /// In en, this message translates to:
+  /// **'Emoji and stickers'**
+  String get desktopComposerEmoji;
+
+  /// No description provided for @desktopComposerRecordVoice.
+  ///
+  /// In en, this message translates to:
+  /// **'Record a voice message'**
+  String get desktopComposerRecordVoice;
+
+  /// No description provided for @desktopComposerEnterSends.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter sends · Shift+Enter makes a new line'**
+  String get desktopComposerEnterSends;
+
+  /// No description provided for @desktopComposerEnterNewline.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter makes a new line · Shift+Enter sends'**
+  String get desktopComposerEnterNewline;
+
+  /// No description provided for @desktopComposerEditing.
+  ///
+  /// In en, this message translates to:
+  /// **'Editing'**
+  String get desktopComposerEditing;
+
+  /// No description provided for @desktopComposerReplyTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Reply · {name}'**
+  String desktopComposerReplyTo(Object name);
+
+  /// No description provided for @desktopComposerCancelAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get desktopComposerCancelAction;
+
+  /// No description provided for @desktopComposerSendHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Send · Enter\nRight click to send later'**
+  String get desktopComposerSendHint;
+
+  /// No description provided for @desktopComposerWriteFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Write a message first'**
+  String get desktopComposerWriteFirst;
+
+  /// No description provided for @desktopComposerToTopic.
+  ///
+  /// In en, this message translates to:
+  /// **'to the topic “{title}”'**
+  String desktopComposerToTopic(Object title);
+
+  /// No description provided for @desktopShortcutsNavigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Navigation'**
+  String get desktopShortcutsNavigation;
+
+  /// No description provided for @desktopShortcutsTabs.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats · Rooms · Calls · Contacts'**
+  String get desktopShortcutsTabs;
+
+  /// No description provided for @desktopShortcutsSearchAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Search chats and messages'**
+  String get desktopShortcutsSearchAll;
+
+  /// No description provided for @desktopShortcutsPrevNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous / next chat'**
+  String get desktopShortcutsPrevNext;
+
+  /// No description provided for @desktopShortcutsInChat.
+  ///
+  /// In en, this message translates to:
+  /// **'In a conversation'**
+  String get desktopShortcutsInChat;
+
+  /// No description provided for @desktopShortcutsFindHere.
+  ///
+  /// In en, this message translates to:
+  /// **'Find in this conversation'**
+  String get desktopShortcutsFindHere;
+
+  /// No description provided for @desktopShortcutsSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Send (configurable)'**
+  String get desktopShortcutsSend;
+
+  /// No description provided for @desktopShortcutsNewline.
+  ///
+  /// In en, this message translates to:
+  /// **'New line'**
+  String get desktopShortcutsNewline;
+
+  /// No description provided for @desktopShortcutsPaste.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste an image from the clipboard'**
+  String get desktopShortcutsPaste;
+
+  /// No description provided for @desktopShortcutsApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Application'**
+  String get desktopShortcutsApp;
+
+  /// No description provided for @desktopShortcutsThisHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'This help'**
+  String get desktopShortcutsThisHelp;
+
+  /// No description provided for @desktopShortcutsCloseWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Close the window or the search'**
+  String get desktopShortcutsCloseWindow;
+
+  /// No description provided for @desktopShortcutsTray.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimise to the tray'**
+  String get desktopShortcutsTray;
+
+  /// No description provided for @desktopShortcutsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard shortcuts'**
+  String get desktopShortcutsTitle;
+
+  /// No description provided for @desktopMediaCancelSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel the send'**
+  String get desktopMediaCancelSend;
+
+  /// No description provided for @desktopMediaSending.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending…'**
+  String get desktopMediaSending;
+
+  /// No description provided for @desktopMediaSendingOf.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending… · {total}'**
+  String desktopMediaSendingOf(Object total);
+
+  /// No description provided for @desktopMediaRetryDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry the download'**
+  String get desktopMediaRetryDownload;
+
+  /// No description provided for @desktopMediaImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get desktopMediaImage;
+
+  /// No description provided for @desktopMediaDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading… · {size}'**
+  String desktopMediaDownloading(Object size);
+
+  /// No description provided for @desktopMediaDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get desktopMediaDownload;
+
+  /// No description provided for @desktopSendAsMedia.
+  ///
+  /// In en, this message translates to:
+  /// **'Send as media'**
+  String get desktopSendAsMedia;
+
+  /// No description provided for @desktopSendAsFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Send as files'**
+  String get desktopSendAsFiles;
+
+  /// No description provided for @desktopSendUngroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Do not group'**
+  String get desktopSendUngroup;
+
+  /// No description provided for @desktopSendGroup.
+  ///
+  /// In en, this message translates to:
+  /// **'Group'**
+  String get desktopSendGroup;
+
+  /// No description provided for @desktopSendAddFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Add files…'**
+  String get desktopSendAddFiles;
+
+  /// No description provided for @desktopSendDropHere.
+  ///
+  /// In en, this message translates to:
+  /// **'Release to add'**
+  String get desktopSendDropHere;
+
+  /// No description provided for @desktopSendCloseEsc.
+  ///
+  /// In en, this message translates to:
+  /// **'Close · Esc'**
+  String get desktopSendCloseEsc;
+
+  /// No description provided for @desktopSendToDestination.
+  ///
+  /// In en, this message translates to:
+  /// **'to “{destination}”'**
+  String desktopSendToDestination(Object destination);
+
+  /// No description provided for @desktopSendCaptionHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a caption…'**
+  String get desktopSendCaptionHint;
+
+  /// No description provided for @desktopSendEmoji.
+  ///
+  /// In en, this message translates to:
+  /// **'Emoji'**
+  String get desktopSendEmoji;
+
+  /// No description provided for @desktopSendRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get desktopSendRemove;
+
+  /// No description provided for @desktopSendEnter.
+  ///
+  /// In en, this message translates to:
+  /// **'Send · Enter'**
+  String get desktopSendEnter;
+
+  /// No description provided for @desktopSendShiftEnter.
+  ///
+  /// In en, this message translates to:
+  /// **'Send · Shift+Enter'**
+  String get desktopSendShiftEnter;
+
+  /// No description provided for @desktopCallCtlMicOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn the microphone off   ⌘D'**
+  String get desktopCallCtlMicOff;
+
+  /// No description provided for @desktopCallCtlMicOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn the microphone on   ⌘D'**
+  String get desktopCallCtlMicOn;
+
+  /// No description provided for @desktopCallCtlCamOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn the camera off   ⌘E'**
+  String get desktopCallCtlCamOff;
+
+  /// No description provided for @desktopCallCtlCamOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn the camera on   ⌘E'**
+  String get desktopCallCtlCamOn;
+
+  /// No description provided for @desktopCallCtlShareStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop the screen share'**
+  String get desktopCallCtlShareStop;
+
+  /// No description provided for @desktopCallCtlShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen sharing'**
+  String get desktopCallCtlShare;
+
+  /// No description provided for @desktopCallCtlHandDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Lower the hand'**
+  String get desktopCallCtlHandDown;
+
+  /// No description provided for @desktopCallCtlHandUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Raise the hand'**
+  String get desktopCallCtlHandUp;
+
+  /// No description provided for @desktopCallCtlHangUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Hang up   ⌘W'**
+  String get desktopCallCtlHangUp;
+
+  /// No description provided for @desktopAbsenceDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} day} other{{count} days}}'**
+  String desktopAbsenceDays(int count);
+
+  /// No description provided for @desktopAbsencePastFanout.
+  ///
+  /// In en, this message translates to:
+  /// **'This computer has been out of touch for {days}. In that time senders stopped encrypting messages for it, and part of the history will not arrive here. It is intact on the phone — open the chats you need there and the recent history will follow.'**
+  String desktopAbsencePastFanout(Object days);
+
+  /// No description provided for @desktopAbsenceWithinWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'This computer has been out of touch for {days}. Messages are kept on the server for a week, so some of them may not have survived for it. On the phone they are intact.'**
+  String desktopAbsenceWithinWindow(Object days);
+
+  /// No description provided for @desktopAbsenceGotIt.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get desktopAbsenceGotIt;
+
+  /// No description provided for @desktopNavContacts.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts'**
+  String get desktopNavContacts;
+
+  /// No description provided for @desktopChatNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'The conversation was not found'**
+  String get desktopChatNotFound;
+
+  /// No description provided for @desktopUnreadTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Secretly — {count} unread'**
+  String desktopUnreadTitle(Object count);
+
+  /// No description provided for @desktopRoomsNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No rooms yet'**
+  String get desktopRoomsNone;
+
+  /// No description provided for @desktopRoomsNoneHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a room on the phone — it will appear here automatically'**
+  String get desktopRoomsNoneHint;
+
+  /// No description provided for @desktopRoomsPickOne.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a room on the left'**
+  String get desktopRoomsPickOne;
+
+  /// No description provided for @desktopScheduleTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Send later'**
+  String get desktopScheduleTitle;
+
+  /// No description provided for @desktopScheduleInHour.
+  ///
+  /// In en, this message translates to:
+  /// **'In an hour'**
+  String get desktopScheduleInHour;
+
+  /// No description provided for @desktopScheduleTonight.
+  ///
+  /// In en, this message translates to:
+  /// **'Today at 19:00'**
+  String get desktopScheduleTonight;
+
+  /// No description provided for @desktopScheduleTomorrow.
+  ///
+  /// In en, this message translates to:
+  /// **'Tomorrow at 9:00'**
+  String get desktopScheduleTomorrow;
+
+  /// No description provided for @desktopScheduleInWeek.
+  ///
+  /// In en, this message translates to:
+  /// **'In a week'**
+  String get desktopScheduleInWeek;
+
+  /// No description provided for @desktopScheduleTodayAt.
+  ///
+  /// In en, this message translates to:
+  /// **'today at {time}'**
+  String desktopScheduleTodayAt(Object time);
+
+  /// No description provided for @desktopScheduleTomorrowAt.
+  ///
+  /// In en, this message translates to:
+  /// **'tomorrow at {time}'**
+  String desktopScheduleTomorrowAt(Object time);
+
+  /// No description provided for @desktopScheduleOnAt.
+  ///
+  /// In en, this message translates to:
+  /// **'{date} at {time}'**
+  String desktopScheduleOnAt(Object date, Object time);
+
+  /// No description provided for @desktopScheduleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The message goes out on its own at the chosen time — even with the window closed it will be sent at the next start.'**
+  String get desktopScheduleHint;
+
+  /// No description provided for @desktopSchedulePickTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a time…'**
+  String get desktopSchedulePickTime;
+
+  /// No description provided for @desktopDevicesSearching.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking for devices…'**
+  String get desktopDevicesSearching;
+
+  /// No description provided for @desktopDevicesNoCameras.
+  ///
+  /// In en, this message translates to:
+  /// **'No cameras found. The application may not have been given access to them in the system settings.'**
+  String get desktopDevicesNoCameras;
+
+  /// No description provided for @desktopDevicesNoMics.
+  ///
+  /// In en, this message translates to:
+  /// **'No microphones found. The application may not have been given access to them in the system settings.'**
+  String get desktopDevicesNoMics;
+
+  /// No description provided for @desktopDevicesOutputHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Where the sound goes is chosen inside the call — by the chevron next to “Microphone”. That is also where the application switches to headphones on its own when they are plugged in.'**
+  String get desktopDevicesOutputHint;
+
+  /// No description provided for @desktopDevicesSystemDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'As chosen in the system'**
+  String get desktopDevicesSystemDefault;
+
+  /// No description provided for @desktopRailSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings   Cmd ,'**
+  String get desktopRailSettings;
+
+  /// No description provided for @desktopRailConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get desktopRailConnected;
+
+  /// No description provided for @desktopRailConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get desktopRailConnecting;
+
+  /// No description provided for @desktopRailOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'No connection'**
+  String get desktopRailOffline;
+
+  /// No description provided for @desktopRailProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile   Cmd P   ·   {status}'**
+  String desktopRailProfile(Object status);
+
+  /// No description provided for @desktopEmojiSmileys.
+  ///
+  /// In en, this message translates to:
+  /// **'Smileys and emotion'**
+  String get desktopEmojiSmileys;
+
+  /// No description provided for @desktopEmojiPeople.
+  ///
+  /// In en, this message translates to:
+  /// **'People and body'**
+  String get desktopEmojiPeople;
+
+  /// No description provided for @desktopEmojiNature.
+  ///
+  /// In en, this message translates to:
+  /// **'Nature'**
+  String get desktopEmojiNature;
+
+  /// No description provided for @desktopEmojiFood.
+  ///
+  /// In en, this message translates to:
+  /// **'Food and drink'**
+  String get desktopEmojiFood;
+
+  /// No description provided for @desktopEmojiTravel.
+  ///
+  /// In en, this message translates to:
+  /// **'Travel'**
+  String get desktopEmojiTravel;
+
+  /// No description provided for @desktopEmojiActivities.
+  ///
+  /// In en, this message translates to:
+  /// **'Activities'**
+  String get desktopEmojiActivities;
+
+  /// No description provided for @desktopEmojiObjects.
+  ///
+  /// In en, this message translates to:
+  /// **'Objects'**
+  String get desktopEmojiObjects;
+
+  /// No description provided for @desktopEmojiSymbols.
+  ///
+  /// In en, this message translates to:
+  /// **'Symbols'**
+  String get desktopEmojiSymbols;
+
+  /// No description provided for @desktopEmojiFlags.
+  ///
+  /// In en, this message translates to:
+  /// **'Flags'**
+  String get desktopEmojiFlags;
+
+  /// No description provided for @desktopEmojiOther.
+  ///
+  /// In en, this message translates to:
+  /// **'Other'**
+  String get desktopEmojiOther;
+
+  /// No description provided for @desktopLockedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Secretly is locked'**
+  String get desktopLockedTitle;
+
+  /// No description provided for @desktopLockedTouchIdPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm your identity with Touch ID to continue.'**
+  String get desktopLockedTouchIdPrompt;
+
+  /// No description provided for @desktopLockedPasswordPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm with your device password to continue.'**
+  String get desktopLockedPasswordPrompt;
+
+  /// No description provided for @desktopLockedUnlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock'**
+  String get desktopLockedUnlock;
+
+  /// No description provided for @desktopLockedWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for confirmation…'**
+  String get desktopLockedWaiting;
+
+  /// No description provided for @desktopLockedFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not confirm your identity.'**
+  String get desktopLockedFailed;
+
+  /// No description provided for @desktopLockedNoService.
+  ///
+  /// In en, this message translates to:
+  /// **'The identity service is unavailable on this computer. Restart Secretly or the computer. If that doesn\'t help, write to support from your phone.'**
+  String get desktopLockedNoService;
+
+  /// No description provided for @desktopEmojiTabEmoji.
+  ///
+  /// In en, this message translates to:
+  /// **'Emoji'**
+  String get desktopEmojiTabEmoji;
+
+  /// No description provided for @desktopEmojiTabStickers.
+  ///
+  /// In en, this message translates to:
+  /// **'Stickers'**
+  String get desktopEmojiTabStickers;
+
+  /// No description provided for @desktopEmojiRecents.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get desktopEmojiRecents;
+
+  /// No description provided for @desktopEmojiNothingFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing found'**
+  String get desktopEmojiNothingFound;
+
+  /// No description provided for @desktopEmojiSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search emoji'**
+  String get desktopEmojiSearchHint;
+
+  /// No description provided for @desktopStickersSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search stickers'**
+  String get desktopStickersSearchHint;
+
+  /// No description provided for @desktopGifSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search GIFs'**
+  String get desktopGifSearchHint;
+
+  /// No description provided for @desktopGifUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'GIFs aren\'t available in this window'**
+  String get desktopGifUnavailable;
+
+  /// No description provided for @desktopStickerPacksSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Sticker packs coming soon'**
+  String get desktopStickerPacksSoon;
+
+  /// No description provided for @desktopCallFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Full screen'**
+  String get desktopCallFullscreen;
+
+  /// No description provided for @desktopCallExitFullscreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Exit full screen'**
+  String get desktopCallExitFullscreen;
+
+  /// No description provided for @desktopCallDialing.
+  ///
+  /// In en, this message translates to:
+  /// **'Calling…'**
+  String get desktopCallDialing;
+
+  /// No description provided for @desktopCallEnded.
+  ///
+  /// In en, this message translates to:
+  /// **'Ended'**
+  String get desktopCallEnded;
+
+  /// No description provided for @desktopCallEncryptedFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted · {duration}'**
+  String desktopCallEncryptedFor(Object duration);
+
+  /// No description provided for @desktopCallReturn.
+  ///
+  /// In en, this message translates to:
+  /// **'Return'**
+  String get desktopCallReturn;
+
+  /// No description provided for @desktopCallInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Call in progress'**
+  String get desktopCallInProgress;
+
+  /// No description provided for @desktopCallInProgressWith.
+  ///
+  /// In en, this message translates to:
+  /// **'Call in progress · {title}'**
+  String desktopCallInProgressWith(Object title);
+
+  /// No description provided for @desktopCallAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Answer'**
+  String get desktopCallAnswer;
+
+  /// No description provided for @desktopCallAnswerVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Answer with video'**
+  String get desktopCallAnswerVideo;
+
+  /// No description provided for @desktopCallAnswerText.
+  ///
+  /// In en, this message translates to:
+  /// **'By text'**
+  String get desktopCallAnswerText;
+
+  /// No description provided for @desktopTimeYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'yesterday'**
+  String get desktopTimeYesterday;
+
+  /// No description provided for @desktopForwardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Forward to…'**
+  String get desktopForwardTitle;
+
+  /// No description provided for @desktopForwardSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search chats and rooms'**
+  String get desktopForwardSearchHint;
+
+  /// No description provided for @desktopForwardNoChats.
+  ///
+  /// In en, this message translates to:
+  /// **'No chats available'**
+  String get desktopForwardNoChats;
+
+  /// No description provided for @desktopForwardKindDirect.
+  ///
+  /// In en, this message translates to:
+  /// **'Direct chat'**
+  String get desktopForwardKindDirect;
+
+  /// No description provided for @desktopContactsSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search contacts'**
+  String get desktopContactsSearchHint;
+
+  /// No description provided for @desktopContactsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Contacts will appear after syncing.'**
+  String get desktopContactsEmpty;
+
+  /// No description provided for @desktopContactsNothingFor.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing found for “{query}”.'**
+  String desktopContactsNothingFor(Object query);
+
+  /// No description provided for @desktopContactsPick.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a contact'**
+  String get desktopContactsPick;
+
+  /// No description provided for @desktopContactsCardRight.
+  ///
+  /// In en, this message translates to:
+  /// **'The card will open on the right.'**
+  String get desktopContactsCardRight;
+
+  /// No description provided for @desktopContactsWrite.
+  ///
+  /// In en, this message translates to:
+  /// **'Send a message'**
+  String get desktopContactsWrite;
+
+  /// No description provided for @desktopVideoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get desktopVideoTitle;
+
+  /// No description provided for @desktopViewerCloseEsc.
+  ///
+  /// In en, this message translates to:
+  /// **'Close  Esc'**
+  String get desktopViewerCloseEsc;
+
+  /// No description provided for @desktopVideoPlayFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not play the video'**
+  String get desktopVideoPlayFailed;
+
+  /// No description provided for @desktopKeySpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Space'**
+  String get desktopKeySpace;
+
+  /// No description provided for @desktopWindowMinimize.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimise'**
+  String get desktopWindowMinimize;
+
+  /// No description provided for @desktopWindowMaximize.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximise'**
+  String get desktopWindowMaximize;
+
+  /// No description provided for @desktopWindowClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get desktopWindowClose;
+
+  /// No description provided for @desktopWindowBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get desktopWindowBack;
+
+  /// No description provided for @desktopWindowForward.
+  ///
+  /// In en, this message translates to:
+  /// **'Forward'**
+  String get desktopWindowForward;
+
+  /// No description provided for @desktopSearchEverything.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats, people, messages, files'**
+  String get desktopSearchEverything;
+
+  /// No description provided for @desktopUnitB.
+  ///
+  /// In en, this message translates to:
+  /// **'B'**
+  String get desktopUnitB;
+
+  /// No description provided for @desktopUnitKb.
+  ///
+  /// In en, this message translates to:
+  /// **'KB'**
+  String get desktopUnitKb;
+
+  /// No description provided for @desktopUnitMb.
+  ///
+  /// In en, this message translates to:
+  /// **'MB'**
+  String get desktopUnitMb;
+
+  /// No description provided for @desktopUnitGb.
+  ///
+  /// In en, this message translates to:
+  /// **'GB'**
+  String get desktopUnitGb;
+
+  /// No description provided for @desktopUnitTb.
+  ///
+  /// In en, this message translates to:
+  /// **'TB'**
+  String get desktopUnitTb;
+
+  /// No description provided for @desktopSyncDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced'**
+  String get desktopSyncDone;
+
+  /// No description provided for @desktopSyncSyncing.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing…'**
+  String get desktopSyncSyncing;
+
+  /// No description provided for @desktopSyncReconnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Reconnecting…'**
+  String get desktopSyncReconnecting;
+
+  /// No description provided for @desktopDetailsShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get desktopDetailsShare;
+
+  /// No description provided for @desktopDetailsHide.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide'**
+  String get desktopDetailsHide;
+
+  /// No description provided for @desktopDetailsMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get desktopDetailsMore;
+
+  /// No description provided for @desktopDetailsChangeCover.
+  ///
+  /// In en, this message translates to:
+  /// **'Change cover'**
+  String get desktopDetailsChangeCover;
+
+  /// No description provided for @desktopDetailsFrame.
+  ///
+  /// In en, this message translates to:
+  /// **'“{name}” frame'**
+  String desktopDetailsFrame(Object name);
+
+  /// No description provided for @desktopApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get desktopApply;
+
+  /// No description provided for @desktopAccentAppliesTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Buttons, selections and rings. The bubble keeps its own style — you pick that below.'**
+  String get desktopAccentAppliesTo;
+
+  /// No description provided for @desktopTranslateUnknownSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t detect the message language'**
+  String get desktopTranslateUnknownSource;
+
+  /// No description provided for @desktopTranslateUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'The system translator doesn\'t know this language pair'**
+  String get desktopTranslateUnsupported;
+
+  /// No description provided for @desktopTranslateNeedsDownload.
+  ///
+  /// In en, this message translates to:
+  /// **'The language isn’t downloaded. System Settings → General → Language & Region → Translation Languages'**
+  String get desktopTranslateNeedsDownload;
+
+  /// No description provided for @desktopTranslateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t translate'**
+  String get desktopTranslateFailed;
+
+  /// No description provided for @desktopNewChatSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Search contacts'**
+  String get desktopNewChatSearchHint;
+
+  /// No description provided for @desktopNewChatNoContacts.
+  ///
+  /// In en, this message translates to:
+  /// **'No contacts yet'**
+  String get desktopNewChatNoContacts;
+
+  /// No description provided for @desktopNewChatNobodyFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Nobody found'**
+  String get desktopNewChatNobodyFound;
+
+  /// No description provided for @desktopMentionEveryone.
+  ///
+  /// In en, this message translates to:
+  /// **'Everyone'**
+  String get desktopMentionEveryone;
+
+  /// No description provided for @desktopMentionAdmins.
+  ///
+  /// In en, this message translates to:
+  /// **'Admins'**
+  String get desktopMentionAdmins;
+
+  /// No description provided for @desktopMentionEveryoneHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Call everyone in the room'**
+  String get desktopMentionEveryoneHint;
+
+  /// No description provided for @desktopMentionAdminsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Call the owner and admins'**
+  String get desktopMentionAdminsHint;
+
+  /// No description provided for @desktopClearForPeer.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear the history on {name}’s side too'**
+  String desktopClearForPeer(Object name);
+
+  /// No description provided for @desktopClearForPeerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Messages will vanish on their device and on all of yours. This cannot be undone.'**
+  String get desktopClearForPeerHint;
+
+  /// No description provided for @desktopGifNoKey.
+  ///
+  /// In en, this message translates to:
+  /// **'GIFs unavailable: this build has no GIPHY key'**
+  String get desktopGifNoKey;
+
+  /// No description provided for @desktopGifConnectionLost.
+  ///
+  /// In en, this message translates to:
+  /// **'The connection dropped. Try again'**
+  String get desktopGifConnectionLost;
+
+  /// No description provided for @desktopNotesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'What to remember from this conversation…'**
+  String get desktopNotesHint;
+
+  /// No description provided for @desktopNotesPrivate.
+  ///
+  /// In en, this message translates to:
+  /// **'Visible only to you. It is never sent, never appears in the conversation and is not part of the backup — it lives on this computer, in the same encrypted database as the messages.'**
+  String get desktopNotesPrivate;
+
+  /// No description provided for @desktopEmojiSearchShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Search emoji…'**
+  String get desktopEmojiSearchShort;
+
+  /// No description provided for @desktopNotifOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get desktopNotifOpen;
+
+  /// No description provided for @desktopLinkPreviewLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Link preview…'**
+  String get desktopLinkPreviewLoading;
+
+  /// No description provided for @desktopLinkPreviewOff.
+  ///
+  /// In en, this message translates to:
+  /// **'No preview'**
+  String get desktopLinkPreviewOff;
+
+  /// No description provided for @desktopDropToSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Drop to send'**
+  String get desktopDropToSend;
+
+  /// No description provided for @desktopDropEncrypted.
+  ///
+  /// In en, this message translates to:
+  /// **'Files are encrypted before they are sent'**
+  String get desktopDropEncrypted;
+
+  /// No description provided for @desktopDetailsPickChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a chat'**
+  String get desktopDetailsPickChat;
+
+  /// No description provided for @desktopDetailsEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Details about the person or room\nwill appear here.'**
+  String get desktopDetailsEmptyHint;
+
+  /// No description provided for @desktopMemberWrite.
+  ///
+  /// In en, this message translates to:
+  /// **'Message'**
+  String get desktopMemberWrite;
+
+  /// No description provided for @desktopShowPanel.
+  ///
+  /// In en, this message translates to:
+  /// **'Show the panel'**
+  String get desktopShowPanel;
+
+  /// No description provided for @desktopHidePanel.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide the panel'**
+  String get desktopHidePanel;
+
+  /// No description provided for @desktopNotifOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are off'**
+  String get desktopNotifOff;
+
+  /// No description provided for @desktopSettingsSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Find a setting'**
+  String get desktopSettingsSearchHint;
+
+  /// No description provided for @desktopUnlockPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock Secretly'**
+  String get desktopUnlockPrompt;
+
+  /// No description provided for @desktopEnableLockPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm to turn on the Secretly lock'**
+  String get desktopEnableLockPrompt;
+
+  /// No description provided for @desktopRoomsNoneHintDot.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a room on your phone — it will show up here by itself.'**
+  String get desktopRoomsNoneHintDot;
+
+  /// No description provided for @desktopSplashLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading your profile…'**
+  String get desktopSplashLoading;
+
+  /// No description provided for @desktopOutgoingOnePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo'**
+  String get desktopOutgoingOnePhoto;
+
+  /// No description provided for @desktopOutgoingOneVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get desktopOutgoingOneVideo;
+
+  /// No description provided for @desktopOutgoingOneAudio.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio'**
+  String get desktopOutgoingOneAudio;
+
+  /// No description provided for @desktopOutgoingOneFile.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get desktopOutgoingOneFile;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

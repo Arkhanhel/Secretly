@@ -191,9 +191,11 @@ void main() {
 
     test('настройки открываются мини-окнами посередине', () {
       final view = read('lib/ui/desktop/chat/details/self_profile_view.dart');
+      // 19.09.2026: подписи уехали в переводы — проверяем ключи.
       for (final title in const <String>[
-        "title: 'Эмодзи-статус'",
-        "frame ? 'Рамка аватара' : 'Обложка профиля'",
+        'title: l10n.desktopProfileEmojiStatus',
+        'l10n.desktopProfileAvatarFrame',
+        'l10n.desktopProfileCover',
       ]) {
         expect(view.contains(title), isTrue, reason: 'нет окна: $title');
       }
@@ -311,7 +313,7 @@ void main() {
       final gallery = read(
         'lib/ui/desktop/chat/details/desktop_media_gallery.dart',
       );
-      expect(gallery.contains("_GalleryTab('Ссылки')"), isTrue);
+      expect(gallery.contains('_GalleryTab(l10n.desktopGalleryLinks)'), isTrue);
       expect(gallery.contains('_DesktopLinksList'), isTrue);
     });
 
@@ -321,7 +323,7 @@ void main() {
       final gallery = read(
         'lib/ui/desktop/chat/details/desktop_media_gallery.dart',
       );
-      expect(gallery.contains("_GalleryTab('Медиа')"), isTrue);
+      expect(gallery.contains('_GalleryTab(l10n.desktopGalleryMedia)'), isTrue);
       expect(gallery.contains("_GalleryTab('Фото')"), isFalse);
       expect(gallery.contains("_GalleryTab('Видео')"), isFalse);
       expect(gallery.contains('length: 4'), isTrue);
@@ -576,8 +578,15 @@ void main() {
             'поле слушалось настройки, а подпись под ним утверждала обратное '
             '— подпись, которая врёт про клавишу прямо над клавишей',
       );
-      expect(composer.contains("'Enter — перенос · Shift+Enter — отправить'"),
-          isTrue);
+      // 19.09.2026: обе подписи уехали в переводы — смотрим на ключ в коде
+      // и на сам текст в ARB, а не на литерал, которого больше нет.
+      expect(composer.contains('l10n.desktopComposerEnterNewline'), isTrue);
+      expect(
+        File('lib/l10n/app_ru.arb')
+            .readAsStringSync()
+            .contains('Enter — перенос · Shift+Enter — отправить'),
+        isTrue,
+      );
     });
   });
 

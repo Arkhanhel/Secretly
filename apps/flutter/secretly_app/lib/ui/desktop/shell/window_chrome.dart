@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -59,6 +60,7 @@ class DesktopWindowChrome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Container(
       height: height,
@@ -93,12 +95,12 @@ class DesktopWindowChrome extends StatelessWidget {
                 // [DesktopNavHistory]: они настоящие, а не нарисованные.
                 _NavArrow(
                   icon: FluentIcons.chevron_left_20_regular,
-                  tooltip: 'Назад',
+                  tooltip: l10n.desktopWindowBack,
                   onTap: navBack,
                 ),
                 _NavArrow(
                   icon: FluentIcons.chevron_right_20_regular,
-                  tooltip: 'Вперёд',
+                  tooltip: l10n.desktopWindowForward,
                   onTap: navForward,
                 ),
                 const SizedBox(width: DSpace.s),
@@ -160,20 +162,21 @@ class _WindowsControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Row(
       children: [
         DesktopIconButton(
           icon: Icons.remove_rounded,
           size: 40,
           iconSize: 16,
-          tooltip: 'Свернуть',
+          tooltip: l10n.desktopWindowMinimize,
           onPressed: () => windowManager.minimize(),
         ),
         DesktopIconButton(
           icon: Icons.crop_square_rounded,
           size: 40,
           iconSize: 14,
-          tooltip: 'Развернуть',
+          tooltip: l10n.desktopWindowMaximize,
           onPressed: () async {
             if (await windowManager.isMaximized()) {
               await windowManager.unmaximize();
@@ -186,7 +189,7 @@ class _WindowsControls extends StatelessWidget {
           icon: Icons.close_rounded,
           size: 40,
           iconSize: 16,
-          tooltip: 'Закрыть',
+          tooltip: l10n.desktopWindowClose,
           kind: DIconButtonKind.danger,
           onPressed: () => windowManager.close(),
         ),
@@ -305,7 +308,8 @@ class DesktopBreadcrumbs extends StatelessWidget {
 /// находил вовсе. Слова «Поиск по…» в начале нет намеренно — слева уже стоит
 /// лупа, и строка без них помещается в поле целиком, а не обрывается
 /// многоточием на середине перечисления.
-const String kDesktopSearchScopeLabel = 'Чаты, люди, сообщения, файлы';
+String desktopSearchScopeLabel(AppLocalizations l10n) =>
+    l10n.desktopSearchEverything;
 
 class WindowSearchEntry extends StatelessWidget {
   const WindowSearchEntry({super.key, required this.onTap, this.width = 320});
@@ -315,6 +319,7 @@ class WindowSearchEntry extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return HoverListener(
       onTap: onTap,
@@ -347,7 +352,7 @@ class WindowSearchEntry extends StatelessWidget {
             const SizedBox(width: 9),
             Expanded(
               child: Text(
-                kDesktopSearchScopeLabel,
+                desktopSearchScopeLabel(l10n),
                 overflow: TextOverflow.ellipsis,
                 style: DType.caption.copyWith(
                   fontSize: 12.5,

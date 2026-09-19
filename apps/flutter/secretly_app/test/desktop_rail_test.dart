@@ -12,6 +12,7 @@
 //
 // Поэтому проверка идёт от ДАННЫХ к тому, что видно, а не от наличия параметра.
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
@@ -24,6 +25,9 @@ Widget _host({
   ValueChanged<String>? onOpenSpace,
   String selfName = 'Юрий',
 }) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(
     body: DColors(
       colors: kDColorsDark,

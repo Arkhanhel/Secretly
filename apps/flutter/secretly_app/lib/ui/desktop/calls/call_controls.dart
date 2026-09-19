@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
@@ -44,6 +45,7 @@ class CallControls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final pad = compact ? const EdgeInsets.symmetric(horizontal: 8, vertical: 6)
                        : const EdgeInsets.symmetric(horizontal: 12, vertical: 10);
@@ -83,8 +85,8 @@ class CallControls extends StatelessWidget {
             on: FluentIcons.mic_24_filled,
             off: FluentIcons.mic_off_24_filled,
             isOn: micOn,
-            tooltipOn: 'Выключить микрофон   ⌘D',
-            tooltipOff: 'Включить микрофон   ⌘D',
+            tooltipOn: l10n.desktopCallCtlMicOff,
+            tooltipOff: l10n.desktopCallCtlMicOn,
             onTap: onToggleMic,
             dangerWhenOff: true,
           ),
@@ -93,8 +95,8 @@ class CallControls extends StatelessWidget {
             on: FluentIcons.video_24_filled,
             off: FluentIcons.video_off_24_filled,
             isOn: camOn,
-            tooltipOn: 'Выключить камеру   ⌘E',
-            tooltipOff: 'Включить камеру   ⌘E',
+            tooltipOn: l10n.desktopCallCtlCamOff,
+            tooltipOff: l10n.desktopCallCtlCamOn,
             onTap: onToggleCam,
             dangerWhenOff: true,
           ),
@@ -103,7 +105,7 @@ class CallControls extends StatelessWidget {
             icon: sharingScreen
                 ? FluentIcons.share_screen_stop_24_filled
                 : FluentIcons.share_screen_start_24_filled,
-            tooltip: sharingScreen ? 'Остановить демонстрацию' : 'Демонстрация экрана',
+            tooltip: sharingScreen ? l10n.desktopCallCtlShareStop : l10n.desktopCallCtlShare,
             size: size,
             highlighted: sharingScreen,
             onTap: onToggleScreenShare,
@@ -113,7 +115,7 @@ class CallControls extends StatelessWidget {
             icon: handRaised
                 ? FluentIcons.hand_right_24_filled
                 : FluentIcons.hand_right_24_regular,
-            tooltip: handRaised ? 'Опустить руку' : 'Поднять руку',
+            tooltip: handRaised ? l10n.desktopCallCtlHandDown : l10n.desktopCallCtlHandUp,
             size: size,
             highlighted: handRaised,
             onTap: onToggleHand,
@@ -122,21 +124,21 @@ class CallControls extends StatelessWidget {
             SizedBox(width: gap),
             _CallControlButton(
               icon: FluentIcons.chat_24_regular,
-              tooltip: 'Чат',
+              tooltip: l10n.contactDetailsChat,
               size: size,
               onTap: onOpenChat,
             ),
             SizedBox(width: gap),
             _CallControlButton(
               icon: FluentIcons.people_24_regular,
-              tooltip: 'Участники',
+              tooltip: l10n.desktopRoomTabMembers,
               size: size,
               onTap: onOpenParticipants,
             ),
             SizedBox(width: gap),
             _CallControlButton(
               icon: FluentIcons.more_horizontal_24_regular,
-              tooltip: 'Ещё',
+              tooltip: l10n.desktopThreadMore,
               size: size,
               onTap: onMore,
             ),
@@ -213,9 +215,10 @@ class _EndCallButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return DesktopTooltip(
-      message: 'Завершить   ⌘W',
+      message: l10n.desktopCallCtlHangUp,
       child: HoverListener(
         onTap: onTap,
         builder: (ctx, hovered, pressed) {

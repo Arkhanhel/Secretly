@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -165,12 +166,13 @@ class _WorkspaceLayoutState extends State<WorkspaceLayout> {
   /// Sidebar list: quiet group headings over the section rows, and an honest
   /// empty state when a search matches nothing.
   Widget _buildSectionList(DColorSet c) {
+    final l10n = AppLocalizations.of(context)!;
     final visible = _visibleIndices;
     if (visible.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(DSpace.l),
         child: Text(
-          'Ничего не найдено',
+          l10n.desktopListNothingFound,
           textAlign: TextAlign.center,
           style: DType.caption.copyWith(color: c.textSecondary),
         ),
@@ -229,6 +231,7 @@ class _WorkspaceLayoutState extends State<WorkspaceLayout> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Focus(
       autofocus: true,
@@ -277,7 +280,7 @@ class _WorkspaceLayoutState extends State<WorkspaceLayout> {
                     // «Найти настройку» из макета: глагол называет, что
                     // случится, а «Поиск настроек» — только раздел, в котором
                     // человек и так стоит.
-                    hintText: 'Найти настройку',
+                    hintText: l10n.desktopSettingsSearchHint,
                     prefixIcon: FluentIcons.search_24_regular,
                     suffixIcon: _query.isEmpty
                         ? null

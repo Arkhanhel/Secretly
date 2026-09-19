@@ -17,38 +17,48 @@
 // Признака «в теме идёт голос» из макета здесь нет намеренно: голос по темам
 // протокол не различает, рисовать его было бы не по чему.
 
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter/widgets.dart';
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/chat/chat_time_label.dart';
 import 'package:secretly_app/ui/desktop/chat/details/desktop_selection_store.dart';
 
+final _ru = lookupAppLocalizations(const Locale('ru'));
+
 void main() {
+  // Сокращения дней недели даёт `intl`. В приложении их готовит
+  // `GlobalMaterialLocalizations`, которого в чистом тесте нет, —
+  // поэтому здесь то же самое делается руками.
+  setUpAll(() => initializeDateFormatting('ru'));
+
   group('подпись времени', () {
     final now = DateTime(2026, 9, 15, 18, 30);
     int ms(DateTime d) => d.millisecondsSinceEpoch;
 
     test('сегодня — часы и минуты', () {
-      expect(desktopTimeLabel(ms(DateTime(2026, 9, 15, 14, 19)), now: now), '14:19');
-      expect(desktopTimeLabel(ms(DateTime(2026, 9, 15, 9, 5)), now: now), '09:05');
+      expect(desktopTimeLabel(ms(DateTime(2026, 9, 15, 14, 19)), _ru, now: now), '14:19');
+      expect(desktopTimeLabel(ms(DateTime(2026, 9, 15, 9, 5)), _ru, now: now), '09:05');
     });
 
     test('вчера — словом', () {
-      expect(desktopTimeLabel(ms(DateTime(2026, 9, 14, 23, 59)), now: now), 'вчера');
+      expect(desktopTimeLabel(ms(DateTime(2026, 9, 14, 23, 59)), _ru, now: now), 'вчера');
     });
 
     test('на этой неделе — день недели', () {
       // 11.09.2026 — пятница.
-      expect(desktopTimeLabel(ms(DateTime(2026, 9, 11, 12, 0)), now: now), 'пт');
+      expect(desktopTimeLabel(ms(DateTime(2026, 9, 11, 12, 0)), _ru, now: now), 'пт');
     });
 
     test('дальше недели — число и месяц', () {
-      expect(desktopTimeLabel(ms(DateTime(2026, 6, 30, 12, 0)), now: now), '30.06');
+      expect(desktopTimeLabel(ms(DateTime(2026, 6, 30, 12, 0)), _ru, now: now), '30.06');
     });
 
     test('нуля и отрицательного времени не бывает — подпись пуста', () {
-      expect(desktopTimeLabel(0, now: now), '');
-      expect(desktopTimeLabel(-1, now: now), '');
+      expect(desktopTimeLabel(0, _ru, now: now), '');
+      expect(desktopTimeLabel(-1, _ru, now: now), '');
     });
 
     test('подпись одна на весь десктоп', () {
@@ -57,9 +67,9 @@ void main() {
       final section = File(
         'lib/ui/desktop/app/desktop_chats_section.dart',
       ).readAsStringSync();
-      expect(section.contains('String _formatTime(int ms) => desktopTimeLabel(ms);'), isTrue);
+      expect(section.contains('desktopTimeLabel(ms, l10n)'), isTrue);
       expect(
-        section.contains("const wd = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];"),
+        section.contains("const wd = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']"),
         isFalse,
         reason: 'второй копии лестницы условий быть не должно',
       );
@@ -152,7 +162,7 @@ void main() {
 
     test('не знаем времени — справа пусто, а не «давно»', () {
       expect(src.contains('final int? lastActivityMs;'), isTrue);
-      expect(src.contains('desktopTimeLabel(lastActivityMs ?? 0)'), isTrue);
+      expect(src.contains('desktopTimeLabel(lastActivityMs ?? 0, l10n)'), isTrue);
     });
 
     test('признака голоса нет: протокол его не различает', () {

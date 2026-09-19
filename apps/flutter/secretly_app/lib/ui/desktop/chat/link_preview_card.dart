@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -238,6 +239,7 @@ class DesktopLinkPreviewDraftBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return ListenableBuilder(
       listenable: draft,
       builder: (context, _) {
@@ -290,7 +292,7 @@ class DesktopLinkPreviewDraftBar extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      preview?.siteName ?? 'Превью ссылки…',
+                      preview?.siteName ?? l10n.desktopLinkPreviewLoading,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: DType.caption.copyWith(
@@ -339,7 +341,7 @@ class DesktopLinkPreviewDraftBar extends StatelessWidget {
               const SizedBox(width: 9),
               DesktopIconButton(
                 icon: FluentIcons.dismiss_24_regular,
-                tooltip: 'Без превью',
+                tooltip: l10n.desktopLinkPreviewOff,
                 size: 26,
                 iconSize: 16,
                 radius: DRadii.r8,

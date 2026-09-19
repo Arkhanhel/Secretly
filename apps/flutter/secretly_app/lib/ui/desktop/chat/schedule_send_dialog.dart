@@ -20,6 +20,7 @@
 /// варианты в списке не показываются, а из календаря не возвращаются.
 library;
 
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
@@ -35,7 +36,7 @@ Future<DateTime?> showScheduleSendDialog(
   final base = now ?? DateTime.now();
   return DesktopDialog.show<DateTime>(
     context,
-    title: 'Отправить позже',
+    title: AppLocalizations.of(context)!.desktopScheduleTitle,
     size: DDialogSize.small,
     body: _ScheduleBody(now: base),
   );
@@ -45,24 +46,27 @@ Future<DateTime?> showScheduleSendDialog(
 ///
 /// Отдельной функцией — чтобы их можно было проверить без окна: именно здесь
 /// живёт правило «в прошлое не предлагаем».
-List<({String label, DateTime at})> scheduleSendPresets(DateTime now) {
+List<({String label, DateTime at})> scheduleSendPresets(
+  DateTime now,
+  AppLocalizations l10n,
+) {
   final out = <({String label, DateTime at})>[];
-  out.add((label: 'Через час', at: now.add(const Duration(hours: 1))));
+  out.add((label: l10n.desktopScheduleInHour, at: now.add(const Duration(hours: 1))));
 
   final tonight = DateTime(now.year, now.month, now.day, 19);
   if (tonight.isAfter(now)) {
-    out.add((label: 'Сегодня в 19:00', at: tonight));
+    out.add((label: l10n.desktopScheduleTonight, at: tonight));
   }
 
   final tomorrow = now.add(const Duration(days: 1));
   out.add((
-    label: 'Завтра в 9:00',
+    label: l10n.desktopScheduleTomorrow,
     at: DateTime(tomorrow.year, tomorrow.month, tomorrow.day, 9),
   ));
 
   final inWeek = now.add(const Duration(days: 7));
   out.add((
-    label: 'Через неделю',
+    label: l10n.desktopScheduleInWeek,
     at: DateTime(inWeek.year, inWeek.month, inWeek.day, now.hour, now.minute),
   ));
 
@@ -72,16 +76,20 @@ List<({String label, DateTime at})> scheduleSendPresets(DateTime now) {
 }
 
 /// Подпись момента: «завтра в 9:00», «17.09 в 19:00».
-String formatScheduleMoment(DateTime at, {DateTime? now}) {
+String formatScheduleMoment(
+  DateTime at,
+  AppLocalizations l10n, {
+  DateTime? now,
+}) {
   final base = now ?? DateTime.now();
   String two(int v) => v.toString().padLeft(2, '0');
   final time = '${two(at.hour)}:${two(at.minute)}';
   final today = DateTime(base.year, base.month, base.day);
   final day = DateTime(at.year, at.month, at.day);
   final diff = day.difference(today).inDays;
-  if (diff == 0) return 'сегодня в $time';
-  if (diff == 1) return 'завтра в $time';
-  return '${two(at.day)}.${two(at.month)} в $time';
+  if (diff == 0) return l10n.desktopScheduleTodayAt(time);
+  if (diff == 1) return l10n.desktopScheduleTomorrowAt(time);
+  return l10n.desktopScheduleOnAt('${two(at.day)}.${two(at.month)}', time);
 }
 
 class _ScheduleBody extends StatelessWidget {
@@ -117,15 +125,15 @@ class _ScheduleBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
-    final presets = scheduleSendPresets(now);
+    final presets = scheduleSendPresets(now, l10n);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Сообщение уйдёт само в выбранное время — даже если окно будет '
-          'закрыто, оно отправится при следующем запуске.',
+          l10n.desktopScheduleHint,
           style: DType.caption.copyWith(color: c.textSecondary),
         ),
         const SizedBox(height: DSpace.m),
@@ -133,13 +141,13 @@ class _ScheduleBody extends StatelessWidget {
           _Row(
             icon: FluentIcons.clock_24_regular,
             label: preset.label,
-            hint: formatScheduleMoment(preset.at, now: now),
+            hint: formatScheduleMoment(preset.at, l10n, now: now),
             onTap: () => Navigator.of(context).maybePop(preset.at),
           ),
         const SizedBox(height: DSpace.xs),
         _Row(
           icon: FluentIcons.calendar_ltr_24_regular,
-          label: 'Выбрать время…',
+          label: l10n.desktopSchedulePickTime,
           onTap: () => _pickCustom(context),
         ),
       ],

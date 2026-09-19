@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
@@ -31,6 +32,7 @@ class DetailsHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final menuKey = GlobalKey();
     return Container(
@@ -43,7 +45,7 @@ class DetailsHeader extends StatelessWidget {
         children: [
           DesktopIconButton(
             icon: FluentIcons.dismiss_24_regular,
-            tooltip: 'Скрыть',
+            tooltip: l10n.desktopDetailsHide,
             onPressed: onClose,
           ),
           const SizedBox(width: DSpace.xs),
@@ -73,7 +75,7 @@ class DetailsHeader extends StatelessWidget {
               key: menuKey,
               child: DesktopIconButton(
                 icon: FluentIcons.more_vertical_24_regular,
-                tooltip: 'Дополнительно',
+                tooltip: l10n.desktopDetailsMore,
                 onPressed: () => _openMenu(context, menuKey),
               ),
             ),

@@ -14,6 +14,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -184,6 +185,9 @@ void main() {
     });
 
     Widget host(MessageData m) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: DColors(
         colors: kDColorsDark,
         child: Scaffold(
@@ -322,6 +326,9 @@ void main() {
       final sent = <DesktopComposerSubmission>[];
       await t.pumpWidget(
         MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
           home: DColors(
             colors: kDColorsDark,
             child: Scaffold(
@@ -396,6 +403,9 @@ void main() {
       final sent = <DesktopComposerSubmission>[];
       await t.pumpWidget(
         MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
           home: DColors(
             colors: kDColorsDark,
             child: Scaffold(

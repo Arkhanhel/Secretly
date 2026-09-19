@@ -25,6 +25,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/storage/app_db.dart';
@@ -199,7 +200,7 @@ void main() {
         'lib/ui/desktop/chat/details/room_details_view.dart',
       ).readAsStringSync();
       expect(src.contains('RoomNotesPane('), isTrue);
-      expect(src.contains("title: 'ЗАМЕТКИ'"), isTrue);
+      expect(src.contains('title: l10n.desktopRoomNotes'), isTrue);
     });
 
     test('🔴 панель не тянется в общий код напрямую', () {
@@ -219,10 +220,14 @@ void main() {
       final src = File(
         'lib/ui/desktop/chat/details/room_notes_pane.dart',
       ).readAsStringSync();
-      expect(src.contains('Видно только вам'), isTrue);
-      expect(src.contains('Не отправляется, не попадает в переписку'), isTrue);
+      expect(src.contains('l10n.desktopNotesPrivate'), isTrue);
+      // 19.09.2026: сам текст уехал в переводы, и проверяем его там —
+      // иначе правило охраняло бы наличие строки, а не её смысл.
+      final ru = File('lib/l10n/app_ru.arb').readAsStringSync();
+      expect(ru.contains('Видно только вам'), isTrue);
+      expect(ru.contains('Не отправляется, не попадает в переписку'), isTrue);
       // И про резервную копию — тоже правда, а не умолчание.
-      expect(src.contains('не входит в резервную копию'), isTrue);
+      expect(ru.contains('не входит в резервную копию'), isTrue);
     });
 
     test('🔴 последняя фраза дописывается при закрытии окна', () {
@@ -244,6 +249,9 @@ void main() {
       required Future<void> Function(String, String) save,
       bool expand = false,
     }) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: DColors(
         colors: kDColorsDark,
         child: Scaffold(
@@ -320,7 +328,10 @@ void main() {
 
       // Окно созвона закрывается вместе с разговором — снимаем панель до
       // того, как выйдет пауза набора.
-      await t.pumpWidget(const MaterialApp(home: SizedBox()));
+      await t.pumpWidget(MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,home: SizedBox()));
       await t.pumpAndSettle();
       expect(writes, ['room-1:успеть']);
     });

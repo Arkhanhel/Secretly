@@ -10,6 +10,8 @@
 // значка, ни уведомления; человек, которого позвали с компьютера, об этом не
 // узнавал.
 
+import 'package:flutter/widgets.dart';
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -20,6 +22,8 @@ import 'package:secretly_app/ui/desktop/chat/desktop_mentions.dart';
   String name, {
   String? role,
 }) => (profileId: id, displayName: name, avatarPath: null, role: role);
+
+final _ru = lookupAppLocalizations(const Locale('ru'));
 
 void main() {
   group('ярлык', () {
@@ -56,6 +60,7 @@ void main() {
   group('кого можно позвать', () {
     test('«все» впереди, себя в списке нет', () {
       final t = desktopMentionTargets(
+      l10n: _ru,
         members: [m('me', 'Я'), m('p1', 'Игорь')],
         selfProfileId: 'me',
       );
@@ -67,6 +72,7 @@ void main() {
     test('🔴 два одинаковых имени разводятся суффиксом', () {
       // Иначе один ярлык на двоих, и разметка встала бы не на того.
       final t = desktopMentionTargets(
+      l10n: _ru,
         members: [m('p1', 'Игорь'), m('p2', 'Игорь')],
         selfProfileId: 'me',
       );
@@ -76,6 +82,7 @@ void main() {
 
     test('без имени ярлык берётся от идентификатора', () {
       final t = desktopMentionTargets(
+      l10n: _ru,
         members: [m('6R2K', '')],
         selfProfileId: 'me',
       );
@@ -83,9 +90,14 @@ void main() {
     });
 
     test('«админы» — только там, где они есть', () {
-      final without = desktopMentionTargets(members: [], selfProfileId: 'me');
+      final without = desktopMentionTargets(
+        l10n: _ru,
+        members: [],
+        selfProfileId: 'me',
+      );
       expect(without.any((x) => x.token == '@admins'), isFalse);
       final with_ = desktopMentionTargets(
+      l10n: _ru,
         members: [],
         selfProfileId: 'me',
         withAdmins: true,
@@ -128,6 +140,7 @@ void main() {
 
   group('отбор по набранному', () {
     final targets = desktopMentionTargets(
+      l10n: _ru,
       members: [m('p1', 'Игорь'), m('p2', 'Сергей Игоревич'), m('p3', 'Анна')],
       selfProfileId: 'me',
     );
@@ -146,6 +159,7 @@ void main() {
 
   group('разметка на отправку', () {
     final targets = desktopMentionTargets(
+      l10n: _ru,
       members: [m('p1', 'Игорь')],
       selfProfileId: 'me',
     );

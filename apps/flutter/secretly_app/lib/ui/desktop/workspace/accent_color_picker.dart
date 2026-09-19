@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 import '../design/theme_bridge.dart';
@@ -27,9 +28,10 @@ Future<int?> showAccentColorPicker(
   // Живое значение держим здесь: кнопки диалога собираются один раз, до
   // первого движения по полю, и до состояния тела им иначе не дотянуться.
   var picked = legibleAccent(initial, dark: dark);
+  final l10n = AppLocalizations.of(context)!;
   return DesktopDialog.show<int>(
     context,
-    title: 'Свой цвет',
+    title: l10n.desktopAccentCustom,
     size: DDialogSize.small,
     body: _AccentPickerBody(
       initial: picked,
@@ -37,12 +39,12 @@ Future<int?> showAccentColorPicker(
       onChanged: (v) => picked = v,
     ),
     secondary: DDialogAction(
-      label: 'Отмена',
+      label: l10n.cancel,
       kind: DButtonKind.ghost,
       onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
     ),
     primary: DDialogAction(
-      label: 'Применить',
+      label: l10n.desktopApply,
       onPressed: () => Navigator.of(
         context,
         rootNavigator: true,
@@ -89,6 +91,7 @@ class _AccentPickerBodyState extends State<_AccentPickerBody> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final band = accentValueBand(dark: widget.dark);
     final alt = desktopAccentAlt(_color);
@@ -139,8 +142,7 @@ class _AccentPickerBodyState extends State<_AccentPickerBody> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Кнопки, выделения и кольца. Пузырь остаётся на своём '
-                    'стиле — он выбирается ниже.',
+                    l10n.desktopAccentAppliesTo,
                     style: DType.caption.copyWith(
                       color: c.textTertiary,
                       height: 1.35,

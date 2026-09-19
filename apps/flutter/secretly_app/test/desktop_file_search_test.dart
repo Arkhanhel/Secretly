@@ -13,6 +13,8 @@
 // обычного: лишнее совпадение заставит расшифровать и показать не то, а
 // пропущенное сделает вид, что файла в переписке нет.
 
+import 'package:flutter/widgets.dart';
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -37,6 +39,8 @@ AttachmentEventV1 att({
   musicTitle: musicTitle,
   musicArtist: musicArtist,
 );
+
+final _ru = lookupAppLocalizations(const Locale('ru'));
 
 void main() {
   group('имя вложения', () {
@@ -118,22 +122,22 @@ void main() {
 
   group('подпись под именем', () {
     test('тип берётся из расширения, а без него — из mime', () {
-      expect(attachmentMetaLine(att(filename: 'a.pdf', sizeBytes: 2048)), 'PDF · 2.0 КБ');
-      expect(attachmentMetaLine(att(mime: 'image/png', sizeBytes: 500)), 'PNG · 500 Б');
+      expect(attachmentMetaLine(att(filename: 'a.pdf', sizeBytes: 2048), _ru), 'PDF · 2.0 КБ');
+      expect(attachmentMetaLine(att(mime: 'image/png', sizeBytes: 500), _ru), 'PNG · 500 Б');
       // Тот же формат, что под кадром в ленте: размер считает одна функция.
     });
 
     test('размер округляется по ступеням', () {
-      expect(formatAttachmentSize(0), '');
-      expect(formatAttachmentSize(999), '999 Б');
-      expect(formatAttachmentSize(1024 * 1024 * 3), '3.0 МБ');
-      expect(formatAttachmentSize(1024 * 1024 * 1024 * 2), '2.0 ГБ');
+      expect(formatAttachmentSize(0, _ru), '');
+      expect(formatAttachmentSize(999, _ru), '999 Б');
+      expect(formatAttachmentSize(1024 * 1024 * 3, _ru), '3.0 МБ');
+      expect(formatAttachmentSize(1024 * 1024 * 1024 * 2, _ru), '2.0 ГБ');
     });
 
     test('файл без имени и без типа показывает только размер', () {
-      expect(attachmentMetaLine(att(sizeBytes: 100)), '100 Б');
+      expect(attachmentMetaLine(att(sizeBytes: 100), _ru), '100 Б');
       // Размер неизвестен — строка не врёт нулём, а ставит прочерк.
-      expect(attachmentMetaLine(att(sizeBytes: 0)), '—');
+      expect(attachmentMetaLine(att(sizeBytes: 0), _ru), '—');
     });
   });
 }

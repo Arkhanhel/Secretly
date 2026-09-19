@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -165,6 +166,7 @@ class _DesktopContactsSectionState extends State<DesktopContactsSection> {
   }
 
   Widget _listColumn(DColorSet c, List<Contact> filtered) {
+    final l10n = AppLocalizations.of(context)!;
     final api = widget.shellApi;
     if (api != null && api.listCompact) return _compactColumn(c, api);
     return Container(
@@ -175,7 +177,7 @@ class _DesktopContactsSectionState extends State<DesktopContactsSection> {
             padding: const EdgeInsets.all(DSpace.m),
             child: DesktopTextField(
               controller: _searchCtrl,
-              hintText: 'Поиск контактов',
+              hintText: l10n.desktopContactsSearchHint,
               prefixIcon: FluentIcons.search_24_regular,
               onChanged: (v) => setState(() => _query = v),
             ),
@@ -218,6 +220,7 @@ class _DesktopContactsSectionState extends State<DesktopContactsSection> {
   /// Столбик портретов — как свёрнутый список чатов. Поиска в нём нет —
   /// значит, и фильтр по слову не действует: лупа разворачивает колонку.
   Widget _compactColumn(DColorSet c, DesktopShellApi api) {
+    final l10n = AppLocalizations.of(context)!;
     final expand = api.onListExpand;
     return Container(
       color: c.chatList,
@@ -234,7 +237,7 @@ class _DesktopContactsSectionState extends State<DesktopContactsSection> {
                     )
                   : DesktopIconButton(
                       icon: FluentIcons.search_24_regular,
-                      tooltip: 'Поиск контактов',
+                      tooltip: l10n.desktopContactsSearchHint,
                       size: 30,
                       iconSize: 17,
                       onPressed: expand,
@@ -388,6 +391,7 @@ class _ContactDetails extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     if (contact == null) {
       return Container(
@@ -411,10 +415,10 @@ class _ContactDetails extends StatelessWidget {
               ),
             ),
             const SizedBox(height: DSpace.l),
-            Text('Выберите контакт',
+            Text(l10n.desktopContactsPick,
                 style: DType.title.copyWith(color: c.textPrimary)),
             const SizedBox(height: DSpace.xs),
-            Text('Карточка появится справа.',
+            Text(l10n.desktopContactsCardRight,
                 style: DType.body.copyWith(color: c.textSecondary)),
           ],
         ),
@@ -450,7 +454,7 @@ class _ContactDetails extends StatelessWidget {
             const SizedBox(height: DSpace.xl),
             if (onMessage != null)
               DesktopButton(
-                label: 'Написать сообщение',
+                label: l10n.desktopContactsWrite,
                 kind: DButtonKind.filled,
                 icon: FluentIcons.chat_24_regular,
                 expand: true,
@@ -479,14 +483,15 @@ class _EmptyList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(DSpace.xl),
         child: Text(
           query.isEmpty
-              ? 'Контакты появятся после синхронизации.'
-              : 'Ничего не найдено по запросу «$query».',
+              ? l10n.desktopContactsEmpty
+              : l10n.desktopContactsNothingFor(query),
           textAlign: TextAlign.center,
           style: DType.caption.copyWith(color: c.textSecondary),
         ),

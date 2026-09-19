@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -37,20 +38,14 @@ String formatRoomCallDuration(int startedAtMs, int nowMs) {
 ///
 /// Слово не сокращаем: «3 участ.» экономит четыре точки ширины и стоит
 /// читаемости, а места в плашке хватает.
-/// «1 участник», «2 участника», «5 участников» — по-русски.
+/// «1 участник», «2 участника», «5 участников» — со склонением языка.
 ///
-/// Живёт здесь исторически (писалось для плашки созвона), но считает обычное
-/// русское склонение и годится везде, где на десктопе нужно сказать, сколько
-/// человек: шапка комнаты зовёт его же.
-String formatParticipantsRu(int count) {
-  final n = count.abs();
-  final tens = n % 100;
-  final ones = n % 10;
-  if (tens >= 11 && tens <= 14) return '$count участников';
-  if (ones == 1) return '$count участник';
-  if (ones >= 2 && ones <= 4) return '$count участника';
-  return '$count участников';
-}
+/// Живёт здесь исторически (писалось для плашки созвона), но годится везде,
+/// где на десктопе нужно сказать, сколько человек: шапка комнаты зовёт его
+/// же. Само склонение считает ICU внутри ключа — своя лесенка «11..14»
+/// повторяла бы то, что intl уже знает про каждый из восьми языков.
+String formatParticipants(int count, AppLocalizations l10n) =>
+    l10n.desktopRoomMembersCount(count);
 
 /// Плашка «Идёт обсуждение» под шапкой комнаты.
 ///
@@ -144,11 +139,12 @@ class _DesktopRoomCallBannerState extends State<DesktopRoomCallBanner> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final call = widget.call;
     final joined = call.selfParticipant?.isJoined ?? false;
     final duration = formatRoomCallDuration(call.startedAtMs, _now());
-    final people = formatParticipantsRu(call.joinedParticipantCount);
+    final people = formatParticipants(call.joinedParticipantCount, l10n);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(DSpace.l, DSpace.m, DSpace.l, 0),
@@ -190,7 +186,7 @@ class _DesktopRoomCallBannerState extends State<DesktopRoomCallBanner> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Идёт обсуждение',
+                      l10n.desktopCallOngoing,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: DType.label.copyWith(
@@ -219,7 +215,7 @@ class _DesktopRoomCallBannerState extends State<DesktopRoomCallBanner> {
               ],
               const SizedBox(width: DSpace.m),
               _JoinButton(
-                label: joined ? 'Вернуться' : 'Присоединиться',
+                label: joined ? l10n.desktopCallReturn : l10n.desktopCallJoin,
                 onTap: widget.onJoin,
               ),
             ],

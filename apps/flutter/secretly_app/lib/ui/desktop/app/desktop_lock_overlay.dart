@@ -7,6 +7,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 
+import '../../../l10n/app_localizations.dart';
 import '../design/tokens.dart';
 import '../primitives/desktop_button.dart';
 import '../services/desktop_app_lock_service.dart';
@@ -25,7 +26,9 @@ class DesktopLockOverlay extends StatefulWidget {
 
 class _DesktopLockOverlayState extends State<DesktopLockOverlay> {
   bool _busy = false;
-  String? _error;
+  /// Вид ошибки, а не её текст: подпись собирается в [build], иначе она
+  /// застыла бы на языке, который стоял в момент неудачи.
+  _LockError? _error;
   bool _autoPrompted = false;
 
   @override
@@ -45,7 +48,9 @@ class _DesktopLockOverlayState extends State<DesktopLockOverlay> {
       _busy = true;
       _error = null;
     });
-    final ok = await widget.service.requestUnlock();
+    final ok = await widget.service.requestUnlock(
+      reason: AppLocalizations.of(context)!.desktopUnlockPrompt,
+    );
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -61,16 +66,15 @@ class _DesktopLockOverlayState extends State<DesktopLockOverlay> {
         // with the phone (it lives in this computer's preferences), so the
         // phone is a way to reach support, not a switch (17.09.2026).
         _error = widget.service.unlockUnavailable.value
-            ? 'Служба проверки личности недоступна на этом компьютере. '
-                'Перезапустите Secretly или компьютер. Если не поможет — '
-                'напишите в поддержку с телефона.'
-            : 'Не удалось подтвердить личность.';
+            ? _LockError.noService
+            : _LockError.failed;
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final supported = widget.service.biometricSupported.value;
     return Positioned.fill(
@@ -103,29 +107,31 @@ class _DesktopLockOverlayState extends State<DesktopLockOverlay> {
                   ),
                   const SizedBox(height: DSpace.xl),
                   Text(
-                    'Secretly заблокирован',
+                    l10n.desktopLockedTitle,
                     style: DType.title.copyWith(color: c.textPrimary),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: DSpace.s),
                   Text(
                     supported
-                        ? 'Подтвердите личность через Touch ID, чтобы продолжить.'
-                        : 'Подтвердите паролем устройства, чтобы продолжить.',
+                        ? l10n.desktopLockedTouchIdPrompt
+                        : l10n.desktopLockedPasswordPrompt,
                     textAlign: TextAlign.center,
                     style: DType.body.copyWith(color: c.textSecondary),
                   ),
                   if (_error != null) ...[
                     const SizedBox(height: DSpace.m),
                     Text(
-                      _error!,
+                      _error == _LockError.noService
+                          ? l10n.desktopLockedNoService
+                          : l10n.desktopLockedFailed,
                       textAlign: TextAlign.center,
                       style: DType.caption.copyWith(color: c.danger),
                     ),
                   ],
                   const SizedBox(height: DSpace.xl2),
                   DesktopButton(
-                    label: _busy ? 'Ожидаем подтверждения…' : 'Разблокировать',
+                    label: _busy ? l10n.desktopLockedWaiting : l10n.desktopLockedUnlock,
                     kind: DButtonKind.tonal,
                     // E13: never gate unlock on biometric support — requestUnlock
                     // uses biometricOnly:false, so it falls back to the device
@@ -142,3 +148,6 @@ class _DesktopLockOverlayState extends State<DesktopLockOverlay> {
     );
   }
 }
+
+/// Что именно не получилось при разблокировке.
+enum _LockError { failed, noService }

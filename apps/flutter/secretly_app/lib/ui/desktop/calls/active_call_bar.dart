@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
@@ -113,6 +114,7 @@ class _DesktopActiveCallBarState extends State<DesktopActiveCallBar> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final roomId = _joinedRoomId;
     if (roomId == null) return const SizedBox.shrink();
     final c = DColors.of(context);
@@ -135,7 +137,9 @@ class _DesktopActiveCallBarState extends State<DesktopActiveCallBar> {
           const SizedBox(width: 8),
           Flexible(
             child: Text(
-              title.isEmpty ? 'Идёт созвон' : 'Идёт созвон · $title',
+              title.isEmpty
+                  ? l10n.desktopCallInProgress
+                  : l10n.desktopCallInProgressWith(title),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: DType.tiny.copyWith(color: c.voice),
@@ -148,7 +152,7 @@ class _DesktopActiveCallBarState extends State<DesktopActiveCallBar> {
             icon: muted
                 ? FluentIcons.mic_off_24_filled
                 : FluentIcons.mic_24_filled,
-            tooltip: muted ? 'Включить микрофон' : 'Выключить микрофон',
+            tooltip: muted ? l10n.desktopCallMicOn : l10n.desktopCallMicOff,
             // Выключенный микрофон тревожит, включённый — нет: красим только
             // отказ, как и в доке созвона.
             danger: muted,
@@ -167,7 +171,7 @@ class _DesktopActiveCallBarState extends State<DesktopActiveCallBar> {
                 borderRadius: BorderRadius.circular(DRadii.r9),
               ),
               child: Text(
-                'Вернуться',
+                l10n.desktopCallReturn,
                 style: DType.tiny.copyWith(
                   fontSize: 10.5,
                   color: c.voice,

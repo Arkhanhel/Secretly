@@ -14,6 +14,7 @@
 //      одна серия, а на компьютере были две, с повтором имени и портрета.
 //   3. Серию собирали по ИМЕНИ, и два разных «Участника» склеивались в одного.
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/chat/chat_thread_panel.dart';
@@ -47,6 +48,9 @@ Future<void> _pump(WidgetTester tester, List<MessageData> messages) async {
   addTearDown(tester.view.resetPhysicalSize);
   await tester.pumpWidget(
     MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: DColors(
         colors: kDColorsDark,
         child: Scaffold(
@@ -143,6 +147,9 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
       MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: DColors(
           colors: kDColorsDark,
           child: Scaffold(

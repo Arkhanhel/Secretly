@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import '../../../models/e2e_payload_v1.dart';
 import '../../chat_message_mentions.dart';
 
@@ -47,17 +48,21 @@ class DesktopMentionTarget {
     this.subtitle,
   }) : type = MsgMentionV1.profileType;
 
-  const DesktopMentionTarget.everyone({required this.token, this.subtitle})
-    : type = MsgMentionV1.allType,
-      title = 'Все участники',
-      profileId = null,
-      avatarPath = null;
+  const DesktopMentionTarget.everyone({
+    required this.token,
+    required this.title,
+    this.subtitle,
+  }) : type = MsgMentionV1.allType,
+       profileId = null,
+       avatarPath = null;
 
-  const DesktopMentionTarget.admins({required this.token, this.subtitle})
-    : type = MsgMentionV1.adminsType,
-      title = 'Администраторы',
-      profileId = null,
-      avatarPath = null;
+  const DesktopMentionTarget.admins({
+    required this.token,
+    required this.title,
+    this.subtitle,
+  }) : type = MsgMentionV1.adminsType,
+       profileId = null,
+       avatarPath = null;
 
   /// То, что попадёт в текст: «@Игорь», «@all».
   final String token;
@@ -84,17 +89,20 @@ class DesktopMentionTarget {
 List<DesktopMentionTarget> desktopMentionTargets({
   required Iterable<({String profileId, String displayName, String? avatarPath, String? role})> members,
   required String selfProfileId,
+  required AppLocalizations l10n,
   bool withAdmins = false,
 }) {
   final out = <DesktopMentionTarget>[
-    const DesktopMentionTarget.everyone(
+    DesktopMentionTarget.everyone(
       token: '@all',
-      subtitle: 'Позвать всех в комнате',
+      title: l10n.desktopMentionEveryone,
+      subtitle: l10n.desktopMentionEveryoneHint,
     ),
     if (withAdmins)
-      const DesktopMentionTarget.admins(
+      DesktopMentionTarget.admins(
         token: '@admins',
-        subtitle: 'Позвать владельца и администраторов',
+        title: l10n.desktopMentionAdmins,
+        subtitle: l10n.desktopMentionAdminsHint,
       ),
   ];
   final used = <String>{'all', if (withAdmins) 'admins'};

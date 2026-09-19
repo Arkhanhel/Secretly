@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 
@@ -48,6 +49,7 @@ class ChatListFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Container(
       height: 44,
@@ -71,7 +73,7 @@ class ChatListFooter extends StatelessWidget {
           if (onOpenArchive != null)
             DesktopIconButton(
               icon: FluentIcons.archive_24_regular,
-              tooltip: 'Архив',
+              tooltip: l10n.archive,
               size: 28,
               iconSize: 16,
               color: archiveActive ? c.accentPrimary : null,
@@ -100,12 +102,16 @@ class _SyncPill extends StatelessWidget {
   }
 
   Widget _pill(BuildContext context, DesktopSyncPhase phase) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final (Color tone, String label) = switch (phase) {
-      DesktopSyncPhase.online => (c.success, 'Синхронизировано'),
-      DesktopSyncPhase.syncing => (c.accentPrimary, 'Синхронизация…'),
-      DesktopSyncPhase.connecting => (c.textSecondary, 'Подключение…'),
-      DesktopSyncPhase.reconnecting => (c.warning, 'Переподключение…'),
+      DesktopSyncPhase.online => (c.success, l10n.desktopSyncDone),
+      DesktopSyncPhase.syncing => (c.accentPrimary, l10n.desktopSyncSyncing),
+      DesktopSyncPhase.connecting => (
+        c.textSecondary,
+        l10n.desktopRailConnecting,
+      ),
+      DesktopSyncPhase.reconnecting => (c.warning, l10n.desktopSyncReconnecting),
     };
     if (compact) {
       return DesktopTooltip(

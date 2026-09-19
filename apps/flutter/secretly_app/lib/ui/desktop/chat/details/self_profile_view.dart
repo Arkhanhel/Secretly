@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../../l10n/app_localizations.dart';
 import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
@@ -115,6 +116,9 @@ class _CosmeticPreview extends StatelessWidget {
 }
 
 class _SelfProfileViewState extends State<SelfProfileView> {
+  /// Подписи своего профиля.
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   /// Фото, которое здесь показывается. Не `controller.myAvatarPath`: на
   /// спаренном компьютере своего файла нет — лицо приезжает вместе с
   /// метаданными профиля, и показать надо именно его.
@@ -172,11 +176,11 @@ class _SelfProfileViewState extends State<SelfProfileView> {
               : (v) => Navigator.of(context).maybePop(v),
         ),
         primary: DDialogAction(
-          label: 'Сохранить',
+          label: l10n.saveAction,
           onPressed: () => Navigator.of(context).maybePop(ctrl.text),
         ),
         secondary: DDialogAction(
-          label: 'Отмена',
+          label: l10n.cancel,
           onPressed: () => Navigator.of(context).maybePop(),
         ),
       );
@@ -200,7 +204,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
     final current = _c.myEmojiStatus ?? '';
     final picked = await DesktopDialog.show<String>(
       context,
-      title: 'Эмодзи-статус',
+      title: l10n.desktopProfileEmojiStatus,
       size: DDialogSize.small,
       body: Wrap(
         spacing: DSpace.s,
@@ -227,12 +231,12 @@ class _SelfProfileViewState extends State<SelfProfileView> {
       primary: current.isEmpty
           ? null
           : DDialogAction(
-              label: 'Убрать статус',
+              label: l10n.desktopProfileClearStatus,
               kind: DButtonKind.tonal,
               onPressed: () => Navigator.of(context).maybePop(''),
             ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(),
       ),
     );
@@ -253,7 +257,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось применить: $e',
+        message: l10n.desktopProfileApplyFailed('$e'),
         kind: DSnackKind.error,
       );
     }
@@ -277,7 +281,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
     ];
     final picked = await DesktopDialog.show<String>(
       context,
-      title: frame ? 'Рамка аватара' : 'Обложка профиля',
+      title: frame ? l10n.desktopProfileAvatarFrame : l10n.desktopProfileCover,
       size: DDialogSize.medium,
       body: SizedBox(
         height: 320,
@@ -295,7 +299,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
             final id = ids[i];
             final selected = id == currentId;
             final label = id == null
-                ? (frame ? 'Без рамки' : 'Без обложки')
+                ? (frame ? l10n.desktopProfileNoFrame : l10n.desktopProfileNoCover)
                 : (frame
                       ? kAvatarFrames.firstWhere((f) => f.id == id).name(true)
                       : kProfileCovers
@@ -358,7 +362,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
         ),
       ),
       secondary: DDialogAction(
-        label: 'Отмена',
+        label: l10n.cancel,
         onPressed: () => Navigator.of(context).maybePop(),
       ),
     );
@@ -375,7 +379,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось применить: $e',
+        message: l10n.desktopProfileApplyFailed('$e'),
         kind: DSnackKind.error,
       );
     }
@@ -398,7 +402,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
         if (!mounted) return;
         DesktopSnackbar.show(
           context,
-          message: 'Не удалось прочитать файл',
+          message: l10n.desktopProfileReadFailed,
           kind: DSnackKind.error,
         );
         return;
@@ -409,14 +413,14 @@ class _SelfProfileViewState extends State<SelfProfileView> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Фото профиля обновлено',
+        message: l10n.desktopProfilePhotoUpdated,
         kind: DSnackKind.success,
       );
     } catch (e) {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось обновить фото: $e',
+        message: l10n.desktopProfilePhotoFailed('$e'),
         kind: DSnackKind.error,
       );
     }
@@ -431,7 +435,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось убрать фото: $e',
+        message: l10n.desktopProfilePhotoRemoveFailed('$e'),
         kind: DSnackKind.error,
       );
     }
@@ -441,6 +445,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final name = _c.myNickname.trim();
     final display = name.isEmpty ? 'Secretly' : name;
     final bio = _c.myBio.trim();
@@ -453,7 +458,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
     return Column(
       children: [
         DetailsHeader(
-          title: 'Мой профиль',
+          title: l10n.desktopProfileMine,
           // Идентификатор переехал под имя (макет): здесь он был бы вторым
           // разом на одном экране, а повтор читается как две разные строки.
           subtitle: null,
@@ -478,12 +483,12 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                   // строкам «Имя» и «О себе» ниже, и узнать об этом было
                   // нельзя: строки выглядели фактами, а не полями.
                   trailing: DesktopButton(
-                    label: 'Редактировать',
+                    label: l10n.desktopProfileEdit,
                     icon: FluentIcons.edit_24_regular,
                     kind: DButtonKind.tonal,
                     onPressed: () => unawaited(
                       _editLine(
-                        title: 'Имя',
+                        title: l10n.desktopProfileName,
                         initial: name,
                         maxLength: 40,
                         save: (v) => _c.setMyNickname(v),
@@ -541,7 +546,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                         right: -2,
                         bottom: -2,
                         child: DesktopTooltip(
-                          message: 'Сменить фото',
+                          message: l10n.desktopProfileChangePhoto,
                           child: HoverListener(
                             onTap: () => unawaited(_pickAvatar()),
                             cursor: SystemMouseCursors.click,
@@ -581,24 +586,24 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                   items: [
                     DetailsActionItem(
                       icon: FluentIcons.image_24_regular,
-                      label: 'Фото',
+                      label: l10n.desktopChatsPhoto,
                       onPressed: () => unawaited(_pickAvatar()),
                     ),
                     DetailsActionItem(
                       icon: FluentIcons.circle_24_regular,
-                      label: 'Рамка',
+                      label: l10n.desktopProfileFrameShort,
                       onPressed: () => unawaited(_pickCosmetic(frame: true)),
                       active: _c.myFrameId != null,
                     ),
                     DetailsActionItem(
                       icon: FluentIcons.panel_top_gallery_24_regular,
-                      label: 'Обложка',
+                      label: l10n.desktopProfileCoverShort,
                       onPressed: () => unawaited(_pickCosmetic(frame: false)),
                       active: _c.myCoverId != null,
                     ),
                     DetailsActionItem(
                       icon: FluentIcons.emoji_24_regular,
-                      label: 'Статус',
+                      label: l10n.desktopProfileStatus,
                       onPressed: () => unawaited(_pickEmojiStatus()),
                       active: (_c.myEmojiStatus ?? '').isNotEmpty,
                     ),
@@ -630,22 +635,22 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                     children: [
                       DetailsInfoRow(
                         icon: FluentIcons.color_24_regular,
-                        label: 'Внешний вид',
-                        value: 'Тема, акцент и обои чата',
+                        label: l10n.desktopSettingsAppearanceLabel,
+                        value: l10n.desktopProfileAppearanceHint,
                         onTap: widget.onOpenAppearanceSettings,
                       ),
                     ],
                   ),
                 DetailsInfoSection(
-                  title: 'Профиль',
+                  title: l10n.desktopAccountProfile,
                   children: [
                     DetailsInfoRow(
                       icon: FluentIcons.person_24_regular,
-                      label: 'Имя',
+                      label: l10n.desktopProfileName,
                       value: display,
                       onTap: () => unawaited(
                         _editLine(
-                          title: 'Имя',
+                          title: l10n.desktopProfileName,
                           initial: name,
                           maxLength: 40,
                           save: (v) => _c.setMyNickname(v),
@@ -654,12 +659,12 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                     ),
                     DetailsInfoRow(
                       icon: FluentIcons.text_description_24_regular,
-                      label: 'О себе',
-                      value: bio.isEmpty ? 'Не заполнено' : bio,
+                      label: l10n.desktopProfileAbout,
+                      value: bio.isEmpty ? l10n.desktopProfileEmpty : bio,
                       multiline: true,
                       onTap: () => unawaited(
                         _editLine(
-                          title: 'О себе',
+                          title: l10n.desktopProfileAbout,
                           initial: bio,
                           maxLength: 140,
                           multiline: true,
@@ -677,14 +682,14 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                 ),
                 const SizedBox(height: DSpace.s),
                 DetailsInfoSection(
-                  title: 'Фото профиля',
+                  title: l10n.desktopProfilePhoto,
                   children: [
                     // Порядок как у соседних строк: СВЕРХУ действие, снизу
                     // пояснение. «Проверить контакт» в карточке собеседника
                     // устроен так же.
                     DetailsInfoRow(
                       icon: FluentIcons.image_24_regular,
-                      value: hasAvatar ? 'Заменить фото' : 'Выбрать фото',
+                      value: hasAvatar ? l10n.desktopProfileReplacePhoto : l10n.desktopProfilePickPhoto,
                       // 🔴 «Убрать» убирает ФАЙЛ, выбранный здесь. Фотография,
                       // приехавшая с телефона, файлом на этом компьютере не
                       // является, и сервер удаление не принимает: пустое
@@ -692,39 +697,37 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                       // там нет, а вместо неё — прямой ответ, где это
                       // делается.
                       label: hasLocalAvatar
-                          ? 'Выбрано на этом компьютере'
+                          ? l10n.desktopProfilePickedHere
                           : (hasAvatar
-                                ? 'Синхронизировано с телефоном'
-                                : 'Не выбрано'),
+                                ? l10n.desktopProfileSyncedWithPhone
+                                : l10n.desktopProfileNotPicked),
                       onTap: () => unawaited(_pickAvatar()),
                     ),
                     if (hasLocalAvatar)
                       DetailsInfoRow(
                         icon: FluentIcons.delete_24_regular,
-                        value: 'Убрать фото',
-                        label: 'Останутся инициалы',
+                        value: l10n.desktopProfileRemovePhoto,
+                        label: l10n.desktopProfileInitialsStay,
                         onTap: () => unawaited(_removeAvatar()),
                       ),
                   ],
                 ),
                 const SizedBox(height: DSpace.s),
                 DetailsInfoSection(
-                  title: 'Аккаунт',
+                  title: l10n.desktopProfileAccount,
                   children: [
                     DetailsInfoRow(
                       icon: FluentIcons.phone_24_regular,
-                      label: 'Восстановление',
+                      label: l10n.desktopProfileRecovery,
                       value:
-                          'Этот компьютер подключён к телефону и своей фразы '
-                          'восстановления не хранит: аккаунт возвращает копия '
-                          'и ключ восстановления.',
+                          l10n.desktopProfileRecoveryHint,
                       multiline: true,
                     ),
                     if (widget.onOpenDeviceSettings != null)
                       DetailsInfoRow(
                         icon: FluentIcons.qr_code_24_regular,
-                        label: 'Устройства',
-                        value: 'Подключённые компьютеры и телефоны',
+                        label: l10n.desktopDevicesTitle,
+                        value: l10n.desktopProfileDevicesHint,
                         onTap: widget.onOpenDeviceSettings,
                       ),
                   ],
@@ -782,6 +785,7 @@ class _FrameStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     // Выбранная рамка всегда в полосе, даже если она не из первых: иначе
     // человек не увидел бы, что у него стоит.
@@ -814,7 +818,7 @@ class _FrameStrip extends StatelessWidget {
               DSpace.xs,
             ),
             child: Text(
-              'РАМКА АВАТАРА',
+              l10n.desktopProfileFrameCaps,
               style: DType.meta.copyWith(color: c.textDisabled),
             ),
           ),
@@ -825,7 +829,7 @@ class _FrameStrip extends StatelessWidget {
               runSpacing: DSpace.s,
               children: [
                 _FrameTile(
-                  label: 'Без рамки',
+                  label: l10n.desktopProfileNoFrame,
                   selected: currentId == null,
                   locked: false,
                   name: name,
@@ -969,6 +973,7 @@ class _MoreFramesTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return SizedBox(
       width: 62,
@@ -995,7 +1000,7 @@ class _MoreFramesTile extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Ещё',
+              l10n.desktopThreadMore,
               style: DType.tiny.copyWith(
                 fontSize: 10.5,
                 color: c.textSecondary,

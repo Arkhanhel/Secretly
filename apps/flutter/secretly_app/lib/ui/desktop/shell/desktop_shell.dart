@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show ValueListenable;
@@ -787,6 +788,7 @@ class _DetailsToggleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final enabled = onPressed != null;
     final btn = HoverListener(
@@ -817,7 +819,7 @@ class _DetailsToggleButton extends StatelessWidget {
     );
     if (!enabled) return btn;
     return DesktopTooltip(
-      message: open ? 'Скрыть панель' : 'Показать панель',
+      message: open ? l10n.desktopHidePanel : l10n.desktopShowPanel,
       child: btn,
     );
   }

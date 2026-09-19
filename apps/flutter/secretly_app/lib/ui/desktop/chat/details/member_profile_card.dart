@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
@@ -80,6 +81,7 @@ class MemberProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final displayName = name.trim().isEmpty ? profileId : name.trim();
     return Container(
@@ -172,7 +174,7 @@ class MemberProfileCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  isOnline ? 'в сети' : 'не в сети',
+                  isOnline ? l10n.desktopChatsOnline : l10n.desktopContactOffline,
                   style: DType.caption.copyWith(
                     color: isOnline ? c.voice : c.textSecondary,
                   ),
@@ -190,7 +192,7 @@ class MemberProfileCard extends StatelessWidget {
                     const SizedBox(width: DSpace.s),
                     _CardIconButton(
                       icon: FluentIcons.copy_24_regular,
-                      tooltip: 'Скопировать ID',
+                      tooltip: l10n.desktopContactCopyIdShort,
                       onTap: onCopyId,
                     ),
                   ],
@@ -239,6 +241,7 @@ class _WriteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return HoverListener(
       onTap: onTap,
@@ -275,7 +278,7 @@ class _WriteButton extends StatelessWidget {
             ),
             const SizedBox(width: 7),
             Text(
-              'Написать',
+              l10n.desktopMemberWrite,
               style: DType.label.copyWith(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,

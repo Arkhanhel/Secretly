@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -43,7 +44,7 @@ Future<String?> showNewChatPicker(
 }) {
   return DesktopDialog.show<String>(
     context,
-    title: 'Новый чат',
+    title: AppLocalizations.of(context)!.newChat,
     size: DDialogSize.small,
     body: _NewChatPickerBody(loadContacts: loadContacts),
   );
@@ -115,6 +116,7 @@ class _NewChatPickerBodyState extends State<_NewChatPickerBody> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final all = _all;
     final visible = _visible;
@@ -125,7 +127,7 @@ class _NewChatPickerBodyState extends State<_NewChatPickerBody> {
       children: [
         DesktopTextField(
           controller: _search,
-          hintText: 'Поиск по контактам',
+          hintText: l10n.desktopNewChatSearchHint,
           prefixIcon: FluentIcons.search_24_regular,
           autofocus: true,
           onChanged: (v) => setState(() => _query = v),
@@ -149,7 +151,9 @@ class _NewChatPickerBodyState extends State<_NewChatPickerBody> {
               : visible.isEmpty
               ? Center(
                   child: Text(
-                    all.isEmpty ? 'Контактов пока нет' : 'Никого не нашлось',
+                    all.isEmpty
+                        ? l10n.desktopNewChatNoContacts
+                        : l10n.desktopNewChatNobodyFound,
                     style: DType.body.copyWith(color: c.textSecondary),
                   ),
                 )

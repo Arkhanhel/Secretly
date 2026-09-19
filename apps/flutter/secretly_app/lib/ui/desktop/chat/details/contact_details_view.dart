@@ -57,6 +57,9 @@ class ContactDetailsView extends StatefulWidget {
 }
 
 class _ContactDetailsViewState extends State<ContactDetailsView> {
+  /// Подписи экрана контакта.
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   bool _muted = false;
   bool _blocked = false;
 
@@ -173,7 +176,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _pinned = !next);
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
@@ -194,7 +197,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _archived = !next);
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
@@ -203,11 +206,11 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     if (pid.isEmpty) return;
     final next = !_blocked;
     final confirm = await _confirm(
-      title: next ? 'Заблокировать?' : 'Разблокировать?',
+      title: next ? l10n.desktopContactBlockTitle : l10n.desktopContactUnblockTitle,
       body: next
-          ? 'Собеседник больше не сможет отправлять вам сообщения и звонить.'
-          : 'Собеседник снова сможет с вами связаться.',
-      okLabel: next ? 'Заблокировать' : 'Разблокировать',
+          ? l10n.desktopContactBlockBody
+          : l10n.desktopContactUnblockBody,
+      okLabel: next ? l10n.desktopContactBlock : l10n.desktopUnblockAction,
       danger: next,
     );
     if (confirm != true) return;
@@ -221,7 +224,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
       setState(() => _blocked = next);
     } catch (e) {
       if (!mounted) return;
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
@@ -268,7 +271,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
         // Жалоба уже ушла — молчать о неудавшейся блокировке нельзя, но и
         // отменять из-за неё жалобу незачем. Текст тот же, что у блокировки
         // из меню: это и есть она.
-        if (mounted) _toast('Не удалось: $e', danger: true);
+        if (mounted) _toast(l10n.desktopFailedWith('$e'), danger: true);
       }
     }
     if (!mounted) return;
@@ -280,11 +283,11 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     if (pid.isEmpty) return;
     final cm = CallManager.instance;
     if (cm == null) {
-      _toast('Сервис звонков ещё не готов', danger: true);
+      _toast(l10n.desktopContactCallsNotReady, danger: true);
       return;
     }
     if (cm.state.value.isActive) {
-      _toast('Звонок уже идёт');
+      _toast(l10n.desktopContactCallInProgress);
       return;
     }
     try {
@@ -298,7 +301,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
       );
     } catch (e) {
       if (!mounted) return;
-      _toast('Не удалось начать звонок: $e', danger: true);
+      _toast(l10n.desktopContactCallFailed('$e'), danger: true);
     }
   }
 
@@ -312,7 +315,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
       setState(() => _autoDeleteSeconds = seconds);
     } catch (e) {
       if (!mounted) return;
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
@@ -324,13 +327,13 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
         return AlertDialog(
           backgroundColor: cc.elevated,
           title: Text(
-            'Автоудаление сообщений',
+            l10n.desktopContactAutoDelete,
             style: DType.title.copyWith(color: cc.textPrimary),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              for (final entry in _autoDeleteOptions.entries)
+              for (final entry in _autoDeleteOptions(l10n).entries)
                 ListTile(
                   title: Text(
                     entry.key,
@@ -351,7 +354,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     if (picked.seconds == _autoDeleteSeconds) return; // unchanged
     await _setAutoDelete(picked.seconds);
     if (!mounted) return;
-    _toast('Автоудаление обновлено');
+    _toast(l10n.desktopContactAutoDeleteUpdated);
   }
 
   /// 🔴 ТА ЖЕ ГАЛОЧКА, ЧТО В МЕНЮ СПИСКА (16.09.2026).
@@ -368,9 +371,9 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     final title = widget.conversation.title.trim();
     final result = await confirmClearWithPeer(
       context,
-      title: 'Очистить историю?',
-      body: 'Все сообщения этого чата на этом устройстве будут удалены.',
-      okLabel: 'Очистить',
+      title: l10n.desktopChatsClearHistoryTitle,
+      body: l10n.desktopContactClearBody,
+      okLabel: l10n.desktopChatsClear,
       peerTitle: canClearPeer ? (title.isEmpty ? '—' : title) : null,
     );
     if (result == null || !mounted) return;
@@ -381,23 +384,23 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
           directPeerProfileId: peer,
         );
         if (!mounted) return;
-        _toast('История очищена у обоих');
+        _toast(l10n.desktopChatsHistoryClearedBoth);
       } else {
         await widget.controller.clearChatHistory(convoId: _convoId);
         if (!mounted) return;
-        _toast('История очищена');
+        _toast(l10n.desktopChatsHistoryCleared);
       }
     } catch (e) {
       if (!mounted) return;
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
   Future<void> _deleteChat() async {
     final ok = await _confirm(
-      title: 'Удалить чат?',
-      body: 'Чат полностью удалится с этого устройства.',
-      okLabel: 'Удалить',
+      title: l10n.desktopChatsDeleteChatTitle,
+      body: l10n.desktopContactDeleteBody,
+      okLabel: l10n.delete,
       danger: true,
     );
     if (ok != true) return;
@@ -415,7 +418,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
       widget.onClose();
     } catch (e) {
       if (!mounted) return;
-      _toast('Не удалось: $e', danger: true);
+      _toast(l10n.desktopFailedWith('$e'), danger: true);
     }
   }
 
@@ -443,7 +446,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
               child: Text(
-                'Отмена',
+                l10n.cancel,
                 style: DType.label.copyWith(color: cc.textPrimary),
               ),
             ),
@@ -497,38 +500,38 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
 
   String _autoDeleteLabel() {
     final s = _autoDeleteSeconds;
-    if (s == null || s <= 0) return 'Выключено';
-    if (s == 86400) return '1 день';
-    if (s == 86400 * 7) return '7 дней';
-    if (s == 86400 * 30) return '30 дней';
-    if (s == 3600) return '1 час';
-    return '${s ~/ 60} мин';
+    if (s == null || s <= 0) return l10n.desktopContactOff;
+    if (s == 86400) return l10n.desktopContactDay1;
+    if (s == 86400 * 7) return l10n.desktopContactDays7;
+    if (s == 86400 * 30) return l10n.desktopContactDays30;
+    if (s == 3600) return l10n.desktopContactHour1;
+    return l10n.desktopContactMinutes('${s ~/ 60}');
   }
 
   String _presenceText() {
     final convo = widget.conversation;
-    if (convo.isOnline) return 'в сети';
+    if (convo.isOnline) return l10n.desktopChatsOnline;
     final ts = convo.peerLastSeenAtMs;
     // 🔴 Ноль — это «время неизвестно», а не «был в 1970-м». Без этой отсечки
     // панель показывала «был(а) 01.01» — тот же дефект, что нашёлся в шапке
     // чата 03.08.2026. Здесь «не в сети» уместно: выше уже проверено isOnline.
-    if (ts == null || ts <= 0) return 'не в сети';
+    if (ts == null || ts <= 0) return l10n.desktopContactOffline;
     final dt = DateTime.fromMillisecondsSinceEpoch(ts);
     final now = DateTime.now();
     if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
       final h = dt.hour.toString().padLeft(2, '0');
       final m = dt.minute.toString().padLeft(2, '0');
-      return 'был(а) в $h:$m';
+      return l10n.desktopContactSeenAt('$h:$m');
     }
     final yesterday = now.subtract(const Duration(days: 1));
     if (dt.year == yesterday.year &&
         dt.month == yesterday.month &&
         dt.day == yesterday.day) {
-      return 'был(а) вчера';
+      return l10n.desktopContactSeenYesterday;
     }
     final d = dt.day.toString().padLeft(2, '0');
     final mo = dt.month.toString().padLeft(2, '0');
-    return 'был(а) $d.$mo';
+    return l10n.desktopContactSeenOn('$d.$mo');
   }
 
   /// «Поделиться» на обложке — это ID собеседника в буфере.
@@ -538,22 +541,22 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
   /// действие есть в меню «Дополнительно» — здесь это ярлык, как в макете.
   void _shareId() {
     Clipboard.setData(ClipboardData(text: _peerProfileId));
-    _toast('ID скопирован');
+    _toast(l10n.desktopRoomIdCopied);
   }
 
   List<List<CtxMenuItem>> _menuSections() {
     return <List<CtxMenuItem>>[
       [
         CtxMenuItem(
-          label: 'Копировать ID',
+          label: l10n.desktopContactCopyId,
           icon: FluentIcons.copy_24_regular,
           onTap: () {
             Clipboard.setData(ClipboardData(text: _peerProfileId));
-            _toast('ID скопирован');
+            _toast(l10n.desktopRoomIdCopied);
           },
         ),
         CtxMenuItem(
-          label: _muted ? 'Включить уведомления' : 'Отключить уведомления',
+          label: _muted ? l10n.unmuteNotifications : l10n.desktopRoomMuteOff,
           icon: _muted
               ? FluentIcons.alert_24_regular
               : FluentIcons.alert_off_24_regular,
@@ -562,19 +565,19 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
         CtxMenuItem(
           // Одно название на оба входа: в панели строка называется так же.
           // Два имени у одной настройки человек читает как две разные.
-          label: 'Исчезающие сообщения',
+          label: l10n.desktopContactDisappearing,
           icon: FluentIcons.timer_24_regular,
           onTap: _pickAutoDelete,
         ),
         CtxMenuItem(
-          label: _pinned ? 'Убрать из избранного' : 'В избранное',
+          label: _pinned ? l10n.desktopListRemoveFavourite : l10n.desktopListAddFavourite,
           icon: _pinned
               ? FluentIcons.pin_off_24_regular
               : FluentIcons.pin_24_regular,
           onTap: _togglePinned,
         ),
         CtxMenuItem(
-          label: _archived ? 'Вернуть из архива' : 'В архив',
+          label: _archived ? l10n.desktopRoomUnarchive : l10n.desktopListArchive,
           icon: _archived
               ? FluentIcons.archive_arrow_back_24_regular
               : FluentIcons.archive_24_regular,
@@ -583,7 +586,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
       ],
       [
         CtxMenuItem(
-          label: _blocked ? 'Разблокировать' : 'Заблокировать',
+          label: _blocked ? l10n.desktopUnblockAction : l10n.desktopContactBlock,
           icon: _blocked
               ? FluentIcons.shield_24_regular
               : FluentIcons.shield_dismiss_24_regular,
@@ -597,13 +600,13 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
           onTap: _report,
         ),
         CtxMenuItem(
-          label: 'Очистить историю',
+          label: l10n.clearHistory,
           icon: FluentIcons.broom_24_regular,
           onTap: _clearHistory,
           isDanger: true,
         ),
         CtxMenuItem(
-          label: 'Удалить чат',
+          label: l10n.desktopContactDeleteChat,
           icon: FluentIcons.delete_24_regular,
           onTap: _deleteChat,
           isDanger: true,
@@ -614,6 +617,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final convo = widget.conversation;
     final displayName = convo.title.isEmpty ? '—' : convo.title;
     final presence = _presenceText();
@@ -647,7 +651,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
                 frameId: convo.frameId,
                 onClose: widget.onClose,
                 onShare: _peerProfileId.isEmpty ? null : _shareId,
-                shareTooltip: 'Скопировать ID',
+                shareTooltip: l10n.desktopContactCopyIdShort,
                 menuSections: _menuSections(),
                 avatar: HoverListener(
                   onTap: () => showAvatarPreviewDialog(
@@ -683,19 +687,19 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
                 items: [
                   DetailsActionItem(
                     icon: FluentIcons.call_24_regular,
-                    label: 'Звонок',
+                    label: l10n.desktopContactCall,
                     onPressed: () => _startCall(video: false),
                   ),
                   DetailsActionItem(
                     icon: FluentIcons.video_24_regular,
-                    label: 'Видео',
+                    label: l10n.desktopChatsVideo,
                     onPressed: () => _startCall(video: true),
                   ),
                   DetailsActionItem(
                     icon: _muted
                         ? FluentIcons.alert_off_24_regular
                         : FluentIcons.alert_24_regular,
-                    label: _muted ? 'Без звука' : 'Звук',
+                    label: _muted ? l10n.desktopChatsSoundOff : l10n.desktopRoomSound,
                     onPressed: _toggleMute,
                     active: _muted,
                   ),
@@ -705,7 +709,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
                         : FluentIcons.shield_dismiss_24_regular,
                     // Без точки: «Блок.» с точкой читается как оборванное
                     // слово, а места в плитке 56 хватает обоим.
-                    label: _blocked ? 'Разблокировать' : 'Блок',
+                    label: _blocked ? l10n.desktopUnblockAction : l10n.desktopContactBlockShort,
                     onPressed: _toggleBlock,
                     danger: !_blocked,
                     active: _blocked,
@@ -714,7 +718,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
               ),
               const SizedBox(height: DSpace.s),
               DetailsTabs(
-                tabs: const ['Инфо', 'Медиа'],
+                tabs: [l10n.desktopRoomTabInfo, l10n.desktopRoomTabMedia],
                 index: _tab,
                 onChanged: (i) => setState(() => _tab = i),
               ),
@@ -741,7 +745,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
           const SizedBox(height: DSpace.s),
           const SizedBox(height: DSpace.s),
           DetailsInfoSection(
-            title: 'Информация',
+            title: l10n.desktopRoomInformation,
             children: [
               if (_peerProfileId.isNotEmpty)
                 DetailsInfoRow(
@@ -763,7 +767,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
               // было бы потерей.
               DetailsToggleRow(
                 icon: FluentIcons.timer_24_regular,
-                label: 'Исчезающие сообщения',
+                label: l10n.desktopContactDisappearing,
                 subtitle: _autoDeleteLabel(),
                 value: (_autoDeleteSeconds ?? 0) > 0,
                 onChanged: (on) => unawaited(
@@ -792,27 +796,27 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
                   // Порядок как у соседних строк: сверху ДЕЙСТВИЕ, снизу
                   // название поля. «Проверить / Проверить контакт»
                   // читалось бы как заикание.
-                  label: _l10n?.securityTitle ?? 'Безопасность',
-                  value: _l10n?.verifyContact ?? 'Проверить контакт',
+                  label: _l10n?.securityTitle ?? l10n.desktopContactSecurity,
+                  value: _l10n?.verifyContact ?? l10n.desktopContactVerify,
                   onTap: _openVerifyContact,
                 ),
             ],
           ),
           const SizedBox(height: DSpace.s),
           DetailsInfoSection(
-            title: 'Чат',
+            title: l10n.contactDetailsChat,
             children: [
               DetailsToggleRow(
                 icon: FluentIcons.pin_24_regular,
-                label: 'В избранное',
-                subtitle: 'Плитка на рейке и место вверху списка',
+                label: l10n.desktopListAddFavourite,
+                subtitle: l10n.desktopRoomFavouriteHint,
                 value: _pinned,
                 onChanged: (_) => _togglePinned(),
               ),
               DetailsToggleRow(
                 icon: FluentIcons.archive_24_regular,
-                label: 'В архив',
-                subtitle: 'Скрыть чат из основного списка',
+                label: l10n.desktopListArchive,
+                subtitle: l10n.desktopContactArchiveHint,
                 value: _archived,
                 onChanged: (_) => _toggleArchived(),
               ),
@@ -838,12 +842,14 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
   }
 }
 
-const Map<String, int?> _autoDeleteOptions = {
-  'Выключить': null,
-  '1 час': 3600,
-  '1 день': 86400,
-  '7 дней': 86400 * 7,
-  '30 дней': 86400 * 30,
+/// Сроки автоудаления. Подписи приходят из переводов, поэтому это функция, а
+/// не постоянная: у постоянной нет доступа к языку окна.
+Map<String, int?> _autoDeleteOptions(AppLocalizations l10n) => <String, int?>{
+  l10n.desktopContactDisable: null,
+  l10n.desktopContactHour1: 3600,
+  l10n.desktopContactDay1: 86400,
+  l10n.desktopContactDays7: 86400 * 7,
+  l10n.desktopContactDays30: 86400 * 30,
 };
 
 class _AutoDeleteChoice {

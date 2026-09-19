@@ -3192,4 +3192,2470 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get desktopUnblockAction => 'Розблокувати';
+
+  @override
+  String get desktopPrivacyLastSeen => 'Час входу';
+
+  @override
+  String get desktopPrivacyProfilePhoto => 'Фотографії профілю';
+
+  @override
+  String get desktopPrivacyForwarding => 'Пересилання повідомлень';
+
+  @override
+  String get desktopPrivacyCalls => 'Дзвінки';
+
+  @override
+  String get desktopPrivacyVoice => 'Голосові повідомлення';
+
+  @override
+  String get desktopPrivacyMessages => 'Повідомлення';
+
+  @override
+  String get desktopPrivacyNobody => 'Ніхто';
+
+  @override
+  String get desktopPrivacyEverybody => 'Усі';
+
+  @override
+  String get desktopPrivacyContacts => 'Контакти';
+
+  @override
+  String get desktopPrivacyEncryption => 'Шифрування';
+
+  @override
+  String get desktopPrivacyEncryptionHint => 'Усі повідомлення та дзвінки захищено наскрізним шифруванням. Ключі є лише на ваших пристроях.';
+
+  @override
+  String get desktopPrivacyE2eeActive => 'Наскрізне шифрування активне';
+
+  @override
+  String get desktopPrivacyWhoSees => 'Хто бачить';
+
+  @override
+  String get desktopPrivacyWhoSeesHint => 'Ті самі налаштування видимості, що й у мобільному застосунку.';
+
+  @override
+  String get desktopPrivacyVisibility => 'Видимість';
+
+  @override
+  String get desktopPrivacyByNickname => 'Видимість за ніком';
+
+  @override
+  String get desktopPrivacyByNicknameHint => 'Дозволити знаходити вас за ніком';
+
+  @override
+  String get desktopPrivacySuggest => 'Підказка людей під час пошуку';
+
+  @override
+  String get desktopPrivacyStrangers => 'Нові чати з незнайомцями';
+
+  @override
+  String get desktopPrivacyStrangersHint => 'До архіву та без сповіщень';
+
+  @override
+  String get desktopPrivacyAutoDelete => 'Видалити мій обліковий запис';
+
+  @override
+  String get desktopPrivacyAutoDeleteHint => 'Якщо ви не заходите довше за обраний строк, обліковий запис і всі повідомлення видаляються автоматично. Відлік скидається за кожного входу.';
+
+  @override
+  String get desktopPrivacyIfAbsent => 'Якщо не заходжу';
+
+  @override
+  String get desktopPrivacyIn1Month => 'Через 1 місяць';
+
+  @override
+  String get desktopPrivacyIn3Months => 'Через 3 місяці';
+
+  @override
+  String get desktopPrivacyIn6Months => 'Через 6 місяців';
+
+  @override
+  String get desktopPrivacyIn1Year => 'Через рік';
+
+  @override
+  String get desktopPrivacyIn2Years => 'Через 2 роки';
+
+  @override
+  String get desktopLockImmediately => 'Одразу при втраті фокуса';
+
+  @override
+  String desktopLockSeconds(Object value) {
+    return '$value с';
+  }
+
+  @override
+  String desktopLockMinutes(Object value) {
+    return '$value хв';
+  }
+
+  @override
+  String desktopLockHours(Object value) {
+    return '$value год';
+  }
+
+  @override
+  String get desktopLockNoIdentityService => 'Служба перевірки особи недоступна — блокування не ввімкнено.';
+
+  @override
+  String get desktopLockNotConfirmed => 'Блокування не ввімкнено: підтвердження не пройдено.';
+
+  @override
+  String get desktopLockTitle => 'Блокування застосунку';
+
+  @override
+  String get desktopLockTouchIdHint => 'Запитувати Touch ID для входу після втрати фокуса.';
+
+  @override
+  String get desktopLockPasswordHint => 'Запитувати пароль пристрою для входу після втрати фокуса.';
+
+  @override
+  String get desktopLockEnableTouchId => 'Увімкнути Touch ID';
+
+  @override
+  String get desktopLockEnableLock => 'Увімкнути блокування';
+
+  @override
+  String get desktopLockDevicePassword => 'Пароль пристрою';
+
+  @override
+  String get desktopLockAfter => 'Блокувати через';
+
+  @override
+  String get desktopLockNow => 'Заблокувати зараз';
+
+  @override
+  String get desktopDevicesEndSessionTitle => 'Завершити сеанс?';
+
+  @override
+  String desktopDevicesEndSessionBody(Object id) {
+    return 'Пристрій $id буде відключено від вашого профілю. Щоб повернути доступ, потрібне повторне сканування QR. Продовжити?';
+  }
+
+  @override
+  String get desktopDevicesEnd => 'Завершити';
+
+  @override
+  String desktopDevicesEndFailed(Object error) {
+    return 'Не вдалося завершити сеанс: $error';
+  }
+
+  @override
+  String get desktopDevicesEnded => 'Сеанс пристрою завершено.';
+
+  @override
+  String get desktopDevicesActiveSessions => 'Активні сеанси';
+
+  @override
+  String get desktopDevicesDemoHint => 'Демо-режим · справжні пристрої з’являться після підключення профілю';
+
+  @override
+  String get desktopDevicesThisComputer => 'macOS · Цей комп’ютер';
+
+  @override
+  String get desktopDevicesDemoMac => 'MacBook Pro · Зараз активний';
+
+  @override
+  String get desktopDevicesDemoIphone => 'iOS 18.2 · 2 години тому (демо)';
+
+  @override
+  String get desktopDevicesDemoIpad => 'iPadOS 18 · вчора (демо)';
+
+  @override
+  String get desktopDevicesThisDevice => 'Цей пристрій';
+
+  @override
+  String get desktopDevicesRemoteDevice => 'Віддалений пристрій';
+
+  @override
+  String get desktopDevicesDisconnect => 'Відключити';
+
+  @override
+  String get desktopDevicesTitle => 'Пристрої';
+
+  @override
+  String desktopDevicesTitleCount(Object count) {
+    return 'Пристрої · $count';
+  }
+
+  @override
+  String get desktopDevicesHint => 'Перелік пристроїв, прив’язаних до цього профілю на сервері ключів.';
+
+  @override
+  String get desktopDevicesLoadFailed => 'Не вдалося завантажити';
+
+  @override
+  String get desktopDevicesRetry => 'Повторити';
+
+  @override
+  String get desktopDevicesNone => 'Пристроїв не знайдено';
+
+  @override
+  String get desktopDevicesNotLinked => 'Профіль ще не прив’язано до сервера.';
+
+  @override
+  String get desktopDevicesRefresh => 'Оновити перелік';
+
+  @override
+  String get desktopAccentCustom => 'Свій колір';
+
+  @override
+  String get desktopAccentCustomChange => 'Свій колір — змінити';
+
+  @override
+  String get desktopPairTitle => 'Підключити пристрій';
+
+  @override
+  String get desktopPairHint => 'Покажіть QR-код на новому пристрої або відскануйте його з телефона';
+
+  @override
+  String get desktopPairRequestFailed => 'Не вдалося створити запит на підключення';
+
+  @override
+  String get desktopPairCodeCopied => 'Вміст QR скопійовано';
+
+  @override
+  String get desktopPairNewTitle => 'Підключити новий пристрій';
+
+  @override
+  String get desktopPairNewHint => 'На новому пристрої відкрийте Secretly і виберіть «Підключитися за QR». Потім відскануйте код нижче.';
+
+  @override
+  String get desktopPairClose => 'Закрити';
+
+  @override
+  String get desktopPairCopyCode => 'Скопіювати код';
+
+  @override
+  String get desktopPairRefreshQr => 'Оновити QR';
+
+  @override
+  String desktopSyncPulled(Object count) {
+    return 'Підвантажено нових подій: $count';
+  }
+
+  @override
+  String get desktopSyncTooOften => 'Забагато запитів — спробуйте пізніше';
+
+  @override
+  String get desktopSyncNothingNew => 'Готово · нових подій немає';
+
+  @override
+  String get desktopSyncDemoUnavailable => 'Недоступно в демо-режимі';
+
+  @override
+  String desktopSyncBlobsPulled(Object blobs, Object convos) {
+    return 'Підвантажено вкладень: $blobs (чатів: $convos)';
+  }
+
+  @override
+  String desktopSyncNoBlobs(Object convos) {
+    return 'Готово · нових вкладень немає (чатів: $convos)';
+  }
+
+  @override
+  String get desktopSyncTitle => 'Історія з інших пристроїв';
+
+  @override
+  String get desktopSyncHint => 'Запитати нещодавню історію чатів у мобільного пристрою. Використовується, якщо комп’ютер був офлайн довше за 7 днів або щойно прив’язаний за QR.';
+
+  @override
+  String get desktopSyncRunning => 'Синхронізація…';
+
+  @override
+  String get desktopSyncAskHistory => 'Запитати історію';
+
+  @override
+  String get desktopSyncAsk => 'Запитати';
+
+  @override
+  String get desktopSyncBlobsRunning => 'Завантаження вкладень…';
+
+  @override
+  String get desktopSyncBlobsAction => 'Підвантажити вкладення';
+
+  @override
+  String get desktopSyncBlobsHint => 'Завантажує медіа з нещодавніх чатів, якщо файлів немає локально (після повторної прив’язки або довгого офлайну).';
+
+  @override
+  String get desktopSyncBlobsShort => 'Підвантажити';
+
+  @override
+  String desktopServerBackupOk(Object stamp, Object size, Object profile) {
+    return 'Копія на сервері ✓ · $stamp · $size КБ · профіль $profile';
+  }
+
+  @override
+  String get desktopServerBackupPassword => 'Пароль резервної копії';
+
+  @override
+  String get desktopServerBackupPasswordHint => 'Цим паролем копія шифрується і відновлюється на будь-якому пристрої. Запам’ятайте його — без пароля копія марна, відновити його не можна.';
+
+  @override
+  String get desktopServerBackupRepeat => 'Повторіть пароль';
+
+  @override
+  String get desktopServerBackupCreate => 'Створити копію';
+
+  @override
+  String get desktopServerBackupTitle => 'Резервна копія на сервер';
+
+  @override
+  String get desktopServerBackupHint => 'Зашифрована копія облікового запису на сервері Secretly. Відновлюється на будь-якому пристрої через «Відновити з сервера» за вашим Secretly ID і паролем.';
+
+  @override
+  String get desktopServerBackupLoading => 'Завантаження…';
+
+  @override
+  String get desktopServerBackupCreateOnServer => 'Створити копію на сервері';
+
+  @override
+  String get desktopServerBackupUpdate => 'Оновити копію';
+
+  @override
+  String desktopFailedWith(Object error) {
+    return 'Не вдалося: $error';
+  }
+
+  @override
+  String get desktopStorageDeleteModelTitle => 'Видалити модель розпізнавання?';
+
+  @override
+  String get desktopStorageDeleteModelBody => 'Розшифрування голосових повідомлень перестане працювати, доки модель не завантажиться знову.';
+
+  @override
+  String get desktopStorageModelDeleted => 'Модель видалено';
+
+  @override
+  String desktopStorageDeleteFailed(Object error) {
+    return 'Не вдалося видалити: $error';
+  }
+
+  @override
+  String desktopStorageKb(Object value) {
+    return '$value КБ';
+  }
+
+  @override
+  String desktopStorageMb(Object value) {
+    return '$value МБ';
+  }
+
+  @override
+  String desktopStorageGb(Object value) {
+    return '$value ГБ';
+  }
+
+  @override
+  String get desktopStorageUsage => 'Використання';
+
+  @override
+  String get desktopStorageUsageHint => 'Кеш і медіа на цьому пристрої';
+
+  @override
+  String desktopStorageClearHint(Object size) {
+    return 'Звільниться $size. Повідомлення, надіслані вами файли та «нещодавні» не видаляються — їх немає звідки відновити.';
+  }
+
+  @override
+  String get desktopStorageClear => 'Очистити кеш';
+
+  @override
+  String get desktopStorageCounting => 'Підрахунок…';
+
+  @override
+  String get desktopStorageSpeechModel => 'Модель розпізнавання мовлення';
+
+  @override
+  String get desktopStorageSpeechModelHint => 'Використовується для розшифрування голосових повідомлень на цьому комп’ютері, без надсилання звуку кудись. Звичайне очищення кешу її НЕ видаляє — вона велика й завантажується окремо.';
+
+  @override
+  String get desktopStorageDeleteModel => 'Видалити модель';
+
+  @override
+  String desktopStorageMedia(Object size) {
+    return 'Медіа · $size';
+  }
+
+  @override
+  String desktopStorageVoice(Object size) {
+    return 'Голос · $size';
+  }
+
+  @override
+  String desktopStorageOther(Object size) {
+    return 'Інше · $size';
+  }
+
+  @override
+  String get desktopStorageFree => 'Вільно';
+
+  @override
+  String desktopStorageTotal(Object size) {
+    return 'Усього · $size';
+  }
+
+  @override
+  String desktopAboutVersion(Object version, Object build) {
+    return 'Версія $version · збірка $build';
+  }
+
+  @override
+  String get desktopAboutTagline => 'Захищений месенджер із наскрізним шифруванням. Без хмари. Без реклами. Відкритий код.';
+
+  @override
+  String get desktopAboutLicences => 'Ліцензії';
+
+  @override
+  String get desktopAboutWebsite => 'Сайт';
+
+  @override
+  String get desktopDangerTitle => 'Видалити обліковий запис безповоротно?';
+
+  @override
+  String get desktopDangerBody => 'Профіль, ключі, локальні дані та історія повідомлень будуть видалені на цьому та інших пристроях. Відновлення неможливе.';
+
+  @override
+  String get desktopDangerDeleting => 'Видалення облікового запису…';
+
+  @override
+  String desktopDangerFailed(Object error) {
+    return 'Не вдалося видалити обліковий запис: $error';
+  }
+
+  @override
+  String get desktopDangerSection => 'Видалення облікового запису';
+
+  @override
+  String get desktopDangerDemo => 'Демо-режим · видалення недоступне без підключеного профілю.';
+
+  @override
+  String get desktopDangerEnterId => 'Введіть ваш Secretly ID для підтвердження';
+
+  @override
+  String desktopDangerEnterIdExact(Object id) {
+    return 'Введіть $id для підтвердження';
+  }
+
+  @override
+  String get desktopDangerAction => 'Видалити обліковий запис';
+
+  @override
+  String get desktopDangerIrreversible => 'Ця дія незворотна. Буде видалено всі ваші дані, історію повідомлень і ключі. Відновлення неможливе.';
+
+  @override
+  String get desktopSecurityE2ee => 'Наскрізне шифрування';
+
+  @override
+  String get desktopSecurityE2eeHint => 'Усі повідомлення, дзвінки та файли шифруються на вашому пристрої. Ключі не залишають ваші пристрої — сервер бачить лише шифротекст.';
+
+  @override
+  String get desktopSecurityVerifiedDevices => 'Перевірені пристрої';
+
+  @override
+  String get desktopSecurityVerifiedHint => 'Доки налаштування ввімкнене, повідомлення не йдуть на непідтверджені пристрої співрозмовника. Це захист від підміни, але повідомлення може не дійти, доки він не підтвердить новий. Лише особисте листування: на групи не діє.';
+
+  @override
+  String get desktopSecurityOnlyVerified => 'Лише перевірені пристрої';
+
+  @override
+  String get desktopSecurityBlocked => 'Неперевірені пристрої блокуються';
+
+  @override
+  String get desktopSecurityAllDevices => 'Повідомлення йдуть на всі пристрої співрозмовника';
+
+  @override
+  String get desktopSecurityAppEntry => 'Вхід у застосунок';
+
+  @override
+  String get desktopSecurityAppEntryHint => 'Пароль під час відкриття Secretly і після того, як вікно було сховане довше за хвилину. Діє на цьому комп’ютері.';
+
+  @override
+  String get desktopSecurityPersonalScopeHint => 'Окремий пароль на категорію «Особисті». Без нього особисті чати відкриті будь-кому, хто має доступ до розблокованого комп’ютера.';
+
+  @override
+  String get desktopCallsInApp => 'Дзвінки в застосунку';
+
+  @override
+  String get desktopCallsInAppHint => 'Вимкніть, щоб повністю відключити дзвінки';
+
+  @override
+  String get desktopCallsAccept => 'Приймати вхідні';
+
+  @override
+  String get desktopCallsAcceptHint => 'Вам зможуть дзвонити';
+
+  @override
+  String get desktopCallsDisabledHint => 'Недоступно, доки дзвінки вимкнені';
+
+  @override
+  String get desktopCallsScreenShare => 'Показ екрана';
+
+  @override
+  String get desktopCallsScreenShareHint => 'Приймання чужого показу — окремий дозвіл: на екрані може опинитися те, чого ви не очікували побачити.';
+
+  @override
+  String get desktopCallsAcceptScreenShare => 'Приймати показ екрана';
+
+  @override
+  String get desktopAccountIdCopied => 'Secretly ID скопійовано';
+
+  @override
+  String get desktopAccountIdHint => 'Цим ідентифікатором діляться, щоб вас знайшли. Він не містить ні номера телефона, ні пошти.';
+
+  @override
+  String get desktopAccountCopy => 'Копіювати';
+
+  @override
+  String get desktopAccountProfile => 'Профіль';
+
+  @override
+  String get desktopAccountProfileHint => 'Ім’я, фото, статус';
+
+  @override
+  String get desktopAccountOpenProfile => 'Відкрити сторінку профілю';
+
+  @override
+  String desktopScopePasswordFor(Object name) {
+    return 'Пароль для «$name»';
+  }
+
+  @override
+  String get desktopScopeMin4 => 'Щонайменше 4 символи';
+
+  @override
+  String get desktopScopeOn => 'Захист увімкнено';
+
+  @override
+  String desktopScopeOnFailed(Object error) {
+    return 'Не вдалося ввімкнути: $error';
+  }
+
+  @override
+  String get desktopScopeOff => 'Захист вимкнено';
+
+  @override
+  String desktopScopeOffFailed(Object error) {
+    return 'Не вдалося вимкнути: $error';
+  }
+
+  @override
+  String get desktopScopePasswordsDiffer => 'Паролі не збігаються';
+
+  @override
+  String get desktopScopeTitle => 'Захист паролем';
+
+  @override
+  String get desktopScopeOnWithPassword => 'Увімкнено — пароль';
+
+  @override
+  String get desktopScopeEnabled => 'Увімкнено';
+
+  @override
+  String get desktopScopeDisabled => 'Вимкнено';
+
+  @override
+  String get desktopScopeChangePassword => 'Змінити пароль';
+
+  @override
+  String get desktopScopeLockNow => 'Заблокувати';
+
+  @override
+  String desktopBlockedUnblocked(Object name) {
+    return '$name розблоковано';
+  }
+
+  @override
+  String desktopBlockedUnblockFailed(Object error) {
+    return 'Не вдалося розблокувати: $error';
+  }
+
+  @override
+  String get desktopBlockedTitle => 'Заблоковані';
+
+  @override
+  String get desktopBlockedEmptyHint => 'Перелік порожній. Заблокувати можна з меню чату.';
+
+  @override
+  String get desktopBlockedHint => 'Ці люди не можуть писати вам і дзвонити.';
+
+  @override
+  String get desktopBlockedNone => 'Ніхто не заблокований';
+
+  @override
+  String get desktopSupportSent => 'Повідомлення надіслано';
+
+  @override
+  String get desktopSupportSendFailed => 'Не вдалося надіслати. Перевірте підключення.';
+
+  @override
+  String get desktopSupportUnavailable => 'Підтримка недоступна';
+
+  @override
+  String get desktopSupportUnavailableHint => 'Службу підтримки зараз вимкнено. Спробуйте пізніше або напишіть з телефона.';
+
+  @override
+  String get desktopSupportThread => 'Листування з підтримкою';
+
+  @override
+  String get desktopSupportThreadHint => 'Повідомлення шифруються на вашому пристрої. Сервер зберігає лише шифротекст — прочитати листування може лише підтримка.';
+
+  @override
+  String get desktopSupportNoReplies => 'Відповідей поки немає. Опишіть проблему — відповідь прийде сюди.';
+
+  @override
+  String get desktopSupportWrite => 'Написати в підтримку';
+
+  @override
+  String get desktopSupportWriteHint => 'До повідомлення автоматично додаються версія збірки та ідентифікатор пристрою — без них відтворити проблему майже неможливо.';
+
+  @override
+  String get desktopSupportDescribe => 'Опишіть, що сталося';
+
+  @override
+  String get desktopSupportSending => 'Надсилаємо…';
+
+  @override
+  String get desktopSupportSend => 'Надіслати';
+
+  @override
+  String get desktopChatsEmptyHint => 'Почніть спілкування з телефона — чати автоматично синхронізуються на комп’ютер';
+
+  @override
+  String get desktopChatsPickOne => 'Оберіть чат ліворуч';
+
+  @override
+  String desktopChatsSendFailed(Object error) {
+    return 'Не вдалося надіслати: $error';
+  }
+
+  @override
+  String desktopChatsSendingTo(Object title) {
+    return 'Надсилається в «$title»';
+  }
+
+  @override
+  String get desktopChatsFilterAll => 'Усі';
+
+  @override
+  String get desktopChatsFilterUnread => 'Непрочит.';
+
+  @override
+  String get desktopChatsFilterGroups => 'Групи';
+
+  @override
+  String get desktopChatsFilterArchive => 'Архів';
+
+  @override
+  String get desktopChatsFilterPersonal => 'Особисті';
+
+  @override
+  String get desktopChatsRenameFolder => 'Перейменувати теку';
+
+  @override
+  String get desktopChatsDeleteFolder => 'Видалити теку';
+
+  @override
+  String desktopChatsRenameFailed(Object error) {
+    return 'Не вдалося перейменувати: $error';
+  }
+
+  @override
+  String desktopChatsDeleteFolderTitle(Object name) {
+    return 'Видалити теку «$name»?';
+  }
+
+  @override
+  String get desktopChatsDeleteFolderBody => 'Чати залишаться на місці — видалиться лише тека.';
+
+  @override
+  String desktopChatsDeleteFailed(Object error) {
+    return 'Не вдалося видалити: $error';
+  }
+
+  @override
+  String desktopChatsAddedToFolder(Object name) {
+    return 'Додано до «$name»';
+  }
+
+  @override
+  String desktopChatsRemovedFromFolder(Object name) {
+    return 'Прибрано з «$name»';
+  }
+
+  @override
+  String desktopChatsFolderChangeFailed(Object error) {
+    return 'Не вдалося змінити теку: $error';
+  }
+
+  @override
+  String desktopChatsFolderCreated(Object name) {
+    return 'Теку «$name» створено';
+  }
+
+  @override
+  String desktopChatsFolderCreateFailed(Object error) {
+    return 'Не вдалося створити теку: $error';
+  }
+
+  @override
+  String get desktopChatsNewFolder => 'Нова тека';
+
+  @override
+  String get desktopChatsFolderName => 'Назва теки';
+
+  @override
+  String desktopChatsRemoveFromFolder(Object name) {
+    return 'Прибрати з «$name»';
+  }
+
+  @override
+  String desktopChatsAddToFolder(Object name) {
+    return 'До теки «$name»';
+  }
+
+  @override
+  String get desktopChatsNewFolderWithChat => 'Нова тека з цим чатом…';
+
+  @override
+  String get desktopChatsRemoveFromPersonal => 'Прибрати з особистих';
+
+  @override
+  String get desktopChatsAddToPersonal => 'До особистих';
+
+  @override
+  String get desktopChatsArchiveEmpty => 'В архіві порожньо';
+
+  @override
+  String get desktopChatsNoPersonal => 'Особистих чатів немає';
+
+  @override
+  String get desktopChatsPersonalLocked => 'Особисті чати захищено паролем';
+
+  @override
+  String get desktopChatsAllRead => 'Усе прочитано';
+
+  @override
+  String get desktopChatsFolderEmpty => 'У цій теці поки порожньо';
+
+  @override
+  String get desktopChatsNewChat => 'Новий чат';
+
+  @override
+  String get desktopChatsNewRoom => 'Нова кімната';
+
+  @override
+  String get desktopChatsStartFailed => 'Не вдалося почати чат: профіль недоступний';
+
+  @override
+  String get desktopChatsPhoto => 'Фото';
+
+  @override
+  String get desktopChatsVideo => 'Відео';
+
+  @override
+  String get desktopChatsAudio => 'Аудіо';
+
+  @override
+  String get desktopChatsVoiceMessage => 'Голосове повідомлення';
+
+  @override
+  String get desktopChatsVoiceShort => 'Голосове';
+
+  @override
+  String get desktopChatsLink => 'Посилання';
+
+  @override
+  String get desktopChatsSticker => 'Стікер';
+
+  @override
+  String desktopChatsStickerWith(Object label) {
+    return 'Стікер $label';
+  }
+
+  @override
+  String desktopChatsPoll(Object question) {
+    return '📊 Опитування: $question';
+  }
+
+  @override
+  String get desktopChatsUnknown => 'невідомо';
+
+  @override
+  String get desktopChatsMember => 'Учасник';
+
+  @override
+  String get desktopChatsSoundOn => 'Увімкнути звук';
+
+  @override
+  String get desktopChatsSoundOff => 'Без звуку';
+
+  @override
+  String get desktopChatsClearHistoryTitle => 'Очистити історію?';
+
+  @override
+  String desktopChatsClearHistoryBody(Object title) {
+    return 'Усі повідомлення чату «$title» на цьому пристрої буде видалено.';
+  }
+
+  @override
+  String get desktopChatsClear => 'Очистити';
+
+  @override
+  String get desktopChatsHistoryClearedBoth => 'Історію очищено в обох';
+
+  @override
+  String get desktopChatsHistoryCleared => 'Історію очищено';
+
+  @override
+  String get desktopChatsDeleteChatTitle => 'Видалити чат?';
+
+  @override
+  String desktopChatsDeleteChatBody(Object title) {
+    return 'Чат «$title» повністю видалиться з цього пристрою.';
+  }
+
+  @override
+  String get desktopChatsRooms => 'Кімнати';
+
+  @override
+  String get desktopChatsGeneralTopic => 'Загальний';
+
+  @override
+  String get desktopChatsNewTopicEllipsis => 'Нова тема…';
+
+  @override
+  String desktopChatsBranch(Object title) {
+    return 'Гілка «$title»';
+  }
+
+  @override
+  String get desktopChatsRename => 'Перейменувати';
+
+  @override
+  String get desktopChatsIcon => 'Значок';
+
+  @override
+  String get desktopChatsDeleteBranch => 'Видалити гілку';
+
+  @override
+  String get desktopChatsBranchIcon => 'Значок гілки';
+
+  @override
+  String get desktopChatsBranchIconHint => 'Значок замінює решітку перед назвою. Кольорові обіцяють, що всередині: зелений — дзвінок, червоний — термінове. Решта сірі, щоб не сперечатися з назвою.';
+
+  @override
+  String get desktopChatsHash => 'Решітка';
+
+  @override
+  String desktopChatsBranchFailed(Object error) {
+    return 'Не вдалося змінити гілки: $error';
+  }
+
+  @override
+  String get desktopChatsNewTopic => 'Нова тема';
+
+  @override
+  String get desktopChatsRenameTopic => 'Перейменувати тему';
+
+  @override
+  String get desktopChatsTopicName => 'Назва теми';
+
+  @override
+  String desktopChatsReactionFailed(Object error) {
+    return 'Не вдалося зберегти реакцію: $error';
+  }
+
+  @override
+  String desktopChatsReactionLocal(Object error) {
+    return 'Реакцію застосовано локально, але не доставлено співрозмовнику: $error';
+  }
+
+  @override
+  String get desktopChatsRevealFailed => 'Не вдалося показати файл у Finder';
+
+  @override
+  String desktopChatsVideoOpenFailed(Object error) {
+    return 'Не вдалося відкрити відео: $error';
+  }
+
+  @override
+  String get desktopChatsVideoUnavailable => 'Відео недоступне';
+
+  @override
+  String desktopChatsFileFetchFailed(Object error) {
+    return 'Не вдалося отримати файл: $error';
+  }
+
+  @override
+  String get desktopChatsSaveAttachment => 'Зберегти вкладення';
+
+  @override
+  String get desktopChatsFileUnavailable => 'Файл недоступний';
+
+  @override
+  String desktopChatsSaveFailed(Object error) {
+    return 'Не вдалося зберегти: $error';
+  }
+
+  @override
+  String desktopChatsOpenFailedWith(Object error) {
+    return 'Не вдалося відкрити файл: $error';
+  }
+
+  @override
+  String get desktopChatsOpenFailed => 'Не вдалося відкрити файл';
+
+  @override
+  String desktopChatsOpenFailedShort(Object error) {
+    return 'Не вдалося відкрити: $error';
+  }
+
+  @override
+  String desktopChatsPlayFailed(Object error) {
+    return 'Не вдалося відтворити: $error';
+  }
+
+  @override
+  String get desktopChatsNoCallPeer => 'Не вдалося визначити співрозмовника для дзвінка.';
+
+  @override
+  String get desktopChatsCallsNotReady => 'Служба дзвінків не готова.';
+
+  @override
+  String get desktopChatsCallInProgress => 'Дзвінок уже триває.';
+
+  @override
+  String get desktopChatsEditFailed => 'Не вдалося змінити повідомлення.';
+
+  @override
+  String get desktopChatsNoRecipient => 'Не вдалося визначити отримувача.';
+
+  @override
+  String get desktopChatsDeleteMessageTitle => 'Видалити повідомлення?';
+
+  @override
+  String get desktopChatsDeleteMessagesTitle => 'Видалити обрані повідомлення?';
+
+  @override
+  String get desktopChatsDeleteOthersHint => 'Чужі повідомлення видаляться лише у вас.';
+
+  @override
+  String get desktopChatsDeleteForAll => 'Видалити в усіх';
+
+  @override
+  String get desktopChatsDeleteForMeOnly => 'Видалити лише в мене';
+
+  @override
+  String get desktopChatsDeleteForMe => 'Видалити в мене';
+
+  @override
+  String get desktopChatsSavePrivacyBlocked => 'Це повідомлення не можна зберегти через обмеження приватності.';
+
+  @override
+  String get desktopChatsNothingToSave => 'Вкладення не завантажено — зберігати нічого';
+
+  @override
+  String get desktopChatsSavedPartly => 'Збережено в «Обране», але не все';
+
+  @override
+  String get desktopChatsSaved => 'Збережено в «Обране»';
+
+  @override
+  String get desktopChatsForwardPrivacyBlocked => 'Це повідомлення не можна переслати через обмеження приватності.';
+
+  @override
+  String desktopChatsForwardFailed(Object error) {
+    return 'Не вдалося переслати: $error';
+  }
+
+  @override
+  String get desktopChatsNothingToForward => 'Вкладення не завантажено — пересилати нічого';
+
+  @override
+  String desktopChatsForwardedPartly(Object title) {
+    return 'Переслано в «$title», але не все';
+  }
+
+  @override
+  String desktopChatsForwarded(Object title) {
+    return 'Переслано в «$title»';
+  }
+
+  @override
+  String desktopChatsFileNotSentElsewhere(Object text) {
+    return 'Файл в інше листування не надіслано: $text';
+  }
+
+  @override
+  String get desktopChatsFileSendFailed => 'Не вдалося надіслати файл.';
+
+  @override
+  String desktopChatsPremiumFiles(Object text) {
+    return '$text З Premium можна надсилати файли до 1 ГБ.';
+  }
+
+  @override
+  String get desktopChatsTypingEllipsis => 'пише…';
+
+  @override
+  String get desktopChatsOnline => 'у мережі';
+
+  @override
+  String desktopChatsSomeoneTyping(Object name) {
+    return '$name пише';
+  }
+
+  @override
+  String get desktopChatsLoadingList => 'Підтягуємо перелік із локального сховища.';
+
+  @override
+  String get desktopChatsWillAppear => 'Повідомлення та дзвінки з’являться тут, щойно ви відкриєте чат.';
+
+  @override
+  String get desktopRoomNoOpenHere => 'Відкрити листування звідси не можна';
+
+  @override
+  String get desktopRoomIdCopied => 'ID скопійовано';
+
+  @override
+  String get desktopRoomAwaiting => 'Чекає схвалення';
+
+  @override
+  String get desktopRoomBlocked => 'Заблокований';
+
+  @override
+  String get desktopRoomCopied => 'Скопійовано';
+
+  @override
+  String get desktopRoomChangeRole => 'Змінити роль';
+
+  @override
+  String get desktopRoomTransfer => 'Передати володіння';
+
+  @override
+  String get desktopRoomBlockMember => 'Заблокувати';
+
+  @override
+  String get desktopRoomKick => 'Виключити';
+
+  @override
+  String get desktopRoomKickTitle => 'Виключити учасника?';
+
+  @override
+  String desktopRoomKickBody(Object name) {
+    return '$name втратить доступ до кімнати. Повернути його можна новим запрошенням.';
+  }
+
+  @override
+  String get desktopRoomBlockTitle => 'Заблокувати учасника?';
+
+  @override
+  String desktopRoomBlockBody(Object name) {
+    return '$name не зможе повернутися до кімнати навіть за запрошенням, доки блокування не знімуть.';
+  }
+
+  @override
+  String get desktopRoomTransferTitle => 'Передати володіння кімнатою?';
+
+  @override
+  String desktopRoomTransferBody(Object name) {
+    return '$name стане власником, а ви — адміністратором. Скасувати це зможе лише новий власник.';
+  }
+
+  @override
+  String get desktopRoomTransferAction => 'Передати';
+
+  @override
+  String get desktopRoomClearTitle => 'Очистити історію?';
+
+  @override
+  String get desktopRoomClearBody => 'Усі повідомлення кімнати на цьому пристрої буде видалено.';
+
+  @override
+  String get desktopRoomLeaveTitle => 'Покинути кімнату?';
+
+  @override
+  String get desktopRoomLeaveBody => 'Ви перестанете отримувати повідомлення. Щоб повернутися, знадобиться нове запрошення.';
+
+  @override
+  String get desktopRoomLeave => 'Покинути';
+
+  @override
+  String get desktopRoomInvite => 'Запросити';
+
+  @override
+  String get desktopRoomCopyId => 'Копіювати ID кімнати';
+
+  @override
+  String get desktopRoomMuteOff => 'Вимкнути сповіщення';
+
+  @override
+  String get desktopRoomUnarchive => 'Повернути з архіву';
+
+  @override
+  String get desktopRoomLeaveRoom => 'Покинути кімнату';
+
+  @override
+  String get desktopRoomUntitled => 'Без назви';
+
+  @override
+  String get desktopRoomCopyInvite => 'Скопіювати запрошення';
+
+  @override
+  String get desktopRoomSound => 'Звук';
+
+  @override
+  String get desktopRoomTabInfo => 'Інфо';
+
+  @override
+  String get desktopRoomTabMembers => 'Учасники';
+
+  @override
+  String get desktopRoomTabMedia => 'Медіа';
+
+  @override
+  String get desktopRoomTopics => 'ТЕМИ';
+
+  @override
+  String desktopRoomTopicsCount(Object count) {
+    return 'ТЕМИ · $count';
+  }
+
+  @override
+  String get desktopRoomDescription => 'Опис';
+
+  @override
+  String get desktopRoomNotes => 'НОТАТКИ';
+
+  @override
+  String get desktopRoomInformation => 'Інформація';
+
+  @override
+  String get desktopRoomId => 'ID кімнати';
+
+  @override
+  String get desktopRoomInviteLink => 'Посилання-запрошення · натисніть, щоб скопіювати';
+
+  @override
+  String get desktopRoomFavouriteHint => 'Плитка на рейці та місце вгорі переліку';
+
+  @override
+  String get desktopRoomArchiveHint => 'Сховати кімнату з основного переліку';
+
+  @override
+  String get desktopRoomNoMembers => 'Немає учасників';
+
+  @override
+  String desktopRoomMembersCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count учасника',
+      many: '$count учасників',
+      few: '$count учасники',
+      one: '$count учасник',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get desktopRoomNobodyFound => 'Нікого не знайдено';
+
+  @override
+  String get desktopRoomMembersUnavailable => 'Перелік учасників недоступний.';
+
+  @override
+  String get desktopRoomInCall => 'У ДЗВІНКУ';
+
+  @override
+  String get desktopRoomOnline => 'У МЕРЕЖІ';
+
+  @override
+  String get desktopRoomOffline => 'НЕ В МЕРЕЖІ';
+
+  @override
+  String desktopRoomMoreHidden(Object count) {
+    return 'Ще $count — знайдіть пошуком вище';
+  }
+
+  @override
+  String get desktopRoomSearchMember => 'Пошук учасника';
+
+  @override
+  String get desktopRoomJoinRequests => 'Заявки на вступ';
+
+  @override
+  String get desktopRoomAccept => 'Прийняти';
+
+  @override
+  String get desktopRoomDecline => 'Відхилити';
+
+  @override
+  String get desktopRoomRoleOwner => 'Власник';
+
+  @override
+  String get desktopRoomRoleAdmin => 'Адміністратор';
+
+  @override
+  String get desktopRoomRoleModerator => 'Модератор';
+
+  @override
+  String get desktopRoomRoleRestricted => 'Обмежений';
+
+  @override
+  String get desktopRoomRoleGuest => 'Гість';
+
+  @override
+  String get desktopContactBlockTitle => 'Заблокувати?';
+
+  @override
+  String get desktopContactUnblockTitle => 'Розблокувати?';
+
+  @override
+  String get desktopContactBlockBody => 'Співрозмовник більше не зможе надсилати вам повідомлення й дзвонити.';
+
+  @override
+  String get desktopContactUnblockBody => 'Співрозмовник знову зможе з вами зв’язатися.';
+
+  @override
+  String get desktopContactBlock => 'Заблокувати';
+
+  @override
+  String get desktopContactCallsNotReady => 'Служба дзвінків ще не готова';
+
+  @override
+  String get desktopContactCallInProgress => 'Дзвінок уже триває';
+
+  @override
+  String desktopContactCallFailed(Object error) {
+    return 'Не вдалося почати дзвінок: $error';
+  }
+
+  @override
+  String get desktopContactAutoDelete => 'Автовидалення повідомлень';
+
+  @override
+  String get desktopContactAutoDeleteUpdated => 'Автовидалення оновлено';
+
+  @override
+  String get desktopContactClearBody => 'Усі повідомлення цього чату на цьому пристрої буде видалено.';
+
+  @override
+  String get desktopContactDeleteBody => 'Чат повністю видалиться з цього пристрою.';
+
+  @override
+  String get desktopContactOff => 'Вимкнено';
+
+  @override
+  String get desktopContactDisable => 'Вимкнути';
+
+  @override
+  String get desktopContactDay1 => '1 день';
+
+  @override
+  String get desktopContactDays7 => '7 днів';
+
+  @override
+  String get desktopContactDays30 => '30 днів';
+
+  @override
+  String get desktopContactHour1 => '1 година';
+
+  @override
+  String desktopContactMinutes(Object value) {
+    return '$value хв';
+  }
+
+  @override
+  String get desktopContactOffline => 'не в мережі';
+
+  @override
+  String desktopContactSeenAt(Object time) {
+    return 'був(ла) о $time';
+  }
+
+  @override
+  String get desktopContactSeenYesterday => 'був(ла) учора';
+
+  @override
+  String desktopContactSeenOn(Object date) {
+    return 'був(ла) $date';
+  }
+
+  @override
+  String get desktopContactCopyId => 'Копіювати ID';
+
+  @override
+  String get desktopContactCopyIdShort => 'Скопіювати ID';
+
+  @override
+  String get desktopContactDisappearing => 'Зникомі повідомлення';
+
+  @override
+  String get desktopContactDeleteChat => 'Видалити чат';
+
+  @override
+  String get desktopContactCall => 'Дзвінок';
+
+  @override
+  String get desktopContactBlockShort => 'Блок';
+
+  @override
+  String get desktopContactSecurity => 'Безпека';
+
+  @override
+  String get desktopContactVerify => 'Перевірити контакт';
+
+  @override
+  String get desktopContactArchiveHint => 'Сховати чат з основного переліку';
+
+  @override
+  String get desktopThreadMessageHint => 'Повідомлення…';
+
+  @override
+  String get desktopThreadPasteFailed => 'Не вдалося вставити зображення';
+
+  @override
+  String get desktopThreadNoScheduleEdit => 'Правку не можна відкласти — вона змінює вже надіслане';
+
+  @override
+  String desktopThreadWillLeave(Object when) {
+    return 'Піде $when';
+  }
+
+  @override
+  String desktopThreadSeconds(Object value) {
+    return '$value с';
+  }
+
+  @override
+  String desktopThreadMinutes(Object value) {
+    return '$value хв';
+  }
+
+  @override
+  String desktopThreadHours(Object value) {
+    return '$value год';
+  }
+
+  @override
+  String desktopThreadDays(Object value) {
+    return '$value дн';
+  }
+
+  @override
+  String desktopThreadWeeks(Object value) {
+    return '$value тиж';
+  }
+
+  @override
+  String desktopThreadSelected(Object count) {
+    return 'Вибрано: $count';
+  }
+
+  @override
+  String get desktopThreadDisappearingOn => 'Зникомі повідомлення ввімкнено';
+
+  @override
+  String get desktopThreadCallAction => 'Подзвонити';
+
+  @override
+  String get desktopThreadCallRoom => 'Дзвінок';
+
+  @override
+  String get desktopThreadVideoCall => 'Відеодзвінок';
+
+  @override
+  String get desktopThreadSearchShortcut => 'Пошук у чаті  Cmd F';
+
+  @override
+  String get desktopThreadHideDetails => 'Сховати подробиці';
+
+  @override
+  String get desktopThreadShowDetails => 'Показати подробиці';
+
+  @override
+  String get desktopThreadMore => 'Ще';
+
+  @override
+  String get desktopThreadPinned => 'Закріплене повідомлення';
+
+  @override
+  String get desktopThreadNoMatches => 'немає збігів';
+
+  @override
+  String get desktopThreadSearchHint => 'Пошук у чаті…';
+
+  @override
+  String get desktopThreadPrevMatch => 'Попереднє (Shift F3)';
+
+  @override
+  String get desktopThreadNextMatch => 'Наступне (F3)';
+
+  @override
+  String get desktopThreadCloseEsc => 'Закрити (Esc)';
+
+  @override
+  String get desktopThreadNewMessages => 'Нові повідомлення';
+
+  @override
+  String desktopThreadUnreadCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count непрочитаних',
+      many: '$count непрочитаних',
+      few: '$count непрочитані',
+      one: '$count непрочитане',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get desktopThreadToday => 'Сьогодні';
+
+  @override
+  String get desktopThreadYesterday => 'Вчора';
+
+  @override
+  String get desktopProfileEmojiStatus => 'Емодзі-статус';
+
+  @override
+  String get desktopProfileClearStatus => 'Прибрати статус';
+
+  @override
+  String desktopProfileApplyFailed(Object error) {
+    return 'Не вдалося застосувати: $error';
+  }
+
+  @override
+  String get desktopProfileAvatarFrame => 'Рамка аватара';
+
+  @override
+  String get desktopProfileCover => 'Обкладинка профілю';
+
+  @override
+  String get desktopProfileNoFrame => 'Без рамки';
+
+  @override
+  String get desktopProfileNoCover => 'Без обкладинки';
+
+  @override
+  String get desktopProfileReadFailed => 'Не вдалося прочитати файл';
+
+  @override
+  String get desktopProfilePhotoUpdated => 'Фото профілю оновлено';
+
+  @override
+  String desktopProfilePhotoFailed(Object error) {
+    return 'Не вдалося оновити фото: $error';
+  }
+
+  @override
+  String desktopProfilePhotoRemoveFailed(Object error) {
+    return 'Не вдалося прибрати фото: $error';
+  }
+
+  @override
+  String get desktopProfileMine => 'Мій профіль';
+
+  @override
+  String get desktopProfileEdit => 'Редагувати';
+
+  @override
+  String get desktopProfileName => 'Ім’я';
+
+  @override
+  String get desktopProfileChangePhoto => 'Змінити фото';
+
+  @override
+  String get desktopProfileFrameShort => 'Рамка';
+
+  @override
+  String get desktopProfileCoverShort => 'Обкладинка';
+
+  @override
+  String get desktopProfileStatus => 'Статус';
+
+  @override
+  String get desktopProfileAppearanceHint => 'Тема, акцент і шпалери чату';
+
+  @override
+  String get desktopProfileAbout => 'Про себе';
+
+  @override
+  String get desktopProfileEmpty => 'Не заповнено';
+
+  @override
+  String get desktopProfilePhoto => 'Фото профілю';
+
+  @override
+  String get desktopProfileReplacePhoto => 'Замінити фото';
+
+  @override
+  String get desktopProfilePickPhoto => 'Обрати фото';
+
+  @override
+  String get desktopProfilePickedHere => 'Обрано на цьому комп’ютері';
+
+  @override
+  String get desktopProfileSyncedWithPhone => 'Синхронізовано з телефоном';
+
+  @override
+  String get desktopProfileNotPicked => 'Не обрано';
+
+  @override
+  String get desktopProfileRemovePhoto => 'Прибрати фото';
+
+  @override
+  String get desktopProfileInitialsStay => 'Залишаться ініціали';
+
+  @override
+  String get desktopProfileAccount => 'Обліковий запис';
+
+  @override
+  String get desktopProfileRecovery => 'Відновлення';
+
+  @override
+  String get desktopProfileRecoveryHint => 'Цей комп’ютер підключений до телефона і своєї фрази відновлення не зберігає: обліковий запис повертає копія та ключ відновлення.';
+
+  @override
+  String get desktopProfileDevicesHint => 'Підключені комп’ютери та телефони';
+
+  @override
+  String get desktopProfileFrameCaps => 'РАМКА АВАТАРА';
+
+  @override
+  String get desktopGalleryMedia => 'Медіа';
+
+  @override
+  String get desktopGalleryFiles => 'Файли';
+
+  @override
+  String get desktopGalleryLinks => 'Посилання';
+
+  @override
+  String get desktopGalleryNoMedia => 'Немає медіа';
+
+  @override
+  String get desktopGalleryNoFiles => 'Немає файлів';
+
+  @override
+  String get desktopGalleryNoAudio => 'Немає аудіо';
+
+  @override
+  String get desktopGalleryNoLinks => 'Немає посилань';
+
+  @override
+  String get desktopGalleryPathCopied => 'Шлях скопійовано';
+
+  @override
+  String get desktopGalleryOpen => 'Відкрити';
+
+  @override
+  String get desktopGalleryView => 'Перегляд';
+
+  @override
+  String get desktopGalleryOpenInSystem => 'Відкрити в системі';
+
+  @override
+  String get desktopGalleryRevealFinder => 'Показати у Finder';
+
+  @override
+  String get desktopGalleryRevealExplorer => 'Показати в провіднику';
+
+  @override
+  String get desktopGalleryOpenFolder => 'Відкрити теку';
+
+  @override
+  String get desktopGalleryCopyPath => 'Копіювати шлях';
+
+  @override
+  String desktopGalleryBytes(Object value) {
+    return '$value Б';
+  }
+
+  @override
+  String get desktopGalleryZeroBytes => '0 Б';
+
+  @override
+  String desktopOutgoingFolderSingle(Object name) {
+    return 'теку «$name» надіслати не можна';
+  }
+
+  @override
+  String get desktopOutgoingFoldersMany => 'теки надіслати не можна';
+
+  @override
+  String desktopOutgoingTooLargeOne(Object name, Object limit) {
+    return '«$name» більше за $limit МБ';
+  }
+
+  @override
+  String desktopOutgoingTooLargeMany(int count, Object limit) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count файла більші за $limit МБ',
+      many: '$count файлів більші за $limit МБ',
+      few: '$count файли більші за $limit МБ',
+      one: '$count файл більший за $limit МБ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingEmptyOne(Object name) {
+    return '«$name» порожній';
+  }
+
+  @override
+  String desktopOutgoingEmptyMany(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count файла порожні',
+      many: '$count файлів порожні',
+      few: '$count файли порожні',
+      one: '$count файл порожній',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingUnreadableOne(Object name) {
+    return '«$name» не вдалося прочитати';
+  }
+
+  @override
+  String desktopOutgoingUnreadableMany(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count файла не вдалося прочитати',
+      many: '$count файлів не вдалося прочитати',
+      few: '$count файли не вдалося прочитати',
+      one: '$count файл не вдалося прочитати',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get desktopOutgoingSending => 'Надсилання';
+
+  @override
+  String desktopOutgoingPhotos(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count фото',
+      one: '$count фото',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingVideos(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count відео',
+      one: '$count відео',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingMedia(Object count) {
+    return '$count медіа';
+  }
+
+  @override
+  String desktopOutgoingAudios(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count аудіо',
+      one: '$count аудіо',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopOutgoingFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count файла',
+      many: '$count файлів',
+      few: '$count файли',
+      one: '$count файл',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get desktopCallsPickOne => 'Оберіть дзвінок ліворуч';
+
+  @override
+  String get desktopCallsPickHint => 'Тут з’являться подробиці та кнопка передзвонити';
+
+  @override
+  String get desktopCallsNone => 'Дзвінків поки немає';
+
+  @override
+  String get desktopCallsNoneHint => 'Історія з’явиться після першого дзвінка';
+
+  @override
+  String get desktopCallsOutgoing => 'Вихідний';
+
+  @override
+  String get desktopCallsIncoming => 'Вхідний';
+
+  @override
+  String get desktopCallsGroup => 'груповий';
+
+  @override
+  String get desktopCallsVideoKind => 'відео';
+
+  @override
+  String get desktopCallsAudioKind => 'аудіо';
+
+  @override
+  String get desktopCallsMissed => 'пропущений';
+
+  @override
+  String desktopPhotoCopyFailed(Object error) {
+    return 'Не вдалося скопіювати: $error';
+  }
+
+  @override
+  String get desktopPhotoSave => 'Зберегти фото';
+
+  @override
+  String get desktopPhotoSaved => 'Збережено';
+
+  @override
+  String desktopPhotoRevealFailed(Object error) {
+    return 'Не вдалося показати у Finder: $error';
+  }
+
+  @override
+  String get desktopPhotoLoadFailed => 'Не вдалося завантажити';
+
+  @override
+  String get desktopPhotoZoomOut => 'Зменшити';
+
+  @override
+  String get desktopPhotoZoomReset => 'Скинути масштаб';
+
+  @override
+  String get desktopPhotoZoomIn => 'Збільшити';
+
+  @override
+  String get desktopPhotoCopy => 'Скопіювати';
+
+  @override
+  String desktopBubbleForwardedFrom(Object from) {
+    return 'Переслано від $from';
+  }
+
+  @override
+  String get desktopBubbleAudioFile => 'Аудіофайл';
+
+  @override
+  String get desktopBubbleTranslating => 'Перекладаємо…';
+
+  @override
+  String get desktopBubbleTranslation => 'ПЕРЕКЛАД';
+
+  @override
+  String get desktopBubbleEdited => 'змінено';
+
+  @override
+  String get desktopBubbleMoreReactions => 'Більше реакцій';
+
+  @override
+  String get desktopBubbleRoleOwner => 'власник';
+
+  @override
+  String get desktopBubbleRoleAdmin => 'адмін';
+
+  @override
+  String get desktopBubbleRoleMod => 'модер';
+
+  @override
+  String get desktopBubbleSpeed => 'Швидкість відтворення';
+
+  @override
+  String get desktopSpotlightGoChats => 'Перейти до чатів';
+
+  @override
+  String get desktopSpotlightGoRooms => 'Перейти до кімнат';
+
+  @override
+  String get desktopSpotlightGoContacts => 'Перейти до контактів';
+
+  @override
+  String get desktopSpotlightGoCalls => 'Перейти до дзвінків';
+
+  @override
+  String get desktopSpotlightSelect => 'вибір';
+
+  @override
+  String get desktopSpotlightOpen => 'відкрити';
+
+  @override
+  String get desktopSpotlightClose => 'закрити';
+
+  @override
+  String get desktopSpotlightRoom => 'Кімната';
+
+  @override
+  String get desktopSpotlightMessage => 'Повідомлення';
+
+  @override
+  String get desktopSpotlightCommand => 'Команда';
+
+  @override
+  String get desktopComposerCancelRec => 'Скасувати запис';
+
+  @override
+  String desktopComposerRecording(Object time) {
+    return 'Запис  $time';
+  }
+
+  @override
+  String get desktopComposerSendVoice => 'Надіслати голосове';
+
+  @override
+  String get desktopComposerAttach => 'Прикріпити';
+
+  @override
+  String get desktopComposerEmoji => 'Емодзі та стікери';
+
+  @override
+  String get desktopComposerRecordVoice => 'Записати голосове';
+
+  @override
+  String get desktopComposerEnterSends => 'Enter — надіслати · Shift+Enter — перенос';
+
+  @override
+  String get desktopComposerEnterNewline => 'Enter — перенос · Shift+Enter — надіслати';
+
+  @override
+  String get desktopComposerEditing => 'Редагування';
+
+  @override
+  String desktopComposerReplyTo(Object name) {
+    return 'Відповідь · $name';
+  }
+
+  @override
+  String get desktopComposerCancelAction => 'Скасувати';
+
+  @override
+  String get desktopComposerSendHint => 'Надіслати · Enter\nПрава кнопка — надіслати пізніше';
+
+  @override
+  String get desktopComposerWriteFirst => 'Спочатку напишіть повідомлення';
+
+  @override
+  String desktopComposerToTopic(Object title) {
+    return 'у тему «$title»';
+  }
+
+  @override
+  String get desktopShortcutsNavigation => 'Навігація';
+
+  @override
+  String get desktopShortcutsTabs => 'Чати · Кімнати · Дзвінки · Контакти';
+
+  @override
+  String get desktopShortcutsSearchAll => 'Пошук по чатах і повідомленнях';
+
+  @override
+  String get desktopShortcutsPrevNext => 'Попередній / наступний чат';
+
+  @override
+  String get desktopShortcutsInChat => 'У листуванні';
+
+  @override
+  String get desktopShortcutsFindHere => 'Знайти в цьому листуванні';
+
+  @override
+  String get desktopShortcutsSend => 'Надіслати (налаштовується)';
+
+  @override
+  String get desktopShortcutsNewline => 'Перенос рядка';
+
+  @override
+  String get desktopShortcutsPaste => 'Вставити зображення з буфера';
+
+  @override
+  String get desktopShortcutsApp => 'Застосунок';
+
+  @override
+  String get desktopShortcutsThisHelp => 'Ця довідка';
+
+  @override
+  String get desktopShortcutsCloseWindow => 'Закрити вікно або пошук';
+
+  @override
+  String get desktopShortcutsTray => 'Згорнути в трей';
+
+  @override
+  String get desktopShortcutsTitle => 'Гарячі клавіші';
+
+  @override
+  String get desktopMediaCancelSend => 'Скасувати надсилання';
+
+  @override
+  String get desktopMediaSending => 'Надсилання…';
+
+  @override
+  String desktopMediaSendingOf(Object total) {
+    return 'Надсилання… · $total';
+  }
+
+  @override
+  String get desktopMediaRetryDownload => 'Повторити завантаження';
+
+  @override
+  String get desktopMediaImage => 'Зображення';
+
+  @override
+  String desktopMediaDownloading(Object size) {
+    return 'Завантаження… · $size';
+  }
+
+  @override
+  String get desktopMediaDownload => 'Завантажити';
+
+  @override
+  String get desktopSendAsMedia => 'Надіслати як медіа';
+
+  @override
+  String get desktopSendAsFiles => 'Надіслати як файли';
+
+  @override
+  String get desktopSendUngroup => 'Не групувати';
+
+  @override
+  String get desktopSendGroup => 'Групувати';
+
+  @override
+  String get desktopSendAddFiles => 'Додати файли…';
+
+  @override
+  String get desktopSendDropHere => 'Відпустіть, щоб додати';
+
+  @override
+  String get desktopSendCloseEsc => 'Закрити · Esc';
+
+  @override
+  String desktopSendToDestination(Object destination) {
+    return 'у «$destination»';
+  }
+
+  @override
+  String get desktopSendCaptionHint => 'Додати підпис…';
+
+  @override
+  String get desktopSendEmoji => 'Емодзі';
+
+  @override
+  String get desktopSendRemove => 'Прибрати';
+
+  @override
+  String get desktopSendEnter => 'Надіслати · Enter';
+
+  @override
+  String get desktopSendShiftEnter => 'Надіслати · Shift+Enter';
+
+  @override
+  String get desktopCallCtlMicOff => 'Вимкнути мікрофон   ⌘D';
+
+  @override
+  String get desktopCallCtlMicOn => 'Увімкнути мікрофон   ⌘D';
+
+  @override
+  String get desktopCallCtlCamOff => 'Вимкнути камеру   ⌘E';
+
+  @override
+  String get desktopCallCtlCamOn => 'Увімкнути камеру   ⌘E';
+
+  @override
+  String get desktopCallCtlShareStop => 'Зупинити демонстрацію';
+
+  @override
+  String get desktopCallCtlShare => 'Демонстрація екрана';
+
+  @override
+  String get desktopCallCtlHandDown => 'Опустити руку';
+
+  @override
+  String get desktopCallCtlHandUp => 'Підняти руку';
+
+  @override
+  String get desktopCallCtlHangUp => 'Завершити   ⌘W';
+
+  @override
+  String desktopAbsenceDays(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count дня',
+      many: '$count днів',
+      few: '$count дні',
+      one: '$count день',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopAbsencePastFanout(Object days) {
+    return 'Цей комп’ютер не виходив на зв’язок $days. За цей час відправники перестали шифрувати повідомлення для нього, і частина листування сюди не прийде. Вона ціла на телефоні — відкрийте там потрібні чати, і свіжа історія підтягнеться.';
+  }
+
+  @override
+  String desktopAbsenceWithinWindow(Object days) {
+    return 'Цей комп’ютер не виходив на зв’язок $days. Повідомлення зберігаються на сервері тиждень, тому частина з них могла не зберегтися для нього. На телефоні вони цілі.';
+  }
+
+  @override
+  String get desktopAbsenceGotIt => 'Зрозуміло';
+
+  @override
+  String get desktopNavContacts => 'Контакти';
+
+  @override
+  String get desktopChatNotFound => 'Листування не знайдено';
+
+  @override
+  String desktopUnreadTitle(Object count) {
+    return 'Secretly — $count непрочитаних';
+  }
+
+  @override
+  String get desktopRoomsNone => 'Кімнат поки немає';
+
+  @override
+  String get desktopRoomsNoneHint => 'Створіть кімнату з телефона — вона з’явиться тут автоматично';
+
+  @override
+  String get desktopRoomsPickOne => 'Оберіть кімнату ліворуч';
+
+  @override
+  String get desktopScheduleTitle => 'Надіслати пізніше';
+
+  @override
+  String get desktopScheduleInHour => 'Через годину';
+
+  @override
+  String get desktopScheduleTonight => 'Сьогодні о 19:00';
+
+  @override
+  String get desktopScheduleTomorrow => 'Завтра о 9:00';
+
+  @override
+  String get desktopScheduleInWeek => 'Через тиждень';
+
+  @override
+  String desktopScheduleTodayAt(Object time) {
+    return 'сьогодні о $time';
+  }
+
+  @override
+  String desktopScheduleTomorrowAt(Object time) {
+    return 'завтра о $time';
+  }
+
+  @override
+  String desktopScheduleOnAt(Object date, Object time) {
+    return '$date о $time';
+  }
+
+  @override
+  String get desktopScheduleHint => 'Повідомлення піде саме в обраний час — навіть якщо вікно закрите, воно надішлеться під час наступного запуску.';
+
+  @override
+  String get desktopSchedulePickTime => 'Обрати час…';
+
+  @override
+  String get desktopDevicesSearching => 'Шукаємо пристрої…';
+
+  @override
+  String get desktopDevicesNoCameras => 'Камер не знайдено. Можливо, застосунку не надали до них доступ у налаштуваннях системи.';
+
+  @override
+  String get desktopDevicesNoMics => 'Мікрофонів не знайдено. Можливо, застосунку не надали до них доступ у налаштуваннях системи.';
+
+  @override
+  String get desktopDevicesOutputHint => 'Куди виводити звук, обирається в самому дзвінку — шевроном біля «Мікрофона». Там же застосунок сам перемикається на навушники, коли їх під’єднують.';
+
+  @override
+  String get desktopDevicesSystemDefault => 'Як обрано в системі';
+
+  @override
+  String get desktopRailSettings => 'Налаштування   Cmd ,';
+
+  @override
+  String get desktopRailConnected => 'Підключено';
+
+  @override
+  String get desktopRailConnecting => 'Підключення…';
+
+  @override
+  String get desktopRailOffline => 'Немає з’єднання';
+
+  @override
+  String desktopRailProfile(Object status) {
+    return 'Профіль   Cmd P   ·   $status';
+  }
+
+  @override
+  String get desktopEmojiSmileys => 'Смайлики та емоції';
+
+  @override
+  String get desktopEmojiPeople => 'Люди й тіло';
+
+  @override
+  String get desktopEmojiNature => 'Природа';
+
+  @override
+  String get desktopEmojiFood => 'Їжа та напої';
+
+  @override
+  String get desktopEmojiTravel => 'Подорожі';
+
+  @override
+  String get desktopEmojiActivities => 'Активності';
+
+  @override
+  String get desktopEmojiObjects => 'Предмети';
+
+  @override
+  String get desktopEmojiSymbols => 'Символи';
+
+  @override
+  String get desktopEmojiFlags => 'Прапори';
+
+  @override
+  String get desktopEmojiOther => 'Інше';
+
+  @override
+  String get desktopLockedTitle => 'Secretly заблоковано';
+
+  @override
+  String get desktopLockedTouchIdPrompt => 'Підтвердьте особу через Touch ID, щоб продовжити.';
+
+  @override
+  String get desktopLockedPasswordPrompt => 'Підтвердьте паролем пристрою, щоб продовжити.';
+
+  @override
+  String get desktopLockedUnlock => 'Розблокувати';
+
+  @override
+  String get desktopLockedWaiting => 'Очікуємо підтвердження…';
+
+  @override
+  String get desktopLockedFailed => 'Не вдалося підтвердити особу.';
+
+  @override
+  String get desktopLockedNoService => 'Служба перевірки особи недоступна на цьому комп\'ютері. Перезапустіть Secretly або комп\'ютер. Якщо не допоможе — напишіть у підтримку з телефона.';
+
+  @override
+  String get desktopEmojiTabEmoji => 'Емодзі';
+
+  @override
+  String get desktopEmojiTabStickers => 'Стікери';
+
+  @override
+  String get desktopEmojiRecents => 'Нещодавні';
+
+  @override
+  String get desktopEmojiNothingFound => 'Нічого не знайшлося';
+
+  @override
+  String get desktopEmojiSearchHint => 'Пошук емодзі';
+
+  @override
+  String get desktopStickersSearchHint => 'Пошук стікерів';
+
+  @override
+  String get desktopGifSearchHint => 'Пошук GIF';
+
+  @override
+  String get desktopGifUnavailable => 'GIF недоступні в цьому вікні';
+
+  @override
+  String get desktopStickerPacksSoon => 'Стікерпаки скоро';
+
+  @override
+  String get desktopCallFullscreen => 'На весь екран';
+
+  @override
+  String get desktopCallExitFullscreen => 'Вийти з повноекранного';
+
+  @override
+  String get desktopCallDialing => 'Виклик…';
+
+  @override
+  String get desktopCallEnded => 'Завершено';
+
+  @override
+  String desktopCallEncryptedFor(Object duration) {
+    return 'Зашифровано · $duration';
+  }
+
+  @override
+  String get desktopCallReturn => 'Повернутися';
+
+  @override
+  String get desktopCallInProgress => 'Триває дзвінок';
+
+  @override
+  String desktopCallInProgressWith(Object title) {
+    return 'Триває дзвінок · $title';
+  }
+
+  @override
+  String get desktopCallAnswer => 'Відповісти';
+
+  @override
+  String get desktopCallAnswerVideo => 'Відповісти з відео';
+
+  @override
+  String get desktopCallAnswerText => 'Текстом';
+
+  @override
+  String get desktopTimeYesterday => 'учора';
+
+  @override
+  String get desktopForwardTitle => 'Переслати в…';
+
+  @override
+  String get desktopForwardSearchHint => 'Пошук чату або кімнати';
+
+  @override
+  String get desktopForwardNoChats => 'Немає доступних чатів';
+
+  @override
+  String get desktopForwardKindDirect => 'Особистий чат';
+
+  @override
+  String get desktopContactsSearchHint => 'Пошук контактів';
+
+  @override
+  String get desktopContactsEmpty => 'Контакти з\'являться після синхронізації.';
+
+  @override
+  String desktopContactsNothingFor(Object query) {
+    return 'Нічого не знайдено за запитом «$query».';
+  }
+
+  @override
+  String get desktopContactsPick => 'Виберіть контакт';
+
+  @override
+  String get desktopContactsCardRight => 'Картка з\'явиться праворуч.';
+
+  @override
+  String get desktopContactsWrite => 'Написати повідомлення';
+
+  @override
+  String get desktopVideoTitle => 'Відео';
+
+  @override
+  String get desktopViewerCloseEsc => 'Закрити  Esc';
+
+  @override
+  String get desktopVideoPlayFailed => 'Не вдалося відтворити відео';
+
+  @override
+  String get desktopKeySpace => 'Пробіл';
+
+  @override
+  String get desktopWindowMinimize => 'Згорнути';
+
+  @override
+  String get desktopWindowMaximize => 'Розгорнути';
+
+  @override
+  String get desktopWindowClose => 'Закрити';
+
+  @override
+  String get desktopWindowBack => 'Назад';
+
+  @override
+  String get desktopWindowForward => 'Вперед';
+
+  @override
+  String get desktopSearchEverything => 'Чати, люди, повідомлення, файли';
+
+  @override
+  String get desktopUnitB => 'Б';
+
+  @override
+  String get desktopUnitKb => 'КБ';
+
+  @override
+  String get desktopUnitMb => 'МБ';
+
+  @override
+  String get desktopUnitGb => 'ГБ';
+
+  @override
+  String get desktopUnitTb => 'ТБ';
+
+  @override
+  String get desktopSyncDone => 'Синхронізовано';
+
+  @override
+  String get desktopSyncSyncing => 'Синхронізація…';
+
+  @override
+  String get desktopSyncReconnecting => 'Перепідключення…';
+
+  @override
+  String get desktopDetailsShare => 'Поділитися';
+
+  @override
+  String get desktopDetailsHide => 'Сховати';
+
+  @override
+  String get desktopDetailsMore => 'Додатково';
+
+  @override
+  String get desktopDetailsChangeCover => 'Змінити обкладинку';
+
+  @override
+  String desktopDetailsFrame(Object name) {
+    return 'Рамка «$name»';
+  }
+
+  @override
+  String get desktopApply => 'Застосувати';
+
+  @override
+  String get desktopAccentAppliesTo => 'Кнопки, виділення та кільця. Бульбашка лишається у своєму стилі — він вибирається нижче.';
+
+  @override
+  String get desktopTranslateUnknownSource => 'Не вдалося визначити мову повідомлення';
+
+  @override
+  String get desktopTranslateUnsupported => 'Системний перекладач не знає цієї пари мов';
+
+  @override
+  String get desktopTranslateNeedsDownload => 'Мову не завантажено. Системні параметри → Основні → Мова й регіон → Мови перекладу';
+
+  @override
+  String get desktopTranslateFailed => 'Не вдалося перекласти';
+
+  @override
+  String get desktopNewChatSearchHint => 'Пошук за контактами';
+
+  @override
+  String get desktopNewChatNoContacts => 'Контактів поки немає';
+
+  @override
+  String get desktopNewChatNobodyFound => 'Нікого не знайшлося';
+
+  @override
+  String get desktopMentionEveryone => 'Усі учасники';
+
+  @override
+  String get desktopMentionAdmins => 'Адміністратори';
+
+  @override
+  String get desktopMentionEveryoneHint => 'Покликати всіх у кімнаті';
+
+  @override
+  String get desktopMentionAdminsHint => 'Покликати власника й адміністраторів';
+
+  @override
+  String desktopClearForPeer(Object name) {
+    return 'Очистити історію в співрозмовника ($name)';
+  }
+
+  @override
+  String get desktopClearForPeerHint => 'Повідомлення зникнуть і на його пристрої, і на всіх ваших. Скасувати це не можна.';
+
+  @override
+  String get desktopGifNoKey => 'GIF недоступні: збірка без ключа GIPHY';
+
+  @override
+  String get desktopGifConnectionLost => 'Зв\'язок перервався. Спробуйте ще раз';
+
+  @override
+  String get desktopNotesHint => 'Що запамʼятати з цієї розмови…';
+
+  @override
+  String get desktopNotesPrivate => 'Видно лише вам. Не надсилається, не потрапляє в листування і не входить до резервної копії — живе на цьому комп’ютері, у тій самій зашифрованій базі, що й повідомлення.';
+
+  @override
+  String get desktopEmojiSearchShort => 'Пошук емодзі…';
+
+  @override
+  String get desktopNotifOpen => 'Відкрити';
+
+  @override
+  String get desktopLinkPreviewLoading => 'Попередній перегляд посилання…';
+
+  @override
+  String get desktopLinkPreviewOff => 'Без перегляду';
+
+  @override
+  String get desktopDropToSend => 'Відпустіть, щоб надіслати';
+
+  @override
+  String get desktopDropEncrypted => 'Файли буде зашифровано перед надсиланням';
+
+  @override
+  String get desktopDetailsPickChat => 'Виберіть чат';
+
+  @override
+  String get desktopDetailsEmptyHint => 'Відомості про співрозмовника або кімнату\nзʼявляться тут.';
+
+  @override
+  String get desktopMemberWrite => 'Написати';
+
+  @override
+  String get desktopShowPanel => 'Показати панель';
+
+  @override
+  String get desktopHidePanel => 'Сховати панель';
+
+  @override
+  String get desktopNotifOff => 'Сповіщення вимкнено';
+
+  @override
+  String get desktopSettingsSearchHint => 'Знайти налаштування';
+
+  @override
+  String get desktopUnlockPrompt => 'Розблокувати Secretly';
+
+  @override
+  String get desktopEnableLockPrompt => 'Підтвердьте, щоб увімкнути блокування Secretly';
+
+  @override
+  String get desktopRoomsNoneHintDot => 'Створіть кімнату з телефона — вона зʼявиться тут автоматично.';
+
+  @override
+  String get desktopSplashLoading => 'Завантаження профілю…';
+
+  @override
+  String get desktopOutgoingOnePhoto => 'Фото';
+
+  @override
+  String get desktopOutgoingOneVideo => 'Відео';
+
+  @override
+  String get desktopOutgoingOneAudio => 'Аудіо';
+
+  @override
+  String get desktopOutgoingOneFile => 'Файл';
 }

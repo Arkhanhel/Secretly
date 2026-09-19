@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -38,6 +39,8 @@ class DesktopCallsSection extends StatefulWidget {
 }
 
 class _DesktopCallsSectionState extends State<DesktopCallsSection> {
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   /// The journal, loaded once per settled burst of controller ticks and
   /// republished only when it actually differs.
   ///
@@ -206,7 +209,7 @@ class _DesktopCallsSectionState extends State<DesktopCallsSection> {
       child: Align(
         alignment: Alignment.centerLeft,
         child: Text(
-          'Звонки',
+          l10n.desktopPrivacyCalls,
           style: DType.title.copyWith(color: c.textPrimary),
         ),
       ),
@@ -226,12 +229,12 @@ class _DesktopCallsSectionState extends State<DesktopCallsSection> {
             Icon(FluentIcons.call_24_regular, size: 36, color: c.textDisabled),
             const SizedBox(height: DSpace.m),
             Text(
-              'Выберите звонок слева',
+              l10n.desktopCallsPickOne,
               style: DType.bodyStrong.copyWith(color: c.textSecondary),
             ),
             const SizedBox(height: DSpace.xs),
             Text(
-              'Здесь появятся подробности и кнопка перезвонить',
+              l10n.desktopCallsPickHint,
               style: DType.caption.copyWith(color: c.textDisabled),
             ),
           ],
@@ -249,12 +252,12 @@ class _DesktopCallsSectionState extends State<DesktopCallsSection> {
           Icon(FluentIcons.call_24_regular, size: 40, color: c.textDisabled),
           const SizedBox(height: DSpace.m),
           Text(
-            'Звонков пока нет',
+            l10n.desktopCallsNone,
             style: DType.body.copyWith(color: c.textSecondary),
           ),
           const SizedBox(height: DSpace.xs),
           Text(
-            'История появится после первого звонка',
+            l10n.desktopCallsNoneHint,
             style: DType.caption.copyWith(color: c.textDisabled),
           ),
         ],
@@ -277,12 +280,16 @@ class _CallDetailCard extends StatelessWidget {
 
   bool get _isRoom => entry.scope != CallRecordScope.oneToOne;
 
-  String get _title => (entry.peerDisplayName ?? '').isNotEmpty
+  String _titleOf(AppLocalizations l10n) =>
+      (entry.peerDisplayName ?? '').isNotEmpty
       ? entry.peerDisplayName!
-      : (entry.peerProfileId.isNotEmpty ? entry.peerProfileId : 'Звонок');
+      : (entry.peerProfileId.isNotEmpty
+            ? entry.peerProfileId
+            : l10n.desktopContactCall);
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final missed =
         entry.result == CallRecordResult.missed ||
@@ -301,23 +308,23 @@ class _CallDetailCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Avatar(
-            name: _title,
+            name: _titleOf(l10n),
             image: Avatar.fileImage(entry.peerAvatarPath),
             size: 96,
             shape: _isRoom ? AvatarShape.room : AvatarShape.round,
           ),
           const SizedBox(height: DSpace.l),
           Text(
-            _title,
+            _titleOf(l10n),
             textAlign: TextAlign.center,
             style: DType.display.copyWith(color: c.textPrimary),
           ),
           const SizedBox(height: DSpace.xs),
           Text(
             [
-              outgoing ? 'Исходящий' : 'Входящий',
-              _isRoom ? 'групповой' : (entry.hadVideo ? 'видео' : 'аудио'),
-              if (missed) 'пропущен',
+              outgoing ? l10n.desktopCallsOutgoing : l10n.desktopCallsIncoming,
+              _isRoom ? l10n.desktopCallsGroup : (entry.hadVideo ? l10n.desktopCallsVideoKind : l10n.desktopCallsAudioKind),
+              if (missed) l10n.desktopCallsMissed,
               if (entry.didConnect && entry.durationMs > 0)
                 _fmtDuration(entry.durationMs),
             ].join(' · '),
@@ -338,7 +345,7 @@ class _CallDetailCard extends StatelessWidget {
               children: [
                 _RecallButton(
                   icon: FluentIcons.call_24_regular,
-                  label: 'Позвонить',
+                  label: l10n.desktopThreadCallAction,
                   onTap: () => onRecall(entry),
                 ),
               ],
@@ -419,28 +426,37 @@ class _CallRow extends StatelessWidget {
 
   bool get _isOutgoing => entry.direction == CallRecordDirection.outgoing;
 
-  String get _title => (entry.peerDisplayName ?? '').isNotEmpty
+  String _titleOf(AppLocalizations l10n) =>
+      (entry.peerDisplayName ?? '').isNotEmpty
       ? entry.peerDisplayName!
-      : (entry.peerProfileId.isNotEmpty ? entry.peerProfileId : 'Звонок');
+      : (entry.peerProfileId.isNotEmpty
+            ? entry.peerProfileId
+            : l10n.desktopContactCall);
 
-  String _subtitle() {
-    final dir = _isOutgoing ? 'Исходящий' : 'Входящий';
+  String _subtitle(AppLocalizations l10n) {
+    final dir = _isOutgoing ? l10n.desktopCallsOutgoing : l10n.desktopCallsIncoming;
     final isMultiParty =
         entry.scope == CallRecordScope.group ||
         entry.scope == CallRecordScope.room;
     final kind = isMultiParty
-        ? 'групповой'
-        : (entry.hadVideo ? 'видео' : 'аудио');
-    final missed = _isMissed ? ' · пропущен' : '';
+        ? l10n.desktopCallsGroup
+        : (entry.hadVideo ? l10n.desktopCallsVideoKind : l10n.desktopCallsAudioKind);
+    final missed = _isMissed ? ' · ${l10n.desktopCallsMissed}' : '';
     final dur = (entry.didConnect && entry.durationMs > 0)
         ? ' · ${_fmtDuration(entry.durationMs)}'
         : '';
     return '$dir · $kind$missed$dur';
   }
 
-  Widget _compactRow(DColorSet c, Widget avatar, IconData icon, Color tone) {
+  Widget _compactRow(
+    DColorSet c,
+    Widget avatar,
+    IconData icon,
+    Color tone,
+    AppLocalizations l10n,
+  ) {
     return DesktopTooltip(
-      message: '$_title\n${_subtitle()} · ${_fmtWhen(entry.startedAtMs)}',
+      message: '${_titleOf(l10n)}\n${_subtitle(l10n)} · ${_fmtWhen(entry.startedAtMs)}',
       child: HoverListener(
         onTap: onTap,
         builder: (ctx, hovered, pressed) => AnimatedContainer(
@@ -485,6 +501,7 @@ class _CallRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final color = _isMissed ? c.danger : c.textSecondary;
     final icon = _isOutgoing
@@ -494,12 +511,12 @@ class _CallRow extends StatelessWidget {
               : FluentIcons.call_inbound_24_regular);
     final isRoom = entry.scope != CallRecordScope.oneToOne;
     final avatar = Avatar(
-      name: _title,
+      name: _titleOf(l10n),
       size: 40,
       shape: isRoom ? AvatarShape.room : AvatarShape.round,
     );
 
-    if (compact) return _compactRow(c, avatar, icon, color);
+    if (compact) return _compactRow(c, avatar, icon, color, l10n);
 
     return HoverListener(
       onTap: onTap,
@@ -545,7 +562,7 @@ class _CallRow extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    _title,
+                    _titleOf(l10n),
                     style: DType.bodyStrong.copyWith(
                       color: _isMissed ? c.danger : c.textPrimary,
                     ),
@@ -559,7 +576,7 @@ class _CallRow extends StatelessWidget {
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
-                          _subtitle(),
+                          _subtitle(l10n),
                           style: DType.caption.copyWith(color: color),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,

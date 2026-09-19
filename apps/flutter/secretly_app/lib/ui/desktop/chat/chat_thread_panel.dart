@@ -10,6 +10,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/foundation.dart'
     show ValueListenable, setEquals, visibleForTesting;
 import 'package:flutter/gestures.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderMetaData;
 import 'package:flutter/services.dart';
@@ -489,6 +490,9 @@ class ChatThreadPanel extends StatefulWidget {
 }
 
 class _ChatThreadPanelState extends State<ChatThreadPanel> {
+  /// Подписи ленты.
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   final _composer = TextEditingController();
 
   /// Выделенные сообщения — по `MessageData.id`. Пусто — режима выделения
@@ -834,7 +838,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
   void _copySelected() {
     final lines = <String>[];
     for (final m in _selectedMessages) {
-      final body = _copyableText(m);
+      final body = _copyableText(m, l10n);
       if (body.isEmpty) continue;
       lines.add('${m.authorName}: $body');
     }
@@ -844,7 +848,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     if (!mounted) return;
     DesktopSnackbar.show(
       context,
-      message: 'Скопировано',
+      message: l10n.desktopRoomCopied,
       kind: DSnackKind.success,
     );
   }
@@ -865,22 +869,22 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
   }
 
   /// Текст сообщения для копии; у вложения без подписи — его вид.
-  static String _copyableText(MessageData m) {
+  static String _copyableText(MessageData m, AppLocalizations l10n) {
     final text = m.text.trim();
     if (text.isNotEmpty) return text;
-    if (m.sticker != null) return 'Стикер';
+    if (m.sticker != null) return l10n.desktopChatsSticker;
     final att = m.attachment;
     if (att == null) return '';
     final name = (att.fileName ?? '').trim();
     switch (att.kind) {
       case MessageAttachmentKind.image:
-        return 'Фото';
+        return l10n.desktopChatsPhoto;
       case MessageAttachmentKind.video:
-        return 'Видео';
+        return l10n.desktopChatsVideo;
       case MessageAttachmentKind.voice:
-        return 'Голосовое сообщение';
+        return l10n.desktopChatsVoiceMessage;
       default:
-        return name.isNotEmpty ? name : 'Файл';
+        return name.isNotEmpty ? name : l10n.file;
     }
   }
   final _attachKey = GlobalKey();
@@ -1855,7 +1859,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     return Composer(
                 // Тема называется ЧИПОМ под полем, а не плейсхолдером:
                 // плейсхолдер исчезает с первым символом. См. [Composer].
-                placeholder: 'Сообщение…',
+                placeholder: l10n.desktopThreadMessageHint,
                 topicTitle: widget.composerTopicTitle,
                 mentionTargets: widget.mentionTargets,
                 controller: _composer,
@@ -2097,7 +2101,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     if (widget.onSendMedia == null) return;
     final limit = widget.attachmentMaxBytes;
     final intake = intakeOutgoingPaths(paths, maxBytes: limit);
-    final notice = intake.rejectionText(maxBytes: limit);
+    final notice = intake.rejectionText(maxBytes: limit, l10n: l10n);
     if (intake.files.isEmpty) {
       if (notice != null) {
         DesktopSnackbar.show(
@@ -2122,7 +2126,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     if (staged == null) {
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось вставить картинку',
+        message: l10n.desktopThreadPasteFailed,
         kind: DSnackKind.error,
       );
       return;
@@ -2137,7 +2141,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     if (!mounted || paths.isEmpty) return;
     final limit = widget.attachmentMaxBytes;
     final intake = intakeOutgoingPaths(paths, maxBytes: limit);
-    final notice = intake.rejectionText(maxBytes: limit);
+    final notice = intake.rejectionText(maxBytes: limit, l10n: l10n);
     if (intake.files.isEmpty) {
       if (notice != null) {
         DesktopSnackbar.show(
@@ -2296,7 +2300,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     if (_ctx != null && _ctx!.isEdit) {
       DesktopSnackbar.show(
         context,
-        message: 'Правку нельзя отложить — она меняет уже отправленное',
+        message: l10n.desktopThreadNoScheduleEdit,
         kind: DSnackKind.warning,
       );
       return false;
@@ -2306,7 +2310,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     _submitComposer(txt, scheduledAtMs: at.millisecondsSinceEpoch);
     DesktopSnackbar.show(
       context,
-      message: 'Уйдёт ${formatScheduleMoment(at)}',
+      message: l10n.desktopThreadWillLeave(formatScheduleMoment(at, l10n)),
       kind: DSnackKind.success,
     );
     return true;
@@ -2374,7 +2378,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
         _translations.remove(id);
       }
     });
-    final complaint = result.userMessage;
+    final complaint = result.userMessage(l10n);
     if (complaint != null) {
       DesktopSnackbar.show(
         context,
@@ -2459,12 +2463,12 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
 }
 
 /// Compact Russian duration label for the disappearing-messages header chip.
-String _formatDisappear(int s) {
-  if (s < 60) return '$s с';
-  if (s < 3600) return '${s ~/ 60} мин';
-  if (s < 86400) return '${s ~/ 3600} ч';
-  if (s < 604800) return '${s ~/ 86400} дн';
-  return '${s ~/ 604800} нед';
+String _formatDisappear(int s, AppLocalizations l10n) {
+  if (s < 60) return l10n.desktopThreadSeconds('$s');
+  if (s < 3600) return l10n.desktopThreadMinutes('${s ~/ 60}');
+  if (s < 86400) return l10n.desktopThreadHours('${s ~/ 3600}');
+  if (s < 604800) return l10n.desktopThreadDays('${s ~/ 86400}');
+  return l10n.desktopThreadWeeks('${s ~/ 604800}');
 }
 
 /// Панель действий над выделенным — на месте шапки переписки.
@@ -2490,6 +2494,7 @@ class _SelectionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Container(
       height: 56,
@@ -2498,7 +2503,7 @@ class _SelectionBar extends StatelessWidget {
         children: [
           DesktopIconButton(
             icon: FluentIcons.dismiss_24_regular,
-            tooltip: 'Отмена',
+            tooltip: l10n.cancel,
             size: 32,
             iconSize: 18,
             onPressed: onCancel,
@@ -2506,7 +2511,7 @@ class _SelectionBar extends StatelessWidget {
           const SizedBox(width: DSpace.s),
           Expanded(
             child: Text(
-              'Выбрано: $count',
+              l10n.desktopThreadSelected(count),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: DType.threadTitle.copyWith(
@@ -2517,7 +2522,7 @@ class _SelectionBar extends StatelessWidget {
           ),
           DesktopIconButton(
             icon: FluentIcons.copy_24_regular,
-            tooltip: 'Копировать',
+            tooltip: l10n.desktopAccountCopy,
             size: 32,
             iconSize: 18,
             onPressed: onCopy,
@@ -2525,7 +2530,7 @@ class _SelectionBar extends StatelessWidget {
           if (onForward != null)
             DesktopIconButton(
               icon: FluentIcons.share_24_regular,
-              tooltip: 'Переслать',
+              tooltip: l10n.chatMenuForward,
               size: 32,
               iconSize: 18,
               onPressed: onForward,
@@ -2533,7 +2538,7 @@ class _SelectionBar extends StatelessWidget {
           if (onSave != null)
             DesktopIconButton(
               icon: FluentIcons.bookmark_24_regular,
-              tooltip: 'Сохранить',
+              tooltip: l10n.saveAction,
               size: 32,
               iconSize: 18,
               onPressed: onSave,
@@ -2541,7 +2546,7 @@ class _SelectionBar extends StatelessWidget {
           if (onDelete != null)
             DesktopIconButton(
               icon: FluentIcons.delete_24_regular,
-              tooltip: 'Удалить',
+              tooltip: l10n.delete,
               size: 32,
               iconSize: 18,
               color: c.danger,
@@ -2662,6 +2667,7 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Container(
       height: 56,
@@ -2766,7 +2772,7 @@ class _Header extends StatelessWidget {
           const Spacer(),
           if ((header.disappearingSeconds ?? 0) > 0) ...[
             Tooltip(
-              message: 'Исчезающие сообщения включены',
+              message: l10n.desktopThreadDisappearingOn,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -2784,7 +2790,7 @@ class _Header extends StatelessWidget {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      _formatDisappear(header.disappearingSeconds!),
+                      _formatDisappear(header.disappearingSeconds!, l10n),
                       style: DType.caption.copyWith(color: c.textSecondary),
                     ),
                   ],
@@ -2812,14 +2818,14 @@ class _Header extends StatelessWidget {
           // общий созвон, и «Позвонить» обещало бы не то.
           if (onCall != null) ...[
             _CallButton(
-              label: isDirect ? 'Позвонить' : 'Созвон',
+              label: isDirect ? l10n.desktopThreadCallAction : l10n.desktopThreadCallRoom,
               onTap: onCall!,
             ),
             const SizedBox(width: DSpace.xs),
           ],
           DesktopIconButton(
             icon: FluentIcons.video_24_regular,
-            tooltip: 'Видеозвонок',
+            tooltip: l10n.desktopThreadVideoCall,
             onPressed: onVideoCall,
           ),
           // Разделитель отделяет разговор от работы с самим чатом: слева то,
@@ -2832,21 +2838,21 @@ class _Header extends StatelessWidget {
           ),
           DesktopIconButton(
             icon: FluentIcons.search_24_regular,
-            tooltip: 'Поиск в чате  Cmd F',
+            tooltip: l10n.desktopThreadSearchShortcut,
             onPressed: onToggleSearch,
           ),
           DesktopIconButton(
             icon: detailsOpen
                 ? FluentIcons.panel_right_contract_24_regular
                 : FluentIcons.panel_right_24_regular,
-            tooltip: detailsOpen ? 'Скрыть детали' : 'Показать детали',
+            tooltip: detailsOpen ? l10n.desktopThreadHideDetails : l10n.desktopThreadShowDetails,
             onPressed: onToggleDetails,
           ),
           if (onHeaderMenu != null)
             Builder(
               builder: (btnCtx) => DesktopIconButton(
                 icon: FluentIcons.more_horizontal_24_regular,
-                tooltip: 'Ещё',
+                tooltip: l10n.desktopThreadMore,
                 onPressed: () {
                   final box = btnCtx.findRenderObject();
                   final at = box is RenderBox
@@ -2963,6 +2969,7 @@ class _PinnedBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final preview = message.text.trim().isEmpty
         ? message.authorName
@@ -3017,7 +3024,7 @@ class _PinnedBar extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'Закреплённое сообщение',
+                          l10n.desktopThreadPinned,
                           // Светлый акцент, а не сам акцент: на собственной
                           // заливке в 8 % он почти сливается с ней.
                           style: DType.tiny.copyWith(
@@ -3052,7 +3059,7 @@ class _PinnedBar extends StatelessWidget {
           if (onUnpin != null)
             DesktopIconButton(
               icon: FluentIcons.dismiss_24_regular,
-              tooltip: 'Открепить',
+              tooltip: l10n.unpin,
               onPressed: onUnpin,
             ),
         ],
@@ -3087,12 +3094,13 @@ class _SearchBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final String counter;
     if (!hasQuery) {
       counter = '';
     } else if (matches == 0) {
-      counter = 'нет совпадений';
+      counter = l10n.desktopThreadNoMatches;
     } else {
       counter = '$current / $matches';
     }
@@ -3122,7 +3130,7 @@ class _SearchBanner extends StatelessWidget {
               decoration: InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
-                hintText: 'Поиск в чате…',
+                hintText: l10n.desktopThreadSearchHint,
                 hintStyle: DType.body.copyWith(color: c.textSecondary),
               ),
             ),
@@ -3140,17 +3148,17 @@ class _SearchBanner extends StatelessWidget {
           ],
           DesktopIconButton(
             icon: FluentIcons.chevron_up_24_regular,
-            tooltip: 'Предыдущее (Shift F3)',
+            tooltip: l10n.desktopThreadPrevMatch,
             onPressed: onPrev,
           ),
           DesktopIconButton(
             icon: FluentIcons.chevron_down_24_regular,
-            tooltip: 'Следующее (F3)',
+            tooltip: l10n.desktopThreadNextMatch,
             onPressed: onNext,
           ),
           DesktopIconButton(
             icon: FluentIcons.dismiss_24_regular,
-            tooltip: 'Закрыть (Esc)',
+            tooltip: l10n.desktopThreadCloseEsc,
             onPressed: onClose,
           ),
         ],
@@ -3215,7 +3223,7 @@ class _UnreadSeparator extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: DSpace.s),
             child: Text(
-              unreadSeparatorLabelRu(count),
+              unreadSeparatorLabelRu(count, AppLocalizations.of(context)!),
               style: DType.caption.copyWith(
                 color: line,
                 fontWeight: FontWeight.w700,
@@ -3229,19 +3237,17 @@ class _UnreadSeparator extends StatelessWidget {
   }
 }
 
-/// «3 непрочитанных» с русским склонением.
+/// «3 непрочитанных».
 ///
 /// Ноль и отрицательное — «Новые сообщения»: черта всё равно нарисована (её
 /// поставили по месту последнего прочитанного), а врать числом нельзя.
-String unreadSeparatorLabelRu(int count) {
-  if (count <= 0) return 'Новые сообщения';
-  final tens = count % 100;
-  final ones = count % 10;
-  if (tens >= 11 && tens <= 14) return '$count непрочитанных';
-  if (ones == 1) return '$count непрочитанное';
-  if (ones >= 2 && ones <= 4) return '$count непрочитанных';
-  return '$count непрочитанных';
-}
+///
+/// 🔴 Русские формы числительного считались ЗДЕСЬ вручную; теперь их даёт
+/// правило множественного числа из переводов — в каждом языке своё.
+String unreadSeparatorLabelRu(int count, AppLocalizations l10n) =>
+    count <= 0
+    ? l10n.desktopThreadNewMessages
+    : l10n.desktopThreadUnreadCount(count);
 
 /// E9: centered day-separator chip ("Сегодня" / "Вчера" / "30 июня" /
 /// "30 июня 2025") shown above the first message of each calendar day.
@@ -3251,31 +3257,22 @@ class _DateSeparator extends StatelessWidget {
   final int timestampMs;
   final DColorSet palette;
 
-  static const List<String> _monthsGenitive = [
-    'января',
-    'февраля',
-    'марта',
-    'апреля',
-    'мая',
-    'июня',
-    'июля',
-    'августа',
-    'сентября',
-    'октября',
-    'ноября',
-    'декабря',
-  ];
-
-  String _label() {
+  /// 🔴 НАЗВАНИЯ МЕСЯЦЕВ БЕРЁТ СИСТЕМА, а не список в этом файле. Список был
+  /// русским родительным падежом («30 июня»); в другом языке он дал бы
+  /// «30 июня» рядом с английским интерфейсом, а порядок «день-месяц» верен
+  /// не везде. `DateFormat` знает и падеж, и порядок для каждого языка.
+  String _label(BuildContext context, AppLocalizations l10n) {
     final d = DateTime.fromMillisecondsSinceEpoch(timestampMs);
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final that = DateTime(d.year, d.month, d.day);
     final diff = today.difference(that).inDays;
-    if (diff == 0) return 'Сегодня';
-    if (diff == 1) return 'Вчера';
-    final month = _monthsGenitive[d.month - 1];
-    return d.year == now.year ? '${d.day} $month' : '${d.day} $month ${d.year}';
+    if (diff == 0) return l10n.desktopThreadToday;
+    if (diff == 1) return l10n.desktopThreadYesterday;
+    final locale = Localizations.localeOf(context).toString();
+    return d.year == now.year
+        ? DateFormat.MMMMd(locale).format(d)
+        : DateFormat.yMMMMd(locale).format(d);
   }
 
   @override
@@ -3293,7 +3290,7 @@ class _DateSeparator extends StatelessWidget {
             borderRadius: BorderRadius.circular(DRadii.r9),
           ),
           child: Text(
-            _label(),
+            _label(context, AppLocalizations.of(context)!),
             style: DType.caption.copyWith(
               color: palette.textSecondary,
               fontWeight: FontWeight.w600,

@@ -18,6 +18,7 @@
 // Видно её только по КООРДИНАТАМ на настоящей раскладке — поэтому проверка
 // меряет положение, а не ищет строки.
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/chat/details/details_headline.dart';
@@ -26,6 +27,9 @@ import 'package:secretly_app/ui/desktop/design/colors.dart';
 const double _panelWidth = 330;
 
 Widget _host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(
     body: DColors(
       colors: kDColorsDark,

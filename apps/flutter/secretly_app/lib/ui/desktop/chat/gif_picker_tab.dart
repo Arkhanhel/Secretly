@@ -307,8 +307,9 @@ class _DesktopGifPickerTabState extends State<DesktopGifPickerTab> {
 
   /// Неудача выбора — видна и при полной сетке (17.09.2026).
   Widget _pickFailureBanner(DColorSet c) {
+    final l10n = AppLocalizations.of(context)!;
     final text = _pickFailedNetwork
-        ? _kGifConnectionLost
+        ? _gifConnectionLost(l10n)
         : AppLocalizations.of(context)!.attachmentActionGeneric;
     return Padding(
       padding: const EdgeInsets.fromLTRB(DSpace.m, DSpace.xs, DSpace.m, 0),
@@ -367,11 +368,12 @@ class _DesktopGifPickerTabState extends State<DesktopGifPickerTab> {
       );
 
   Widget _grid(DColorSet c) {
+    final l10n = AppLocalizations.of(context)!;
     if (kGiphyApiKey.isEmpty) {
       return _notice(
         c,
         FluentIcons.gif_24_regular,
-        'GIF недоступны: сборка без ключа GIPHY',
+        l10n.desktopGifNoKey,
       );
     }
     if (_loadingFirst) {
@@ -392,14 +394,14 @@ class _DesktopGifPickerTabState extends State<DesktopGifPickerTab> {
       return _notice(
         c,
         FluentIcons.wifi_off_24_regular,
-        _kGifConnectionLost,
+        _gifConnectionLost(l10n),
       );
     }
     final showRecents = _recents.isNotEmpty &&
         _activeCategory == null &&
         widget.query.trim().isEmpty;
     if (_gifs.isEmpty && !showRecents) {
-      return _notice(c, FluentIcons.gif_24_regular, 'Ничего не нашлось');
+      return _notice(c, FluentIcons.gif_24_regular, l10n.desktopEmojiNothingFound);
     }
     return SingleChildScrollView(
       controller: _scroll,
@@ -408,7 +410,7 @@ class _DesktopGifPickerTabState extends State<DesktopGifPickerTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (showRecents) ...[
-            _sectionLabel(c, 'Недавние'),
+            _sectionLabel(c, l10n.desktopEmojiRecents),
             _wrap(
               _recents
                   .map(
@@ -510,7 +512,8 @@ class _DesktopGifPickerTabState extends State<DesktopGifPickerTab> {
       );
 }
 
-const String _kGifConnectionLost = 'Связь прервалась. Попробуйте ещё раз';
+String _gifConnectionLost(AppLocalizations l10n) =>
+    l10n.desktopGifConnectionLost;
 
 /// Стоит ли повторять неудавшуюся загрузку гифки: только сетевой класс.
 /// Ответ сервера — доказательство, что связь есть (5xx обрабатывается в цикле).

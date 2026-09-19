@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
@@ -110,21 +111,21 @@ class DesktopSidebar extends StatelessWidget {
   /// (журнал звонков и люди). Перестановка сдвинула бы заодно все Cmd 1..4,
   /// то есть сменила бы привычку ради чужой раскладки.
   ///
-  /// Обратная правка — одна строка: порядок в [_items] и подписи Cmd, плюс
+  /// Обратная правка — одна строка: порядок в [_itemsFor] и подписи Cmd, плюс
   /// привязки в `desktop_shell.dart`.
-  static const _items = <_TabSpec>[
+  static List<_TabSpec> _itemsFor(AppLocalizations l10n) => <_TabSpec>[
     _TabSpec(
       DesktopSection.chats,
       FluentIcons.chat_24_regular,
       FluentIcons.chat_24_filled,
-      'Чаты',
+      l10n.chatsTitle,
       'Cmd 1',
     ),
     _TabSpec(
       DesktopSection.rooms,
       FluentIcons.people_24_regular,
       FluentIcons.people_24_filled,
-      'Комнаты',
+      l10n.desktopChatsRooms,
       'Cmd 2',
       unreadKind: ChatKind.group,
     ),
@@ -132,20 +133,21 @@ class DesktopSidebar extends StatelessWidget {
       DesktopSection.calls,
       FluentIcons.call_24_regular,
       FluentIcons.call_24_filled,
-      'Звонки',
+      l10n.desktopPrivacyCalls,
       'Cmd 3',
     ),
     _TabSpec(
       DesktopSection.contacts,
       FluentIcons.person_24_regular,
       FluentIcons.person_24_filled,
-      'Контакты',
+      l10n.desktopNavContacts,
       'Cmd 4',
     ),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Container(
       width: width,
@@ -160,7 +162,7 @@ class DesktopSidebar extends StatelessWidget {
       child: Column(
         children: [
           const SizedBox(height: 12),
-          for (final t in _items)
+          for (final t in _itemsFor(l10n))
             _SidebarTab(
               spec: t,
               active: active == t.id,
@@ -195,7 +197,7 @@ class DesktopSidebar extends StatelessWidget {
           const Spacer(),
           _SidebarBottom(
             icon: FluentIcons.settings_24_regular,
-            tooltip: 'Настройки   Cmd ,',
+            tooltip: l10n.desktopRailSettings,
             onTap: onOpenSettings,
             badgeCount: supportUnread,
             badgeDot: supportAwaiting,
@@ -491,9 +493,10 @@ class _AddFavouriteTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return DesktopTooltip(
-      message: 'В избранное',
+      message: l10n.desktopListAddFavourite,
       preferBelow: false,
       child: HoverListener(
         onTap: onTap,
@@ -693,14 +696,15 @@ class _ProfileTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final (dotColor, statusLabel) = switch (connectionStatus) {
-      ConnectionStatus.connected => (c.success, 'Подключено'),
-      ConnectionStatus.connecting => (c.warning, 'Подключение…'),
-      ConnectionStatus.offline => (c.danger, 'Нет соединения'),
+      ConnectionStatus.connected => (c.success, l10n.desktopRailConnected),
+      ConnectionStatus.connecting => (c.warning, l10n.desktopRailConnecting),
+      ConnectionStatus.offline => (c.danger, l10n.desktopRailOffline),
     };
     return DesktopTooltip(
-      message: 'Профиль   Cmd P   ·   $statusLabel',
+      message: l10n.desktopRailProfile(statusLabel),
       preferBelow: false,
       child: HoverListener(
         onTap: onTap,

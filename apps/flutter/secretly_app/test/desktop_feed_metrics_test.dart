@@ -38,7 +38,9 @@ void main() {
       'lib/ui/desktop/chat/chat_thread_panel.dart',
     ).readAsStringSync();
     final i = panel.indexOf('class _DateSeparator');
-    final body = panel.substring(i, i + 1600);
+    // Окно по числу знаков сползало от добавленных строк: берём весь класс.
+    final next = panel.indexOf('\nclass ', i + 1);
+    final body = panel.substring(i, next < 0 ? panel.length : next);
     expect(body.contains('border: Border.all(color: palette.borderSubtle)'), isFalse);
     expect(body.contains('Colors.white.withValues(alpha: 0.05)'), isTrue);
     expect(body.contains('BorderRadius.circular(DRadii.r9)'), isTrue);

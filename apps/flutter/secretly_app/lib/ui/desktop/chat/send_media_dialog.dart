@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:ui' as ui;
 
@@ -155,6 +156,8 @@ const double _kDialogWidth = 400;
 const double _kContentPadding = 12;
 
 class _SendMediaDialogState extends State<SendMediaDialog> {
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   late final List<OutgoingFile> _files = <OutgoingFile>[
     ...widget.initialFiles,
   ];
@@ -218,7 +221,7 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
     );
     _addFiles(
       intake.files,
-      notice: intake.rejectionText(maxBytes: widget.maxBytes),
+      notice: intake.rejectionText(maxBytes: widget.maxBytes, l10n: l10n),
     );
   }
 
@@ -275,7 +278,7 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
       [
         if (hasVisual)
           CtxMenuItem(
-            label: _asFiles ? 'Отправить как медиа' : 'Отправить как файлы',
+            label: _asFiles ? l10n.desktopSendAsMedia : l10n.desktopSendAsFiles,
             icon: _asFiles
                 ? FluentIcons.image_multiple_24_regular
                 : FluentIcons.document_multiple_24_regular,
@@ -283,7 +286,7 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
           ),
         if (_files.length > 1)
           CtxMenuItem(
-            label: _grouped ? 'Не группировать' : 'Группировать',
+            label: _grouped ? l10n.desktopSendUngroup : l10n.desktopSendGroup,
             icon: _grouped
                 ? FluentIcons.group_dismiss_24_regular
                 : FluentIcons.group_24_regular,
@@ -293,7 +296,7 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
       [
         if (widget.onPickMore != null)
           CtxMenuItem(
-            label: 'Добавить файлы…',
+            label: l10n.desktopSendAddFiles,
             icon: FluentIcons.add_24_regular,
             onTap: () => unawaited(_pickMore()),
           ),
@@ -496,10 +499,10 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
                         ],
                       ),
                       if (_dragging)
-                        const Positioned.fill(
+                        Positioned.fill(
                           child: AttachmentsDropZone(
                             visible: true,
-                            message: 'Отпустите, чтобы добавить',
+                            message: l10n.desktopSendDropHere,
                           ),
                         ),
                     ],
@@ -522,7 +525,7 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
           const SizedBox(width: 8),
           DesktopIconButton(
             icon: FluentIcons.dismiss_24_regular,
-            tooltip: 'Закрыть · Esc',
+            tooltip: l10n.desktopSendCloseEsc,
             onPressed: _dismiss,
           ),
           Expanded(
@@ -530,7 +533,7 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  outgoingDialogTitle(_files, sendAsFiles: _asFiles),
+                  outgoingDialogTitle(_files, sendAsFiles: _asFiles, l10n: l10n),
                   key: const ValueKey('send-media-title'),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -539,7 +542,7 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
                 ),
                 if (destination.isNotEmpty)
                   Text(
-                    'в «$destination»',
+                    l10n.desktopSendToDestination(destination),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.center,
@@ -551,7 +554,7 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
           DesktopIconButton(
             key: _moreKey,
             icon: FluentIcons.more_horizontal_24_regular,
-            tooltip: 'Ещё',
+            tooltip: l10n.desktopThreadMore,
             onPressed: () => unawaited(_openMore()),
           ),
           const SizedBox(width: 8),
@@ -714,7 +717,7 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
                           decoration: InputDecoration(
                             isCollapsed: true,
                             border: InputBorder.none,
-                            hintText: 'Добавить подпись…',
+                            hintText: l10n.desktopSendCaptionHint,
                             hintStyle: DType.body.copyWith(
                               color: c.textSecondary,
                             ),
@@ -728,7 +731,7 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
                     child: DesktopIconButton(
                       key: _emojiKey,
                       icon: FluentIcons.emoji_24_regular,
-                      tooltip: 'Эмодзи',
+                      tooltip: l10n.desktopSendEmoji,
                       onPressed: () => unawaited(_openEmoji()),
                     ),
                   ),
@@ -841,6 +844,7 @@ class _PreviewFileRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final preview = file.previewPath;
     final Widget leading;
@@ -900,7 +904,7 @@ class _PreviewFileRow extends StatelessWidget {
                   Text(
                     [
                       ?file.musicArtist,
-                      formatAttachmentSize(file.sizeBytes),
+                      formatAttachmentSize(file.sizeBytes, l10n),
                     ].join(' · '),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -941,6 +945,7 @@ class _HoverRemovableState extends State<_HoverRemovable> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -958,7 +963,7 @@ class _HoverRemovableState extends State<_HoverRemovable> {
                   child: IgnorePointer(
                     ignoring: !_hover,
                     child: DesktopTooltip(
-                      message: 'Убрать',
+                      message: l10n.desktopSendRemove,
                       child: HoverListener(
                         onTap: widget.onRemove,
                         builder: (ctx, hovered, pressed) => Container(
@@ -1000,12 +1005,13 @@ class _SendRoundButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final enabled = onTap != null && !busy;
     return DesktopTooltip(
       message: DesktopUiPrefs.enterToSend.value
-          ? 'Отправить · Enter'
-          : 'Отправить · Shift+Enter',
+          ? l10n.desktopSendEnter
+          : l10n.desktopSendShiftEnter,
       child: HoverListener(
         onTap: enabled ? onTap : null,
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
