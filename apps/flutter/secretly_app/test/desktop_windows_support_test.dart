@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
+// Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 // ПОДДЕРЖКА WINDOWS: ЗВУК, ВИДЕО, УВЕДОМЛЕНИЯ.
 //
 // 🔴 Компьютерная версия собирается под Windows, но три вещи там не работали
@@ -15,6 +18,21 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 String _read(String path) => File(path).readAsStringSync();
+
+/// Файл сборочного задания лежит по-разному: в рабочем дереве — в
+/// `docs/public/github/`, в публичной выкладке он же разложен в `.github/`.
+/// Ищем в обоих местах, иначе проверка ломается ровно там, ради чего её и
+/// писали — в публичной копии.
+File? _ciWorkflow() {
+  for (final path in const [
+    '../../../docs/public/github/workflows/ci.yml',
+    '../../../.github/workflows/ci.yml',
+  ]) {
+    final f = File(path);
+    if (f.existsSync()) return f;
+  }
+  return null;
+}
 
 void main() {
   test('🔴 пакеты для Windows объявлены', () {
@@ -77,9 +95,15 @@ void main() {
     });
   });
 
-  test('сборка под Windows проверяется на CI', () {
-    final ci = _read('../../../docs/public/github/workflows/ci.yml');
-    expect(ci.contains('runs-on: windows-latest'), isTrue);
-    expect(ci.contains('flutter build windows --release'), isTrue);
-  });
+  test(
+    'сборка под Windows проверяется на CI',
+    () {
+      final ci = _ciWorkflow()!.readAsStringSync();
+      expect(ci.contains('runs-on: windows-latest'), isTrue);
+      expect(ci.contains('flutter build windows --release'), isTrue);
+    },
+    skip: _ciWorkflow() == null
+        ? 'файла сборочного задания нет в этой копии дерева'
+        : null,
+  );
 }
