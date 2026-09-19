@@ -326,9 +326,9 @@ void main() {
       final sent = <DesktopComposerSubmission>[];
       await t.pumpWidget(
         MaterialApp(
-      locale: const Locale('ru'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('ru'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: DColors(
             colors: kDColorsDark,
             child: Scaffold(
@@ -403,9 +403,9 @@ void main() {
       final sent = <DesktopComposerSubmission>[];
       await t.pumpWidget(
         MaterialApp(
-      locale: const Locale('ru'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('ru'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: DColors(
             colors: kDColorsDark,
             child: Scaffold(

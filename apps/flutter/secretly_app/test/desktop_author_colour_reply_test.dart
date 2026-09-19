@@ -31,9 +31,9 @@ import 'package:secretly_app/ui/desktop/design/colors.dart';
 import 'package:secretly_app/ui/widgets/avatar_initials.dart';
 
 Widget _host(Widget child) => MaterialApp(
-      locale: const Locale('ru'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+  locale: const Locale('ru'),
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
   home: DColors(
     colors: kDColorsDark,
     child: Scaffold(body: SizedBox(width: 760, child: child)),

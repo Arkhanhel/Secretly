@@ -35,9 +35,9 @@ Finder _ticks() => find.byWidgetPredicate(
     );
 
 Widget _host(List<ChatListItem> items) => MaterialApp(
-      locale: const Locale('ru'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+  locale: const Locale('ru'),
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(
     body: DColors(
       colors: kDColorsDark,
@@ -156,9 +156,9 @@ void main() {
   testWidgets('🔴 выбранная строка — сплошная заливка, текст белый', (t) async {
     await t.pumpWidget(
       MaterialApp(
-      locale: const Locale('ru'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('ru'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: DColors(
             colors: kDColorsDark,
@@ -337,9 +337,9 @@ void main() {
     // На выделенной строке — белый: цветное имя на заливке не читается.
     await t.pumpWidget(
       MaterialApp(
-      locale: const Locale('ru'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('ru'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: DColors(
             colors: kDColorsDark,

@@ -96,9 +96,9 @@ void main() {
   testWidgets('сообщение с эмодзи рисуется без исключения', (t) async {
     await t.pumpWidget(
       MaterialApp(
-      locale: const Locale('ru'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('ru'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Text.rich(
             TextSpan(

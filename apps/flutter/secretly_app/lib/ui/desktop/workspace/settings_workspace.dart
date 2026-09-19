@@ -618,17 +618,16 @@ class _GeneralPaneState extends State<_GeneralPane> {
             ],
           ),
         ),
-        // D-1: hidden until the desktop strings are actually translated.
+        // D-1: shown since 19.09.2026, when the desktop strings finished
+        // moving into ARB (TZ §5, L-2 and L-3) and [kDesktopUiLocalized] was
+        // turned on.
         //
-        // The picker itself works — it calls setAppLocalePreference and the
-        // app rebuilds in the chosen locale. The problem is there is nothing
-        // to translate: the desktop tree carries ~800 hardcoded Russian
-        // literals against 4 l10n lookups, so choosing English produced an
-        // English "Cancel" button inside an entirely Russian app. Offering the
-        // choice was worse than not offering it — it looked like it worked.
-        //
-        // Flip [kDesktopUiLocalized] once the strings are in ARB (TZ §5, L-2
-        // and L-3) and this row comes back with nothing else to change.
+        // The row was hidden, not deleted, for a year: the picker itself always
+        // worked — it calls setAppLocalePreference and the app rebuilds in the
+        // chosen locale — but there was nothing to translate, so choosing
+        // English gave an English "Cancel" inside an entirely Russian app.
+        // Offering that choice was worse than not offering it, because it
+        // looked like it worked.
         if (ctrl != null && kDesktopUiLocalized)
           WorkspaceCard(
             title: l10n.desktopGeneralInterfaceLanguage,

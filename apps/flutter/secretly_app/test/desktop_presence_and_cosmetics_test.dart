@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:secretly_app/ui/desktop/services/desktop_ui_prefs.dart';
@@ -90,14 +92,21 @@ void main() {
 
   group('D-1 the language picker stays hidden until strings are translated',
       () {
-    test('the localisation flag is off', () {
-      // The desktop tree still carries ~800 hardcoded Russian literals against
-      // a handful of l10n lookups. Offering a language picker in that state
-      // switches the locale for real but translates almost nothing, which
-      // reads as a broken app rather than an untranslated one. Flip this only
-      // together with the ARB work (TZ §5).
-      expect(kDesktopUiLocalized, isFalse,
-          reason: 'flip only when lib/ui/desktop strings are actually in ARB');
+    test('the localisation flag is on, and the strings back it up', () {
+      // Turned on 19.09.2026 together with the last ARB batch. The flag says
+      // "the desktop is translated", so it may only be true while that is
+      // true — hence the second half of this test, which is the same floor the
+      // ratchet holds. If someone adds hardcoded text again, the ratchet fails
+      // first and this reads as the reason why it matters.
+      expect(kDesktopUiLocalized, isTrue);
+      final ratchet = File(
+        'test/desktop_l10n_ratchet_test.dart',
+      ).readAsStringSync();
+      expect(
+        ratchet.contains('baseline: 2,'),
+        isTrue,
+        reason: 'флаг обещает переведённое окно — рубеж обязан держать ноль',
+      );
     });
   });
 }

@@ -47,9 +47,9 @@ void main() {
       // A 1px hit target cannot be hit with a mouse. The visible line stays
       // thin on purpose; the invisible hit area is what makes it usable.
       await t.pumpWidget(MaterialApp(
-      locale: const Locale('ru'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('ru'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Row(children: [
             ResizableDivider(onDelta: (_) {}),
@@ -65,9 +65,9 @@ void main() {
     testWidgets('horizontal drags are reported to the parent', (t) async {
       final deltas = <double>[];
       await t.pumpWidget(MaterialApp(
-      locale: const Locale('ru'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('ru'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: Row(children: [
             ResizableDivider(onDelta: deltas.add),

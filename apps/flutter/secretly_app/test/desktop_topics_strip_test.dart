@@ -27,9 +27,9 @@ void main() {
   testWidgets('· подписи «ТЕМЫ» в полосе нет', (t) async {
     await t.pumpWidget(
       MaterialApp(
-      locale: const Locale('ru'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+        locale: const Locale('ru'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: DColors(
           colors: kDColorsDark,
           child: Scaffold(

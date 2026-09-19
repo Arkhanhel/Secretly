@@ -6,13 +6,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Whether the desktop UI strings have actually been localised.
 ///
-/// The desktop tree still carries ~800 hardcoded Russian literals against a
-/// handful of `l10n` lookups. Until that is fixed (TZ §5) an interface-language
-/// picker is a placebo: it genuinely switches the locale, but only Material's
-/// own widgets follow, so the user gets an English "Cancel" inside a Russian
-/// app. The picker is gated on this flag rather than deleted, so turning
-/// localisation on is a one-line change and the intent stays documented.
-const bool kDesktopUiLocalized = false;
+/// 🔴 ON since 19.09.2026, when the last desktop label moved into
+/// `lib/l10n/app_*.arb` (TZ §5, L-2 and L-3). Two literals remain and always
+/// will: «Русский» and «Українська» in the language list itself, because
+/// language names are not translated.
+///
+/// Before that the picker was a placebo: it genuinely switched the locale, but
+/// only Material's own widgets followed, so the user got an English "Cancel"
+/// inside an entirely Russian app. That is why the row was gated on a flag
+/// rather than deleted — and why turning it on is this one line.
+///
+/// The guard is `test/desktop_l10n_ratchet_test.dart`: it holds the desktop
+/// literal count at its floor, so the flag cannot quietly become a lie again.
+const bool kDesktopUiLocalized = true;
 
 /// Decides whether the Enter key press currently in hand should SEND.
 ///

@@ -31,9 +31,9 @@ import 'package:secretly_app/ui/desktop/services/desktop_ui_prefs.dart';
 import 'package:secretly_app/ui/desktop/workspace/accent_color_picker.dart';
 
 Widget host(Widget child) => MaterialApp(
-      locale: const Locale('ru'),
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
+  locale: const Locale('ru'),
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
   home: DColors(colors: kDColorsDark, child: Scaffold(body: child)),
 );
 
