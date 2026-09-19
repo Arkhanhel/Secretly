@@ -2255,4 +2255,34 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get desktopViewerTooLarge => 'Diese Datei ist zu groß für die Anzeige hier';
+
+  @override
+  String get desktopSupportAttach => 'Datei anhängen';
+
+  @override
+  String desktopSupportAttachHint(Object limit) {
+    return 'Ein Screenshot oder eine Protokolldatei – bis $limit. Der Anhang wird zusammen mit der Nachricht verschlüsselt.';
+  }
+
+  @override
+  String desktopSupportTooLarge(Object limit) {
+    return 'Die Datei ist größer als $limit und kann nicht gesendet werden';
+  }
+
+  @override
+  String get desktopSupportUnreadable => 'Die Datei konnte nicht gelesen werden';
+
+  @override
+  String get desktopSupportRemoveAttachment => 'Anhang entfernen';
+
+  @override
+  String desktopSupportMegabytes(Object value) {
+    return '$value MB';
+  }
+
+  @override
+  String get desktopSupportYou => 'Sie';
+
+  @override
+  String get desktopSupportShrunk => 'Das Bild wurde verkleinert, damit es passt';
 }

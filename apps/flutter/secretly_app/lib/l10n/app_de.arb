@@ -1008,5 +1008,13 @@
   "desktopViewerSaveAs": "Sichern unter…",
   "desktopViewerPage": "Seite {page} von {total}",
   "desktopViewerFailed": "Datei konnte nicht angezeigt werden",
-  "desktopViewerTooLarge": "Diese Datei ist zu groß für die Anzeige hier"
+  "desktopViewerTooLarge": "Diese Datei ist zu groß für die Anzeige hier",
+  "desktopSupportAttach": "Datei anhängen",
+  "desktopSupportAttachHint": "Ein Screenshot oder eine Protokolldatei – bis {limit}. Der Anhang wird zusammen mit der Nachricht verschlüsselt.",
+  "desktopSupportTooLarge": "Die Datei ist größer als {limit} und kann nicht gesendet werden",
+  "desktopSupportUnreadable": "Die Datei konnte nicht gelesen werden",
+  "desktopSupportRemoveAttachment": "Anhang entfernen",
+  "desktopSupportMegabytes": "{value} MB",
+  "desktopSupportYou": "Sie",
+  "desktopSupportShrunk": "Das Bild wurde verkleinert, damit es passt"
 }

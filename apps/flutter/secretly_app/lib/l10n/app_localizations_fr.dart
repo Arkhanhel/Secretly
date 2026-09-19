@@ -2255,4 +2255,34 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get desktopViewerTooLarge => 'Ce fichier est trop grand pour être affiché ici';
+
+  @override
+  String get desktopSupportAttach => 'Joindre un fichier';
+
+  @override
+  String desktopSupportAttachHint(Object limit) {
+    return 'Une capture d\'écran ou un fichier journal — jusqu\'à $limit. La pièce jointe est chiffrée avec le message.';
+  }
+
+  @override
+  String desktopSupportTooLarge(Object limit) {
+    return 'Le fichier dépasse $limit et ne peut pas être envoyé';
+  }
+
+  @override
+  String get desktopSupportUnreadable => 'Impossible de lire le fichier';
+
+  @override
+  String get desktopSupportRemoveAttachment => 'Retirer la pièce jointe';
+
+  @override
+  String desktopSupportMegabytes(Object value) {
+    return '$value Mo';
+  }
+
+  @override
+  String get desktopSupportYou => 'Vous';
+
+  @override
+  String get desktopSupportShrunk => 'L\'image a été réduite pour tenir';
 }

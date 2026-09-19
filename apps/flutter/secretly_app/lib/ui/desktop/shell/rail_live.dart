@@ -102,6 +102,8 @@ class _DesktopLiveRailState extends State<DesktopLiveRail> {
       selfName: snap.selfName,
       selfAvatarPath: snap.selfAvatarPath,
       selfFrameId: snap.selfFrameId,
+      supportUnread: snap.supportUnread,
+      supportAwaiting: snap.supportAwaiting,
     );
   }
 }

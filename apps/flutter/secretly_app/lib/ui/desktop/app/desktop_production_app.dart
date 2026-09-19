@@ -800,6 +800,11 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       // своё лицо приезжает вместе с метаданными профиля.
       selfAvatarPath: await _controller.resolvedOwnAvatarPath(),
       selfFrameId: _controller.myFrameId,
+      // Отметка поддержки берётся оттуда же, откуда её берёт телефон, — из
+      // контроллера. Считать её заново здесь значило бы завести второй ответ
+      // на тот же вопрос.
+      supportUnread: _controller.supportUnreadCount,
+      supportAwaiting: _controller.supportAwaitingReply,
     );
   }
 

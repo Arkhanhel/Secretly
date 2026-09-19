@@ -2255,4 +2255,34 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get desktopViewerTooLarge => 'Файл завеликий, щоб показати тут';
+
+  @override
+  String get desktopSupportAttach => 'Прикріпити файл';
+
+  @override
+  String desktopSupportAttachHint(Object limit) {
+    return 'Знімок екрана або файл журналу — до $limit. Вкладення шифрується разом із повідомленням.';
+  }
+
+  @override
+  String desktopSupportTooLarge(Object limit) {
+    return 'Файл більший за $limit — такий не надіслати';
+  }
+
+  @override
+  String get desktopSupportUnreadable => 'Не вдалося прочитати файл';
+
+  @override
+  String get desktopSupportRemoveAttachment => 'Прибрати вкладення';
+
+  @override
+  String desktopSupportMegabytes(Object value) {
+    return '$value МБ';
+  }
+
+  @override
+  String get desktopSupportYou => 'Ви';
+
+  @override
+  String get desktopSupportShrunk => 'Зображення стиснуто, щоб умістилося';
 }

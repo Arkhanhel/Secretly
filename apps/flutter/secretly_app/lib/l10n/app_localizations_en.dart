@@ -2255,4 +2255,34 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get desktopViewerTooLarge => 'This file is too large to show here';
+
+  @override
+  String get desktopSupportAttach => 'Attach a file';
+
+  @override
+  String desktopSupportAttachHint(Object limit) {
+    return 'A screenshot or a log file — up to $limit. The attachment is encrypted together with the message.';
+  }
+
+  @override
+  String desktopSupportTooLarge(Object limit) {
+    return 'The file is larger than $limit — it cannot be sent';
+  }
+
+  @override
+  String get desktopSupportUnreadable => 'Could not read the file';
+
+  @override
+  String get desktopSupportRemoveAttachment => 'Remove the attachment';
+
+  @override
+  String desktopSupportMegabytes(Object value) {
+    return '$value MB';
+  }
+
+  @override
+  String get desktopSupportYou => 'You';
+
+  @override
+  String get desktopSupportShrunk => 'The image was shrunk to fit';
 }

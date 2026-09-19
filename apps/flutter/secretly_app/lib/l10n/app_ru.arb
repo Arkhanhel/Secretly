@@ -1004,5 +1004,13 @@
   "desktopViewerSaveAs": "Сохранить как…",
   "desktopViewerPage": "Страница {page} из {total}",
   "desktopViewerFailed": "Не удалось показать файл",
-  "desktopViewerTooLarge": "Файл слишком большой для просмотра здесь"
+  "desktopViewerTooLarge": "Файл слишком большой для просмотра здесь",
+  "desktopSupportAttach": "Прикрепить файл",
+  "desktopSupportAttachHint": "Снимок экрана или файл журнала — до {limit}. Вложение шифруется вместе с сообщением.",
+  "desktopSupportTooLarge": "Файл больше {limit} — такой не отправить",
+  "desktopSupportUnreadable": "Не удалось прочитать файл",
+  "desktopSupportRemoveAttachment": "Убрать вложение",
+  "desktopSupportMegabytes": "{value} МБ",
+  "desktopSupportYou": "Вы",
+  "desktopSupportShrunk": "Изображение ужато, чтобы уместиться"
 }

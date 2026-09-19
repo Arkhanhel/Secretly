@@ -1008,5 +1008,13 @@
   "desktopViewerSaveAs": "Enregistrer sous…",
   "desktopViewerPage": "Page {page} sur {total}",
   "desktopViewerFailed": "Impossible d’afficher ce fichier",
-  "desktopViewerTooLarge": "Ce fichier est trop grand pour être affiché ici"
+  "desktopViewerTooLarge": "Ce fichier est trop grand pour être affiché ici",
+  "desktopSupportAttach": "Joindre un fichier",
+  "desktopSupportAttachHint": "Une capture d'écran ou un fichier journal — jusqu'à {limit}. La pièce jointe est chiffrée avec le message.",
+  "desktopSupportTooLarge": "Le fichier dépasse {limit} et ne peut pas être envoyé",
+  "desktopSupportUnreadable": "Impossible de lire le fichier",
+  "desktopSupportRemoveAttachment": "Retirer la pièce jointe",
+  "desktopSupportMegabytes": "{value} Mo",
+  "desktopSupportYou": "Vous",
+  "desktopSupportShrunk": "L'image a été réduite pour tenir"
 }

@@ -1008,5 +1008,13 @@
   "desktopViewerSaveAs": "Зберегти як…",
   "desktopViewerPage": "Сторінка {page} з {total}",
   "desktopViewerFailed": "Не вдалося показати файл",
-  "desktopViewerTooLarge": "Файл завеликий, щоб показати тут"
+  "desktopViewerTooLarge": "Файл завеликий, щоб показати тут",
+  "desktopSupportAttach": "Прикріпити файл",
+  "desktopSupportAttachHint": "Знімок екрана або файл журналу — до {limit}. Вкладення шифрується разом із повідомленням.",
+  "desktopSupportTooLarge": "Файл більший за {limit} — такий не надіслати",
+  "desktopSupportUnreadable": "Не вдалося прочитати файл",
+  "desktopSupportRemoveAttachment": "Прибрати вкладення",
+  "desktopSupportMegabytes": "{value} МБ",
+  "desktopSupportYou": "Ви",
+  "desktopSupportShrunk": "Зображення стиснуто, щоб умістилося"
 }

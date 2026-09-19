@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -38,12 +39,16 @@ import '../primitives/desktop_snackbar.dart';
 import '../primitives/hover_listener.dart';
 import '../primitives/desktop_text_field.dart';
 import '../../recovery_kit_screen.dart';
+import '../../widgets/support_badge.dart';
 import '../services/desktop_app_lock_service.dart';
 import '../services/desktop_notification_service.dart';
 import '../primitives/desktop_segmented.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../services/desktop_ui_prefs.dart';
+import '../app/desktop_media_send.dart' show pickDesktopAttachments;
 import '../shell/shortcuts_help.dart' show ShortcutsList;
+import 'support_attachment.dart';
+import 'support_sent.dart';
 import 'workspace_layout.dart';
 
 /// Settings workspace — INLINE in the content pane, NOT a modal.
@@ -426,6 +431,9 @@ class SettingsWorkspace extends StatelessWidget {
             'написать',
             'support',
           ],
+          trailing: controller == null
+              ? null
+              : SupportBadgeListener(controller: controller!, compact: true),
           builder: (ctx) {
             final ctrl = controller;
             return ctrl == null
@@ -4883,30 +4891,66 @@ class _SupportPane extends StatefulWidget {
   State<_SupportPane> createState() => _SupportPaneState();
 }
 
+/// Одна запись нити: моё письмо или ответ поддержки.
+typedef _SupportEntry = ({
+  bool mine,
+  String text,
+  int tsMs,
+  String? attachment,
+});
+
 class _SupportPaneState extends State<_SupportPane> {
   final TextEditingController _text = TextEditingController();
   final ScrollController _scroll = ScrollController();
 
+  late final DesktopSupportSentStore _store = DesktopSupportSentStore(
+    read: widget.controller.localValueGet,
+    write: widget.controller.localValueSet,
+  );
+
   List<({String text, int tsMs, int seq})> _replies = const [];
+
+  /// Свои письма — из зашифрованной базы, см. [DesktopSupportSentStore].
+  List<DesktopSupportSent> _sent = const <DesktopSupportSent>[];
+
   int _cursor = 0;
   bool _loading = true;
   bool _sending = false;
+  bool _attaching = false;
+  Timer? _poll;
   String? _error;
+  DesktopSupportAttachment? _attachment;
 
   @override
   void initState() {
     super.initState();
+    // Кнопка «Отправить» должна гаснуть на пустом поле, а не молча ничего не
+    // делать: молчание читается как поломка.
+    _text.addListener(_onTextChanged);
     _load();
+    // Ответ приходит, пока панель открыта, и до перезахода его не видно —
+    // человек сидит перед ним и ждёт. Телефон опрашивает так же.
+    _poll = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!_sending) unawaited(_load());
+    });
   }
 
   @override
   void dispose() {
+    _poll?.cancel();
+    _text.removeListener(_onTextChanged);
     _text.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
+  void _onTextChanged() {
+    if (mounted) setState(() {});
+  }
+
   Future<void> _load() async {
+    final mine = await _store.load();
+    if (mounted) setState(() => _sent = mine);
     try {
       final res = await widget.controller.fetchSupportReplies(_cursor);
       if (!mounted) return;
@@ -4929,19 +4973,93 @@ class _SupportPaneState extends State<_SupportPane> {
     }
   }
 
+  /// Нить целиком, по времени: своё и ответы вперемешку, как в переписке.
+  List<_SupportEntry> _thread() {
+    final items = <_SupportEntry>[
+      for (final m in _sent)
+        (
+          mine: true,
+          text: m.text,
+          tsMs: m.tsMs,
+          attachment: m.attachmentName,
+        ),
+      for (final r in _replies)
+        (mine: false, text: r.text, tsMs: r.tsMs, attachment: null),
+    ]..sort((a, b) => a.tsMs.compareTo(b.tsMs));
+    return items;
+  }
+
+  Future<void> _pickAttachment() async {
+    if (_attaching || _sending) return;
+    setState(() {
+      _attaching = true;
+      _error = null;
+    });
+    final paths = await pickDesktopAttachments(media: false);
+    if (!mounted) return;
+    if (paths.isEmpty) {
+      setState(() => _attaching = false);
+      return;
+    }
+    final res = await prepareDesktopSupportAttachment(paths.first);
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    setState(() {
+      _attaching = false;
+      if (res.ok) {
+        _attachment = res.file;
+        return;
+      }
+      _error = res.problem == DesktopSupportAttachmentProblem.tooLarge
+          ? l10n.desktopSupportTooLarge(_sizeText(context, _limitBytes))
+          : l10n.desktopSupportUnreadable;
+    });
+  }
+
+  static const int _limitBytes = kDesktopSupportAttachmentMaxBytes;
+
+  /// «1,4 МБ» — разделитель берётся из языка окна, единица из перевода.
+  String _sizeText(BuildContext context, int bytes) {
+    final l10n = AppLocalizations.of(context)!;
+    final mb = bytes / (1024 * 1024);
+    final whole = mb >= 10 || mb == mb.roundToDouble();
+    final fmt = NumberFormat.decimalPatternDigits(
+      locale: Localizations.localeOf(context).toString(),
+      decimalDigits: whole ? 0 : 1,
+    );
+    return l10n.desktopSupportMegabytes(fmt.format(mb));
+  }
+
   Future<void> _send() async {
     final text = _text.text.trim();
+    final att = _attachment;
     if (text.isEmpty || _sending) return;
     setState(() {
       _sending = true;
       _error = null;
     });
     try {
-      await widget.controller.submitSupportMessage(text);
+      await widget.controller.submitSupportMessage(
+        text,
+        attachmentName: att?.name,
+        attachmentMime: att?.mime,
+        attachmentBytes: att?.bytes,
+      );
       await widget.controller.noteSupportMessageSent();
+      final saved = await _store.append(
+        DesktopSupportSent(
+          text: text,
+          tsMs: DateTime.now().millisecondsSinceEpoch,
+          attachmentName: att?.name,
+        ),
+      );
       if (!mounted) return;
       _text.clear();
-      setState(() => _sending = false);
+      setState(() {
+        _sending = false;
+        _sent = saved;
+        _attachment = null;
+      });
       DesktopSnackbar.show(
         context,
         message: 'Сообщение отправлено',
@@ -4971,6 +5089,7 @@ class _SupportPaneState extends State<_SupportPane> {
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
+    final l10n = AppLocalizations.of(context)!;
     final available = widget.controller.supportConfig.isUsable;
     if (!available) {
       return _PaneScaffold(
@@ -4986,6 +5105,7 @@ class _SupportPaneState extends State<_SupportPane> {
         ],
       );
     }
+    final thread = _thread();
     return _PaneScaffold(
       children: [
         WorkspaceCard(
@@ -5010,7 +5130,7 @@ class _SupportPaneState extends State<_SupportPane> {
                     ),
                   ),
                 )
-              else if (_replies.isEmpty)
+              else if (thread.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: DSpace.m),
                   child: Text(
@@ -5024,35 +5144,8 @@ class _SupportPaneState extends State<_SupportPane> {
                   child: ListView.builder(
                     controller: _scroll,
                     shrinkWrap: true,
-                    itemCount: _replies.length,
-                    itemBuilder: (ctx, i) {
-                      final r = _replies[i];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: DSpace.s),
-                        padding: const EdgeInsets.all(DSpace.m),
-                        decoration: BoxDecoration(
-                          color: c.elevated,
-                          borderRadius: BorderRadius.circular(DRadii.md),
-                          border: Border.all(color: c.borderSubtle),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              r.text,
-                              style: DType.body.copyWith(color: c.textPrimary),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _time(r.tsMs),
-                              style: DType.caption.copyWith(
-                                color: c.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                    itemCount: thread.length,
+                    itemBuilder: (ctx, i) => _bubble(thread[i], c, l10n),
                   ),
                 ),
             ],
@@ -5073,6 +5166,8 @@ class _SupportPaneState extends State<_SupportPane> {
                 maxLines: 6,
                 minLines: 3,
               ),
+              const SizedBox(height: DSpace.m),
+              _attachmentRow(c, l10n),
               if (_error != null) ...[
                 const SizedBox(height: DSpace.s),
                 Text(_error!, style: DType.caption.copyWith(color: c.danger)),
@@ -5081,11 +5176,156 @@ class _SupportPaneState extends State<_SupportPane> {
               DesktopButton(
                 label: _sending ? 'Отправляем…' : 'Отправить',
                 icon: FluentIcons.send_24_regular,
-                onPressed: _sending ? null : () => unawaited(_send()),
+                onPressed: (_sending || _text.text.trim().isEmpty)
+                    ? null
+                    : () => unawaited(_send()),
               ),
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  /// Пузырь нити. Своё письмо — цветом отклика, ответ — как карточка.
+  Widget _bubble(_SupportEntry e, DColorSet c, AppLocalizations l10n) {
+    final mine = e.mine;
+    return Container(
+      margin: const EdgeInsets.only(bottom: DSpace.s),
+      padding: const EdgeInsets.all(DSpace.m),
+      decoration: BoxDecoration(
+        color: mine ? c.accentPrimary.withValues(alpha: 0.10) : c.elevated,
+        borderRadius: BorderRadius.circular(DRadii.md),
+        border: Border.all(
+          color: mine ? c.accentPrimary.withValues(alpha: 0.35) : c.borderSubtle,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (mine)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: Text(
+                l10n.desktopSupportYou,
+                style: DType.caption.copyWith(
+                  color: c.accentPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          Text(e.text, style: DType.body.copyWith(color: c.textPrimary)),
+          if ((e.attachment ?? '').isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  FluentIcons.attach_24_regular,
+                  size: 14,
+                  color: c.textSecondary,
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    e.attachment!,
+                    overflow: TextOverflow.ellipsis,
+                    style: DType.caption.copyWith(color: c.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 4),
+          Text(
+            _time(e.tsMs),
+            style: DType.caption.copyWith(color: c.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Вложение: кнопка «прикрепить», а когда файл выбран — он сам и «убрать».
+  Widget _attachmentRow(DColorSet c, AppLocalizations l10n) {
+    final att = _attachment;
+    if (att == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DesktopButton(
+            label: l10n.desktopSupportAttach,
+            icon: FluentIcons.attach_24_regular,
+            kind: DButtonKind.ghost,
+            onPressed: (_attaching || _sending)
+                ? null
+                : () => unawaited(_pickAttachment()),
+          ),
+          const SizedBox(height: DSpace.xs),
+          Text(
+            l10n.desktopSupportAttachHint(_sizeText(context, _limitBytes)),
+            style: DType.caption.copyWith(color: c.textSecondary, height: 1.35),
+          ),
+        ],
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: DSpace.m,
+            vertical: DSpace.s,
+          ),
+          decoration: BoxDecoration(
+            color: c.elevated,
+            borderRadius: BorderRadius.circular(DRadii.sm),
+            border: Border.all(color: c.borderSubtle),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                att.isImage
+                    ? FluentIcons.image_24_regular
+                    : FluentIcons.document_24_regular,
+                size: 16,
+                color: c.textSecondary,
+              ),
+              const SizedBox(width: DSpace.s),
+              Expanded(
+                child: Text(
+                  att.name,
+                  overflow: TextOverflow.ellipsis,
+                  style: DType.label.copyWith(color: c.textPrimary),
+                ),
+              ),
+              const SizedBox(width: DSpace.s),
+              Text(
+                _sizeText(context, att.bytes.length),
+                style: DType.caption.copyWith(color: c.textSecondary),
+              ),
+              const SizedBox(width: DSpace.s),
+              DesktopTooltip(
+                message: l10n.desktopSupportRemoveAttachment,
+                child: HoverListener(
+                  onTap: _sending ? null : () => setState(() => _attachment = null),
+                  builder: (ctx, hovered, pressed) => Icon(
+                    FluentIcons.dismiss_24_regular,
+                    size: 16,
+                    color: hovered ? c.danger : c.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (att.shrunk) ...[
+          const SizedBox(height: DSpace.xs),
+          Text(
+            l10n.desktopSupportShrunk,
+            style: DType.caption.copyWith(color: c.textSecondary),
+          ),
+        ],
       ],
     );
   }

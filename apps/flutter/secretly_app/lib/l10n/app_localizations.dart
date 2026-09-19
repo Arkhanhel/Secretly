@@ -4377,6 +4377,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This file is too large to show here'**
   String get desktopViewerTooLarge;
+
+  /// No description provided for @desktopSupportAttach.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach a file'**
+  String get desktopSupportAttach;
+
+  /// No description provided for @desktopSupportAttachHint.
+  ///
+  /// In en, this message translates to:
+  /// **'A screenshot or a log file — up to {limit}. The attachment is encrypted together with the message.'**
+  String desktopSupportAttachHint(Object limit);
+
+  /// No description provided for @desktopSupportTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is larger than {limit} — it cannot be sent'**
+  String desktopSupportTooLarge(Object limit);
+
+  /// No description provided for @desktopSupportUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the file'**
+  String get desktopSupportUnreadable;
+
+  /// No description provided for @desktopSupportRemoveAttachment.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the attachment'**
+  String get desktopSupportRemoveAttachment;
+
+  /// No description provided for @desktopSupportMegabytes.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} MB'**
+  String desktopSupportMegabytes(Object value);
+
+  /// No description provided for @desktopSupportYou.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get desktopSupportYou;
+
+  /// No description provided for @desktopSupportShrunk.
+  ///
+  /// In en, this message translates to:
+  /// **'The image was shrunk to fit'**
+  String get desktopSupportShrunk;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

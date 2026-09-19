@@ -54,6 +54,7 @@ class WorkspaceSection {
     this.dangerous = false,
     this.group,
     this.keywords = const <String>[],
+    this.trailing,
   });
   final String id;
   final IconData icon;
@@ -75,6 +76,13 @@ class WorkspaceSection {
   /// them. Without keywords they would have to already know the structure,
   /// which is exactly what they are searching to avoid.
   final List<String> keywords;
+
+  /// Значок справа в строке раздела.
+  ///
+  /// 🔴 ЗАЧЕМ. Поддержка отвечает не сразу, и ответ приходит в раздел, который
+  /// человек закрыл час назад. Без отметки о нём узнают случайно — то есть
+  /// никогда. Телефон её показывает, компьютер молчал.
+  final Widget? trailing;
 
   bool matches(String query) {
     if (query.isEmpty) return true;
@@ -371,6 +379,10 @@ class _SectionRow extends StatelessWidget {
                   ),
                 ),
               ),
+              if (section.trailing != null) ...[
+                const SizedBox(width: DSpace.xs),
+                section.trailing!,
+              ],
             ],
           ),
         );

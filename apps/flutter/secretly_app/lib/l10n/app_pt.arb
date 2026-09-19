@@ -1008,5 +1008,13 @@
   "desktopViewerSaveAs": "Guardar como…",
   "desktopViewerPage": "Página {page} de {total}",
   "desktopViewerFailed": "Não foi possível mostrar o ficheiro",
-  "desktopViewerTooLarge": "O ficheiro é grande demais para mostrar aqui"
+  "desktopViewerTooLarge": "O ficheiro é grande demais para mostrar aqui",
+  "desktopSupportAttach": "Anexar um ficheiro",
+  "desktopSupportAttachHint": "Uma captura de ecrã ou um ficheiro de registo — até {limit}. O anexo é cifrado juntamente com a mensagem.",
+  "desktopSupportTooLarge": "O ficheiro é maior do que {limit} e não pode ser enviado",
+  "desktopSupportUnreadable": "Não foi possível ler o ficheiro",
+  "desktopSupportRemoveAttachment": "Remover o anexo",
+  "desktopSupportMegabytes": "{value} MB",
+  "desktopSupportYou": "Você",
+  "desktopSupportShrunk": "A imagem foi reduzida para caber"
 }

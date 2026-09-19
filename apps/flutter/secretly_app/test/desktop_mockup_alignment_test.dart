@@ -129,8 +129,9 @@ void main() {
       expect(rail.contains('rail ? c.unreadRail : unreadColorFor(kind, c)'), isTrue);
       expect(
         'rail: true,'.allMatches(rail).length,
-        2,
-        reason: 'и плитка раздела, и закреплённая переписка',
+        3,
+        reason: 'плитка раздела, закреплённая переписка и ответ поддержки '
+            'на кнопке «Настройки» — все три одного цвета',
       );
     });
 

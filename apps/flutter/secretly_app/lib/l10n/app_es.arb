@@ -1008,5 +1008,13 @@
   "desktopViewerSaveAs": "Guardar como…",
   "desktopViewerPage": "Página {page} de {total}",
   "desktopViewerFailed": "No se ha podido mostrar el archivo",
-  "desktopViewerTooLarge": "El archivo es demasiado grande para mostrarlo aquí"
+  "desktopViewerTooLarge": "El archivo es demasiado grande para mostrarlo aquí",
+  "desktopSupportAttach": "Adjuntar un archivo",
+  "desktopSupportAttachHint": "Una captura de pantalla o un archivo de registro: hasta {limit}. El adjunto se cifra junto con el mensaje.",
+  "desktopSupportTooLarge": "El archivo supera {limit} y no se puede enviar",
+  "desktopSupportUnreadable": "No se pudo leer el archivo",
+  "desktopSupportRemoveAttachment": "Quitar el adjunto",
+  "desktopSupportMegabytes": "{value} MB",
+  "desktopSupportYou": "Tú",
+  "desktopSupportShrunk": "La imagen se redujo para que quepa"
 }

@@ -2255,4 +2255,34 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get desktopViewerTooLarge => 'Файл слишком большой для просмотра здесь';
+
+  @override
+  String get desktopSupportAttach => 'Прикрепить файл';
+
+  @override
+  String desktopSupportAttachHint(Object limit) {
+    return 'Снимок экрана или файл журнала — до $limit. Вложение шифруется вместе с сообщением.';
+  }
+
+  @override
+  String desktopSupportTooLarge(Object limit) {
+    return 'Файл больше $limit — такой не отправить';
+  }
+
+  @override
+  String get desktopSupportUnreadable => 'Не удалось прочитать файл';
+
+  @override
+  String get desktopSupportRemoveAttachment => 'Убрать вложение';
+
+  @override
+  String desktopSupportMegabytes(Object value) {
+    return '$value МБ';
+  }
+
+  @override
+  String get desktopSupportYou => 'Вы';
+
+  @override
+  String get desktopSupportShrunk => 'Изображение ужато, чтобы уместиться';
 }

@@ -2255,6 +2255,36 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get desktopViewerTooLarge => 'O ficheiro é grande demais para mostrar aqui';
+
+  @override
+  String get desktopSupportAttach => 'Anexar um ficheiro';
+
+  @override
+  String desktopSupportAttachHint(Object limit) {
+    return 'Uma captura de ecrã ou um ficheiro de registo — até $limit. O anexo é cifrado juntamente com a mensagem.';
+  }
+
+  @override
+  String desktopSupportTooLarge(Object limit) {
+    return 'O ficheiro é maior do que $limit e não pode ser enviado';
+  }
+
+  @override
+  String get desktopSupportUnreadable => 'Não foi possível ler o ficheiro';
+
+  @override
+  String get desktopSupportRemoveAttachment => 'Remover o anexo';
+
+  @override
+  String desktopSupportMegabytes(Object value) {
+    return '$value MB';
+  }
+
+  @override
+  String get desktopSupportYou => 'Você';
+
+  @override
+  String get desktopSupportShrunk => 'A imagem foi reduzida para caber';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -4508,4 +4538,34 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopViewerTooLarge => 'O arquivo é grande demais para mostrar aqui';
+
+  @override
+  String get desktopSupportAttach => 'Anexar um arquivo';
+
+  @override
+  String desktopSupportAttachHint(Object limit) {
+    return 'Uma captura de tela ou um arquivo de log — até $limit. O anexo é criptografado junto com a mensagem.';
+  }
+
+  @override
+  String desktopSupportTooLarge(Object limit) {
+    return 'O arquivo é maior que $limit e não pode ser enviado';
+  }
+
+  @override
+  String get desktopSupportUnreadable => 'Não foi possível ler o arquivo';
+
+  @override
+  String get desktopSupportRemoveAttachment => 'Remover o anexo';
+
+  @override
+  String desktopSupportMegabytes(Object value) {
+    return '$value MB';
+  }
+
+  @override
+  String get desktopSupportYou => 'Você';
+
+  @override
+  String get desktopSupportShrunk => 'A imagem foi reduzida para caber';
 }

@@ -46,7 +46,11 @@ void main() {
     // Кнопка «Настройки» больше не своего размера.
     expect(src.contains('width: 48,\n            height: 48,'), isFalse);
     final i = src.indexOf('class _SidebarBottom');
-    final body = src.substring(i, (i + 1600).clamp(0, src.length));
+    // Границей служит следующий класс, а не «плюс 1600 знаков»: окно по числу
+    // знаков сползало с проверяемого места от любой добавленной строки — и
+    // тест падал не потому, что плитка стала другой.
+    final next = src.indexOf('\nclass ', i + 1);
+    final body = src.substring(i, next < 0 ? src.length : next);
     expect(body.contains('width: kRailTileSize'), isTrue);
     expect(body.contains('BorderRadius.circular(kRailTileRadius)'), isTrue);
     expect(body.contains('size: 21'), isTrue);

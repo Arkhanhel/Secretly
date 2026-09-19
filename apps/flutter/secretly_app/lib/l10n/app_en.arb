@@ -1028,5 +1028,28 @@
       "page": {},
       "total": {}
     }
+  },
+  "desktopSupportAttach": "Attach a file",
+  "desktopSupportAttachHint": "A screenshot or a log file — up to {limit}. The attachment is encrypted together with the message.",
+  "desktopSupportTooLarge": "The file is larger than {limit} — it cannot be sent",
+  "desktopSupportUnreadable": "Could not read the file",
+  "desktopSupportRemoveAttachment": "Remove the attachment",
+  "desktopSupportMegabytes": "{value} MB",
+  "desktopSupportYou": "You",
+  "desktopSupportShrunk": "The image was shrunk to fit",
+  "@desktopSupportAttachHint": {
+    "placeholders": {
+      "limit": {}
+    }
+  },
+  "@desktopSupportTooLarge": {
+    "placeholders": {
+      "limit": {}
+    }
+  },
+  "@desktopSupportMegabytes": {
+    "placeholders": {
+      "value": {}
+    }
   }
 }

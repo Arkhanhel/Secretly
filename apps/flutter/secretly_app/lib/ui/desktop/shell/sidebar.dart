@@ -29,6 +29,8 @@ class DesktopSidebar extends StatelessWidget {
     super.key,
     required this.active,
     required this.onSelect,
+    this.supportUnread = 0,
+    this.supportAwaiting = false,
     this.onOpenSettings,
     this.onOpenProfile,
     this.unreadByTab = const <DesktopSection, int>{},
@@ -71,6 +73,10 @@ class DesktopSidebar extends StatelessWidget {
   final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenProfile;
   final Map<DesktopSection, int> unreadByTab;
+
+  /// Ответы поддержки: число, а при пустом числе — точка «обращение в работе».
+  final int supportUnread;
+  final bool supportAwaiting;
   final ConnectionStatus connectionStatus;
   final double width;
 
@@ -191,6 +197,8 @@ class DesktopSidebar extends StatelessWidget {
             icon: FluentIcons.settings_24_regular,
             tooltip: 'Настройки   Cmd ,',
             onTap: onOpenSettings,
+            badgeCount: supportUnread,
+            badgeDot: supportAwaiting,
           ),
           // · СОСТОЯНИЕ СВЯЗИ ПЕРЕЕХАЛО НА СВОЙ ПОРТРЕТ (макет).
           //
@@ -273,6 +281,8 @@ class RailSnapshot {
     this.selfName = '',
     this.selfAvatarPath,
     this.selfFrameId,
+    this.supportUnread = 0,
+    this.supportAwaiting = false,
   });
 
   final int directUnread;
@@ -289,6 +299,15 @@ class RailSnapshot {
   /// которое он платит вслепую.
   final String? selfFrameId;
 
+  /// Непрочитанные ответы поддержки и «обращение в работе».
+  ///
+  /// 🔴 ЗАЧЕМ НА РЕЙКЕ. Ответ приходит в настройки — туда, куда никто не
+  /// заглядывает без повода. На телефоне о нём говорит точка у входа в
+  /// настройки, на компьютере не говорило ничто: человек писал в поддержку и
+  /// не узнавал, что ему ответили.
+  final int supportUnread;
+  final bool supportAwaiting;
+
   /// Подпись включает РОВНО то, что видно на рейке. Всё остальное в переписках
   /// может меняться сколько угодно — рейки это не касается.
   String get signature {
@@ -301,7 +320,11 @@ class RailSnapshot {
       ..write('/')
       ..write(selfAvatarPath ?? '')
       ..write('/')
-      ..write(selfFrameId ?? '');
+      ..write(selfFrameId ?? '')
+      ..write('/')
+      ..write(supportUnread)
+      ..write('/')
+      ..write(supportAwaiting);
     for (final sp in spaces) {
       buffer
         ..write('|')
@@ -792,10 +815,23 @@ class _UnreadBadge extends StatelessWidget {
 }
 
 class _SidebarBottom extends StatelessWidget {
-  const _SidebarBottom({required this.icon, required this.tooltip, this.onTap});
+  const _SidebarBottom({
+    required this.icon,
+    required this.tooltip,
+    this.onTap,
+    this.badgeCount = 0,
+    this.badgeDot = false,
+  });
   final IconData icon;
   final String tooltip;
   final VoidCallback? onTap;
+
+  /// Число ответов; 0 — числа нет.
+  final int badgeCount;
+
+  /// Точка без числа: «обращение в работе, ответа ещё нет». Показывается
+  /// только когда числа нет — иначе две отметки налезли бы друг на друга.
+  final bool badgeDot;
 
   @override
   Widget build(BuildContext context) {
@@ -821,7 +857,36 @@ class _SidebarBottom extends StatelessWidget {
               color: hovered ? c.hover : Colors.transparent,
               borderRadius: BorderRadius.circular(kRailTileRadius),
             ),
-            child: Center(child: Icon(icon, size: 21, color: c.railIconIdle)),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Center(child: Icon(icon, size: 21, color: c.railIconIdle)),
+                if (badgeCount > 0)
+                  Positioned(
+                    right: -5,
+                    top: -4,
+                    child: _UnreadBadge(
+                      count: badgeCount,
+                      kind: ChatKind.direct,
+                      rail: true,
+                    ),
+                  )
+                else if (badgeDot)
+                  Positioned(
+                    right: 0,
+                    top: 1,
+                    child: Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: c.unreadRail,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: c.sidebar, width: 2),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           );
         },
       ),
