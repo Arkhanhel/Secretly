@@ -11,12 +11,23 @@
 /// должен занимать память целиком. Всё считается на самом компьютере.
 library;
 
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 class DesktopPdfBridge {
   DesktopPdfBridge._();
 
   static const MethodChannel channel = MethodChannel('secretly/pdf_render');
+
+  /// Умеет ли эта система показать PDF сама.
+  ///
+  /// 🔴 Сейчас только macOS: там рисует системный PDFKit. У Windows свой
+  /// встроенный движок PDF, но к нему нужен свой мост в приложении-обёртке;
+  /// пока его нет, PDF там открывается внешней программой, как раньше.
+  /// Показать пустое окно вместо документа было бы хуже прежнего.
+  static bool get isAvailable => !kIsWeb && Platform.isMacOS;
 
   /// Сколько страниц в документе; `null` — файл не читается как PDF или
   /// система показа недоступна (не macOS).

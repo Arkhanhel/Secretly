@@ -76,6 +76,27 @@ void main() {
       );
     });
 
+    test('🔴 система не умеет PDF (Windows) — отдаём программе', () {
+      // Показать пустое окно вместо документа хуже прежнего поведения.
+      expect(
+        desktopViewerKindFor(
+          mime: 'application/pdf',
+          fileName: 'x.pdf',
+          canRenderPdf: false,
+        ),
+        DesktopViewerKind.external_,
+      );
+      // Текст показывается везде — он никакого движка не требует.
+      expect(
+        desktopViewerKindFor(
+          mime: 'text/plain',
+          fileName: 'note.txt',
+          canRenderPdf: false,
+        ),
+        DesktopViewerKind.text,
+      );
+    });
+
     test('чужие типы — как раньше, внешней программой', () {
       for (final f in const ['архив.zip', 'песня.mp3', 'таблица.xlsx']) {
         expect(

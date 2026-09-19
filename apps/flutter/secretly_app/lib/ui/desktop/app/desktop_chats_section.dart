@@ -70,6 +70,7 @@ import '../chat/forward_blob_reuse.dart';
 import '../chat/event_composer_dialog.dart';
 import '../chat/poll_composer_dialog.dart';
 import '../chat/desktop_poll_tally.dart';
+import '../chat/desktop_pdf_bridge.dart';
 import '../chat/document_viewer.dart';
 import '../chat/document_viewer_kind.dart';
 import '../chat/chat_list_footer.dart';
@@ -4588,6 +4589,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       mime: att.mime,
       fileName: shownName,
       sizeBytes: att.sizeBytes,
+      canRenderPdf: DesktopPdfBridge.isAvailable,
     );
     if (kind != DesktopViewerKind.external_) {
       final opened = file;

@@ -37,12 +37,19 @@ DesktopViewerKind desktopViewerKindFor({
   String? mime,
   String? fileName,
   int sizeBytes = 0,
+
+  /// Умеет ли эта система показать PDF сама (macOS — да; Windows пока нет).
+  bool canRenderPdf = true,
 }) {
   final m = (mime ?? '').trim().toLowerCase();
   final ext = p.extension((fileName ?? '').trim()).toLowerCase();
 
   if (m == 'application/pdf' || m == 'application/x-pdf' || ext == '.pdf') {
-    return DesktopViewerKind.pdf;
+    // Без своего показа честнее отдать внешней программе, чем показать
+    // пустое окно.
+    return canRenderPdf
+        ? DesktopViewerKind.pdf
+        : DesktopViewerKind.external_;
   }
   final looksText =
       m.startsWith('text/') ||
