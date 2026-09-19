@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 
 import 'package:desktop_drop/desktop_drop.dart';
@@ -9,7 +10,6 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 import '../../widgets/avatar_initials.dart';
 import '../primitives/verified_badge.dart';
-import 'room_call_banner.dart' show formatParticipantsRu;
 import '../../../app/message_command_utils.dart' show RoomTopicRef;
 import '../../room_topic_marks.dart';
 import '../design/tokens.dart';
@@ -216,7 +216,7 @@ class ChatListPanel extends StatefulWidget {
     this.currentTopicId,
     this.topicUnread = const <String, int>{},
     this.onSelectTopic,
-    this.title = 'Чаты',
+    this.title,
     this.onCompose,
     this.onFilters,
     this.compact = false,
@@ -256,7 +256,7 @@ class ChatListPanel extends StatefulWidget {
   final ValueChanged<String?>? onSelectTopic;
 
   /// Заголовок панели: «Чаты» или «Комнаты».
-  final String title;
+  final String? title;
 
   /// Меню создания (чат / комната). `null` — кнопки нет.
   ///
@@ -325,13 +325,24 @@ class ChatListPanel extends StatefulWidget {
   State<ChatListPanel> createState() => _ChatListPanelState();
 }
 
-/// Подписи разделов. Вынесены в постоянные: заголовок одновременно и
-/// показывается, и служит признаком раздела при выборе значка — сравнение
-/// литералом в двух местах разъехалось бы при первой правке текста.
-const String _kPinnedHeader = 'ЗАКРЕПЛЁННЫЕ';
+/// Признаки разделов. Раздел ОПОЗНАЁТСЯ по этой метке (значок булавки,
+/// склейка одинаковых подряд), а ПОКАЗЫВАЕТСЯ подписью из переводов: пока в
+/// списке лежал русский текст, сравнение и подпись были одним и тем же, и
+/// переводить список было нельзя, не сломав разбиение.
+const String _kPinnedHeader = 'pinned';
+const String _kTodayHeader = 'today';
+const String _kYesterdayHeader = 'yesterday';
+const String _kThisWeekHeader = 'this-week';
+const String _kEarlierHeader = 'earlier';
 
-/// Подпись поиска: у поля и у лупы свёрнутого списка — одна.
-const String _kSearchHint = 'Поиск';
+/// Подпись раздела на языке окна.
+String _sectionTitle(AppLocalizations l10n, String header) => switch (header) {
+  _kPinnedHeader => l10n.desktopListPinned,
+  _kTodayHeader => l10n.desktopListToday,
+  _kYesterdayHeader => l10n.desktopListYesterday,
+  _kThisWeekHeader => l10n.desktopListThisWeek,
+  _ => l10n.desktopListEarlier,
+};
 
 /// Подпись раздела по времени последнего события.
 ///
@@ -340,15 +351,15 @@ const String _kSearchHint = 'Поиск';
 /// глазами не «все», а «то, что было сегодня». Заголовок отвечает на это
 /// сразу, без чтения времени в каждой строке.
 String _dateHeaderFor(int timestampMs, DateTime now) {
-  if (timestampMs <= 0) return 'РАНЬШЕ';
+  if (timestampMs <= 0) return _kEarlierHeader;
   final at = DateTime.fromMillisecondsSinceEpoch(timestampMs);
   final today = DateTime(now.year, now.month, now.day);
   final day = DateTime(at.year, at.month, at.day);
   final diff = today.difference(day).inDays;
-  if (diff <= 0) return 'СЕГОДНЯ';
-  if (diff == 1) return 'ВЧЕРА';
-  if (diff < 7) return 'НА ЭТОЙ НЕДЕЛЕ';
-  return 'РАНЬШЕ';
+  if (diff <= 0) return _kTodayHeader;
+  if (diff == 1) return _kYesterdayHeader;
+  if (diff < 7) return _kThisWeekHeader;
+  return _kEarlierHeader;
 }
 
 /// Идёт ли в комнате созвон — для строки списка.
@@ -503,6 +514,7 @@ class _ChatListPanelState extends State<ChatListPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     if (widget.compact) return _buildCompact(c);
     final visible = _pinnedFirst(_filter(widget.items));
@@ -524,7 +536,7 @@ class _ChatListPanelState extends State<ChatListPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _PanelHeader(
-            title: widget.title,
+            title: widget.title ?? l10n.chatsTitle,
             onCompose: widget.onCompose,
             onFilters: widget.onFilters,
           ),
@@ -534,7 +546,7 @@ class _ChatListPanelState extends State<ChatListPanel> {
               // Развернули лупой — курсор сразу в поле, как в телеграме.
               focusNode: _searchFocus,
               controller: _search,
-              hintText: _kSearchHint,
+              hintText: l10n.search,
               prefixIcon: FluentIcons.search_24_regular,
               suffixIcon: _query.isEmpty
                   ? null
@@ -662,6 +674,8 @@ class _ChatListPanelState extends State<ChatListPanel> {
 
   /// Сам список — вынесен из [build], чтобы затенение снизу не пришлось
   /// заворачивать вокруг двухсот строк разметки.
+  AppLocalizations get l10n => AppLocalizations.of(context)!;
+
   Widget _list(
     DColorSet c,
     List<ChatListItem> visible,
@@ -673,8 +687,8 @@ class _ChatListPanelState extends State<ChatListPanel> {
                     child: Center(
                       child: Text(
                         _query.isNotEmpty
-                            ? 'Ничего не найдено'
-                            : (widget.emptyCategoryText ?? 'Чатов пока нет'),
+                            ? l10n.desktopListNothingFound
+                            : (widget.emptyCategoryText ?? l10n.noChatsYet),
                         textAlign: TextAlign.center,
                         style: DType.caption.copyWith(color: c.textSecondary),
                       ),
@@ -698,7 +712,7 @@ class _ChatListPanelState extends State<ChatListPanel> {
                       final header = entry.header;
                       if (header != null) {
                         return _SectionHeader(
-                          label: header,
+                          label: _sectionTitle(l10n, header),
                           colors: c,
                           icon: header == _kPinnedHeader
                               ? FluentIcons.pin_24_filled
@@ -764,25 +778,27 @@ class _ChatListPanelState extends State<ChatListPanel> {
         // раздела. Человек, которому нужно именно это, слово «закрепить» не
         // ищет.
         CtxMenuItem(
-          label: item.pinned ? 'Убрать из избранного' : 'В избранное',
+          label: item.pinned
+              ? l10n.desktopListRemoveFavourite
+              : l10n.desktopListAddFavourite,
           icon: item.pinned
               ? FluentIcons.star_off_24_regular
               : FluentIcons.star_24_regular,
           onTap: () => widget.onPin?.call(item.id),
         ),
         CtxMenuItem(
-          label: item.muted ? 'Включить уведомления' : 'Заглушить',
+          label: item.muted ? l10n.unmuteNotifications : l10n.desktopListMute,
           icon: FluentIcons.alert_off_24_regular,
           onTap: () => widget.onMute?.call(item.id),
         ),
         CtxMenuItem(
-          label: 'Отметить прочитанным',
+          label: l10n.desktopListMarkRead,
           icon: FluentIcons.checkmark_circle_24_regular,
           enabled: item.unread > 0,
           onTap: () => widget.onMarkRead?.call(item.id),
         ),
         CtxMenuItem(
-          label: item.archived ? 'Из архива' : 'В архив',
+          label: item.archived ? l10n.unarchive : l10n.desktopListArchive,
           icon: item.archived
               ? FluentIcons.archive_arrow_back_24_regular
               : FluentIcons.archive_24_regular,
@@ -792,13 +808,13 @@ class _ChatListPanelState extends State<ChatListPanel> {
       ...extra,
       [
         CtxMenuItem(
-          label: 'Очистить историю',
+          label: l10n.clearHistory,
           icon: FluentIcons.broom_24_regular,
           isDanger: true,
           onTap: () => widget.onClear?.call(item.id),
         ),
         CtxMenuItem(
-          label: 'Удалить',
+          label: l10n.delete,
           icon: FluentIcons.delete_24_regular,
           isDanger: true,
           onTap: () => widget.onDelete?.call(item.id),
@@ -882,6 +898,7 @@ class _ChatRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
+    final l10n = AppLocalizations.of(context)!;
     return HoverListener(
       onTap: onTap,
       onSecondaryTapDown: (d) => ContextMenu.show(
@@ -1165,7 +1182,7 @@ class _ChatRow extends StatelessWidget {
                                   ),
                                   child: Align(
                                     alignment: Alignment.topLeft,
-                                    child: _preview(c),
+                                    child: _preview(c, l10n),
                                   ),
                                 ),
                               ),
@@ -1208,7 +1225,7 @@ class _ChatRow extends StatelessWidget {
   /// «Отака фигня ребятки ✓✓» не подписано «Вы».
   ///
   /// На выделенной строке весь текст белый: под ним сплошная заливка окна.
-  Widget _preview(DColorSet c) {
+  Widget _preview(DColorSet c, AppLocalizations l10n) {
     final sub = selected
         ? Colors.white.withValues(alpha: 0.85)
         : c.textSecondary;
@@ -1234,7 +1251,7 @@ class _ChatRow extends StatelessWidget {
           const SizedBox(width: 4),
           Flexible(
             child: Text(
-              'Обсуждение · ${formatParticipantsRu(call.participants)}',
+              l10n.desktopListDiscussion(call.participants),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: style(tint).copyWith(fontWeight: FontWeight.w600),
@@ -1249,7 +1266,7 @@ class _ChatRow extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'печатает',
+            l10n.desktopListTyping,
             style: style(tint).copyWith(fontStyle: FontStyle.italic),
           ),
           const SizedBox(width: 4),
@@ -1264,7 +1281,7 @@ class _ChatRow extends StatelessWidget {
         text: TextSpan(
           children: [
             TextSpan(
-              text: 'Черновик: ',
+              text: l10n.desktopListDraftPrefix,
               style: style(selected ? Colors.white : c.danger).copyWith(
                 fontWeight: FontWeight.w600,
               ),
@@ -1511,6 +1528,7 @@ class _PanelHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final compose = onCompose;
     final filters = onFilters;
@@ -1541,14 +1559,14 @@ class _PanelHeader extends StatelessWidget {
           if (filters != null)
             _HeaderButton(
               icon: FluentIcons.filter_24_regular,
-              tooltip: 'Папки',
+              tooltip: l10n.desktopListFolders,
               onTap: filters,
             ),
           if (filters != null && compose != null) const SizedBox(width: 2),
           if (compose != null)
             _HeaderButton(
               icon: FluentIcons.compose_24_regular,
-              tooltip: 'Создать',
+              tooltip: l10n.desktopListCreate,
               accent: true,
               onTap: compose,
             ),
@@ -1633,6 +1651,7 @@ class _CompactHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final search = onSearch;
     final filters = onFilters;
     final compose = onCompose;
@@ -1640,20 +1659,20 @@ class _CompactHeader extends StatelessWidget {
       if (compose != null)
         _HeaderButton(
           icon: FluentIcons.compose_24_regular,
-          tooltip: 'Создать',
+          tooltip: l10n.desktopListCreate,
           accent: true,
           onTap: compose,
         ),
       if (search != null)
         _HeaderButton(
           icon: FluentIcons.search_24_regular,
-          tooltip: _kSearchHint,
+          tooltip: l10n.search,
           onTap: (_) => search(),
         ),
       if (filters != null)
         _HeaderButton(
           icon: FluentIcons.filter_24_regular,
-          tooltip: 'Папки',
+          tooltip: l10n.desktopListFolders,
           onTap: filters,
         ),
     ];

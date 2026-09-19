@@ -13,6 +13,7 @@
 // Было: только удержание на месте, по одному сообщению; текст не выделялся
 // вовсе, курсор над пузырём — рука.
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -53,6 +54,9 @@ Future<void> _pump(
   addTearDown(t.view.resetPhysicalSize);
   await t.pumpWidget(
     MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: DColors(
         colors: kDColorsDark,
         child: Scaffold(

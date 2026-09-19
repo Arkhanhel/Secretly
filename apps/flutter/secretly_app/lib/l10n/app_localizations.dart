@@ -4479,6 +4479,288 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, one{Add {count} sticker} other{Add {count} stickers}}'**
   String desktopStickerPackAdd(int count);
+
+  /// No description provided for @desktopPairingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect Secretly Desktop'**
+  String get desktopPairingTitle;
+
+  /// No description provided for @desktopPairingHowTo.
+  ///
+  /// In en, this message translates to:
+  /// **'On your phone open Secretly → Settings → Devices → “Link a device” and scan this QR code.'**
+  String get desktopPairingHowTo;
+
+  /// No description provided for @desktopPairingPreparingQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing the QR…'**
+  String get desktopPairingPreparingQr;
+
+  /// No description provided for @desktopPairingQrUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'QR unavailable'**
+  String get desktopPairingQrUnavailable;
+
+  /// No description provided for @desktopPairingCodeExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'The code expired — refreshing…'**
+  String get desktopPairingCodeExpired;
+
+  /// No description provided for @desktopPairingCodeValidFor.
+  ///
+  /// In en, this message translates to:
+  /// **'The code is valid for another {time}'**
+  String desktopPairingCodeValidFor(Object time);
+
+  /// No description provided for @desktopPairingPrepareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not prepare the code. Check your internet connection and try again.'**
+  String get desktopPairingPrepareFailed;
+
+  /// No description provided for @desktopPairingRevoked.
+  ///
+  /// In en, this message translates to:
+  /// **'This device was removed from the account, so no code is created.\nConnect the desktop again — it will get a new device identity, and the old one stays revoked. Only a confirmation from the phone gives access to the conversations.'**
+  String get desktopPairingRevoked;
+
+  /// No description provided for @desktopPairingPreparingNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing a new connection…'**
+  String get desktopPairingPreparingNew;
+
+  /// No description provided for @desktopPairingConnectAsNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect as a new device'**
+  String get desktopPairingConnectAsNew;
+
+  /// No description provided for @desktopPairingIdentityResetFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not recreate the device identity. Restart the application and try again.'**
+  String get desktopPairingIdentityResetFailed;
+
+  /// No description provided for @desktopPairingWaitingConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for confirmation…'**
+  String get desktopPairingWaitingConfirm;
+
+  /// No description provided for @desktopPairingNewQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Generate a new QR'**
+  String get desktopPairingNewQr;
+
+  /// No description provided for @desktopPairingCreatingRequest.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating the request…'**
+  String get desktopPairingCreatingRequest;
+
+  /// No description provided for @desktopPairingReadyToScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready to scan'**
+  String get desktopPairingReadyToScan;
+
+  /// No description provided for @desktopPairingWaitingScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for the scan on the phone…'**
+  String get desktopPairingWaitingScan;
+
+  /// No description provided for @desktopPairingScannedConfirmOnPhone.
+  ///
+  /// In en, this message translates to:
+  /// **'QR scanned — confirm on the phone.'**
+  String get desktopPairingScannedConfirmOnPhone;
+
+  /// No description provided for @desktopPairingFetchingProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Fetching the profile and keys…'**
+  String get desktopPairingFetchingProfile;
+
+  /// No description provided for @desktopPairingConnectedLoading.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected. Loading…'**
+  String get desktopPairingConnectedLoading;
+
+  /// No description provided for @desktopPairingConnectionError.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection error. Try again.'**
+  String get desktopPairingConnectionError;
+
+  /// No description provided for @desktopMenuReaction.
+  ///
+  /// In en, this message translates to:
+  /// **'Reaction'**
+  String get desktopMenuReaction;
+
+  /// No description provided for @desktopMenuContinueInTopic.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue in a topic'**
+  String get desktopMenuContinueInTopic;
+
+  /// No description provided for @desktopMenuCopySelection.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the selection'**
+  String get desktopMenuCopySelection;
+
+  /// No description provided for @desktopMenuCopyText.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the text'**
+  String get desktopMenuCopyText;
+
+  /// No description provided for @desktopMenuCopyLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy the link'**
+  String get desktopMenuCopyLink;
+
+  /// No description provided for @desktopMenuTranslate.
+  ///
+  /// In en, this message translates to:
+  /// **'Translate'**
+  String get desktopMenuTranslate;
+
+  /// No description provided for @desktopMenuHideTranslation.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide the translation'**
+  String get desktopMenuHideTranslation;
+
+  /// No description provided for @desktopMenuSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get desktopMenuSelect;
+
+  /// No description provided for @desktopMenuPhotoOrVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo or video'**
+  String get desktopMenuPhotoOrVideo;
+
+  /// No description provided for @desktopMenuContact.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact'**
+  String get desktopMenuContact;
+
+  /// No description provided for @desktopMenuLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get desktopMenuLocation;
+
+  /// No description provided for @desktopListPinned.
+  ///
+  /// In en, this message translates to:
+  /// **'PINNED'**
+  String get desktopListPinned;
+
+  /// No description provided for @desktopListToday.
+  ///
+  /// In en, this message translates to:
+  /// **'TODAY'**
+  String get desktopListToday;
+
+  /// No description provided for @desktopListYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'YESTERDAY'**
+  String get desktopListYesterday;
+
+  /// No description provided for @desktopListThisWeek.
+  ///
+  /// In en, this message translates to:
+  /// **'THIS WEEK'**
+  String get desktopListThisWeek;
+
+  /// No description provided for @desktopListEarlier.
+  ///
+  /// In en, this message translates to:
+  /// **'EARLIER'**
+  String get desktopListEarlier;
+
+  /// No description provided for @desktopListNothingFound.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing found'**
+  String get desktopListNothingFound;
+
+  /// No description provided for @desktopListAddFavourite.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to favourites'**
+  String get desktopListAddFavourite;
+
+  /// No description provided for @desktopListRemoveFavourite.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from favourites'**
+  String get desktopListRemoveFavourite;
+
+  /// No description provided for @desktopListMute.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute'**
+  String get desktopListMute;
+
+  /// No description provided for @desktopListMarkRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as read'**
+  String get desktopListMarkRead;
+
+  /// No description provided for @desktopListArchive.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive'**
+  String get desktopListArchive;
+
+  /// No description provided for @desktopListFolders.
+  ///
+  /// In en, this message translates to:
+  /// **'Folders'**
+  String get desktopListFolders;
+
+  /// No description provided for @desktopListCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get desktopListCreate;
+
+  /// No description provided for @desktopListTyping.
+  ///
+  /// In en, this message translates to:
+  /// **'typing'**
+  String get desktopListTyping;
+
+  /// No description provided for @desktopListDraftPrefix.
+  ///
+  /// In en, this message translates to:
+  /// **'Draft: '**
+  String get desktopListDraftPrefix;
+
+  /// No description provided for @desktopListDiscussion.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{Discussion · {count} participant} other{Discussion · {count} participants}}'**
+  String desktopListDiscussion(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

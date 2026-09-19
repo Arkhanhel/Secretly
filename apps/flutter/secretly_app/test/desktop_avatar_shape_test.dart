@@ -15,6 +15,7 @@
 // каждой правке оформления, а стоит он того, что одна и та же комната станет
 // зелёной на столе и синей в кармане. Люди узнают чаты по цветному пятну.
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/chat/chat_list_panel.dart';
@@ -23,6 +24,9 @@ import 'package:secretly_app/ui/desktop/primitives/avatar.dart';
 import 'package:secretly_app/ui/widgets/shared_palette.dart';
 
 Widget _host(Widget child) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(
     body: DColors(
       colors: kDColorsDark,
@@ -294,6 +298,9 @@ void main() {
 
   group('список чатов раздаёт форму по типу', () {
     Widget list(ChatKind kind) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: DColors(
           colors: kDColorsDark,

@@ -21,6 +21,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/app/message_command_utils.dart' show RoomTopicRef;
@@ -55,6 +56,9 @@ Widget _host({
   ValueChanged<String?>? onSelectTopic,
   Map<String, int> unread = const <String, int>{},
 }) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(
     body: DColors(
       colors: kDColorsDark,

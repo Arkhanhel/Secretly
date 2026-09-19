@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'package:secretly_app/l10n/app_localizations_ru.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:secretly_app/app/message_command_utils.dart';
@@ -64,6 +65,7 @@ void main() {
 
     test('omits forward when no handler is supplied', () {
       final sections = MessageContextMenu.sections(
+        l10n: AppLocalizationsRu(),
         isSelf: true,
         canEdit: true,
         canDelete: true,
@@ -75,6 +77,7 @@ void main() {
 
     test('shows forward once a handler is supplied', () {
       final sections = MessageContextMenu.sections(
+        l10n: AppLocalizationsRu(),
         isSelf: true,
         canEdit: true,
         canDelete: true,
@@ -87,6 +90,7 @@ void main() {
 
     test('never emits an empty section (no stray dividers)', () {
       final sections = MessageContextMenu.sections(
+        l10n: AppLocalizationsRu(),
         isSelf: false,
         canEdit: false,
         canDelete: false,
@@ -101,6 +105,7 @@ void main() {
 
     test('unimplemented pin and select stay hidden', () {
       final sections = MessageContextMenu.sections(
+        l10n: AppLocalizationsRu(),
         isSelf: true,
         canEdit: true,
         canDelete: true,

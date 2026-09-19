@@ -2330,4 +2330,155 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get desktopPairingTitle => 'Connect Secretly Desktop';
+
+  @override
+  String get desktopPairingHowTo => 'On your phone open Secretly → Settings → Devices → “Link a device” and scan this QR code.';
+
+  @override
+  String get desktopPairingPreparingQr => 'Preparing the QR…';
+
+  @override
+  String get desktopPairingQrUnavailable => 'QR unavailable';
+
+  @override
+  String get desktopPairingCodeExpired => 'The code expired — refreshing…';
+
+  @override
+  String desktopPairingCodeValidFor(Object time) {
+    return 'The code is valid for another $time';
+  }
+
+  @override
+  String get desktopPairingPrepareFailed => 'Could not prepare the code. Check your internet connection and try again.';
+
+  @override
+  String get desktopPairingRevoked => 'This device was removed from the account, so no code is created.\nConnect the desktop again — it will get a new device identity, and the old one stays revoked. Only a confirmation from the phone gives access to the conversations.';
+
+  @override
+  String get desktopPairingPreparingNew => 'Preparing a new connection…';
+
+  @override
+  String get desktopPairingConnectAsNew => 'Connect as a new device';
+
+  @override
+  String get desktopPairingIdentityResetFailed => 'Could not recreate the device identity. Restart the application and try again.';
+
+  @override
+  String get desktopPairingWaitingConfirm => 'Waiting for confirmation…';
+
+  @override
+  String get desktopPairingNewQr => 'Generate a new QR';
+
+  @override
+  String get desktopPairingCreatingRequest => 'Creating the request…';
+
+  @override
+  String get desktopPairingReadyToScan => 'Ready to scan';
+
+  @override
+  String get desktopPairingWaitingScan => 'Waiting for the scan on the phone…';
+
+  @override
+  String get desktopPairingScannedConfirmOnPhone => 'QR scanned — confirm on the phone.';
+
+  @override
+  String get desktopPairingFetchingProfile => 'Fetching the profile and keys…';
+
+  @override
+  String get desktopPairingConnectedLoading => 'Connected. Loading…';
+
+  @override
+  String get desktopPairingConnectionError => 'Connection error. Try again.';
+
+  @override
+  String get desktopMenuReaction => 'Reaction';
+
+  @override
+  String get desktopMenuContinueInTopic => 'Continue in a topic';
+
+  @override
+  String get desktopMenuCopySelection => 'Copy the selection';
+
+  @override
+  String get desktopMenuCopyText => 'Copy the text';
+
+  @override
+  String get desktopMenuCopyLink => 'Copy the link';
+
+  @override
+  String get desktopMenuTranslate => 'Translate';
+
+  @override
+  String get desktopMenuHideTranslation => 'Hide the translation';
+
+  @override
+  String get desktopMenuSelect => 'Select';
+
+  @override
+  String get desktopMenuPhotoOrVideo => 'Photo or video';
+
+  @override
+  String get desktopMenuContact => 'Contact';
+
+  @override
+  String get desktopMenuLocation => 'Location';
+
+  @override
+  String get desktopListPinned => 'PINNED';
+
+  @override
+  String get desktopListToday => 'TODAY';
+
+  @override
+  String get desktopListYesterday => 'YESTERDAY';
+
+  @override
+  String get desktopListThisWeek => 'THIS WEEK';
+
+  @override
+  String get desktopListEarlier => 'EARLIER';
+
+  @override
+  String get desktopListNothingFound => 'Nothing found';
+
+  @override
+  String get desktopListAddFavourite => 'Add to favourites';
+
+  @override
+  String get desktopListRemoveFavourite => 'Remove from favourites';
+
+  @override
+  String get desktopListMute => 'Mute';
+
+  @override
+  String get desktopListMarkRead => 'Mark as read';
+
+  @override
+  String get desktopListArchive => 'Archive';
+
+  @override
+  String get desktopListFolders => 'Folders';
+
+  @override
+  String get desktopListCreate => 'Create';
+
+  @override
+  String get desktopListTyping => 'typing';
+
+  @override
+  String get desktopListDraftPrefix => 'Draft: ';
+
+  @override
+  String desktopListDiscussion(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Discussion · $count participants',
+      one: 'Discussion · $count participant',
+    );
+    return '$_temp0';
+  }
 }

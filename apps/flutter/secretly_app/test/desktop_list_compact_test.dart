@@ -18,6 +18,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/chat/chat_list_footer.dart';
@@ -83,6 +84,9 @@ void main() {
       addTearDown(t.view.resetPhysicalSize);
       await t.pumpWidget(
         MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
           home: DColors(
             colors: kDColorsDark,
             child: DesktopShell(
@@ -197,6 +201,9 @@ void main() {
       addTearDown(t.view.resetPhysicalSize);
       await t.pumpWidget(
         MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
           home: DColors(
             colors: kDColorsDark,
             child: DesktopShell(
@@ -267,6 +274,9 @@ void main() {
       ValueChanged<String>? onSelect,
       VoidCallback? onExpand,
     }) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       // Как в окне: фокус уже держит оболочка (`Focus(autofocus: true)`).
       // Без этого `autofocus` поля срабатывал бы в тесте и не срабатывал бы
       // в приложении — ровно так 16.09 и было.
@@ -369,6 +379,9 @@ void main() {
     testWidgets('подвал столбика — точка вместо надписи', (t) async {
       await t.pumpWidget(
         MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: DColors(
               colors: kDColorsDark,

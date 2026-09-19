@@ -1063,5 +1063,62 @@
   "desktopStickerPackAdd": "{count, plural, one{Add {count} sticker} other{Add {count} stickers}}",
   "@desktopStickerPackCount": {"placeholders": {"count": {"type": "int"}}},
   "@desktopStickerPackAdd": {"placeholders": {"count": {"type": "int"}}},
-  "@desktopStickerPackInstallingProgress": {"placeholders": {"done": {}, "total": {}}}
+  "@desktopStickerPackInstallingProgress": {"placeholders": {"done": {}, "total": {}}},
+  "desktopPairingTitle": "Connect Secretly Desktop",
+  "desktopPairingHowTo": "On your phone open Secretly → Settings → Devices → “Link a device” and scan this QR code.",
+  "desktopPairingPreparingQr": "Preparing the QR…",
+  "desktopPairingQrUnavailable": "QR unavailable",
+  "desktopPairingCodeExpired": "The code expired — refreshing…",
+  "desktopPairingCodeValidFor": "The code is valid for another {time}",
+  "desktopPairingPrepareFailed": "Could not prepare the code. Check your internet connection and try again.",
+  "desktopPairingRevoked": "This device was removed from the account, so no code is created.\nConnect the desktop again — it will get a new device identity, and the old one stays revoked. Only a confirmation from the phone gives access to the conversations.",
+  "desktopPairingPreparingNew": "Preparing a new connection…",
+  "desktopPairingConnectAsNew": "Connect as a new device",
+  "desktopPairingIdentityResetFailed": "Could not recreate the device identity. Restart the application and try again.",
+  "desktopPairingWaitingConfirm": "Waiting for confirmation…",
+  "desktopPairingNewQr": "Generate a new QR",
+  "desktopPairingCreatingRequest": "Creating the request…",
+  "desktopPairingReadyToScan": "Ready to scan",
+  "desktopPairingWaitingScan": "Waiting for the scan on the phone…",
+  "desktopPairingScannedConfirmOnPhone": "QR scanned — confirm on the phone.",
+  "desktopPairingFetchingProfile": "Fetching the profile and keys…",
+  "desktopPairingConnectedLoading": "Connected. Loading…",
+  "desktopPairingConnectionError": "Connection error. Try again.",
+  "@desktopPairingCodeValidFor": {
+    "placeholders": {
+      "time": {}
+    }
+  },
+  "desktopMenuReaction": "Reaction",
+  "desktopMenuContinueInTopic": "Continue in a topic",
+  "desktopMenuCopySelection": "Copy the selection",
+  "desktopMenuCopyText": "Copy the text",
+  "desktopMenuCopyLink": "Copy the link",
+  "desktopMenuTranslate": "Translate",
+  "desktopMenuHideTranslation": "Hide the translation",
+  "desktopMenuSelect": "Select",
+  "desktopMenuPhotoOrVideo": "Photo or video",
+  "desktopMenuContact": "Contact",
+  "desktopMenuLocation": "Location",
+  "desktopListPinned": "PINNED",
+  "desktopListToday": "TODAY",
+  "desktopListYesterday": "YESTERDAY",
+  "desktopListThisWeek": "THIS WEEK",
+  "desktopListEarlier": "EARLIER",
+  "desktopListNothingFound": "Nothing found",
+  "desktopListAddFavourite": "Add to favourites",
+  "desktopListRemoveFavourite": "Remove from favourites",
+  "desktopListMute": "Mute",
+  "desktopListMarkRead": "Mark as read",
+  "desktopListArchive": "Archive",
+  "desktopListFolders": "Folders",
+  "desktopListCreate": "Create",
+  "desktopListTyping": "typing",
+  "desktopListDraftPrefix": "Draft: ",
+  "desktopListDiscussion": "{count, plural, one{Discussion · {count} participant} other{Discussion · {count} participants}}",
+  "@desktopListDiscussion": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  }
 }

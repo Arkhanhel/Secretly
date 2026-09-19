@@ -2334,4 +2334,157 @@ class AppLocalizationsUk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get desktopPairingTitle => 'Під\'єднайте Secretly Desktop';
+
+  @override
+  String get desktopPairingHowTo => 'На телефоні відкрийте Secretly → Налаштування → Пристрої → «Підключити пристрій» і відскануйте цей QR-код.';
+
+  @override
+  String get desktopPairingPreparingQr => 'Готуємо QR…';
+
+  @override
+  String get desktopPairingQrUnavailable => 'QR недоступний';
+
+  @override
+  String get desktopPairingCodeExpired => 'Код застарів — оновлюємо…';
+
+  @override
+  String desktopPairingCodeValidFor(Object time) {
+    return 'Код дійсний ще $time';
+  }
+
+  @override
+  String get desktopPairingPrepareFailed => 'Не вдалося підготувати код. Перевірте підключення до інтернету та спробуйте ще раз.';
+
+  @override
+  String get desktopPairingRevoked => 'Цей пристрій видалили з облікового запису, тому код не створюється.\nПідключіть комп’ютер заново — він отримає нову особу пристрою, а стара лишиться відкликаною. Доступ до листувань дасть лише підтвердження з телефона.';
+
+  @override
+  String get desktopPairingPreparingNew => 'Готуємо нове підключення…';
+
+  @override
+  String get desktopPairingConnectAsNew => 'Підключити як новий пристрій';
+
+  @override
+  String get desktopPairingIdentityResetFailed => 'Не вдалося створити особу пристрою заново. Перезапустіть застосунок і спробуйте ще раз.';
+
+  @override
+  String get desktopPairingWaitingConfirm => 'Очікуємо підтвердження…';
+
+  @override
+  String get desktopPairingNewQr => 'Створити новий QR';
+
+  @override
+  String get desktopPairingCreatingRequest => 'Створюємо запит…';
+
+  @override
+  String get desktopPairingReadyToScan => 'Готово до сканування';
+
+  @override
+  String get desktopPairingWaitingScan => 'Очікуємо сканування на телефоні…';
+
+  @override
+  String get desktopPairingScannedConfirmOnPhone => 'QR відскановано — підтвердьте на телефоні.';
+
+  @override
+  String get desktopPairingFetchingProfile => 'Отримуємо профіль і ключі…';
+
+  @override
+  String get desktopPairingConnectedLoading => 'Підключено. Завантажуємо…';
+
+  @override
+  String get desktopPairingConnectionError => 'Помилка підключення. Спробуйте ще раз.';
+
+  @override
+  String get desktopMenuReaction => 'Реакція';
+
+  @override
+  String get desktopMenuContinueInTopic => 'Продовжити в темі';
+
+  @override
+  String get desktopMenuCopySelection => 'Копіювати виділене';
+
+  @override
+  String get desktopMenuCopyText => 'Копіювати текст';
+
+  @override
+  String get desktopMenuCopyLink => 'Копіювати посилання';
+
+  @override
+  String get desktopMenuTranslate => 'Перекласти';
+
+  @override
+  String get desktopMenuHideTranslation => 'Сховати переклад';
+
+  @override
+  String get desktopMenuSelect => 'Виділити';
+
+  @override
+  String get desktopMenuPhotoOrVideo => 'Фото або відео';
+
+  @override
+  String get desktopMenuContact => 'Контакт';
+
+  @override
+  String get desktopMenuLocation => 'Геопозиція';
+
+  @override
+  String get desktopListPinned => 'ЗАКРІПЛЕНІ';
+
+  @override
+  String get desktopListToday => 'СЬОГОДНІ';
+
+  @override
+  String get desktopListYesterday => 'ВЧОРА';
+
+  @override
+  String get desktopListThisWeek => 'ЦЬОГО ТИЖНЯ';
+
+  @override
+  String get desktopListEarlier => 'РАНІШЕ';
+
+  @override
+  String get desktopListNothingFound => 'Нічого не знайдено';
+
+  @override
+  String get desktopListAddFavourite => 'До обраного';
+
+  @override
+  String get desktopListRemoveFavourite => 'Прибрати з обраного';
+
+  @override
+  String get desktopListMute => 'Вимкнути звук';
+
+  @override
+  String get desktopListMarkRead => 'Позначити прочитаним';
+
+  @override
+  String get desktopListArchive => 'До архіву';
+
+  @override
+  String get desktopListFolders => 'Теки';
+
+  @override
+  String get desktopListCreate => 'Створити';
+
+  @override
+  String get desktopListTyping => 'пише';
+
+  @override
+  String get desktopListDraftPrefix => 'Чернетка: ';
+
+  @override
+  String desktopListDiscussion(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Обговорення · $count учасника',
+      many: 'Обговорення · $count учасників',
+      few: 'Обговорення · $count учасники',
+      one: 'Обговорення · $count учасник',
+    );
+    return '$_temp0';
+  }
 }

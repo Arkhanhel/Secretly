@@ -432,10 +432,11 @@ void main() {
       final menu = File(
         'lib/ui/desktop/chat/message_context_menu.dart',
       ).readAsStringSync();
-      expect(
-        menu.contains("translationShown ? 'Скрыть перевод' : 'Перевести'"),
-        isTrue,
-      );
+      // 19.09.2026: подписи меню уехали в переводы — проверяем, что
+      // переключается именно ПАРА подписей, а не одна на оба состояния.
+      expect(menu.contains('translationShown'), isTrue);
+      expect(menu.contains('l10n.desktopMenuHideTranslation'), isTrue);
+      expect(menu.contains('l10n.desktopMenuTranslate'), isTrue);
     });
 
     test('🔴 оригинал остаётся на месте — перевод ДОБАВЛЯЕТСЯ под ним', () {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
@@ -40,6 +41,10 @@ class DesktopOnboardingScreen extends StatefulWidget {
 }
 
 class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
+  /// Подписи экрана. Короткая дорога: `AppLocalizations.of(context)!` в
+  /// каждой строке читался бы хуже самой подписи.
+  AppLocalizations get _l10n => AppLocalizations.of(context)!;
+
   DesktopLinkRequest? _request;
   String? _qrPayload;
   String? _errorMessage;
@@ -158,8 +163,7 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
         // остальное — это «мы сами не знаем», и честнее сказать именно так,
         // добавив то единственное, что человек может сделать. Подробность
         // остаётся в журнале, где ей и место.
-        _errorMessage = 'Не удалось подготовить код. Проверьте подключение к '
-            'интернету и попробуйте ещё раз.';
+        _errorMessage = _l10n.desktopPairingPrepareFailed;
       });
     }
   }
@@ -197,14 +201,13 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
               _headerIcon(c),
               const SizedBox(height: DSpace.xl),
               Text(
-                'Подключите Secretly Desktop',
+                _l10n.desktopPairingTitle,
                 style: DType.title.copyWith(color: c.textPrimary),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: DSpace.s),
               Text(
-                'На телефоне откройте Secretly → Настройки → Устройства → '
-                '«Подключить устройство» и отсканируйте этот QR-код.',
+                _l10n.desktopPairingHowTo,
                 textAlign: TextAlign.center,
                 style: DType.body.copyWith(color: c.textSecondary),
               ),
@@ -289,7 +292,9 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
                   ),
                 const SizedBox(height: DSpace.s),
                 Text(
-                  _busy ? 'Готовим QR…' : 'QR недоступен',
+                  _busy
+                      ? _l10n.desktopPairingPreparingQr
+                      : _l10n.desktopPairingQrUnavailable,
                   style: DType.caption.copyWith(color: Colors.black54),
                 ),
               ],
@@ -313,7 +318,7 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
         if (_request == null) return const SizedBox.shrink();
         if (left <= Duration.zero) {
           return Text(
-            'Код истёк — обновляем…',
+            _l10n.desktopPairingCodeExpired,
             textAlign: TextAlign.center,
             style: DType.caption.copyWith(color: c.warning),
           );
@@ -322,7 +327,9 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
         final s = left.inSeconds % 60;
         final expiringSoon = left.inSeconds <= 60;
         return Text(
-          'Код действителен ещё $m:${s.toString().padLeft(2, '0')}',
+          _l10n.desktopPairingCodeValidFor(
+            '$m:${s.toString().padLeft(2, '0')}',
+          ),
           textAlign: TextAlign.center,
           style: DType.caption.copyWith(
             color: expiringSoon ? c.warning : c.textSecondary,
@@ -374,18 +381,15 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'Это устройство удалили из аккаунта, поэтому код не создаётся.\n'
-          'Подключите десктоп заново — он получит новую личность устройства, '
-          'а старая останется отозванной. Доступ к перепискам даст только '
-          'подтверждение с телефона.',
+          _l10n.desktopPairingRevoked,
           textAlign: TextAlign.center,
           style: DType.caption.copyWith(color: c.textSecondary),
         ),
         const SizedBox(height: DSpace.s),
         DesktopButton(
           label: _repairing
-              ? 'Готовим новое подключение…'
-              : 'Подключить как новое устройство',
+              ? _l10n.desktopPairingPreparingNew
+              : _l10n.desktopPairingConnectAsNew,
           kind: DButtonKind.filled,
           onPressed: (_repairing || _busy) ? null : _resetIdentityAndRetry,
         ),
@@ -408,8 +412,7 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
       setState(() {
         _repairing = false;
         // Не текст исключения — см. пояснение в [_startRequest].
-        _errorMessage = 'Не удалось пересоздать личность устройства. '
-            'Перезапустите приложение и попробуйте ещё раз.';
+        _errorMessage = _l10n.desktopPairingIdentityResetFailed;
       });
       return;
     }
@@ -429,8 +432,10 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
     final canRetry = !_busy && !pairingInFlight;
     return DesktopButton(
       label: pairingInFlight
-          ? 'Ожидаем подтверждения…'
-          : (_busy ? 'Готовим QR…' : 'Сгенерировать новый QR'),
+          ? _l10n.desktopPairingWaitingConfirm
+          : (_busy
+                ? _l10n.desktopPairingPreparingQr
+                : _l10n.desktopPairingNewQr),
       kind: DButtonKind.tonal,
       onPressed: canRetry ? _cancelAndRetry : null,
     );
@@ -439,18 +444,20 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
   String _authFlowLabel(AuthFlowState s) {
     switch (s) {
       case AuthFlowState.unauthenticated:
-        return _busy ? 'Создаём запрос…' : 'Готов к сканированию';
+        return _busy
+            ? _l10n.desktopPairingCreatingRequest
+            : _l10n.desktopPairingReadyToScan;
       case AuthFlowState.qrSessionPending:
-        return 'Ожидаем сканирования на телефоне…';
+        return _l10n.desktopPairingWaitingScan;
       case AuthFlowState.qrScannedWaitConfirm:
-        return 'QR отсканирован — подтвердите на телефоне.';
+        return _l10n.desktopPairingScannedConfirmOnPhone;
       case AuthFlowState.bundleApplying:
-        return 'Получаем профиль и ключи…';
+        return _l10n.desktopPairingFetchingProfile;
       case AuthFlowState.authenticated:
-        return 'Подключено. Загружаем…';
+        return _l10n.desktopPairingConnectedLoading;
       case AuthFlowState.authError:
         return widget.controller.authFlowError ??
-            'Ошибка подключения. Попробуйте ещё раз.';
+            _l10n.desktopPairingConnectionError;
     }
   }
 

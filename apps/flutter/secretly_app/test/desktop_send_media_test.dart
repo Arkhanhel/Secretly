@@ -16,6 +16,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -58,7 +59,10 @@ OutgoingFile _doc(String name) =>
       ..prepared = true;
 
 Widget _app(Widget home) =>
-    DColors(colors: kDColorsDark, child: MaterialApp(home: home));
+    DColors(colors: kDColorsDark, child: MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,home: home));
 
 void _bigView(WidgetTester t) {
   t.view.physicalSize = const Size(1400, 1000);

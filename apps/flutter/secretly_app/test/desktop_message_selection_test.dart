@@ -11,6 +11,7 @@
 // Указание владельца 16.09.2026: «при зажатии левой кнопкой мыши на пустое
 // место от пузыря оно должно выделяться».
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -52,6 +53,9 @@ Future<_Calls> _pump(
   final calls = _Calls();
   await t.pumpWidget(
     MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: DColors(
         colors: kDColorsDark,
         child: Scaffold(

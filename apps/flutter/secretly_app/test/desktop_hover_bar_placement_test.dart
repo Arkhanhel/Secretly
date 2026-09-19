@@ -15,6 +15,7 @@
 
 import 'dart:io';
 
+import 'package:secretly_app/l10n/app_localizations_ru.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -104,6 +105,7 @@ void main() {
   test('🔴 «Продолжить в теме» есть и в меню правой кнопки', () {
     var picked = 0;
     final sections = MessageContextMenu.sections(
+        l10n: AppLocalizationsRu(),
       isSelf: false,
       canEdit: false,
       canDelete: true,
@@ -118,6 +120,7 @@ void main() {
 
     // Без обработчика — пункта нет (правило окна: без действия нет кнопки).
     final bare = MessageContextMenu.sections(
+        l10n: AppLocalizationsRu(),
       isSelf: false,
       canEdit: false,
       canDelete: true,

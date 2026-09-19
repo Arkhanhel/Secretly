@@ -245,14 +245,22 @@ void main() {
     test('🔴 разделы по дням вместо одного «ВСЕ ЧАТЫ»', () {
       final panel = read('lib/ui/desktop/chat/chat_list_panel.dart');
       expect(panel.contains('_dateHeaderFor'), isTrue);
+      // 19.09.2026: подписи разделов уехали в переводы, а в списке осталась
+      // МЕТКА раздела. Проверяем метки — они и есть разбиение; сам текст
+      // теперь дело языковых файлов.
       for (final label in const <String>[
-        "'СЕГОДНЯ'",
-        "'ВЧЕРА'",
-        "'НА ЭТОЙ НЕДЕЛЕ'",
-        "'РАНЬШЕ'",
+        '_kTodayHeader',
+        '_kYesterdayHeader',
+        '_kThisWeekHeader',
+        '_kEarlierHeader',
       ]) {
         expect(panel.contains(label), isTrue, reason: 'нет раздела $label');
       }
+      expect(
+        panel.contains('l10n.desktopListToday'),
+        isTrue,
+        reason: 'подпись раздела берётся из переводов',
+      );
       expect(
         panel.contains("_kAllChatsHeader"),
         isFalse,
@@ -270,7 +278,7 @@ void main() {
     test('🔴 идущий созвон виден В СТРОКЕ списка', () {
       final panel = read('lib/ui/desktop/chat/chat_list_panel.dart');
       expect(panel.contains('RoomCallHint'), isTrue);
-      expect(panel.contains("'Обсуждение · "), isTrue);
+      expect(panel.contains('desktopListDiscussion'), isTrue);
       final section = read('lib/ui/desktop/app/desktop_chats_section.dart');
       expect(
         section.contains('listCachedActiveRoomCalls'),

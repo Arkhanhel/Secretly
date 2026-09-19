@@ -19,6 +19,7 @@
 // сообщение, они на строке имени слева от времени; счётчик — про чужие
 // сообщения, он на строке превью. Друг друга они не вытесняют.
 
+import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/chat/chat_list_panel.dart';
@@ -34,6 +35,9 @@ Finder _ticks() => find.byWidgetPredicate(
     );
 
 Widget _host(List<ChatListItem> items) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
   home: Scaffold(
     body: DColors(
       colors: kDColorsDark,
@@ -152,6 +156,9 @@ void main() {
   testWidgets('🔴 выбранная строка — сплошная заливка, текст белый', (t) async {
     await t.pumpWidget(
       MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: DColors(
             colors: kDColorsDark,
@@ -214,6 +221,9 @@ void main() {
       ChatListItem(id: 'c', name: 'Третий', preview: '3', time: '3'),
     ];
     Widget host(String? selected) => MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: DColors(
           colors: kDColorsDark,
@@ -327,6 +337,9 @@ void main() {
     // На выделенной строке — белый: цветное имя на заливке не читается.
     await t.pumpWidget(
       MaterialApp(
+      locale: const Locale('ru'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: DColors(
             colors: kDColorsDark,

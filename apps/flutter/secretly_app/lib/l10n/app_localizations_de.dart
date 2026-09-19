@@ -2330,4 +2330,155 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get desktopPairingTitle => 'Verbinde Secretly Desktop';
+
+  @override
+  String get desktopPairingHowTo => 'Öffne am Telefon Secretly → Einstellungen → Geräte → „Gerät verbinden“ und scanne diesen QR-Code.';
+
+  @override
+  String get desktopPairingPreparingQr => 'QR wird vorbereitet…';
+
+  @override
+  String get desktopPairingQrUnavailable => 'QR nicht verfügbar';
+
+  @override
+  String get desktopPairingCodeExpired => 'Der Code ist abgelaufen – wird erneuert…';
+
+  @override
+  String desktopPairingCodeValidFor(Object time) {
+    return 'Der Code gilt noch $time';
+  }
+
+  @override
+  String get desktopPairingPrepareFailed => 'Der Code konnte nicht vorbereitet werden. Prüfe deine Internetverbindung und versuche es erneut.';
+
+  @override
+  String get desktopPairingRevoked => 'Dieses Gerät wurde aus dem Konto entfernt, daher wird kein Code erstellt.\nVerbinde den Computer erneut – er erhält eine neue Geräteidentität, die alte bleibt widerrufen. Zugriff auf die Unterhaltungen gibt nur eine Bestätigung vom Telefon.';
+
+  @override
+  String get desktopPairingPreparingNew => 'Neue Verbindung wird vorbereitet…';
+
+  @override
+  String get desktopPairingConnectAsNew => 'Als neues Gerät verbinden';
+
+  @override
+  String get desktopPairingIdentityResetFailed => 'Die Geräteidentität konnte nicht neu erstellt werden. Starte die App neu und versuche es erneut.';
+
+  @override
+  String get desktopPairingWaitingConfirm => 'Warte auf Bestätigung…';
+
+  @override
+  String get desktopPairingNewQr => 'Neuen QR erzeugen';
+
+  @override
+  String get desktopPairingCreatingRequest => 'Anfrage wird erstellt…';
+
+  @override
+  String get desktopPairingReadyToScan => 'Bereit zum Scannen';
+
+  @override
+  String get desktopPairingWaitingScan => 'Warte auf den Scan am Telefon…';
+
+  @override
+  String get desktopPairingScannedConfirmOnPhone => 'QR gescannt – bestätige am Telefon.';
+
+  @override
+  String get desktopPairingFetchingProfile => 'Profil und Schlüssel werden geholt…';
+
+  @override
+  String get desktopPairingConnectedLoading => 'Verbunden. Wird geladen…';
+
+  @override
+  String get desktopPairingConnectionError => 'Verbindungsfehler. Versuche es erneut.';
+
+  @override
+  String get desktopMenuReaction => 'Reaktion';
+
+  @override
+  String get desktopMenuContinueInTopic => 'Im Thema fortsetzen';
+
+  @override
+  String get desktopMenuCopySelection => 'Auswahl kopieren';
+
+  @override
+  String get desktopMenuCopyText => 'Text kopieren';
+
+  @override
+  String get desktopMenuCopyLink => 'Link kopieren';
+
+  @override
+  String get desktopMenuTranslate => 'Übersetzen';
+
+  @override
+  String get desktopMenuHideTranslation => 'Übersetzung ausblenden';
+
+  @override
+  String get desktopMenuSelect => 'Auswählen';
+
+  @override
+  String get desktopMenuPhotoOrVideo => 'Foto oder Video';
+
+  @override
+  String get desktopMenuContact => 'Kontakt';
+
+  @override
+  String get desktopMenuLocation => 'Standort';
+
+  @override
+  String get desktopListPinned => 'ANGEHEFTET';
+
+  @override
+  String get desktopListToday => 'HEUTE';
+
+  @override
+  String get desktopListYesterday => 'GESTERN';
+
+  @override
+  String get desktopListThisWeek => 'DIESE WOCHE';
+
+  @override
+  String get desktopListEarlier => 'FRÜHER';
+
+  @override
+  String get desktopListNothingFound => 'Nichts gefunden';
+
+  @override
+  String get desktopListAddFavourite => 'Zu Favoriten';
+
+  @override
+  String get desktopListRemoveFavourite => 'Aus Favoriten entfernen';
+
+  @override
+  String get desktopListMute => 'Stummschalten';
+
+  @override
+  String get desktopListMarkRead => 'Als gelesen markieren';
+
+  @override
+  String get desktopListArchive => 'Archivieren';
+
+  @override
+  String get desktopListFolders => 'Ordner';
+
+  @override
+  String get desktopListCreate => 'Erstellen';
+
+  @override
+  String get desktopListTyping => 'schreibt';
+
+  @override
+  String get desktopListDraftPrefix => 'Entwurf: ';
+
+  @override
+  String desktopListDiscussion(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Gespräch · $count Teilnehmer',
+      one: 'Gespräch · $count Teilnehmer',
+    );
+    return '$_temp0';
+  }
 }

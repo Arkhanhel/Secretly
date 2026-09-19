@@ -1580,6 +1580,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                                   );
                                 },
                                 sections: MessageContextMenu.sections(
+                                  l10n: AppLocalizations.of(context)!,
                                   isSelf: m.isSelf,
                                   // Only real text messages are editable — mobile
                                   // refuses non-text payloads (payload is! MsgEventV1).
@@ -2234,6 +2235,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     if (rb == null) return;
     final canPick = widget.onPickAttachments != null && widget.onSendMedia != null;
     final sections = MessageContextMenu.attachSections(
+      l10n: AppLocalizations.of(context)!,
       onPhoto: canPick ? () => unawaited(_pickAndOpen(media: true)) : null,
       onFile: canPick ? () => unawaited(_pickAndOpen(media: false)) : null,
       // Опрос (17.09.2026): пункт был заготовлен, но никуда не вёл. Карточка

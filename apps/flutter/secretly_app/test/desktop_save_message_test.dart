@@ -29,7 +29,8 @@ void main() {
   ).readAsStringSync();
 
   test('пункт есть и пропадает без обработчика', () {
-    expect(menu.contains("label: 'Сохранить'"), isTrue);
+    // 19.09.2026: подписи меню уехали в переводы.
+    expect(menu.contains('label: l10n.saveAction'), isTrue);
     expect(
       menu.contains('if (onSave != null)'),
       isTrue,
