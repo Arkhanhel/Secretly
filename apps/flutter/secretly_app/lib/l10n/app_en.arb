@@ -1017,5 +1017,16 @@
   "desktopEventDescriptionHint": "Description",
   "desktopEventLocationHint": "Place",
   "desktopEventPickWhen": "Pick a date and time",
-  "desktopEventNeedTitleAndDate": "An event needs a title and a date"
+  "desktopEventNeedTitleAndDate": "An event needs a title and a date",
+  "desktopViewerOpenExternally": "Open in another app",
+  "desktopViewerSaveAs": "Save as…",
+  "desktopViewerPage": "Page {page} of {total}",
+  "desktopViewerFailed": "Could not show this file",
+  "desktopViewerTooLarge": "This file is too large to show here",
+  "@desktopViewerPage": {
+    "placeholders": {
+      "page": {},
+      "total": {}
+    }
+  }
 }

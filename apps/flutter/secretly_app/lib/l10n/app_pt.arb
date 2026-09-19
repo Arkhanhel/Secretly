@@ -1003,5 +1003,10 @@
   "desktopEventDescriptionHint": "Descrição",
   "desktopEventLocationHint": "Local",
   "desktopEventPickWhen": "Escolher data e hora",
-  "desktopEventNeedTitleAndDate": "São precisos um título e uma data"
+  "desktopEventNeedTitleAndDate": "São precisos um título e uma data",
+  "desktopViewerOpenExternally": "Abrir noutra aplicação",
+  "desktopViewerSaveAs": "Guardar como…",
+  "desktopViewerPage": "Página {page} de {total}",
+  "desktopViewerFailed": "Não foi possível mostrar o ficheiro",
+  "desktopViewerTooLarge": "O ficheiro é grande demais para mostrar aqui"
 }

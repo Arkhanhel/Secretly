@@ -2238,4 +2238,21 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get desktopEventNeedTitleAndDate => 'Потрібні назва і дата';
+
+  @override
+  String get desktopViewerOpenExternally => 'Відкрити у програмі';
+
+  @override
+  String get desktopViewerSaveAs => 'Зберегти як…';
+
+  @override
+  String desktopViewerPage(Object page, Object total) {
+    return 'Сторінка $page з $total';
+  }
+
+  @override
+  String get desktopViewerFailed => 'Не вдалося показати файл';
+
+  @override
+  String get desktopViewerTooLarge => 'Файл завеликий, щоб показати тут';
 }

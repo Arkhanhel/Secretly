@@ -124,7 +124,9 @@ void main() {
     final section = File(
       'lib/ui/desktop/app/desktop_chats_section.dart',
     ).readAsStringSync();
-    final at = section.indexOf('Future<void> _openFile(');
+    // Внешнее открытие живёт в `_openFileExternally`: свой просмотр теперь
+    // спрашивают раньше, но наружу по-прежнему уходит копия, а не кэш.
+    final at = section.indexOf('Future<void> _openFileExternally(');
     expect(at, greaterThan(0));
     final body = section.substring(at, at + 2000);
     final copyAt = body.indexOf('attachmentOpenCopy(');

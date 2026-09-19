@@ -2238,6 +2238,23 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get desktopEventNeedTitleAndDate => 'São precisos um título e uma data';
+
+  @override
+  String get desktopViewerOpenExternally => 'Abrir noutra aplicação';
+
+  @override
+  String get desktopViewerSaveAs => 'Guardar como…';
+
+  @override
+  String desktopViewerPage(Object page, Object total) {
+    return 'Página $page de $total';
+  }
+
+  @override
+  String get desktopViewerFailed => 'Não foi possível mostrar o ficheiro';
+
+  @override
+  String get desktopViewerTooLarge => 'O ficheiro é grande demais para mostrar aqui';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -4474,4 +4491,21 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopEventNeedTitleAndDate => 'São necessários um título e uma data';
+
+  @override
+  String get desktopViewerOpenExternally => 'Abrir em outro app';
+
+  @override
+  String get desktopViewerSaveAs => 'Salvar como…';
+
+  @override
+  String desktopViewerPage(Object page, Object total) {
+    return 'Página $page de $total';
+  }
+
+  @override
+  String get desktopViewerFailed => 'Não foi possível mostrar o arquivo';
+
+  @override
+  String get desktopViewerTooLarge => 'O arquivo é grande demais para mostrar aqui';
 }

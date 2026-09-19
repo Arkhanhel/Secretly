@@ -19,6 +19,9 @@ class MainFlutterWindow: NSWindow {
   /// Теги песни, когда их не прочла библиотека, — см. [MusicTagsBridge].
   private let musicTagsBridge = MusicTagsBridge()
 
+  /// Показ PDF внутри окна — см. [PdfRenderBridge].
+  private let pdfRenderBridge = PdfRenderBridge()
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -40,6 +43,7 @@ class MainFlutterWindow: NSWindow {
     translationBridge.attach(to: flutterViewController.engine.binaryMessenger)
     imagePrepBridge.attach(to: flutterViewController.engine.binaryMessenger)
     musicTagsBridge.attach(to: flutterViewController.engine.binaryMessenger)
+    pdfRenderBridge.attach(to: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
   }

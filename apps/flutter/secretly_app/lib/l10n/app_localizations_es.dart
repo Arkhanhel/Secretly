@@ -2238,4 +2238,21 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get desktopEventNeedTitleAndDate => 'Hacen falta un título y una fecha';
+
+  @override
+  String get desktopViewerOpenExternally => 'Abrir en otra app';
+
+  @override
+  String get desktopViewerSaveAs => 'Guardar como…';
+
+  @override
+  String desktopViewerPage(Object page, Object total) {
+    return 'Página $page de $total';
+  }
+
+  @override
+  String get desktopViewerFailed => 'No se ha podido mostrar el archivo';
+
+  @override
+  String get desktopViewerTooLarge => 'El archivo es demasiado grande para mostrarlo aquí';
 }

@@ -1003,5 +1003,10 @@
   "desktopEventDescriptionHint": "Beschreibung",
   "desktopEventLocationHint": "Ort",
   "desktopEventPickWhen": "Datum und Uhrzeit wählen",
-  "desktopEventNeedTitleAndDate": "Nötig sind ein Titel und ein Datum"
+  "desktopEventNeedTitleAndDate": "Nötig sind ein Titel und ein Datum",
+  "desktopViewerOpenExternally": "In anderer App öffnen",
+  "desktopViewerSaveAs": "Sichern unter…",
+  "desktopViewerPage": "Seite {page} von {total}",
+  "desktopViewerFailed": "Datei konnte nicht angezeigt werden",
+  "desktopViewerTooLarge": "Diese Datei ist zu groß für die Anzeige hier"
 }

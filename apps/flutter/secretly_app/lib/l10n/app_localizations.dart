@@ -4347,6 +4347,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'An event needs a title and a date'**
   String get desktopEventNeedTitleAndDate;
+
+  /// No description provided for @desktopViewerOpenExternally.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in another app'**
+  String get desktopViewerOpenExternally;
+
+  /// No description provided for @desktopViewerSaveAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Save as…'**
+  String get desktopViewerSaveAs;
+
+  /// No description provided for @desktopViewerPage.
+  ///
+  /// In en, this message translates to:
+  /// **'Page {page} of {total}'**
+  String desktopViewerPage(Object page, Object total);
+
+  /// No description provided for @desktopViewerFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not show this file'**
+  String get desktopViewerFailed;
+
+  /// No description provided for @desktopViewerTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'This file is too large to show here'**
+  String get desktopViewerTooLarge;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

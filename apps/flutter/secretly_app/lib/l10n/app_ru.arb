@@ -999,5 +999,10 @@
   "desktopEventDescriptionHint": "Описание",
   "desktopEventLocationHint": "Место",
   "desktopEventPickWhen": "Выбрать дату и время",
-  "desktopEventNeedTitleAndDate": "Нужны название и дата"
+  "desktopEventNeedTitleAndDate": "Нужны название и дата",
+  "desktopViewerOpenExternally": "Открыть в программе",
+  "desktopViewerSaveAs": "Сохранить как…",
+  "desktopViewerPage": "Страница {page} из {total}",
+  "desktopViewerFailed": "Не удалось показать файл",
+  "desktopViewerTooLarge": "Файл слишком большой для просмотра здесь"
 }

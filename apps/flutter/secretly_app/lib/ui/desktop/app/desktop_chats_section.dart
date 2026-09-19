@@ -70,6 +70,8 @@ import '../chat/forward_blob_reuse.dart';
 import '../chat/event_composer_dialog.dart';
 import '../chat/poll_composer_dialog.dart';
 import '../chat/desktop_poll_tally.dart';
+import '../chat/document_viewer.dart';
+import '../chat/document_viewer_kind.dart';
 import '../chat/chat_list_footer.dart';
 import '../chat/chat_list_panel.dart';
 import '../chat/chat_time_label.dart';
@@ -4573,6 +4575,37 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       setState(() => _sendError = 'Файл недоступен');
       return;
     }
+    // 🔴 СВОЙ ПРОСМОТР ВПЕРЕДИ ЧУЖОЙ ПРОГРАММЫ (19.09.2026). Отдать документ
+    // наружу значит отдать РАСШИФРОВАННЫЙ файл другому приложению: он попадёт
+    // в его список недавних и в его кэш. PDF и простой текст показываем сами;
+    // «Открыть в программе» остаётся кнопкой, то есть решением человека.
+    final shownName = suggestedAttachmentFileName(
+      fileName: att.fileName,
+      mime: att.mime,
+      blobId: att.blobId,
+    );
+    final kind = desktopViewerKindFor(
+      mime: att.mime,
+      fileName: shownName,
+      sizeBytes: att.sizeBytes,
+    );
+    if (kind != DesktopViewerKind.external_) {
+      final opened = file;
+      await DesktopDocumentViewer.show(
+        context: context,
+        file: opened,
+        title: shownName,
+        kind: kind,
+        onOpenExternally: () => _openFileExternally(att, opened),
+        onSaveAs: () => _saveAttachment(tapped),
+      );
+      return;
+    }
+    await _openFileExternally(att, file);
+  }
+
+  /// Отдать файл внешней программе — временной копией под настоящим именем.
+  Future<void> _openFileExternally(MessageAttachment att, File file) async {
     try {
       // Внешней программе отдаём временную копию под настоящим именем, а не
       // файл из кэша: у кэшированного имя вида `<идентификатор>.bin`, и
@@ -4586,6 +4619,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         ),
         blobId: att.blobId,
       );
+      if (!mounted) return;
       final ok = await launchUrl(
         Uri.file(opening.path),
         mode: LaunchMode.externalApplication,
