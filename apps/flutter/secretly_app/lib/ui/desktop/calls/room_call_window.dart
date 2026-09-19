@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 
@@ -74,6 +75,10 @@ class DesktopRoomCallWindow extends StatefulWidget {
 }
 
 class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
+  /// Подписи окна. Метод `_nameFor` и сборка списков зовутся из многих мест,
+  /// и `AppLocalizations.of(context)!` в каждом читался бы хуже подписи.
+  AppLocalizations get _l10n => AppLocalizations.of(context)!;
+
   late final DesktopSelector<CachedRoomCall?> _callSel;
   Timer? _ticker;
 
@@ -262,11 +267,11 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
       if (mounted) {
         setState(
           () => _actionError =
-              'Сервер не ответил. Попробуйте ещё раз или выйдите из созвона.',
+              _l10n.desktopCallServerSilent,
         );
       }
     } catch (e) {
-      if (mounted) setState(() => _actionError = _describeCallError(e));
+      if (mounted) setState(() => _actionError = _describeCallError(e, _l10n));
     } finally {
       if (mounted) setState(() => _busy = null);
     }
@@ -293,13 +298,13 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
     return text;
   }
 
-  static String _describeCallError(Object error) {
+  static String _describeCallError(Object error, AppLocalizations l10n) {
     final text = _stripDartPrefix(error);
     if (text.contains('404') || text.contains('room not found')) {
-      return 'Комната недоступна на сервере — созвон в ней не начать.';
+      return l10n.desktopCallRoomMissing;
     }
     if (text.contains('SocketException') || text.contains('Failed host')) {
-      return 'Нет связи с сервером. Проверьте подключение.';
+      return l10n.desktopCallNoServer;
     }
     return text;
   }
@@ -330,7 +335,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
         // HTTP-ошибку внутри и возвращает пустоту), поэтому здесь — честное
         // общее объяснение и подсказка, что делать.
         throw StateError(
-          'Не удалось войти в созвон. Проверьте связь и попробуйте ещё раз.',
+          _l10n.desktopCallJoinFailed,
         );
       }
       await RoomCallManager.instance?.ensureJoined(
@@ -432,7 +437,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
       RoomCallManager.instance?.mediaController;
 
   String _nameFor(String profileId) {
-    if (profileId == _myProfileId) return 'Вы';
+    if (profileId == _myProfileId) return _l10n.desktopSupportYou;
     for (final m in _members) {
       if (m.profileId == profileId) {
         final n = m.displayName.trim();
@@ -686,7 +691,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
             );
             return _StageFrame(
               label: pick.screenShare
-                  ? '${_nameFor(found.profileId)} показывает экран'
+                  ? _l10n.desktopCallSharingScreen(_nameFor(found.profileId))
                   : _nameFor(found.profileId),
               stats: pick.screenShare && !found.isSelf ? _stageStats : null,
               icon: pick.screenShare
@@ -1061,7 +1066,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
         } catch (_) {}
         out.add(
           _CallChatLine(
-            author: mine ? 'Вы' : _nameFor(pid ?? ''),
+            author: mine ? _l10n.desktopSupportYou : _nameFor(pid ?? ''),
             avatarPath: mine ? null : _avatarFor(pid ?? ''),
             text: text.trim(),
             mine: mine,
@@ -1126,7 +1131,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
                   child: Padding(
                     padding: const EdgeInsets.all(DSpace.l),
                     child: Text(
-                      'В комнате пока ничего не написано',
+                      _l10n.desktopCallRoomEmpty,
                       textAlign: TextAlign.center,
                       style: DType.caption.copyWith(color: c.textSecondary),
                     ),
@@ -1210,7 +1215,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
                       horizontal: 10,
                       vertical: 9,
                     ),
-                    hintText: 'Сообщение в комнату…',
+                    hintText: _l10n.desktopCallMessageHint,
                     hintStyle: DType.caption.copyWith(color: c.textDisabled),
                     filled: true,
                     fillColor: c.elevated,
@@ -1231,7 +1236,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
               ),
               const SizedBox(width: 6),
               DesktopTooltip(
-                message: 'Отправить в комнату',
+                message: _l10n.desktopCallSendToRoom,
                 child: HoverListener(
                   onTap: _chatSending ? null : () => unawaited(_sendChat()),
                   cursor: _chatSending
@@ -1289,7 +1294,11 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
           // видная только пока идёт звонок, бесполезна ровно тогда, когда за
           // ней приходят.
           DetailsTabs(
-            tabs: ['Участники · ${participants.length}', 'Чат', 'Заметки'],
+            tabs: [
+              _l10n.desktopCallParticipantsTab(participants.length),
+              _l10n.contactDetailsChat,
+              _l10n.desktopCallNotesTab,
+            ],
             index: _panelTab,
             onChanged: (i) => setState(() => _panelTab = i),
           ),
@@ -1371,15 +1380,15 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
       DesktopSnackbar.show(
         context,
         message: result.ok
-            ? 'Ссылка скопирована'
-            : (result.error ?? 'Не удалось'),
+            ? _l10n.desktopCallLinkCopied
+            : (result.error ?? _l10n.desktopCallFailed),
         kind: result.ok ? DSnackKind.success : DSnackKind.error,
       );
     } catch (e) {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: 'Не удалось: $e',
+        message: _l10n.desktopCallFailedWith('$e'),
         kind: DSnackKind.error,
       );
     } finally {
@@ -1431,8 +1440,8 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
             icon: muted
                 ? FluentIcons.mic_off_24_filled
                 : FluentIcons.mic_24_filled,
-            label: 'Микрофон',
-            tooltip: muted ? 'Включить микрофон' : 'Выключить микрофон',
+            label: _l10n.callControlMute,
+            tooltip: muted ? _l10n.desktopCallMicOn : _l10n.desktopCallMicOff,
             on: !muted,
             enabled: !busy,
             onTap: () => unawaited(_updateSelf(muted: !muted)),
@@ -1453,10 +1462,10 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
             icon: videoOn
                 ? FluentIcons.video_24_filled
                 : FluentIcons.video_off_24_filled,
-            label: 'Камера',
+            label: _l10n.callControlCamera,
             tooltip: _mediaBackendReady
-                ? (videoOn ? 'Выключить камеру' : 'Включить камеру')
-                : 'Сервер не выдал медиа-канал — видео недоступно',
+                ? (videoOn ? _l10n.desktopCallCamOff : _l10n.desktopCallCamOn)
+                : _l10n.desktopCallNoMediaVideo,
             on: videoOn,
             enabled: !busy && _mediaBackendReady,
             onTap: () => unawaited(_updateSelf(videoEnabled: !videoOn)),
@@ -1474,10 +1483,10 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
               icon: _gridMode
                   ? FluentIcons.person_24_filled
                   : FluentIcons.grid_24_filled,
-              label: _gridMode ? 'Один' : 'Сетка',
+              label: _gridMode ? _l10n.desktopCallLayoutSingle : _l10n.desktopCallLayoutGrid,
               tooltip: _gridMode
-                  ? 'Показывать одного крупно'
-                  : 'Показать всех сеткой',
+                  ? _l10n.desktopCallShowOneLarge
+                  : _l10n.desktopCallShowGrid,
               on: _gridMode,
               enabled: !busy,
               onTap: () => setState(() => _gridMode = !_gridMode),
@@ -1486,10 +1495,10 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
           ],
           _DockToggle(
             icon: FluentIcons.share_screen_start_24_filled,
-            label: 'Экран',
+            label: _l10n.desktopCallScreen,
             tooltip: _mediaBackendReady
-                ? (shareOn ? 'Остановить показ экрана' : 'Показать экран')
-                : 'Сервер не выдал медиа-канал — показ экрана недоступен',
+                ? (shareOn ? _l10n.desktopCallShareStop : _l10n.desktopCallShareStart)
+                : _l10n.desktopCallNoMediaScreen,
             on: shareOn,
             enabled: !busy && _mediaBackendReady,
             onTap: () => unawaited(_updateSelf(screenShareEnabled: !shareOn)),
@@ -1502,8 +1511,8 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
           ),
           _DockToggle(
             icon: FluentIcons.call_end_24_filled,
-            label: 'Выйти',
-            tooltip: 'Выйти из созвона',
+            label: _l10n.desktopCallLeave,
+            tooltip: _l10n.desktopCallLeaveCall,
             on: false,
             danger: true,
             // 🔴 ВСЕГДА ДОСТУПЕН, даже когда идёт другое действие. Зависший
@@ -1540,8 +1549,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  'Сервер не выдал медиа-канал: в этом созвоне не будет ни '
-                  'звука, ни видео',
+                  _l10n.desktopCallNoMediaBoth,
                   style: DType.tiny.copyWith(color: c.warning),
                 ),
               ),
@@ -1592,6 +1600,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
+    final l10n = AppLocalizations.of(context)!;
     // 🔴 Слева резервируется место под «светофор» macOS.
     //
     // Окно созвона открывается маршрутом поверх оболочки и своей рамки не
@@ -1612,7 +1621,7 @@ class _Header extends StatelessWidget {
         children: [
           _ChromeButton(
             icon: FluentIcons.chevron_left_24_regular,
-            tooltip: 'Свернуть созвон',
+            tooltip: l10n.desktopCallMinimise,
             onTap: onBack,
           ),
           const SizedBox(width: DSpace.s),
@@ -1625,7 +1634,7 @@ class _Header extends StatelessWidget {
               // созвон полосой сразу после перезапуска, и склад выбора ещё
               // пуст. Тогда «Обсуждение» без хвоста честнее, чем
               // «Обсуждение · Созвон».
-              title.trim().isEmpty ? 'Обсуждение' : 'Обсуждение · $title',
+              title.trim().isEmpty ? l10n.desktopCallDiscussion : l10n.desktopCallDiscussionOf(title),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: DType.label.copyWith(
@@ -1640,7 +1649,7 @@ class _Header extends StatelessWidget {
             // шифрования полезен, но в макете чип занят другим, и держать
             // замок рядом с таймером значило бы отдать ему место эквалайзера.
             DesktopTooltip(
-              message: 'Созвон защищён сквозным шифрованием',
+              message: l10n.desktopCallEncrypted,
               child: Container(
                 height: 26,
                 padding: const EdgeInsets.symmetric(horizontal: 9),
@@ -1662,7 +1671,7 @@ class _Header extends StatelessWidget {
                       //
                       // «N в эфире» оставлено сверх макета: в комнате это
                       // первый вопрос, а место в чипе есть.
-                      '${_duration(call!.startedAtMs)} · $joinedCount в эфире',
+                      l10n.desktopCallDurationOnAir(_duration(call!.startedAtMs), joinedCount),
                       // Моноширинным, как в макете: цифры таймера не должны
                       // дёргать строку каждую секунду.
                       style: DType.mono.copyWith(
@@ -1680,7 +1689,9 @@ class _Header extends StatelessWidget {
             icon: fullScreen
                 ? FluentIcons.full_screen_minimize_24_regular
                 : FluentIcons.full_screen_maximize_24_regular,
-            tooltip: fullScreen ? 'Выйти из полноэкранного' : 'Во весь экран',
+            tooltip: fullScreen
+                ? l10n.desktopCallExitFullScreen
+                : l10n.desktopCallFullScreen,
             onTap: onToggleFullScreen,
           ),
         ],
@@ -1790,6 +1801,7 @@ class _StartPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       color: c.thread,
       alignment: Alignment.center,
@@ -1803,7 +1815,7 @@ class _StartPanel extends StatelessWidget {
           ),
           const SizedBox(height: DSpace.m),
           Text(
-            demo ? 'Демонстрационная комната' : 'Созвона пока нет',
+            demo ? l10n.desktopCallDemoRoom : l10n.desktopCallNoCallYet,
             style: DType.bodyStrong.copyWith(color: c.textSecondary),
           ),
           const SizedBox(height: DSpace.xs),
@@ -1811,10 +1823,8 @@ class _StartPanel extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 380),
             child: Text(
               demo
-                  ? 'Она живёт только на этом компьютере и на сервере её нет — '
-                        'созвон в ней не начать. В настоящей комнате кнопка '
-                        'работает.'
-                  : 'Начните — остальные увидят приглашение в комнате',
+                  ? l10n.desktopCallDemoExplain
+                  : l10n.desktopCallStartHint,
               textAlign: TextAlign.center,
               style: DType.caption.copyWith(color: c.textDisabled),
             ),
@@ -1827,14 +1837,14 @@ class _StartPanel extends StatelessWidget {
               children: [
                 _WideButton(
                   icon: FluentIcons.call_24_filled,
-                  label: 'Голосом',
+                  label: l10n.desktopCallVoiceOnly,
                   enabled: !busy,
                   onTap: onVoice,
                 ),
                 const SizedBox(width: DSpace.m),
                 _WideButton(
                   icon: FluentIcons.video_24_filled,
-                  label: 'С камерой',
+                  label: l10n.desktopCallWithCamera,
                   enabled: !busy,
                   onTap: onVideo,
                 ),
@@ -1858,7 +1868,7 @@ class _StartPanel extends StatelessWidget {
                 ),
                 const SizedBox(width: DSpace.s),
                 Text(
-                  'Подключаемся…',
+                  l10n.desktopCallConnecting,
                   style: DType.caption.copyWith(color: c.textSecondary),
                 ),
               ],
@@ -1911,6 +1921,7 @@ class _JoinPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Container(
       color: c.thread,
@@ -1921,18 +1932,18 @@ class _JoinPanel extends StatelessWidget {
           Icon(FluentIcons.person_voice_20_filled, size: 40, color: c.success),
           const SizedBox(height: DSpace.m),
           Text(
-            'Идёт обсуждение',
+            l10n.desktopCallOngoing,
             style: DType.bodyStrong.copyWith(color: c.textPrimary),
           ),
           const SizedBox(height: DSpace.xs),
           Text(
-            '$joinedCount в эфире',
+            l10n.desktopCallOnAir(joinedCount),
             style: DType.caption.copyWith(color: c.textSecondary),
           ),
           const SizedBox(height: DSpace.xl),
           _WideButton(
             icon: FluentIcons.person_add_24_filled,
-            label: 'Присоединиться',
+            label: l10n.desktopCallJoin,
             enabled: !busy,
             onTap: onJoin,
           ),
@@ -1952,7 +1963,7 @@ class _JoinPanel extends StatelessWidget {
                 ),
                 const SizedBox(width: DSpace.s),
                 Text(
-                  'Подключаемся…',
+                  l10n.desktopCallConnecting,
                   style: DType.caption.copyWith(color: c.textSecondary),
                 ),
               ],
@@ -2108,6 +2119,7 @@ class _StageFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     // 🔴 Скругление и рамка из макета. Прямой чёрный прямоугольник без краёв
     // не отличался от «видео не загрузилось»; зелёная рамка называет сцену
@@ -2170,7 +2182,7 @@ class _StageFrame extends StatelessWidget {
                     Icon(FluentIcons.video_24_regular, size: 13, color: c.textSecondary),
                     const SizedBox(width: 6),
                     Text(
-                      _statsLabel(stats!),
+                      _statsLabel(stats!, l10n),
                       style: DType.mono.copyWith(
                         fontSize: 10.5,
                         color: Colors.white,
@@ -2209,7 +2221,7 @@ class _StageFrame extends StatelessWidget {
                       ),
                       const SizedBox(width: 7),
                       Text(
-                        expanded ? 'Свернуть' : 'Во весь экран',
+                        expanded ? l10n.callMinimize : l10n.desktopCallFullScreenShort,
                         style: DType.caption.copyWith(
                           fontSize: 11.5,
                           color: Colors.white,
@@ -2561,6 +2573,7 @@ class _ParticipantRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 1),
@@ -2612,22 +2625,22 @@ class _ParticipantRow extends StatelessWidget {
                   ),
                   if (reconnecting)
                     Text(
-                      'переподключается',
+                      l10n.desktopCallReconnecting,
                       style: DType.tiny.copyWith(color: c.warning),
                     )
                   else if (deafened)
                     Text(
-                      'не слышит',
+                      l10n.desktopCallCannotHear,
                       style: DType.tiny.copyWith(color: c.textTertiary),
                     )
                   else if (sharing)
                     Text(
-                      'показывает экран',
+                      l10n.desktopCallSharingShort,
                       style: DType.tiny.copyWith(color: c.success),
                     )
                   else if (video)
                     Text(
-                      'камера включена',
+                      l10n.desktopCallCameraOn,
                       style: DType.tiny.copyWith(color: c.textSecondary),
                     ),
                 ],
@@ -2705,6 +2718,7 @@ class _DockToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     // Выключенная возможность — красноватая, включённая — обычная: во время
     // созвона тревожит именно «меня не слышно», а не «микрофон работает».
@@ -2755,7 +2769,7 @@ class _DockToggle extends StatelessWidget {
         const SizedBox(width: 2),
         Builder(
           builder: (anchor) => DesktopTooltip(
-            message: 'Выбрать устройство',
+            message: l10n.desktopCallPickDevice,
             child: HoverListener(
               onTap: enabled ? () => onExpand!(anchor) : null,
               cursor: enabled
@@ -2798,6 +2812,7 @@ class _InviteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     return HoverListener(
       onTap: busy ? null : onTap,
@@ -2833,7 +2848,7 @@ class _InviteButton extends StatelessWidget {
               ),
             const SizedBox(width: 7),
             Text(
-              busy ? 'Готовим ссылку…' : 'Пригласить',
+              busy ? l10n.desktopCallPreparingLink : l10n.desktopCallInvite,
               style: DType.tiny.copyWith(
                 fontSize: 11.5,
                 color: c.textSecondary,
@@ -2885,12 +2900,12 @@ class _StageOverflow extends StatelessWidget {
 /// или наоборот — тогда в чипе стоит одна половина, а не выдуманная вторая.
 /// «1080p · — к/с» было бы честнее нуля, но и оно лишнее: пустое место не
 /// обещает ничего.
-String _statsLabel(RoomCallVideoStats s) {
+String _statsLabel(RoomCallVideoStats s, AppLocalizations l10n) {
   final parts = <String>[];
   final h = s.height;
   if (h != null && h > 0) parts.add('${h}p');
   final fps = s.fps;
-  if (fps != null && fps > 0) parts.add('${fps.round()} к/с');
+  if (fps != null && fps > 0) parts.add(l10n.desktopCallFps(fps.round()));
   return parts.join(' · ');
 }
 

@@ -18,7 +18,10 @@ void main() {
 
   test('◆ переключатель есть и меняет подпись', () {
     expect(win.contains('bool _gridMode = false;'), isTrue);
-    expect(win.contains("label: _gridMode ? 'Один' : 'Сетка'"), isTrue);
+    // 19.09.2026: подписи уехали в переводы — проверяем пару ключей.
+    expect(win.contains('_gridMode'), isTrue);
+    expect(win.contains('desktopCallLayoutSingle'), isTrue);
+    expect(win.contains('desktopCallLayoutGrid'), isTrue);
     expect(win.contains('onTap: () => setState(() => _gridMode = !_gridMode)'), isTrue);
   });
 

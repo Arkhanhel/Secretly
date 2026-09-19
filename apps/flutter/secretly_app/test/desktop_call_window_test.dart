@@ -34,7 +34,8 @@ void main() {
   test('🔴 «не слышит» доходит до списка участников', () {
     expect(call.contains('deafened: p.deafened'), isTrue,
         reason: 'признак есть в снимке — его надо прокинуть в строку');
-    expect(call.contains("'не слышит'"), isTrue);
+    // 19.09.2026: подписи окна уехали в переводы — проверяем ключ.
+    expect(call.contains('desktopCallCannotHear'), isTrue);
     expect(
       call.contains('FluentIcons.speaker_off_24_filled'),
       isTrue,
@@ -163,7 +164,7 @@ void main() {
       // же нажатие иногда открывает список, человек промахнётся ровно тогда,
       // когда хотел просто замолчать.
       expect(call.contains('final void Function(BuildContext anchorContext)? onExpand;'), isTrue);
-      expect(call.contains("message: 'Выбрать устройство'"), isTrue);
+      expect(call.contains('message: l10n.desktopCallPickDevice'), isTrue);
     });
 
     test('окно подписано на список устройств', () {
@@ -189,7 +190,11 @@ void main() {
   group('чат созвона', () {
     test('панель разрезана на вкладки той же полосой, что подробности', () {
       expect(call.contains('DetailsTabs('), isTrue);
-      expect(call.contains("'Участники · \${participants.length}', 'Чат'"), isTrue);
+      expect(
+        call.contains('desktopCallParticipantsTab(participants.length)'),
+        isTrue,
+      );
+      expect(call.contains('l10n.contactDetailsChat'), isTrue);
     });
 
     test('🔴 это ТА ЖЕ переписка комнаты, а не новая сущность', () {
@@ -239,7 +244,7 @@ void main() {
       expect(call.contains('if (_busy != null && !force) return;'), isTrue);
       expect(call.contains("_run('leave', force: true"), isTrue);
       // У кнопки выхода нет `enabled: !busy`.
-      final i = call.indexOf("label: 'Выйти'");
+      final i = call.indexOf('label: _l10n.desktopCallLeave');
       expect(i, greaterThan(0));
       final block = call.substring(i, i + 500);
       expect(block.contains('enabled: true'), isTrue);
@@ -249,7 +254,7 @@ void main() {
     test('🔴 ни одно действие не висит вечно', () {
       expect(call.contains('await body().timeout(timeout);'), isTrue);
       expect(call.contains('on TimeoutException'), isTrue);
-      expect(call.contains('Сервер не ответил.'), isTrue);
+      expect(call.contains('desktopCallServerSilent'), isTrue);
     });
 
     test('отсутствие медиа-канала названо словами, а не молчанием', () {
@@ -264,7 +269,7 @@ void main() {
       );
       expect(call.contains('enabled: !busy && _mediaBackendReady'), isTrue);
       expect(
-        call.contains('не будет ни '),
+        call.contains('desktopCallNoMediaBoth'),
         isTrue,
         reason: 'плашка должна называть последствие, а не код ошибки',
       );
@@ -357,7 +362,7 @@ void main() {
     });
 
     test('🔴 замок не выброшен молча, а переехал в подсказку', () {
-      expect(call.contains("message: 'Созвон защищён сквозным шифрованием'"), isTrue);
+      expect(call.contains('message: l10n.desktopCallEncrypted'), isTrue);
       expect(call.contains('lock_closed_16_filled'), isFalse);
     });
 

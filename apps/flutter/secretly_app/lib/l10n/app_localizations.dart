@@ -4761,6 +4761,336 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, one{Discussion · {count} participant} other{Discussion · {count} participants}}'**
   String desktopListDiscussion(int count);
+
+  /// No description provided for @desktopCallServerSilent.
+  ///
+  /// In en, this message translates to:
+  /// **'The server did not answer. Try again or leave the call.'**
+  String get desktopCallServerSilent;
+
+  /// No description provided for @desktopCallRoomMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'The room is not available on the server — a call cannot be started in it.'**
+  String get desktopCallRoomMissing;
+
+  /// No description provided for @desktopCallNoServer.
+  ///
+  /// In en, this message translates to:
+  /// **'No connection to the server. Check your connection.'**
+  String get desktopCallNoServer;
+
+  /// No description provided for @desktopCallJoinFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not join the call. Check the connection and try again.'**
+  String get desktopCallJoinFailed;
+
+  /// No description provided for @desktopCallSharingScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is sharing the screen'**
+  String desktopCallSharingScreen(Object name);
+
+  /// No description provided for @desktopCallRoomEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing has been written in the room yet'**
+  String get desktopCallRoomEmpty;
+
+  /// No description provided for @desktopCallMessageHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Message to the room…'**
+  String get desktopCallMessageHint;
+
+  /// No description provided for @desktopCallSendToRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'Send to the room'**
+  String get desktopCallSendToRoom;
+
+  /// No description provided for @desktopCallParticipantsTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Participants · {count}'**
+  String desktopCallParticipantsTab(Object count);
+
+  /// No description provided for @desktopCallNotesTab.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes'**
+  String get desktopCallNotesTab;
+
+  /// No description provided for @desktopCallLinkCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'The link was copied'**
+  String get desktopCallLinkCopied;
+
+  /// No description provided for @desktopCallFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'It did not work'**
+  String get desktopCallFailed;
+
+  /// No description provided for @desktopCallFailedWith.
+  ///
+  /// In en, this message translates to:
+  /// **'It did not work: {error}'**
+  String desktopCallFailedWith(Object error);
+
+  /// No description provided for @desktopCallMicOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn the microphone on'**
+  String get desktopCallMicOn;
+
+  /// No description provided for @desktopCallMicOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn the microphone off'**
+  String get desktopCallMicOff;
+
+  /// No description provided for @desktopCallCamOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn the camera on'**
+  String get desktopCallCamOn;
+
+  /// No description provided for @desktopCallCamOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn the camera off'**
+  String get desktopCallCamOff;
+
+  /// No description provided for @desktopCallNoMediaVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'The server gave no media channel — video is unavailable'**
+  String get desktopCallNoMediaVideo;
+
+  /// No description provided for @desktopCallLayoutSingle.
+  ///
+  /// In en, this message translates to:
+  /// **'One'**
+  String get desktopCallLayoutSingle;
+
+  /// No description provided for @desktopCallLayoutGrid.
+  ///
+  /// In en, this message translates to:
+  /// **'Grid'**
+  String get desktopCallLayoutGrid;
+
+  /// No description provided for @desktopCallShowOneLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'Show one person large'**
+  String get desktopCallShowOneLarge;
+
+  /// No description provided for @desktopCallShowGrid.
+  ///
+  /// In en, this message translates to:
+  /// **'Show everyone in a grid'**
+  String get desktopCallShowGrid;
+
+  /// No description provided for @desktopCallScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen'**
+  String get desktopCallScreen;
+
+  /// No description provided for @desktopCallShareStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop sharing the screen'**
+  String get desktopCallShareStop;
+
+  /// No description provided for @desktopCallShareStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Share the screen'**
+  String get desktopCallShareStart;
+
+  /// No description provided for @desktopCallNoMediaScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'The server gave no media channel — screen sharing is unavailable'**
+  String get desktopCallNoMediaScreen;
+
+  /// No description provided for @desktopCallLeave.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave'**
+  String get desktopCallLeave;
+
+  /// No description provided for @desktopCallLeaveCall.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave the call'**
+  String get desktopCallLeaveCall;
+
+  /// No description provided for @desktopCallNoMediaBoth.
+  ///
+  /// In en, this message translates to:
+  /// **'The server gave no media channel: this call will have neither sound nor video'**
+  String get desktopCallNoMediaBoth;
+
+  /// No description provided for @desktopCallMinimise.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimise the call'**
+  String get desktopCallMinimise;
+
+  /// No description provided for @desktopCallDiscussion.
+  ///
+  /// In en, this message translates to:
+  /// **'Discussion'**
+  String get desktopCallDiscussion;
+
+  /// No description provided for @desktopCallDiscussionOf.
+  ///
+  /// In en, this message translates to:
+  /// **'Discussion · {title}'**
+  String desktopCallDiscussionOf(Object title);
+
+  /// No description provided for @desktopCallEncrypted.
+  ///
+  /// In en, this message translates to:
+  /// **'The call is end-to-end encrypted'**
+  String get desktopCallEncrypted;
+
+  /// No description provided for @desktopCallDurationOnAir.
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} · {count} on air'**
+  String desktopCallDurationOnAir(Object duration, Object count);
+
+  /// No description provided for @desktopCallExitFullScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave full screen'**
+  String get desktopCallExitFullScreen;
+
+  /// No description provided for @desktopCallFullScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Full screen'**
+  String get desktopCallFullScreen;
+
+  /// No description provided for @desktopCallDemoRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'Demonstration room'**
+  String get desktopCallDemoRoom;
+
+  /// No description provided for @desktopCallNoCallYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No call yet'**
+  String get desktopCallNoCallYet;
+
+  /// No description provided for @desktopCallDemoExplain.
+  ///
+  /// In en, this message translates to:
+  /// **'It lives only on this computer and does not exist on the server, so no call can be started in it. In a real room the button works.'**
+  String get desktopCallDemoExplain;
+
+  /// No description provided for @desktopCallStartHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Start — everyone else will see the invitation in the room'**
+  String get desktopCallStartHint;
+
+  /// No description provided for @desktopCallVoiceOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice only'**
+  String get desktopCallVoiceOnly;
+
+  /// No description provided for @desktopCallWithCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'With camera'**
+  String get desktopCallWithCamera;
+
+  /// No description provided for @desktopCallConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get desktopCallConnecting;
+
+  /// No description provided for @desktopCallOngoing.
+  ///
+  /// In en, this message translates to:
+  /// **'A discussion is under way'**
+  String get desktopCallOngoing;
+
+  /// No description provided for @desktopCallOnAir.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} on air'**
+  String desktopCallOnAir(Object count);
+
+  /// No description provided for @desktopCallJoin.
+  ///
+  /// In en, this message translates to:
+  /// **'Join'**
+  String get desktopCallJoin;
+
+  /// No description provided for @desktopCallFullScreenShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Full screen'**
+  String get desktopCallFullScreenShort;
+
+  /// No description provided for @desktopCallReconnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'reconnecting'**
+  String get desktopCallReconnecting;
+
+  /// No description provided for @desktopCallCannotHear.
+  ///
+  /// In en, this message translates to:
+  /// **'cannot hear'**
+  String get desktopCallCannotHear;
+
+  /// No description provided for @desktopCallSharingShort.
+  ///
+  /// In en, this message translates to:
+  /// **'is sharing the screen'**
+  String get desktopCallSharingShort;
+
+  /// No description provided for @desktopCallCameraOn.
+  ///
+  /// In en, this message translates to:
+  /// **'camera is on'**
+  String get desktopCallCameraOn;
+
+  /// No description provided for @desktopCallPickDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a device'**
+  String get desktopCallPickDevice;
+
+  /// No description provided for @desktopCallPreparingLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing the link…'**
+  String get desktopCallPreparingLink;
+
+  /// No description provided for @desktopCallInvite.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite'**
+  String get desktopCallInvite;
+
+  /// No description provided for @desktopCallFps.
+  ///
+  /// In en, this message translates to:
+  /// **'{fps} fps'**
+  String desktopCallFps(Object fps);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

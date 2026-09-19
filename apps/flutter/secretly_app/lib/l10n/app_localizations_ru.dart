@@ -2487,4 +2487,183 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get desktopCallServerSilent => 'Сервер не ответил. Попробуйте ещё раз или выйдите из созвона.';
+
+  @override
+  String get desktopCallRoomMissing => 'Комната недоступна на сервере — созвон в ней не начать.';
+
+  @override
+  String get desktopCallNoServer => 'Нет связи с сервером. Проверьте подключение.';
+
+  @override
+  String get desktopCallJoinFailed => 'Не удалось войти в созвон. Проверьте связь и попробуйте ещё раз.';
+
+  @override
+  String desktopCallSharingScreen(Object name) {
+    return '$name показывает экран';
+  }
+
+  @override
+  String get desktopCallRoomEmpty => 'В комнате пока ничего не написано';
+
+  @override
+  String get desktopCallMessageHint => 'Сообщение в комнату…';
+
+  @override
+  String get desktopCallSendToRoom => 'Отправить в комнату';
+
+  @override
+  String desktopCallParticipantsTab(Object count) {
+    return 'Участники · $count';
+  }
+
+  @override
+  String get desktopCallNotesTab => 'Заметки';
+
+  @override
+  String get desktopCallLinkCopied => 'Ссылка скопирована';
+
+  @override
+  String get desktopCallFailed => 'Не удалось';
+
+  @override
+  String desktopCallFailedWith(Object error) {
+    return 'Не удалось: $error';
+  }
+
+  @override
+  String get desktopCallMicOn => 'Включить микрофон';
+
+  @override
+  String get desktopCallMicOff => 'Выключить микрофон';
+
+  @override
+  String get desktopCallCamOn => 'Включить камеру';
+
+  @override
+  String get desktopCallCamOff => 'Выключить камеру';
+
+  @override
+  String get desktopCallNoMediaVideo => 'Сервер не выдал медиа-канал — видео недоступно';
+
+  @override
+  String get desktopCallLayoutSingle => 'Один';
+
+  @override
+  String get desktopCallLayoutGrid => 'Сетка';
+
+  @override
+  String get desktopCallShowOneLarge => 'Показывать одного крупно';
+
+  @override
+  String get desktopCallShowGrid => 'Показать всех сеткой';
+
+  @override
+  String get desktopCallScreen => 'Экран';
+
+  @override
+  String get desktopCallShareStop => 'Остановить показ экрана';
+
+  @override
+  String get desktopCallShareStart => 'Показать экран';
+
+  @override
+  String get desktopCallNoMediaScreen => 'Сервер не выдал медиа-канал — показ экрана недоступен';
+
+  @override
+  String get desktopCallLeave => 'Выйти';
+
+  @override
+  String get desktopCallLeaveCall => 'Выйти из созвона';
+
+  @override
+  String get desktopCallNoMediaBoth => 'Сервер не выдал медиа-канал: в этом созвоне не будет ни звука, ни видео';
+
+  @override
+  String get desktopCallMinimise => 'Свернуть созвон';
+
+  @override
+  String get desktopCallDiscussion => 'Обсуждение';
+
+  @override
+  String desktopCallDiscussionOf(Object title) {
+    return 'Обсуждение · $title';
+  }
+
+  @override
+  String get desktopCallEncrypted => 'Созвон защищён сквозным шифрованием';
+
+  @override
+  String desktopCallDurationOnAir(Object duration, Object count) {
+    return '$duration · $count в эфире';
+  }
+
+  @override
+  String get desktopCallExitFullScreen => 'Выйти из полноэкранного';
+
+  @override
+  String get desktopCallFullScreen => 'Во весь экран';
+
+  @override
+  String get desktopCallDemoRoom => 'Демонстрационная комната';
+
+  @override
+  String get desktopCallNoCallYet => 'Созвона пока нет';
+
+  @override
+  String get desktopCallDemoExplain => 'Она живёт только на этом компьютере и на сервере её нет — созвон в ней не начать. В настоящей комнате кнопка работает.';
+
+  @override
+  String get desktopCallStartHint => 'Начните — остальные увидят приглашение в комнате';
+
+  @override
+  String get desktopCallVoiceOnly => 'Голосом';
+
+  @override
+  String get desktopCallWithCamera => 'С камерой';
+
+  @override
+  String get desktopCallConnecting => 'Подключаемся…';
+
+  @override
+  String get desktopCallOngoing => 'Идёт обсуждение';
+
+  @override
+  String desktopCallOnAir(Object count) {
+    return '$count в эфире';
+  }
+
+  @override
+  String get desktopCallJoin => 'Присоединиться';
+
+  @override
+  String get desktopCallFullScreenShort => 'Во весь экран';
+
+  @override
+  String get desktopCallReconnecting => 'переподключается';
+
+  @override
+  String get desktopCallCannotHear => 'не слышит';
+
+  @override
+  String get desktopCallSharingShort => 'показывает экран';
+
+  @override
+  String get desktopCallCameraOn => 'камера включена';
+
+  @override
+  String get desktopCallPickDevice => 'Выбрать устройство';
+
+  @override
+  String get desktopCallPreparingLink => 'Готовим ссылку…';
+
+  @override
+  String get desktopCallInvite => 'Пригласить';
+
+  @override
+  String desktopCallFps(Object fps) {
+    return '$fps к/с';
+  }
 }

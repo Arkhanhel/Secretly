@@ -1120,5 +1120,96 @@
     "placeholders": {
       "count": {"type": "int"}
     }
+  },
+  "desktopCallServerSilent": "The server did not answer. Try again or leave the call.",
+  "desktopCallRoomMissing": "The room is not available on the server — a call cannot be started in it.",
+  "desktopCallNoServer": "No connection to the server. Check your connection.",
+  "desktopCallJoinFailed": "Could not join the call. Check the connection and try again.",
+  "desktopCallSharingScreen": "{name} is sharing the screen",
+  "desktopCallRoomEmpty": "Nothing has been written in the room yet",
+  "desktopCallMessageHint": "Message to the room…",
+  "desktopCallSendToRoom": "Send to the room",
+  "desktopCallParticipantsTab": "Participants · {count}",
+  "desktopCallNotesTab": "Notes",
+  "desktopCallLinkCopied": "The link was copied",
+  "desktopCallFailed": "It did not work",
+  "desktopCallFailedWith": "It did not work: {error}",
+  "desktopCallMicOn": "Turn the microphone on",
+  "desktopCallMicOff": "Turn the microphone off",
+  "desktopCallCamOn": "Turn the camera on",
+  "desktopCallCamOff": "Turn the camera off",
+  "desktopCallNoMediaVideo": "The server gave no media channel — video is unavailable",
+  "desktopCallLayoutSingle": "One",
+  "desktopCallLayoutGrid": "Grid",
+  "desktopCallShowOneLarge": "Show one person large",
+  "desktopCallShowGrid": "Show everyone in a grid",
+  "desktopCallScreen": "Screen",
+  "desktopCallShareStop": "Stop sharing the screen",
+  "desktopCallShareStart": "Share the screen",
+  "desktopCallNoMediaScreen": "The server gave no media channel — screen sharing is unavailable",
+  "desktopCallLeave": "Leave",
+  "desktopCallLeaveCall": "Leave the call",
+  "desktopCallNoMediaBoth": "The server gave no media channel: this call will have neither sound nor video",
+  "desktopCallMinimise": "Minimise the call",
+  "desktopCallDiscussion": "Discussion",
+  "desktopCallDiscussionOf": "Discussion · {title}",
+  "desktopCallEncrypted": "The call is end-to-end encrypted",
+  "desktopCallDurationOnAir": "{duration} · {count} on air",
+  "@desktopCallSharingScreen": {
+    "placeholders": {
+      "name": {}
+    }
+  },
+  "@desktopCallParticipantsTab": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@desktopCallFailedWith": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "@desktopCallDiscussionOf": {
+    "placeholders": {
+      "title": {}
+    }
+  },
+  "@desktopCallDurationOnAir": {
+    "placeholders": {
+      "duration": {},
+      "count": {}
+    }
+  },
+  "desktopCallExitFullScreen": "Leave full screen",
+  "desktopCallFullScreen": "Full screen",
+  "desktopCallDemoRoom": "Demonstration room",
+  "desktopCallNoCallYet": "No call yet",
+  "desktopCallDemoExplain": "It lives only on this computer and does not exist on the server, so no call can be started in it. In a real room the button works.",
+  "desktopCallStartHint": "Start — everyone else will see the invitation in the room",
+  "desktopCallVoiceOnly": "Voice only",
+  "desktopCallWithCamera": "With camera",
+  "desktopCallConnecting": "Connecting…",
+  "desktopCallOngoing": "A discussion is under way",
+  "desktopCallOnAir": "{count} on air",
+  "desktopCallJoin": "Join",
+  "desktopCallFullScreenShort": "Full screen",
+  "desktopCallReconnecting": "reconnecting",
+  "desktopCallCannotHear": "cannot hear",
+  "desktopCallSharingShort": "is sharing the screen",
+  "desktopCallCameraOn": "camera is on",
+  "desktopCallPickDevice": "Choose a device",
+  "desktopCallPreparingLink": "Preparing the link…",
+  "desktopCallInvite": "Invite",
+  "desktopCallFps": "{fps} fps",
+  "@desktopCallOnAir": {
+    "placeholders": {
+      "count": {}
+    }
+  },
+  "@desktopCallFps": {
+    "placeholders": {
+      "fps": {}
+    }
   }
 }

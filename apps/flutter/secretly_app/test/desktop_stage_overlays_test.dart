@@ -34,7 +34,10 @@ void main() {
       .join('\n');
 
   test('◆ чип разворота есть и подписан честно', () {
-    expect(src.contains("expanded ? 'Свернуть' : 'Во весь экран'"), isTrue);
+    expect(
+      src.contains('expanded ? l10n.callMinimize : l10n.desktopCallFullScreenShort'),
+      isTrue,
+    );
     // Макетной подписи нет: второго окна мы не открываем.
     expect(code.contains('В отдельное окно'), isFalse);
   });

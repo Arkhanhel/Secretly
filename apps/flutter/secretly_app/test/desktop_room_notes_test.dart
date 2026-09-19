@@ -185,10 +185,9 @@ void main() {
       final src = File(
         'lib/ui/desktop/calls/room_call_window.dart',
       ).readAsStringSync();
-      expect(
-        src.contains("'Участники · \${participants.length}', 'Чат', 'Заметки'"),
-        isTrue,
-      );
+      expect(src.contains('desktopCallParticipantsTab'), isTrue);
+      expect(src.contains('l10n.contactDetailsChat'), isTrue);
+      expect(src.contains('l10n.desktopCallNotesTab'), isTrue);
       expect(src.contains('RoomNotesPane('), isTrue);
     });
 

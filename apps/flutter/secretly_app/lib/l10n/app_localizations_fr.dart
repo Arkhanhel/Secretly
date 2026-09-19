@@ -2481,4 +2481,183 @@ class AppLocalizationsFr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get desktopCallServerSilent => 'Le serveur n’a pas répondu. Réessayez ou quittez l’appel.';
+
+  @override
+  String get desktopCallRoomMissing => 'Le salon n’est pas disponible sur le serveur — impossible d’y démarrer un appel.';
+
+  @override
+  String get desktopCallNoServer => 'Pas de connexion au serveur. Vérifiez votre connexion.';
+
+  @override
+  String get desktopCallJoinFailed => 'Impossible de rejoindre l’appel. Vérifiez la connexion et réessayez.';
+
+  @override
+  String desktopCallSharingScreen(Object name) {
+    return '$name partage son écran';
+  }
+
+  @override
+  String get desktopCallRoomEmpty => 'Rien n’a encore été écrit dans le salon';
+
+  @override
+  String get desktopCallMessageHint => 'Message au salon…';
+
+  @override
+  String get desktopCallSendToRoom => 'Envoyer au salon';
+
+  @override
+  String desktopCallParticipantsTab(Object count) {
+    return 'Participants · $count';
+  }
+
+  @override
+  String get desktopCallNotesTab => 'Notes';
+
+  @override
+  String get desktopCallLinkCopied => 'Lien copié';
+
+  @override
+  String get desktopCallFailed => 'Échec';
+
+  @override
+  String desktopCallFailedWith(Object error) {
+    return 'Échec : $error';
+  }
+
+  @override
+  String get desktopCallMicOn => 'Activer le micro';
+
+  @override
+  String get desktopCallMicOff => 'Couper le micro';
+
+  @override
+  String get desktopCallCamOn => 'Activer la caméra';
+
+  @override
+  String get desktopCallCamOff => 'Couper la caméra';
+
+  @override
+  String get desktopCallNoMediaVideo => 'Le serveur n’a pas fourni de canal média — la vidéo est indisponible';
+
+  @override
+  String get desktopCallLayoutSingle => 'Un seul';
+
+  @override
+  String get desktopCallLayoutGrid => 'Grille';
+
+  @override
+  String get desktopCallShowOneLarge => 'Afficher une personne en grand';
+
+  @override
+  String get desktopCallShowGrid => 'Afficher tout le monde en grille';
+
+  @override
+  String get desktopCallScreen => 'Écran';
+
+  @override
+  String get desktopCallShareStop => 'Arrêter le partage d’écran';
+
+  @override
+  String get desktopCallShareStart => 'Partager l’écran';
+
+  @override
+  String get desktopCallNoMediaScreen => 'Le serveur n’a pas fourni de canal média — le partage d’écran est indisponible';
+
+  @override
+  String get desktopCallLeave => 'Quitter';
+
+  @override
+  String get desktopCallLeaveCall => 'Quitter l’appel';
+
+  @override
+  String get desktopCallNoMediaBoth => 'Le serveur n’a pas fourni de canal média : cet appel n’aura ni son ni vidéo';
+
+  @override
+  String get desktopCallMinimise => 'Réduire l’appel';
+
+  @override
+  String get desktopCallDiscussion => 'Discussion';
+
+  @override
+  String desktopCallDiscussionOf(Object title) {
+    return 'Discussion · $title';
+  }
+
+  @override
+  String get desktopCallEncrypted => 'L’appel est chiffré de bout en bout';
+
+  @override
+  String desktopCallDurationOnAir(Object duration, Object count) {
+    return '$duration · $count en direct';
+  }
+
+  @override
+  String get desktopCallExitFullScreen => 'Quitter le plein écran';
+
+  @override
+  String get desktopCallFullScreen => 'Plein écran';
+
+  @override
+  String get desktopCallDemoRoom => 'Salon de démonstration';
+
+  @override
+  String get desktopCallNoCallYet => 'Pas encore d’appel';
+
+  @override
+  String get desktopCallDemoExplain => 'Il n’existe que sur cet ordinateur et pas sur le serveur — impossible d’y démarrer un appel. Dans un vrai salon, le bouton fonctionne.';
+
+  @override
+  String get desktopCallStartHint => 'Démarrez — les autres verront l’invitation dans le salon';
+
+  @override
+  String get desktopCallVoiceOnly => 'Voix seule';
+
+  @override
+  String get desktopCallWithCamera => 'Avec caméra';
+
+  @override
+  String get desktopCallConnecting => 'Connexion…';
+
+  @override
+  String get desktopCallOngoing => 'Une discussion est en cours';
+
+  @override
+  String desktopCallOnAir(Object count) {
+    return '$count en direct';
+  }
+
+  @override
+  String get desktopCallJoin => 'Rejoindre';
+
+  @override
+  String get desktopCallFullScreenShort => 'Plein écran';
+
+  @override
+  String get desktopCallReconnecting => 'se reconnecte';
+
+  @override
+  String get desktopCallCannotHear => 'n’entend pas';
+
+  @override
+  String get desktopCallSharingShort => 'partage son écran';
+
+  @override
+  String get desktopCallCameraOn => 'caméra activée';
+
+  @override
+  String get desktopCallPickDevice => 'Choisir un appareil';
+
+  @override
+  String get desktopCallPreparingLink => 'Préparation du lien…';
+
+  @override
+  String get desktopCallInvite => 'Inviter';
+
+  @override
+  String desktopCallFps(Object fps) {
+    return '$fps i/s';
+  }
 }

@@ -2481,4 +2481,183 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get desktopCallServerSilent => 'Der Server hat nicht geantwortet. Versuche es erneut oder verlasse den Anruf.';
+
+  @override
+  String get desktopCallRoomMissing => 'Der Raum ist auf dem Server nicht verfügbar – darin lässt sich kein Anruf starten.';
+
+  @override
+  String get desktopCallNoServer => 'Keine Verbindung zum Server. Prüfe deine Verbindung.';
+
+  @override
+  String get desktopCallJoinFailed => 'Der Anruf konnte nicht betreten werden. Prüfe die Verbindung und versuche es erneut.';
+
+  @override
+  String desktopCallSharingScreen(Object name) {
+    return '$name teilt den Bildschirm';
+  }
+
+  @override
+  String get desktopCallRoomEmpty => 'Im Raum wurde noch nichts geschrieben';
+
+  @override
+  String get desktopCallMessageHint => 'Nachricht an den Raum…';
+
+  @override
+  String get desktopCallSendToRoom => 'An den Raum senden';
+
+  @override
+  String desktopCallParticipantsTab(Object count) {
+    return 'Teilnehmer · $count';
+  }
+
+  @override
+  String get desktopCallNotesTab => 'Notizen';
+
+  @override
+  String get desktopCallLinkCopied => 'Link kopiert';
+
+  @override
+  String get desktopCallFailed => 'Fehlgeschlagen';
+
+  @override
+  String desktopCallFailedWith(Object error) {
+    return 'Fehlgeschlagen: $error';
+  }
+
+  @override
+  String get desktopCallMicOn => 'Mikrofon einschalten';
+
+  @override
+  String get desktopCallMicOff => 'Mikrofon ausschalten';
+
+  @override
+  String get desktopCallCamOn => 'Kamera einschalten';
+
+  @override
+  String get desktopCallCamOff => 'Kamera ausschalten';
+
+  @override
+  String get desktopCallNoMediaVideo => 'Der Server hat keinen Medienkanal bereitgestellt – Video ist nicht verfügbar';
+
+  @override
+  String get desktopCallLayoutSingle => 'Einzeln';
+
+  @override
+  String get desktopCallLayoutGrid => 'Raster';
+
+  @override
+  String get desktopCallShowOneLarge => 'Eine Person groß zeigen';
+
+  @override
+  String get desktopCallShowGrid => 'Alle im Raster zeigen';
+
+  @override
+  String get desktopCallScreen => 'Bildschirm';
+
+  @override
+  String get desktopCallShareStop => 'Bildschirmfreigabe beenden';
+
+  @override
+  String get desktopCallShareStart => 'Bildschirm teilen';
+
+  @override
+  String get desktopCallNoMediaScreen => 'Der Server hat keinen Medienkanal bereitgestellt – Bildschirmfreigabe ist nicht verfügbar';
+
+  @override
+  String get desktopCallLeave => 'Verlassen';
+
+  @override
+  String get desktopCallLeaveCall => 'Anruf verlassen';
+
+  @override
+  String get desktopCallNoMediaBoth => 'Der Server hat keinen Medienkanal bereitgestellt: In diesem Anruf gibt es weder Ton noch Video';
+
+  @override
+  String get desktopCallMinimise => 'Anruf minimieren';
+
+  @override
+  String get desktopCallDiscussion => 'Gespräch';
+
+  @override
+  String desktopCallDiscussionOf(Object title) {
+    return 'Gespräch · $title';
+  }
+
+  @override
+  String get desktopCallEncrypted => 'Der Anruf ist Ende-zu-Ende-verschlüsselt';
+
+  @override
+  String desktopCallDurationOnAir(Object duration, Object count) {
+    return '$duration · $count live';
+  }
+
+  @override
+  String get desktopCallExitFullScreen => 'Vollbild verlassen';
+
+  @override
+  String get desktopCallFullScreen => 'Vollbild';
+
+  @override
+  String get desktopCallDemoRoom => 'Demoraum';
+
+  @override
+  String get desktopCallNoCallYet => 'Noch kein Anruf';
+
+  @override
+  String get desktopCallDemoExplain => 'Er existiert nur auf diesem Computer und nicht auf dem Server – darin lässt sich kein Anruf starten. In einem echten Raum funktioniert die Schaltfläche.';
+
+  @override
+  String get desktopCallStartHint => 'Starte – die anderen sehen die Einladung im Raum';
+
+  @override
+  String get desktopCallVoiceOnly => 'Nur Ton';
+
+  @override
+  String get desktopCallWithCamera => 'Mit Kamera';
+
+  @override
+  String get desktopCallConnecting => 'Verbinden…';
+
+  @override
+  String get desktopCallOngoing => 'Ein Gespräch läuft';
+
+  @override
+  String desktopCallOnAir(Object count) {
+    return '$count live';
+  }
+
+  @override
+  String get desktopCallJoin => 'Beitreten';
+
+  @override
+  String get desktopCallFullScreenShort => 'Vollbild';
+
+  @override
+  String get desktopCallReconnecting => 'verbindet neu';
+
+  @override
+  String get desktopCallCannotHear => 'hört nicht';
+
+  @override
+  String get desktopCallSharingShort => 'teilt den Bildschirm';
+
+  @override
+  String get desktopCallCameraOn => 'Kamera ist an';
+
+  @override
+  String get desktopCallPickDevice => 'Gerät wählen';
+
+  @override
+  String get desktopCallPreparingLink => 'Link wird vorbereitet…';
+
+  @override
+  String get desktopCallInvite => 'Einladen';
+
+  @override
+  String desktopCallFps(Object fps) {
+    return '$fps B/s';
+  }
 }
