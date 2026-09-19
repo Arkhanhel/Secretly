@@ -51,7 +51,8 @@ void main() {
       'lib/ui/desktop/workspace/settings_workspace.dart',
     ).readAsStringSync();
     expect(settings.contains("id: 'media',"), isTrue);
-    expect(settings.contains("label: 'Звук и видео',"), isTrue);
+    // 19.09.2026: названия разделов уехали в переводы.
+    expect(settings.contains('label: l10n.desktopSettingsMediaLabel,'), isTrue);
     expect(settings.contains('MediaDevicesPane('), isTrue);
   });
 

@@ -74,11 +74,12 @@ Future<void> showSignOutDialog(
   BuildContext context,
   AppController controller,
 ) async {
+  final l10n = AppLocalizations.of(context)!;
   final cm = CallManager.instance;
   if (cm != null && cm.state.value.isActive) {
     DesktopSnackbar.show(
       context,
-      message: 'Сначала завершите активный звонок.',
+      message: l10n.desktopSettingsEndCallFirst,
       kind: DSnackKind.info,
     );
     return;
@@ -86,21 +87,19 @@ Future<void> showSignOutDialog(
   final c = DColors.of(context);
   final ok = await DesktopDialog.show<bool>(
     context,
-    title: 'Выйти из аккаунта на этом компьютере?',
+    title: l10n.desktopSettingsSignOutTitle,
     size: DDialogSize.small,
     body: Text(
-      'С этого компьютера будут удалены переписка, ключи и кэш. Аккаунт и '
-      'история на телефоне не пострадают — десктоп можно привязать заново по '
-      'QR-коду.',
+      l10n.desktopSettingsSignOutBody,
       style: DType.body.copyWith(color: c.textSecondary),
     ),
     primary: DDialogAction(
-      label: 'Выйти',
+      label: l10n.desktopSettingsSignOut,
       kind: DButtonKind.danger,
       onPressed: () => Navigator.of(context).maybePop(true),
     ),
     secondary: DDialogAction(
-      label: 'Отмена',
+      label: l10n.cancel,
       onPressed: () => Navigator.of(context).maybePop(false),
     ),
   );
@@ -112,7 +111,7 @@ Future<void> showSignOutDialog(
     if (!context.mounted) return;
     DesktopSnackbar.show(
       context,
-      message: 'Не удалось выйти: $e',
+      message: l10n.desktopSettingsSignOutFailed('$e'),
       kind: DSnackKind.error,
     );
   }
@@ -155,7 +154,7 @@ class SettingsWorkspace extends StatelessWidget {
         ? 0
         : sections.indexWhere((s) => s.id == wanted).clamp(0, sections.length - 1);
     return WorkspaceLayout(
-      title: 'Настройки',
+      title: AppLocalizations.of(context)!.desktopSettingsTitle,
       onClose: onClose,
       initialIndex: initial < 0 ? 0 : initial,
       sections: sections,
@@ -168,39 +167,34 @@ class SettingsWorkspace extends StatelessWidget {
     );
   }
 
+  /// Слова для поиска по настройкам приходят из переводов одной строкой
+  /// через запятую: держать в языковых файлах СПИСОК на каждый раздел —
+  /// значит завести сотню ключей там, где хватает семнадцати.
+  static List<String> _keywords(String csv) => <String>[
+    for (final w in csv.split(',')) if (w.trim().isNotEmpty) w.trim(),
+  ];
+
   List<WorkspaceSection> _sections(BuildContext context, dynamic controller) {
     final vm = this.vm;
+    final l10n = AppLocalizations.of(context)!;
     return [
         // ── Приложение ───────────────────────────────────────────────
         WorkspaceSection(
           id: 'general',
           icon: FluentIcons.settings_24_regular,
-          label: 'Общие',
-          subtitle: 'Язык, поведение приложения',
-          group: 'Приложение',
-          keywords: const ['язык', 'локаль', 'enter', 'отправка', 'ввод'],
+          label: l10n.desktopSettingsGeneralLabel,
+          subtitle: l10n.desktopSettingsGeneralSubtitle,
+          group: l10n.desktopSettingsGroupApp,
+          keywords: _keywords(l10n.desktopSettingsGeneralKeywords),
           builder: (ctx) => _GeneralPane(controller: controller),
         ),
         WorkspaceSection(
           id: 'appearance',
           icon: FluentIcons.color_24_regular,
-          label: 'Внешний вид',
-          subtitle: 'Тема, акцент, обои чата',
-          group: 'Приложение',
-          keywords: const [
-            'тема',
-            'акцент',
-            'обои',
-            'фон',
-            'пузыри',
-            'ник',
-            'цвет',
-            'тёмная',
-            'темная',
-            'индикатор',
-            'галочки',
-            'анимация',
-          ],
+          label: l10n.desktopSettingsAppearanceLabel,
+          subtitle: l10n.desktopSettingsAppearanceSubtitle,
+          group: l10n.desktopSettingsGroupApp,
+          keywords: _keywords(l10n.desktopSettingsAppearanceKeywords),
           builder: (ctx) => _AppearancePane(vm: vm),
         ),
         // 🔴 Справка о клавишах была доступна ТОЛЬКО комбинацией Cmd+/ — то
@@ -210,67 +204,37 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'shortcuts',
           icon: FluentIcons.keyboard_24_regular,
-          label: 'Горячие клавиши',
-          subtitle: 'Что нажимать, чтобы быстрее',
-          group: 'Приложение',
-          keywords: const [
-            'клавиши',
-            'сочетания',
-            'быстро',
-            'cmd',
-            'ctrl',
-            'shortcut',
-          ],
+          label: l10n.desktopSettingsShortcutsLabel,
+          subtitle: l10n.desktopSettingsShortcutsSubtitle,
+          group: l10n.desktopSettingsGroupApp,
+          keywords: _keywords(l10n.desktopSettingsShortcutsKeywords),
           builder: (ctx) => const _ShortcutsPane(),
         ),
         WorkspaceSection(
           id: 'power',
           icon: FluentIcons.flash_24_regular,
-          label: 'Энергопотребление',
-          subtitle: 'Что тратит батарею',
-          group: 'Приложение',
-          keywords: const [
-            'батарея',
-            'анимация',
-            'рамки',
-            'статусы',
-            'стекло',
-            'панели',
-            'производительность',
-            'нагрев',
-          ],
+          label: l10n.desktopSettingsPowerLabel,
+          subtitle: l10n.desktopSettingsPowerSubtitle,
+          group: l10n.desktopSettingsGroupApp,
+          keywords: _keywords(l10n.desktopSettingsPowerKeywords),
           builder: (ctx) => _PowerPane(vm: vm),
         ),
         WorkspaceSection(
           id: 'notifications',
           icon: FluentIcons.alert_24_regular,
-          label: 'Уведомления',
-          subtitle: 'Звуки, превью, тишина',
-          group: 'Приложение',
-          keywords: const [
-            'звук',
-            'превью',
-            'тишина',
-            'не беспокоить',
-            'баннер',
-            'текст',
-          ],
+          label: l10n.desktopSettingsNotificationsLabel,
+          subtitle: l10n.desktopSettingsNotificationsSubtitle,
+          group: l10n.desktopSettingsGroupApp,
+          keywords: _keywords(l10n.desktopSettingsNotificationsKeywords),
           builder: (ctx) => const _NotificationsPane(),
         ),
         WorkspaceSection(
           id: 'calls',
           icon: FluentIcons.call_24_regular,
-          label: 'Звонки',
-          subtitle: 'Приём звонков и демонстрации',
-          group: 'Приложение',
-          keywords: const [
-            'звонки',
-            'входящие',
-            'демонстрация',
-            'экран',
-            'видео',
-            'аудио',
-          ],
+          label: l10n.desktopSettingsCallsLabel,
+          subtitle: l10n.desktopSettingsCallsSubtitle,
+          group: l10n.desktopSettingsGroupApp,
+          keywords: _keywords(l10n.desktopSettingsCallsKeywords),
           builder: (ctx) => _CallsPane(vm: vm),
         ),
         // ◆ «ЗВУК И ВИДЕО» ИЗ МАКЕТА. Раздела не было, и причина была верной:
@@ -279,19 +243,10 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'media',
           icon: FluentIcons.mic_24_regular,
-          label: 'Звук и видео',
-          subtitle: 'Камера и микрофон для звонков',
-          group: 'Приложение',
-          keywords: const [
-            'камера',
-            'микрофон',
-            'устройство',
-            'вебкамера',
-            'гарнитура',
-            'наушники',
-            'звук',
-            'видео',
-          ],
+          label: l10n.desktopSettingsMediaLabel,
+          subtitle: l10n.desktopSettingsMediaSubtitle,
+          group: l10n.desktopSettingsGroupApp,
+          keywords: _keywords(l10n.desktopSettingsMediaKeywords),
           builder: (ctx) =>
               MediaDevicesPane(body: (children) => _PaneScaffold(children: children)),
         ),
@@ -300,57 +255,28 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'privacy',
           icon: FluentIcons.eye_24_regular,
-          label: 'Приватность',
-          subtitle: 'Кто и что о вас видит',
-          group: 'Приватность и безопасность',
-          keywords: const [
-            'кто видит',
-            'время захода',
-            'фото',
-            'звонки',
-            'сообщения',
-            'пересылка',
-            'никнейм',
-            'поиск',
-            'незнакомцы',
-            'удалить аккаунт',
-          ],
+          label: l10n.desktopSettingsPrivacyLabel,
+          subtitle: l10n.desktopSettingsPrivacySubtitle,
+          group: l10n.desktopSettingsGroupPrivacy,
+          keywords: _keywords(l10n.desktopSettingsPrivacyKeywords),
           builder: (ctx) => _PrivacyPane(lockService: lockService, vm: vm),
         ),
         WorkspaceSection(
           id: 'security',
           icon: FluentIcons.shield_keyhole_24_regular,
-          label: 'Безопасность',
-          subtitle: 'Шифрование и проверенные устройства',
-          group: 'Приватность и безопасность',
-          keywords: const [
-            'шифрование',
-            'e2ee',
-            'проверенные',
-            'непроверенные',
-            'блокировка',
-            'пароль',
-            'touch id',
-            'замок',
-            'верификация',
-          ],
+          label: l10n.desktopSettingsSecurityLabel,
+          subtitle: l10n.desktopSettingsSecuritySubtitle,
+          group: l10n.desktopSettingsGroupPrivacy,
+          keywords: _keywords(l10n.desktopSettingsSecurityKeywords),
           builder: (ctx) => _SecurityPane(vm: vm, lockService: lockService),
         ),
         WorkspaceSection(
           id: 'backup',
           icon: FluentIcons.cloud_arrow_up_24_regular,
-          label: 'Резервная копия',
-          subtitle: 'Что спасёт историю переписки',
-          group: 'Аккаунт и данные',
-          keywords: const [
-            'бэкап',
-            'резервная',
-            'копия',
-            'восстановление',
-            'safe backup',
-            'пароль копии',
-            'медиа',
-          ],
+          label: l10n.desktopSettingsBackupLabel,
+          subtitle: l10n.desktopSettingsBackupSubtitle,
+          group: l10n.desktopSettingsGroupAccount,
+          keywords: _keywords(l10n.desktopSettingsBackupKeywords),
           builder: (ctx) {
             final model = vm;
             return model == null
@@ -361,17 +287,10 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'blocked',
           icon: FluentIcons.person_prohibited_24_regular,
-          label: 'Заблокированные',
-          subtitle: 'Кому закрыт доступ к вам',
-          group: 'Приватность и безопасность',
-          keywords: const [
-            'блок',
-            'заблокированные',
-            'разблокировать',
-            'чёрный список',
-            'черный список',
-            'спам',
-          ],
+          label: l10n.desktopSettingsBlockedLabel,
+          subtitle: l10n.desktopSettingsBlockedSubtitle,
+          group: l10n.desktopSettingsGroupPrivacy,
+          keywords: _keywords(l10n.desktopSettingsBlockedKeywords),
           builder: (ctx) {
             final model = vm;
             return model == null
@@ -382,19 +301,10 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'devices',
           icon: FluentIcons.phone_laptop_24_regular,
-          label: 'Сессии и устройства',
-          subtitle: 'Активные сеансы',
-          group: 'Приватность и безопасность',
-          keywords: const [
-            'устройства',
-            'сеансы',
-            'сессии',
-            'qr',
-            'привязка',
-            'выход',
-            'резервная копия',
-            'бэкап',
-          ],
+          label: l10n.desktopSettingsDevicesLabel,
+          subtitle: l10n.desktopSettingsDevicesSubtitle,
+          group: l10n.desktopSettingsGroupPrivacy,
+          keywords: _keywords(l10n.desktopSettingsDevicesKeywords),
           builder: (ctx) => _DevicesPane(controller: controller, vm: vm),
         ),
 
@@ -402,35 +312,28 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'account',
           icon: FluentIcons.person_24_regular,
-          label: 'Аккаунт',
-          subtitle: 'Профиль и выход',
-          group: 'Аккаунт и данные',
-          keywords: const ['имя', 'о себе', 'id', 'выйти', 'сбросить'],
+          label: l10n.desktopSettingsAccountLabel,
+          subtitle: l10n.desktopSettingsAccountSubtitle,
+          group: l10n.desktopSettingsGroupAccount,
+          keywords: _keywords(l10n.desktopSettingsAccountKeywords),
           builder: (ctx) => _AccountPane(vm: vm, onOpenProfile: onOpenProfile),
         ),
         WorkspaceSection(
           id: 'storage',
           icon: FluentIcons.database_24_regular,
-          label: 'Хранилище',
-          subtitle: 'Кеш, скачивания',
-          group: 'Аккаунт и данные',
-          keywords: const ['кеш', 'кэш', 'место', 'очистить', 'медиа'],
+          label: l10n.desktopSettingsStorageLabel,
+          subtitle: l10n.desktopSettingsStorageSubtitle,
+          group: l10n.desktopSettingsGroupAccount,
+          keywords: _keywords(l10n.desktopSettingsStorageKeywords),
           builder: (ctx) => const _StoragePane(),
         ),
         WorkspaceSection(
           id: 'support',
           icon: FluentIcons.chat_help_24_regular,
-          label: 'Поддержка',
-          subtitle: 'Зашифрованная переписка с нами',
-          group: 'Аккаунт и данные',
-          keywords: const [
-            'поддержка',
-            'помощь',
-            'проблема',
-            'баг',
-            'написать',
-            'support',
-          ],
+          label: l10n.desktopSettingsSupportLabel,
+          subtitle: l10n.desktopSettingsSupportSubtitle,
+          group: l10n.desktopSettingsGroupAccount,
+          keywords: _keywords(l10n.desktopSettingsSupportKeywords),
           trailing: controller == null
               ? null
               : SupportBadgeListener(controller: controller!, compact: true),
@@ -444,15 +347,15 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'about',
           icon: FluentIcons.info_24_regular,
-          label: 'О программе',
-          group: 'Аккаунт и данные',
-          keywords: const ['версия', 'сборка', 'лицензии', 'сайт'],
+          label: l10n.desktopSettingsAboutLabel,
+          group: l10n.desktopSettingsGroupAccount,
+          keywords: _keywords(l10n.desktopSettingsAboutKeywords),
           builder: (ctx) => const _AboutPane(),
         ),
         WorkspaceSection(
           id: 'danger',
           icon: FluentIcons.delete_24_regular,
-          label: 'Удалить аккаунт',
+          label: l10n.desktopSettingsDangerLabel,
           // PR-F (bug 23): the danger pane was stateless and had no
           // `AppController` reference, so the "Удалить аккаунт" button was a
           // no-op (`onPressed: () {}`). Inject the controller so the new
@@ -473,6 +376,7 @@ class _SignOutRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
+    final l10n = AppLocalizations.of(context)!;
     return HoverListener(
       onTap: () => unawaited(showSignOutDialog(context, controller)),
       cursor: SystemMouseCursors.click,
@@ -495,7 +399,7 @@ class _SignOutRow extends StatelessWidget {
             const SizedBox(width: DSpace.s),
             Expanded(
               child: Text(
-                'Выйти',
+                l10n.desktopSettingsSignOut,
                 style: DType.label.copyWith(
                   color: c.danger,
                   fontWeight: FontWeight.w600,
@@ -519,6 +423,7 @@ class _ActiveBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
+    final l10n = AppLocalizations.of(context)!;
     return Container(
       height: 24,
       padding: const EdgeInsets.symmetric(horizontal: 9),
@@ -536,7 +441,7 @@ class _ActiveBadge extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            'активно',
+            l10n.desktopSettingsActive,
             style: DType.tiny.copyWith(
               fontWeight: FontWeight.w700,
               color: HSLColor.fromColor(c.success).withLightness(0.72).toColor(),

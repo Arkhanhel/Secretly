@@ -2660,6 +2660,182 @@ class AppLocalizationsPt extends AppLocalizations {
   String desktopCallFps(Object fps) {
     return '$fps f/s';
   }
+
+  @override
+  String get desktopSettingsTitle => 'Definições';
+
+  @override
+  String get desktopSettingsGroupApp => 'Aplicação';
+
+  @override
+  String get desktopSettingsGroupPrivacy => 'Privacidade e segurança';
+
+  @override
+  String get desktopSettingsGroupAccount => 'Conta e dados';
+
+  @override
+  String get desktopSettingsGeneralLabel => 'Geral';
+
+  @override
+  String get desktopSettingsGeneralSubtitle => 'Idioma, comportamento da aplicação';
+
+  @override
+  String get desktopSettingsGeneralKeywords => 'idioma, região, enter, envio, entrada';
+
+  @override
+  String get desktopSettingsAppearanceLabel => 'Aspeto';
+
+  @override
+  String get desktopSettingsAppearanceSubtitle => 'Tema, acento, fundo da conversa';
+
+  @override
+  String get desktopSettingsAppearanceKeywords => 'tema, acento, fundo, balões, cor, escuro, marcas, animação';
+
+  @override
+  String get desktopSettingsShortcutsLabel => 'Atalhos de teclado';
+
+  @override
+  String get desktopSettingsShortcutsSubtitle => 'O que premir para ser mais rápido';
+
+  @override
+  String get desktopSettingsShortcutsKeywords => 'teclas, atalhos, rápido, cmd, ctrl';
+
+  @override
+  String get desktopSettingsPowerLabel => 'Consumo de energia';
+
+  @override
+  String get desktopSettingsPowerSubtitle => 'O que gasta a bateria';
+
+  @override
+  String get desktopSettingsPowerKeywords => 'bateria, animação, molduras, vidro, desempenho, calor';
+
+  @override
+  String get desktopSettingsNotificationsLabel => 'Notificações';
+
+  @override
+  String get desktopSettingsNotificationsSubtitle => 'Sons, pré-visualização, silêncio';
+
+  @override
+  String get desktopSettingsNotificationsKeywords => 'som, pré-visualização, silêncio, não incomodar, faixa, texto';
+
+  @override
+  String get desktopSettingsCallsLabel => 'Chamadas';
+
+  @override
+  String get desktopSettingsCallsSubtitle => 'Receber chamadas e partilhar o ecrã';
+
+  @override
+  String get desktopSettingsCallsKeywords => 'chamadas, recebidas, partilha de ecrã, vídeo, áudio';
+
+  @override
+  String get desktopSettingsMediaLabel => 'Som e vídeo';
+
+  @override
+  String get desktopSettingsMediaSubtitle => 'Câmara e microfone para chamadas';
+
+  @override
+  String get desktopSettingsMediaKeywords => 'câmara, microfone, dispositivo, webcam, auscultadores, som, vídeo';
+
+  @override
+  String get desktopSettingsPrivacyLabel => 'Privacidade';
+
+  @override
+  String get desktopSettingsPrivacySubtitle => 'Quem vê o quê sobre si';
+
+  @override
+  String get desktopSettingsPrivacyKeywords => 'quem vê, visto por último, foto, chamadas, mensagens, reencaminhar, alcunha, procura, desconhecidos';
+
+  @override
+  String get desktopSettingsSecurityLabel => 'Segurança';
+
+  @override
+  String get desktopSettingsSecuritySubtitle => 'Cifra e dispositivos verificados';
+
+  @override
+  String get desktopSettingsSecurityKeywords => 'cifra, e2ee, verificados, bloqueio, palavra-passe, touch id, verificação';
+
+  @override
+  String get desktopSettingsBackupLabel => 'Cópia de segurança';
+
+  @override
+  String get desktopSettingsBackupSubtitle => 'O que salva o histórico das conversas';
+
+  @override
+  String get desktopSettingsBackupKeywords => 'cópia, backup, restauro, safe backup, palavra-passe, media';
+
+  @override
+  String get desktopSettingsBlockedLabel => 'Bloqueados';
+
+  @override
+  String get desktopSettingsBlockedSubtitle => 'A quem está vedado o acesso';
+
+  @override
+  String get desktopSettingsBlockedKeywords => 'bloqueio, bloqueados, desbloquear, lista negra, spam';
+
+  @override
+  String get desktopSettingsDevicesLabel => 'Sessões e dispositivos';
+
+  @override
+  String get desktopSettingsDevicesSubtitle => 'Sessões ativas';
+
+  @override
+  String get desktopSettingsDevicesKeywords => 'dispositivos, sessões, qr, ligação, terminar sessão, cópia';
+
+  @override
+  String get desktopSettingsAccountLabel => 'Conta';
+
+  @override
+  String get desktopSettingsAccountSubtitle => 'Perfil e terminar sessão';
+
+  @override
+  String get desktopSettingsAccountKeywords => 'nome, sobre mim, id, terminar sessão, repor';
+
+  @override
+  String get desktopSettingsStorageLabel => 'Armazenamento';
+
+  @override
+  String get desktopSettingsStorageSubtitle => 'Cache, transferências';
+
+  @override
+  String get desktopSettingsStorageKeywords => 'cache, espaço, limpar, media, transferências';
+
+  @override
+  String get desktopSettingsSupportLabel => 'Apoio';
+
+  @override
+  String get desktopSettingsSupportSubtitle => 'Uma conversa cifrada connosco';
+
+  @override
+  String get desktopSettingsSupportKeywords => 'apoio, ajuda, problema, erro, escrever';
+
+  @override
+  String get desktopSettingsAboutLabel => 'Acerca';
+
+  @override
+  String get desktopSettingsAboutKeywords => 'versão, compilação, licenças, site';
+
+  @override
+  String get desktopSettingsDangerLabel => 'Eliminar a conta';
+
+  @override
+  String get desktopSettingsEndCallFirst => 'Termine primeiro a chamada ativa.';
+
+  @override
+  String get desktopSettingsSignOutTitle => 'Terminar sessão neste computador?';
+
+  @override
+  String get desktopSettingsSignOutBody => 'Deste computador serão removidas as conversas, as chaves e a cache. A conta e o histórico no telemóvel não são afetados — o computador pode ser ligado de novo por código QR.';
+
+  @override
+  String get desktopSettingsSignOut => 'Terminar sessão';
+
+  @override
+  String desktopSettingsSignOutFailed(Object error) {
+    return 'Não foi possível terminar a sessão: $error';
+  }
+
+  @override
+  String get desktopSettingsActive => 'ativo';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -5318,4 +5494,180 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String desktopCallFps(Object fps) {
     return '$fps q/s';
   }
+
+  @override
+  String get desktopSettingsTitle => 'Configurações';
+
+  @override
+  String get desktopSettingsGroupApp => 'Aplicativo';
+
+  @override
+  String get desktopSettingsGroupPrivacy => 'Privacidade e segurança';
+
+  @override
+  String get desktopSettingsGroupAccount => 'Conta e dados';
+
+  @override
+  String get desktopSettingsGeneralLabel => 'Geral';
+
+  @override
+  String get desktopSettingsGeneralSubtitle => 'Idioma, comportamento do aplicativo';
+
+  @override
+  String get desktopSettingsGeneralKeywords => 'idioma, região, enter, envio, entrada';
+
+  @override
+  String get desktopSettingsAppearanceLabel => 'Aparência';
+
+  @override
+  String get desktopSettingsAppearanceSubtitle => 'Tema, acento, papel de parede da conversa';
+
+  @override
+  String get desktopSettingsAppearanceKeywords => 'tema, acento, fundo, balões, cor, escuro, marcas, animação';
+
+  @override
+  String get desktopSettingsShortcutsLabel => 'Atalhos de teclado';
+
+  @override
+  String get desktopSettingsShortcutsSubtitle => 'O que apertar para ser mais rápido';
+
+  @override
+  String get desktopSettingsShortcutsKeywords => 'teclas, atalhos, rápido, cmd, ctrl';
+
+  @override
+  String get desktopSettingsPowerLabel => 'Consumo de energia';
+
+  @override
+  String get desktopSettingsPowerSubtitle => 'O que gasta a bateria';
+
+  @override
+  String get desktopSettingsPowerKeywords => 'bateria, animação, molduras, vidro, desempenho, calor';
+
+  @override
+  String get desktopSettingsNotificationsLabel => 'Notificações';
+
+  @override
+  String get desktopSettingsNotificationsSubtitle => 'Sons, prévia, silêncio';
+
+  @override
+  String get desktopSettingsNotificationsKeywords => 'som, prévia, silêncio, não perturbe, faixa, texto';
+
+  @override
+  String get desktopSettingsCallsLabel => 'Chamadas';
+
+  @override
+  String get desktopSettingsCallsSubtitle => 'Receber chamadas e compartilhar a tela';
+
+  @override
+  String get desktopSettingsCallsKeywords => 'chamadas, recebidas, compartilhamento de tela, vídeo, áudio';
+
+  @override
+  String get desktopSettingsMediaLabel => 'Som e vídeo';
+
+  @override
+  String get desktopSettingsMediaSubtitle => 'Câmera e microfone para chamadas';
+
+  @override
+  String get desktopSettingsMediaKeywords => 'câmera, microfone, dispositivo, webcam, fones, som, vídeo';
+
+  @override
+  String get desktopSettingsPrivacyLabel => 'Privacidade';
+
+  @override
+  String get desktopSettingsPrivacySubtitle => 'Quem vê o que sobre você';
+
+  @override
+  String get desktopSettingsPrivacyKeywords => 'quem vê, visto por último, foto, chamadas, mensagens, encaminhar, apelido, busca, desconhecidos';
+
+  @override
+  String get desktopSettingsSecurityLabel => 'Segurança';
+
+  @override
+  String get desktopSettingsSecuritySubtitle => 'Criptografia e dispositivos verificados';
+
+  @override
+  String get desktopSettingsSecurityKeywords => 'criptografia, e2ee, verificados, bloqueio, senha, touch id, verificação';
+
+  @override
+  String get desktopSettingsBackupLabel => 'Backup';
+
+  @override
+  String get desktopSettingsBackupSubtitle => 'O que salva o histórico das conversas';
+
+  @override
+  String get desktopSettingsBackupKeywords => 'backup, cópia, restauração, safe backup, senha, mídia';
+
+  @override
+  String get desktopSettingsBlockedLabel => 'Bloqueados';
+
+  @override
+  String get desktopSettingsBlockedSubtitle => 'Quem não tem acesso a você';
+
+  @override
+  String get desktopSettingsBlockedKeywords => 'bloqueio, bloqueados, desbloquear, lista negra, spam';
+
+  @override
+  String get desktopSettingsDevicesLabel => 'Sessões e dispositivos';
+
+  @override
+  String get desktopSettingsDevicesSubtitle => 'Sessões ativas';
+
+  @override
+  String get desktopSettingsDevicesKeywords => 'dispositivos, sessões, qr, vínculo, sair, backup';
+
+  @override
+  String get desktopSettingsAccountLabel => 'Conta';
+
+  @override
+  String get desktopSettingsAccountSubtitle => 'Perfil e saída';
+
+  @override
+  String get desktopSettingsAccountKeywords => 'nome, sobre mim, id, sair, redefinir';
+
+  @override
+  String get desktopSettingsStorageLabel => 'Armazenamento';
+
+  @override
+  String get desktopSettingsStorageSubtitle => 'Cache, downloads';
+
+  @override
+  String get desktopSettingsStorageKeywords => 'cache, espaço, limpar, mídia, downloads';
+
+  @override
+  String get desktopSettingsSupportLabel => 'Suporte';
+
+  @override
+  String get desktopSettingsSupportSubtitle => 'Uma conversa criptografada conosco';
+
+  @override
+  String get desktopSettingsSupportKeywords => 'suporte, ajuda, problema, erro, escrever';
+
+  @override
+  String get desktopSettingsAboutLabel => 'Sobre';
+
+  @override
+  String get desktopSettingsAboutKeywords => 'versão, compilação, licenças, site';
+
+  @override
+  String get desktopSettingsDangerLabel => 'Excluir a conta';
+
+  @override
+  String get desktopSettingsEndCallFirst => 'Encerre primeiro a chamada ativa.';
+
+  @override
+  String get desktopSettingsSignOutTitle => 'Sair da conta neste computador?';
+
+  @override
+  String get desktopSettingsSignOutBody => 'Deste computador serão removidas as conversas, as chaves e o cache. A conta e o histórico no celular não são afetados — o computador pode ser conectado de novo por QR code.';
+
+  @override
+  String get desktopSettingsSignOut => 'Sair';
+
+  @override
+  String desktopSettingsSignOutFailed(Object error) {
+    return 'Não foi possível sair: $error';
+  }
+
+  @override
+  String get desktopSettingsActive => 'ativo';
 }

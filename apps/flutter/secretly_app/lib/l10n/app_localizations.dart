@@ -5091,6 +5091,354 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{fps} fps'**
   String desktopCallFps(Object fps);
+
+  /// No description provided for @desktopSettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get desktopSettingsTitle;
+
+  /// No description provided for @desktopSettingsGroupApp.
+  ///
+  /// In en, this message translates to:
+  /// **'Application'**
+  String get desktopSettingsGroupApp;
+
+  /// No description provided for @desktopSettingsGroupPrivacy.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy and security'**
+  String get desktopSettingsGroupPrivacy;
+
+  /// No description provided for @desktopSettingsGroupAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Account and data'**
+  String get desktopSettingsGroupAccount;
+
+  /// No description provided for @desktopSettingsGeneralLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'General'**
+  String get desktopSettingsGeneralLabel;
+
+  /// No description provided for @desktopSettingsGeneralSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Language, how the app behaves'**
+  String get desktopSettingsGeneralSubtitle;
+
+  /// No description provided for @desktopSettingsGeneralKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'language, locale, enter, sending, input'**
+  String get desktopSettingsGeneralKeywords;
+
+  /// No description provided for @desktopSettingsAppearanceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get desktopSettingsAppearanceLabel;
+
+  /// No description provided for @desktopSettingsAppearanceSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme, accent, chat wallpaper'**
+  String get desktopSettingsAppearanceSubtitle;
+
+  /// No description provided for @desktopSettingsAppearanceKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'theme, accent, wallpaper, background, bubbles, colour, dark, ticks, animation'**
+  String get desktopSettingsAppearanceKeywords;
+
+  /// No description provided for @desktopSettingsShortcutsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard shortcuts'**
+  String get desktopSettingsShortcutsLabel;
+
+  /// No description provided for @desktopSettingsShortcutsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What to press to go faster'**
+  String get desktopSettingsShortcutsSubtitle;
+
+  /// No description provided for @desktopSettingsShortcutsKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'keys, shortcuts, fast, cmd, ctrl'**
+  String get desktopSettingsShortcutsKeywords;
+
+  /// No description provided for @desktopSettingsPowerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Power use'**
+  String get desktopSettingsPowerLabel;
+
+  /// No description provided for @desktopSettingsPowerSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What drains the battery'**
+  String get desktopSettingsPowerSubtitle;
+
+  /// No description provided for @desktopSettingsPowerKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'battery, animation, frames, glass, panels, performance, heat'**
+  String get desktopSettingsPowerKeywords;
+
+  /// No description provided for @desktopSettingsNotificationsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications'**
+  String get desktopSettingsNotificationsLabel;
+
+  /// No description provided for @desktopSettingsNotificationsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sounds, previews, quiet'**
+  String get desktopSettingsNotificationsSubtitle;
+
+  /// No description provided for @desktopSettingsNotificationsKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'sound, preview, quiet, do not disturb, banner, text'**
+  String get desktopSettingsNotificationsKeywords;
+
+  /// No description provided for @desktopSettingsCallsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Calls'**
+  String get desktopSettingsCallsLabel;
+
+  /// No description provided for @desktopSettingsCallsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Receiving calls and screen sharing'**
+  String get desktopSettingsCallsSubtitle;
+
+  /// No description provided for @desktopSettingsCallsKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'calls, incoming, screen sharing, screen, video, audio'**
+  String get desktopSettingsCallsKeywords;
+
+  /// No description provided for @desktopSettingsMediaLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sound and video'**
+  String get desktopSettingsMediaLabel;
+
+  /// No description provided for @desktopSettingsMediaSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera and microphone for calls'**
+  String get desktopSettingsMediaSubtitle;
+
+  /// No description provided for @desktopSettingsMediaKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'camera, microphone, device, webcam, headset, headphones, sound, video'**
+  String get desktopSettingsMediaKeywords;
+
+  /// No description provided for @desktopSettingsPrivacyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy'**
+  String get desktopSettingsPrivacyLabel;
+
+  /// No description provided for @desktopSettingsPrivacySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Who sees what about you'**
+  String get desktopSettingsPrivacySubtitle;
+
+  /// No description provided for @desktopSettingsPrivacyKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'who sees, last seen, photo, calls, messages, forwarding, nickname, search, strangers, delete account'**
+  String get desktopSettingsPrivacyKeywords;
+
+  /// No description provided for @desktopSettingsSecurityLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Security'**
+  String get desktopSettingsSecurityLabel;
+
+  /// No description provided for @desktopSettingsSecuritySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Encryption and verified devices'**
+  String get desktopSettingsSecuritySubtitle;
+
+  /// No description provided for @desktopSettingsSecurityKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'encryption, e2ee, verified, unverified, lock, password, touch id, verification'**
+  String get desktopSettingsSecurityKeywords;
+
+  /// No description provided for @desktopSettingsBackupLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup'**
+  String get desktopSettingsBackupLabel;
+
+  /// No description provided for @desktopSettingsBackupSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What will save your conversation history'**
+  String get desktopSettingsBackupSubtitle;
+
+  /// No description provided for @desktopSettingsBackupKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'backup, copy, restore, safe backup, backup password, media'**
+  String get desktopSettingsBackupKeywords;
+
+  /// No description provided for @desktopSettingsBlockedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked'**
+  String get desktopSettingsBlockedLabel;
+
+  /// No description provided for @desktopSettingsBlockedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Who is shut out from you'**
+  String get desktopSettingsBlockedSubtitle;
+
+  /// No description provided for @desktopSettingsBlockedKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'block, blocked, unblock, blacklist, spam'**
+  String get desktopSettingsBlockedKeywords;
+
+  /// No description provided for @desktopSettingsDevicesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sessions and devices'**
+  String get desktopSettingsDevicesLabel;
+
+  /// No description provided for @desktopSettingsDevicesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Active sessions'**
+  String get desktopSettingsDevicesSubtitle;
+
+  /// No description provided for @desktopSettingsDevicesKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'devices, sessions, qr, linking, sign out, backup'**
+  String get desktopSettingsDevicesKeywords;
+
+  /// No description provided for @desktopSettingsAccountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Account'**
+  String get desktopSettingsAccountLabel;
+
+  /// No description provided for @desktopSettingsAccountSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile and signing out'**
+  String get desktopSettingsAccountSubtitle;
+
+  /// No description provided for @desktopSettingsAccountKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'name, about, id, sign out, reset'**
+  String get desktopSettingsAccountKeywords;
+
+  /// No description provided for @desktopSettingsStorageLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage'**
+  String get desktopSettingsStorageLabel;
+
+  /// No description provided for @desktopSettingsStorageSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Cache, downloads'**
+  String get desktopSettingsStorageSubtitle;
+
+  /// No description provided for @desktopSettingsStorageKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'cache, space, clear, media, downloads'**
+  String get desktopSettingsStorageKeywords;
+
+  /// No description provided for @desktopSettingsSupportLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Support'**
+  String get desktopSettingsSupportLabel;
+
+  /// No description provided for @desktopSettingsSupportSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'An encrypted conversation with us'**
+  String get desktopSettingsSupportSubtitle;
+
+  /// No description provided for @desktopSettingsSupportKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'support, help, problem, bug, write'**
+  String get desktopSettingsSupportKeywords;
+
+  /// No description provided for @desktopSettingsAboutLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get desktopSettingsAboutLabel;
+
+  /// No description provided for @desktopSettingsAboutKeywords.
+  ///
+  /// In en, this message translates to:
+  /// **'version, build, licences, website'**
+  String get desktopSettingsAboutKeywords;
+
+  /// No description provided for @desktopSettingsDangerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the account'**
+  String get desktopSettingsDangerLabel;
+
+  /// No description provided for @desktopSettingsEndCallFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'End the active call first.'**
+  String get desktopSettingsEndCallFirst;
+
+  /// No description provided for @desktopSettingsSignOutTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out of the account on this computer?'**
+  String get desktopSettingsSignOutTitle;
+
+  /// No description provided for @desktopSettingsSignOutBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The conversations, keys and cache will be removed from this computer. The account and the history on the phone are untouched — the desktop can be linked again with a QR code.'**
+  String get desktopSettingsSignOutBody;
+
+  /// No description provided for @desktopSettingsSignOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign out'**
+  String get desktopSettingsSignOut;
+
+  /// No description provided for @desktopSettingsSignOutFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not sign out: {error}'**
+  String desktopSettingsSignOutFailed(Object error);
+
+  /// No description provided for @desktopSettingsActive.
+  ///
+  /// In en, this message translates to:
+  /// **'active'**
+  String get desktopSettingsActive;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

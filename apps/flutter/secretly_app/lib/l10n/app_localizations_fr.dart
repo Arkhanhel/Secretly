@@ -2660,4 +2660,180 @@ class AppLocalizationsFr extends AppLocalizations {
   String desktopCallFps(Object fps) {
     return '$fps i/s';
   }
+
+  @override
+  String get desktopSettingsTitle => 'Réglages';
+
+  @override
+  String get desktopSettingsGroupApp => 'Application';
+
+  @override
+  String get desktopSettingsGroupPrivacy => 'Confidentialité et sécurité';
+
+  @override
+  String get desktopSettingsGroupAccount => 'Compte et données';
+
+  @override
+  String get desktopSettingsGeneralLabel => 'Général';
+
+  @override
+  String get desktopSettingsGeneralSubtitle => 'Langue, comportement de l’application';
+
+  @override
+  String get desktopSettingsGeneralKeywords => 'langue, locale, entrée, envoi, saisie';
+
+  @override
+  String get desktopSettingsAppearanceLabel => 'Apparence';
+
+  @override
+  String get desktopSettingsAppearanceSubtitle => 'Thème, accent, fond de conversation';
+
+  @override
+  String get desktopSettingsAppearanceKeywords => 'thème, accent, fond, bulles, couleur, sombre, coches, animation';
+
+  @override
+  String get desktopSettingsShortcutsLabel => 'Raccourcis clavier';
+
+  @override
+  String get desktopSettingsShortcutsSubtitle => 'Ce qu’il faut presser pour aller plus vite';
+
+  @override
+  String get desktopSettingsShortcutsKeywords => 'touches, raccourcis, rapide, cmd, ctrl';
+
+  @override
+  String get desktopSettingsPowerLabel => 'Consommation';
+
+  @override
+  String get desktopSettingsPowerSubtitle => 'Ce qui vide la batterie';
+
+  @override
+  String get desktopSettingsPowerKeywords => 'batterie, animation, cadres, verre, performance, chaleur';
+
+  @override
+  String get desktopSettingsNotificationsLabel => 'Notifications';
+
+  @override
+  String get desktopSettingsNotificationsSubtitle => 'Sons, aperçus, silence';
+
+  @override
+  String get desktopSettingsNotificationsKeywords => 'son, aperçu, silence, ne pas déranger, bannière, texte';
+
+  @override
+  String get desktopSettingsCallsLabel => 'Appels';
+
+  @override
+  String get desktopSettingsCallsSubtitle => 'Réception des appels et partage d’écran';
+
+  @override
+  String get desktopSettingsCallsKeywords => 'appels, entrants, partage d’écran, vidéo, audio';
+
+  @override
+  String get desktopSettingsMediaLabel => 'Son et vidéo';
+
+  @override
+  String get desktopSettingsMediaSubtitle => 'Caméra et micro pour les appels';
+
+  @override
+  String get desktopSettingsMediaKeywords => 'caméra, micro, appareil, webcam, casque, écouteurs, son, vidéo';
+
+  @override
+  String get desktopSettingsPrivacyLabel => 'Confidentialité';
+
+  @override
+  String get desktopSettingsPrivacySubtitle => 'Qui voit quoi de vous';
+
+  @override
+  String get desktopSettingsPrivacyKeywords => 'qui voit, dernière connexion, photo, appels, messages, transfert, pseudo, recherche, inconnus';
+
+  @override
+  String get desktopSettingsSecurityLabel => 'Sécurité';
+
+  @override
+  String get desktopSettingsSecuritySubtitle => 'Chiffrement et appareils vérifiés';
+
+  @override
+  String get desktopSettingsSecurityKeywords => 'chiffrement, e2ee, vérifiés, verrouillage, mot de passe, touch id, vérification';
+
+  @override
+  String get desktopSettingsBackupLabel => 'Sauvegarde';
+
+  @override
+  String get desktopSettingsBackupSubtitle => 'Ce qui sauvera votre historique';
+
+  @override
+  String get desktopSettingsBackupKeywords => 'sauvegarde, copie, restauration, safe backup, mot de passe, médias';
+
+  @override
+  String get desktopSettingsBlockedLabel => 'Bloqués';
+
+  @override
+  String get desktopSettingsBlockedSubtitle => 'Qui n’a pas accès à vous';
+
+  @override
+  String get desktopSettingsBlockedKeywords => 'blocage, bloqués, débloquer, liste noire, spam';
+
+  @override
+  String get desktopSettingsDevicesLabel => 'Sessions et appareils';
+
+  @override
+  String get desktopSettingsDevicesSubtitle => 'Sessions actives';
+
+  @override
+  String get desktopSettingsDevicesKeywords => 'appareils, sessions, qr, association, déconnexion, sauvegarde';
+
+  @override
+  String get desktopSettingsAccountLabel => 'Compte';
+
+  @override
+  String get desktopSettingsAccountSubtitle => 'Profil et déconnexion';
+
+  @override
+  String get desktopSettingsAccountKeywords => 'nom, à propos, id, déconnexion, réinitialiser';
+
+  @override
+  String get desktopSettingsStorageLabel => 'Stockage';
+
+  @override
+  String get desktopSettingsStorageSubtitle => 'Cache, téléchargements';
+
+  @override
+  String get desktopSettingsStorageKeywords => 'cache, espace, vider, médias, téléchargements';
+
+  @override
+  String get desktopSettingsSupportLabel => 'Assistance';
+
+  @override
+  String get desktopSettingsSupportSubtitle => 'Une conversation chiffrée avec nous';
+
+  @override
+  String get desktopSettingsSupportKeywords => 'assistance, aide, problème, bogue, écrire';
+
+  @override
+  String get desktopSettingsAboutLabel => 'À propos';
+
+  @override
+  String get desktopSettingsAboutKeywords => 'version, build, licences, site web';
+
+  @override
+  String get desktopSettingsDangerLabel => 'Supprimer le compte';
+
+  @override
+  String get desktopSettingsEndCallFirst => 'Terminez d’abord l’appel en cours.';
+
+  @override
+  String get desktopSettingsSignOutTitle => 'Se déconnecter du compte sur cet ordinateur ?';
+
+  @override
+  String get desktopSettingsSignOutBody => 'Les conversations, les clés et le cache seront supprimés de cet ordinateur. Le compte et l’historique sur le téléphone ne sont pas touchés — l’ordinateur peut être réassocié avec un code QR.';
+
+  @override
+  String get desktopSettingsSignOut => 'Se déconnecter';
+
+  @override
+  String desktopSettingsSignOutFailed(Object error) {
+    return 'Impossible de se déconnecter : $error';
+  }
+
+  @override
+  String get desktopSettingsActive => 'actif';
 }

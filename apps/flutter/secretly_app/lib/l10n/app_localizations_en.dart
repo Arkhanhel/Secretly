@@ -2660,4 +2660,180 @@ class AppLocalizationsEn extends AppLocalizations {
   String desktopCallFps(Object fps) {
     return '$fps fps';
   }
+
+  @override
+  String get desktopSettingsTitle => 'Settings';
+
+  @override
+  String get desktopSettingsGroupApp => 'Application';
+
+  @override
+  String get desktopSettingsGroupPrivacy => 'Privacy and security';
+
+  @override
+  String get desktopSettingsGroupAccount => 'Account and data';
+
+  @override
+  String get desktopSettingsGeneralLabel => 'General';
+
+  @override
+  String get desktopSettingsGeneralSubtitle => 'Language, how the app behaves';
+
+  @override
+  String get desktopSettingsGeneralKeywords => 'language, locale, enter, sending, input';
+
+  @override
+  String get desktopSettingsAppearanceLabel => 'Appearance';
+
+  @override
+  String get desktopSettingsAppearanceSubtitle => 'Theme, accent, chat wallpaper';
+
+  @override
+  String get desktopSettingsAppearanceKeywords => 'theme, accent, wallpaper, background, bubbles, colour, dark, ticks, animation';
+
+  @override
+  String get desktopSettingsShortcutsLabel => 'Keyboard shortcuts';
+
+  @override
+  String get desktopSettingsShortcutsSubtitle => 'What to press to go faster';
+
+  @override
+  String get desktopSettingsShortcutsKeywords => 'keys, shortcuts, fast, cmd, ctrl';
+
+  @override
+  String get desktopSettingsPowerLabel => 'Power use';
+
+  @override
+  String get desktopSettingsPowerSubtitle => 'What drains the battery';
+
+  @override
+  String get desktopSettingsPowerKeywords => 'battery, animation, frames, glass, panels, performance, heat';
+
+  @override
+  String get desktopSettingsNotificationsLabel => 'Notifications';
+
+  @override
+  String get desktopSettingsNotificationsSubtitle => 'Sounds, previews, quiet';
+
+  @override
+  String get desktopSettingsNotificationsKeywords => 'sound, preview, quiet, do not disturb, banner, text';
+
+  @override
+  String get desktopSettingsCallsLabel => 'Calls';
+
+  @override
+  String get desktopSettingsCallsSubtitle => 'Receiving calls and screen sharing';
+
+  @override
+  String get desktopSettingsCallsKeywords => 'calls, incoming, screen sharing, screen, video, audio';
+
+  @override
+  String get desktopSettingsMediaLabel => 'Sound and video';
+
+  @override
+  String get desktopSettingsMediaSubtitle => 'Camera and microphone for calls';
+
+  @override
+  String get desktopSettingsMediaKeywords => 'camera, microphone, device, webcam, headset, headphones, sound, video';
+
+  @override
+  String get desktopSettingsPrivacyLabel => 'Privacy';
+
+  @override
+  String get desktopSettingsPrivacySubtitle => 'Who sees what about you';
+
+  @override
+  String get desktopSettingsPrivacyKeywords => 'who sees, last seen, photo, calls, messages, forwarding, nickname, search, strangers, delete account';
+
+  @override
+  String get desktopSettingsSecurityLabel => 'Security';
+
+  @override
+  String get desktopSettingsSecuritySubtitle => 'Encryption and verified devices';
+
+  @override
+  String get desktopSettingsSecurityKeywords => 'encryption, e2ee, verified, unverified, lock, password, touch id, verification';
+
+  @override
+  String get desktopSettingsBackupLabel => 'Backup';
+
+  @override
+  String get desktopSettingsBackupSubtitle => 'What will save your conversation history';
+
+  @override
+  String get desktopSettingsBackupKeywords => 'backup, copy, restore, safe backup, backup password, media';
+
+  @override
+  String get desktopSettingsBlockedLabel => 'Blocked';
+
+  @override
+  String get desktopSettingsBlockedSubtitle => 'Who is shut out from you';
+
+  @override
+  String get desktopSettingsBlockedKeywords => 'block, blocked, unblock, blacklist, spam';
+
+  @override
+  String get desktopSettingsDevicesLabel => 'Sessions and devices';
+
+  @override
+  String get desktopSettingsDevicesSubtitle => 'Active sessions';
+
+  @override
+  String get desktopSettingsDevicesKeywords => 'devices, sessions, qr, linking, sign out, backup';
+
+  @override
+  String get desktopSettingsAccountLabel => 'Account';
+
+  @override
+  String get desktopSettingsAccountSubtitle => 'Profile and signing out';
+
+  @override
+  String get desktopSettingsAccountKeywords => 'name, about, id, sign out, reset';
+
+  @override
+  String get desktopSettingsStorageLabel => 'Storage';
+
+  @override
+  String get desktopSettingsStorageSubtitle => 'Cache, downloads';
+
+  @override
+  String get desktopSettingsStorageKeywords => 'cache, space, clear, media, downloads';
+
+  @override
+  String get desktopSettingsSupportLabel => 'Support';
+
+  @override
+  String get desktopSettingsSupportSubtitle => 'An encrypted conversation with us';
+
+  @override
+  String get desktopSettingsSupportKeywords => 'support, help, problem, bug, write';
+
+  @override
+  String get desktopSettingsAboutLabel => 'About';
+
+  @override
+  String get desktopSettingsAboutKeywords => 'version, build, licences, website';
+
+  @override
+  String get desktopSettingsDangerLabel => 'Delete the account';
+
+  @override
+  String get desktopSettingsEndCallFirst => 'End the active call first.';
+
+  @override
+  String get desktopSettingsSignOutTitle => 'Sign out of the account on this computer?';
+
+  @override
+  String get desktopSettingsSignOutBody => 'The conversations, keys and cache will be removed from this computer. The account and the history on the phone are untouched — the desktop can be linked again with a QR code.';
+
+  @override
+  String get desktopSettingsSignOut => 'Sign out';
+
+  @override
+  String desktopSettingsSignOutFailed(Object error) {
+    return 'Could not sign out: $error';
+  }
+
+  @override
+  String get desktopSettingsActive => 'active';
 }

@@ -2666,4 +2666,180 @@ class AppLocalizationsUk extends AppLocalizations {
   String desktopCallFps(Object fps) {
     return '$fps к/с';
   }
+
+  @override
+  String get desktopSettingsTitle => 'Налаштування';
+
+  @override
+  String get desktopSettingsGroupApp => 'Застосунок';
+
+  @override
+  String get desktopSettingsGroupPrivacy => 'Приватність і безпека';
+
+  @override
+  String get desktopSettingsGroupAccount => 'Обліковий запис і дані';
+
+  @override
+  String get desktopSettingsGeneralLabel => 'Загальні';
+
+  @override
+  String get desktopSettingsGeneralSubtitle => 'Мова, поведінка застосунку';
+
+  @override
+  String get desktopSettingsGeneralKeywords => 'мова, локаль, enter, надсилання, введення';
+
+  @override
+  String get desktopSettingsAppearanceLabel => 'Вигляд';
+
+  @override
+  String get desktopSettingsAppearanceSubtitle => 'Тема, акцент, шпалери чату';
+
+  @override
+  String get desktopSettingsAppearanceKeywords => 'тема, акцент, шпалери, тло, бульбашки, колір, темна, галочки, анімація';
+
+  @override
+  String get desktopSettingsShortcutsLabel => 'Гарячі клавіші';
+
+  @override
+  String get desktopSettingsShortcutsSubtitle => 'Що натискати, щоб швидше';
+
+  @override
+  String get desktopSettingsShortcutsKeywords => 'клавіші, сполучення, швидко, cmd, ctrl';
+
+  @override
+  String get desktopSettingsPowerLabel => 'Енергоспоживання';
+
+  @override
+  String get desktopSettingsPowerSubtitle => 'Що витрачає батарею';
+
+  @override
+  String get desktopSettingsPowerKeywords => 'батарея, анімація, рамки, скло, панелі, продуктивність, нагрів';
+
+  @override
+  String get desktopSettingsNotificationsLabel => 'Сповіщення';
+
+  @override
+  String get desktopSettingsNotificationsSubtitle => 'Звуки, попередній перегляд, тиша';
+
+  @override
+  String get desktopSettingsNotificationsKeywords => 'звук, перегляд, тиша, не турбувати, банер, текст';
+
+  @override
+  String get desktopSettingsCallsLabel => 'Дзвінки';
+
+  @override
+  String get desktopSettingsCallsSubtitle => 'Приймання дзвінків і показ екрана';
+
+  @override
+  String get desktopSettingsCallsKeywords => 'дзвінки, вхідні, показ екрана, екран, відео, аудіо';
+
+  @override
+  String get desktopSettingsMediaLabel => 'Звук і відео';
+
+  @override
+  String get desktopSettingsMediaSubtitle => 'Камера та мікрофон для дзвінків';
+
+  @override
+  String get desktopSettingsMediaKeywords => 'камера, мікрофон, пристрій, вебкамера, гарнітура, навушники, звук, відео';
+
+  @override
+  String get desktopSettingsPrivacyLabel => 'Приватність';
+
+  @override
+  String get desktopSettingsPrivacySubtitle => 'Хто і що про вас бачить';
+
+  @override
+  String get desktopSettingsPrivacyKeywords => 'хто бачить, час входу, фото, дзвінки, повідомлення, пересилання, нікнейм, пошук, незнайомці';
+
+  @override
+  String get desktopSettingsSecurityLabel => 'Безпека';
+
+  @override
+  String get desktopSettingsSecuritySubtitle => 'Шифрування та перевірені пристрої';
+
+  @override
+  String get desktopSettingsSecurityKeywords => 'шифрування, e2ee, перевірені, неперевірені, блокування, пароль, touch id, звірка';
+
+  @override
+  String get desktopSettingsBackupLabel => 'Резервна копія';
+
+  @override
+  String get desktopSettingsBackupSubtitle => 'Що врятує історію листування';
+
+  @override
+  String get desktopSettingsBackupKeywords => 'резервна, копія, відновлення, safe backup, пароль копії, медіа';
+
+  @override
+  String get desktopSettingsBlockedLabel => 'Заблоковані';
+
+  @override
+  String get desktopSettingsBlockedSubtitle => 'Кому закрито доступ до вас';
+
+  @override
+  String get desktopSettingsBlockedKeywords => 'блок, заблоковані, розблокувати, чорний список, спам';
+
+  @override
+  String get desktopSettingsDevicesLabel => 'Сеанси та пристрої';
+
+  @override
+  String get desktopSettingsDevicesSubtitle => 'Активні сеанси';
+
+  @override
+  String get desktopSettingsDevicesKeywords => 'пристрої, сеанси, qr, прив’язка, вихід, резервна копія';
+
+  @override
+  String get desktopSettingsAccountLabel => 'Обліковий запис';
+
+  @override
+  String get desktopSettingsAccountSubtitle => 'Профіль і вихід';
+
+  @override
+  String get desktopSettingsAccountKeywords => 'ім’я, про себе, id, вийти, скинути';
+
+  @override
+  String get desktopSettingsStorageLabel => 'Сховище';
+
+  @override
+  String get desktopSettingsStorageSubtitle => 'Кеш, завантаження';
+
+  @override
+  String get desktopSettingsStorageKeywords => 'кеш, місце, очистити, медіа, завантаження';
+
+  @override
+  String get desktopSettingsSupportLabel => 'Підтримка';
+
+  @override
+  String get desktopSettingsSupportSubtitle => 'Зашифроване листування з нами';
+
+  @override
+  String get desktopSettingsSupportKeywords => 'підтримка, допомога, проблема, помилка, написати';
+
+  @override
+  String get desktopSettingsAboutLabel => 'Про програму';
+
+  @override
+  String get desktopSettingsAboutKeywords => 'версія, збірка, ліцензії, сайт';
+
+  @override
+  String get desktopSettingsDangerLabel => 'Видалити обліковий запис';
+
+  @override
+  String get desktopSettingsEndCallFirst => 'Спочатку завершіть активний дзвінок.';
+
+  @override
+  String get desktopSettingsSignOutTitle => 'Вийти з облікового запису на цьому комп’ютері?';
+
+  @override
+  String get desktopSettingsSignOutBody => 'З цього комп’ютера буде видалено листування, ключі та кеш. Обліковий запис та історія на телефоні не постраждають — комп’ютер можна прив’язати знову за QR-кодом.';
+
+  @override
+  String get desktopSettingsSignOut => 'Вийти';
+
+  @override
+  String desktopSettingsSignOutFailed(Object error) {
+    return 'Не вдалося вийти: $error';
+  }
+
+  @override
+  String get desktopSettingsActive => 'активно';
 }
