@@ -2015,5 +2015,16 @@
   "desktopOutgoingOnePhoto": "Фото",
   "desktopOutgoingOneVideo": "Видео",
   "desktopOutgoingOneAudio": "Аудио",
-  "desktopOutgoingOneFile": "Файл"
+  "desktopOutgoingOneFile": "Файл",
+  "desktopMenuSettings": "Настройки…",
+  "desktopMenuEdit": "Правка",
+  "desktopMenuUndo": "Отменить",
+  "desktopMenuRedo": "Повторить",
+  "desktopMenuCut": "Вырезать",
+  "desktopMenuPaste": "Вставить",
+  "desktopMenuSelectAll": "Выбрать все",
+  "desktopMenuView": "Вид",
+  "desktopMenuWindow": "Окно",
+  "desktopMenuHelp": "Справка",
+  "desktopMenuWebsite": "Сайт Secretly"
 }

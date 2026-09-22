@@ -2019,5 +2019,16 @@
   "desktopOutgoingOnePhoto": "Foto",
   "desktopOutgoingOneVideo": "Video",
   "desktopOutgoingOneAudio": "Audio",
-  "desktopOutgoingOneFile": "Datei"
+  "desktopOutgoingOneFile": "Datei",
+  "desktopMenuSettings": "Einstellungen …",
+  "desktopMenuEdit": "Bearbeiten",
+  "desktopMenuUndo": "Widerrufen",
+  "desktopMenuRedo": "Wiederholen",
+  "desktopMenuCut": "Ausschneiden",
+  "desktopMenuPaste": "Einsetzen",
+  "desktopMenuSelectAll": "Alles auswählen",
+  "desktopMenuView": "Darstellung",
+  "desktopMenuWindow": "Fenster",
+  "desktopMenuHelp": "Hilfe",
+  "desktopMenuWebsite": "Secretly-Website"
 }

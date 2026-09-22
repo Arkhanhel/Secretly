@@ -2715,5 +2715,16 @@
   "desktopOutgoingOnePhoto": "Photo",
   "desktopOutgoingOneVideo": "Video",
   "desktopOutgoingOneAudio": "Audio",
-  "desktopOutgoingOneFile": "File"
+  "desktopOutgoingOneFile": "File",
+  "desktopMenuSettings": "Settings…",
+  "desktopMenuEdit": "Edit",
+  "desktopMenuUndo": "Undo",
+  "desktopMenuRedo": "Redo",
+  "desktopMenuCut": "Cut",
+  "desktopMenuPaste": "Paste",
+  "desktopMenuSelectAll": "Select All",
+  "desktopMenuView": "View",
+  "desktopMenuWindow": "Window",
+  "desktopMenuHelp": "Help",
+  "desktopMenuWebsite": "Secretly Website"
 }

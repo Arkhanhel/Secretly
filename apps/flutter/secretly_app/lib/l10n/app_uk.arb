@@ -2019,5 +2019,16 @@
   "desktopOutgoingOnePhoto": "Фото",
   "desktopOutgoingOneVideo": "Відео",
   "desktopOutgoingOneAudio": "Аудіо",
-  "desktopOutgoingOneFile": "Файл"
+  "desktopOutgoingOneFile": "Файл",
+  "desktopMenuSettings": "Налаштування…",
+  "desktopMenuEdit": "Редагування",
+  "desktopMenuUndo": "Скасувати",
+  "desktopMenuRedo": "Повторити",
+  "desktopMenuCut": "Вирізати",
+  "desktopMenuPaste": "Вставити",
+  "desktopMenuSelectAll": "Вибрати все",
+  "desktopMenuView": "Вигляд",
+  "desktopMenuWindow": "Вікно",
+  "desktopMenuHelp": "Довідка",
+  "desktopMenuWebsite": "Сайт Secretly"
 }

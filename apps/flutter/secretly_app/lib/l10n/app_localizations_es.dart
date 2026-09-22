@@ -5638,4 +5638,37 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get desktopOutgoingOneFile => 'Archivo';
+
+  @override
+  String get desktopMenuSettings => 'Ajustes…';
+
+  @override
+  String get desktopMenuEdit => 'Edición';
+
+  @override
+  String get desktopMenuUndo => 'Deshacer';
+
+  @override
+  String get desktopMenuRedo => 'Rehacer';
+
+  @override
+  String get desktopMenuCut => 'Cortar';
+
+  @override
+  String get desktopMenuPaste => 'Pegar';
+
+  @override
+  String get desktopMenuSelectAll => 'Seleccionar todo';
+
+  @override
+  String get desktopMenuView => 'Visualización';
+
+  @override
+  String get desktopMenuWindow => 'Ventana';
+
+  @override
+  String get desktopMenuHelp => 'Ayuda';
+
+  @override
+  String get desktopMenuWebsite => 'Sitio web de Secretly';
 }

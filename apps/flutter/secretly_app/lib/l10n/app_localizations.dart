@@ -10443,6 +10443,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'File'**
   String get desktopOutgoingOneFile;
+
+  /// No description provided for @desktopMenuSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings…'**
+  String get desktopMenuSettings;
+
+  /// No description provided for @desktopMenuEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get desktopMenuEdit;
+
+  /// No description provided for @desktopMenuUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get desktopMenuUndo;
+
+  /// No description provided for @desktopMenuRedo.
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get desktopMenuRedo;
+
+  /// No description provided for @desktopMenuCut.
+  ///
+  /// In en, this message translates to:
+  /// **'Cut'**
+  String get desktopMenuCut;
+
+  /// No description provided for @desktopMenuPaste.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste'**
+  String get desktopMenuPaste;
+
+  /// No description provided for @desktopMenuSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select All'**
+  String get desktopMenuSelectAll;
+
+  /// No description provided for @desktopMenuView.
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get desktopMenuView;
+
+  /// No description provided for @desktopMenuWindow.
+  ///
+  /// In en, this message translates to:
+  /// **'Window'**
+  String get desktopMenuWindow;
+
+  /// No description provided for @desktopMenuHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Help'**
+  String get desktopMenuHelp;
+
+  /// No description provided for @desktopMenuWebsite.
+  ///
+  /// In en, this message translates to:
+  /// **'Secretly Website'**
+  String get desktopMenuWebsite;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

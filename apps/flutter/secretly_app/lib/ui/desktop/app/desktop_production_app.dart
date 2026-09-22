@@ -28,6 +28,7 @@ import '../chat/details/details_drawer.dart';
 import '../chat/details/desktop_selection_store.dart';
 import '../design/theme_bridge.dart';
 import '../design/tokens.dart';
+import '../shell/desktop_app_menu.dart';
 import '../shell/desktop_shell.dart';
 import '../primitives/desktop_snackbar.dart';
 import '../shell/rail_live.dart';
@@ -1557,14 +1558,38 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
           child: DColors(
             colors: colors,
             child: Builder(
-              builder: (ctx) =>
-                  _OverlayHost(key: _overlayHostKey, child: _buildRoot()),
+              // Строка меню macOS — здесь, ВНУТРИ `MaterialApp`: она берёт
+              // подписи из тех же переводов, что и окно, и перестраивается
+              // вместе с ним, когда язык меняют в настройках. Снаружи
+              // переводов нет (см. геттер `l10n` выше).
+              //
+              // Пункты выдаются ровно тогда, когда за ними что-то есть:
+              // до готовности и на экране привязки настроек ещё нет, и
+              // «Настройки… ⌘,» в меню были бы обещанием впустую.
+              builder: (ctx) => DesktopAppMenu(
+                onOpenSettings: _menuReady ? () => _openSettings() : null,
+                onOpenShortcuts: _menuReady
+                    ? () => _openSettings(sectionId: 'shortcuts')
+                    : null,
+                onOpenAbout: _menuReady
+                    ? () => _openSettings(sectionId: 'about')
+                    : null,
+                child: _OverlayHost(key: _overlayHostKey, child: _buildRoot()),
+              ),
             ),
           ),
         ),
       ),
     );
   }
+
+  /// Готово ли приложение показывать пункты меню, ведущие в настройки.
+  ///
+  /// Те же два условия, по которым `_buildRoot` решает, рисовать ли оболочку:
+  /// до готовности внизу заставка, а при непривязанном профиле — экран
+  /// привязки, и настроек в обоих случаях ещё нет.
+  bool get _menuReady =>
+      _ready && !_controller.requiresDesktopProfileSelection;
 
   Widget _buildRoot() {
     if (!_ready) {

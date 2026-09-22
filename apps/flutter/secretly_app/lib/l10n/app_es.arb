@@ -2019,5 +2019,16 @@
   "desktopOutgoingOnePhoto": "Foto",
   "desktopOutgoingOneVideo": "Vídeo",
   "desktopOutgoingOneAudio": "Audio",
-  "desktopOutgoingOneFile": "Archivo"
+  "desktopOutgoingOneFile": "Archivo",
+  "desktopMenuSettings": "Ajustes…",
+  "desktopMenuEdit": "Edición",
+  "desktopMenuUndo": "Deshacer",
+  "desktopMenuRedo": "Rehacer",
+  "desktopMenuCut": "Cortar",
+  "desktopMenuPaste": "Pegar",
+  "desktopMenuSelectAll": "Seleccionar todo",
+  "desktopMenuView": "Visualización",
+  "desktopMenuWindow": "Ventana",
+  "desktopMenuHelp": "Ayuda",
+  "desktopMenuWebsite": "Sitio web de Secretly"
 }

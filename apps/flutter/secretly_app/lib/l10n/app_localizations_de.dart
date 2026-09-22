@@ -5638,4 +5638,37 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get desktopOutgoingOneFile => 'Datei';
+
+  @override
+  String get desktopMenuSettings => 'Einstellungen …';
+
+  @override
+  String get desktopMenuEdit => 'Bearbeiten';
+
+  @override
+  String get desktopMenuUndo => 'Widerrufen';
+
+  @override
+  String get desktopMenuRedo => 'Wiederholen';
+
+  @override
+  String get desktopMenuCut => 'Ausschneiden';
+
+  @override
+  String get desktopMenuPaste => 'Einsetzen';
+
+  @override
+  String get desktopMenuSelectAll => 'Alles auswählen';
+
+  @override
+  String get desktopMenuView => 'Darstellung';
+
+  @override
+  String get desktopMenuWindow => 'Fenster';
+
+  @override
+  String get desktopMenuHelp => 'Hilfe';
+
+  @override
+  String get desktopMenuWebsite => 'Secretly-Website';
 }

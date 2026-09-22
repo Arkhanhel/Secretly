@@ -5658,4 +5658,37 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get desktopOutgoingOneFile => 'Файл';
+
+  @override
+  String get desktopMenuSettings => 'Налаштування…';
+
+  @override
+  String get desktopMenuEdit => 'Редагування';
+
+  @override
+  String get desktopMenuUndo => 'Скасувати';
+
+  @override
+  String get desktopMenuRedo => 'Повторити';
+
+  @override
+  String get desktopMenuCut => 'Вирізати';
+
+  @override
+  String get desktopMenuPaste => 'Вставити';
+
+  @override
+  String get desktopMenuSelectAll => 'Вибрати все';
+
+  @override
+  String get desktopMenuView => 'Вигляд';
+
+  @override
+  String get desktopMenuWindow => 'Вікно';
+
+  @override
+  String get desktopMenuHelp => 'Довідка';
+
+  @override
+  String get desktopMenuWebsite => 'Сайт Secretly';
 }

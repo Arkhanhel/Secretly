@@ -5638,6 +5638,39 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get desktopOutgoingOneFile => 'Ficheiro';
+
+  @override
+  String get desktopMenuSettings => 'Definições…';
+
+  @override
+  String get desktopMenuEdit => 'Editar';
+
+  @override
+  String get desktopMenuUndo => 'Anular';
+
+  @override
+  String get desktopMenuRedo => 'Refazer';
+
+  @override
+  String get desktopMenuCut => 'Cortar';
+
+  @override
+  String get desktopMenuPaste => 'Colar';
+
+  @override
+  String get desktopMenuSelectAll => 'Selecionar tudo';
+
+  @override
+  String get desktopMenuView => 'Visualização';
+
+  @override
+  String get desktopMenuWindow => 'Janela';
+
+  @override
+  String get desktopMenuHelp => 'Ajuda';
+
+  @override
+  String get desktopMenuWebsite => 'Site do Secretly';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -11274,4 +11307,37 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopOutgoingOneFile => 'Arquivo';
+
+  @override
+  String get desktopMenuSettings => 'Ajustes…';
+
+  @override
+  String get desktopMenuEdit => 'Editar';
+
+  @override
+  String get desktopMenuUndo => 'Desfazer';
+
+  @override
+  String get desktopMenuRedo => 'Refazer';
+
+  @override
+  String get desktopMenuCut => 'Recortar';
+
+  @override
+  String get desktopMenuPaste => 'Colar';
+
+  @override
+  String get desktopMenuSelectAll => 'Selecionar tudo';
+
+  @override
+  String get desktopMenuView => 'Visualizar';
+
+  @override
+  String get desktopMenuWindow => 'Janela';
+
+  @override
+  String get desktopMenuHelp => 'Ajuda';
+
+  @override
+  String get desktopMenuWebsite => 'Site do Secretly';
 }

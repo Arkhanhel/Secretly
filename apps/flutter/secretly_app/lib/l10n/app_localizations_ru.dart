@@ -5658,4 +5658,37 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get desktopOutgoingOneFile => 'Файл';
+
+  @override
+  String get desktopMenuSettings => 'Настройки…';
+
+  @override
+  String get desktopMenuEdit => 'Правка';
+
+  @override
+  String get desktopMenuUndo => 'Отменить';
+
+  @override
+  String get desktopMenuRedo => 'Повторить';
+
+  @override
+  String get desktopMenuCut => 'Вырезать';
+
+  @override
+  String get desktopMenuPaste => 'Вставить';
+
+  @override
+  String get desktopMenuSelectAll => 'Выбрать все';
+
+  @override
+  String get desktopMenuView => 'Вид';
+
+  @override
+  String get desktopMenuWindow => 'Окно';
+
+  @override
+  String get desktopMenuHelp => 'Справка';
+
+  @override
+  String get desktopMenuWebsite => 'Сайт Secretly';
 }
