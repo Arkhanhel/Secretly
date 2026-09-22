@@ -6,13 +6,23 @@
 /// This entry is intentionally separate from [lib/main.dart] so that the
 /// mobile builds (Android + iOS — already shipping) remain untouched.
 ///
-/// **Platform status (08.09.2026) — stated as fact, not as intent:**
+/// **Platform status (22.09.2026) — stated as fact, not as intent.**
+///
+/// 🔴 ЭТА ТАБЛИЦА ВРАЛА В ОБЕ СТОРОНЫ, и это стоит записать. Она говорила, что
+/// macOS собирается в CI работой `desktop_macos`, — такой работы в
+/// `docs/public/github/workflows/ci.yml` не было ни одной (настоящая добавлена
+/// этим же заходом). И что Windows «never built in CI», — а работа
+/// `Windows — build` зелёная с 20.09.2026. Таблица, которой нельзя верить,
+/// хуже отсутствующей: по ней принимают решения. Сверять её надо ПО ФАЙЛУ
+/// рабочего потока, а не по памяти.
 ///
 /// | Platform | Status |
 /// |---|---|
-/// | macOS | **shipped target.** Built in CI (`desktop_macos`), release script `tools/desktop_release_macos.sh`. Signing + notarisation still open (R-06/R-07). |
-/// | Windows | **experimental.** The runner exists (`windows/`) and the code compiles, but it is never built in CI, has never been validated, and single-instance still uses a lock file instead of a named mutex (R-15). Not distributed. |
-/// | Linux | **not supported.** There is no `linux/` runner directory — `flutter build linux` will fail until someone runs `flutter create --platforms=linux` (R-11). |
+/// | macOS | **shipped target**, но ещё не отгружаемый. Собирается в CI (работа `macOS — build`) и подписывается `Developer ID Application: Secretly SIA (3HF84UAL32)`. Заверения (notarization) ещё не было: `spctl --assess` отвечает `Unnotarized Developer ID`, то есть скачанную копию Gatekeeper пока не откроет. |
+/// | Windows | **собирается в CI** с 20.09.2026 (работа `Windows — build`). Не отгружается: нет установщика и подписи (A-5), второй запуск не выводит окно вперёд — файл-замок вместо именованного мьютекса (A-6), после сна не переподключается (A-7), PDF показать нечем (A-8). |
+/// | Linux | **not supported.** There is no `linux/` runner directory — `flutter build linux` will fail until someone runs `flutter create --platforms=linux` (A-9). |
+///
+/// Что осталось до выпуска и в каком порядке — `docs/TZ_DESKTOP_RELEASE_2026-09-21.md`.
 ///
 /// The runtime guard below still admits all three so a developer can run on
 /// Windows/Linux; that is a developer affordance, not a shipping claim.
@@ -23,13 +33,18 @@
 ///   flutter build windows --target=lib/main_desktop.dart   # experimental
 ///   # flutter build linux — unavailable, no linux/ runner (R-11)
 ///
-/// macOS + iCloud: this project lives under ~/Documents, which is
-/// iCloud-synced. The file-provider daemon stamps every file in that subtree
-/// with `com.apple.fileprovider.fpfs#P` xattrs, and modern codesign refuses
-/// to sign anything carrying that "detritus". The build helper at
-/// `tools/desktop_build_macos.sh` symlinks `build/macos` to
-/// `~/Library/Caches/secretly_app_build_macos` (outside iCloud) so the .app
-/// can be code-signed cleanly. Re-run the helper after `flutter clean`.
+/// macOS + iCloud: репозиторий ЖИЛ под ~/Documents, а это каталог под iCloud.
+/// Его служба помечает каждый файл в поддереве xattr-ами
+/// `com.apple.fileprovider.fpfs#P`, и codesign отказывается подписывать
+/// что-либо с таким «мусором». Поэтому сборочные помощники
+/// (`tools/desktop_build_macos.sh`, `tools/desktop_release_macos.sh`) делают
+/// `build/macos` ссылкой на `~/Library/Caches/secretly_app_build_macos`.
+///
+/// С переезда в `~/dev/Secretly-code` (вне iCloud) исходники этим xattr-ам
+/// больше не подвержены, но ссылка ОСТАВЛЕНА: она ничего не стоит, снимает
+/// сборку с любого возможного синхронизируемого каталога разом и защищает от
+/// возврата проекта под iCloud. Пересоздавать её после `flutter clean` —
+/// повторным запуском помощника.
 library;
 
 import 'dart:async';

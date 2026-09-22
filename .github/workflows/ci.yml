@@ -81,6 +81,52 @@ jobs:
       - name: Build
         run: flutter build windows --release
 
+  macos:
+    name: macOS — build
+    runs-on: macos-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: apps/flutter/secretly_app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.41.7
+          cache: true
+
+      # The macOS bundle embeds a Rust plugin (third_party/audiotags, built by
+      # cargokit), so cargo has to be here. The version comes from the
+      # committed rust-toolchain.toml — rustup installs it on demand.
+      - name: Show toolchain
+        run: rustc --version && cargo --version
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v4
+        with:
+          path: apps/flutter/secretly_app/macos/Pods
+          key: pods-macos-${{ hashFiles('apps/flutter/secretly_app/macos/Podfile.lock') }}
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      # WHY THIS JOB EXISTS. macOS is the only desktop platform we actually
+      # ship, and until 21.09.2026 it was the ONLY platform not built here:
+      # it compiled on one maintainer's machine and nowhere else, so a broken
+      # build was noticed by that one person, by hand, whenever they next
+      # happened to build. Windows — the platform nobody develops on — had
+      # better coverage than the shipping one.
+      #
+      # Signing is deliberately NOT done here. CI holds no certificates, and
+      # the artefact would be ad-hoc signed: Gatekeeper refuses a downloaded
+      # copy of that, so publishing it would be worse than publishing nothing.
+      # This job answers one question only — does it still compile.
+      - name: Build
+        run: flutter build macos --release
+
   rust:
     name: Rust — build and test
     runs-on: ubuntu-latest
