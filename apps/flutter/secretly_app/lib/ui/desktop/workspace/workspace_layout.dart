@@ -23,6 +23,7 @@ class WorkspaceLayout extends StatefulWidget {
     this.sidebarWidth = 238,
     this.onClose,
     this.trailing,
+    this.contentMaxWidth,
   });
 
   final String title;
@@ -41,6 +42,22 @@ class WorkspaceLayout extends StatefulWidget {
   final VoidCallback? onClose;
   final Widget? trailing;
 
+  /// Наибольшая ширина СОДЕРЖИМОГО. `null` — во всю ширину области.
+  ///
+  /// 🔴 БЕЗ НЕЁ НАСТРОЙКИ РАЗВАЛИВАЮТСЯ НА ПОЛНОМ ЭКРАНЕ. Область содержимого
+  /// занимала всё, что осталось от боковой колонки: на мониторе 3440 точек это
+  /// строка настройки шириной больше трёх тысяч — подпись прижата к левому
+  /// краю, переключатель к правому, между ними метр пустоты. Глаз перестаёт
+  /// связывать одно с другим, и страница выглядит не «просторной», а
+  /// недоделанной: то же самое окно на ноутбуке смотрится нормально, и
+  /// разницу владелец видит каждый раз, когда разворачивает окно.
+  ///
+  /// Так же поступают и Telegram, и Discord, и системные настройки macOS:
+  /// колонка содержимого имеет предел и стоит по центру области, а не
+  /// растягивается. Предел применяется И К ШАПКЕ раздела, иначе её заголовок
+  /// уезжал бы влево от карточек, которые он называет.
+  final double? contentMaxWidth;
+
   @override
   State<WorkspaceLayout> createState() => _WorkspaceLayoutState();
 }
@@ -56,6 +73,7 @@ class WorkspaceSection {
     this.group,
     this.keywords = const <String>[],
     this.trailing,
+    this.tint,
   });
   final String id;
   final IconData icon;
@@ -63,6 +81,18 @@ class WorkspaceSection {
   final String? subtitle;
   final WidgetBuilder builder;
   final bool dangerous;
+
+  /// Цвет плитки под значком раздела — второе имя раздела.
+  ///
+  /// 🔴 ЗАЧЕМ ЦВЕТ, ЕСЛИ ЕСТЬ ПОДПИСЬ. Разделов семнадцать, и в одноцветном
+  /// списке они отличаются только текстом: чтобы найти «Уведомления», список
+  /// приходится ЧИТАТЬ сверху вниз. С телефона человек уже помнит, что
+  /// уведомления красные, а устройства голубые, и находит строку, не читая.
+  /// Поэтому числа взяты с телефона ([DIconTint]), а не подобраны заново.
+  ///
+  /// `null` — плитки нет, рисуется голый значок: так выглядят разделы
+  /// окон-воркспейсов, у которых своей палитры нет.
+  final Color? tint;
 
   /// Heading this section sits under in the sidebar. Sections sharing a group
   /// are rendered together under one quiet label; null keeps a section
@@ -229,11 +259,52 @@ class _WorkspaceLayoutState extends State<WorkspaceLayout> {
     );
   }
 
+  /// Колонка содержимого: шире предела не растёт, по центру области.
+  ///
+  /// Полоса прокрутки при этом остаётся ВНУТРИ колонки, у самого её края, а не
+  /// улетает к краю окна за пустым полем: полоса — часть того, что ты
+  /// листаешь, и на ультрашироком мониторе тянуться к ней через полметра
+  /// пустоты было бы хуже, чем не иметь её вовсе.
+  Widget _constrain(Widget child) {
+    final max = widget.contentMaxWidth;
+    if (max == null) return child;
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: max),
+        child: child,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
-    return Focus(
+    // Полоса прокрутки — та же, что в ленте переписки (`chat_thread_panel`):
+    // 6 точек, скругление 3, приглушённый ползунок. Задаётся темой, а не
+    // обёрткой вокруг каждого списка: списков внутри настроек больше десятка
+    // (разделы, устройства, переписка с поддержкой), и обернуть каждый значит
+    // однажды забыть — и получить в одном окне две разные полосы.
+    return Theme(
+      data: Theme.of(context).copyWith(
+        scrollbarTheme: ScrollbarThemeData(
+          thickness: const WidgetStatePropertyAll<double>(6),
+          radius: const Radius.circular(3),
+          // Ползунок ТАЩАТ мышью — ради этого он на компьютере и нужен.
+          interactive: true,
+          thumbColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.dragged)) {
+              return c.textSecondary.withValues(alpha: 0.85);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return c.textDisabled.withValues(alpha: 0.75);
+            }
+            return c.textDisabled.withValues(alpha: 0.45);
+          }),
+        ),
+      ),
+      child: Focus(
       autofocus: true,
       onKeyEvent: _onKey,
       child: Container(
@@ -313,10 +384,18 @@ class _WorkspaceLayoutState extends State<WorkspaceLayout> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Шапка во всю ширину — её нижняя черта отделяет заголовок от
+                // содержимого по всей области, как перекладина окна. А вот
+                // ТЕКСТ внутри неё живёт в той же колонке, что и карточки
+                // ниже: иначе заголовок стоял бы у левого края, а названная им
+                // карточка — посередине.
                 _ContentHeader(
                   title: widget.sections[_index].label,
                   subtitle: widget.sections[_index].subtitle,
+                  icon: widget.sections[_index].icon,
+                  tint: widget.sections[_index].tint,
                   trailing: widget.trailing,
+                  maxWidth: widget.contentMaxWidth,
                 ),
                 Expanded(
                   child: AnimatedSwitcher(
@@ -333,7 +412,7 @@ class _WorkspaceLayoutState extends State<WorkspaceLayout> {
                     ),
                     child: KeyedSubtree(
                       key: ValueKey(widget.sections[_index].id),
-                      child: widget.sections[_index].builder(context),
+                      child: _constrain(widget.sections[_index].builder(context)),
                     ),
                   ),
                 ),
@@ -343,6 +422,68 @@ class _WorkspaceLayoutState extends State<WorkspaceLayout> {
         ],
       ),
       ),
+      ),
+    );
+  }
+}
+
+/// Цветная плитка со значком — та же форма, что у настроек на телефоне.
+///
+/// Телефон рисует плитку 40×40 со скруглением 13 (`settings_screen.dart`,
+/// `squircle`). Окно плотнее телефона: строка списка здесь 36 точек против
+/// 56, и плитка в 40 её бы распёрла. Поэтому размер уменьшен ПРОПОРЦИОНАЛЬНО
+/// (28/40 ≈ 0.7, скругление 9 ≈ 13 × 0.7) — форма остаётся узнаваемо той же,
+/// а строка остаётся десктопной.
+///
+/// Заливка полупрозрачная, а не подмешанная к фону: строка меняет фон под
+/// собой при наведении и выборе, и непрозрачная плитка в эти моменты
+/// «отклеивалась» бы от строки прямоугольником чужого цвета.
+class WorkspaceIconPlate extends StatelessWidget {
+  const WorkspaceIconPlate({
+    super.key,
+    required this.icon,
+    required this.tint,
+    this.size = 28,
+    this.selected = false,
+  });
+
+  final IconData icon;
+
+  /// `null` — плитки нет, рисуется один значок в цвете подписи.
+  final Color? tint;
+  final double size;
+
+  /// Выбранный раздел: плитка наливается плотнее, значок — в полный цвет.
+  /// Без этого выбранная строка отличалась бы от прочих только фоном под
+  /// текстом, а глаз в списке из семнадцати строк цепляется за значок.
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    final tint = this.tint;
+    if (tint == null) {
+      return Icon(icon, size: size * 0.64, color: c.textSecondary);
+    }
+    // В тёмной теме цветная заливка по тёмному фону читается слабее, чем по
+    // светлому, — отсюда разные доли. Числа подобраны так, чтобы контраст
+    // значка к плитке в обеих темах оставался выше 4.5:1.
+    final dark = c.isDark;
+    final fill = tint.withValues(
+      alpha: selected ? (dark ? 0.26 : 0.20) : (dark ? 0.17 : 0.13),
+    );
+    final glyph = dark
+        ? HSLColor.fromColor(tint).withLightness(selected ? 0.72 : 0.66).toColor()
+        : HSLColor.fromColor(tint).withLightness(selected ? 0.42 : 0.46).toColor();
+    return AnimatedContainer(
+      duration: DMotion.fast,
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(size * 0.32),
+      ),
+      child: Center(child: Icon(icon, size: size * 0.61, color: glyph)),
     );
   }
 }
@@ -360,25 +501,32 @@ class _SectionRow extends StatelessWidget {
         : (active ? c.textPrimary : c.textSecondary);
     return HoverListener(
       onTap: onTap,
+      cursor: SystemMouseCursors.click,
       builder: (ctx, h, p) {
         return AnimatedContainer(
           duration: DMotion.fast,
-          margin: const EdgeInsets.symmetric(vertical: 2),
-          padding: const EdgeInsets.symmetric(horizontal: DSpace.s, vertical: 8),
+          margin: const EdgeInsets.symmetric(vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: DSpace.p6, vertical: DSpace.p5),
           decoration: BoxDecoration(
             color: active ? c.selected : (h ? c.hover : Colors.transparent),
-            borderRadius: BorderRadius.circular(DRadii.sm),
+            borderRadius: BorderRadius.circular(DRadii.r9),
           ),
           child: Row(
             children: [
-              Icon(section.icon, size: 18, color: fg),
-              const SizedBox(width: DSpace.s),
+              WorkspaceIconPlate(
+                icon: section.icon,
+                tint: section.tint,
+                selected: active,
+              ),
+              const SizedBox(width: DSpace.p10),
               Expanded(
                 child: Text(
                   section.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: DType.label.copyWith(
                     color: fg,
-                    fontWeight: active ? FontWeight.w600 : FontWeight.w600,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -395,37 +543,73 @@ class _SectionRow extends StatelessWidget {
 }
 
 class _ContentHeader extends StatelessWidget {
-  const _ContentHeader({required this.title, this.subtitle, this.trailing});
+  const _ContentHeader({
+    required this.title,
+    this.subtitle,
+    this.icon,
+    this.tint,
+    this.trailing,
+    this.maxWidth,
+  });
   final String title;
   final String? subtitle;
+  final IconData? icon;
+  final Color? tint;
   final Widget? trailing;
+  final double? maxWidth;
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
+    final row = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Тот же значок и тот же цвет, что в боковой колонке. Это не
+        // украшение: человек щёлкнул по строке слева и должен УВИДЕТЬ, что
+        // попал туда, куда целился, — одинаковая плитка отвечает на это
+        // быстрее, чем совпадение подписей.
+        if (icon != null) ...[
+          WorkspaceIconPlate(icon: icon!, tint: tint, size: 34, selected: true),
+          const SizedBox(width: DSpace.m),
+        ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, style: DType.title.copyWith(color: c.textPrimary)),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(subtitle!, style: DType.label.copyWith(color: c.textSecondary)),
+              ],
+            ],
+          ),
+        ),
+        if (trailing != null) trailing!,
+      ],
+    );
+    // Боковые поля лежат ВНУТРИ ограниченной колонки, а не снаружи её.
+    //
+    // Снаружи они сдвигали бы колонку шапки на 20 точек уже колонки карточек,
+    // и заголовок раздела вставал бы на два десятка точек левее карточки,
+    // которую называет. Расхождение мелкое ровно настолько, чтобы его не
+    // объяснить, но видно его сразу.
+    final padded = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: DSpace.xl),
+      child: row,
+    );
     return Container(
-      padding: const EdgeInsets.fromLTRB(DSpace.xl, DSpace.l, DSpace.xl, DSpace.m),
+      padding: const EdgeInsets.fromLTRB(0, DSpace.l, 0, DSpace.m),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: c.borderSubtle)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title, style: DType.title.copyWith(color: c.textPrimary)),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 2),
-                  Text(subtitle!, style: DType.label.copyWith(color: c.textSecondary)),
-                ],
-              ],
+      child: maxWidth == null
+          ? padded
+          : Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth!),
+                child: padded,
+              ),
             ),
-          ),
-          if (trailing != null) trailing!,
-        ],
-      ),
     );
   }
 }

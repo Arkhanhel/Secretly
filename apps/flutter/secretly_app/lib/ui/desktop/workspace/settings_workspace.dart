@@ -158,12 +158,37 @@ class SettingsWorkspace extends StatelessWidget {
       onClose: onClose,
       initialIndex: initial < 0 ? 0 : initial,
       sections: sections,
+      // 🔴 ПОЧЕМУ У НАСТРОЕК ЕСТЬ ПРЕДЕЛ ШИРИНЫ, А У ПЕРЕПИСКИ НЕТ.
+      //
+      // Переписка от ширины ВЫИГРЫВАЕТ: больше сообщений видно разом. Строка
+      // настройки не выигрывает ничего — у неё слева подпись, справа
+      // переключатель, и всё, что даёт лишняя ширина, это расстояние между
+      // ними. На мониторе владельца (3440 точек) оно доходило до полуметра:
+      // подпись «Отправлять по Enter» у одного края, переключатель у другого,
+      // и чтобы понять, что чем управляет, приходилось вести глазами по
+      // пустоте. Отсюда и ощущение «страница выглядит огромной».
+      //
+      // 760 выбрано по двум измеримым вещам, а не на глаз. Первое: при боковых
+      // полях по 20 точек остаётся 720 полезной ширины, и сетка обоев
+      // «Оформления» (плитка не шире 200, зазор 8) держит ЧЕТЫРЕ колонки по
+      // 174 — на 700 их остаётся три, и половина набора уезжает под прокрутку.
+      // Второе: строка настройки при такой ширине читается одним движением
+      // глаз, подпись и переключатель остаются в одном поле зрения.
+      contentMaxWidth: 760,
+      // 🔴 260, А НЕ 238 ПО УМОЛЧАНИЮ — ИЗ-ЗА ПЛИТОК И ИЗ-ЗА УКРАИНСКОГО.
+      //
+      // Плитка со значком шире прежнего голого значка на 12 точек, и на
+      // столько же сузилось место под подпись. Самая длинная подпись раздела
+      // среди восьми языков — украинское «Видалити обліковий запис», 24 знака;
+      // при 238 она обрывалась многоточием, а обрезанный «Удалить аккаунт» —
+      // ровно та строка, которую нельзя оставлять недочитанной.
+      sidebarWidth: 260,
       // 🔴 Единственный выход из аккаунта — здесь, внизу боковой колонки, как
       // в макете. Раньше он жил в двух разных панелях с разными текстами
       // подтверждения; см. [showSignOutDialog].
       footer: controller == null
           ? null
-          : _SignOutRow(controller: controller),
+          : _SidebarFooter(controller: controller),
     );
   }
 
@@ -181,6 +206,7 @@ class SettingsWorkspace extends StatelessWidget {
         // ── Приложение ───────────────────────────────────────────────
         WorkspaceSection(
           id: 'general',
+          tint: DIconTint.amber,
           icon: FluentIcons.settings_24_regular,
           label: l10n.desktopSettingsGeneralLabel,
           subtitle: l10n.desktopSettingsGeneralSubtitle,
@@ -190,6 +216,7 @@ class SettingsWorkspace extends StatelessWidget {
         ),
         WorkspaceSection(
           id: 'appearance',
+          tint: DIconTint.orange,
           icon: FluentIcons.color_24_regular,
           label: l10n.desktopSettingsAppearanceLabel,
           subtitle: l10n.desktopSettingsAppearanceSubtitle,
@@ -203,6 +230,7 @@ class SettingsWorkspace extends StatelessWidget {
         // разделом настроек; окно по Cmd+/ никуда не делось и рисует его же.
         WorkspaceSection(
           id: 'shortcuts',
+          tint: DIconTint.purple,
           icon: FluentIcons.keyboard_24_regular,
           label: l10n.desktopSettingsShortcutsLabel,
           subtitle: l10n.desktopSettingsShortcutsSubtitle,
@@ -212,6 +240,7 @@ class SettingsWorkspace extends StatelessWidget {
         ),
         WorkspaceSection(
           id: 'power',
+          tint: DIconTint.green,
           icon: FluentIcons.flash_24_regular,
           label: l10n.desktopSettingsPowerLabel,
           subtitle: l10n.desktopSettingsPowerSubtitle,
@@ -221,6 +250,7 @@ class SettingsWorkspace extends StatelessWidget {
         ),
         WorkspaceSection(
           id: 'notifications',
+          tint: DIconTint.red,
           icon: FluentIcons.alert_24_regular,
           label: l10n.desktopSettingsNotificationsLabel,
           subtitle: l10n.desktopSettingsNotificationsSubtitle,
@@ -230,6 +260,7 @@ class SettingsWorkspace extends StatelessWidget {
         ),
         WorkspaceSection(
           id: 'calls',
+          tint: DIconTint.cyan,
           icon: FluentIcons.call_24_regular,
           label: l10n.desktopSettingsCallsLabel,
           subtitle: l10n.desktopSettingsCallsSubtitle,
@@ -242,6 +273,7 @@ class SettingsWorkspace extends StatelessWidget {
         // бы мёртвой панелью. Теперь умеет.
         WorkspaceSection(
           id: 'media',
+          tint: DIconTint.blue,
           icon: FluentIcons.mic_24_regular,
           label: l10n.desktopSettingsMediaLabel,
           subtitle: l10n.desktopSettingsMediaSubtitle,
@@ -254,6 +286,7 @@ class SettingsWorkspace extends StatelessWidget {
         // ── Приватность и безопасность ───────────────────────────────
         WorkspaceSection(
           id: 'privacy',
+          tint: DIconTint.green,
           icon: FluentIcons.eye_24_regular,
           label: l10n.desktopSettingsPrivacyLabel,
           subtitle: l10n.desktopSettingsPrivacySubtitle,
@@ -263,6 +296,7 @@ class SettingsWorkspace extends StatelessWidget {
         ),
         WorkspaceSection(
           id: 'security',
+          tint: DIconTint.blue,
           icon: FluentIcons.shield_keyhole_24_regular,
           label: l10n.desktopSettingsSecurityLabel,
           subtitle: l10n.desktopSettingsSecuritySubtitle,
@@ -272,6 +306,7 @@ class SettingsWorkspace extends StatelessWidget {
         ),
         WorkspaceSection(
           id: 'backup',
+          tint: DIconTint.cyan,
           icon: FluentIcons.cloud_arrow_up_24_regular,
           label: l10n.desktopSettingsBackupLabel,
           subtitle: l10n.desktopSettingsBackupSubtitle,
@@ -286,6 +321,7 @@ class SettingsWorkspace extends StatelessWidget {
         ),
         WorkspaceSection(
           id: 'blocked',
+          tint: DIconTint.red,
           icon: FluentIcons.person_prohibited_24_regular,
           label: l10n.desktopSettingsBlockedLabel,
           subtitle: l10n.desktopSettingsBlockedSubtitle,
@@ -300,6 +336,7 @@ class SettingsWorkspace extends StatelessWidget {
         ),
         WorkspaceSection(
           id: 'devices',
+          tint: DIconTint.cyan,
           icon: FluentIcons.phone_laptop_24_regular,
           label: l10n.desktopSettingsDevicesLabel,
           subtitle: l10n.desktopSettingsDevicesSubtitle,
@@ -311,6 +348,7 @@ class SettingsWorkspace extends StatelessWidget {
         // ── Аккаунт и данные ─────────────────────────────────────────
         WorkspaceSection(
           id: 'account',
+          tint: DIconTint.blue,
           icon: FluentIcons.person_24_regular,
           label: l10n.desktopSettingsAccountLabel,
           subtitle: l10n.desktopSettingsAccountSubtitle,
@@ -320,6 +358,7 @@ class SettingsWorkspace extends StatelessWidget {
         ),
         WorkspaceSection(
           id: 'storage',
+          tint: DIconTint.amber,
           icon: FluentIcons.database_24_regular,
           label: l10n.desktopSettingsStorageLabel,
           subtitle: l10n.desktopSettingsStorageSubtitle,
@@ -329,6 +368,7 @@ class SettingsWorkspace extends StatelessWidget {
         ),
         WorkspaceSection(
           id: 'support',
+          tint: DIconTint.orange,
           icon: FluentIcons.chat_help_24_regular,
           label: l10n.desktopSettingsSupportLabel,
           subtitle: l10n.desktopSettingsSupportSubtitle,
@@ -346,6 +386,7 @@ class SettingsWorkspace extends StatelessWidget {
         ),
         WorkspaceSection(
           id: 'about',
+          tint: DIconTint.purple,
           icon: FluentIcons.info_24_regular,
           label: l10n.desktopSettingsAboutLabel,
           group: l10n.desktopSettingsGroupAccount,
@@ -354,6 +395,11 @@ class SettingsWorkspace extends StatelessWidget {
         ),
         WorkspaceSection(
           id: 'danger',
+          // Не [DIconTint.red] «Уведомлений», а красный ОПАСНОСТИ окна: этот
+          // же цвет стоит на кнопке «Удалить аккаунт» внутри раздела и на
+          // строке «Выйти» внизу колонки. Совпадение цвета — обещание, что
+          // строка ведёт туда, откуда нет возврата.
+          tint: DColors.of(context).danger,
           icon: FluentIcons.delete_24_regular,
           label: l10n.desktopSettingsDangerLabel,
           // PR-F (bug 23): the danger pane was stateless and had no
@@ -364,6 +410,92 @@ class SettingsWorkspace extends StatelessWidget {
           dangerous: true,
         ),
     ];
+  }
+}
+
+/// Низ боковой колонки: красный «Выйти» и под ним номер сборки.
+///
+/// 🔴 НОМЕР ЗДЕСЬ, А НЕ ТОЛЬКО В «О ПРОГРАММЕ». Первый вопрос поддержки — «что
+/// у вас за версия», и до сих пор ответ лежал за двумя нажатиями в самом
+/// нижнем разделе списка. Telegram держит его на виду внизу колонки ровно по
+/// этой причине. Нажатие кладёт строку в буфер обмена: человеку не придётся
+/// переписывать её с экрана в сообщение поддержке, а переписанная от руки
+/// версия — это версия, которой можно ошибиться.
+class _SidebarFooter extends StatelessWidget {
+  const _SidebarFooter({required this.controller});
+
+  final AppController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SignOutRow(controller: controller),
+        const _VersionLine(),
+      ],
+    );
+  }
+}
+
+class _VersionLine extends StatefulWidget {
+  const _VersionLine();
+  @override
+  State<_VersionLine> createState() => _VersionLineState();
+}
+
+class _VersionLineState extends State<_VersionLine> {
+  // Читается один раз: строка стоит внизу колонки всё время, пока открыты
+  // настройки, и перечитывать её на каждой перерисовке не за чем.
+  late final Future<AppPackageInfo> _pkg = AppPackageInfo.load();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    final l10n = AppLocalizations.of(context)!;
+    return FutureBuilder<AppPackageInfo>(
+      future: _pkg,
+      builder: (ctx, snap) {
+        final info = snap.data;
+        // Пока не прочитано — пустая строка ТОЙ ЖЕ высоты, иначе низ колонки
+        // дёргался бы на первой отрисовке.
+        final text = info == null
+            ? ''
+            : '${info.version} (${info.buildNumber})';
+        return HoverListener(
+          onTap: info == null
+              ? null
+              : () {
+                  unawaited(Clipboard.setData(ClipboardData(text: text)));
+                  DesktopSnackbar.show(
+                    context,
+                    message: l10n.copied,
+                    kind: DSnackKind.success,
+                  );
+                },
+          cursor: info == null
+              ? SystemMouseCursors.basic
+              : SystemMouseCursors.click,
+          builder: (ctx, hovered, pressed) => Padding(
+            padding: const EdgeInsets.fromLTRB(
+              DSpace.l,
+              0,
+              DSpace.l,
+              DSpace.m,
+            ),
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: DType.meta.copyWith(
+                color: hovered ? c.textSecondary : c.textDisabled,
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -382,7 +514,7 @@ class _SignOutRow extends StatelessWidget {
       cursor: SystemMouseCursors.click,
       builder: (ctx, hovered, pressed) => AnimatedContainer(
         duration: DMotion.fast,
-        margin: const EdgeInsets.fromLTRB(DSpace.s, DSpace.s, DSpace.s, DSpace.m),
+        margin: const EdgeInsets.fromLTRB(DSpace.s, DSpace.s, DSpace.s, DSpace.p6),
         padding: const EdgeInsets.symmetric(
           horizontal: DSpace.s,
           vertical: 9,

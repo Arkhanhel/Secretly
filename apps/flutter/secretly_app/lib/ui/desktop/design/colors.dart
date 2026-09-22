@@ -538,3 +538,28 @@ class DColors extends InheritedWidget {
   bool updateShouldNotify(covariant DColors oldWidget) =>
       oldWidget.colors != colors;
 }
+
+/// Цвета плиток под значками разделов настроек.
+///
+/// 🔴 ЗНАЧЕНИЯ ВЗЯТЫ С ТЕЛЕФОНА ПОИМЁННО, А НЕ ПОДОБРАНЫ НА ГЛАЗ.
+/// Это те же семь чисел, что стоят в `lib/ui/settings_screen.dart`
+/// (`_iconBlue`…`_iconAmber`). Телефон и компьютер показывают один и тот же
+/// список настроек, и если «Уведомления» на телефоне красные, а на компьютере
+/// оранжевые, человек перестаёт узнавать раздел по цвету — а цвет здесь
+/// работает именно как второе имя раздела, быстрее подписи.
+///
+/// Копия, а не общий файл: мобильная типографика и палитра живут отдельно от
+/// десктопных токенов, и тянуть `settings_screen.dart` в окно значило бы
+/// связать выпущенную телефонную версию с правками компьютерной.
+/// Расхождение стережёт `desktop_settings_icon_tint_test.dart`.
+class DIconTint {
+  DIconTint._();
+
+  static const Color blue = Color(0xFF2AABEE);
+  static const Color orange = Color(0xFFF39A2B);
+  static const Color green = Color(0xFF35B86B);
+  static const Color red = Color(0xFFE25563);
+  static const Color purple = Color(0xFF7C67F2);
+  static const Color cyan = Color(0xFF1FAFC4);
+  static const Color amber = Color(0xFFE0A43A);
+}
