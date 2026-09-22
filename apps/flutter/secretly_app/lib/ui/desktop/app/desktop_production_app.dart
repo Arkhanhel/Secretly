@@ -81,7 +81,50 @@ class DesktopProductionApp extends StatefulWidget {
 
 class _DesktopProductionAppState extends State<DesktopProductionApp>
     with WindowListener {
-  AppLocalizations get l10n => AppLocalizations.of(context)!;
+  /// Переводы для кода САМОГО КОРНЯ.
+  ///
+  /// 🔴 `AppLocalizations.of(context)!` ЗДЕСЬ ВСЕГДА ПАДАЛ — и падал молча.
+  ///
+  /// Этот класс СТРОИТ `MaterialApp`, значит его собственный `context` лежит
+  /// ВЫШЕ `Localizations`, которые `MaterialApp` вставляет под собой. Поиск
+  /// идёт среди предков, наверху его нет — `of` возвращал null, а `!` бросал
+  /// исключение. Не иногда, а на каждом обращении.
+  ///
+  /// Так было не всегда: до 20.09.2026 (`224f2a63`, перевод окна на ARB) в
+  /// этих двенадцати местах стояли строки прямо в коде, и обращаться к
+  /// переводам корню было незачем. Перевод заменил их на `l10n.…` — и хлебные
+  /// крошки в шапке окна начали бросать исключение при КАЖДОЙ сборке шапки.
+  /// `_installDesktopErrorGuard` гасит красное полотно, поэтому наружу это
+  /// вышло не поломкой, а ПРОПАЖЕЙ: строка заголовка со стрелками «назад» и
+  /// «вперёд», полем ⌘K и кнопкой «не беспокоить» просто не рисовалась.
+  /// В журнале это видно как шесть `ui.widget_error` подряд на старте.
+  ///
+  /// Контекст берётся у [_OverlayHost] — он уже есть и уже лежит ВНУТРИ
+  /// `MaterialApp` (его завели ровно за тем же: корню неоткуда взять слой,
+  /// чтобы показать всплывашку). Пока его ещё нет — первые кадры до первой
+  /// отрисовки — переводы ищутся напрямую по языку, который выбрал бы сам
+  /// `MaterialApp`. Это тот же запасной путь, которым пользуются уведомления
+  /// (`DesktopNotificationService`), и он не умеет не найтись:
+  /// `resolveAppUiLocale` в худшем случае отвечает английским.
+  AppLocalizations get l10n {
+    final ctx = _overlayHostKey.currentContext;
+    if (ctx != null) {
+      final found = AppLocalizations.of(ctx);
+      if (found != null) return found;
+    }
+    return lookupAppLocalizations(_localeForStrings);
+  }
+
+  /// Язык для запасного пути [l10n]: выбор человека, иначе — язык системы,
+  /// разрешённый теми же правилами, что и у `MaterialApp` ниже.
+  Locale get _localeForStrings {
+    if (!_ready) return const Locale('en');
+    final override = _controller.appLocaleOverride;
+    if (override != null) return override;
+    return _controller.resolveAppUiLocale(
+      WidgetsBinding.instance.platformDispatcher.locales,
+    );
+  }
 
   AppController _controller = AppController();
   CallManager? _callManager;
