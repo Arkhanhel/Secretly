@@ -5680,6 +5680,9 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get desktopContactsRenamed => 'Nome guardado';
+
+  @override
+  String get desktopMenuCheckUpdates => 'Procurar atualizações…';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -11358,4 +11361,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopContactsRenamed => 'Nome salvo';
+
+  @override
+  String get desktopMenuCheckUpdates => 'Buscar atualizações…';
 }

@@ -91,13 +91,33 @@ void main() {
     );
   });
 
-  test('🔴 «Проверить обновления» НЕ обещано: автообновления нет', () {
-    final labels = _leaves(DesktopAppMenu(
-      onOpenSettings: () {},
+  test('🔴 «Проверить обновления» — только когда проверка НАСТРОЕНА', () {
+    // Долго этого пункта не было вовсе: пока в приложении не было самой
+    // проверки (A-4), он был бы обещанием, которого некому сдержать. Теперь
+    // проверка есть — но обновлятору нужны адрес перечня версий и открытый
+    // ключ для проверки подписи пакета. Пока их не положили в Info.plist,
+    // проверять нечем, и пункта по-прежнему нет.
+    String labels({VoidCallback? onCheckUpdates}) => _leaves(DesktopAppMenu(
+          onOpenSettings: () {},
+          onCheckUpdates: onCheckUpdates,
+          child: const SizedBox(),
+        ).menus(ru)).map((i) => i.label).join(' ').toLowerCase();
+
+    expect(labels().contains('обновл'), isFalse,
+        reason: 'не настроено — пункта быть не должно');
+    expect(labels(onCheckUpdates: () {}).contains('обновл'), isTrue);
+  });
+
+  test('«Проверить обновления» действительно зовёт проверку', () {
+    var checked = 0;
+    final items = _leaves(DesktopAppMenu(
       child: const SizedBox(),
-    ).menus(ru)).map((i) => i.label).join(' ').toLowerCase();
-    expect(labels.contains('обновл'), isFalse);
-    expect(labels.contains('update'), isFalse);
+      onCheckUpdates: () => checked++,
+    ).menus(ru));
+    items
+        .firstWhere((i) => i.label == 'Проверить обновления…')
+        .onSelected!();
+    expect(checked, 1);
   });
 
   test('у каждого СВОЕГО пункта есть обработчик', () {
@@ -106,6 +126,7 @@ void main() {
       onOpenSettings: () {},
       onOpenShortcuts: () {},
       onOpenAbout: () {},
+      onCheckUpdates: () {},
     ).menus(ru));
     for (final i in items) {
       if (i is PlatformProvidedMenuItem) continue; // их делает система

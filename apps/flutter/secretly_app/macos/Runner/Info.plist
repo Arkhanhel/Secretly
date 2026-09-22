@@ -28,6 +28,29 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUEnableInstallerLauncherService</key>
+	<!-- Обновление в песочнице идёт через службу Sparkle внутри рамки;
+	     `Downloader.xpc` при этом НЕ нужен — он только для приложений без
+	     `network.client`, а оно у нас есть. См. Runner/SparkleBridge.swift. -->
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<!-- 🔴 ПРОВЕРЯЕМ САМИ, НЕ СПРАШИВАЯ РАЗРЕШЕНИЯ ПРОВЕРЯТЬ.
+	     Sparkle по умолчанию при первом запуске спрашивает «искать обновления
+	     автоматически?». Для мессенджера это неуместный вопрос: человек,
+	     ответивший «нет», остаётся на версии с дырой и узнает об этом
+	     последним. Сама ПОСТАНОВКА обновления при этом по-прежнему требует
+	     его согласия — см. SUAutomaticallyUpdate ниже. -->
+	<true/>
+	<key>SUScheduledCheckInterval</key>
+	<!-- Раз в сутки. Чаще незачем: выпуски не ежечасные, а каждая проверка —
+	     это обращение наружу. -->
+	<integer>86400</integer>
+	<key>SUAutomaticallyUpdate</key>
+	<!-- Скачать и поставить молча — НЕТ. Обновление мессенджера меняет
+	     программу, которая держит переписку; человек вправе знать, когда это
+	     происходит, и доделать начатое. Найдено — показываем, ставим по
+	     согласию. -->
+	<false/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Secretly использует микрофон для голосовых и видеозвонков, а также для записи голосовых сообщений.</string>
 	<key>NSCameraUsageDescription</key>

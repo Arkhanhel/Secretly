@@ -2033,5 +2033,6 @@
   "desktopMenuWebsite": "Site do Secretly",
   "desktopContactsAddHint": "ID do Secretly ou link de convite",
   "desktopContactsAdded": "Contacto adicionado",
-  "desktopContactsRenamed": "Nome guardado"
+  "desktopContactsRenamed": "Nome guardado",
+  "desktopMenuCheckUpdates": "Procurar atualizações…"
 }

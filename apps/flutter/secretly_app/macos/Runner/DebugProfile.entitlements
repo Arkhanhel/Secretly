@@ -4,6 +4,27 @@
 <dict>
 	<key>com.apple.security.app-sandbox</key>
 	<true/>
+	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+	<!-- 🔴 ДЛЯ ОБНОВЛЕНИЯ В ПЕСОЧНИЦЕ (A-4).
+
+	     Приложение в песочнице само обновиться не может: ставит обновление
+	     служба Sparkle `Installer.xpc` внутри рамки, а чтобы до неё
+	     достучаться, песочнице нужно разрешение искать эти два имени.
+	     Больше это исключение не даёт ничего: два конкретных имени, оба —
+	     наши собственные.
+
+	     🔴 ИМЕНА ЗАПИСАНЫ ЦЕЛИКОМ, А НЕ ЧЕРЕЗ $(PRODUCT_BUNDLE_IDENTIFIER).
+	     Переменные раскрывает Xcode, а выпускную подпись ставит
+	     `tools/desktop_release_macos.sh`, передавая ЭТОТ файл прямо в
+	     codesign — там раскрывать их некому, и в подпись ушла бы строка
+	     «$(PRODUCT_BUNDLE_IDENTIFIER)-spks» как есть. Обновление молча
+	     перестало бы работать, а по виду файла всё было бы правильно.
+
+	     Правится вместе с идентификатором бандла: com.secretly.secretlyApp. -->
+	<array>
+		<string>com.secretly.secretlyApp-spks</string>
+		<string>com.secretly.secretlyApp-spki</string>
+	</array>
 	<key>com.apple.security.cs.allow-jit</key>
 	<true/>
 	<key>com.apple.security.network.server</key>

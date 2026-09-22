@@ -40,6 +40,7 @@ class DesktopAppMenu extends StatelessWidget {
     this.onOpenSettings,
     this.onOpenShortcuts,
     this.onOpenAbout,
+    this.onCheckUpdates,
   });
 
   final Widget child;
@@ -51,6 +52,16 @@ class DesktopAppMenu extends StatelessWidget {
   final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenShortcuts;
   final VoidCallback? onOpenAbout;
+
+  /// «Проверить обновления…». `null` — пункта нет.
+  ///
+  /// 🔴 ЕГО ЗДЕСЬ ДОЛГО НЕ БЫЛО НАМЕРЕННО: пока в приложении не было самой
+  /// проверки (A-4), пункт «Проверить обновления» был бы обещанием, которого
+  /// некому сдержать. Теперь проверка есть — но появляется он всё равно
+  /// только там, где она НАСТРОЕНА (есть адрес перечня версий и открытый
+  /// ключ для проверки подписи пакета). Правило то же, просто теперь у него
+  /// есть два исхода вместо одного.
+  final VoidCallback? onCheckUpdates;
 
   static bool get _isMacOS => !kIsWeb && Platform.isMacOS;
 
@@ -119,6 +130,15 @@ class DesktopAppMenu extends StatelessWidget {
                   ),
               ],
             ),
+            if (onCheckUpdates != null)
+              PlatformMenuItemGroup(
+                members: <PlatformMenuItem>[
+                  PlatformMenuItem(
+                    label: l10n.desktopMenuCheckUpdates,
+                    onSelected: onCheckUpdates,
+                  ),
+                ],
+              ),
             if (onOpenSettings != null)
               PlatformMenuItemGroup(
                 members: <PlatformMenuItem>[
@@ -277,8 +297,9 @@ class DesktopAppMenu extends StatelessWidget {
           label: l10n.desktopMenuHelp,
           menus: <PlatformMenuItem>[
             // «Проверить обновления» здесь НЕТ намеренно: автообновления в
-            // приложении пока нет. Пункт, который ничего не проверяет, —
-            // обещание, которого некому сдержать.
+            // приложении нет (A-4 в docs/TZ_DESKTOP_RELEASE_2026-09-21.md).
+            // Пункт, который ничего не проверяет, — обещание, которого некому
+            // сдержать.
             if (onOpenShortcuts != null)
               PlatformMenuItem(
                 label: l10n.desktopSettingsShortcutsLabel,

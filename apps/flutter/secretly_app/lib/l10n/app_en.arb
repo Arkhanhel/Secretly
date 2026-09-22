@@ -2729,5 +2729,6 @@
   "desktopMenuWebsite": "Secretly Website",
   "desktopContactsAddHint": "Secretly ID or invite link",
   "desktopContactsAdded": "Contact added",
-  "desktopContactsRenamed": "Name saved"
+  "desktopContactsRenamed": "Name saved",
+  "desktopMenuCheckUpdates": "Check for Updates…"
 }

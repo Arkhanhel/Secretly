@@ -30,6 +30,7 @@
 		33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33CC11122044BFA00003C045 /* MainFlutterWindow.swift */; };
 		SEC0TR4N0002 /* TranslationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = SEC0TR4N0001 /* TranslationBridge.swift */; };
 		SEC0PDF00002 /* PdfRenderBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = SEC0PDF00001 /* PdfRenderBridge.swift */; };
+		SEC0SPRK0002 /* SparkleBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = SEC0SPRK0001 /* SparkleBridge.swift */; };
 		8E2D2AC49DE46EA42874926B /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F2B538C68673FA59041A9C4B /* Pods_RunnerTests.framework */; };
 		A8206D5FB2D39F78F24ED1D9 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 04E16B6426E2D749642425D9 /* Pods_Runner.framework */; };
 /* End PBXBuildFile section */
@@ -88,6 +89,7 @@
 		33CC11122044BFA00003C045 /* MainFlutterWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainFlutterWindow.swift; sourceTree = "<group>"; };
 		SEC0TR4N0001 /* TranslationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationBridge.swift; sourceTree = "<group>"; };
 		SEC0PDF00001 /* PdfRenderBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PdfRenderBridge.swift; sourceTree = "<group>"; };
+		SEC0SPRK0001 /* SparkleBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleBridge.swift; sourceTree = "<group>"; };
 		33CEB47222A05771004F2AC0 /* Flutter-Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Debug.xcconfig"; sourceTree = "<group>"; };
 		33CEB47422A05771004F2AC0 /* Flutter-Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = "Flutter-Release.xcconfig"; sourceTree = "<group>"; };
 		33CEB47722A0578A004F2AC0 /* Flutter-Generated.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = "Flutter-Generated.xcconfig"; path = "ephemeral/Flutter-Generated.xcconfig"; sourceTree = "<group>"; };
@@ -207,6 +209,7 @@
 				33CC11122044BFA00003C045 /* MainFlutterWindow.swift */,
 				SEC0TR4N0001 /* TranslationBridge.swift */,
 				SEC0PDF00001 /* PdfRenderBridge.swift */,
+				SEC0SPRK0001 /* SparkleBridge.swift */,
 				33E51913231747F40026EE4D /* DebugProfile.entitlements */,
 				33E51914231749380026EE4D /* Release.entitlements */,
 				33CC11242044D66E0003C045 /* Resources */,
@@ -502,6 +505,7 @@
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				SEC0TR4N0002 /* TranslationBridge.swift in Sources */,
 				SEC0PDF00002 /* PdfRenderBridge.swift in Sources */,
+				SEC0SPRK0002 /* SparkleBridge.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
 			);

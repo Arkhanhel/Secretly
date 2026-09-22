@@ -5700,4 +5700,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get desktopContactsRenamed => 'Имя сохранено';
+
+  @override
+  String get desktopMenuCheckUpdates => 'Проверить обновления…';
 }

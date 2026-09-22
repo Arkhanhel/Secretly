@@ -2033,5 +2033,6 @@
   "desktopMenuWebsite": "Сайт Secretly",
   "desktopContactsAddHint": "ID у Secretly або посилання-запрошення",
   "desktopContactsAdded": "Контакт додано",
-  "desktopContactsRenamed": "Ім’я збережено"
+  "desktopContactsRenamed": "Ім’я збережено",
+  "desktopMenuCheckUpdates": "Перевірити оновлення…"
 }

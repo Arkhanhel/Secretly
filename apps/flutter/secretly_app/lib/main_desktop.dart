@@ -45,6 +45,7 @@ import 'package:window_manager/window_manager.dart';
 import 'diagnostics/diag_log.dart';
 import 'desktop/single_instance.dart';
 import 'legal/third_party_licenses.dart';
+import 'ui/desktop/services/desktop_update_service.dart';
 import 'ui/desktop/app/desktop_production_app.dart';
 import 'ui/desktop/chat/chat_thread_panel.dart' show DesktopDraftStore;
 import 'ui/desktop/chat/recent_reactions_store.dart';
@@ -184,6 +185,10 @@ Future<void> main() async {
     // can be opened so the composer never briefly honours the default instead
     // of the user's choice. Best-effort: defaults hold if the read fails.
     unawaited(DesktopUiPrefs.load());
+    // Спрашиваем нативную сторону, настроена ли проверка обновлений. Ответ
+    // решает только одно: показывать ли пункт меню. Поэтому не ждём — пункт
+    // появится, когда ответ придёт (меню слушает `configured`).
+    unawaited(DesktopUpdateService.instance.load());
 
     // 6. Composer drafts. Loaded before any chat can be opened so a restored
     // draft is already in place rather than appearing a moment later.

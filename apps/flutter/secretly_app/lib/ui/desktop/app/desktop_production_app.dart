@@ -37,6 +37,7 @@ import '../shell/sidebar.dart'
     show DesktopSection, ConnectionStatus, kRailWidth;
 import '../workspace/settings_workspace.dart';
 import '../onboarding/desktop_onboarding_screen.dart';
+import '../services/desktop_update_service.dart';
 import '../services/desktop_absence.dart';
 import '../services/desktop_nav_history.dart';
 import '../services/desktop_deleted_chats.dart';
@@ -1566,14 +1567,28 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
               // Пункты выдаются ровно тогда, когда за ними что-то есть:
               // до готовности и на экране привязки настроек ещё нет, и
               // «Настройки… ⌘,» в меню были бы обещанием впустую.
-              builder: (ctx) => DesktopAppMenu(
-                onOpenSettings: _menuReady ? () => _openSettings() : null,
-                onOpenShortcuts: _menuReady
-                    ? () => _openSettings(sectionId: 'shortcuts')
-                    : null,
-                onOpenAbout: _menuReady
-                    ? () => _openSettings(sectionId: 'about')
-                    : null,
+              // Ответ «настроена ли проверка обновлений» приходит с нативной
+              // стороны уже после первого кадра. Без подписки пункт меню
+              // появлялся бы только со следующей перерисовки окна — то есть
+              // иногда никогда.
+              builder: (ctx) => ValueListenableBuilder<bool>(
+                valueListenable: DesktopUpdateService.instance.configured,
+                builder: (ctx, updatesReady, child) => DesktopAppMenu(
+                  onOpenSettings: _menuReady ? () => _openSettings() : null,
+                  onOpenShortcuts: _menuReady
+                      ? () => _openSettings(sectionId: 'shortcuts')
+                      : null,
+                  onOpenAbout: _menuReady
+                      ? () => _openSettings(sectionId: 'about')
+                      : null,
+                  // Проверка обновлений не ждёт готовности приложения: она про
+                  // саму программу, а не про переписку, и нужна в том числе
+                  // тогда, когда программа поднимается плохо.
+                  onCheckUpdates: updatesReady
+                      ? () => unawaited(DesktopUpdateService.instance.check())
+                      : null,
+                  child: child!,
+                ),
                 child: _OverlayHost(key: _overlayHostKey, child: _buildRoot()),
               ),
             ),

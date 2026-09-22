@@ -10527,6 +10527,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Name saved'**
   String get desktopContactsRenamed;
+
+  /// No description provided for @desktopMenuCheckUpdates.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for Updates…'**
+  String get desktopMenuCheckUpdates;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

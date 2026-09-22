@@ -140,6 +140,7 @@ PODS:
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
+  - Sparkle (2.9.6)
   - speech_to_text (7.2.0):
     - CwlCatchException
     - Flutter
@@ -225,6 +226,7 @@ DEPENDENCIES:
   - screen_retriever_macos (from `Flutter/ephemeral/.symlinks/plugins/screen_retriever_macos/macos`)
   - share_plus (from `Flutter/ephemeral/.symlinks/plugins/share_plus/macos`)
   - shared_preferences_foundation (from `Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin`)
+  - Sparkle (= 2.9.6)
   - speech_to_text (from `Flutter/ephemeral/.symlinks/plugins/speech_to_text/darwin`)
   - sqflite_sqlcipher (from `Flutter/ephemeral/.symlinks/plugins/sqflite_sqlcipher/macos`)
   - sqlite3_flutter_libs (from `Flutter/ephemeral/.symlinks/plugins/sqlite3_flutter_libs/darwin`)
@@ -249,6 +251,7 @@ SPEC REPOS:
     - GoogleUtilities
     - nanopb
     - PromisesObjC
+    - Sparkle
     - SQLCipher
     - sqlite3
     - WebRTC-SDK
@@ -376,6 +379,7 @@ SPEC CHECKSUMS:
   screen_retriever_macos: 776e0fa5d42c6163d2bf772d22478df4b302b161
   share_plus: 1fa619de8392a4398bfaf176d441853922614e89
   shared_preferences_foundation: 5086985c1d43c5ba4d5e69a4e8083a389e2909e6
+  Sparkle: b8c9cf4ced217ffc708a1ca5f988a7ba877658db
   speech_to_text: 87bf9298952e8d9073be1b6aade6d5758db5170c
   sqflite_sqlcipher: cf9f9d9b621b480396f558b06494327aea2aade4
   SQLCipher: eb79c64049cb002b4e9fcb30edb7979bf4706dfc
@@ -389,6 +393,6 @@ SPEC CHECKSUMS:
   webview_flutter_wkwebview: 29eb20d43355b48fe7d07113835b9128f84e3af4
   window_manager: e25faf20d88283a0d46e7b1a759d07261ca27575
 
-PODFILE CHECKSUM: 4bdb4582b653239643162f4495462aed664f9e85
+PODFILE CHECKSUM: 11c2c6e0ebdde44f6553a6f2403e93b7f36de975
 
 COCOAPODS: 1.16.2

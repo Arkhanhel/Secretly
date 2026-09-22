@@ -5680,4 +5680,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get desktopContactsRenamed => 'Nombre guardado';
+
+  @override
+  String get desktopMenuCheckUpdates => 'Buscar actualizaciones…';
 }

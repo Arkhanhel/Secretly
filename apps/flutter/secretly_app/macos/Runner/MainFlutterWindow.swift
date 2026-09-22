@@ -22,6 +22,9 @@ class MainFlutterWindow: NSWindow {
   /// Показ PDF внутри окна — см. [PdfRenderBridge].
   private let pdfRenderBridge = PdfRenderBridge()
 
+  /// Обновление приложения, скачанного с сайта, — см. [SparkleBridge].
+  private let sparkleBridge = SparkleBridge()
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -44,6 +47,7 @@ class MainFlutterWindow: NSWindow {
     imagePrepBridge.attach(to: flutterViewController.engine.binaryMessenger)
     musicTagsBridge.attach(to: flutterViewController.engine.binaryMessenger)
     pdfRenderBridge.attach(to: flutterViewController.engine.binaryMessenger)
+    sparkleBridge.attach(to: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
   }

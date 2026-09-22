@@ -203,22 +203,48 @@ if [ -n "$IDENTITY" ]; then
     echo "    (no notarization requested — skipping secure timestamps)"
   fi
 
-  # Nested code first (deepest last-modified order is irrelevant; depth order is).
+  # 🔴 ПОРЯДОК: СНАЧАЛА ТО, ЧТО ЛЕЖИТ ГЛУБЖЕ. БЕЗ ИСКЛЮЧЕНИЙ.
+  #
+  # Раньше здесь было два прохода: сперва все `.framework`/`.dylib`, потом
+  # `.xpc`/`.app`. Пока внутри рамок ничего не лежало, разница не видна. С
+  # Sparkle (A-4) она стала поломкой: его `XPCServices/*.xpc`, `Updater.app`
+  # и `Autoupdate` лежат ВНУТРИ `Sparkle.framework`, и подпись вложенного
+  # ПОСЛЕ подписи рамки ломает подпись рамки — проверка видит изменившееся
+  # содержимое. То же правило уже записано в шапке этого блока, но порядок
+  # ему не следовал.
+  #
+  # Теперь список собирается один и сортируется по ГЛУБИНЕ ПУТИ по убыванию:
+  # что бы ни вложили внутрь чего, вложенное подпишется раньше.
+  #
+  # Почему пересобирать подписи вообще надо: Sparkle приезжает уже подписанным
+  # СВОЕЙ командой. Заверение у Apple отвергает бандл, внутри которого код
+  # подписан чужой командой, — поэтому каждая вложенная часть переподписывается
+  # нашим сертификатом.
+  sign_list="$(mktemp)"
+  # Бандлы и библиотеки.
+  /usr/bin/find "$APP/Contents" \
+      \( -name '*.dylib' -o -name '*.so' -o -name '*.framework' \
+         -o -name '*.xpc' -o -name '*.app' \) \
+      -mindepth 1 2>/dev/null >>"$sign_list" || true
+  # Голые исполняемые файлы внутри рамок: у Sparkle это `Autoupdate` —
+  # программа, которая и ставит обновление. Она не бандл, под шаблоны выше не
+  # попадает, а остаться подписанной чужой командой не может.
+  /usr/bin/find "$APP/Contents/Frameworks" -type f -perm -u+x \
+      ! -name '*.dylib' ! -name '*.so' 2>/dev/null \
+      | while IFS= read -r f; do
+          case "$(/usr/bin/file -b "$f" 2>/dev/null)" in
+            *Mach-O*executable*) echo "$f" ;;
+          esac
+        done >>"$sign_list" || true
+
+  # Сортировка по числу «/» в пути, по убыванию — то есть сверху самое
+  # глубокое. `sort -rn` по первому полю, само поле потом отрезается.
   while IFS= read -r nested; do
     [ -n "$nested" ] || continue
     codesign --force "$TS_FLAG" --options runtime \
       --sign "$IDENTITY" "$nested"
-  done < <(/usr/bin/find "$APP/Contents/Frameworks" \
-            \( -name '*.dylib' -o -name '*.framework' -o -name '*.so' \) \
-            -depth 2>/dev/null || true)
-
-  # Helper executables / XPC services, if any.
-  while IFS= read -r helper; do
-    [ -n "$helper" ] || continue
-    codesign --force "$TS_FLAG" --options runtime \
-      --sign "$IDENTITY" "$helper"
-  done < <(/usr/bin/find "$APP/Contents" -type d \
-            \( -name '*.xpc' -o -name '*.app' \) -mindepth 2 -depth 2>/dev/null || true)
+  done < <(awk -F/ '{print NF"\t"$0}' "$sign_list" | sort -rn -k1,1 | cut -f2-)
+  rm -f "$sign_list"
 
   # Finally the outer bundle.
   codesign --force "$TS_FLAG" --options runtime \
@@ -245,10 +271,28 @@ fi
 NOTARY_PROFILE="${SECRETLY_NOTARY_PROFILE:-}"
 if [ -n "$NOTARY_PROFILE" ]; then
   if [ -z "$IDENTITY" ]; then
-    echo "error: SECRETLY_NOTARY_PROFILE set but SECRETLY_SIGN_IDENTITY is not." >&2
+    echo "error: notarization requested but the build is signed ad-hoc." >&2
     echo "       Apple only notarizes Developer ID-signed code." >&2
     exit 1
   fi
+  # 🔴 ПРОВЕРКА ТИПА СЕРТИФИКАТА, А НЕ ФАКТА ПОДПИСИ.
+  #
+  # Раньше здесь спрашивалось только «подписано ли хоть чем-нибудь». Но
+  # сертификат выбирается автоматически, и на машине, где нет Developer ID,
+  # выбор падал на Apple Development — проверка пропускала, а отказ приходил
+  # от Apple через несколько минут ожидания и чужими словами. Отказывать надо
+  # СРАЗУ и своими: Apple заверяет только код, подписанный Developer ID.
+  case "$IDENTITY" in
+    "Developer ID Application"*) ;;
+    *)
+      echo "error: notarization needs a Developer ID Application certificate." >&2
+      echo "       this build is signed with: $IDENTITY" >&2
+      echo "       set SECRETLY_SIGN_IDENTITY, or create the certificate:" >&2
+      echo "       Xcode > Settings > Accounts > Manage Certificates > + " >&2
+      echo "       (see docs/TZ_DESKTOP_RELEASE_2026-09-21.md §1)" >&2
+      exit 1
+      ;;
+  esac
   ZIP="$APP_DIR/$(basename "${APP%.app}")-notarize.zip"
   echo "==> submitting to Apple notary service (profile: $NOTARY_PROFILE)"
   /usr/bin/ditto -c -k --keepParent "$APP" "$ZIP"
@@ -277,6 +321,24 @@ if [ -n "${SECRETLY_MAKE_DMG:-}" ]; then
   if [ -n "$IDENTITY" ]; then
     codesign --force "$TS_FLAG" --sign "$IDENTITY" "$DMG"
   fi
+  # 🔴 ОБРАЗ ДИСКА ЗАВЕРЯЕТСЯ ОТДЕЛЬНО ОТ ПРИЛОЖЕНИЯ.
+  #
+  # Раньше заверялось только приложение, талон приклеивался к нему, а образ
+  # оставался просто подписанным. Но человек скачивает ИМЕННО ОБРАЗ, и
+  # Gatekeeper проверяет то, что скачано: незаверенный образ macOS не
+  # открывает вовсе — «Apple не может проверить его на наличие вредоносного
+  # ПО». То есть выпуск выглядел бы готовым и не открывался бы ни у кого.
+  #
+  # Подача вторая, отдельная: у приложения свой талон (оно работает и без
+  # сети после того, как его скопировали), у образа — свой (он открывается).
+  # Порядок обязателен: образ собирается из УЖЕ заверенного приложения, иначе
+  # внутри окажется копия без талона.
+  if [ -n "$NOTARY_PROFILE" ]; then
+    echo "==> submitting the DMG to Apple notary service"
+    xcrun notarytool submit "$DMG" --keychain-profile "$NOTARY_PROFILE" --wait
+    xcrun stapler staple "$DMG"
+    xcrun stapler validate "$DMG"
+  fi
   echo "==> DMG: $DMG"
 fi
 
@@ -285,8 +347,37 @@ echo "=============================================================="
 echo " RELEASE ARTIFACT: $APP"
 [ -n "${SECRETLY_MAKE_DMG:-}" ] && echo " DMG:              $APP_DIR/Secretly.dmg"
 echo
-echo " Signed:     $([ -n "$IDENTITY" ] && echo "Developer ID ($IDENTITY)" || echo "ad-hoc (local only)")"
+# 🔴 ЯРЛЫК ПОДПИСИ НАЗЫВАЛ «Developer ID» ЛЮБОЙ СЕРТИФИКАТ.
+#
+# Строка печаталась как `Developer ID ($IDENTITY)` независимо от того, чем
+# подписано на самом деле, — и на машине без Developer ID выдавала
+# «Signed: Developer ID (Apple Development: …)». Это не описка: по этой строке
+# владелец 21.09.2026 решил, что сертификат для раздачи уже есть, а его нет.
+# Отчёт, который называет вещь не своим именем, стоит дороже отсутствующего.
+#
+# Разница не в названии, а в том, что умеет каждый:
+#   Apple Development  — запуск на своих машинах;
+#   Apple Distribution — заливка в App Store / TestFlight;
+#   Developer ID Application — ЕДИНСТВЕННЫЙ, с которым скачанное приложение
+#   откроется у постороннего (и только вместе с заверением).
+case "${IDENTITY:-}" in
+  "")                            SIGN_LABEL="ad-hoc (local only — Gatekeeper will refuse a downloaded copy)" ;;
+  "Developer ID Application"*)   SIGN_LABEL="Developer ID Application ($IDENTITY) — distributable once notarized" ;;
+  "Apple Distribution"*)         SIGN_LABEL="Apple Distribution ($IDENTITY) — App Store / TestFlight ONLY, not for download" ;;
+  "Apple Development"*)          SIGN_LABEL="Apple Development ($IDENTITY) — THIS MACHINE ONLY, not distributable" ;;
+  *)                             SIGN_LABEL="$IDENTITY" ;;
+esac
+echo " Signed:     $SIGN_LABEL"
 echo " Notarized:  $([ -n "$NOTARY_PROFILE" ] && echo "yes" || echo "no")"
+case "${IDENTITY:-}" in
+  "Developer ID Application"*) ;;
+  *)
+    echo
+    echo " 🔴 NOT DISTRIBUTABLE. Gatekeeper opens a DOWNLOADED copy only when it is"
+    echo "    signed with a Developer ID Application certificate AND notarized."
+    echo "    See docs/TZ_DESKTOP_RELEASE_2026-09-21.md §1 (item A-1)."
+    ;;
+esac
 echo
 echo " Smoke-test before distributing:"
 echo "   1. open \"$APP\"  — must reach the UI (not crash on splash)"
