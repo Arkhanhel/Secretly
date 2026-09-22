@@ -5430,7 +5430,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get desktopContactsSearchHint => 'Kontakte suchen';
 
   @override
-  String get desktopContactsEmpty => 'Kontakte erscheinen nach der Synchronisierung.';
+  String get desktopContactsEmpty => 'Noch niemand. Füge einen Kontakt per ID oder Einladungslink hinzu.';
 
   @override
   String desktopContactsNothingFor(Object query) {
@@ -5671,4 +5671,13 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get desktopMenuWebsite => 'Secretly-Website';
+
+  @override
+  String get desktopContactsAddHint => 'Secretly-ID oder Einladungslink';
+
+  @override
+  String get desktopContactsAdded => 'Kontakt hinzugefügt';
+
+  @override
+  String get desktopContactsRenamed => 'Name gesichert';
 }

@@ -1952,7 +1952,7 @@
   "desktopForwardNoChats": "Sem conversas disponíveis",
   "desktopForwardKindDirect": "Conversa direta",
   "desktopContactsSearchHint": "Procurar contactos",
-  "desktopContactsEmpty": "Os contactos vão aparecer após a sincronização.",
+  "desktopContactsEmpty": "Ainda ninguém. Adicione um contato por ID ou link de convite.",
   "desktopContactsNothingFor": "Nada encontrado para «{query}».",
   "desktopContactsPick": "Escolha um contacto",
   "desktopContactsCardRight": "O cartão vai aparecer à direita.",
@@ -2030,5 +2030,8 @@
   "desktopMenuView": "Visualizar",
   "desktopMenuWindow": "Janela",
   "desktopMenuHelp": "Ajuda",
-  "desktopMenuWebsite": "Site do Secretly"
+  "desktopMenuWebsite": "Site do Secretly",
+  "desktopContactsAddHint": "ID do Secretly ou link de convite",
+  "desktopContactsAdded": "Contato adicionado",
+  "desktopContactsRenamed": "Nome salvo"
 }

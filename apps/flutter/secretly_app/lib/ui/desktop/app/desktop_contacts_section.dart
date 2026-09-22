@@ -9,6 +9,11 @@ import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 import '../../../app/app_controller.dart';
+import '../../../security/qr_payload.dart';
+import '../../contact_action_error_text.dart';
+import 'contact_rename.dart';
+import '../primitives/desktop_dialog.dart';
+import '../primitives/desktop_snackbar.dart';
 import 'desktop_app_view_model.dart';
 import 'desktop_selector.dart';
 import '../design/tokens.dart';
@@ -24,6 +29,58 @@ import '../shell/list_thread_split.dart';
 /// contact shows its card on the right, and «Написать сообщение» opens (creating
 /// if needed) the 1:1 chat with that profile and jumps to the Chats section via
 /// [onOpenChat].
+/// Что человек вставил в поле «добавить контакт» — и какой из этого ID.
+///
+/// 🔴 ТРИ ФОРМЫ ОДНОГО И ТОГО ЖЕ, И ЧЕЛОВЕК НЕ ОБЯЗАН ИХ РАЗЛИЧАТЬ.
+/// Секретли-ID ходит по свету в трёх видах: сам по себе, ссылкой-приглашением
+/// (`secretly://profile/…` или `https://links.secretlyapp.com/profile/…`) и
+/// содержимым QR-кода (`secretly_id=…&nickname=…`). Человек вставляет то, что
+/// ему прислали, и поле, принимающее только первую форму, отвечало бы «такого
+/// ID нет» на совершенно правильную ссылку.
+///
+/// Порядок разбора не случаен: ссылка проверяется ПЕРВОЙ, потому что её
+/// содержимое (`?profile=…`) разобрал бы и разборщик QR, но неверно.
+@visibleForTesting
+String? resolveDesktopContactInput(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty) return null;
+
+  final uri = Uri.tryParse(text);
+  if (uri != null && uri.hasScheme) {
+    final fromLink = tryParseProfileShareUri(uri);
+    if (fromLink != null && fromLink.isNotEmpty) return fromLink;
+  }
+
+  final fromQr = (QrPayload.tryParse(text).secretlyId ?? '').trim();
+  if (fromQr.isNotEmpty) return fromQr;
+
+  // Ни ссылка, ни QR — значит сам ID. Проверять его здесь нечем и не надо:
+  // это делает `addContact`, спрашивая сервер ключей, и делает честнее любой
+  // проверки по виду строки.
+  return text;
+}
+
+/// Имя из вставленного, если оно там было.
+///
+/// QR и ссылка-приглашение несут ник отправителя. Подставить его в поле имени
+/// — не догадка за человека: он это имя УЖЕ видел в приглашении, и пустое
+/// поле после вставки выглядело бы так, будто половина данных потерялась.
+@visibleForTesting
+String? resolveDesktopContactName(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty) return null;
+  final fromQr = (QrPayload.tryParse(text).nickname ?? '').trim();
+  if (fromQr.isNotEmpty) return fromQr;
+  final uri = Uri.tryParse(text);
+  if (uri != null && uri.hasScheme) {
+    for (final key in const ['name', 'nickname', 'displayName']) {
+      final v = (uri.queryParameters[key] ?? '').trim();
+      if (v.isNotEmpty) return v;
+    }
+  }
+  return null;
+}
+
 class DesktopContactsSection extends StatefulWidget {
   const DesktopContactsSection({
     super.key,
@@ -132,18 +189,124 @@ class _DesktopContactsSectionState extends State<DesktopContactsSection> {
     }).toList(growable: false);
   }
 
+  /// Завести контакт: ID или ссылка-приглашение плюс необязательное имя.
+  ///
+  /// 🔴 ДО 21.09.2026 ЭТОГО НА КОМПЬЮТЕРЕ НЕ БЫЛО ВООБЩЕ. Раздел умел искать
+  /// среди уже известных, показать карточку и написать — то есть человек за
+  /// компьютером не мог завести новое знакомство, не взяв телефон. Для
+  /// ежедневного инструмента это не пробел удобства, а отсутствие входа.
+  ///
+  /// Сканера QR здесь нет и не будет: сканирует телефон, это направление
+  /// привязки. Зато СОДЕРЖИМОЕ кода, присланное текстом, поле принимает —
+  /// см. [resolveDesktopContactInput].
+  Future<void> _addContact() async {
+    final l10n = AppLocalizations.of(context)!;
+    final idCtrl = TextEditingController();
+    final nameCtrl = TextEditingController();
+    // Вставили ссылку или QR с ником — имя подставляется само, но остаётся
+    // правимым: своё имя для контакта человек вправе дать любое.
+    var nameTouched = false;
+    void syncName() {
+      if (nameTouched) return;
+      final guessed = resolveDesktopContactName(idCtrl.text);
+      if (guessed != null && guessed != nameCtrl.text) nameCtrl.text = guessed;
+    }
+    idCtrl.addListener(syncName);
+
+    final ok = await DesktopDialog.show<bool>(
+      context,
+      title: l10n.addContact,
+      size: DDialogSize.small,
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DesktopTextField(
+            controller: idCtrl,
+            autofocus: true,
+            hintText: l10n.desktopContactsAddHint,
+            prefixIcon: FluentIcons.person_add_24_regular,
+          ),
+          const SizedBox(height: DSpace.m),
+          DesktopTextField(
+            controller: nameCtrl,
+            hintText: l10n.nameOptionalLabel,
+            prefixIcon: FluentIcons.tag_24_regular,
+            onChanged: (_) => nameTouched = true,
+            onSubmitted: (_) => Navigator.of(context).maybePop(true),
+          ),
+        ],
+      ),
+      primary: DDialogAction(
+        label: l10n.add,
+        onPressed: () => Navigator.of(context).maybePop(true),
+      ),
+      secondary: DDialogAction(
+        label: l10n.cancel,
+        kind: DButtonKind.ghost,
+        onPressed: () => Navigator.of(context).maybePop(false),
+      ),
+    );
+
+    idCtrl.removeListener(syncName);
+    final profileId = resolveDesktopContactInput(idCtrl.text);
+    final name = nameCtrl.text.trim();
+    idCtrl.dispose();
+    nameCtrl.dispose();
+    if (ok != true || profileId == null) return;
+    if (!mounted) return;
+
+    try {
+      await widget.controller.addContact(
+        profileId: profileId,
+        displayName: name.isEmpty ? null : name,
+        displayNameIsCustom: name.isNotEmpty,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      // Те же слова, что на телефоне: «такого ID нет», «сервер недоступен».
+      // Своя формулировка здесь означала бы два разных объяснения одному и
+      // тому же отказу на двух экранах одного приложения.
+      DesktopSnackbar.show(
+        context,
+        message: contactActionErrorText(l10n, e),
+        kind: DSnackKind.error,
+      );
+      return;
+    }
+    if (!mounted) return;
+    // Показать заведённого сразу: список перечитывается по тику управляющего,
+    // но ждать его — значит оставить человека смотреть на прежний список.
+    setState(() => _selectedId = profileId);
+    unawaited(widget.vm.refreshNow());
+    DesktopSnackbar.show(
+      context,
+      message: l10n.desktopContactsAdded,
+      kind: DSnackKind.success,
+    );
+  }
+
+  /// Своё имя для контакта — общим окном, одним на оба места, откуда
+  /// переименовывают (здесь и карточка человека в переписке).
+  Future<void> _renameContact(Contact contact) => showRenameContactDialog(
+        context: context,
+        vm: widget.vm,
+        profileId: contact.profileId,
+        currentName: contact.displayName,
+      );
+
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
     final filtered = _filtered;
 
     final list = _listColumn(c, filtered);
+    final selected = _selectedById(_selectedId);
     final details = _ContactDetails(
-      contact: _selectedById(_selectedId),
-      displayName: _selectedById(_selectedId) == null
-          ? ''
-          : _displayName(_selectedById(_selectedId)!),
+      contact: selected,
+      displayName: selected == null ? '' : _displayName(selected),
       onMessage: widget.onOpenChat,
+      onRename: selected == null ? null : () => unawaited(_renameContact(selected)),
     );
     // Левая колонка — общая с чатами: та же ширина и тот же край, который
     // тянется. `shellApi == null` — прежняя неподвижная колонка.
@@ -175,11 +338,30 @@ class _DesktopContactsSectionState extends State<DesktopContactsSection> {
         children: [
           Padding(
             padding: const EdgeInsets.all(DSpace.m),
-            child: DesktopTextField(
-              controller: _searchCtrl,
-              hintText: l10n.desktopContactsSearchHint,
-              prefixIcon: FluentIcons.search_24_regular,
-              onChanged: (v) => setState(() => _query = v),
+            child: Row(
+              children: [
+                Expanded(
+                  child: DesktopTextField(
+                    controller: _searchCtrl,
+                    hintText: l10n.desktopContactsSearchHint,
+                    prefixIcon: FluentIcons.search_24_regular,
+                    onChanged: (v) => setState(() => _query = v),
+                  ),
+                ),
+                const SizedBox(width: DSpace.s),
+                // Рядом с поиском, а не в шапке окна: искать среди своих и
+                // заводить нового — соседние мысли, и разносить их по разным
+                // углам значит заставлять искать вторую.
+                // Квадратная со скруглением, а не кружок: она стоит вплотную
+                // к полю поиска, и кружок рядом с полем спорит с его формой.
+                DesktopIconButton(
+                  icon: FluentIcons.person_add_24_regular,
+                  tooltip: l10n.addContact,
+                  radius: DRadii.r11,
+                  bgColor: DColors.of(context).elevated,
+                  onPressed: () => unawaited(_addContact()),
+                ),
+              ],
             ),
           ),
           Expanded(
@@ -196,7 +378,16 @@ class _DesktopContactsSectionState extends State<DesktopContactsSection> {
                     ),
                   )
                 : filtered.isEmpty
-                    ? _EmptyList(query: _query)
+                    ? _EmptyList(
+                        query: _query,
+                        // Кнопка ТОЛЬКО когда список пуст сам по себе.
+                        // Ничего не нашлось по слову — предлагать «добавить»
+                        // значит отвечать не на тот вопрос: человек искал
+                        // среди своих, а не заводил нового.
+                        onAdd: _query.isEmpty
+                            ? () => unawaited(_addContact())
+                            : null,
+                      )
                     : ListView.builder(
                         itemCount: filtered.length,
                         itemBuilder: (ctx, i) {
@@ -383,11 +574,16 @@ class _ContactDetails extends StatelessWidget {
     required this.contact,
     required this.displayName,
     this.onMessage,
+    this.onRename,
   });
 
   final Contact? contact;
   final String displayName;
   final ValueChanged<String>? onMessage;
+
+  /// Дать контакту своё имя. `null` — строки нет вовсе: кнопка, которая
+  /// ничего не открывает, учит не верить остальным кнопкам.
+  final VoidCallback? onRename;
 
   @override
   Widget build(BuildContext context) {
@@ -460,6 +656,18 @@ class _ContactDetails extends StatelessWidget {
                 expand: true,
                 onPressed: () => onMessage!(contact!.profileId),
               ),
+            if (onRename != null) ...[
+              const SizedBox(height: DSpace.s),
+              // Тише главного действия и ниже его: написать человеку хотят
+              // каждый раз, переименовать — однажды.
+              DesktopButton(
+                label: l10n.desktopChatsRename,
+                kind: DButtonKind.ghost,
+                icon: FluentIcons.tag_24_regular,
+                expand: true,
+                onPressed: onRename,
+              ),
+            ],
           ],
         ),
       ),
@@ -477,9 +685,10 @@ class _ContactDetails extends StatelessWidget {
 }
 
 class _EmptyList extends StatelessWidget {
-  const _EmptyList({required this.query});
+  const _EmptyList({required this.query, this.onAdd});
 
   final String query;
+  final VoidCallback? onAdd;
 
   @override
   Widget build(BuildContext context) {
@@ -488,12 +697,26 @@ class _EmptyList extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(DSpace.xl),
-        child: Text(
-          query.isEmpty
-              ? l10n.desktopContactsEmpty
-              : l10n.desktopContactsNothingFor(query),
-          textAlign: TextAlign.center,
-          style: DType.caption.copyWith(color: c.textSecondary),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              query.isEmpty
+                  ? l10n.desktopContactsEmpty
+                  : l10n.desktopContactsNothingFor(query),
+              textAlign: TextAlign.center,
+              style: DType.caption.copyWith(color: c.textSecondary),
+            ),
+            if (onAdd != null) ...[
+              const SizedBox(height: DSpace.l),
+              DesktopButton(
+                label: l10n.addContact,
+                kind: DButtonKind.tonal,
+                icon: FluentIcons.person_add_24_regular,
+                onPressed: onAdd,
+              ),
+            ],
+          ],
         ),
       ),
     );

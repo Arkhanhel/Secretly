@@ -5430,7 +5430,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get desktopContactsSearchHint => 'Procurar contactos';
 
   @override
-  String get desktopContactsEmpty => 'Os contactos vão aparecer após a sincronização.';
+  String get desktopContactsEmpty => 'Ainda ninguém. Adicione um contacto por ID ou link de convite.';
 
   @override
   String desktopContactsNothingFor(Object query) {
@@ -5671,6 +5671,15 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get desktopMenuWebsite => 'Site do Secretly';
+
+  @override
+  String get desktopContactsAddHint => 'ID do Secretly ou link de convite';
+
+  @override
+  String get desktopContactsAdded => 'Contacto adicionado';
+
+  @override
+  String get desktopContactsRenamed => 'Nome guardado';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -11099,7 +11108,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String get desktopContactsSearchHint => 'Procurar contactos';
 
   @override
-  String get desktopContactsEmpty => 'Os contactos vão aparecer após a sincronização.';
+  String get desktopContactsEmpty => 'Ainda ninguém. Adicione um contato por ID ou link de convite.';
 
   @override
   String desktopContactsNothingFor(Object query) {
@@ -11340,4 +11349,13 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopMenuWebsite => 'Site do Secretly';
+
+  @override
+  String get desktopContactsAddHint => 'ID do Secretly ou link de convite';
+
+  @override
+  String get desktopContactsAdded => 'Contato adicionado';
+
+  @override
+  String get desktopContactsRenamed => 'Nome salvo';
 }

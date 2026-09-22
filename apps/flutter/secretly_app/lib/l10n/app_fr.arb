@@ -1952,7 +1952,7 @@
   "desktopForwardNoChats": "Aucune discussion disponible",
   "desktopForwardKindDirect": "Discussion privée",
   "desktopContactsSearchHint": "Rechercher des contacts",
-  "desktopContactsEmpty": "Les contacts apparaîtront après la synchronisation.",
+  "desktopContactsEmpty": "Personne pour l’instant. Ajoutez un contact par identifiant ou lien d’invitation.",
   "desktopContactsNothingFor": "Aucun résultat pour « {query} ».",
   "desktopContactsPick": "Choisissez un contact",
   "desktopContactsCardRight": "La fiche apparaîtra à droite.",
@@ -2030,5 +2030,8 @@
   "desktopMenuView": "Présentation",
   "desktopMenuWindow": "Fenêtre",
   "desktopMenuHelp": "Aide",
-  "desktopMenuWebsite": "Site web de Secretly"
+  "desktopMenuWebsite": "Site web de Secretly",
+  "desktopContactsAddHint": "Identifiant Secretly ou lien d’invitation",
+  "desktopContactsAdded": "Contact ajouté",
+  "desktopContactsRenamed": "Nom enregistré"
 }

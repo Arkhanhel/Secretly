@@ -10039,7 +10039,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopContactsEmpty.
   ///
   /// In en, this message translates to:
-  /// **'Contacts will appear after syncing.'**
+  /// **'No one yet. Add a contact by ID or invite link.'**
   String get desktopContactsEmpty;
 
   /// No description provided for @desktopContactsNothingFor.
@@ -10509,6 +10509,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Secretly Website'**
   String get desktopMenuWebsite;
+
+  /// No description provided for @desktopContactsAddHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Secretly ID or invite link'**
+  String get desktopContactsAddHint;
+
+  /// No description provided for @desktopContactsAdded.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact added'**
+  String get desktopContactsAdded;
+
+  /// No description provided for @desktopContactsRenamed.
+  ///
+  /// In en, this message translates to:
+  /// **'Name saved'**
+  String get desktopContactsRenamed;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

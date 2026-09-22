@@ -2633,7 +2633,7 @@
   "desktopForwardNoChats": "No chats available",
   "desktopForwardKindDirect": "Direct chat",
   "desktopContactsSearchHint": "Search contacts",
-  "desktopContactsEmpty": "Contacts will appear after syncing.",
+  "desktopContactsEmpty": "No one yet. Add a contact by ID or invite link.",
   "desktopContactsNothingFor": "Nothing found for “{query}”.",
   "@desktopContactsNothingFor": {
     "placeholders": {
@@ -2726,5 +2726,8 @@
   "desktopMenuView": "View",
   "desktopMenuWindow": "Window",
   "desktopMenuHelp": "Help",
-  "desktopMenuWebsite": "Secretly Website"
+  "desktopMenuWebsite": "Secretly Website",
+  "desktopContactsAddHint": "Secretly ID or invite link",
+  "desktopContactsAdded": "Contact added",
+  "desktopContactsRenamed": "Name saved"
 }

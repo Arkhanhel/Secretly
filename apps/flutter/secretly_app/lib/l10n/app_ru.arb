@@ -1948,7 +1948,7 @@
   "desktopForwardNoChats": "Нет доступных чатов",
   "desktopForwardKindDirect": "Личный чат",
   "desktopContactsSearchHint": "Поиск контактов",
-  "desktopContactsEmpty": "Контакты появятся после синхронизации.",
+  "desktopContactsEmpty": "Пока никого. Добавьте контакт по ID или ссылке-приглашению.",
   "desktopContactsNothingFor": "Ничего не найдено по запросу «{query}».",
   "desktopContactsPick": "Выберите контакт",
   "desktopContactsCardRight": "Карточка появится справа.",
@@ -2026,5 +2026,8 @@
   "desktopMenuView": "Вид",
   "desktopMenuWindow": "Окно",
   "desktopMenuHelp": "Справка",
-  "desktopMenuWebsite": "Сайт Secretly"
+  "desktopMenuWebsite": "Сайт Secretly",
+  "desktopContactsAddHint": "ID в Secretly или ссылка-приглашение",
+  "desktopContactsAdded": "Контакт добавлен",
+  "desktopContactsRenamed": "Имя сохранено"
 }

@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 import '../../../../app/app_controller.dart';
+import '../../app/contact_rename.dart';
 import '../../../verify_contact_screen.dart';
 import '../../../report_abuse_sheet.dart';
 import '../../../../l10n/app_localizations.dart';
@@ -82,6 +83,13 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
   late final DesktopSelector<({bool blocked, int? autoDeleteSeconds})> _status;
 
   String get _peerProfileId => widget.conversation.peerProfileId ?? '';
+
+  /// Имя, под которым человек показан в переписке.
+  ///
+  /// Прочерка здесь нет намеренно: он годится для ПОКАЗА в шапке, но в поле
+  /// переименования подставился бы как имя, и человек сохранил бы контакт с
+  /// именем «—».
+  String get _titleName => widget.conversation.title.trim();
   String get _convoId => widget.conversation.convoId;
 
   @override
@@ -753,6 +761,33 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
                   label: 'Secretly ID',
                   value: _peerProfileId,
                   copyValue: _peerProfileId,
+                ),
+              // 🔴 ПЕРЕИМЕНОВАТЬ МОЖНО И ОТСЮДА (21.09.2026).
+              //
+              // Своё имя контакту на компьютере не давалось НИГДЕ; когда оно
+              // появилось в разделе «Контакты», сюда его пришлось добавить
+              // сразу же. Человек, который смотрит на карточку собеседника
+              // ПРЯМО ИЗ ПЕРЕПИСКИ, не пойдёт искать его же в другом разделе:
+              // он решит, что переименовать нельзя.
+              //
+              // Окно — то же самое (`showRenameContactDialog`), а не похожее:
+              // две копии одного действия расходятся текстами и обещают
+              // разное.
+              if (_peerProfileId.isNotEmpty)
+                DetailsInfoRow(
+                  icon: FluentIcons.tag_24_regular,
+                  label: l10n.contactEditNameLabel,
+                  value: _titleName.isEmpty ? '—' : _titleName,
+                  onTap: () => unawaited(showRenameContactDialog(
+                    context: context,
+                    vm: widget.vm,
+                    profileId: _peerProfileId,
+                    // Подставляем показанное имя — ровно как на телефоне
+                    // (`edit_contact_screen.dart`, `initialName`). Пустое
+                    // поле снимает своё имя и возвращает то, которым человек
+                    // назвался сам.
+                    currentName: _titleName,
+                  )),
                 ),
               // · «ИСЧЕЗАЮЩИЕ СООБЩЕНИЯ» — НАСТРОЙКА, А НЕ ФАКТ (макет).
               //

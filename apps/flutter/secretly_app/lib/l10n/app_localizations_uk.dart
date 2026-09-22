@@ -5450,7 +5450,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopContactsSearchHint => 'Пошук контактів';
 
   @override
-  String get desktopContactsEmpty => 'Контакти з\'являться після синхронізації.';
+  String get desktopContactsEmpty => 'Поки нікого. Додайте контакт за ID або посиланням-запрошенням.';
 
   @override
   String desktopContactsNothingFor(Object query) {
@@ -5691,4 +5691,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get desktopMenuWebsite => 'Сайт Secretly';
+
+  @override
+  String get desktopContactsAddHint => 'ID у Secretly або посилання-запрошення';
+
+  @override
+  String get desktopContactsAdded => 'Контакт додано';
+
+  @override
+  String get desktopContactsRenamed => 'Ім’я збережено';
 }

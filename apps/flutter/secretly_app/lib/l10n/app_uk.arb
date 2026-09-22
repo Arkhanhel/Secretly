@@ -1952,7 +1952,7 @@
   "desktopForwardNoChats": "Немає доступних чатів",
   "desktopForwardKindDirect": "Особистий чат",
   "desktopContactsSearchHint": "Пошук контактів",
-  "desktopContactsEmpty": "Контакти з'являться після синхронізації.",
+  "desktopContactsEmpty": "Поки нікого. Додайте контакт за ID або посиланням-запрошенням.",
   "desktopContactsNothingFor": "Нічого не знайдено за запитом «{query}».",
   "desktopContactsPick": "Виберіть контакт",
   "desktopContactsCardRight": "Картка з'явиться праворуч.",
@@ -2030,5 +2030,8 @@
   "desktopMenuView": "Вигляд",
   "desktopMenuWindow": "Вікно",
   "desktopMenuHelp": "Довідка",
-  "desktopMenuWebsite": "Сайт Secretly"
+  "desktopMenuWebsite": "Сайт Secretly",
+  "desktopContactsAddHint": "ID у Secretly або посилання-запрошення",
+  "desktopContactsAdded": "Контакт додано",
+  "desktopContactsRenamed": "Ім’я збережено"
 }
