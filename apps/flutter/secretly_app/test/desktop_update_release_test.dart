@@ -64,6 +64,48 @@ void main() {
     );
   });
 
+  test('🔴 адрес обновлений — СВОЙ, не чужая площадка', () {
+    // Как у Signal (updates.signal.org), Telegram и Element. Проверка
+    // обновлений идёт с каждой установленной копии и несёт адрес человека:
+    // отдать этот поток третьей стороне значит сообщить ей, у кого стоит
+    // Secretly и когда он включает компьютер.
+    final m = RegExp(
+      r'<key>SUFeedURL</key>.*?<string>([^<]*)</string>',
+      dotAll: true,
+    ).firstMatch(plist);
+    expect(m, isNotNull);
+    final url = (m!.group(1) ?? '').trim();
+    expect(url.startsWith('https://'), isTrue, reason: 'только по HTTPS');
+    expect(url.endsWith('/appcast.xml'), isTrue);
+    for (final foreign in const [
+      'github.com',
+      'githubusercontent.com',
+      's3.amazonaws.com',
+      'dropbox.com',
+    ]) {
+      expect(url.contains(foreign), isFalse, reason: 'чужая площадка: $foreign');
+    }
+    expect(url.contains('secretlyapp.com'), isTrue);
+  });
+
+  test('раздача обновлений описана в настройке прокси', () {
+    final caddy =
+        File('../../../server/proxy/caddy/Caddyfile').readAsStringSync();
+    expect(caddy.contains('SECRETLY_UPDATES_DOMAIN'), isTrue);
+    // Перечень файлов в каталоге сам по себе сообщает, какие версии были.
+    expect(caddy.contains('respond 404'), isTrue);
+    // «Этот адрес спросил про обновления» = «у этого человека стоит Secretly».
+    expect(caddy.contains('output discard'), isTrue);
+  });
+
+  test('🔴 сборка для раздачи не уйдёт, пока адрес обновлений молчит', () {
+    // Адрес зашит в сборку навсегда: ошибиться можно один раз и узнать об
+    // этом только от людей, у которых «не удалось проверить обновления».
+    expect(script.contains('the update feed does not answer'), isTrue);
+    expect(script.contains("Print :SUFeedURL"), isTrue,
+        reason: 'читать надо из собранного приложения, а не из переменной');
+  });
+
   test('обновлятор не поднимается, пока не задан адрес перечня', () {
     // Пока `SUFeedURL` не прописан, проверка обновлений выключена целиком, и
     // пункта меню нет: обновлятор, которому некуда ходить, показывал бы

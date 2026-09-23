@@ -303,6 +303,30 @@ if [ -n "$NOTARY_PROFILE" ]; then
       exit 1
       ;;
   esac
+  # 🔴 ЕСЛИ АДРЕС ОБНОВЛЕНИЙ НЕ ОТВЕЧАЕТ — НЕ ОТГРУЖАЕМ.
+  #
+  # Заверение означает «эту сборку отдадут людям». Сборка, у которой
+  # `SUFeedURL` указывает в пустоту, будет у каждого показывать «не удалось
+  # проверить обновления» — и, что хуже, останется без обновлений насовсем,
+  # потому что адрес зашит в неё навсегда. Ошибиться здесь можно один раз и
+  # узнать об этом только от людей.
+  #
+  # Проверка читается из самого Info.plist собранного приложения, а не из
+  # переменной: врать может переменная, а не то, что реально уехало в сборку.
+  FEED_URL="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' \
+    "$APP/Contents/Info.plist" 2>/dev/null || true)"
+  if [ -n "$FEED_URL" ]; then
+    echo "==> checking the update feed is live: $FEED_URL"
+    if ! /usr/bin/curl -sfI --max-time 15 "$FEED_URL" >/dev/null 2>&1; then
+      echo "error: the update feed does not answer: $FEED_URL" >&2
+      echo "       this build would ship with auto-update pointing at nothing." >&2
+      echo "       publish appcast.xml there first (see the updates.* block in" >&2
+      echo "       server/proxy/caddy/Caddyfile), or unset SUFeedURL to ship" >&2
+      echo "       without the updater." >&2
+      exit 1
+    fi
+  fi
+
   ZIP="$APP_DIR/$(basename "${APP%.app}")-notarize.zip"
   echo "==> submitting to Apple notary service (profile: $NOTARY_PROFILE)"
   /usr/bin/ditto -c -k --keepParent "$APP" "$ZIP"

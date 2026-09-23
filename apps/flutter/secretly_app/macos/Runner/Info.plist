@@ -28,6 +28,13 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUFeedURL</key>
+	<!-- Свой поддомен на своём сервере — как у Signal (updates.signal.org),
+	     Telegram и Element. Проверка обновлений идёт с каждой установленной
+	     копии и несёт адрес человека; отдавать этот поток третьей стороне
+	     значит сообщать ей, у кого стоит Secretly и когда он включает
+	     компьютер. Раздача — блок updates.* в server/proxy/caddy/Caddyfile. -->
+	<string>https://updates.secretlyapp.com/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<!-- 🔴 ЭТО ОТКРЫТАЯ ЧАСТЬ КЛЮЧА, И ЕЙ ЗДЕСЬ МЕСТО.
 	     Ею приложение ПРОВЕРЯЕТ подпись пакета обновления перед установкой —
