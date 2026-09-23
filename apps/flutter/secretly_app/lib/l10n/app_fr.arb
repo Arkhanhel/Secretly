@@ -2034,5 +2034,8 @@
   "desktopContactsAddHint": "Identifiant Secretly ou lien d’invitation",
   "desktopContactsAdded": "Contact ajouté",
   "desktopContactsRenamed": "Nom enregistré",
-  "desktopMenuCheckUpdates": "Rechercher les mises à jour…"
+  "desktopMenuCheckUpdates": "Rechercher les mises à jour…",
+  "desktopNotifBlockedTitle": "Le système n’affiche pas les notifications de Secretly",
+  "desktopNotifBlockedBody": "Les commutateurs ci-dessous fonctionnent toujours, mais rien ne sera affiché : le système bloque les notifications de cette app. La fenêtre est souvent masquée, et une notification est le seul moyen d’apprendre l’arrivée d’un message.",
+  "desktopNotifBlockedAction": "Ouvrir Réglages Système"
 }

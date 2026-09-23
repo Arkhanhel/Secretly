@@ -2030,5 +2030,8 @@
   "desktopContactsAddHint": "ID в Secretly или ссылка-приглашение",
   "desktopContactsAdded": "Контакт добавлен",
   "desktopContactsRenamed": "Имя сохранено",
-  "desktopMenuCheckUpdates": "Проверить обновления…"
+  "desktopMenuCheckUpdates": "Проверить обновления…",
+  "desktopNotifBlockedTitle": "Система не показывает уведомления Secretly",
+  "desktopNotifBlockedBody": "Переключатели ниже работают, но показать их некому: уведомления приложения запрещены в настройках системы. Окно часто скрыто, и уведомление — единственный способ узнать о новом сообщении.",
+  "desktopNotifBlockedAction": "Открыть настройки системы"
 }

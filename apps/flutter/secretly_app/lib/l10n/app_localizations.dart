@@ -10533,6 +10533,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Check for Updates…'**
   String get desktopMenuCheckUpdates;
+
+  /// No description provided for @desktopNotifBlockedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The system is not showing Secretly notifications'**
+  String get desktopNotifBlockedTitle;
+
+  /// No description provided for @desktopNotifBlockedBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The switches below still work, but nothing will be shown: the system is blocking this app’s notifications. The window is often hidden, and a notification is the only way to learn about a new message.'**
+  String get desktopNotifBlockedBody;
+
+  /// No description provided for @desktopNotifBlockedAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Open System Settings'**
+  String get desktopNotifBlockedAction;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

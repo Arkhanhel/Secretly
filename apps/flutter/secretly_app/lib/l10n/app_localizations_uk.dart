@@ -5703,4 +5703,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get desktopMenuCheckUpdates => 'Перевірити оновлення…';
+
+  @override
+  String get desktopNotifBlockedTitle => 'Система не показує сповіщення Secretly';
+
+  @override
+  String get desktopNotifBlockedBody => 'Перемикачі нижче працюють, але показати їх нікому: сповіщення застосунку заборонені в налаштуваннях системи. Вікно часто приховане, і сповіщення — єдиний спосіб дізнатися про нове повідомлення.';
+
+  @override
+  String get desktopNotifBlockedAction => 'Відкрити налаштування системи';
 }

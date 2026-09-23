@@ -5683,4 +5683,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get desktopMenuCheckUpdates => 'Check for Updates…';
+
+  @override
+  String get desktopNotifBlockedTitle => 'The system is not showing Secretly notifications';
+
+  @override
+  String get desktopNotifBlockedBody => 'The switches below still work, but nothing will be shown: the system is blocking this app’s notifications. The window is often hidden, and a notification is the only way to learn about a new message.';
+
+  @override
+  String get desktopNotifBlockedAction => 'Open System Settings';
 }

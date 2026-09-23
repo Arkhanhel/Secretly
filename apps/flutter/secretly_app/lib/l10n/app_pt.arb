@@ -2034,5 +2034,8 @@
   "desktopContactsAddHint": "ID do Secretly ou link de convite",
   "desktopContactsAdded": "Contacto adicionado",
   "desktopContactsRenamed": "Nome guardado",
-  "desktopMenuCheckUpdates": "Procurar atualizações…"
+  "desktopMenuCheckUpdates": "Procurar atualizações…",
+  "desktopNotifBlockedTitle": "O sistema não mostra as notificações do Secretly",
+  "desktopNotifBlockedBody": "Os botões abaixo continuam a funcionar, mas nada será mostrado: o sistema está a bloquear as notificações desta aplicação. A janela está muitas vezes oculta, e uma notificação é a única forma de saber de uma nova mensagem.",
+  "desktopNotifBlockedAction": "Abrir Definições do Sistema"
 }

@@ -5683,6 +5683,15 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get desktopMenuCheckUpdates => 'Procurar atualizações…';
+
+  @override
+  String get desktopNotifBlockedTitle => 'O sistema não mostra as notificações do Secretly';
+
+  @override
+  String get desktopNotifBlockedBody => 'Os botões abaixo continuam a funcionar, mas nada será mostrado: o sistema está a bloquear as notificações desta aplicação. A janela está muitas vezes oculta, e uma notificação é a única forma de saber de uma nova mensagem.';
+
+  @override
+  String get desktopNotifBlockedAction => 'Abrir Definições do Sistema';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -11364,4 +11373,13 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopMenuCheckUpdates => 'Buscar atualizações…';
+
+  @override
+  String get desktopNotifBlockedTitle => 'O sistema não mostra as notificações do Secretly';
+
+  @override
+  String get desktopNotifBlockedBody => 'Os botões abaixo continuam funcionando, mas nada será mostrado: o sistema está bloqueando as notificações deste app. A janela fica oculta com frequência, e uma notificação é a única forma de saber de uma nova mensagem.';
+
+  @override
+  String get desktopNotifBlockedAction => 'Abrir Ajustes do Sistema';
 }

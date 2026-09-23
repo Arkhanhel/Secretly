@@ -2730,5 +2730,8 @@
   "desktopContactsAddHint": "Secretly ID or invite link",
   "desktopContactsAdded": "Contact added",
   "desktopContactsRenamed": "Name saved",
-  "desktopMenuCheckUpdates": "Check for Updates…"
+  "desktopMenuCheckUpdates": "Check for Updates…",
+  "desktopNotifBlockedTitle": "The system is not showing Secretly notifications",
+  "desktopNotifBlockedBody": "The switches below still work, but nothing will be shown: the system is blocking this app’s notifications. The window is often hidden, and a notification is the only way to learn about a new message.",
+  "desktopNotifBlockedAction": "Open System Settings"
 }

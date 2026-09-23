@@ -6,7 +6,7 @@ import 'dart:io' show Platform;
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/foundation.dart'
-    show VoidCallback, kIsWeb, visibleForTesting;
+    show ValueNotifier, VoidCallback, debugPrint, kIsWeb, visibleForTesting;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:local_notifier/local_notifier.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -88,6 +88,27 @@ class DesktopNotificationService {
 
   bool _ready = false;
   bool _windowFocused = true;
+
+  /// Пропускает ли САМА СИСТЕМА уведомления этого приложения.
+  ///
+  /// 🔴 ЭТОТ ОТВЕТ ВЫБРАСЫВАЛСЯ, И ЭТО БЫЛА МОЛЧАЛИВАЯ ПОТЕРЯ СООБЩЕНИЙ.
+  ///
+  /// Разрешение запрашивалось (`requestPermissions`), но результат уходил в
+  /// никуда: `unawaited(...catchError((_) => false))`. Приложение не знало
+  /// отказа — и вело себя так, будто его нет.
+  ///
+  /// Чем это кончается на компьютере. Окно живёт в трее и большую часть
+  /// времени спрятано; уведомление — ЕДИНСТВЕННЫЙ способ узнать о новом
+  /// сообщении. Человек однажды нажал «Не разрешать» (или выключил их в
+  /// системных настройках) — и с тех пор не получает ничего, а в разделе
+  /// «Уведомления» все переключатели стоят включёнными и выглядят рабочими.
+  /// Вывод, который он делает: «Secretly не доставляет сообщения». Это худший
+  /// из возможных отказов — тот, который выглядит как исправная работа.
+  ///
+  /// `null` — ответа ещё нет или спрашивать некого: на Windows `local_notifier`
+  /// разрешений не знает вовсе, и показывать там предупреждение значило бы
+  /// пугать без причины.
+  final ValueNotifier<bool?> systemAllowed = ValueNotifier<bool?>(null);
   bool _screenShareActive = false;
   String _lastNotifiedCallId = '';
 
@@ -160,6 +181,53 @@ class DesktopNotificationService {
     final prefs = _prefs ?? await SharedPreferences.getInstance();
     _prefs = prefs;
     await prefs.setBool(_prefsDoNotDisturbKey, value);
+  }
+
+  /// Спросить систему заново, пропускает ли она наши уведомления.
+  ///
+  /// Вызывается после запроса разрешения и каждый раз, когда окно снова
+  /// снова становится активным: человек уходит выключать или включать их в
+  /// системных настройках и возвращается — и предупреждение должно исчезнуть
+  /// само, без перезапуска.
+  /// Чем спросить систему. Подменяется в тестах.
+  ///
+  /// Настоящий путь идёт в платформенный канал, которого в тесте нет, а на
+  /// сборщике CI нет и самой macOS. Без этого шва проверка свелась бы к
+  /// «на маке что-то произошло» — и молчала бы ровно там, где нужна.
+  @visibleForTesting
+  static Future<bool?> Function()? debugPermissionProbe;
+
+  Future<void> refreshSystemPermission() async {
+    final probe = debugPermissionProbe;
+    if (probe != null) {
+      final value = await probe();
+      if (value != null) systemAllowed.value = value;
+      return;
+    }
+    if (kIsWeb || !Platform.isMacOS) return;
+    try {
+      final macImpl = _plugin
+          .resolvePlatformSpecificImplementation<
+            MacOSFlutterLocalNotificationsPlugin
+          >();
+      if (macImpl == null) return;
+      final opts = await macImpl.checkPermissions();
+      // `null` — система не ответила. Это НЕ отказ: показать предупреждение
+      // по молчанию значило бы обвинить систему без основания.
+      if (opts == null) return;
+      // Достаточно `isEnabled`: без него не покажется ничего. Отдельно
+      // выключенные звук или плашка — это выбор человека, а не потеря.
+      final allowed = opts.isEnabled;
+      // В журнал — потому что это причина жалобы «сообщения не приходят», а
+      // причина, которой нет в журнале, стоит поддержке часа расспросов.
+      if (systemAllowed.value != allowed) {
+        debugPrint('Sly/Diag: event=notif.system_permission allowed=$allowed');
+      }
+      systemAllowed.value = allowed;
+    } catch (_) {
+      // Канал недоступен — молчим. Прежнее значение остаётся: ложная тревога
+      // хуже отсутствия тревоги.
+    }
   }
 
   bool get _isDesktopOs =>
@@ -239,10 +307,15 @@ class DesktopNotificationService {
             MacOSFlutterLocalNotificationsPlugin
           >();
       if (macImpl != null) {
+        // Ответ на запрос больше НЕ выбрасывается: за ним сразу идёт сверка с
+        // системой. Ожидание по-прежнему не блокирует запуск (см. выше про
+        // окно, способное висеть бесконечно) — поэтому `unawaited`, а не
+        // `await`, и проверка навешена продолжением.
         unawaited(
           macImpl
               .requestPermissions(alert: true, badge: true, sound: true)
-              .catchError((_) => false),
+              .catchError((_) => false)
+              .whenComplete(refreshSystemPermission),
         );
       }
       _ready = true;
@@ -284,6 +357,9 @@ class DesktopNotificationService {
   }
 
   void setWindowFocused(bool focused) {
+    // Вернулись в окно — самый вероятный момент, когда разрешение только что
+    // поменяли в системных настройках.
+    if (focused && !_windowFocused) unawaited(refreshSystemPermission());
     _windowFocused = focused;
   }
 

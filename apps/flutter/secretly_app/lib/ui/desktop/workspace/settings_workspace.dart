@@ -256,6 +256,13 @@ class SettingsWorkspace extends StatelessWidget {
           subtitle: l10n.desktopSettingsNotificationsSubtitle,
           group: l10n.desktopSettingsGroupApp,
           keywords: _keywords(l10n.desktopSettingsNotificationsKeywords),
+          // 🔴 ОТМЕТКА В СПИСКЕ, А НЕ ТОЛЬКО ВНУТРИ РАЗДЕЛА.
+          //
+          // Про запрет уведомлений человек узнаёт ровно тогда, когда открывает
+          // «Уведомления», — а открывает он их только если уже заподозрил
+          // неладное. То есть узнаёт последним и случайно. Точка в строке
+          // видна сразу, как только он вообще зашёл в настройки.
+          trailing: const _NotificationsAlertDot(),
           builder: (ctx) => const _NotificationsPane(),
         ),
         WorkspaceSection(
@@ -1892,6 +1899,39 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
     }
   }
 
+  /// Открыть системные настройки уведомлений.
+  ///
+  /// Два адреса, а не один: с macOS 13 раздел переехал на
+  /// `com.apple.Notifications-Settings.extension`, а прежний
+  /// `com.apple.preference.notifications` на новых системах открывает не то
+  /// или ничего. Пробуем сперва новый; если система его не знает — старый.
+  /// Молча не получиться здесь нельзя: кнопка, которая ничего не открывает,
+  /// оставляет человека ровно там же, где он был.
+  Future<void> _openSystemNotificationSettings() async {
+    const urls = <String>[
+      'x-apple.systempreferences:com.apple.Notifications-Settings.extension',
+      'x-apple.systempreferences:com.apple.preference.notifications',
+    ];
+    for (final u in urls) {
+      try {
+        if (await launchUrl(Uri.parse(u),
+            mode: LaunchMode.externalApplication)) {
+          return;
+        }
+      } catch (_) {
+        // Следующий адрес.
+      }
+    }
+    if (!mounted) return;
+    // Общая строка «не удалось открыть» — своей заводить не за чем: человеку
+    // важно, что не открылось, а не какой именно из двух адресов не подошёл.
+    DesktopSnackbar.show(
+      context,
+      message: AppLocalizations.of(context)!.devicesLinkOpenFailed,
+      kind: DSnackKind.error,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -1903,6 +1943,23 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
     final doNotDisturb = svc?.doNotDisturb ?? false;
     return _PaneScaffold(
       children: [
+        // 🔴 ПЕРВЫМ ДЕЛОМ — НЕ НАСТРОЙКИ, А ОТКАЗ СИСТЕМЫ, ЕСЛИ ОН ЕСТЬ.
+        //
+        // Все переключатели ниже управляют тем, ЧТО показывать. Если система
+        // не пропускает уведомления вовсе, они управляют ничем — и при этом
+        // выглядят включёнными и рабочими. Человек листает исправную с виду
+        // страницу и делает единственный доступный ему вывод: «Secretly не
+        // доставляет сообщения». Поэтому отказ стоит выше всего остального.
+        if (svc != null)
+          ValueListenableBuilder<bool?>(
+            valueListenable: svc.systemAllowed,
+            builder: (ctx, allowed, _) => allowed == false
+                ? _SystemNotificationsBlockedCard(
+                    onOpenSettings: () =>
+                        unawaited(_openSystemNotificationSettings()),
+                  )
+                : const SizedBox.shrink(),
+          ),
         WorkspaceCard(
           title: l10n.desktopSettingsNotificationsLabel,
           description: svc == null ? l10n.desktopNotifUnavailableHere : null,
@@ -1990,6 +2047,106 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Точка тревоги у строки «Уведомления» в боковой колонке.
+///
+/// Ничего не рисует, пока система уведомления пропускает, — и не рисует, пока
+/// ответа нет: точка «на всякий случай» обесценила бы точку настоящую.
+class _NotificationsAlertDot extends StatelessWidget {
+  const _NotificationsAlertDot();
+
+  @override
+  Widget build(BuildContext context) {
+    final svc = DesktopNotificationService.instance;
+    if (svc == null) return const SizedBox.shrink();
+    final c = DColors.of(context);
+    return ValueListenableBuilder<bool?>(
+      valueListenable: svc.systemAllowed,
+      builder: (ctx, allowed, _) {
+        if (allowed != false) return const SizedBox.shrink();
+        return DesktopTooltip(
+          message: AppLocalizations.of(ctx)!.desktopNotifBlockedTitle,
+          child: Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: c.warning, shape: BoxShape.circle),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Плашка «система не пропускает уведомления».
+///
+/// Тревожного цвета и с одним действием — кнопкой в системные настройки. Без
+/// кнопки это было бы сообщение «у вас сломано, разбирайтесь сами»: путь к
+/// нужному разделу macOS помнит не каждый, а искать его в чужом интерфейсе
+/// посреди чужой ошибки — худший момент для поиска.
+class _SystemNotificationsBlockedCard extends StatelessWidget {
+  const _SystemNotificationsBlockedCard({required this.onOpenSettings});
+
+  final VoidCallback onOpenSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    final l10n = AppLocalizations.of(context)!;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: DSpace.xl),
+      child: Container(
+        padding: const EdgeInsets.all(DSpace.l),
+        decoration: BoxDecoration(
+          color: c.warning.withValues(alpha: c.isDark ? 0.12 : 0.10),
+          border: Border.all(color: c.warning.withValues(alpha: 0.45)),
+          borderRadius: BorderRadius.circular(DRadii.md),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              FluentIcons.alert_urgent_24_regular,
+              size: 22,
+              color: c.warning,
+            ),
+            const SizedBox(width: DSpace.m),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    l10n.desktopNotifBlockedTitle,
+                    style: DType.body.copyWith(
+                      color: c.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: DSpace.xs),
+                  Text(
+                    l10n.desktopNotifBlockedBody,
+                    style: DType.label
+                        .copyWith(color: c.textSecondary, height: 1.45),
+                  ),
+                  const SizedBox(height: DSpace.m),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: DesktopButton(
+                      label: l10n.desktopNotifBlockedAction,
+                      kind: DButtonKind.tonal,
+                      icon: FluentIcons.settings_24_regular,
+                      onPressed: onOpenSettings,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

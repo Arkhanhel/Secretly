@@ -2034,5 +2034,8 @@
   "desktopContactsAddHint": "ID у Secretly або посилання-запрошення",
   "desktopContactsAdded": "Контакт додано",
   "desktopContactsRenamed": "Ім’я збережено",
-  "desktopMenuCheckUpdates": "Перевірити оновлення…"
+  "desktopMenuCheckUpdates": "Перевірити оновлення…",
+  "desktopNotifBlockedTitle": "Система не показує сповіщення Secretly",
+  "desktopNotifBlockedBody": "Перемикачі нижче працюють, але показати їх нікому: сповіщення застосунку заборонені в налаштуваннях системи. Вікно часто приховане, і сповіщення — єдиний спосіб дізнатися про нове повідомлення.",
+  "desktopNotifBlockedAction": "Відкрити налаштування системи"
 }

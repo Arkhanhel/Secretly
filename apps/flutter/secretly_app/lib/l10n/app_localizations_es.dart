@@ -5683,4 +5683,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get desktopMenuCheckUpdates => 'Buscar actualizaciones…';
+
+  @override
+  String get desktopNotifBlockedTitle => 'El sistema no muestra las notificaciones de Secretly';
+
+  @override
+  String get desktopNotifBlockedBody => 'Los interruptores de abajo siguen funcionando, pero no se mostrará nada: el sistema bloquea las notificaciones de esta app. La ventana suele estar oculta, y una notificación es la única forma de enterarse de un mensaje nuevo.';
+
+  @override
+  String get desktopNotifBlockedAction => 'Abrir Ajustes del Sistema';
 }
