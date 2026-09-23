@@ -14594,6 +14594,12 @@ class AppController {
           'expected': expected,
           'ok': onDisk == expected,
         });
+        // Итог разовой чистки дублей (миграция 68). Печатается один раз — в
+        // запуск, который её выполнил; по нему видно, сколько налипло.
+        final deduped = AppDb.debugLastPayloadDedupeRemoved;
+        if (deduped != null) {
+          DiagLog.event('startup', 'db_payload_dedupe', {'removed': deduped});
+        }
       } catch (_) {
         // observability only — never block boot on it
       }
@@ -35016,6 +35022,35 @@ class AppController {
         if (existing != null) continue;
       } catch (_) {
         // Best-effort; fall through and let insertEvent dedup.
+      }
+
+      // 🔴 СВЕРКА ПО ЛОГИЧЕСКОМУ ID, А НЕ ТОЛЬКО ПО КЛЮЧУ СТРОКИ (24.09.2026).
+      //
+      // Входящее личное сообщение лежит под `event_id = msgId` — id КОНВЕРТА
+      // реле, а у каждого устройства свой конверт. Одно и то же сообщение у
+      // телефона и у ПК оказывалось под разными ключами, проверка выше его не
+      // узнавала, и синхронизация истории — она просит «последние 250», то
+      // есть ровно то, что уже пришло вживую, — клала второй экземпляр.
+      // Владелец увидел это как «сообщения через какое-то время задвоились».
+      //
+      // Живой приём это правило соблюдал давно (`apply_dedup_payload` при
+      // записи входящего); здесь оно просто не было применено. Сверяем с
+      // ЭТОЙ перепиской: логический id от отправителя одинаков на всех
+      // устройствах.
+      final payloadId = (ev.payloadEventId ?? '').trim();
+      if (payloadId.isNotEmpty) {
+        try {
+          if (await db.eventExistsForPayload(
+            convoId: ev.convoId,
+            payloadEventId: payloadId,
+          )) {
+            continue;
+          }
+        } catch (_) {
+          // Без сверки лучше пропустить событие, чем задвоить его: история
+          // догонится следующим циклом.
+          continue;
+        }
       }
 
       if (await _shouldDropConversationEventByClearCutoff(

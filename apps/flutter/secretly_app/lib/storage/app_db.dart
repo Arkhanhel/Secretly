@@ -213,7 +213,7 @@ class AppDb {
     _db = reopened._db;
   }
 
-  static const _schemaVersion = 67;
+  static const _schemaVersion = 68;
 
   static String _escapeSqlString(String s) {
     // Minimal SQL string literal escaping for PRAGMA key.
@@ -1726,6 +1726,35 @@ CREATE TABLE IF NOT EXISTS contact_verification (
             alterSql:
                 'ALTER TABLE contact_devices ADD COLUMN approved_at_ms INTEGER;',
           );
+        }
+      }
+
+      if (oldVersion < 68) {
+        // 🔴 ЧИСТКА ДУБЛЕЙ ОТ СИНХРОНИЗАЦИИ ИСТОРИИ (24.09.2026).
+        //
+        // Входящее личное сообщение лежит под `event_id = msgId` — id
+        // КОНВЕРТА реле, а у каждого устройства свой конверт. Синхронизация
+        // истории между своими устройствами сверяла только `event_id`, и копия
+        // с телефона ложилась на ПК второй раз, рядом с уже принятой вживую.
+        // Новые дубли остановлены в `_applyPeerHistoryChunk`; здесь убираются
+        // налипшие.
+        //
+        // 🔴 Падение в цепочке миграций — это база, которая не открывается,
+        // то есть потеря переписки. Чистка не обязательна, поэтому любая
+        // ошибка здесь проглатывается: лучше оставить дубли, чем закрыть
+        // человеку его историю.
+        try {
+          final hasEvents = (await db.rawQuery(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='events';",
+          )).isNotEmpty;
+          if (hasEvents) {
+            final cols = await db.rawQuery('PRAGMA table_info(events);');
+            if (cols.any((c) => c['name'] == 'payload_event_id')) {
+              debugLastPayloadDedupeRemoved = await dedupeEventsByPayload(db);
+            }
+          }
+        } catch (_) {
+          // См. выше: дубль лучше закрытой базы.
         }
       }
 
@@ -10544,6 +10573,74 @@ CREATE TABLE IF NOT EXISTS deferred_room_inbound (
         convoId: convoId,
       );
     }
+  }
+
+  /// Есть ли в переписке [convoId] сообщение с логическим id [payloadEventId].
+  ///
+  /// Строже, чем [convoIdForPayloadEventId]: та ищет по всем перепискам и
+  /// берёт первую попавшуюся, а синхронизации истории нужен ответ ровно про
+  /// ЭТУ переписку. Индекс `events_payload_id_idx` делает запрос дешёвым.
+  Future<bool> eventExistsForPayload({
+    required String convoId,
+    required String payloadEventId,
+  }) async {
+    final id = payloadEventId.trim();
+    if (id.isEmpty) return false;
+    final rows = await _db.query(
+      'events',
+      columns: ['event_id'],
+      where: 'payload_event_id = ? AND convo_id = ?',
+      whereArgs: [id, convoId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  /// Сколько дублей убрала миграция 68 в этом процессе — для журнала.
+  static int? debugLastPayloadDedupeRemoved;
+
+  /// Убирает строки, которые описывают ОДНО И ТО ЖЕ сообщение.
+  ///
+  /// Одно сообщение — это одинаковые переписка, логический id и тип. Такие
+  /// строки появлялись, когда синхронизация истории приносила копию под
+  /// другим `event_id`.
+  ///
+  /// Остаётся строка, вставленная ПЕРВОЙ (наименьший `rowid`): обычно это
+  /// принятая вживую — у неё отметка прочтения и всё, что приложение
+  /// успело к ней привязать. Если отметки прочтения у неё нет, а у дубля
+  /// есть, она переносится: иначе прочитанное снова стало бы непрочитанным.
+  /// Реакции, вложения и квитанции привязаны к логическому id или к блобу,
+  /// а не к строке, поэтому удаление дубля их не задевает.
+  ///
+  /// 🔴 Без оконных функций: на Android 7 (minSdk 24) системный SQLite 3.9,
+  /// а они появились в 3.25.
+  static Future<int> dedupeEventsByPayload(DatabaseExecutor db) async {
+    final groups = await db.rawQuery('''
+SELECT convo_id, payload_event_id, type,
+       MIN(rowid) AS keep_rowid,
+       MAX(read_at_ms) AS max_read
+FROM events
+WHERE payload_event_id IS NOT NULL AND payload_event_id <> ''
+GROUP BY convo_id, payload_event_id, type
+HAVING COUNT(*) > 1;
+''');
+    var removed = 0;
+    for (final g in groups) {
+      final keep = (g['keep_rowid'] as num).toInt();
+      final maxRead = (g['max_read'] as num?)?.toInt();
+      if (maxRead != null) {
+        await db.rawUpdate(
+          'UPDATE events SET read_at_ms = ? WHERE rowid = ? AND read_at_ms IS NULL;',
+          [maxRead, keep],
+        );
+      }
+      removed += await db.rawDelete(
+        'DELETE FROM events WHERE convo_id = ? AND payload_event_id = ? '
+        'AND type = ? AND rowid <> ?;',
+        [g['convo_id'], g['payload_event_id'], g['type'], keep],
+      );
+    }
+    return removed;
   }
 
   Future<String?> convoIdForPayloadEventId(String payloadEventId) async {
