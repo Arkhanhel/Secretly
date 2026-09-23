@@ -5737,4 +5737,89 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get backupPwNeedSpecial => 'Добавьте хотя бы один спецсимвол, например !, # или ?.';
+
+  @override
+  String get desktopAuthGateTitle => 'Secretly на этом компьютере';
+
+  @override
+  String get desktopAuthGateSubtitle => 'Выберите, как войти';
+
+  @override
+  String get desktopAuthPhoneTitle => 'Войти через телефон';
+
+  @override
+  String get desktopAuthPhoneBody => 'Если Secretly уже стоит на телефоне. Переписка и контакты переедут сюда.';
+
+  @override
+  String get desktopAuthCreateTitle => 'Создать новый аккаунт';
+
+  @override
+  String get desktopAuthCreateBody => 'Аккаунт только на этом компьютере. Подписку можно оформить лишь в приложении на телефоне.';
+
+  @override
+  String get desktopAuthRestoreTitle => 'Восстановить';
+
+  @override
+  String get desktopAuthRestoreBody => 'Из набора восстановления или из копии на сервере.';
+
+  @override
+  String get desktopAuthBack => 'Назад';
+
+  @override
+  String get desktopAuthNameTitle => 'Как вас зовут?';
+
+  @override
+  String get desktopAuthNameBody => 'Это имя увидят те, кому вы напишете. Его можно поменять в любой момент.';
+
+  @override
+  String get desktopAuthCreating => 'Создаём аккаунт…';
+
+  @override
+  String desktopAuthCreateFailed(Object error) {
+    return 'Не удалось создать аккаунт: $error';
+  }
+
+  @override
+  String get desktopAuthCheckClock => 'Проверьте часы компьютера: при расхождении сервер отклоняет запрос.';
+
+  @override
+  String get desktopAuthKitTitle => 'Сохраните набор восстановления';
+
+  @override
+  String get desktopAuthKitBody => 'Это единственный способ вернуть аккаунт, если компьютер сломается или потеряется. У Secretly нет ни почты, ни номера телефона: без набора аккаунт не вернёт никто, включая нас.';
+
+  @override
+  String get desktopAuthKitAction => 'Создать набор восстановления';
+
+  @override
+  String get desktopAuthKitSaved => 'Набор сохранён. Теперь аккаунт можно вернуть.';
+
+  @override
+  String get desktopAuthContinue => 'Продолжить';
+
+  @override
+  String get desktopAuthKitOptionTitle => 'У меня есть набор восстановления';
+
+  @override
+  String get desktopAuthKitOptionBody => 'Самый простой путь: в наборе уже записан ваш Secretly ID.';
+
+  @override
+  String get desktopAuthKitPasteHint => 'Вставьте содержимое набора';
+
+  @override
+  String get desktopAuthServerOptionTitle => 'Копия на сервере';
+
+  @override
+  String get desktopAuthServerOptionBody => 'Понадобятся ваш Secretly ID и пароль копии.';
+
+  @override
+  String get desktopAuthRestoring => 'Восстанавливаем…';
+
+  @override
+  String desktopAuthRestoreFailed(Object error) {
+    return 'Не удалось восстановить: $error';
+  }
+
+  @override
+  String get desktopAuthBackupNotFound => 'Копии для этого Secretly ID на сервере нет.';
 }

@@ -36,7 +36,9 @@ import '../shell/window_chrome.dart';
 import '../shell/sidebar.dart'
     show DesktopSection, ConnectionStatus, kRailWidth;
 import '../workspace/settings_workspace.dart';
-import '../onboarding/desktop_onboarding_screen.dart';
+import '../onboarding/desktop_account_setup.dart';
+import '../onboarding/desktop_auth_gate.dart';
+import '../onboarding/desktop_recovery_kit_gate.dart';
 import '../services/desktop_update_service.dart';
 import '../services/desktop_absence.dart';
 import '../services/desktop_nav_history.dart';
@@ -1589,7 +1591,14 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
                       : null,
                   child: child!,
                 ),
-                child: _OverlayHost(key: _overlayHostKey, child: _buildRoot()),
+                // Признак «набор ещё не сделан» меняется уже после того, как
+                // корень построен: без подписки человек остался бы на шаге
+                // после того, как ключ сохранён.
+                child: ValueListenableBuilder<bool>(
+                  valueListenable: DesktopAccountSetup.kitPending,
+                  builder: (ctx, _, __) =>
+                      _OverlayHost(key: _overlayHostKey, child: _buildRoot()),
+                ),
               ),
             ),
           ),
@@ -1616,7 +1625,24 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       // finished — so it is non-null here. The splash is the honest fallback
       // if that ever stops holding.
       if (rootVm == null) return const DesktopSplash();
-      return DesktopOnboardingScreen(vm: rootVm);
+      // 🔴 ВЫБОР ИЗ ТРЁХ, А НЕ СРАЗУ QR (23.09.2026). Компьютерная версия
+      // делалась вторым экраном к платному телефонному приложению, поэтому
+      // телефон был по условию. Приложение стало бесплатным — к нам приходят
+      // и те, у кого телефонной версии нет вовсе.
+      return DesktopAuthGate(vm: rootVm);
+    }
+    // 🔴 ОБЯЗАТЕЛЬНЫЙ ШАГ ПОСЛЕ СОЗДАНИЯ АККАУНТА ЗДЕСЬ.
+    //
+    // Создание снимает запрет входа в тот же кадр, и экран создания уходит со
+    // сцены — шаг «сохраните набор восстановления», живущий внутри него,
+    // исчез бы вместе с ним. Поэтому его показывает КОРЕНЬ, по признаку,
+    // который лежит в настройках устройства и переживает закрытие окна.
+    //
+    // Признак взводится ТОЛЬКО при создании аккаунта на компьютере: привязка
+    // по телефону и восстановление его не ставят — там ключ либо уже есть,
+    // либо аккаунт живёт ещё где-то.
+    if (rootVm != null && DesktopAccountSetup.kitPending.value) {
+      return DesktopRecoveryKitGate(vm: rootVm);
     }
 
     final shell = DesktopShell(

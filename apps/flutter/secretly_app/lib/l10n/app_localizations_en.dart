@@ -5717,4 +5717,89 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupPwNeedSpecial => 'Add at least one special character, such as !, #, or ?.';
+
+  @override
+  String get desktopAuthGateTitle => 'Secretly on this computer';
+
+  @override
+  String get desktopAuthGateSubtitle => 'Choose how to sign in';
+
+  @override
+  String get desktopAuthPhoneTitle => 'Sign in with your phone';
+
+  @override
+  String get desktopAuthPhoneBody => 'If Secretly is already on your phone. Chats and contacts will move here.';
+
+  @override
+  String get desktopAuthCreateTitle => 'Create a new account';
+
+  @override
+  String get desktopAuthCreateBody => 'An account on this computer only. A subscription can be bought only in the phone app.';
+
+  @override
+  String get desktopAuthRestoreTitle => 'Restore';
+
+  @override
+  String get desktopAuthRestoreBody => 'From a recovery kit or from a backup on the server.';
+
+  @override
+  String get desktopAuthBack => 'Back';
+
+  @override
+  String get desktopAuthNameTitle => 'What should we call you?';
+
+  @override
+  String get desktopAuthNameBody => 'People you write to will see this name. You can change it at any time.';
+
+  @override
+  String get desktopAuthCreating => 'Creating the account…';
+
+  @override
+  String desktopAuthCreateFailed(Object error) {
+    return 'Could not create the account: $error';
+  }
+
+  @override
+  String get desktopAuthCheckClock => 'Check the computer’s clock: the server rejects requests when it is off.';
+
+  @override
+  String get desktopAuthKitTitle => 'Save your recovery kit';
+
+  @override
+  String get desktopAuthKitBody => 'This is the only way back into the account if the computer breaks or is lost. Secretly has no email and no phone number: without the kit nobody can restore the account, including us.';
+
+  @override
+  String get desktopAuthKitAction => 'Create the recovery kit';
+
+  @override
+  String get desktopAuthKitSaved => 'Kit saved. The account can be restored now.';
+
+  @override
+  String get desktopAuthContinue => 'Continue';
+
+  @override
+  String get desktopAuthKitOptionTitle => 'I have a recovery kit';
+
+  @override
+  String get desktopAuthKitOptionBody => 'The simplest way: the kit already carries your Secretly ID.';
+
+  @override
+  String get desktopAuthKitPasteHint => 'Paste the contents of the kit';
+
+  @override
+  String get desktopAuthServerOptionTitle => 'Backup on the server';
+
+  @override
+  String get desktopAuthServerOptionBody => 'You will need your Secretly ID and the backup password.';
+
+  @override
+  String get desktopAuthRestoring => 'Restoring…';
+
+  @override
+  String desktopAuthRestoreFailed(Object error) {
+    return 'Could not restore: $error';
+  }
+
+  @override
+  String get desktopAuthBackupNotFound => 'There is no backup on the server for this Secretly ID.';
 }

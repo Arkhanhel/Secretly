@@ -28,7 +28,15 @@ import '../primitives/desktop_button.dart';
 ///    [DesktopProductionApp] swaps this screen out for the shell — no action
 ///    needed here beyond rebuilding.
 class DesktopOnboardingScreen extends StatefulWidget {
-  const DesktopOnboardingScreen({super.key, required this.vm});
+  const DesktopOnboardingScreen({super.key, required this.vm, this.onBack});
+
+  /// Вернуться к выбору способа входа. `null` — выбора нет и возвращаться
+  /// некуда (так было до 23.09.2026, когда привязка была единственным входом).
+  ///
+  /// 🔴 Сам экран привязки при этом НЕ ТРОНУТ: он был единственным рабочим
+  /// входом, и переделывать его ради нового выбора значило бы поставить под
+  /// удар то, что работает.
+  final VoidCallback? onBack;
 
   /// The controller seam. [controller] is derived from it, so every
   /// `widget.controller` use site below keeps working unchanged.
@@ -198,6 +206,17 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
+              if (widget.onBack != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: DesktopButton(
+                    label: _l10n.desktopAuthBack,
+                    kind: DButtonKind.ghost,
+                    size: DButtonSize.small,
+                    icon: FluentIcons.chevron_left_24_regular,
+                    onPressed: widget.onBack,
+                  ),
+                ),
               _headerIcon(c),
               const SizedBox(height: DSpace.xl),
               Text(

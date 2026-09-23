@@ -5717,4 +5717,89 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get backupPwNeedSpecial => 'Füge mindestens ein Sonderzeichen hinzu, etwa !, # oder ?.';
+
+  @override
+  String get desktopAuthGateTitle => 'Secretly auf diesem Computer';
+
+  @override
+  String get desktopAuthGateSubtitle => 'Wähle, wie du dich anmeldest';
+
+  @override
+  String get desktopAuthPhoneTitle => 'Mit dem Telefon anmelden';
+
+  @override
+  String get desktopAuthPhoneBody => 'Wenn Secretly schon auf dem Telefon ist. Chats und Kontakte ziehen hierher um.';
+
+  @override
+  String get desktopAuthCreateTitle => 'Neues Konto erstellen';
+
+  @override
+  String get desktopAuthCreateBody => 'Ein Konto nur auf diesem Computer. Ein Abo lässt sich nur in der Telefon-App kaufen.';
+
+  @override
+  String get desktopAuthRestoreTitle => 'Wiederherstellen';
+
+  @override
+  String get desktopAuthRestoreBody => 'Aus einem Wiederherstellungs-Set oder aus einer Sicherung auf dem Server.';
+
+  @override
+  String get desktopAuthBack => 'Zurück';
+
+  @override
+  String get desktopAuthNameTitle => 'Wie heißt du?';
+
+  @override
+  String get desktopAuthNameBody => 'Diesen Namen sehen die Leute, denen du schreibst. Du kannst ihn jederzeit ändern.';
+
+  @override
+  String get desktopAuthCreating => 'Konto wird erstellt …';
+
+  @override
+  String desktopAuthCreateFailed(Object error) {
+    return 'Konto konnte nicht erstellt werden: $error';
+  }
+
+  @override
+  String get desktopAuthCheckClock => 'Prüfe die Uhr des Computers: Bei Abweichung lehnt der Server die Anfrage ab.';
+
+  @override
+  String get desktopAuthKitTitle => 'Sichere dein Wiederherstellungs-Set';
+
+  @override
+  String get desktopAuthKitBody => 'Das ist der einzige Weg zurück ins Konto, wenn der Computer kaputtgeht oder verloren geht. Secretly hat weder E-Mail noch Telefonnummer: Ohne das Set kann niemand das Konto wiederherstellen, auch wir nicht.';
+
+  @override
+  String get desktopAuthKitAction => 'Wiederherstellungs-Set erstellen';
+
+  @override
+  String get desktopAuthKitSaved => 'Set gesichert. Das Konto lässt sich jetzt wiederherstellen.';
+
+  @override
+  String get desktopAuthContinue => 'Weiter';
+
+  @override
+  String get desktopAuthKitOptionTitle => 'Ich habe ein Wiederherstellungs-Set';
+
+  @override
+  String get desktopAuthKitOptionBody => 'Der einfachste Weg: Das Set enthält deine Secretly-ID bereits.';
+
+  @override
+  String get desktopAuthKitPasteHint => 'Inhalt des Sets einfügen';
+
+  @override
+  String get desktopAuthServerOptionTitle => 'Sicherung auf dem Server';
+
+  @override
+  String get desktopAuthServerOptionBody => 'Du brauchst deine Secretly-ID und das Sicherungs-Passwort.';
+
+  @override
+  String get desktopAuthRestoring => 'Wird wiederhergestellt …';
+
+  @override
+  String desktopAuthRestoreFailed(Object error) {
+    return 'Wiederherstellung fehlgeschlagen: $error';
+  }
+
+  @override
+  String get desktopAuthBackupNotFound => 'Für diese Secretly-ID gibt es keine Sicherung auf dem Server.';
 }

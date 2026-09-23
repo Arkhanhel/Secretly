@@ -60,6 +60,7 @@ import 'package:window_manager/window_manager.dart';
 import 'diagnostics/diag_log.dart';
 import 'desktop/single_instance.dart';
 import 'legal/third_party_licenses.dart';
+import 'ui/desktop/onboarding/desktop_account_setup.dart';
 import 'ui/desktop/services/desktop_update_service.dart';
 import 'ui/desktop/app/desktop_production_app.dart';
 import 'ui/desktop/chat/chat_thread_panel.dart' show DesktopDraftStore;
@@ -204,6 +205,10 @@ Future<void> main() async {
     // решает только одно: показывать ли пункт меню. Поэтому не ждём — пункт
     // появится, когда ответ придёт (меню слушает `configured`).
     unawaited(DesktopUpdateService.instance.load());
+    // Признак «аккаунт заведён здесь, ключа ещё нет» — до первого кадра:
+    // иначе шаг «сохраните набор» мигнёт после того, как оболочка уже
+    // показалась.
+    unawaited(DesktopAccountSetup.load());
 
     // 6. Composer drafts. Loaded before any chat can be opened so a restored
     // draft is already in place rather than appearing a moment later.

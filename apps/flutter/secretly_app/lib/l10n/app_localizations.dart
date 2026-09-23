@@ -10593,6 +10593,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add at least one special character, such as !, #, or ?.'**
   String get backupPwNeedSpecial;
+
+  /// No description provided for @desktopAuthGateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Secretly on this computer'**
+  String get desktopAuthGateTitle;
+
+  /// No description provided for @desktopAuthGateSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how to sign in'**
+  String get desktopAuthGateSubtitle;
+
+  /// No description provided for @desktopAuthPhoneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in with your phone'**
+  String get desktopAuthPhoneTitle;
+
+  /// No description provided for @desktopAuthPhoneBody.
+  ///
+  /// In en, this message translates to:
+  /// **'If Secretly is already on your phone. Chats and contacts will move here.'**
+  String get desktopAuthPhoneBody;
+
+  /// No description provided for @desktopAuthCreateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a new account'**
+  String get desktopAuthCreateTitle;
+
+  /// No description provided for @desktopAuthCreateBody.
+  ///
+  /// In en, this message translates to:
+  /// **'An account on this computer only. A subscription can be bought only in the phone app.'**
+  String get desktopAuthCreateBody;
+
+  /// No description provided for @desktopAuthRestoreTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get desktopAuthRestoreTitle;
+
+  /// No description provided for @desktopAuthRestoreBody.
+  ///
+  /// In en, this message translates to:
+  /// **'From a recovery kit or from a backup on the server.'**
+  String get desktopAuthRestoreBody;
+
+  /// No description provided for @desktopAuthBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get desktopAuthBack;
+
+  /// No description provided for @desktopAuthNameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'What should we call you?'**
+  String get desktopAuthNameTitle;
+
+  /// No description provided for @desktopAuthNameBody.
+  ///
+  /// In en, this message translates to:
+  /// **'People you write to will see this name. You can change it at any time.'**
+  String get desktopAuthNameBody;
+
+  /// No description provided for @desktopAuthCreating.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating the account…'**
+  String get desktopAuthCreating;
+
+  /// No description provided for @desktopAuthCreateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create the account: {error}'**
+  String desktopAuthCreateFailed(Object error);
+
+  /// No description provided for @desktopAuthCheckClock.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the computer’s clock: the server rejects requests when it is off.'**
+  String get desktopAuthCheckClock;
+
+  /// No description provided for @desktopAuthKitTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Save your recovery kit'**
+  String get desktopAuthKitTitle;
+
+  /// No description provided for @desktopAuthKitBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This is the only way back into the account if the computer breaks or is lost. Secretly has no email and no phone number: without the kit nobody can restore the account, including us.'**
+  String get desktopAuthKitBody;
+
+  /// No description provided for @desktopAuthKitAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Create the recovery kit'**
+  String get desktopAuthKitAction;
+
+  /// No description provided for @desktopAuthKitSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Kit saved. The account can be restored now.'**
+  String get desktopAuthKitSaved;
+
+  /// No description provided for @desktopAuthContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get desktopAuthContinue;
+
+  /// No description provided for @desktopAuthKitOptionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'I have a recovery kit'**
+  String get desktopAuthKitOptionTitle;
+
+  /// No description provided for @desktopAuthKitOptionBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The simplest way: the kit already carries your Secretly ID.'**
+  String get desktopAuthKitOptionBody;
+
+  /// No description provided for @desktopAuthKitPasteHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the contents of the kit'**
+  String get desktopAuthKitPasteHint;
+
+  /// No description provided for @desktopAuthServerOptionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup on the server'**
+  String get desktopAuthServerOptionTitle;
+
+  /// No description provided for @desktopAuthServerOptionBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You will need your Secretly ID and the backup password.'**
+  String get desktopAuthServerOptionBody;
+
+  /// No description provided for @desktopAuthRestoring.
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring…'**
+  String get desktopAuthRestoring;
+
+  /// No description provided for @desktopAuthRestoreFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not restore: {error}'**
+  String desktopAuthRestoreFailed(Object error);
+
+  /// No description provided for @desktopAuthBackupNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'There is no backup on the server for this Secretly ID.'**
+  String get desktopAuthBackupNotFound;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

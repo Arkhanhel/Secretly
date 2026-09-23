@@ -5717,4 +5717,89 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get backupPwNeedSpecial => 'Añade al menos un carácter especial, por ejemplo !, # o ?.';
+
+  @override
+  String get desktopAuthGateTitle => 'Secretly en este ordenador';
+
+  @override
+  String get desktopAuthGateSubtitle => 'Elige cómo iniciar sesión';
+
+  @override
+  String get desktopAuthPhoneTitle => 'Entrar con el teléfono';
+
+  @override
+  String get desktopAuthPhoneBody => 'Si ya tienes Secretly en el teléfono. Los chats y contactos se trasladarán aquí.';
+
+  @override
+  String get desktopAuthCreateTitle => 'Crear una cuenta nueva';
+
+  @override
+  String get desktopAuthCreateBody => 'Una cuenta solo en este ordenador. La suscripción solo puede contratarse en la app del teléfono.';
+
+  @override
+  String get desktopAuthRestoreTitle => 'Restaurar';
+
+  @override
+  String get desktopAuthRestoreBody => 'Desde un kit de recuperación o desde una copia en el servidor.';
+
+  @override
+  String get desktopAuthBack => 'Atrás';
+
+  @override
+  String get desktopAuthNameTitle => '¿Cómo te llamas?';
+
+  @override
+  String get desktopAuthNameBody => 'Las personas a las que escribas verán este nombre. Puedes cambiarlo cuando quieras.';
+
+  @override
+  String get desktopAuthCreating => 'Creando la cuenta…';
+
+  @override
+  String desktopAuthCreateFailed(Object error) {
+    return 'No se ha podido crear la cuenta: $error';
+  }
+
+  @override
+  String get desktopAuthCheckClock => 'Comprueba el reloj del ordenador: si va desfasado, el servidor rechaza la petición.';
+
+  @override
+  String get desktopAuthKitTitle => 'Guarda tu kit de recuperación';
+
+  @override
+  String get desktopAuthKitBody => 'Es la única forma de recuperar la cuenta si el ordenador se rompe o se pierde. Secretly no tiene correo ni número de teléfono: sin el kit nadie puede restaurar la cuenta, nosotros tampoco.';
+
+  @override
+  String get desktopAuthKitAction => 'Crear el kit de recuperación';
+
+  @override
+  String get desktopAuthKitSaved => 'Kit guardado. Ya se puede restaurar la cuenta.';
+
+  @override
+  String get desktopAuthContinue => 'Continuar';
+
+  @override
+  String get desktopAuthKitOptionTitle => 'Tengo un kit de recuperación';
+
+  @override
+  String get desktopAuthKitOptionBody => 'La vía más sencilla: el kit ya contiene tu Secretly ID.';
+
+  @override
+  String get desktopAuthKitPasteHint => 'Pega el contenido del kit';
+
+  @override
+  String get desktopAuthServerOptionTitle => 'Copia en el servidor';
+
+  @override
+  String get desktopAuthServerOptionBody => 'Necesitarás tu Secretly ID y la contraseña de la copia.';
+
+  @override
+  String get desktopAuthRestoring => 'Restaurando…';
+
+  @override
+  String desktopAuthRestoreFailed(Object error) {
+    return 'No se ha podido restaurar: $error';
+  }
+
+  @override
+  String get desktopAuthBackupNotFound => 'No hay ninguna copia en el servidor para este Secretly ID.';
 }
