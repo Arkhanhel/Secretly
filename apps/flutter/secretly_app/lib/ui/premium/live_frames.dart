@@ -352,7 +352,25 @@ class _LiveFrameViewState extends State<LiveFrameView>
   @override
   void initState() {
     super.initState();
-    _sim = makeLiveFrame(widget.id)?..active = _pressed;
+    _sim = _freshSim(widget.id);
+  }
+
+  /// Персонаж, у которого УЖЕ есть поза.
+  ///
+  /// 🔴 Свежая симуляция стоит в стартовой точке: координаты ушей, призрака,
+  /// машины и нот — ноль, то есть левый верхний угол холста. Живой рамке это
+  /// не мешает — первый же кадр тикера всё расставит. А неподвижной мешало:
+  /// флаг «анимирую» стартует с `false`, и в списке, где движения нет,
+  /// `_syncTicker` выходил раньше, чем доходил до `settle()`. Персонаж так и
+  /// оставался в углу — в ленте чатов, в сетке выбора и в шапке переписки на
+  /// время перехода между экранами. Теперь поза считается сразу, при любом
+  /// режиме: полторы секунды симуляции, как и задумано в наборе.
+  FrameSim? _freshSim(String id) {
+    final sim = makeLiveFrame(id);
+    if (sim == null) return null;
+    sim.active = _pressed;
+    sim.settle();
+    return sim;
   }
 
   @override
@@ -360,7 +378,7 @@ class _LiveFrameViewState extends State<LiveFrameView>
     super.didUpdateWidget(old);
     if (old.id != widget.id) {
       _sim?.dispose();
-      _sim = makeLiveFrame(widget.id)?..active = _pressed;
+      _sim = _freshSim(widget.id);
     }
     if (old.size != widget.size) _syncTicker();
   }
@@ -527,4 +545,82 @@ class LiveFramePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant LiveFramePainter old) =>
       old.sim != sim || old.palette != palette || old.ringOnly != ringOnly;
+}
+
+/// Кнопка, которая будит персонажа живой рамки.
+///
+/// 🔴 ПОЧЕМУ У СТРОКИ ПРИСУТСТВИЯ, А НЕ СРЕДИ ТРЁХ БОЛЬШИХ ДЕЙСТВИЙ. Ряд ниже
+/// («Фото», «Обложки», «Настройки») — это то, что МЕНЯЕТ профиль. Здесь ничего
+/// не меняется: нажатие живёт до следующего нажатия и никуда не сохраняется.
+/// Место в углу у присутствия отведено владельцем 23.09.2026.
+///
+/// 🔴 ПОДПИСЬ, А НЕ ЗНАЧОК. «Погладить», «Дедлайн!», «Пауза» — три разных
+/// действия, и по одному значку не догадаться, какое именно. Глагол приходит
+/// из каталога рамки, поэтому новая рамка приносит свою подпись сама.
+class LiveFrameWakeButton extends StatelessWidget {
+  const LiveFrameWakeButton({
+    super.key,
+    required this.frameId,
+    required this.onCover,
+  });
+
+  final String frameId;
+
+  /// Шапка раскрыта и кнопка лежит на обложке: там свои цвета, как у имени и
+  /// присутствия рядом.
+  final bool onCover;
+
+  @override
+  Widget build(BuildContext context) {
+    final press = LiveFramePressScope.controllerOf(context);
+    final active = LiveFramePressScope.of(context);
+    final label = liveFrameActionLabel(context, frameId);
+    if (label == null || press == null) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+    final ink = onCover ? Colors.white : scheme.primary;
+    final fill = onCover
+        ? Colors.white.withValues(alpha: active ? 0.30 : 0.18)
+        : scheme.primary.withValues(alpha: active ? 0.26 : 0.13);
+
+    return Semantics(
+      container: true,
+      button: true,
+      toggled: active,
+      label: label,
+      child: ExcludeSemantics(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => press.value = !press.value,
+            borderRadius: BorderRadius.circular(999),
+            child: Ink(
+              decoration: BoxDecoration(
+                color: fill,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 🔴 Значок НЕ меняется на «паузу», когда выходка идёт.
+                  // Пауза обещала бы, что нажатие её остановит, а она
+                  // заканчивается сама — обещание было бы ложным.
+                  Icon(Icons.bolt_rounded, size: 14, color: ink),
+                  const SizedBox(width: 4),
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: ink,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

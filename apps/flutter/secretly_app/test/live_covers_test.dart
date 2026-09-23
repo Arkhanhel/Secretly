@@ -163,8 +163,45 @@ void main() {
       isFalse,
       reason: 'живая сцена снова под запретом нажатий',
     );
-    expect(head.contains('_IgnoreUnless('), isTrue);
+    expect(head.contains('LiveCoverTouch('), isTrue);
     expect(head.contains('isLiveCoverId(controller.myCoverId)'), isTrue);
+  });
+
+  test('🔴 обложки уходят в прозрачность, а не в плашку цвета страницы', () {
+    // 24.09.2026 владелец: «резкий переход между низом обложки и фоном, на
+    // светлой теме очень заметно». Плашка цвета страницы лежала и на краю
+    // картинки, и на самой странице, и на стыке выходила линия. Теперь низ
+    // обложки сам теряет непрозрачность — подгонять под тему нечего.
+    for (final path in const [
+      'lib/ui/profile_screen.dart',
+      'lib/ui/contact_details_screen.dart',
+      'lib/ui/desktop/chat/details/details_headline.dart',
+    ]) {
+      final src = File(path).readAsStringSync();
+      expect(src.contains('CoverBottomFade('), isTrue, reason: '$path: нет перехода');
+      expect(
+        src.contains('AppBackground.scrimColorOf'),
+        isFalse,
+        reason: '$path: вернулась плашка под цвет страницы',
+      );
+    }
+  });
+
+  testWidgets('переход прозрачности ложится на обложку без ошибок', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: SizedBox(
+          width: 360,
+          height: 240,
+          child: CoverBottomFade(child: LiveCoverView(id: 'silk')),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(find.byType(ShaderMask), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   test('сцены вокруг фотографии помечены', () {

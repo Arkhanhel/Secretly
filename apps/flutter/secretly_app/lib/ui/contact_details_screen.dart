@@ -28,11 +28,12 @@ import 'fullscreen_image_viewer.dart';
 import 'l10n.dart';
 import 'premium/cosmetic_animation_scope.dart';
 import 'premium/cosmetics_catalog.dart';
+import 'premium/live_covers.dart';
+import 'premium/live_frames.dart';
 import 'report_abuse_sheet.dart';
 import 'room_policy_error_text.dart';
 import 'share_utils.dart';
 import 'wave1_l10n.dart';
-import 'widgets/app_background.dart';
 import 'widgets/conversation_media_gallery.dart';
 import 'widgets/secretly_glass_sheet.dart';
 import 'widgets/avatar_initials.dart';
@@ -550,11 +551,20 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
               // Back/front cover split (black hole): the peer's photo must
               // sit INSIDE the scene exactly like on the own-profile page —
               // back layer under the photo, near disk edge drawn over it.
+              // 🔴 Сцены вокруг фотографии (затмение, дорожка, круги,
+              // прожектор) должны знать, где портрет стоит на самом деле —
+              // так же, как в своём профиле. Доли — от полосы обложки.
+              final coverH = collapsedButtonsTop + 66;
               final cover = vm.isFavoritesConvo
                   ? null
                   : coverBackWidgetFor(
                       vm.coverId,
                       customImagePath: vm.coverImagePath,
+                      avatarCenter: Offset(
+                        0.5,
+                        (avatarTop + avatarSize / 2) / coverH,
+                      ),
+                      avatarRadius: avatarSize / 2 / screenW,
                     );
               final coverFront = vm.isFavoritesConvo
                   ? null
@@ -563,6 +573,12 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                       customImagePath: vm.coverImagePath,
                     );
               final frame = vm.isFavoritesConvo ? null : frameById(vm.frameId);
+              // Держатель нажатия — над всей шапкой: кнопка у строки
+              // присутствия и портрет с рамкой стоят в разных её ветках. У
+              // обычных рамок держателя нет — будить нечего.
+              Widget wrapPress(Widget child) => isLiveFrameId(vm.frameId)
+                  ? LiveFramePressHost(frameId: vm.frameId, child: child)
+                  : child;
 
               final bottomInset = MediaQuery.of(context).padding.bottom;
 
@@ -647,7 +663,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                         // frame / name / status / 4 action buttons. Pulling
                         // the avatar (or overscrolling the list) drives
                         // _pullExpand and the whole hero animates together.
-                        SizedBox(
+                        wrapPress(
+                          SizedBox(
                           height: heroHeight,
                           child: Stack(
                             clipBehavior: Clip.none,
@@ -660,7 +677,12 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                   left: 0,
                                   right: 0,
                                   height: collapsedButtonsTop + 66,
-                                  child: IgnorePointer(
+                                  // Живая сцена слышит палец, как и в своём
+                                  // профиле; фото-обложка собеседника — нет.
+                                  child: LiveCoverTouch(
+                                    listen:
+                                        isLiveCoverId(vm.coverId) &&
+                                        (vm.coverImagePath ?? '').isEmpty,
                                     child: Opacity(
                                       opacity: (1.0 - _pullExpand * 2.0).clamp(
                                         0.0,
@@ -668,47 +690,16 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                       ),
                                       // Showcase: the banner is the biggest thing on this page,
                                       // so it rasterises at full resolution here.
-                                      child: CosmeticShowcaseScope(child: cover),
-                                    ),
-                                  ),
-                                ),
-                                // 2) Decoupled page-colour scrim — a SEPARATE
-                                //    layer running DOWN PAST the cover (Clip.none
-                                //    overflow) so the cover darkens into the page
-                                //    colour cleanly with no bright bleed.
-                                Positioned(
-                                  top: 0,
-                                  left: 0,
-                                  right: 0,
-                                  height: collapsedHeroBottom + 16,
-                                  child: IgnorePointer(
-                                    child: Opacity(
-                                      opacity: (1.0 - _pullExpand * 2.0).clamp(
-                                        0.0,
-                                        1.0,
-                                      ),
-                                      child: DecoratedBox(
-                                        decoration: BoxDecoration(
-                                          // Theme-background scrim so the peer
-                                          // cover blends on light + dark themes.
-                                          gradient: LinearGradient(
-                                            begin: Alignment.topCenter,
-                                            end: Alignment.bottomCenter,
-                                            stops: const [0.55, 1.0],
-                                            colors: [
-                                              AppBackground.scrimColorOf(
-                                                context,
-                                              ).withValues(alpha: 0.0),
-                                              AppBackground.scrimColorOf(
-                                                context,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                      child: CoverBottomFade(
+                                        child: CosmeticShowcaseScope(child: cover),
                                       ),
                                     ),
                                   ),
                                 ),
+                                // 🔴 Плашки «под цвет страницы» здесь больше
+                                // нет: низ обложки сам уходит в прозрачность
+                                // (`CoverBottomFade`). Плашка давала линию на
+                                // стыке, особенно заметную на светлой теме.
                               ],
                               Positioned(
                                 top: avatarTop,
@@ -904,6 +895,22 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                   ),
                                 ),
                               ),
+                              // 🔴 Кнопка «разбудить» — и на странице
+                              // СОБЕСЕДНИКА, если у него живая рамка: его
+                              // персонажа можно погладить так же, как своего
+                              // (решение владельца 24.09.2026). Нажатие живёт
+                              // только на этом экране и никуда не уходит.
+                              if (isLiveFrameId(vm.frameId))
+                                Positioned(
+                                  top: statusTop - 4,
+                                  right: 20,
+                                  child: Builder(
+                                    builder: (ctx) => LiveFrameWakeButton(
+                                      frameId: vm.frameId!,
+                                      onCover: _pullExpand > 0.35,
+                                    ),
+                                  ),
+                                ),
                               Positioned(
                                 top: buttonsTop,
                                 left: 12,
@@ -958,6 +965,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                               ),
                             ],
                           ),
+                        ),
                         ),
                       if (!vm.isFavoritesConvo) ...[
                         // The "about" text dropped out of the static column

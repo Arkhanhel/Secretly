@@ -5,7 +5,8 @@ import '../../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
-import '../../../premium/live_covers.dart' show CoverAvatarGeometry;
+import '../../../premium/live_covers.dart'
+    show CoverAvatarGeometry, CoverBottomFade;
 import '../../../premium/live_frames.dart';
 import '../../../premium/cosmetics_catalog.dart' show frameById;
 import '../../primitives/context_menu.dart';
@@ -388,7 +389,11 @@ class DetailsHeadline extends StatelessWidget {
     return wrap(Stack(
       children: [
         Positioned.fill(
-          child: ClipRect(
+          // 🔴 Низ обложки сам уходит в прозрачность вместо плашки цвета
+          // списка: плашка давала линию на стыке и требовала подгонки под
+          // каждую тему (владелец, 24.09.2026).
+          child: CoverBottomFade(
+            child: ClipRect(
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -409,22 +414,9 @@ class DetailsHeadline extends StatelessWidget {
                   )
                 else
                   cover!,
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        c.chatList.withValues(alpha: 0.0),
-                        c.chatList.withValues(alpha: 0.55),
-                        c.chatList,
-                      ],
-                      stops: const [0.0, 0.62, 1.0],
-                    ),
-                  ),
-                ),
               ],
             ),
+          ),
           ),
         ),
         content,

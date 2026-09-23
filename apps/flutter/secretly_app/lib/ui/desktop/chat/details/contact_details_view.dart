@@ -654,6 +654,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
             children: [
               DetailsHeadline(
                 name: displayName,
+                avatarDiameter: 88,
                 cover: cover,
                 coverFront: coverFront,
                 presence: presence,

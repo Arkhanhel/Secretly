@@ -143,3 +143,73 @@ class LiveCoverView extends StatelessWidget {
     );
   }
 }
+
+/// Нижний край обложки, уходящий в прозрачность.
+///
+/// 🔴 ЗАЧЕМ ВМЕСТО СЛОЯ «ПОД ЦВЕТ СТРАНИЦЫ». Раньше низ обложки прятали
+/// отдельной плашкой цвета фона, которая тянулась ниже обложки. На стыке она
+/// лежала одновременно на краю картинки и на самой странице, и там, где под
+/// полупрозрачной плашкой оказывались разные пиксели, выходила линия — на
+/// тёмной теме почти незаметная, на светлой резкая (сообщил владелец
+/// 24.09.2026). К тому же плашку приходилось подгонять под цвет фона каждой
+/// темы.
+///
+/// Здесь обложка САМА теряет непрозрачность к низу: под ней просто видна
+/// страница, какой бы та ни была. Подгонять нечего — и стыка нет.
+///
+/// Ширина перехода задана в ТОЧКАХ, а не долей высоты: обложки бывают разной
+/// высоты, а переход должен выглядеть одинаково — мягким, но коротким.
+class CoverBottomFade extends StatelessWidget {
+  const CoverBottomFade({super.key, required this.child, this.fade = 56});
+
+  final Widget child;
+
+  /// Высота перехода в логических точках.
+  final double fade;
+
+  @override
+  Widget build(BuildContext context) => ShaderMask(
+    blendMode: BlendMode.dstIn,
+    shaderCallback: (bounds) {
+      final h = bounds.height <= 0 ? 1.0 : bounds.height;
+      final start = ((h - fade) / h).clamp(0.0, 1.0);
+      // Кривая, а не прямая: линейный спад прозрачности глаз читает как
+      // «полосу» у начала перехода. Промежуточные точки дают мягкое плечо.
+      return LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: const [
+          Color(0xFFFFFFFF),
+          Color(0xFFFFFFFF),
+          Color(0xB3FFFFFF),
+          Color(0x40FFFFFF),
+          Color(0x00FFFFFF),
+        ],
+        stops: [
+          0,
+          start,
+          start + (1 - start) * 0.35,
+          start + (1 - start) * 0.72,
+          1,
+        ],
+      ).createShader(bounds);
+    },
+    child: child,
+  );
+}
+
+/// `IgnorePointer`, который можно отключить.
+///
+/// Нужен там, где слой обычно прозрачен для нажатий, но иногда обязан их
+/// слышать: живая обложка отзывается на палец, а фотография или видео на её
+/// месте — нет.
+class LiveCoverTouch extends StatelessWidget {
+  const LiveCoverTouch({super.key, required this.listen, required this.child});
+
+  final bool listen;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      listen ? child : IgnorePointer(child: child);
+}

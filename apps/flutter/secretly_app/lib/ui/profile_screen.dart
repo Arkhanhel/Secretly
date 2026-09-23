@@ -47,7 +47,6 @@ import 'security_lock_flow.dart';
 import 'share_utils.dart';
 import 'settings_screen.dart';
 import 'wave1_l10n.dart';
-import 'widgets/app_background.dart';
 import 'widgets/avatar_initials.dart';
 import 'liquid_glass_flags.dart';
 import 'widgets/frosted_header_island.dart';
@@ -2936,7 +2935,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             // участвует в разборе жестов, поэтому потягивание
                             // шапки и прокрутка списка продолжают работать —
                             // они живут выше по дереву.
-                            child: _IgnoreUnless(
+                            child: LiveCoverTouch(
                               listen:
                                   isLiveCoverId(controller.myCoverId) &&
                                   (controller.myCoverImagePath ?? '').isEmpty &&
@@ -2948,47 +2947,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ),
                                 // Showcase: the banner is the biggest thing on this page,
                                 // so it rasterises at full resolution here.
-                                child: CosmeticShowcaseScope(child: myCover),
-                              ),
-                            ),
-                          ),
-                          // 2) The shading — a SEPARATE page-colour scrim that runs
-                          //    DOWN PAST the cover to the top of the ID-profile card
-                          //    (Clip.none lets it overflow the hero into the gap),
-                          //    so the darkening reaches the ID placeholder while the
-                          //    cover above stays exactly where it is.
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            height: collapsedHeroBottom + 16,
-                            child: IgnorePointer(
-                              child: Opacity(
-                                opacity: (1.0 - _pullExpand * 2.0).clamp(
-                                  0.0,
-                                  1.0,
-                                ),
-                                child: DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    // Page-colour scrim tied to the active theme
-                                    // background so it blends on every theme
-                                    // (light + dark), not a fixed midnight tone.
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
-                                      stops: const [0.55, 1.0],
-                                      colors: [
-                                        AppBackground.scrimColorOf(
-                                          context,
-                                        ).withValues(alpha: 0.0),
-                                        AppBackground.scrimColorOf(context),
-                                      ],
-                                    ),
-                                  ),
+                                child: CoverBottomFade(
+                                  child: CosmeticShowcaseScope(child: myCover),
                                 ),
                               ),
                             ),
                           ),
+                          // 🔴 Плашки «под цвет страницы» здесь больше нет: низ
+                          // обложки сам уходит в прозрачность (`CoverBottomFade`),
+                          // и под ним видна страница при любой теме. Плашка давала
+                          // линию на стыке, особенно на светлой теме.
                         ],
                         Positioned(
                           top: avatarTop,
@@ -3256,7 +3224,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             top: statusTop - 4,
                             right: 20,
                             child: Builder(
-                              builder: (ctx) => _LiveFrameWakeButton(
+                              builder: (ctx) => LiveFrameWakeButton(
                                 frameId: controller.myFrameId!,
                                 onCover: _pullExpand > 0.35,
                               ),
@@ -3589,94 +3557,4 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     );
   }
-}
-
-/// Кнопка, которая будит персонажа живой рамки.
-///
-/// 🔴 ПОЧЕМУ У СТРОКИ ПРИСУТСТВИЯ, А НЕ СРЕДИ ТРЁХ БОЛЬШИХ ДЕЙСТВИЙ. Ряд ниже
-/// («Фото», «Обложки», «Настройки») — это то, что МЕНЯЕТ профиль. Здесь ничего
-/// не меняется: нажатие живёт до следующего нажатия и никуда не сохраняется.
-/// Место в углу у присутствия отведено владельцем 23.09.2026.
-///
-/// 🔴 ПОДПИСЬ, А НЕ ЗНАЧОК. «Погладить», «Дедлайн!», «Пауза» — три разных
-/// действия, и по одному значку не догадаться, какое именно. Глагол приходит
-/// из каталога рамки, поэтому новая рамка приносит свою подпись сама.
-class _LiveFrameWakeButton extends StatelessWidget {
-  const _LiveFrameWakeButton({required this.frameId, required this.onCover});
-
-  final String frameId;
-
-  /// Шапка раскрыта и кнопка лежит на обложке: там свои цвета, как у имени и
-  /// присутствия рядом.
-  final bool onCover;
-
-  @override
-  Widget build(BuildContext context) {
-    final press = LiveFramePressScope.controllerOf(context);
-    final active = LiveFramePressScope.of(context);
-    final label = liveFrameActionLabel(context, frameId);
-    if (label == null || press == null) return const SizedBox.shrink();
-
-    final scheme = Theme.of(context).colorScheme;
-    final ink = onCover ? Colors.white : scheme.primary;
-    final fill = onCover
-        ? Colors.white.withValues(alpha: active ? 0.30 : 0.18)
-        : scheme.primary.withValues(alpha: active ? 0.26 : 0.13);
-
-    return Semantics(
-      container: true,
-      button: true,
-      toggled: active,
-      label: label,
-      child: ExcludeSemantics(
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => press.value = !press.value,
-            borderRadius: BorderRadius.circular(999),
-            child: Ink(
-              decoration: BoxDecoration(
-                color: fill,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // 🔴 Значок НЕ меняется на «паузу», когда выходка идёт.
-                  // Пауза обещала бы, что нажатие её остановит, а она
-                  // заканчивается сама — обещание было бы ложным.
-                  Icon(Icons.bolt_rounded, size: 14, color: ink),
-                  const SizedBox(width: 4),
-                  Text(
-                    label,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: ink,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// `IgnorePointer`, который можно отключить.
-///
-/// Нужен там, где слой обычно прозрачен для нажатий, но иногда обязан их
-/// слышать: живая обложка отзывается на палец, а фотография или видео на её
-/// месте — нет.
-class _IgnoreUnless extends StatelessWidget {
-  const _IgnoreUnless({required this.listen, required this.child});
-
-  final bool listen;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) =>
-      listen ? child : IgnorePointer(child: child);
 }

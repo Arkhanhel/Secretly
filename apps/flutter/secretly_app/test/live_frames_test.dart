@@ -344,6 +344,42 @@ void main() {
       }
     });
 
+    testWidgets('🔴 неподвижная рамка стоит В ПОЗЕ, а не в углу холста', (
+      tester,
+    ) async {
+      // 24.09.2026 владелец прислал: в ленте чатов и в сетке выбора призрак
+      // висел в левом верхнем углу, а не у портрета. Свежая симуляция стоит в
+      // точке (0, 0), и неподвижный кадр её ни разу не просчитывал. Меряем
+      // сам рисунок: в углу холста — куда ничего не рисуется у рамки в позе —
+      // должно быть пусто.
+      for (final id in const ['ghost', 'bird', 'aquarium', 'drift', 'astronaut']) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: TickerMode(
+              enabled: false,
+              child: Center(
+                child: RepaintBoundary(
+                  child: SizedBox(
+                    width: 104,
+                    height: 104,
+                    child: LiveFrameView(size: 104, id: id),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        final state = tester.state(find.byType(LiveFrameView));
+        final sim = (state as dynamic).debugSim;
+        // Время симуляции стартует со СЛУЧАЙНОГО значения в [0, 2), а
+        // `settle()` добавляет ровно 1.5. После него время всегда не меньше
+        // 1.5; без него все пять рамок разом оказались бы выше 1.5 с
+        // вероятностью около 0.1 % — так проверка не обманывается случаем.
+        expect(sim.t, greaterThanOrEqualTo(1.5), reason: '$id: поза не просчитана');
+      }
+    });
+
     testWidgets('🔴 список гасит движение, а персонажа оставляет', (
       tester,
     ) async {
