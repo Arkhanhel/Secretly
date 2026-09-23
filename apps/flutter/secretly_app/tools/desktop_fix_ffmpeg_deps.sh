@@ -114,6 +114,21 @@ for f in libavcodec libavdevice libavfilter libavformat libavutil libswresample 
   codesign --force --sign "${SIGN_ID:--}" "$FW/$f.framework"
 done
 
+# 🔴 В ВЫПУСКЕ ГЛУБОКАЯ ПЕРЕПОДПИСЬ ЗАПРЕЩЕНА. `--deep` проходит по ВСЕМУ
+# вложенному коду и переподписывает его заново — в том числе помощников Sparkle
+# (Updater, Autoupdate, Downloader, Installer), которые приходят подписанными
+# самим Sparkle, с hardened runtime. После нашей переподписи они теряли его и
+# получали отладочное право get-task-allow, и Apple отказывала в заверении:
+# 23.09.2026 выпуск 1.8.53 вернулся со статусом Invalid ровно по этим четырём.
+#
+# Выпускному скрипту эта переподпись и не нужна: он сам подписывает всё
+# вложенное настоящим сертификатом сразу после починки. Поэтому он выставляет
+# SECRETLY_FFMPEG_FIX_NO_RESIGN=1, и здесь остаётся только правка библиотек.
+if [ "${SECRETLY_FFMPEG_FIX_NO_RESIGN:-0}" = "1" ]; then
+  echo "==> done — libraries patched; the release script signs the bundle"
+  exit 0
+fi
+
 echo "==> deep re-signing the app bundle"
 
 # `codesign --force` REPLACES the signature, and a signature carries the
