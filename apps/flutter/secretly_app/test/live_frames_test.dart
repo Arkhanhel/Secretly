@@ -17,6 +17,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/premium/cosmetics_catalog.dart';
+import 'package:secretly_app/ui/widgets/framed_avatar.dart';
 import 'package:secretly_app/ui/premium/live_frames.dart';
 
 Future<ui.Image> _render(String id, double size, {double seconds = 0}) async {
@@ -279,6 +280,55 @@ void main() {
           }
         }
       });
+    });
+  });
+
+  group('в настоящем окне', () {
+    testWidgets('🔴 портрет с живой рамкой живёт и умирает без исключений', (
+      tester,
+    ) async {
+      // Пиксельные проверки рисуют холст напрямую и не трогают виджет: тикер,
+      // подписку на TickerMode и dispose не проверяет никто. Ровно там и живут
+      // поломки, которые видно только запущенным приложением.
+      for (final id in kLiveFrameIds) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Center(
+              child: FramedAvatar(
+                size: 96,
+                fallbackSeed: 'seed',
+                fallbackName: 'Имя',
+                frameId: id,
+              ),
+            ),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 40));
+        await tester.pump(const Duration(milliseconds: 40));
+        expect(tester.takeException(), isNull, reason: '$id упал на кадре');
+        // Снимаем со сцены — тикер обязан остановиться вместе с виджетом.
+        await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+        expect(tester.takeException(), isNull, reason: '$id упал на снятии');
+      }
+    });
+
+    testWidgets('маленький портрет не заводит тикера', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Center(
+            child: FramedAvatar(
+              size: 40,
+              fallbackSeed: 'seed',
+              fallbackName: 'Имя',
+              frameId: 'music',
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 40));
+      // Если бы тикер крутился, `pumpAndSettle` не сошёлся бы никогда.
+      await tester.pumpAndSettle(const Duration(milliseconds: 20));
+      expect(tester.takeException(), isNull);
     });
   });
 
