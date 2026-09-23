@@ -2,6 +2,8 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 // 🔴 ЖИВЫЕ ОБЛОЖКИ: каталог и стык с набором.
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/premium/cosmetics_catalog.dart';
@@ -131,6 +133,38 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 40));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('🔴 живая сцена СЛЫШИТ палец', (tester) async {
+    // Набор кладёт внутрь `Listener`: от него идут круги по воде и за ним
+    // следит прожектор. Если сцену завернуть в `IgnorePointer`, слушателя
+    // никто не позовёт — и это ровно то, что было на телефоне.
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: SizedBox(width: 300, height: 200, child: LiveCoverView(id: 'ripples')),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(find.byType(Listener).hitTestable(), findsWidgets);
+    await tester.tapAt(const Offset(150, 100));
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(tester.takeException(), isNull);
+  });
+
+  test('🔴 телефон не прячет живую сцену под IgnorePointer', () {
+    // Слой обложки на экране профиля исторически стоял под запретом нажатий —
+    // прежним сценам слушать было нечего. Живым есть.
+    final src = File('lib/ui/profile_screen.dart').readAsStringSync();
+    final i = src.indexOf('height: collapsedButtonsTop + 66,');
+    expect(i, greaterThan(0));
+    final head = src.substring(i, i + 1400);
+    expect(
+      head.contains('child: IgnorePointer('),
+      isFalse,
+      reason: 'живая сцена снова под запретом нажатий',
+    );
+    expect(head.contains('_IgnoreUnless('), isTrue);
+    expect(head.contains('isLiveCoverId(controller.myCoverId)'), isTrue);
   });
 
   test('сцены вокруг фотографии помечены', () {

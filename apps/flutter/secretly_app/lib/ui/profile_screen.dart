@@ -31,6 +31,7 @@ import 'local_image_gallery_dialog.dart';
 import 'my_secretly_id_screen.dart';
 import 'premium/cosmetic_animation_scope.dart';
 import 'premium/cosmetics_catalog.dart';
+import 'premium/live_covers.dart';
 import 'premium/live_frames.dart';
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
@@ -2923,7 +2924,23 @@ class _ProfileScreenState extends State<ProfileScreen>
                             left: 0,
                             right: 0,
                             height: collapsedButtonsTop + 66,
-                            child: IgnorePointer(
+                            // 🔴 ЖИВАЯ СЦЕНА ДОЛЖНА ЧУВСТВОВАТЬ ПАЛЕЦ. У
+                            // прежних обложек слушать было нечего, и слой
+                            // стоял под `IgnorePointer` — оттого круги на воде
+                            // не расходились от касания, а прожектор не следил
+                            // за пальцем.
+                            //
+                            // Снимаем запрет ТОЛЬКО под живой сценой и только
+                            // когда обложка не заменена своим фото или видео:
+                            // у тех слушателя нет. `Listener` внутри сцены не
+                            // участвует в разборе жестов, поэтому потягивание
+                            // шапки и прокрутка списка продолжают работать —
+                            // они живут выше по дереву.
+                            child: _IgnoreUnless(
+                              listen:
+                                  isLiveCoverId(controller.myCoverId) &&
+                                  (controller.myCoverImagePath ?? '').isEmpty &&
+                                  (controller.myCoverVideoPath ?? '').isEmpty,
                               child: Opacity(
                                 opacity: (1.0 - _pullExpand * 2.0).clamp(
                                   0.0,
@@ -3646,4 +3663,20 @@ class _LiveFrameWakeButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// `IgnorePointer`, который можно отключить.
+///
+/// Нужен там, где слой обычно прозрачен для нажатий, но иногда обязан их
+/// слышать: живая обложка отзывается на палец, а фотография или видео на её
+/// месте — нет.
+class _IgnoreUnless extends StatelessWidget {
+  const _IgnoreUnless({required this.listen, required this.child});
+
+  final bool listen;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      listen ? child : IgnorePointer(child: child);
 }
