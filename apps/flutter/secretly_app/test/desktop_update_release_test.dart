@@ -89,13 +89,20 @@ void main() {
   });
 
   test('раздача обновлений описана в настройке прокси', () {
-    final caddy =
-        File('../../../server/proxy/caddy/Caddyfile').readAsStringSync();
-    expect(caddy.contains('SECRETLY_UPDATES_DOMAIN'), isTrue);
+    // 🔴 ФАЙЛА ЗДЕСЬ МОЖЕТ НЕ БЫТЬ, И ЭТО НЕ ПОЛОМКА.
+    //
+    // `server/proxy/` сознательно не публикуется: через настройку прокси
+    // уходила бы карта сервера — ровно то, что README обещает не
+    // раскрывать. В опубликованном дереве этот тест проверять нечего, и
+    // падать ему здесь не за что: он охраняет НАШУ настройку, а не код.
+    final caddy = File('../../../server/proxy/caddy/Caddyfile');
+    if (!caddy.existsSync()) return;
+    final text = caddy.readAsStringSync();
+    expect(text.contains('SECRETLY_UPDATES_DOMAIN'), isTrue);
     // Перечень файлов в каталоге сам по себе сообщает, какие версии были.
-    expect(caddy.contains('respond 404'), isTrue);
+    expect(text.contains('respond 404'), isTrue);
     // «Этот адрес спросил про обновления» = «у этого человека стоит Secretly».
-    expect(caddy.contains('output discard'), isTrue);
+    expect(text.contains('output discard'), isTrue);
   });
 
   test('🔴 сборка для раздачи не уйдёт, пока адрес обновлений молчит', () {
