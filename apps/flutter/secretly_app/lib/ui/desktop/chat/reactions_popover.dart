@@ -419,23 +419,27 @@ class _ExpandBtnState extends State<_ExpandBtn> {
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _h = true),
       onExit: (_) => setState(() => _h = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          width: 32,
-          height: 28,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: _h ? c.hover : Colors.transparent,
-            borderRadius: BorderRadius.circular(DRadii.pill),
-          ),
-          child: Icon(
-            FluentIcons.chevron_down_24_regular,
-            size: 18,
-            color: c.textSecondary,
+      child: Semantics(
+               button: true,
+               label: AppLocalizations.of(context)!.desktopReactionsMore,
+               child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            width: 32,
+            height: 28,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _h ? c.hover : Colors.transparent,
+              borderRadius: BorderRadius.circular(DRadii.pill),
+            ),
+            child: Icon(
+              FluentIcons.chevron_down_24_regular,
+              size: 18,
+              color: c.textSecondary,
+            ),
           ),
         ),
-      ),
+             ),
     );
   }
 }
@@ -583,17 +587,21 @@ class _ExpandedGridState extends State<_ExpandedGrid> {
             children: [
               MouseRegion(
                 cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: widget.onCollapse,
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      FluentIcons.chevron_up_24_regular,
-                      size: 18,
-                      color: c.textSecondary,
+                child: Semantics(
+                         button: true,
+                         label: AppLocalizations.of(context)!.desktopReactionsCollapse,
+                         child: GestureDetector(
+                    onTap: widget.onCollapse,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        FluentIcons.chevron_up_24_regular,
+                        size: 18,
+                        color: c.textSecondary,
+                      ),
                     ),
                   ),
-                ),
+                       ),
               ),
               const SizedBox(width: 4),
               Expanded(

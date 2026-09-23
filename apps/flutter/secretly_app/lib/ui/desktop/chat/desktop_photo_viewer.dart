@@ -467,6 +467,7 @@ class _DesktopPhotoViewerState extends State<DesktopPhotoViewer> {
                     child: _ChevronButton(
                       icon: FluentIcons.chevron_left_24_regular,
                       onTap: _prev,
+                      label: l10n.desktopViewerPrev,
                     ),
                   ),
                 ),
@@ -479,6 +480,7 @@ class _DesktopPhotoViewerState extends State<DesktopPhotoViewer> {
                     child: _ChevronButton(
                       icon: FluentIcons.chevron_right_24_regular,
                       onTap: _next,
+                      label: l10n.desktopViewerNext,
                     ),
                   ),
                 ),
@@ -764,10 +766,17 @@ class _ToolbarButtonState extends State<_ToolbarButton> {
 }
 
 class _ChevronButton extends StatefulWidget {
-  const _ChevronButton({required this.icon, required this.onTap});
+  const _ChevronButton({
+    required this.icon,
+    required this.onTap,
+    required this.label,
+  });
 
   final IconData icon;
   final VoidCallback onTap;
+
+  /// Стрелка нарисована знаком, а знак вслух не читается никак.
+  final String label;
 
   @override
   State<_ChevronButton> createState() => _ChevronButtonState();
@@ -778,22 +787,26 @@ class _ChevronButtonState extends State<_ChevronButton> {
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          width: 48,
-          height: 48,
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: 48,
+            height: 48,
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: _hover ? 0.6 : 0.35),
-            shape: BoxShape.circle,
+              color: Colors.black.withValues(alpha: _hover ? 0.6 : 0.35),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: Icon(widget.icon, color: Colors.white, size: 22),
           ),
-          alignment: Alignment.center,
-          child: Icon(widget.icon, color: Colors.white, size: 22),
         ),
       ),
     );

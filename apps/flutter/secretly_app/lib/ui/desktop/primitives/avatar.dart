@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../premium/cosmetics_catalog.dart' show frameById;
+import '../../../l10n/app_localizations.dart';
 import '../../widgets/avatar_initials.dart';
 import '../../widgets/shared_palette.dart';
 import '../design/tokens.dart';
@@ -304,7 +305,12 @@ class Avatar extends StatelessWidget {
         boxShadow: selected ? DShadows.focusRing(c) : null,
       ),
       child: image == null
-          ? Center(
+          // 🔴 Инициалы ВСЛУХ НЕ ЧИТАЮТСЯ. «ЮА» экранный диктор произносит по
+          // буквам — и произносит прямо перед настоящим именем, которое в
+          // списке и в шапке всегда стоит рядом. Это не подпись, а шум перед
+          // подписью: заглушка портрета несёт ровно ноль сведений сверх имени.
+          ? ExcludeSemantics(
+              child: Center(
               child: Text(
                 _initials,
                 style: TextStyle(
@@ -326,7 +332,7 @@ class Avatar extends StatelessWidget {
                   letterSpacing: 0,
                 ),
               ),
-            )
+            ))
           : null,
     );
 
@@ -512,6 +518,9 @@ class Avatar extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: InkWell(customBorder: border, onTap: onTap, child: avatar),
       );
+      // Нажимаемый портрет — кнопка, и без имени диктор объявил бы просто
+      // «кнопка». Имя уже есть в [name], новых строк это не требует.
+      avatar = Semantics(button: true, label: name, child: avatar);
     }
     // Suppress unused radius warning in case of future use.
     radius.toString();
@@ -536,14 +545,23 @@ class _UnreadBadge extends StatelessWidget {
         border: Border.all(color: DColors.of(context).chatList, width: 2),
       ),
       alignment: Alignment.center,
-      child: Text(
-        txt,
-        style: const TextStyle(
-          fontFamily: DType.family,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
-          height: 1.0,
+      // 🔴 Вслух — «три непрочитанных», а не голое «три». В обходе значок
+      // читается сразу после превью, и без слова число сливается с временем и
+      // прочим: «Максим, 11:16, привет, три» не говорит, что именно три.
+      // Склонение берётся у той же строки, что и в заголовке окна.
+      child: Semantics(
+        container: true,
+        excludeSemantics: true,
+        label: AppLocalizations.of(context)?.desktopThreadUnreadCount(count),
+        child: Text(
+          txt,
+          style: const TextStyle(
+            fontFamily: DType.family,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+            height: 1.0,
+          ),
         ),
       ),
     );

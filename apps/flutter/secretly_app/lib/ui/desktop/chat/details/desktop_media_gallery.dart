@@ -427,10 +427,23 @@ class _MediaTileState extends State<_MediaTile> {
   bool get _isVideo =>
       (item.attachment.mime ?? '').toLowerCase().startsWith('video/');
 
+  /// Чем плитка является на слух. Названия у вложения нет — площадка хранит
+  /// только вид и размер, — поэтому вслух идёт вид: «Фото», «Видео», «Файл».
+  /// Без него обход галереи — это тридцать одинаковых «кнопка».
+  String _spokenKind(AppLocalizations l10n) {
+    final mime = widget.item.attachment.mime ?? '';
+    if (mime.startsWith('video/')) return l10n.video;
+    if (mime.startsWith('image/')) return l10n.photo;
+    return l10n.file;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
-    return GestureDetector(
+    return Semantics(
+      button: true,
+      label: _spokenKind(AppLocalizations.of(context)!),
+      child: GestureDetector(
       onSecondaryTapDown: (d) => _openMenu(context, d.globalPosition),
       child: HoverListener(
         // Не смогли — нажатие ПОВТОРЯЕТ попытку, а не открывает пустоту.
@@ -461,6 +474,7 @@ class _MediaTileState extends State<_MediaTile> {
             ),
           );
         },
+      ),
       ),
     );
   }

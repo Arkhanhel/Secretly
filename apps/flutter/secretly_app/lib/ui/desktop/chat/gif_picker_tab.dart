@@ -446,28 +446,32 @@ class _DesktopGifPickerTabState extends State<DesktopGifPickerTab> {
         runSpacing: 6,
         children: [
           for (final gif in items)
-            HoverListener(
-              onTap: () => unawaited(_pick(gif)),
-              cursor: SystemMouseCursors.click,
-              builder: (ctx, hovered, pressed) => Container(
-                width: 104,
-                height: 104,
-                decoration: BoxDecoration(
-                  color: c.bubblePeer,
-                  borderRadius: BorderRadius.circular(DRadii.sm),
-                  border: Border.all(
-                    color: hovered ? c.accentPrimary : Colors.transparent,
+            Semantics(
+              button: true,
+              label: 'GIF',
+              child: HoverListener(
+                onTap: () => unawaited(_pick(gif)),
+                cursor: SystemMouseCursors.click,
+                builder: (ctx, hovered, pressed) => Container(
+                  width: 104,
+                  height: 104,
+                  decoration: BoxDecoration(
+                    color: c.bubblePeer,
+                    borderRadius: BorderRadius.circular(DRadii.sm),
+                    border: Border.all(
+                      color: hovered ? c.accentPrimary : Colors.transparent,
+                    ),
                   ),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Image.network(
-                  gif.previewUrl,
-                  fit: BoxFit.cover,
-                  // Сломанная ссылка не имеет права ронять сетку.
-                  errorBuilder: (_, __, ___) => Icon(
-                    FluentIcons.image_off_24_regular,
-                    size: 20,
-                    color: c.textDisabled,
+                  clipBehavior: Clip.antiAlias,
+                  child: Image.network(
+                    gif.previewUrl,
+                    fit: BoxFit.cover,
+                    // Сломанная ссылка не имеет права ронять сетку.
+                    errorBuilder: (_, __, ___) => Icon(
+                      FluentIcons.image_off_24_regular,
+                      size: 20,
+                      color: c.textDisabled,
+                    ),
                   ),
                 ),
               ),

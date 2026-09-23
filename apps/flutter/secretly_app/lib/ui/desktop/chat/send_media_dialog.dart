@@ -442,22 +442,26 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
       child: Stack(
         children: [
           Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _dismiss,
-              child: AnimatedBuilder(
-                animation: animation,
-                builder: (context, _) {
-                  final t = animation.value;
-                  return BackdropFilter(
-                    filter: ui.ImageFilter.blur(sigmaX: 8 * t, sigmaY: 8 * t),
-                    child: ColoredBox(
-                      color: c.scrim.withValues(alpha: 0.45 * t),
-                    ),
-                  );
-                },
+            child: Semantics(
+                     button: true,
+                     label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+                     child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _dismiss,
+                child: AnimatedBuilder(
+                  animation: animation,
+                  builder: (context, _) {
+                    final t = animation.value;
+                    return BackdropFilter(
+                      filter: ui.ImageFilter.blur(sigmaX: 8 * t, sigmaY: 8 * t),
+                      child: ColoredBox(
+                        color: c.scrim.withValues(alpha: 0.45 * t),
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
+                   ),
           ),
           Center(
             child: GestureDetector(

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../../l10n/app_localizations.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -53,62 +54,70 @@ class _AvatarPreviewDialog extends StatelessWidget {
     final c = DColors.of(context);
     final path = imagePath?.trim() ?? '';
     final hasFile = path.isNotEmpty && File(path).existsSync();
-    return GestureDetector(
-      onTap: () => Navigator.of(context).pop(),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Stack(
-          children: [
-            Center(
-              child: hasFile
-                  ? InteractiveViewer(
-                      maxScale: 4,
-                      child: Image.file(
-                        File(path),
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, _, _) => const BrokenMediaBox(
-                          iconSize: 40,
-                          onDarkSurface: true,
+    return Semantics(
+             button: true,
+             label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+             child: GestureDetector(
+        onTap: () => Navigator.of(context).pop(),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Stack(
+            children: [
+              Center(
+                child: hasFile
+                    ? InteractiveViewer(
+                        maxScale: 4,
+                        child: Image.file(
+                          File(path),
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, _, _) => const BrokenMediaBox(
+                            iconSize: 40,
+                            onDarkSurface: true,
+                          ),
+                        ),
+                      )
+                    : Hero(
+                        tag: 'desktop-avatar-preview-$name',
+                        child: Avatar(
+                          name: name.isEmpty ? '?' : name,
+                          size: 280,
+                          shape: shape,
                         ),
                       ),
-                    )
-                  : Hero(
-                      tag: 'desktop-avatar-preview-$name',
-                      child: Avatar(
-                        name: name.isEmpty ? '?' : name,
-                        size: 280,
-                        shape: shape,
+              ),
+              Positioned(
+                top: 16,
+                right: 16,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Semantics(
+                           button: true,
+                           label: AppLocalizations.of(context)!.close,
+                           child: InkWell(
+                      borderRadius: BorderRadius.circular(DRadii.pill),
+                      onTap: () => Navigator.of(context).pop(),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: c.elevated,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: c.borderSubtle),
+                        ),
+                        child: Icon(
+                          FluentIcons.dismiss_24_regular,
+                          size: 20,
+                          color: c.textPrimary,
+                        ),
                       ),
                     ),
-            ),
-            Positioned(
-              top: 16,
-              right: 16,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(DRadii.pill),
-                  onTap: () => Navigator.of(context).pop(),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: c.elevated,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: c.borderSubtle),
-                    ),
-                    child: Icon(
-                      FluentIcons.dismiss_24_regular,
-                      size: 20,
-                      color: c.textPrimary,
-                    ),
-                  ),
+                         ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    );
+           );
   }
 }

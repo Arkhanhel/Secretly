@@ -211,10 +211,14 @@ class _DesktopVideoViewerState extends State<DesktopVideoViewer> {
           fit: StackFit.expand,
           children: [
             // Backdrop — click outside the video closes.
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => Navigator.of(context).maybePop(),
-              child: Container(color: Colors.black.withValues(alpha: 0.92)),
+            Semantics(
+              button: true,
+              label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(context).maybePop(),
+                child: Container(color: Colors.black.withValues(alpha: 0.92)),
+              ),
             ),
             Center(child: _videoArea()),
             _header(),
@@ -237,30 +241,36 @@ class _DesktopVideoViewerState extends State<DesktopVideoViewer> {
         child: CircularProgressIndicator(strokeWidth: 2.6, color: Colors.white),
       );
     }
-    return GestureDetector(
-      onTap: _togglePlay,
-      child: AspectRatio(
-        aspectRatio: _ctl.value.aspectRatio == 0 ? 16 / 9 : _ctl.value.aspectRatio,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            VideoPlayer(_ctl),
-            // Big play overlay while paused.
-            if (!_ctl.value.isPlaying)
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.45),
-                  shape: BoxShape.circle,
+    return Semantics(
+             button: true,
+             label: _ctl.value.isPlaying
+                 ? AppLocalizations.of(context)!.desktopA11yPause
+                 : AppLocalizations.of(context)!.desktopA11yPlay,
+             child: GestureDetector(
+        onTap: _togglePlay,
+        child: AspectRatio(
+          aspectRatio: _ctl.value.aspectRatio == 0 ? 16 / 9 : _ctl.value.aspectRatio,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              VideoPlayer(_ctl),
+              // Big play overlay while paused.
+              if (!_ctl.value.isPlaying)
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(FluentIcons.play_24_filled,
+                      color: Colors.white, size: 34),
                 ),
-                child: const Icon(FluentIcons.play_24_filled,
-                    color: Colors.white, size: 34),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
-    );
+           );
   }
 
   Widget _header() {

@@ -552,11 +552,15 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
         children: [
           // Backdrop: tap to dismiss.
           Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: widget.onClose,
-              child: Container(color: const Color(0x99000000)),
-            ),
+            child: Semantics(
+                     button: true,
+                     label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+                     child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.onClose,
+                child: Container(color: const Color(0x99000000)),
+              ),
+                   ),
           ),
           // Centered card.
           Center(

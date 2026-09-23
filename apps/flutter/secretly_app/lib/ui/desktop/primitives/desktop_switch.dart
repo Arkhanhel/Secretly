@@ -27,7 +27,13 @@ class DesktopSwitch extends StatelessWidget {
     super.key,
     required this.value,
     required this.onChanged,
+    this.semanticsLabel,
   });
+
+  /// Что именно переключает. Без этого экранный диктор объявляет «включено»,
+  /// не сказав чего: сам переключатель нарисован, подпись живёт в соседней
+  /// строке и в его узел семантики не попадает.
+  final String? semanticsLabel;
 
   final bool value;
 
@@ -41,7 +47,15 @@ class DesktopSwitch extends StatelessWidget {
     final track = value
         ? c.accentPrimary
         : Colors.white.withValues(alpha: 0.12);
-    return Opacity(
+    // 🔴 ОДИН УЗЕЛ, А НЕ ДВА. [MergeSemantics] сводит подпись, состояние и
+    // нажатие в один предмет обхода. Без него диктор находил бы отдельно
+    // «переключатель» без имени и отдельно подпись — и не связал бы их.
+    return MergeSemantics(
+      child: Semantics(
+        toggled: value,
+        enabled: enabled,
+        label: semanticsLabel,
+        child: Opacity(
       opacity: enabled ? 1 : 0.45,
       child: HoverListener(
         onTap: enabled ? () => onChanged!(!value) : null,
@@ -70,6 +84,8 @@ class DesktopSwitch extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
             ),
+          ),
+        ),
           ),
         ),
       ),

@@ -241,6 +241,7 @@ class _DesktopDocumentViewerState extends State<DesktopDocumentViewer> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           IconButton(
+            tooltip: l10n.desktopViewerPagePrev,
             icon: const Icon(Icons.chevron_left_rounded, color: Colors.white),
             onPressed: _page > 0 ? () => _goto(_page - 1) : null,
           ),
@@ -249,6 +250,7 @@ class _DesktopDocumentViewerState extends State<DesktopDocumentViewer> {
             style: DType.caption.copyWith(color: Colors.white70),
           ),
           IconButton(
+            tooltip: l10n.desktopViewerPageNext,
             icon: const Icon(Icons.chevron_right_rounded, color: Colors.white),
             onPressed: _page + 1 < _pageCount ? () => _goto(_page + 1) : null,
           ),

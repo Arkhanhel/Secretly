@@ -6,6 +6,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../l10n/app_localizations.dart';
 import '../design/tokens.dart';
 import 'desktop_button.dart';
 
@@ -124,25 +125,29 @@ class _DialogScaffold extends StatelessWidget {
           autofocus: true,
           child: Stack(
             children: [
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: barrierDismissible
-                    ? () => Navigator.of(context).maybePop()
-                    : null,
-                child: AnimatedBuilder(
-                  animation: animation,
-                  builder: (ctx, _) {
-                    final t = animation.value;
-                    return BackdropFilter(
-                      filter: ImageFilter.blur(
-                        sigmaX: useBlur ? 8 * t : 0,
-                        sigmaY: useBlur ? 8 * t : 0,
-                      ),
-                      child: Container(
-                        color: c.scrim.withValues(alpha: 0.45 * t),
-                      ),
-                    );
-                  },
+              Semantics(
+                button: true,
+                label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: barrierDismissible
+                      ? () => Navigator.of(context).maybePop()
+                      : null,
+                  child: AnimatedBuilder(
+                    animation: animation,
+                    builder: (ctx, _) {
+                      final t = animation.value;
+                      return BackdropFilter(
+                        filter: ImageFilter.blur(
+                          sigmaX: useBlur ? 8 * t : 0,
+                          sigmaY: useBlur ? 8 * t : 0,
+                        ),
+                        child: Container(
+                          color: c.scrim.withValues(alpha: 0.45 * t),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
               Center(
@@ -239,6 +244,7 @@ class _DialogHeader extends StatelessWidget {
           ),
           DesktopIconButton(
             icon: Icons.close_rounded,
+            tooltip: AppLocalizations.of(context)?.close,
             onPressed: () => Navigator.of(context).maybePop(),
             size: 32,
             iconSize: 16,
