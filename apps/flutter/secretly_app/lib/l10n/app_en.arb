@@ -2733,5 +2733,14 @@
   "desktopMenuCheckUpdates": "Check for Updates…",
   "desktopNotifBlockedTitle": "The system is not showing Secretly notifications",
   "desktopNotifBlockedBody": "The switches below still work, but nothing will be shown: the system is blocking this app’s notifications. The window is often hidden, and a notification is the only way to learn about a new message.",
-  "desktopNotifBlockedAction": "Open System Settings"
+  "desktopNotifBlockedAction": "Open System Settings",
+  "backupPwRequirements": "Use at least 8 ASCII characters, one uppercase letter, and one special character. No leading or trailing spaces.",
+  "backupPwTooShort": "Password must be at least {count} characters.",
+  "@backupPwTooShort": {"placeholders": {"count": {"type": "int"}}},
+  "backupPwTooLong": "Password must be no longer than {count} characters.",
+  "@backupPwTooLong": {"placeholders": {"count": {"type": "int"}}},
+  "backupPwNonAscii": "Use only Latin letters, digits, and ASCII symbols.",
+  "backupPwOuterSpace": "Remove leading or trailing spaces from the password.",
+  "backupPwNeedUpper": "Add at least one uppercase A-Z letter.",
+  "backupPwNeedSpecial": "Add at least one special character, such as !, #, or ?."
 }

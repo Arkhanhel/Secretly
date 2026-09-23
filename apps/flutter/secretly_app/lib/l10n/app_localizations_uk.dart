@@ -5712,4 +5712,29 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get desktopNotifBlockedAction => 'Відкрити налаштування системи';
+
+  @override
+  String get backupPwRequirements => 'Щонайменше 8 символів, латиниця/ASCII, одна велика літера й один спецсимвол. Без пробілів на початку та в кінці.';
+
+  @override
+  String backupPwTooShort(int count) {
+    return 'Пароль має містити щонайменше $count символів.';
+  }
+
+  @override
+  String backupPwTooLong(int count) {
+    return 'Пароль має бути не довшим за $count символів.';
+  }
+
+  @override
+  String get backupPwNonAscii => 'Використовуйте лише латиницю, цифри та ASCII-символи.';
+
+  @override
+  String get backupPwOuterSpace => 'Приберіть пробіли на початку або в кінці пароля.';
+
+  @override
+  String get backupPwNeedUpper => 'Додайте щонайменше одну велику літеру A-Z.';
+
+  @override
+  String get backupPwNeedSpecial => 'Додайте щонайменше один спецсимвол, наприклад !, # або ?.';
 }

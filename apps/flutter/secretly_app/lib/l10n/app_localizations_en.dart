@@ -5692,4 +5692,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get desktopNotifBlockedAction => 'Open System Settings';
+
+  @override
+  String get backupPwRequirements => 'Use at least 8 ASCII characters, one uppercase letter, and one special character. No leading or trailing spaces.';
+
+  @override
+  String backupPwTooShort(int count) {
+    return 'Password must be at least $count characters.';
+  }
+
+  @override
+  String backupPwTooLong(int count) {
+    return 'Password must be no longer than $count characters.';
+  }
+
+  @override
+  String get backupPwNonAscii => 'Use only Latin letters, digits, and ASCII symbols.';
+
+  @override
+  String get backupPwOuterSpace => 'Remove leading or trailing spaces from the password.';
+
+  @override
+  String get backupPwNeedUpper => 'Add at least one uppercase A-Z letter.';
+
+  @override
+  String get backupPwNeedSpecial => 'Add at least one special character, such as !, #, or ?.';
 }

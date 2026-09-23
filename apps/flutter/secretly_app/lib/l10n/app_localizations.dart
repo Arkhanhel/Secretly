@@ -10551,6 +10551,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open System Settings'**
   String get desktopNotifBlockedAction;
+
+  /// No description provided for @backupPwRequirements.
+  ///
+  /// In en, this message translates to:
+  /// **'Use at least 8 ASCII characters, one uppercase letter, and one special character. No leading or trailing spaces.'**
+  String get backupPwRequirements;
+
+  /// No description provided for @backupPwTooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be at least {count} characters.'**
+  String backupPwTooShort(int count);
+
+  /// No description provided for @backupPwTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be no longer than {count} characters.'**
+  String backupPwTooLong(int count);
+
+  /// No description provided for @backupPwNonAscii.
+  ///
+  /// In en, this message translates to:
+  /// **'Use only Latin letters, digits, and ASCII symbols.'**
+  String get backupPwNonAscii;
+
+  /// No description provided for @backupPwOuterSpace.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove leading or trailing spaces from the password.'**
+  String get backupPwOuterSpace;
+
+  /// No description provided for @backupPwNeedUpper.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least one uppercase A-Z letter.'**
+  String get backupPwNeedUpper;
+
+  /// No description provided for @backupPwNeedSpecial.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least one special character, such as !, #, or ?.'**
+  String get backupPwNeedSpecial;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

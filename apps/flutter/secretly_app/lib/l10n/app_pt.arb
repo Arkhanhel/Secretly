@@ -2037,5 +2037,12 @@
   "desktopMenuCheckUpdates": "Procurar atualizações…",
   "desktopNotifBlockedTitle": "O sistema não mostra as notificações do Secretly",
   "desktopNotifBlockedBody": "Os botões abaixo continuam a funcionar, mas nada será mostrado: o sistema está a bloquear as notificações desta aplicação. A janela está muitas vezes oculta, e uma notificação é a única forma de saber de uma nova mensagem.",
-  "desktopNotifBlockedAction": "Abrir Definições do Sistema"
+  "desktopNotifBlockedAction": "Abrir Definições do Sistema",
+  "backupPwRequirements": "Pelo menos 8 caracteres ASCII, uma letra maiúscula e um caractere especial. Sem espaços no início ou no fim.",
+  "backupPwTooShort": "A palavra-passe deve ter pelo menos {count} caracteres.",
+  "backupPwTooLong": "A palavra-passe não pode ter mais de {count} caracteres.",
+  "backupPwNonAscii": "Use apenas letras latinas, dígitos e símbolos ASCII.",
+  "backupPwOuterSpace": "Remova os espaços no início ou no fim da palavra-passe.",
+  "backupPwNeedUpper": "Adicione pelo menos uma letra maiúscula A-Z.",
+  "backupPwNeedSpecial": "Adicione pelo menos um caractere especial, por exemplo !, # ou ?."
 }

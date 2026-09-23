@@ -5692,4 +5692,29 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get desktopNotifBlockedAction => 'Systemeinstellungen öffnen';
+
+  @override
+  String get backupPwRequirements => 'Mindestens 8 ASCII-Zeichen, ein Großbuchstabe und ein Sonderzeichen. Keine Leerzeichen am Anfang oder Ende.';
+
+  @override
+  String backupPwTooShort(int count) {
+    return 'Das Passwort muss mindestens $count Zeichen lang sein.';
+  }
+
+  @override
+  String backupPwTooLong(int count) {
+    return 'Das Passwort darf höchstens $count Zeichen lang sein.';
+  }
+
+  @override
+  String get backupPwNonAscii => 'Verwende nur lateinische Buchstaben, Ziffern und ASCII-Zeichen.';
+
+  @override
+  String get backupPwOuterSpace => 'Entferne Leerzeichen am Anfang oder Ende des Passworts.';
+
+  @override
+  String get backupPwNeedUpper => 'Füge mindestens einen Großbuchstaben A-Z hinzu.';
+
+  @override
+  String get backupPwNeedSpecial => 'Füge mindestens ein Sonderzeichen hinzu, etwa !, # oder ?.';
 }

@@ -28,6 +28,7 @@ import '../../../l10n/app_localizations.dart';
 import '../../security_lock_flow.dart' show ensureSecurityScopeUnlocked;
 import '../../theme_presets.dart';
 import '../app/desktop_app_view_model.dart';
+import '../app/recovery_kit_export.dart';
 import '../app/desktop_selector.dart';
 import 'accent_color_picker.dart';
 import '../design/theme_bridge.dart';
@@ -38,7 +39,6 @@ import '../primitives/desktop_dialog.dart';
 import '../primitives/desktop_snackbar.dart';
 import '../primitives/hover_listener.dart';
 import '../primitives/desktop_text_field.dart';
-import '../../recovery_kit_screen.dart';
 import '../../widgets/support_badge.dart';
 import '../services/desktop_app_lock_service.dart';
 import '../services/desktop_notification_service.dart';
@@ -3276,7 +3276,12 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
               final b = confirm.text;
               final validation = BackupPasswordPolicy.validate(a);
               if (!validation.isValid) {
-                setLocal(() => error = validation.problemText(isRu: true));
+                // Перевод по языку ОКНА, а не жёстко по-русски: раньше
+                // немец и испанец читали причину отказа кириллицей ровно в
+                // тот момент, когда пароль не приняли.
+                setLocal(
+                  () => error = desktopPasswordProblems(l10n, validation),
+                );
                 return;
               }
               if (a != b) {
@@ -3314,7 +3319,7 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    error ?? BackupPasswordPolicy.requirementsText(isRu: true),
+                    error ?? desktopPasswordRequirements(l10n),
                     style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
                       color: error != null
                           ? Theme.of(ctx).colorScheme.error
@@ -4981,139 +4986,19 @@ class _BackupPaneState extends State<_BackupPane> {
     );
   }
 
-  /// Создаёт ключ восстановления и показывает его мобильным экраном.
+  /// Набор восстановления — ОБЩИМ путём, одним на всё окно.
   ///
-  /// Последовательность повторяет телефон: пароль с подтверждением →
-  /// `createRecoveryKitPayload` → показ. Пароль здесь не тот, что от
-  /// приложения: им шифруется сам ключ, и без него ключ бесполезен.
-  Future<void> _exportRecoveryKit() async {
-    final l10n = AppLocalizations.of(context)!;
-    final password = await _promptRecoveryPassword();
-    if (password == null || password.isEmpty || !mounted) return;
-    String payload;
-    try {
-      payload = await widget.controller.createRecoveryKitPayload(
-        password: password,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      // «Bad state: …» человеку ничего не сообщает — снимаем техническую
-      // приставку, как это уже делает панель серверной копии.
-      var text = e.toString();
-      for (final prefix in const ['Bad state: ', 'StateError: ']) {
-        if (text.startsWith(prefix)) text = text.substring(prefix.length);
-      }
-      DesktopSnackbar.show(
-        context,
-        message: l10n.desktopBackupKeyFailed(text),
-        kind: DSnackKind.error,
-      );
-      return;
-    }
-    if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => RecoveryKitScreen(payload: payload),
-      ),
-    );
-  }
-
-  /// Пароль для ключа — с подтверждением и ПРОВЕРКОЙ ПО ОБЩЕЙ ПОЛИТИКЕ.
+  /// Свой здесь был копией: пароль с подтверждением, проверка по политике,
+  /// показ ключа. С 23.09.2026 тот же путь нужен при создании аккаунта на
+  /// компьютере (`docs/TZ_DESKTOP_ACCOUNTS_2026-09-23.md`), а две копии
+  /// разошлись бы текстами и проверками — и это тот самый ключ, которым
+  /// человек однажды будет возвращать себе аккаунт.
   ///
-  /// 🔴 Первая версия проверки не делала вовсе — и живая проверка это сразу
-  /// показала: слабый пароль принимался окном, а отказ прилетал потом сырой
-  /// английской строкой «Bad state: Password must be at least 8 characters».
-  /// То есть требования человек узнавал ПОСЛЕ отказа и на чужом языке.
-  ///
-  /// Требования те же, что у резервной копии (`BackupPasswordPolicy`): ключ и
-  /// копия защищают одно и то же, и разные правила для них были бы просто
-  /// разными правилами без причины.
-  ///
-  /// 🔴 Подтверждение обязательно. Опечатка здесь не всплывёт никогда: ключ
-  /// создастся, человек его сохранит, и узнает о расхождении в тот
-  /// единственный момент, когда ключ понадобится, — когда устройств уже не
-  /// осталось.
-  Future<String?> _promptRecoveryPassword() async {
-    final l10n = AppLocalizations.of(context)!;
-    final first = TextEditingController();
-    final again = TextEditingController();
-    String? error;
-
-    final result = await DesktopDialog.show<String>(
-      context,
-      title: l10n.desktopBackupKeyPassword,
-      size: DDialogSize.small,
-      body: StatefulBuilder(
-        builder: (ctx, setLocal) {
-          final c = DColors.of(ctx);
-          void submit() {
-            final a = first.text;
-            final b = again.text;
-            final validation = BackupPasswordPolicy.validate(a);
-            if (!validation.isValid) {
-              setLocal(() => error = validation.problemText(isRu: true));
-              return;
-            }
-            if (a != b) {
-              setLocal(() => error = l10n.desktopBackupPasswordsDiffer);
-              return;
-            }
-            Navigator.of(ctx).maybePop(a);
-          }
-
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                l10n.desktopBackupKeyPasswordHint,
-                style: DType.body.copyWith(color: c.textSecondary),
-              ),
-              const SizedBox(height: DSpace.m),
-              DesktopTextField(
-                controller: first,
-                hintText: l10n.password,
-                obscureText: true,
-                autofocus: true,
-              ),
-              const SizedBox(height: DSpace.s),
-              DesktopTextField(
-                controller: again,
-                hintText: l10n.desktopBackupPasswordAgain,
-                obscureText: true,
-                onSubmitted: (_) => submit(),
-              ),
-              const SizedBox(height: DSpace.s),
-              // Требования видны СРАЗУ, а не после отказа: человек подбирает
-              // пароль один раз, а не угадывает правила.
-              Text(
-                error ?? BackupPasswordPolicy.requirementsText(isRu: true),
-                style: DType.caption.copyWith(
-                  color: error != null ? c.danger : c.textDisabled,
-                ),
-              ),
-              const SizedBox(height: DSpace.m),
-              Align(
-                alignment: Alignment.centerRight,
-                child: DesktopButton(
-                  label: l10n.desktopListCreate,
-                  kind: DButtonKind.filled,
-                  onPressed: submit,
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-      secondary: DDialogAction(
-        label: l10n.cancel,
-        onPressed: () => Navigator.of(context).maybePop(),
-      ),
-    );
-    first.dispose();
-    again.dispose();
-    return result;
-  }
+  /// 🔴 Заодно перевод: своя копия показывала требования к паролю ВСЕГДА
+  /// по-русски (`isRu: true` жёстко), то есть немец и испанец читали их на
+  /// чужом языке ровно в тот момент, когда пароль не приняли.
+  Future<void> _exportRecoveryKit() =>
+      runRecoveryKitExport(context: context, vm: widget.vm);
 }
 
 /// End-to-end encrypted support chat.

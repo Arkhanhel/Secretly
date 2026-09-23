@@ -5692,4 +5692,29 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get desktopNotifBlockedAction => 'Abrir Ajustes del Sistema';
+
+  @override
+  String get backupPwRequirements => 'Al menos 8 caracteres ASCII, una letra mayúscula y un carácter especial. Sin espacios al principio ni al final.';
+
+  @override
+  String backupPwTooShort(int count) {
+    return 'La contraseña debe tener al menos $count caracteres.';
+  }
+
+  @override
+  String backupPwTooLong(int count) {
+    return 'La contraseña no debe superar los $count caracteres.';
+  }
+
+  @override
+  String get backupPwNonAscii => 'Usa solo letras latinas, dígitos y símbolos ASCII.';
+
+  @override
+  String get backupPwOuterSpace => 'Quita los espacios al principio o al final de la contraseña.';
+
+  @override
+  String get backupPwNeedUpper => 'Añade al menos una letra mayúscula A-Z.';
+
+  @override
+  String get backupPwNeedSpecial => 'Añade al menos un carácter especial, por ejemplo !, # o ?.';
 }

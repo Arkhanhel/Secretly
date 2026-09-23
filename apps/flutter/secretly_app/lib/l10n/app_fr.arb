@@ -2037,5 +2037,12 @@
   "desktopMenuCheckUpdates": "Rechercher les mises à jour…",
   "desktopNotifBlockedTitle": "Le système n’affiche pas les notifications de Secretly",
   "desktopNotifBlockedBody": "Les commutateurs ci-dessous fonctionnent toujours, mais rien ne sera affiché : le système bloque les notifications de cette app. La fenêtre est souvent masquée, et une notification est le seul moyen d’apprendre l’arrivée d’un message.",
-  "desktopNotifBlockedAction": "Ouvrir Réglages Système"
+  "desktopNotifBlockedAction": "Ouvrir Réglages Système",
+  "backupPwRequirements": "Au moins 8 caractères ASCII, une majuscule et un caractère spécial. Pas d’espaces au début ni à la fin.",
+  "backupPwTooShort": "Le mot de passe doit contenir au moins {count} caractères.",
+  "backupPwTooLong": "Le mot de passe ne doit pas dépasser {count} caractères.",
+  "backupPwNonAscii": "Utilisez uniquement des lettres latines, des chiffres et des symboles ASCII.",
+  "backupPwOuterSpace": "Supprimez les espaces au début ou à la fin du mot de passe.",
+  "backupPwNeedUpper": "Ajoutez au moins une lettre majuscule A-Z.",
+  "backupPwNeedSpecial": "Ajoutez au moins un caractère spécial, par exemple !, # ou ?."
 }

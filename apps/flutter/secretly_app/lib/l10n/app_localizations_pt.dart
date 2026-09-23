@@ -5692,6 +5692,31 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get desktopNotifBlockedAction => 'Abrir Definições do Sistema';
+
+  @override
+  String get backupPwRequirements => 'Pelo menos 8 caracteres ASCII, uma letra maiúscula e um caractere especial. Sem espaços no início ou no fim.';
+
+  @override
+  String backupPwTooShort(int count) {
+    return 'A palavra-passe deve ter pelo menos $count caracteres.';
+  }
+
+  @override
+  String backupPwTooLong(int count) {
+    return 'A palavra-passe não pode ter mais de $count caracteres.';
+  }
+
+  @override
+  String get backupPwNonAscii => 'Use apenas letras latinas, dígitos e símbolos ASCII.';
+
+  @override
+  String get backupPwOuterSpace => 'Remova os espaços no início ou no fim da palavra-passe.';
+
+  @override
+  String get backupPwNeedUpper => 'Adicione pelo menos uma letra maiúscula A-Z.';
+
+  @override
+  String get backupPwNeedSpecial => 'Adicione pelo menos um caractere especial, por exemplo !, # ou ?.';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -11382,4 +11407,29 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopNotifBlockedAction => 'Abrir Ajustes do Sistema';
+
+  @override
+  String get backupPwRequirements => 'Pelo menos 8 caracteres ASCII, uma letra maiúscula e um caractere especial. Sem espaços no início ou no fim.';
+
+  @override
+  String backupPwTooShort(int count) {
+    return 'A senha deve ter pelo menos $count caracteres.';
+  }
+
+  @override
+  String backupPwTooLong(int count) {
+    return 'A senha não pode ter mais de $count caracteres.';
+  }
+
+  @override
+  String get backupPwNonAscii => 'Use apenas letras latinas, dígitos e símbolos ASCII.';
+
+  @override
+  String get backupPwOuterSpace => 'Remova os espaços no início ou no fim da senha.';
+
+  @override
+  String get backupPwNeedUpper => 'Adicione pelo menos uma letra maiúscula A-Z.';
+
+  @override
+  String get backupPwNeedSpecial => 'Adicione pelo menos um caractere especial, por exemplo !, # ou ?.';
 }

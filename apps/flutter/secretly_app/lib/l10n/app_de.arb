@@ -2037,5 +2037,12 @@
   "desktopMenuCheckUpdates": "Nach Updates suchen …",
   "desktopNotifBlockedTitle": "Das System zeigt keine Secretly-Mitteilungen an",
   "desktopNotifBlockedBody": "Die Schalter unten funktionieren weiterhin, aber es wird nichts angezeigt: Das System blockiert die Mitteilungen dieser App. Das Fenster ist oft ausgeblendet, und eine Mitteilung ist der einzige Weg, von einer neuen Nachricht zu erfahren.",
-  "desktopNotifBlockedAction": "Systemeinstellungen öffnen"
+  "desktopNotifBlockedAction": "Systemeinstellungen öffnen",
+  "backupPwRequirements": "Mindestens 8 ASCII-Zeichen, ein Großbuchstabe und ein Sonderzeichen. Keine Leerzeichen am Anfang oder Ende.",
+  "backupPwTooShort": "Das Passwort muss mindestens {count} Zeichen lang sein.",
+  "backupPwTooLong": "Das Passwort darf höchstens {count} Zeichen lang sein.",
+  "backupPwNonAscii": "Verwende nur lateinische Buchstaben, Ziffern und ASCII-Zeichen.",
+  "backupPwOuterSpace": "Entferne Leerzeichen am Anfang oder Ende des Passworts.",
+  "backupPwNeedUpper": "Füge mindestens einen Großbuchstaben A-Z hinzu.",
+  "backupPwNeedSpecial": "Füge mindestens ein Sonderzeichen hinzu, etwa !, # oder ?."
 }
