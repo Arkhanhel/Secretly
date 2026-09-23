@@ -1,11 +1,11 @@
 {
-    "name": "secretly_app",
-    "short_name": "secretly_app",
+    "name": "Secretly",
+    "short_name": "Secretly",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Secretly — an end-to-end encrypted messenger.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

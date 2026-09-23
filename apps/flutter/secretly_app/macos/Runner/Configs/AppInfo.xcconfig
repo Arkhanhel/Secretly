@@ -19,4 +19,18 @@ PRODUCT_NAME = Secretly
 PRODUCT_BUNDLE_IDENTIFIER = com.secretly.secretlyApp
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.secretly. All rights reserved.
+// 🔴 ПРАВООБЛАДАТЕЛЬ — ЧЕЛОВЕК, А НЕ ОБЛОМОК ИДЕНТИФИКАТОРА.
+//
+// Здесь стояло «com.secretly» — подстановка, которую `flutter create` берёт из
+// обратного доменного имени. Она попала в заверенный выпуск 1.8.51 и видна в
+// «Свойствах» пакета: строка утверждала, что права принадлежат сущности
+// «com.secretly», которой не существует.
+//
+// Имя взято из заголовков SPDX, которые стоят в КАЖДОМ файле проекта. Оно же
+// отвечает на вопрос аудитора «кому принадлежит этот код» — и отвечать в двух
+// местах по-разному нельзя.
+//
+// Это НЕ то же самое, что подпись сборки: подписывает «Secretly SIA» по
+// сертификату Developer ID, и одно другому не противоречит — распространитель
+// и правообладатель бывают разными.
+PRODUCT_COPYRIGHT = Copyright © 2025-2026 Yurii Arkhanhelskyi. All rights reserved.
