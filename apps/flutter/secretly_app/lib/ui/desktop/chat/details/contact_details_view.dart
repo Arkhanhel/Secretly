@@ -16,7 +16,8 @@ import '../../../../l10n/app_localizations.dart';
 import '../../app/desktop_app_view_model.dart';
 import '../../app/desktop_selector.dart';
 import '../../../../calls/call_manager.dart';
-import '../../../premium/cosmetics_catalog.dart' show coverWidgetFor;
+import '../../../premium/cosmetics_catalog.dart'
+    show coverBackWidgetFor, coverFrontWidgetFor;
 import '../../design/tokens.dart';
 import '../../primitives/avatar.dart';
 import '../../primitives/context_menu.dart';
@@ -634,7 +635,10 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
         avatarPath.isNotEmpty && File(avatarPath).existsSync();
     // Premium profile cover (обложка) banner behind the avatar, when the peer
     // has one. Rendered regardless of the local user's tier.
-    final cover = coverWidgetFor(convo.coverId);
+    // 🔴 Два слоя, как на телефоне: задний — сцена без ближнего края диска,
+    // передний — сам край, он проходит ПЕРЕД лицом.
+    final cover = coverBackWidgetFor(convo.coverId);
+    final coverFront = coverFrontWidgetFor(convo.coverId);
 
     return Column(
       children: [
@@ -651,6 +655,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
               DetailsHeadline(
                 name: displayName,
                 cover: cover,
+                coverFront: coverFront,
                 presence: presence,
                 presenceIsOnline: convo.isOnline,
                 emojiStatus: convo.emojiStatus,

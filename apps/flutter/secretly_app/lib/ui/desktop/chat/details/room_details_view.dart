@@ -38,7 +38,8 @@ import 'details_tabs.dart';
 import 'member_profile_card.dart';
 import 'room_invite_share.dart';
 import '../../../../app/message_command_utils.dart' show RoomTopicRef;
-import '../../../premium/cosmetics_catalog.dart' show coverWidgetFor;
+import '../../../premium/cosmetics_catalog.dart'
+    show coverBackWidgetFor, coverFrontWidgetFor;
 
 /// Панель подробностей комнаты.
 ///
@@ -1015,7 +1016,9 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
               // есть, — теперь тот же блок, что и у контакта.
               DetailsHeadline(
                 name: title,
-                cover: coverWidgetFor(widget.conversation.coverId),
+                // 🔴 Два слоя, как на телефоне.
+                cover: coverBackWidgetFor(widget.conversation.coverId),
+                coverFront: coverFrontWidgetFor(widget.conversation.coverId),
                 presence: !_room.hasLoaded ? l10n.desktopServerBackupLoading : memberText,
                 emojiStatus: widget.conversation.emojiStatus,
                 premiumBadge: widget.conversation.premiumBadge,
@@ -1802,35 +1805,39 @@ class _MemberMenuButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = DColors.of(context);
     return Builder(
-      builder: (btnContext) => HoverListener(
-        cursor: SystemMouseCursors.click,
-        onTap: () {
-          final box = btnContext.findRenderObject() as RenderBox?;
-          if (box == null) return;
-          final pos = box.localToGlobal(Offset(0, box.size.height));
-          unawaited(
-            ContextMenu.show(
-              btnContext,
-              globalPosition: pos,
-              sections: sections,
+      builder: (btnContext) => Semantics(
+                                 button: true,
+                                 label: AppLocalizations.of(context)!.desktopThreadMore,
+                                 child: HoverListener(
+          cursor: SystemMouseCursors.click,
+          onTap: () {
+            final box = btnContext.findRenderObject() as RenderBox?;
+            if (box == null) return;
+            final pos = box.localToGlobal(Offset(0, box.size.height));
+            unawaited(
+              ContextMenu.show(
+                btnContext,
+                globalPosition: pos,
+                sections: sections,
+              ),
+            );
+          },
+          builder: (ctx, hovered, pressed) => Container(
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: hovered ? c.elevated : Colors.transparent,
+              borderRadius: BorderRadius.circular(DRadii.sm),
             ),
-          );
-        },
-        builder: (ctx, hovered, pressed) => Container(
-          width: 26,
-          height: 26,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: hovered ? c.elevated : Colors.transparent,
-            borderRadius: BorderRadius.circular(DRadii.sm),
-          ),
-          child: Icon(
-            FluentIcons.more_vertical_24_regular,
-            size: 16,
-            color: c.textSecondary,
+            child: Icon(
+              FluentIcons.more_vertical_24_regular,
+              size: 16,
+              color: c.textSecondary,
+            ),
           ),
         ),
-      ),
+                               ),
     );
   }
 }

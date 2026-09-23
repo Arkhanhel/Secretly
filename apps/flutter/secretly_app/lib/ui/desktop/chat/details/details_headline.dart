@@ -48,6 +48,8 @@ class DetailsHeadline extends StatelessWidget {
     this.onClose,
     this.onShare,
     this.shareTooltip,
+    this.coverFront,
+    this.onEdit,
     this.onChangeCover,
     this.menuSections = const <List<CtxMenuItem>>[],
     this.idLine,
@@ -94,6 +96,25 @@ class DetailsHeadline extends StatelessWidget {
   ///
   /// Показывается только когда обложка ЕСТЬ: на пустом месте «сменить» нечего,
   /// там работает «Обложка» в ряду действий.
+  /// Передний слой обложки — рисуется ПОВЕРХ портрета.
+  ///
+  /// 🔴 ЧТОБЫ ПОРТРЕТ ОКАЗАЛСЯ ВНУТРИ СЦЕНЫ, А НЕ НА НЕЙ. У чёрной дыры ближний
+  /// край диска должен проходить ПЕРЕД лицом — тогда портрет читается как
+  /// находящийся в горизонте событий, а не наклеенный сверху. На телефоне это
+  /// сделано давно (`coverFrontWidgetFor`, `profile_screen.dart`), на
+  /// компьютере обложка рисовалась одним слоем, и портрет лежал поверх всего.
+  ///
+  /// `null` для обложек без переднего слоя — тогда ничего и не рисуется.
+  final Widget? coverFront;
+
+  /// «Редактировать» — плиткой в верхнем ряду, СЛЕВА от обложки.
+  ///
+  /// 🔴 Раньше это была кнопка с подписью рядом с именем. Она стояла в потоке
+  /// содержимого и отодвигала портрет вниз, а главное — читалась как часть
+  /// имени, хотя относится ко всему профилю. В верхнем ряду уже лежат кнопки
+  /// про панель и обложку; правка профиля — из того же разряда.
+  final VoidCallback? onEdit;
+
   final VoidCallback? onChangeCover;
 
   /// Разделы меню «Дополнительно». Пустой список — кнопки нет.
@@ -125,6 +146,7 @@ class DetailsHeadline extends StatelessWidget {
     final hasActions =
         onClose != null ||
         onShare != null ||
+        onEdit != null ||
         onChangeCover != null ||
         menuSections.isNotEmpty;
 
@@ -145,9 +167,20 @@ class DetailsHeadline extends StatelessWidget {
         padding: EdgeInsets.only(
           // Под кнопками на обложке: они лежат поверх этого же блока, и без
           // запаса портрет уезжал бы им под низ на узкой панели.
+          // 🔴 ПОРТРЕТ НИЖЕ ВЕРХНЕГО РЯДА, А НЕ ВПРИТЫК К НЕМУ.
+          //
+          // Запас считался так, чтобы портрет лишь НЕ НАЕЗЖАЛ на кнопки — то
+          // есть по нижнему допустимому краю. Выглядело, будто портрет
+          // подпирает их снизу, а на обложке он ещё и накрывал её верхнюю
+          // часть, ради которой обложку и выбирают.
+          // 🔴 С ОБЛОЖКОЙ ПОРТРЕТ ОПУСКАЕТСЯ К СЕРЕДИНЕ СЦЕНЫ.
+          //
+          // У чёрной дыры смысл именно в этом: портрет должен попасть В ДЫРУ, а
+          // не висеть над ней. Запас считался от кнопок («лишь бы не наезжал»),
+          // и портрет оказывался выше центра сцены.
           top: hasActions
-              ? (cover != null ? DSpace.xl + 12 : DSpace.xl)
-              : (cover != null ? DSpace.xl : DSpace.l),
+              ? (cover != null ? DSpace.xl3 * 2 + DSpace.s : DSpace.xl2)
+              : (cover != null ? DSpace.xl2 : DSpace.l),
           left: DSpace.l,
           right: DSpace.l,
           bottom: DSpace.m,
@@ -276,6 +309,15 @@ class DetailsHeadline extends StatelessWidget {
                 // Поэтому та же плитка 28×28, что у соседей, а слова — в
                 // подсказке. Ряд от этого не теряет смысла: все четыре кнопки
                 // здесь про саму обложку и про панель.
+                if (onEdit != null) ...[
+                  _CoverAction(
+                    icon: FluentIcons.edit_24_regular,
+                    tooltip: l10n.desktopProfileEdit,
+                    onPressed: onEdit!,
+                    onCover: cover != null,
+                  ),
+                  const SizedBox(width: 5),
+                ],
                 if (onChangeCover != null) ...[
                   _CoverAction(
                     icon: FluentIcons.image_24_regular,
@@ -333,6 +375,15 @@ class DetailsHeadline extends StatelessWidget {
           ),
         ),
         content,
+        // 🔴 ПЕРЕДНИЙ СЛОЙ — МЕЖДУ СОДЕРЖИМЫМ И КНОПКАМИ.
+        //
+        // Выше портрета, чтобы край диска прошёл перед лицом; ниже верхнего
+        // ряда, чтобы не закрыть кнопки. `IgnorePointer` — слой прозрачный и
+        // нажатия по портрету должен пропускать насквозь.
+        if (coverFront != null)
+          Positioned.fill(
+            child: IgnorePointer(child: ClipRect(child: coverFront!)),
+          ),
         if (actions != null) actions,
       ],
     );

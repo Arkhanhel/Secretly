@@ -90,13 +90,46 @@ void main() {
   test('«Редактировать» открывает тот же путь, что строка «Имя»', () {
     // Два разных способа править одно и то же разъехались бы: у одного
     // ограничение длины, у другого нет.
+    //
+    // 🔴 23.09.2026 правка переехала из кнопки с подписью рядом с именем в
+    // ПЛИТКУ верхнего ряда (`onEdit`), слева от обложки. Ищем по имени
+    // параметра, а не по подписи: подписи у плитки нет, она в подсказке.
     final view = File(
       'lib/ui/desktop/chat/details/self_profile_view.dart',
     ).readAsStringSync();
-    final i = view.indexOf('label: l10n.desktopProfileEdit');
+    final i = view.indexOf('onEdit:');
+    expect(i, greaterThan(0), reason: 'вход в правку профиля исчез');
     final body = view.substring(i, (i + 500).clamp(0, view.length));
     expect(body.contains('_editLine('), isTrue);
     expect(body.contains('save: (v) => _c.setMyNickname(v)'), isTrue);
+  });
+
+  test('🔴 плитка правки стоит СЛЕВА от обложки, и обе белые на обложке', () {
+    // Решение владельца 23.09.2026. Порядок важен: ряд читается слева направо,
+    // и правка профиля идёт перед сменой обложки, а не после.
+    final headline = File(
+      'lib/ui/desktop/chat/details/details_headline.dart',
+    ).readAsStringSync();
+    final edit = headline.indexOf('if (onEdit != null)');
+    final cover = headline.indexOf('if (onChangeCover != null)');
+    expect(edit, greaterThan(0), reason: 'плитки правки нет');
+    expect(cover, greaterThan(0));
+    expect(edit, lessThan(cover), reason: 'правка обязана стоять до обложки');
+    // Обе — один и тот же вид плитки: белый значок на обложке.
+    final body = headline.substring(edit, cover);
+    expect(body.contains('_CoverAction('), isTrue);
+    expect(body.contains('onCover: cover != null'), isTrue);
+  });
+
+  test('🔴 мини-списка рамок в профиле больше нет', () {
+    // Он дублировал кнопку «Рамка» из ряда действий, показывая при этом не все
+    // варианты: два входа в одно и то же, меньший из которых врал полнотой.
+    final view = File(
+      'lib/ui/desktop/chat/details/self_profile_view.dart',
+    ).readAsStringSync();
+    expect(view.contains('_FrameStrip'), isFalse);
+    // А сама кнопка «Рамка» осталась — за ней полная сетка.
+    expect(view.contains('_pickCosmetic(frame: true)'), isTrue);
   });
 
   test('идентификатор набран моноширинным', () {

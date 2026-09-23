@@ -10,7 +10,12 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 import '../../../../app/app_controller.dart';
 import '../../../premium/cosmetics_catalog.dart'
-    show AvatarFrame, coverWidgetFor, kAvatarFrames, kProfileCovers;
+    show
+        coverBackWidgetFor,
+        coverFrontWidgetFor,
+        coverWidgetFor,
+        kAvatarFrames,
+        kProfileCovers;
 import '../../design/tokens.dart';
 import '../../primitives/avatar.dart';
 import '../../primitives/desktop_tooltip.dart';
@@ -247,21 +252,6 @@ class _SelfProfileViewState extends State<SelfProfileView> {
 
   /// Применить рамку из полосы в панели — тем же путём, что и выбор в сетке.
   ///
-  /// Отказ говорится словами: рамка могла отвалиться вместе с подпиской, и
-  /// молчаливое «ничего не произошло» человек прочитает как поломку.
-  Future<void> _applyFrame(String? id) async {
-    try {
-      await _c.setMyFrame(id);
-      if (mounted) setState(() {});
-    } catch (e) {
-      if (!mounted) return;
-      DesktopSnackbar.show(
-        context,
-        message: l10n.desktopProfileApplyFailed('$e'),
-        kind: DSnackKind.error,
-      );
-    }
-  }
 
   /// Frame / cover picker. Both are premium cosmetics; the controller's
   /// getters already return null when the tier does not allow them, so a
@@ -479,23 +469,31 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                   // чтобы с ним связались, и искать его в «Информации» ниже
                   // приходилось каждый раз.
                   idLine: _c.profileId,
-                  // ◆ «Редактировать» рядом с именем. Правка шла нажатием по
-                  // строкам «Имя» и «О себе» ниже, и узнать об этом было
-                  // нельзя: строки выглядели фактами, а не полями.
-                  trailing: DesktopButton(
-                    label: l10n.desktopProfileEdit,
-                    icon: FluentIcons.edit_24_regular,
-                    kind: DButtonKind.tonal,
-                    onPressed: () => unawaited(
-                      _editLine(
-                        title: l10n.desktopProfileName,
-                        initial: name,
-                        maxLength: 40,
-                        save: (v) => _c.setMyNickname(v),
-                      ),
+                  // ◆ «Редактировать» — ПЛИТКОЙ В ВЕРХНЕМ РЯДУ, слева от
+                  // обложки (решение владельца 23.09.2026).
+                  //
+                  // Была кнопка с подписью рядом с именем. Она стояла в потоке
+                  // содержимого и отодвигала портрет вниз, а читалась как часть
+                  // имени, хотя относится ко всему профилю. Наверху уже лежат
+                  // кнопки про панель и обложку — правка профиля из того же
+                  // разряда, и там она ничего не смещает.
+                  //
+                  // Сама правка прежняя: это по-прежнему вход в «Имя», и строки
+                  // «Имя» и «О себе» ниже никуда не делись.
+                  onEdit: () => unawaited(
+                    _editLine(
+                      title: l10n.desktopProfileName,
+                      initial: name,
+                      maxLength: 40,
+                      save: (v) => _c.setMyNickname(v),
                     ),
                   ),
-                  cover: coverWidgetFor(_c.myCoverId),
+                  // 🔴 ДВА СЛОЯ, КАК НА ТЕЛЕФОНЕ. Задний — сцена без ближнего
+                  // края диска, передний — сам край, он проходит ПЕРЕД лицом, и
+                  // портрет читается как находящийся внутри дыры, а не
+                  // наклеенный на неё. Раньше слой был один.
+                  cover: coverBackWidgetFor(_c.myCoverId),
+                  coverFront: coverFrontWidgetFor(_c.myCoverId),
                   // 🔴 «Сменить обложку» — кнопка ПОВЕРХ самой обложки, как в
                   // макете. Раньше обложку меняли только из ряда действий
                   // ниже, и связи между кнопкой и картинкой не было никакой.
@@ -610,23 +608,11 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                   ],
                 ),
                 const SizedBox(height: DSpace.s),
-                // 🔴 РАМКА ВЫБИРАЕТСЯ ПРЯМО ЗДЕСЬ, А НЕ В ДИАЛОГЕ.
-                //
-                // В макете рамки лежат в самом профиле кружками с настоящими
-                // градиентами: человек видит, что покупает, не нажимая
-                // ничего. Кнопка «Рамка» осталась — за ней полная сетка со
-                // всеми вариантами; полоса показывает первые и выбранную.
-                _FrameStrip(
-                  frames: kAvatarFrames,
-                  currentId: _c.myFrameId,
-                  unlocked: _c.cosmeticsUnlocked,
-                  name: display,
-                  avatarPath: (_avatarPath ?? '').trim().isEmpty
-                      ? null
-                      : _avatarPath,
-                  onPick: (id) => unawaited(_applyFrame(id)),
-                  onMore: () => unawaited(_pickCosmetic(frame: true)),
-                ),
+                // 🔴 ПОЛОСЫ РАМОК ЗДЕСЬ БОЛЬШЕ НЕТ (решение владельца
+                // 23.09.2026). Она показывала первые несколько кружков прямо в
+                // профиле, дублируя кнопку «Рамка» из ряда выше: два входа в
+                // одно и то же, причём меньший показывал не все варианты.
+                // Кнопка «Рамка» осталась — за ней полная сетка.
                 // Заголовка у раздела нет: строка сама называет и что за ней,
                 // и куда она ведёт — тем же порядком, что строка «Устройства»
                 // ниже (сверху описание, снизу название раздела настроек).
@@ -742,274 +728,5 @@ class _SelfProfileViewState extends State<SelfProfileView> {
   }
 }
 
-/// Полоса рамок аватара прямо в профиле.
-///
-/// 🔴 УКРАШЕНИЕ ВЫБИРАЮТ ГЛАЗАМИ. В макете рамки лежат в самом профиле
-/// кружками с настоящими градиентами и подписями — человек видит, что
-/// покупает, ещё ничего не нажав. В коде до этого рамка выбиралась только в
-/// модальном окне, то есть о её существовании надо было сперва догадаться.
-///
-/// Полоса показывает НЕ ВСЕ рамки: их два десятка, и вертикальная панель
-/// шириной 330 точек столько не держит. Здесь первые несколько плюс кнопка
-/// «Ещё» в ту же полную сетку — она никуда не делась.
-///
-/// Заблокированные варианты ПОКАЗЫВАЮТСЯ с замком и подписью «PRO», а не
-/// прячутся: спрятанное платное содержимое человек считает отсутствующим, а
-/// увиденное — выбором. Нажатие по такому кружку ничего не применяет.
-class _FrameStrip extends StatelessWidget {
-  const _FrameStrip({
-    required this.frames,
-    required this.currentId,
-    required this.unlocked,
-    required this.name,
-    required this.avatarPath,
-    required this.onPick,
-    required this.onMore,
-  });
 
-  final List<AvatarFrame> frames;
-  final String? currentId;
-  final bool unlocked;
-  final String name;
-  final String? avatarPath;
-  final void Function(String? id) onPick;
-  final VoidCallback onMore;
 
-  /// Сколько рамок показывать до кнопки «Ещё».
-  ///
-  /// Три плюс «без рамки» плюс «Ещё» — пять кружков, и они помещаются в ряд
-  /// на панели шириной 360. На узкой панели [Wrap] переносит последний вниз,
-  /// а не обрезает его краем: обрезанный кружок читается как поломка, а не
-  /// как «прокрути вбок».
-  static const int _kVisible = 3;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final c = DColors.of(context);
-    // Выбранная рамка всегда в полосе, даже если она не из первых: иначе
-    // человек не увидел бы, что у него стоит.
-    final shown = <AvatarFrame>[];
-    final current = currentId == null
-        ? null
-        : frames.where((f) => f.id == currentId).firstOrNull;
-    if (current != null) shown.add(current);
-    for (final f in frames) {
-      if (shown.length >= _kVisible) break;
-      if (current != null && f.id == current.id) continue;
-      shown.add(f);
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        DSpace.m,
-        DSpace.s,
-        DSpace.m,
-        DSpace.s,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              DSpace.s,
-              0,
-              DSpace.s,
-              DSpace.xs,
-            ),
-            child: Text(
-              l10n.desktopProfileFrameCaps,
-              style: DType.meta.copyWith(color: c.textDisabled),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: DSpace.xs),
-            child: Wrap(
-              spacing: 6,
-              runSpacing: DSpace.s,
-              children: [
-                _FrameTile(
-                  label: l10n.desktopProfileNoFrame,
-                  selected: currentId == null,
-                  locked: false,
-                  name: name,
-                  avatarPath: avatarPath,
-                  frameId: null,
-                  onTap: () => onPick(null),
-                ),
-                for (final f in shown)
-                  _FrameTile(
-                    label: f.nameRu,
-                    selected: f.id == currentId,
-                    // Ни одной бесплатной рамки в каталоге нет
-                    // (`isCosmeticFree` для avatarFrame всегда false), поэтому
-                    // замок вешает один общий признак доступа.
-                    locked: !unlocked,
-                    name: name,
-                    avatarPath: avatarPath,
-                    frameId: f.id,
-                    onTap: unlocked ? () => onPick(f.id) : null,
-                  ),
-                _MoreFramesTile(onTap: onMore),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FrameTile extends StatelessWidget {
-  const _FrameTile({
-    required this.label,
-    required this.selected,
-    required this.locked,
-    required this.name,
-    required this.avatarPath,
-    required this.frameId,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final bool locked;
-  final String name;
-  final String? avatarPath;
-  final String? frameId;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = DColors.of(context);
-    return HoverListener(
-      onTap: onTap,
-      cursor: onTap == null
-          ? SystemMouseCursors.basic
-          : SystemMouseCursors.click,
-      builder: (ctx, hovered, pressed) => SizedBox(
-        width: 58,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              alignment: Alignment.center,
-              children: [
-                // Обводка выбранной идёт ВОКРУГ кружка, а не по нему: рамка
-                // сама рисует кольцо, и вторая линия поверх неё съела бы
-                // ровно то, что человек и выбирает.
-                Container(
-                  width: 58,
-                  height: 58,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: selected
-                          ? c.accentPrimary
-                          : (hovered ? c.borderSubtle : Colors.transparent),
-                      width: selected ? 2 : 1,
-                    ),
-                  ),
-                ),
-                Opacity(
-                  opacity: locked ? 0.55 : 1,
-                  child: Avatar(
-                    name: name,
-                    image: Avatar.fileImage(avatarPath),
-                    frameId: frameId,
-                    // Полоса стоит в открытой панели постоянно: два десятка
-                    // живых колец здесь — это вечная перерисовка.
-                    allowAnimatedFrame: false,
-                    size: 46,
-                  ),
-                ),
-                if (locked)
-                  Positioned(
-                    right: 2,
-                    bottom: 2,
-                    child: Container(
-                      width: 16,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: c.elevated,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: c.borderSubtle),
-                      ),
-                      child: Icon(
-                        FluentIcons.lock_closed_12_filled,
-                        size: 9,
-                        color: c.textSecondary,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              locked ? 'PRO' : label,
-              maxLines: 1,
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-              style: DType.tiny.copyWith(
-                fontSize: 10.5,
-                color: selected ? c.textPrimary : c.textSecondary,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// «Ещё» — вход в полную сетку рамок. Круг того же размера, чтобы полоса не
-/// сбивалась с ритма.
-class _MoreFramesTile extends StatelessWidget {
-  const _MoreFramesTile({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final c = DColors.of(context);
-    return SizedBox(
-      width: 62,
-      child: HoverListener(
-        onTap: onTap,
-        cursor: SystemMouseCursors.click,
-        builder: (ctx, hovered, pressed) => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              margin: const EdgeInsets.only(top: 6),
-              decoration: BoxDecoration(
-                color: hovered ? c.hover : c.elevated,
-                shape: BoxShape.circle,
-                border: Border.all(color: c.borderSubtle),
-              ),
-              child: Icon(
-                FluentIcons.more_horizontal_24_regular,
-                size: 18,
-                color: c.textSecondary,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              l10n.desktopThreadMore,
-              style: DType.tiny.copyWith(
-                fontSize: 10.5,
-                color: c.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
