@@ -31,6 +31,7 @@ import 'local_image_gallery_dialog.dart';
 import 'my_secretly_id_screen.dart';
 import 'premium/cosmetic_animation_scope.dart';
 import 'premium/cosmetics_catalog.dart';
+import 'premium/live_frames.dart';
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 
@@ -2852,6 +2853,12 @@ class _ProfileScreenState extends State<ProfileScreen>
           final titleScale = lerpDouble(1.0, 1.06, _pullExpand)!;
           final subtitleScale = lerpDouble(1.0, 1.04, _pullExpand)!;
           final myFrame = frameById(controller.myFrameId);
+          // Держатель нажатия ставится только под живую рамку: у остальных
+          // двадцати будить нечего, и лишнего узла в дереве не появляется.
+          Widget wrapPress(String? id, Widget child) => isLiveFrameId(id)
+              ? LiveFramePressHost(frameId: id, child: child)
+              : child;
+
           // Back layer under the photo; [myCoverFront] (black hole only) is the
           // near disk edge drawn OVER the photo → avatar sits INSIDE the hole.
           final myCover = coverBackWidgetFor(
@@ -2884,7 +2891,14 @@ class _ProfileScreenState extends State<ProfileScreen>
                       ),
                 padding: EdgeInsets.only(top: 0, bottom: 112 + bottomInset),
                 children: [
-                  SizedBox(
+                  // 🔴 Держатель нажатия — НАД всей шапкой. Кнопка «Погладить»
+                  // стоит у строки присутствия, а рамку рисует портрет двумя
+                  // ветками выше; общий предок — единственное место, откуда о
+                  // нажатии узнают оба. У обычных рамок держателя нет: будить
+                  // нечего, и лишнего узла в дереве телефона не появляется.
+                  wrapPress(
+                    controller.myFrameId,
+                    SizedBox(
                     height: heroHeight,
                     child: Stack(
                       clipBehavior: Clip.none,
@@ -3204,6 +3218,23 @@ class _ProfileScreenState extends State<ProfileScreen>
                             ),
                           ),
                         ),
+                        // 🔴 Кнопка, которая будит персонажа рамки. Справа в
+                        // углу от строки присутствия — решение владельца от
+                        // 23.09.2026. Стоит ОТДЕЛЬНЫМ слоем, а не в строке с
+                        // присутствием: та ездит от центра к левому краю
+                        // вместе с раскрытием шапки, и кнопку утащило бы за
+                        // собой. У обычных рамок кнопки нет вовсе.
+                        if (isLiveFrameId(controller.myFrameId))
+                          Positioned(
+                            top: statusTop - 4,
+                            right: 20,
+                            child: Builder(
+                              builder: (ctx) => _LiveFrameWakeButton(
+                                frameId: controller.myFrameId!,
+                                onCover: _pullExpand > 0.35,
+                              ),
+                            ),
+                          ),
                         Positioned(
                           top: buttonsTop,
                           left: 24,
@@ -3269,6 +3300,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                       ],
                     ),
+                  ),
                   ),
                   const SizedBox(height: 16),
                   Padding(
@@ -3527,6 +3559,80 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Кнопка, которая будит персонажа живой рамки.
+///
+/// 🔴 ПОЧЕМУ У СТРОКИ ПРИСУТСТВИЯ, А НЕ СРЕДИ ТРЁХ БОЛЬШИХ ДЕЙСТВИЙ. Ряд ниже
+/// («Фото», «Обложки», «Настройки») — это то, что МЕНЯЕТ профиль. Здесь ничего
+/// не меняется: нажатие живёт до следующего нажатия и никуда не сохраняется.
+/// Место в углу у присутствия отведено владельцем 23.09.2026.
+///
+/// 🔴 ПОДПИСЬ, А НЕ ЗНАЧОК. «Погладить», «Дедлайн!», «Пауза» — три разных
+/// действия, и по одному значку не догадаться, какое именно. Глагол приходит
+/// из каталога рамки, поэтому новая рамка приносит свою подпись сама.
+class _LiveFrameWakeButton extends StatelessWidget {
+  const _LiveFrameWakeButton({required this.frameId, required this.onCover});
+
+  final String frameId;
+
+  /// Шапка раскрыта и кнопка лежит на обложке: там свои цвета, как у имени и
+  /// присутствия рядом.
+  final bool onCover;
+
+  @override
+  Widget build(BuildContext context) {
+    final press = LiveFramePressScope.controllerOf(context);
+    final active = LiveFramePressScope.of(context);
+    final label = liveFrameActionLabel(context, frameId);
+    if (label == null || press == null) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+    final ink = onCover ? Colors.white : scheme.primary;
+    final fill = onCover
+        ? Colors.white.withValues(alpha: active ? 0.30 : 0.18)
+        : scheme.primary.withValues(alpha: active ? 0.26 : 0.13);
+
+    return Semantics(
+      container: true,
+      button: true,
+      toggled: active,
+      label: label,
+      child: ExcludeSemantics(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => press.value = !press.value,
+            borderRadius: BorderRadius.circular(999),
+            child: Ink(
+              decoration: BoxDecoration(
+                color: fill,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 🔴 Значок НЕ меняется на «паузу», когда выходка идёт.
+                  // Пауза обещала бы, что нажатие её остановит, а она
+                  // заканчивается сама — обещание было бы ложным.
+                  Icon(Icons.bolt_rounded, size: 14, color: ink),
+                  const SizedBox(width: 4),
+                  Text(
+                    label,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: ink,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

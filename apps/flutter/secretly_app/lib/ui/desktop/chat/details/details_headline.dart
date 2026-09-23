@@ -5,6 +5,7 @@ import '../../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
+import '../../../premium/live_frames.dart';
 import '../../../premium/cosmetics_catalog.dart' show frameById;
 import '../../primitives/context_menu.dart';
 import '../../primitives/desktop_tooltip.dart';
@@ -255,10 +256,32 @@ class DetailsHeadline extends StatelessWidget {
                       color: c.accentPrimaryAlt,
                     ),
                   if (frame != null)
-                    _Badge(
-                      label: l10n.desktopDetailsFrame(frame.nameRu),
-                      icon: Icons.bolt_rounded,
-                      color: c.warning,
+                    // 🔴 `Builder` здесь не украшение: он даёт контекст НИЖЕ
+                    // держателя нажатия, который обёрнут вокруг всей шапки.
+                    // Без него значок искал бы область выше себя и не нашёл.
+                    Builder(
+                      builder: (ctx) {
+                        final press = LiveFramePressScope.controllerOf(ctx);
+                        final active = LiveFramePressScope.of(ctx);
+                        final action = liveFrameActionLabel(ctx, frame.id);
+                        return _Badge(
+                          // Имя рамки — подпись окна, а окно переведено на
+                          // восемь языков; `nameRu` держал здесь русский.
+                          label: l10n.desktopDetailsFrame(
+                            frame.nameLocalized(ctx),
+                          ),
+                          icon: Icons.bolt_rounded,
+                          color: c.warning,
+                          active: active,
+                          // Действие есть только у живых рамок: у остальных
+                          // двадцати нажимать нечего, и значок остаётся
+                          // подписью, как был.
+                          tooltip: action,
+                          onTap: action == null || press == null
+                              ? null
+                              : () => press.value = !press.value,
+                        );
+                      },
                     ),
                 ],
               ),
@@ -343,12 +366,19 @@ class DetailsHeadline extends StatelessWidget {
           )
         : null;
 
+    // Живую рамку будит значок с её названием. Держатель кладёт нажатие НАД
+    // всей шапкой: портрет и значок стоят в разных её ветках, и общий предок —
+    // единственное место, откуда о нажатии узнают оба.
+    Widget wrap(Widget body) => isLiveFrameId(frameId)
+        ? LiveFramePressHost(frameId: frameId, child: body)
+        : body;
+
     if (cover == null) {
-      if (actions == null) return content;
-      return Stack(children: [content, actions]);
+      if (actions == null) return wrap(content);
+      return wrap(Stack(children: [content, actions]));
     }
 
-    return Stack(
+    return wrap(Stack(
       children: [
         Positioned.fill(
           child: ClipRect(
@@ -386,7 +416,7 @@ class DetailsHeadline extends StatelessWidget {
           ),
         if (actions != null) actions,
       ],
-    );
+    ));
   }
 }
 
@@ -490,11 +520,28 @@ class _CoverMenuActionState extends State<_CoverMenuAction> {
 /// Цвет приходит снаружи и должен быть СВЕТЛЫМ (#C4B5FD у PRO, #FCD34D у
 /// рамки): на тёмной плашке тёмно-сиреневый акцент кнопок не читался.
 class _Badge extends StatelessWidget {
-  const _Badge({required this.label, required this.icon, required this.color});
+  const _Badge({
+    required this.label,
+    required this.icon,
+    required this.color,
+    this.onTap,
+    this.tooltip,
+    this.active = false,
+  });
 
   final String label;
   final IconData icon;
   final Color color;
+
+  /// `null` — значок остаётся подписью и не отзывается на мышь.
+  final VoidCallback? onTap;
+
+  /// Что произойдёт по нажатию — «Погладить», «Дедлайн!», «Пауза».
+  final String? tooltip;
+
+  /// Персонаж сейчас разбужен: заливка гуще, чтобы состояние было видно, а не
+  /// угадывалось по самой рамке.
+  final bool active;
 
   @override
   Widget build(BuildContext context) {
@@ -512,11 +559,13 @@ class _Badge extends StatelessWidget {
     final ink = hsl
         .withLightness(hsl.lightness < 0.7 ? 0.78 : hsl.lightness)
         .toColor();
-    return Container(
+    Widget chip(bool hovered) => Container(
       height: 23,
       padding: const EdgeInsets.symmetric(horizontal: 9),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
+        color: color.withValues(
+          alpha: active ? 0.34 : (hovered ? 0.24 : 0.16),
+        ),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -535,5 +584,24 @@ class _Badge extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap == null) return chip(false);
+    final button = Semantics(
+      container: true,
+      button: true,
+      toggled: active,
+      label: tooltip == null ? label : '$label. $tooltip',
+      child: ExcludeSemantics(
+        child: HoverListener(
+          onTap: onTap,
+          cursor: SystemMouseCursors.click,
+          builder: (ctx, hovered, pressed) => chip(hovered || pressed),
+        ),
+      ),
+    );
+    final hint = tooltip;
+    return hint == null
+        ? button
+        : DesktopTooltip(message: hint, child: button);
   }
 }
