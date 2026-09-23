@@ -18,8 +18,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Мессенджер, просящий право читать любой набранный текст, противоречил бы сам
 /// себе — см. шапку `macos/Runner/GlobalHotKeyBridge.swift`.
 class DesktopGlobalHotKeyService {
-  DesktopGlobalHotKeyService({@visibleForTesting MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel('secretly/global_hotkey');
+  DesktopGlobalHotKeyService({
+    @visibleForTesting MethodChannel? channel,
+    @visibleForTesting bool? onMacOS,
+  }) : _channel = channel ?? const MethodChannel('secretly/global_hotkey'),
+       _onMacOS = onMacOS;
+
+  /// 🔴 Площадка подменяема ТОЛЬКО ради проверок — см. значок в Dock рядом.
+  final bool? _onMacOS;
 
   static const String _prefsKey = 'desktop_global_hotkey_v1';
 
@@ -33,7 +39,7 @@ class DesktopGlobalHotKeyService {
   /// Не удалось занять сочетание — его держит другая программа.
   final ValueNotifier<bool> taken = ValueNotifier<bool>(false);
 
-  bool get supported => !kIsWeb && Platform.isMacOS;
+  bool get supported => _onMacOS ?? (!kIsWeb && Platform.isMacOS);
 
   Future<void> load() async {
     if (!supported) return;

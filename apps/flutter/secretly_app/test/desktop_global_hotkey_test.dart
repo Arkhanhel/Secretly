@@ -37,7 +37,7 @@ void main() {
   });
 
   test('по умолчанию выключено', () {
-    final s = DesktopGlobalHotKeyService(channel: channel);
+    final s = DesktopGlobalHotKeyService(channel: channel, onMacOS: true);
     addTearDown(s.dispose);
     expect(s.enabled.value, isFalse);
     expect(s.taken.value, isFalse);
@@ -45,7 +45,7 @@ void main() {
 
   test('включение доходит до системы', () async {
     mock((_) => true);
-    final s = DesktopGlobalHotKeyService(channel: channel);
+    final s = DesktopGlobalHotKeyService(channel: channel, onMacOS: true);
     addTearDown(s.dispose);
     final ok = await s.setEnabled(true, persist: false);
     expect(ok, isTrue);
@@ -56,7 +56,7 @@ void main() {
   test('🔴 сочетание занято — переключатель возвращается и говорит почему',
       () async {
     mock((_) => false);
-    final s = DesktopGlobalHotKeyService(channel: channel);
+    final s = DesktopGlobalHotKeyService(channel: channel, onMacOS: true);
     addTearDown(s.dispose);
     final ok = await s.setEnabled(true, persist: false);
     expect(ok, isFalse);
@@ -68,7 +68,7 @@ void main() {
     // Нечего держать — значит и снимать нечего. Запереть переключатель во
     // включённом состоянии из-за отказа площадки было бы ложью наоборот.
     mock((_) => false);
-    final s = DesktopGlobalHotKeyService(channel: channel);
+    final s = DesktopGlobalHotKeyService(channel: channel, onMacOS: true);
     addTearDown(s.dispose);
     expect(await s.setEnabled(false, persist: false), isTrue);
     expect(s.enabled.value, isFalse);
@@ -77,9 +77,23 @@ void main() {
 
   test('сбой моста не роняет приложение', () async {
     mock((_) => throw PlatformException(code: 'boom'));
-    final s = DesktopGlobalHotKeyService(channel: channel);
+    final s = DesktopGlobalHotKeyService(channel: channel, onMacOS: true);
     addTearDown(s.dispose);
     expect(await s.setEnabled(true, persist: false), isFalse);
+    expect(s.enabled.value, isFalse);
+  });
+
+  test('🔴 не на маке служба честно НИЧЕГО не делает', () async {
+    // Сочетание общесистемное и регистрируется через Carbon — этого нет ни у
+    // Windows, ни у Linux. Переключатель, который там притворяется рабочим,
+    // хуже отсутствующего: человек решит, что забрал комбинацию у другой
+    // программы, и пойдёт искать несуществующую беду.
+    mock((_) => true);
+    final s = DesktopGlobalHotKeyService(channel: channel, onMacOS: false);
+    addTearDown(s.dispose);
+    expect(s.supported, isFalse);
+    expect(await s.setEnabled(true, persist: false), isFalse);
+    expect(calls, isEmpty, reason: 'на чужой площадке полезли к системе');
     expect(s.enabled.value, isFalse);
   });
 }

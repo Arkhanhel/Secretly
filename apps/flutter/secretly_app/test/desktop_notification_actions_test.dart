@@ -65,7 +65,7 @@ void main() {
         calls.add(call);
         return null;
       });
-      badge = DesktopDockBadgeService(channel: channel);
+      badge = DesktopDockBadgeService(channel: channel, onMacOS: true);
     });
 
     tearDown(() {
@@ -74,6 +74,19 @@ void main() {
             const MethodChannel('secretly/dock_badge'),
             null,
           );
+    });
+
+    test('🔴 не на маке значок не трогаем', () async {
+      // Значок на иконке — вещь macOS. У Windows он ставится через
+      // `ITaskbarList3`, у Linux единого способа нет, и звонить в пустой канал
+      // означало бы ловить исключение на каждом непрочитанном.
+      final quiet = DesktopDockBadgeService(
+        channel: const MethodChannel('secretly/dock_badge'),
+        onMacOS: false,
+      );
+      await quiet.set(5);
+      expect(calls, isEmpty);
+      expect(quiet.lastSent, isNull);
     });
 
     test('число уходит в систему, повтор — нет', () async {

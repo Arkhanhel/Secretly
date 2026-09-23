@@ -18,15 +18,24 @@ import 'package:flutter/services.dart';
 /// (`ITaskbarList3`), у Linux единого способа нет вовсе. Здесь честное «ничего
 /// не делаем» вместо переключателя, который притворяется работающим.
 class DesktopDockBadgeService {
-  DesktopDockBadgeService({@visibleForTesting MethodChannel? channel})
-    : _channel = channel ?? const MethodChannel('secretly/dock_badge');
+  DesktopDockBadgeService({
+    @visibleForTesting MethodChannel? channel,
+    @visibleForTesting bool? onMacOS,
+  }) : _channel = channel ?? const MethodChannel('secretly/dock_badge'),
+       _onMacOS = onMacOS;
 
   final MethodChannel _channel;
+
+  /// 🔴 Площадка подменяема ТОЛЬКО ради проверок. CI гоняет тесты на Linux, и
+  /// без этого поведение значка не проверял бы никто: всё уходило бы в ранний
+  /// возврат, а проверка «число дошло до системы» молча превращалась бы в
+  /// проверку «ничего не произошло».
+  final bool? _onMacOS;
 
   /// Последнее отправленное число: площадку дёргаем только на изменение.
   int? _last;
 
-  bool get _supported => !kIsWeb && Platform.isMacOS;
+  bool get _supported => _onMacOS ?? (!kIsWeb && Platform.isMacOS);
 
   /// Ставит значок. Отрицательное и ноль — значок снимается.
   Future<void> set(int count) async {
