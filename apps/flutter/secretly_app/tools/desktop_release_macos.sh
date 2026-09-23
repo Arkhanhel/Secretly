@@ -32,6 +32,14 @@
 #                              xcrun notarytool store-credentials secretly \
 #                                --apple-id <id> --team-id 3HF84UAL32 --password <app-specific>
 #   SECRETLY_MAKE_DMG=1      Build a DMG next to the .app.
+#   SECRETLY_UPDATE_BASE_URL Where the DMG and appcast.xml will be published,
+#                            e.g. https://example.com/updates/. When set (and
+#                            with a DMG), the script signs the DMG with the
+#                            Sparkle EdDSA key from the keychain and writes
+#                            appcast.xml next to it. Without it, no appcast is
+#                            produced — an appcast pointing at a URL nobody
+#                            serves would tell every installed copy that an
+#                            update exists and then fail to fetch it.
 #   SECRETLY_LOCAL_DEV=1     Skip production endpoints (use in-code localhost).
 #   SECRETLY_KEYS_BASE_URL / SECRETLY_RELAY_HTTP_BASE_URL / SECRETLY_RELAY_WS_URL
 #                            Per-env endpoint overrides.
@@ -342,6 +350,50 @@ if [ -n "${SECRETLY_MAKE_DMG:-}" ]; then
     xcrun stapler validate "$DMG"
   fi
   echo "==> DMG: $DMG"
+
+  # -----------------------------------------------------------------------
+  # Перечень версий для автообновления (Sparkle).
+  # -----------------------------------------------------------------------
+  #
+  # 🔴 ПОДПИСЬ ПАКЕТА — НЕ ТО ЖЕ, ЧТО ПОДПИСЬ ПРИЛОЖЕНИЯ. Developer ID и
+  # заверение отвечают на вопрос «можно ли это запустить»; подпись EdDSA
+  # отвечает на другой — «мы ли это прислали». Обновление, скачанное с нашего
+  # адреса, но подменённое по дороге, Gatekeeper пропустит: оно подписано
+  # НАШИМ сертификатом только если подменивший его и есть мы. Поэтому Sparkle
+  # проверяет свою подпись сам, ДО установки, и ключ для неё живёт отдельно —
+  # в ключнице выпускающего, а не в дереве исходников.
+  #
+  # `generate_appcast` берёт закрытый ключ из ключницы сам, читает версию из
+  # Info.plist внутри образа и пишет `appcast.xml` рядом.
+  if [ -n "${SECRETLY_UPDATE_BASE_URL:-}" ]; then
+    GEN_APPCAST="$PROJECT_DIR/macos/Pods/Sparkle/bin/generate_appcast"
+    if [ ! -x "$GEN_APPCAST" ]; then
+      echo "error: generate_appcast not found at $GEN_APPCAST" >&2
+      echo "       run 'flutter build macos' once so CocoaPods fetches Sparkle." >&2
+      exit 1
+    fi
+    # Отдельный каталог: `generate_appcast` перебирает ВСЁ, что в нём лежит, и
+    # каталог сборки полон чужих файлов.
+    UPDATES_DIR="$APP_DIR/updates"
+    mkdir -p "$UPDATES_DIR"
+    cp -f "$DMG" "$UPDATES_DIR/"
+    echo "==> building appcast for $SECRETLY_UPDATE_BASE_URL"
+    "$GEN_APPCAST" --download-url-prefix "$SECRETLY_UPDATE_BASE_URL" \
+      "$UPDATES_DIR"
+    if [ ! -f "$UPDATES_DIR/appcast.xml" ]; then
+      echo "error: appcast.xml was not produced" >&2
+      exit 1
+    fi
+    # 🔴 Без подписи в перечне обновление ставиться не будет — и узнаем мы об
+    # этом от людей, у которых «проверка обновлений ничего не делает».
+    if ! grep -q 'edSignature' "$UPDATES_DIR/appcast.xml"; then
+      echo "error: appcast.xml carries no edSignature — the Sparkle key was" >&2
+      echo "       not found in the keychain. Run generate_keys once." >&2
+      exit 1
+    fi
+    echo "==> appcast: $UPDATES_DIR/appcast.xml"
+    echo "    publish BOTH files at $SECRETLY_UPDATE_BASE_URL"
+  fi
 fi
 
 echo
@@ -380,6 +432,10 @@ case "${IDENTITY:-}" in
     echo "    Create one in Xcode: Settings > Accounts > Manage Certificates."
     ;;
 esac
+echo
+if [ -n "${SECRETLY_UPDATE_BASE_URL:-}" ]; then
+  echo " Appcast:    $APP_DIR/updates/appcast.xml"
+fi
 echo
 echo " Smoke-test before distributing:"
 echo "   1. open \"$APP\"  — must reach the UI (not crash on splash)"
