@@ -1061,9 +1061,26 @@
   "desktopStickerPackInstallingProgress": "Installing… {done}/{total}",
   "desktopStickerPackCount": "{count, plural, one{{count} sticker} other{{count} stickers}}",
   "desktopStickerPackAdd": "{count, plural, one{Add {count} sticker} other{Add {count} stickers}}",
-  "@desktopStickerPackCount": {"placeholders": {"count": {"type": "int"}}},
-  "@desktopStickerPackAdd": {"placeholders": {"count": {"type": "int"}}},
-  "@desktopStickerPackInstallingProgress": {"placeholders": {"done": {}, "total": {}}},
+  "@desktopStickerPackCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@desktopStickerPackAdd": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@desktopStickerPackInstallingProgress": {
+    "placeholders": {
+      "done": {},
+      "total": {}
+    }
+  },
   "desktopPairingTitle": "Connect Secretly Desktop",
   "desktopPairingHowTo": "On your phone open Secretly → Settings → Devices → “Link a device” and scan this QR code.",
   "desktopPairingPreparingQr": "Preparing the QR…",
@@ -1118,7 +1135,9 @@
   "desktopListDiscussion": "{count, plural, one{Discussion · {count} participant} other{Discussion · {count} participants}}",
   "@desktopListDiscussion": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "desktopCallServerSilent": "The server did not answer. Try again or leave the call.",
@@ -1383,13 +1402,13 @@
   "desktopBackupFrequency": "Frequency",
   "desktopBackupNowhereTitle": "The backup is saved nowhere",
   "desktopBackupNowhereHint": "Automatic backup is on but both destinations are off, which means no backup is made. Switch on the server or this computer.",
-  "desktopBackupRecoveryKey": "Recovery key",
-  "desktopBackupCreateRecoveryKey": "Create a recovery key",
+  "desktopBackupRecoveryKey": "Recovery kit",
+  "desktopBackupCreateRecoveryKey": "Create a recovery kit",
   "desktopBackupRecoveryKeyHint": "You will need it if no device with Secretly is left. Keep it separately from the password.",
   "desktopBackupKeyFailed": "Could not create the key: {error}",
-  "desktopBackupKeyPassword": "Password for the recovery key",
+  "desktopBackupKeyPassword": "Password for the recovery kit",
   "desktopBackupPasswordsDiffer": "The passwords do not match.",
-  "desktopBackupKeyPasswordHint": "This password encrypts the key itself. It does not replace the application password and is stored nowhere — it cannot be recovered.",
+  "desktopBackupKeyPasswordHint": "This password encrypts the kit itself. It does not replace the application password and is stored nowhere — it cannot be recovered.",
   "desktopBackupPasswordAgain": "Again",
   "@desktopBackupLastFailedWith": {
     "placeholders": {
@@ -2098,7 +2117,9 @@
   },
   "@desktopRoomMembersCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "desktopContactBlockTitle": "Block?",
@@ -2218,7 +2239,9 @@
   },
   "@desktopThreadUnreadCount": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "desktopProfileEmojiStatus": "Emoji status",
@@ -2252,7 +2275,7 @@
   "desktopProfileInitialsStay": "The initials remain",
   "desktopProfileAccount": "Account",
   "desktopProfileRecovery": "Recovery",
-  "desktopProfileRecoveryHint": "This computer is linked to the phone and keeps no recovery phrase of its own: the backup and the recovery key bring the account back.",
+  "desktopProfileRecoveryHint": "This computer is linked to the phone and keeps no recovery phrase of its own: the backup and the recovery kit bring the account back.",
   "desktopProfileDevicesHint": "Connected computers and phones",
   "desktopProfileFrameCaps": "AVATAR FRAME",
   "@desktopProfileApplyFailed": {
@@ -2334,38 +2357,52 @@
   },
   "@desktopOutgoingTooLargeMany": {
     "placeholders": {
-      "count": {"type": "int"},
+      "count": {
+        "type": "int"
+      },
       "limit": {}
     }
   },
   "@desktopOutgoingEmptyMany": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "@desktopOutgoingUnreadableMany": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "@desktopOutgoingPhotos": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "@desktopOutgoingVideos": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "@desktopOutgoingAudios": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "@desktopOutgoingFiles": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "desktopCallsPickOne": "Pick a call on the left",
@@ -2525,7 +2562,9 @@
   },
   "@desktopAbsenceDays": {
     "placeholders": {
-      "count": {"type": "int"}
+      "count": {
+        "type": "int"
+      }
     }
   },
   "desktopNavContacts": "Contacts",
@@ -2736,9 +2775,21 @@
   "desktopNotifBlockedAction": "Open System Settings",
   "backupPwRequirements": "Use at least 8 ASCII characters, one uppercase letter, and one special character. No leading or trailing spaces.",
   "backupPwTooShort": "Password must be at least {count} characters.",
-  "@backupPwTooShort": {"placeholders": {"count": {"type": "int"}}},
+  "@backupPwTooShort": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "backupPwTooLong": "Password must be no longer than {count} characters.",
-  "@backupPwTooLong": {"placeholders": {"count": {"type": "int"}}},
+  "@backupPwTooLong": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "backupPwNonAscii": "Use only Latin letters, digits, and ASCII symbols.",
   "backupPwOuterSpace": "Remove leading or trailing spaces from the password.",
   "backupPwNeedUpper": "Add at least one uppercase A-Z letter.",
@@ -2756,7 +2807,11 @@
   "desktopAuthNameBody": "People you write to will see this name. You can change it at any time.",
   "desktopAuthCreating": "Creating the account…",
   "desktopAuthCreateFailed": "Could not create the account: {error}",
-  "@desktopAuthCreateFailed": {"placeholders": {"error": {}}},
+  "@desktopAuthCreateFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "desktopAuthCheckClock": "Check the computer’s clock: the server rejects requests when it is off.",
   "desktopAuthKitTitle": "Save your recovery kit",
   "desktopAuthKitBody": "This is the only way back into the account if the computer breaks or is lost. Secretly has no email and no phone number: without the kit nobody can restore the account, including us.",
@@ -2770,10 +2825,52 @@
   "desktopAuthServerOptionBody": "You will need your Secretly ID and the backup password.",
   "desktopAuthRestoring": "Restoring…",
   "desktopAuthRestoreFailed": "Could not restore: {error}",
-  "@desktopAuthRestoreFailed": {"placeholders": {"error": {}}},
+  "@desktopAuthRestoreFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
   "desktopAuthBackupNotFound": "There is no backup on the server for this Secretly ID.",
   "desktopGeneralLaunchAtLogin": "Launch at login",
   "desktopGeneralLaunchAtLoginOn": "Secretly starts on its own and keeps receiving messages",
   "desktopGeneralLaunchAtLoginOff": "While Secretly is not running, messages do not reach this computer",
-  "desktopGeneralLaunchNeedsApproval": "Launch at login is switched off in System Settings, under Login Items"
+  "desktopGeneralLaunchNeedsApproval": "Launch at login is switched off in System Settings, under Login Items",
+  "desktopA11yStatusSending": "Sending",
+  "desktopA11yStatusScheduled": "Scheduled",
+  "desktopA11yStatusSent": "Sent",
+  "desktopA11yStatusDelivered": "Delivered",
+  "desktopA11yStatusRead": "Read",
+  "desktopA11yStatusFailed": "Not sent",
+  "desktopA11yVoiceProgress": "Voice message playback",
+  "desktopViewerPagePrev": "Previous page",
+  "desktopViewerPageNext": "Next page",
+  "desktopReactionsMore": "More emoji",
+  "desktopReactionsCollapse": "Collapse",
+  "desktopThreadScrollToBottom": "To the latest messages",
+  "desktopViewerPrev": "Previous",
+  "desktopViewerNext": "Next",
+  "desktopA11yPlay": "Play",
+  "desktopA11yPause": "Pause",
+  "desktopDiagTitle": "Delivery diagnostics",
+  "desktopDiagHint": "What to look at when messages are not arriving, and what to send us",
+  "desktopDiagQueues": "QUEUES",
+  "desktopDiagOutbox": "Waiting to be sent",
+  "desktopDiagStuck": "Stuck on arrival",
+  "desktopDiagReceipts": "Receipts queued",
+  "desktopDiagNothingStuck": "Nothing is stuck",
+  "desktopDiagConditions": "DELIVERY CONDITIONS",
+  "desktopDiagClockOk": "Computer clock agrees with the server",
+  "desktopDiagClockSkew": "Computer clock is off by {delta} — the server may refuse messages",
+  "@desktopDiagClockSkew": {
+    "placeholders": {
+      "delta": {}
+    }
+  },
+  "desktopDiagCopy": "Copy for support",
+  "desktopAppearanceTextSize": "Text size",
+  "desktopAppearanceTextSizeHint": "Applies to the whole window. Spacing and icons stay as designed",
+  "desktopThreadGoToDate": "Go to date",
+  "desktopHotkeyGlobalShow": "Show Secretly from anywhere",
+  "desktopHotkeyGlobalHint": "Off by default: the shortcut is system-wide and would be taken away from another app",
+  "desktopHotkeyGlobalTaken": "Another app already holds this shortcut"
 }

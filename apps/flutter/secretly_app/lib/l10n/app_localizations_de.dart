@@ -3151,13 +3151,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get desktopBackupNowhereHint => 'Die automatische Sicherung ist an, aber beide Ziele sind aus – es wird also keine Sicherung erstellt. Schalte den Server oder diesen Computer ein.';
 
   @override
-  String get desktopBackupRecoveryKey => 'Wiederherstellungsschlüssel';
+  String get desktopBackupRecoveryKey => 'Wiederherstellungsset';
 
   @override
-  String get desktopBackupCreateRecoveryKey => 'Wiederherstellungsschlüssel erstellen';
+  String get desktopBackupCreateRecoveryKey => 'Wiederherstellungsset erstellen';
 
   @override
-  String get desktopBackupRecoveryKeyHint => 'Du brauchst ihn, wenn kein Gerät mit Secretly mehr übrig ist. Bewahre ihn getrennt vom Passwort auf.';
+  String get desktopBackupRecoveryKeyHint => 'Du brauchst es, wenn kein Gerät mit Secretly mehr da ist. Bewahre es getrennt vom Passwort auf.';
 
   @override
   String desktopBackupKeyFailed(Object error) {
@@ -3165,13 +3165,13 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get desktopBackupKeyPassword => 'Passwort für den Wiederherstellungsschlüssel';
+  String get desktopBackupKeyPassword => 'Passwort für das Wiederherstellungsset';
 
   @override
   String get desktopBackupPasswordsDiffer => 'Die Passwörter stimmen nicht überein.';
 
   @override
-  String get desktopBackupKeyPasswordHint => 'Mit diesem Passwort wird der Schlüssel selbst verschlüsselt. Es ersetzt nicht das App-Passwort und wird nirgends gespeichert – es lässt sich nicht wiederherstellen.';
+  String get desktopBackupKeyPasswordHint => 'Dieses Passwort verschlüsselt das Set selbst. Es ersetzt nicht das App-Passwort und wird nirgends gespeichert – es lässt sich nicht wiederherstellen.';
 
   @override
   String get desktopBackupPasswordAgain => 'Noch einmal';
@@ -4709,7 +4709,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get desktopProfileRecovery => 'Wiederherstellung';
 
   @override
-  String get desktopProfileRecoveryHint => 'Dieser Computer ist mit dem Telefon verbunden und speichert keine eigene Wiederherstellungsphrase: Sicherung und Wiederherstellungsschlüssel holen das Konto zurück.';
+  String get desktopProfileRecoveryHint => 'Dieser Computer ist mit dem Telefon verbunden und speichert keine eigene Wiederherstellungsphrase: Sicherung und Wiederherstellungsset holen das Konto zurück.';
 
   @override
   String get desktopProfileDevicesHint => 'Verbundene Computer und Telefone';
@@ -5814,4 +5814,105 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get desktopGeneralLaunchNeedsApproval => 'Der Start beim Anmelden ist in den Systemeinstellungen unter „Anmeldeobjekte“ deaktiviert';
+
+  @override
+  String get desktopA11yStatusSending => 'Wird gesendet';
+
+  @override
+  String get desktopA11yStatusScheduled => 'Geplant';
+
+  @override
+  String get desktopA11yStatusSent => 'Gesendet';
+
+  @override
+  String get desktopA11yStatusDelivered => 'Zugestellt';
+
+  @override
+  String get desktopA11yStatusRead => 'Gelesen';
+
+  @override
+  String get desktopA11yStatusFailed => 'Nicht gesendet';
+
+  @override
+  String get desktopA11yVoiceProgress => 'Wiedergabe der Sprachnachricht';
+
+  @override
+  String get desktopViewerPagePrev => 'Vorherige Seite';
+
+  @override
+  String get desktopViewerPageNext => 'Nächste Seite';
+
+  @override
+  String get desktopReactionsMore => 'Mehr Emojis';
+
+  @override
+  String get desktopReactionsCollapse => 'Einklappen';
+
+  @override
+  String get desktopThreadScrollToBottom => 'Zu den neuesten Nachrichten';
+
+  @override
+  String get desktopViewerPrev => 'Zurück';
+
+  @override
+  String get desktopViewerNext => 'Weiter';
+
+  @override
+  String get desktopA11yPlay => 'Abspielen';
+
+  @override
+  String get desktopA11yPause => 'Pause';
+
+  @override
+  String get desktopDiagTitle => 'Zustellungsdiagnose';
+
+  @override
+  String get desktopDiagHint => 'Worauf zu achten ist, wenn Nachrichten ausbleiben – und was Sie uns senden';
+
+  @override
+  String get desktopDiagQueues => 'WARTESCHLANGEN';
+
+  @override
+  String get desktopDiagOutbox => 'Warten auf Versand';
+
+  @override
+  String get desktopDiagStuck => 'Beim Empfang hängen geblieben';
+
+  @override
+  String get desktopDiagReceipts => 'Bestätigungen in der Warteschlange';
+
+  @override
+  String get desktopDiagNothingStuck => 'Nichts hängt fest';
+
+  @override
+  String get desktopDiagConditions => 'ZUSTELLBEDINGUNGEN';
+
+  @override
+  String get desktopDiagClockOk => 'Die Uhr des Computers stimmt mit dem Server überein';
+
+  @override
+  String desktopDiagClockSkew(Object delta) {
+    return 'Die Uhr des Computers weicht um $delta ab – der Server kann ablehnen';
+  }
+
+  @override
+  String get desktopDiagCopy => 'Für den Support kopieren';
+
+  @override
+  String get desktopAppearanceTextSize => 'Textgröße';
+
+  @override
+  String get desktopAppearanceTextSizeHint => 'Gilt für das ganze Fenster. Abstände und Symbole bleiben wie entworfen';
+
+  @override
+  String get desktopThreadGoToDate => 'Zu Datum springen';
+
+  @override
+  String get desktopHotkeyGlobalShow => 'Secretly von überall einblenden';
+
+  @override
+  String get desktopHotkeyGlobalHint => 'Standardmäßig aus: das Kürzel gilt systemweit und würde es einer anderen App wegnehmen';
+
+  @override
+  String get desktopHotkeyGlobalTaken => 'Ein anderes Programm belegt dieses Kürzel bereits';
 }

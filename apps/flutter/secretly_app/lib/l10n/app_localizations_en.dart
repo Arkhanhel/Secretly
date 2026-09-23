@@ -3151,10 +3151,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get desktopBackupNowhereHint => 'Automatic backup is on but both destinations are off, which means no backup is made. Switch on the server or this computer.';
 
   @override
-  String get desktopBackupRecoveryKey => 'Recovery key';
+  String get desktopBackupRecoveryKey => 'Recovery kit';
 
   @override
-  String get desktopBackupCreateRecoveryKey => 'Create a recovery key';
+  String get desktopBackupCreateRecoveryKey => 'Create a recovery kit';
 
   @override
   String get desktopBackupRecoveryKeyHint => 'You will need it if no device with Secretly is left. Keep it separately from the password.';
@@ -3165,13 +3165,13 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get desktopBackupKeyPassword => 'Password for the recovery key';
+  String get desktopBackupKeyPassword => 'Password for the recovery kit';
 
   @override
   String get desktopBackupPasswordsDiffer => 'The passwords do not match.';
 
   @override
-  String get desktopBackupKeyPasswordHint => 'This password encrypts the key itself. It does not replace the application password and is stored nowhere — it cannot be recovered.';
+  String get desktopBackupKeyPasswordHint => 'This password encrypts the kit itself. It does not replace the application password and is stored nowhere — it cannot be recovered.';
 
   @override
   String get desktopBackupPasswordAgain => 'Again';
@@ -4709,7 +4709,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get desktopProfileRecovery => 'Recovery';
 
   @override
-  String get desktopProfileRecoveryHint => 'This computer is linked to the phone and keeps no recovery phrase of its own: the backup and the recovery key bring the account back.';
+  String get desktopProfileRecoveryHint => 'This computer is linked to the phone and keeps no recovery phrase of its own: the backup and the recovery kit bring the account back.';
 
   @override
   String get desktopProfileDevicesHint => 'Connected computers and phones';
@@ -5814,4 +5814,105 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get desktopGeneralLaunchNeedsApproval => 'Launch at login is switched off in System Settings, under Login Items';
+
+  @override
+  String get desktopA11yStatusSending => 'Sending';
+
+  @override
+  String get desktopA11yStatusScheduled => 'Scheduled';
+
+  @override
+  String get desktopA11yStatusSent => 'Sent';
+
+  @override
+  String get desktopA11yStatusDelivered => 'Delivered';
+
+  @override
+  String get desktopA11yStatusRead => 'Read';
+
+  @override
+  String get desktopA11yStatusFailed => 'Not sent';
+
+  @override
+  String get desktopA11yVoiceProgress => 'Voice message playback';
+
+  @override
+  String get desktopViewerPagePrev => 'Previous page';
+
+  @override
+  String get desktopViewerPageNext => 'Next page';
+
+  @override
+  String get desktopReactionsMore => 'More emoji';
+
+  @override
+  String get desktopReactionsCollapse => 'Collapse';
+
+  @override
+  String get desktopThreadScrollToBottom => 'To the latest messages';
+
+  @override
+  String get desktopViewerPrev => 'Previous';
+
+  @override
+  String get desktopViewerNext => 'Next';
+
+  @override
+  String get desktopA11yPlay => 'Play';
+
+  @override
+  String get desktopA11yPause => 'Pause';
+
+  @override
+  String get desktopDiagTitle => 'Delivery diagnostics';
+
+  @override
+  String get desktopDiagHint => 'What to look at when messages are not arriving, and what to send us';
+
+  @override
+  String get desktopDiagQueues => 'QUEUES';
+
+  @override
+  String get desktopDiagOutbox => 'Waiting to be sent';
+
+  @override
+  String get desktopDiagStuck => 'Stuck on arrival';
+
+  @override
+  String get desktopDiagReceipts => 'Receipts queued';
+
+  @override
+  String get desktopDiagNothingStuck => 'Nothing is stuck';
+
+  @override
+  String get desktopDiagConditions => 'DELIVERY CONDITIONS';
+
+  @override
+  String get desktopDiagClockOk => 'Computer clock agrees with the server';
+
+  @override
+  String desktopDiagClockSkew(Object delta) {
+    return 'Computer clock is off by $delta — the server may refuse messages';
+  }
+
+  @override
+  String get desktopDiagCopy => 'Copy for support';
+
+  @override
+  String get desktopAppearanceTextSize => 'Text size';
+
+  @override
+  String get desktopAppearanceTextSizeHint => 'Applies to the whole window. Spacing and icons stay as designed';
+
+  @override
+  String get desktopThreadGoToDate => 'Go to date';
+
+  @override
+  String get desktopHotkeyGlobalShow => 'Show Secretly from anywhere';
+
+  @override
+  String get desktopHotkeyGlobalHint => 'Off by default: the shortcut is system-wide and would be taken away from another app';
+
+  @override
+  String get desktopHotkeyGlobalTaken => 'Another app already holds this shortcut';
 }

@@ -3151,13 +3151,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get desktopBackupNowhereHint => 'La copia automática está activada pero ambos destinos están desactivados, así que no se crea ninguna copia. Activa el servidor o este ordenador.';
 
   @override
-  String get desktopBackupRecoveryKey => 'Clave de recuperación';
+  String get desktopBackupRecoveryKey => 'Kit de recuperación';
 
   @override
-  String get desktopBackupCreateRecoveryKey => 'Crear una clave de recuperación';
+  String get desktopBackupCreateRecoveryKey => 'Crear un kit de recuperación';
 
   @override
-  String get desktopBackupRecoveryKeyHint => 'Lo necesitarás si no queda ningún dispositivo con Secretly. Guárdala aparte de la contraseña.';
+  String get desktopBackupRecoveryKeyHint => 'Lo necesitarás si no queda ningún dispositivo con Secretly. Guárdalo aparte de la contraseña.';
 
   @override
   String desktopBackupKeyFailed(Object error) {
@@ -3165,13 +3165,13 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get desktopBackupKeyPassword => 'Contraseña de la clave de recuperación';
+  String get desktopBackupKeyPassword => 'Contraseña del kit de recuperación';
 
   @override
   String get desktopBackupPasswordsDiffer => 'Las contraseñas no coinciden.';
 
   @override
-  String get desktopBackupKeyPasswordHint => 'Esta contraseña cifra la clave en sí. No sustituye a la de la aplicación y no se guarda en ninguna parte: no se puede recuperar.';
+  String get desktopBackupKeyPasswordHint => 'Esta contraseña cifra el propio kit. No sustituye a la contraseña de la aplicación y no se guarda en ningún sitio: no se puede recuperar.';
 
   @override
   String get desktopBackupPasswordAgain => 'Otra vez';
@@ -4709,7 +4709,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get desktopProfileRecovery => 'Recuperación';
 
   @override
-  String get desktopProfileRecoveryHint => 'Este ordenador está vinculado al teléfono y no guarda su propia frase de recuperación: la copia y la clave de recuperación devuelven la cuenta.';
+  String get desktopProfileRecoveryHint => 'Este ordenador está vinculado al teléfono y no guarda su propia frase de recuperación: la copia y el kit de recuperación devuelven la cuenta.';
 
   @override
   String get desktopProfileDevicesHint => 'Ordenadores y teléfonos conectados';
@@ -5814,4 +5814,105 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get desktopGeneralLaunchNeedsApproval => 'El inicio automático está desactivado en Ajustes del Sistema, en «Ítems de inicio»';
+
+  @override
+  String get desktopA11yStatusSending => 'Enviando';
+
+  @override
+  String get desktopA11yStatusScheduled => 'Programado';
+
+  @override
+  String get desktopA11yStatusSent => 'Enviado';
+
+  @override
+  String get desktopA11yStatusDelivered => 'Entregado';
+
+  @override
+  String get desktopA11yStatusRead => 'Leído';
+
+  @override
+  String get desktopA11yStatusFailed => 'No enviado';
+
+  @override
+  String get desktopA11yVoiceProgress => 'Reproducción del mensaje de voz';
+
+  @override
+  String get desktopViewerPagePrev => 'Página anterior';
+
+  @override
+  String get desktopViewerPageNext => 'Página siguiente';
+
+  @override
+  String get desktopReactionsMore => 'Más emojis';
+
+  @override
+  String get desktopReactionsCollapse => 'Contraer';
+
+  @override
+  String get desktopThreadScrollToBottom => 'Ir a los mensajes más recientes';
+
+  @override
+  String get desktopViewerPrev => 'Anterior';
+
+  @override
+  String get desktopViewerNext => 'Siguiente';
+
+  @override
+  String get desktopA11yPlay => 'Reproducir';
+
+  @override
+  String get desktopA11yPause => 'Pausa';
+
+  @override
+  String get desktopDiagTitle => 'Diagnóstico de entrega';
+
+  @override
+  String get desktopDiagHint => 'Qué mirar cuando los mensajes no llegan y qué enviarnos';
+
+  @override
+  String get desktopDiagQueues => 'COLAS';
+
+  @override
+  String get desktopDiagOutbox => 'Esperando para enviarse';
+
+  @override
+  String get desktopDiagStuck => 'Atascados al llegar';
+
+  @override
+  String get desktopDiagReceipts => 'Acuses en cola';
+
+  @override
+  String get desktopDiagNothingStuck => 'Nada está atascado';
+
+  @override
+  String get desktopDiagConditions => 'CONDICIONES DE ENTREGA';
+
+  @override
+  String get desktopDiagClockOk => 'El reloj del equipo coincide con el servidor';
+
+  @override
+  String desktopDiagClockSkew(Object delta) {
+    return 'El reloj del equipo está desviado $delta: el servidor puede rechazar';
+  }
+
+  @override
+  String get desktopDiagCopy => 'Copiar para soporte';
+
+  @override
+  String get desktopAppearanceTextSize => 'Tamaño del texto';
+
+  @override
+  String get desktopAppearanceTextSizeHint => 'Se aplica a toda la ventana. Los márgenes y los iconos no cambian';
+
+  @override
+  String get desktopThreadGoToDate => 'Ir a la fecha';
+
+  @override
+  String get desktopHotkeyGlobalShow => 'Mostrar Secretly desde cualquier sitio';
+
+  @override
+  String get desktopHotkeyGlobalHint => 'Desactivado por defecto: el atajo es de todo el sistema y se lo quitaría a otra aplicación';
+
+  @override
+  String get desktopHotkeyGlobalTaken => 'Otra aplicación ya usa este atajo';
 }

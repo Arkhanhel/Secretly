@@ -6061,13 +6061,13 @@ abstract class AppLocalizations {
   /// No description provided for @desktopBackupRecoveryKey.
   ///
   /// In en, this message translates to:
-  /// **'Recovery key'**
+  /// **'Recovery kit'**
   String get desktopBackupRecoveryKey;
 
   /// No description provided for @desktopBackupCreateRecoveryKey.
   ///
   /// In en, this message translates to:
-  /// **'Create a recovery key'**
+  /// **'Create a recovery kit'**
   String get desktopBackupCreateRecoveryKey;
 
   /// No description provided for @desktopBackupRecoveryKeyHint.
@@ -6085,7 +6085,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopBackupKeyPassword.
   ///
   /// In en, this message translates to:
-  /// **'Password for the recovery key'**
+  /// **'Password for the recovery kit'**
   String get desktopBackupKeyPassword;
 
   /// No description provided for @desktopBackupPasswordsDiffer.
@@ -6097,7 +6097,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopBackupKeyPasswordHint.
   ///
   /// In en, this message translates to:
-  /// **'This password encrypts the key itself. It does not replace the application password and is stored nowhere — it cannot be recovered.'**
+  /// **'This password encrypts the kit itself. It does not replace the application password and is stored nowhere — it cannot be recovered.'**
   String get desktopBackupKeyPasswordHint;
 
   /// No description provided for @desktopBackupPasswordAgain.
@@ -8821,7 +8821,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopProfileRecoveryHint.
   ///
   /// In en, this message translates to:
-  /// **'This computer is linked to the phone and keeps no recovery phrase of its own: the backup and the recovery key bring the account back.'**
+  /// **'This computer is linked to the phone and keeps no recovery phrase of its own: the backup and the recovery kit bring the account back.'**
   String get desktopProfileRecoveryHint;
 
   /// No description provided for @desktopProfileDevicesHint.
@@ -10779,6 +10779,204 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Launch at login is switched off in System Settings, under Login Items'**
   String get desktopGeneralLaunchNeedsApproval;
+
+  /// No description provided for @desktopA11yStatusSending.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending'**
+  String get desktopA11yStatusSending;
+
+  /// No description provided for @desktopA11yStatusScheduled.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled'**
+  String get desktopA11yStatusScheduled;
+
+  /// No description provided for @desktopA11yStatusSent.
+  ///
+  /// In en, this message translates to:
+  /// **'Sent'**
+  String get desktopA11yStatusSent;
+
+  /// No description provided for @desktopA11yStatusDelivered.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivered'**
+  String get desktopA11yStatusDelivered;
+
+  /// No description provided for @desktopA11yStatusRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Read'**
+  String get desktopA11yStatusRead;
+
+  /// No description provided for @desktopA11yStatusFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Not sent'**
+  String get desktopA11yStatusFailed;
+
+  /// No description provided for @desktopA11yVoiceProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice message playback'**
+  String get desktopA11yVoiceProgress;
+
+  /// No description provided for @desktopViewerPagePrev.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous page'**
+  String get desktopViewerPagePrev;
+
+  /// No description provided for @desktopViewerPageNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next page'**
+  String get desktopViewerPageNext;
+
+  /// No description provided for @desktopReactionsMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More emoji'**
+  String get desktopReactionsMore;
+
+  /// No description provided for @desktopReactionsCollapse.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse'**
+  String get desktopReactionsCollapse;
+
+  /// No description provided for @desktopThreadScrollToBottom.
+  ///
+  /// In en, this message translates to:
+  /// **'To the latest messages'**
+  String get desktopThreadScrollToBottom;
+
+  /// No description provided for @desktopViewerPrev.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous'**
+  String get desktopViewerPrev;
+
+  /// No description provided for @desktopViewerNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get desktopViewerNext;
+
+  /// No description provided for @desktopA11yPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get desktopA11yPlay;
+
+  /// No description provided for @desktopA11yPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get desktopA11yPause;
+
+  /// No description provided for @desktopDiagTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery diagnostics'**
+  String get desktopDiagTitle;
+
+  /// No description provided for @desktopDiagHint.
+  ///
+  /// In en, this message translates to:
+  /// **'What to look at when messages are not arriving, and what to send us'**
+  String get desktopDiagHint;
+
+  /// No description provided for @desktopDiagQueues.
+  ///
+  /// In en, this message translates to:
+  /// **'QUEUES'**
+  String get desktopDiagQueues;
+
+  /// No description provided for @desktopDiagOutbox.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting to be sent'**
+  String get desktopDiagOutbox;
+
+  /// No description provided for @desktopDiagStuck.
+  ///
+  /// In en, this message translates to:
+  /// **'Stuck on arrival'**
+  String get desktopDiagStuck;
+
+  /// No description provided for @desktopDiagReceipts.
+  ///
+  /// In en, this message translates to:
+  /// **'Receipts queued'**
+  String get desktopDiagReceipts;
+
+  /// No description provided for @desktopDiagNothingStuck.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing is stuck'**
+  String get desktopDiagNothingStuck;
+
+  /// No description provided for @desktopDiagConditions.
+  ///
+  /// In en, this message translates to:
+  /// **'DELIVERY CONDITIONS'**
+  String get desktopDiagConditions;
+
+  /// No description provided for @desktopDiagClockOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Computer clock agrees with the server'**
+  String get desktopDiagClockOk;
+
+  /// No description provided for @desktopDiagClockSkew.
+  ///
+  /// In en, this message translates to:
+  /// **'Computer clock is off by {delta} — the server may refuse messages'**
+  String desktopDiagClockSkew(Object delta);
+
+  /// No description provided for @desktopDiagCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy for support'**
+  String get desktopDiagCopy;
+
+  /// No description provided for @desktopAppearanceTextSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Text size'**
+  String get desktopAppearanceTextSize;
+
+  /// No description provided for @desktopAppearanceTextSizeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies to the whole window. Spacing and icons stay as designed'**
+  String get desktopAppearanceTextSizeHint;
+
+  /// No description provided for @desktopThreadGoToDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to date'**
+  String get desktopThreadGoToDate;
+
+  /// No description provided for @desktopHotkeyGlobalShow.
+  ///
+  /// In en, this message translates to:
+  /// **'Show Secretly from anywhere'**
+  String get desktopHotkeyGlobalShow;
+
+  /// No description provided for @desktopHotkeyGlobalHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Off by default: the shortcut is system-wide and would be taken away from another app'**
+  String get desktopHotkeyGlobalHint;
+
+  /// No description provided for @desktopHotkeyGlobalTaken.
+  ///
+  /// In en, this message translates to:
+  /// **'Another app already holds this shortcut'**
+  String get desktopHotkeyGlobalTaken;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -3157,13 +3157,13 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopBackupNowhereHint => 'Автокопію ввімкнено, але обидва місця призначення вимкнені — отже копія не створюється. Увімкніть сервер або цей комп’ютер.';
 
   @override
-  String get desktopBackupRecoveryKey => 'Ключ відновлення';
+  String get desktopBackupRecoveryKey => 'Набір відновлення';
 
   @override
-  String get desktopBackupCreateRecoveryKey => 'Створити ключ відновлення';
+  String get desktopBackupCreateRecoveryKey => 'Створити набір відновлення';
 
   @override
-  String get desktopBackupRecoveryKeyHint => 'Знадобиться, якщо не залишиться жодного пристрою із Secretly. Зберігайте його окремо від пароля.';
+  String get desktopBackupRecoveryKeyHint => 'Знадобиться, якщо не залишиться жодного пристрою із Secretly. Збережіть його окремо від пароля.';
 
   @override
   String desktopBackupKeyFailed(Object error) {
@@ -3171,13 +3171,13 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get desktopBackupKeyPassword => 'Пароль ключа відновлення';
+  String get desktopBackupKeyPassword => 'Пароль набору відновлення';
 
   @override
   String get desktopBackupPasswordsDiffer => 'Паролі не збігаються.';
 
   @override
-  String get desktopBackupKeyPasswordHint => 'Цим паролем шифрується сам ключ. Він не замінює пароль застосунку і ніде не зберігається — відновити його не можна.';
+  String get desktopBackupKeyPasswordHint => 'Цим паролем шифрується сам набір. Він не замінює пароль від застосунку і не зберігається ніде — відновити його не можна.';
 
   @override
   String get desktopBackupPasswordAgain => 'Ще раз';
@@ -4719,7 +4719,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopProfileRecovery => 'Відновлення';
 
   @override
-  String get desktopProfileRecoveryHint => 'Цей комп’ютер підключений до телефона і своєї фрази відновлення не зберігає: обліковий запис повертає копія та ключ відновлення.';
+  String get desktopProfileRecoveryHint => 'Цей комп’ютер підключений до телефона і своєї фрази відновлення не зберігає: обліковий запис повертає копія та набір відновлення.';
 
   @override
   String get desktopProfileDevicesHint => 'Підключені комп’ютери та телефони';
@@ -5834,4 +5834,105 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get desktopGeneralLaunchNeedsApproval => 'Автозапуск вимкнено в системних налаштуваннях, у розділі «Об’єкти входу»';
+
+  @override
+  String get desktopA11yStatusSending => 'Надсилається';
+
+  @override
+  String get desktopA11yStatusScheduled => 'Заплановано';
+
+  @override
+  String get desktopA11yStatusSent => 'Надіслано';
+
+  @override
+  String get desktopA11yStatusDelivered => 'Доставлено';
+
+  @override
+  String get desktopA11yStatusRead => 'Прочитано';
+
+  @override
+  String get desktopA11yStatusFailed => 'Не надіслано';
+
+  @override
+  String get desktopA11yVoiceProgress => 'Відтворення голосового';
+
+  @override
+  String get desktopViewerPagePrev => 'Попередня сторінка';
+
+  @override
+  String get desktopViewerPageNext => 'Наступна сторінка';
+
+  @override
+  String get desktopReactionsMore => 'Більше емодзі';
+
+  @override
+  String get desktopReactionsCollapse => 'Згорнути';
+
+  @override
+  String get desktopThreadScrollToBottom => 'До останніх повідомлень';
+
+  @override
+  String get desktopViewerPrev => 'Попереднє';
+
+  @override
+  String get desktopViewerNext => 'Наступне';
+
+  @override
+  String get desktopA11yPlay => 'Відтворити';
+
+  @override
+  String get desktopA11yPause => 'Пауза';
+
+  @override
+  String get desktopDiagTitle => 'Діагностика доставки';
+
+  @override
+  String get desktopDiagHint => 'На що дивитися, коли повідомлення не йдуть, і що надіслати нам';
+
+  @override
+  String get desktopDiagQueues => 'ЧЕРГИ';
+
+  @override
+  String get desktopDiagOutbox => 'Чекають на відправлення';
+
+  @override
+  String get desktopDiagStuck => 'Застрягли на вході';
+
+  @override
+  String get desktopDiagReceipts => 'Підтвердження в черзі';
+
+  @override
+  String get desktopDiagNothingStuck => 'Нічого не застрягло';
+
+  @override
+  String get desktopDiagConditions => 'УМОВИ ДОСТАВКИ';
+
+  @override
+  String get desktopDiagClockOk => 'Годинник комп’ютера збігається із сервером';
+
+  @override
+  String desktopDiagClockSkew(Object delta) {
+    return 'Годинник комп’ютера збито на $delta — сервер може відмовляти';
+  }
+
+  @override
+  String get desktopDiagCopy => 'Скопіювати для підтримки';
+
+  @override
+  String get desktopAppearanceTextSize => 'Розмір тексту';
+
+  @override
+  String get desktopAppearanceTextSizeHint => 'Діє на все вікно. Відступи та значки лишаються як намальовані';
+
+  @override
+  String get desktopThreadGoToDate => 'Перейти до дати';
+
+  @override
+  String get desktopHotkeyGlobalShow => 'Показувати Secretly звідусіль';
+
+  @override
+  String get desktopHotkeyGlobalHint => 'Типово вимкнено: сполучення загальносистемне і відібрало б його в іншої програми';
+
+  @override
+  String get desktopHotkeyGlobalTaken => 'Це сполучення вже зайняте іншою програмою';
 }
