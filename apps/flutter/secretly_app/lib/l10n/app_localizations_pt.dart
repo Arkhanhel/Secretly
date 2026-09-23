@@ -5802,6 +5802,18 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get desktopAuthBackupNotFound => 'Não existe cópia no servidor para este Secretly ID.';
+
+  @override
+  String get desktopGeneralLaunchAtLogin => 'Abrir ao iniciar sessão';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOn => 'O Secretly abre sozinho e continua a receber mensagens';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOff => 'Enquanto o Secretly não estiver a correr, as mensagens não chegam a este computador';
+
+  @override
+  String get desktopGeneralLaunchNeedsApproval => 'O arranque automático está desativado nas Definições do Sistema, em «Itens de início»';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -11602,4 +11614,16 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopAuthBackupNotFound => 'Não existe cópia no servidor para este Secretly ID.';
+
+  @override
+  String get desktopGeneralLaunchAtLogin => 'Abrir ao iniciar a sessão';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOn => 'O Secretly abre sozinho e continua recebendo mensagens';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOff => 'Enquanto o Secretly não estiver aberto, as mensagens não chegam a este computador';
+
+  @override
+  String get desktopGeneralLaunchNeedsApproval => 'A abertura automática está desativada nos Ajustes do Sistema, em «Itens de início»';
 }

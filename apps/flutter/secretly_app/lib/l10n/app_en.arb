@@ -2771,5 +2771,9 @@
   "desktopAuthRestoring": "Restoring…",
   "desktopAuthRestoreFailed": "Could not restore: {error}",
   "@desktopAuthRestoreFailed": {"placeholders": {"error": {}}},
-  "desktopAuthBackupNotFound": "There is no backup on the server for this Secretly ID."
+  "desktopAuthBackupNotFound": "There is no backup on the server for this Secretly ID.",
+  "desktopGeneralLaunchAtLogin": "Launch at login",
+  "desktopGeneralLaunchAtLoginOn": "Secretly starts on its own and keeps receiving messages",
+  "desktopGeneralLaunchAtLoginOff": "While Secretly is not running, messages do not reach this computer",
+  "desktopGeneralLaunchNeedsApproval": "Launch at login is switched off in System Settings, under Login Items"
 }

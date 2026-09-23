@@ -2071,5 +2071,9 @@
   "desktopAuthServerOptionBody": "Il vous faudra votre identifiant Secretly et le mot de passe de la sauvegarde.",
   "desktopAuthRestoring": "Restauration…",
   "desktopAuthRestoreFailed": "Impossible de restaurer : {error}",
-  "desktopAuthBackupNotFound": "Il n’y a aucune sauvegarde sur le serveur pour cet identifiant Secretly."
+  "desktopAuthBackupNotFound": "Il n’y a aucune sauvegarde sur le serveur pour cet identifiant Secretly.",
+  "desktopGeneralLaunchAtLogin": "Lancer à l’ouverture de session",
+  "desktopGeneralLaunchAtLoginOn": "Secretly démarre tout seul et continue de recevoir les messages",
+  "desktopGeneralLaunchAtLoginOff": "Tant que Secretly n’est pas lancé, les messages n’arrivent pas sur cet ordinateur",
+  "desktopGeneralLaunchNeedsApproval": "Le lancement à l’ouverture de session est désactivé dans Réglages Système, section « Ouverture »"
 }

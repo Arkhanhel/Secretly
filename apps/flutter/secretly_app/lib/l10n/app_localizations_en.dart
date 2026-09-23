@@ -5802,4 +5802,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get desktopAuthBackupNotFound => 'There is no backup on the server for this Secretly ID.';
+
+  @override
+  String get desktopGeneralLaunchAtLogin => 'Launch at login';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOn => 'Secretly starts on its own and keeps receiving messages';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOff => 'While Secretly is not running, messages do not reach this computer';
+
+  @override
+  String get desktopGeneralLaunchNeedsApproval => 'Launch at login is switched off in System Settings, under Login Items';
 }

@@ -2067,5 +2067,9 @@
   "desktopAuthServerOptionBody": "Понадобятся ваш Secretly ID и пароль копии.",
   "desktopAuthRestoring": "Восстанавливаем…",
   "desktopAuthRestoreFailed": "Не удалось восстановить: {error}",
-  "desktopAuthBackupNotFound": "Копии для этого Secretly ID на сервере нет."
+  "desktopAuthBackupNotFound": "Копии для этого Secretly ID на сервере нет.",
+  "desktopGeneralLaunchAtLogin": "Запускать при входе в систему",
+  "desktopGeneralLaunchAtLoginOn": "Secretly запустится сам и будет получать сообщения",
+  "desktopGeneralLaunchAtLoginOff": "Пока Secretly не запущен, сообщения на этот компьютер не приходят",
+  "desktopGeneralLaunchNeedsApproval": "Автозапуск выключен в системных настройках, в разделе «Объекты входа»"
 }

@@ -5802,4 +5802,16 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get desktopAuthBackupNotFound => 'Für diese Secretly-ID gibt es keine Sicherung auf dem Server.';
+
+  @override
+  String get desktopGeneralLaunchAtLogin => 'Beim Anmelden starten';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOn => 'Secretly startet von selbst und empfängt weiter Nachrichten';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOff => 'Solange Secretly nicht läuft, erreichen Nachrichten diesen Computer nicht';
+
+  @override
+  String get desktopGeneralLaunchNeedsApproval => 'Der Start beim Anmelden ist in den Systemeinstellungen unter „Anmeldeobjekte“ deaktiviert';
 }

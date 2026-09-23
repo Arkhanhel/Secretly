@@ -2071,5 +2071,9 @@
   "desktopAuthServerOptionBody": "Du brauchst deine Secretly-ID und das Sicherungs-Passwort.",
   "desktopAuthRestoring": "Wird wiederhergestellt …",
   "desktopAuthRestoreFailed": "Wiederherstellung fehlgeschlagen: {error}",
-  "desktopAuthBackupNotFound": "Für diese Secretly-ID gibt es keine Sicherung auf dem Server."
+  "desktopAuthBackupNotFound": "Für diese Secretly-ID gibt es keine Sicherung auf dem Server.",
+  "desktopGeneralLaunchAtLogin": "Beim Anmelden starten",
+  "desktopGeneralLaunchAtLoginOn": "Secretly startet von selbst und empfängt weiter Nachrichten",
+  "desktopGeneralLaunchAtLoginOff": "Solange Secretly nicht läuft, erreichen Nachrichten diesen Computer nicht",
+  "desktopGeneralLaunchNeedsApproval": "Der Start beim Anmelden ist in den Systemeinstellungen unter „Anmeldeobjekte“ deaktiviert"
 }

@@ -5802,4 +5802,16 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get desktopAuthBackupNotFound => 'No hay ninguna copia en el servidor para este Secretly ID.';
+
+  @override
+  String get desktopGeneralLaunchAtLogin => 'Abrir al iniciar sesión';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOn => 'Secretly se abre solo y sigue recibiendo mensajes';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOff => 'Mientras Secretly no esté abierto, los mensajes no llegan a este ordenador';
+
+  @override
+  String get desktopGeneralLaunchNeedsApproval => 'El inicio automático está desactivado en Ajustes del Sistema, en «Ítems de inicio»';
 }

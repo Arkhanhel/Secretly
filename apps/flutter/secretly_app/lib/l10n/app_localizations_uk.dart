@@ -5822,4 +5822,16 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get desktopAuthBackupNotFound => 'Копії для цього Secretly ID на сервері немає.';
+
+  @override
+  String get desktopGeneralLaunchAtLogin => 'Запускати під час входу в систему';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOn => 'Secretly запуститься сам і отримуватиме повідомлення';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOff => 'Поки Secretly не запущено, повідомлення на цей комп’ютер не надходять';
+
+  @override
+  String get desktopGeneralLaunchNeedsApproval => 'Автозапуск вимкнено в системних налаштуваннях, у розділі «Об’єкти входу»';
 }

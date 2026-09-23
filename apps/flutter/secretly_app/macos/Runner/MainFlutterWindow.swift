@@ -25,6 +25,9 @@ class MainFlutterWindow: NSWindow {
   /// Обновление приложения, скачанного с сайта, — см. [SparkleBridge].
   private let sparkleBridge = SparkleBridge()
 
+  /// Запуск при входе в систему — см. [LoginItemBridge].
+  private let loginItemBridge = LoginItemBridge()
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -48,6 +51,7 @@ class MainFlutterWindow: NSWindow {
     musicTagsBridge.attach(to: flutterViewController.engine.binaryMessenger)
     pdfRenderBridge.attach(to: flutterViewController.engine.binaryMessenger)
     sparkleBridge.attach(to: flutterViewController.engine.binaryMessenger)
+    loginItemBridge.attach(to: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
   }

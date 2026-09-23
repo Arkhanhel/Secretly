@@ -2071,5 +2071,9 @@
   "desktopAuthServerOptionBody": "Vai precisar do seu Secretly ID e da palavra-passe da cópia.",
   "desktopAuthRestoring": "A restaurar…",
   "desktopAuthRestoreFailed": "Não foi possível restaurar: {error}",
-  "desktopAuthBackupNotFound": "Não existe cópia no servidor para este Secretly ID."
+  "desktopAuthBackupNotFound": "Não existe cópia no servidor para este Secretly ID.",
+  "desktopGeneralLaunchAtLogin": "Abrir ao iniciar sessão",
+  "desktopGeneralLaunchAtLoginOn": "O Secretly abre sozinho e continua a receber mensagens",
+  "desktopGeneralLaunchAtLoginOff": "Enquanto o Secretly não estiver a correr, as mensagens não chegam a este computador",
+  "desktopGeneralLaunchNeedsApproval": "O arranque automático está desativado nas Definições do Sistema, em «Itens de início»"
 }

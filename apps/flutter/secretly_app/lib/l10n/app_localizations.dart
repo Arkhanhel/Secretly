@@ -10755,6 +10755,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'There is no backup on the server for this Secretly ID.'**
   String get desktopAuthBackupNotFound;
+
+  /// No description provided for @desktopGeneralLaunchAtLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Launch at login'**
+  String get desktopGeneralLaunchAtLogin;
+
+  /// No description provided for @desktopGeneralLaunchAtLoginOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Secretly starts on its own and keeps receiving messages'**
+  String get desktopGeneralLaunchAtLoginOn;
+
+  /// No description provided for @desktopGeneralLaunchAtLoginOff.
+  ///
+  /// In en, this message translates to:
+  /// **'While Secretly is not running, messages do not reach this computer'**
+  String get desktopGeneralLaunchAtLoginOff;
+
+  /// No description provided for @desktopGeneralLaunchNeedsApproval.
+  ///
+  /// In en, this message translates to:
+  /// **'Launch at login is switched off in System Settings, under Login Items'**
+  String get desktopGeneralLaunchNeedsApproval;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

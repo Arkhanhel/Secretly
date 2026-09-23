@@ -41,6 +41,7 @@ import '../primitives/hover_listener.dart';
 import '../primitives/desktop_text_field.dart';
 import '../../widgets/support_badge.dart';
 import '../services/desktop_app_lock_service.dart';
+import '../services/desktop_login_item_service.dart';
 import '../services/desktop_notification_service.dart';
 import '../primitives/desktop_segmented.dart';
 import '../primitives/desktop_tooltip.dart';
@@ -629,6 +630,15 @@ class _GeneralPane extends StatefulWidget {
 /// dependency, and Flutter's spell check is Android/iOS only, so neither could
 /// be honoured on macOS today.
 class _GeneralPaneState extends State<_GeneralPane> {
+  @override
+  void initState() {
+    super.initState();
+    // Состояние автозапуска живёт в СИСТЕМЕ: человек мог отменить его в
+    // «Объектах входа», пока окно было закрыто. Спрашиваем при каждом
+    // открытии раздела, а не помним своё.
+    unawaited(DesktopLoginItemService.instance.refresh());
+  }
+
   /// Interface languages, in the order they are offered. Keys are the
   /// controller's locale-preference format; '' means "follow the system".
   ///
@@ -657,6 +667,19 @@ class _GeneralPaneState extends State<_GeneralPane> {
       }
     }
     return l10n.desktopGeneralSystemLanguage;
+  }
+
+  /// Включить или выключить автозапуск. Отказ системы говорится словами:
+  /// молчаливый возврат переключателя выглядит как «он не нажимается».
+  Future<void> _setLaunchAtLogin(bool value) async {
+    final svc = DesktopLoginItemService.instance;
+    final ok = await svc.setEnabled(value);
+    if (!mounted || ok) return;
+    DesktopSnackbar.show(
+      context,
+      message: svc.lastError ?? AppLocalizations.of(context)!.contactActionGeneric,
+      kind: DSnackKind.error,
+    );
   }
 
   Future<void> _pickLanguage() async {
@@ -737,6 +760,42 @@ class _GeneralPaneState extends State<_GeneralPane> {
                         unawaited(DesktopUiPrefs.setMessageHoverBar(v)),
                   ),
                 ),
+              ),
+              // 🔴 АВТОЗАПУСК — УСЛОВИЕ ДОСТАВКИ, А НЕ УДОБСТВО.
+              //
+              // Окно живёт в трее, и сообщения приходят, пока приложение
+              // ЗАПУЩЕНО. Не запущенное не получает ничего — человек узнаёт о
+              // разговоре тогда, когда сам вспомнит открыть Secretly. На
+              // телефоне за доставку отвечает система; на компьютере — мы.
+              //
+              // Строки нет вовсе там, где система этого не умеет (macOS
+              // старше 13, Windows): переключатель, который притворяется
+              // работающим, хуже отсутствующего.
+              ValueListenableBuilder<bool>(
+                valueListenable: DesktopLoginItemService.instance.available,
+                builder: (ctx, available, _) {
+                  if (!available) return const SizedBox.shrink();
+                  return ValueListenableBuilder<bool>(
+                    valueListenable: DesktopLoginItemService.instance.enabled,
+                    builder: (ctx, on, _) => ValueListenableBuilder<bool>(
+                      valueListenable:
+                          DesktopLoginItemService.instance.needsApproval,
+                      builder: (ctx, needsApproval, _) => WorkspaceRow(
+                        label: l10n.desktopGeneralLaunchAtLogin,
+                        description: needsApproval
+                            ? l10n.desktopGeneralLaunchNeedsApproval
+                            : (on
+                                ? l10n.desktopGeneralLaunchAtLoginOn
+                                : l10n.desktopGeneralLaunchAtLoginOff),
+                        icon: FluentIcons.power_24_regular,
+                        trailing: WorkspaceSwitch(
+                          value: on,
+                          onChanged: (v) => unawaited(_setLaunchAtLogin(v)),
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
               // Карточку ссылки готовит отправитель — значит, страницу
               // открывает это окно. Выключатель, как в Signal.

@@ -5802,4 +5802,16 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get desktopAuthBackupNotFound => 'Il n’y a aucune sauvegarde sur le serveur pour cet identifiant Secretly.';
+
+  @override
+  String get desktopGeneralLaunchAtLogin => 'Lancer à l’ouverture de session';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOn => 'Secretly démarre tout seul et continue de recevoir les messages';
+
+  @override
+  String get desktopGeneralLaunchAtLoginOff => 'Tant que Secretly n’est pas lancé, les messages n’arrivent pas sur cet ordinateur';
+
+  @override
+  String get desktopGeneralLaunchNeedsApproval => 'Le lancement à l’ouverture de session est désactivé dans Réglages Système, section « Ouverture »';
 }
