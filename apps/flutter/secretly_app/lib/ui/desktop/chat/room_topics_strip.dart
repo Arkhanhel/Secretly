@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../../../l10n/app_localizations.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 
@@ -110,8 +111,9 @@ class RoomTopicsStrip extends StatelessWidget {
                   unread: unreadByTopicId[''] ?? 0,
                   colors: c,
                   onTap: () => onSelect(null),
-                  onSecondaryTap:
-                      canManage && onManageBase != null ? onManageBase : null,
+                  onSecondaryTap: canManage && onManageBase != null
+                      ? onManageBase
+                      : null,
                 ),
                 for (final t in topics)
                   _TopicChip(
@@ -125,39 +127,44 @@ class RoomTopicsStrip extends StatelessWidget {
                     unread: unreadByTopicId[t.id] ?? 0,
                     colors: c,
                     onTap: () => onSelect(t.id),
-                    onSecondaryTap:
-                        canManage && onManage != null ? () => onManage!(t) : null,
+                    onSecondaryTap: canManage && onManage != null
+                        ? () => onManage!(t)
+                        : null,
                   ),
                 if (canManage && onCreate != null)
                   Padding(
                     padding: const EdgeInsets.only(left: 2),
-                    child: HoverListener(
-                      onTap: onCreate,
-                      builder: (ctx, hovered, pressed) => Container(
-                        width: 28,
-                        height: 28,
-                        alignment: Alignment.center,
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        decoration: BoxDecoration(
-                          color: hovered ? c.hover : Colors.transparent,
-                          borderRadius: BorderRadius.circular(DRadii.md),
-                          border: Border.all(
-                            color: c.borderDivider,
-                            style: BorderStyle.solid,
+                    child: Semantics(
+                      button: true,
+                      label: AppLocalizations.of(context)!.desktopChatsNewTopic,
+                      child: HoverListener(
+                        onTap: onCreate,
+                        builder: (ctx, hovered, pressed) => Container(
+                          width: 28,
+                          height: 28,
+                          alignment: Alignment.center,
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          decoration: BoxDecoration(
+                            color: hovered ? c.hover : Colors.transparent,
+                            borderRadius: BorderRadius.circular(DRadii.md),
+                            border: Border.all(
+                              color: c.borderDivider,
+                              style: BorderStyle.solid,
+                            ),
+                          ),
+                          child: Icon(
+                            FluentIcons.add_24_regular,
+                            size: 15,
+                            color: c.textSecondary,
                           ),
                         ),
-                        child: Icon(FluentIcons.add_24_regular,
-                            size: 15, color: c.textSecondary),
                       ),
                     ),
                   ),
               ],
             ),
           ),
-          if (trailing != null) ...[
-            const SizedBox(width: DSpace.s),
-            trailing!,
-          ],
+          if (trailing != null) ...[const SizedBox(width: DSpace.s), trailing!],
         ],
       ),
     );
@@ -205,8 +212,9 @@ class _TopicChip extends StatelessWidget {
       padding: const EdgeInsets.only(right: 2),
       child: HoverListener(
         onTap: onTap,
-        onSecondaryTapDown:
-            onSecondaryTap == null ? null : (_) => onSecondaryTap!(),
+        onSecondaryTapDown: onSecondaryTap == null
+            ? null
+            : (_) => onSecondaryTap!(),
         builder: (ctx, hovered, pressed) => Container(
           height: 28,
           margin: const EdgeInsets.symmetric(vertical: 4),

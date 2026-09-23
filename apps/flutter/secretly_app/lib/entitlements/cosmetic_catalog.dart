@@ -26,18 +26,27 @@ const Set<String> kFreeThemeIds = {
   'graphite',
 };
 
-/// Free chat-bubble style ids — the first 9 (the ones tied to the 9 themes).
-/// Everything after `noch_na_marse` in `kChatBubbleStylePresets` is premium.
+/// Бесплатные градиенты пузырей — ПЕРВЫЕ ДЕВЯТЬ из `kChatBubbleStylePresets`.
+/// Всё, что идёт после «Неона», — премиальное.
 const Set<String> kFreeBubbleStyleIds = {
-  'flutter_dash',
-  'ocean',
-  'graphite',
-  'amethyst',
-  'sunset',
-  'aurora',
-  'rosewood',
-  'toplenoe_moloko',
-  'noch_na_marse',
+  // 🔴 ПЕРЕПИСАН 23.09.2026 ВМЕСТЕ С НАБОРОМ ГРАДИЕНТОВ.
+  //
+  // Здесь лежат ОПОЗНАВАТЕЛИ, а набор заменён целиком: прежние девять указывали
+  // на то, чего больше нет, и бесплатный тариф остался бы вовсе без доступных
+  // градиентов. Поймала это проверка `cosmetic_catalog_test`, а не глаз.
+  //
+  // Правило прежнее — бесплатны ПЕРВЫЕ ДЕВЯТЬ набора. Это первые девять из
+  // основной группы страницы дизайна; «Графит», «классика» и «яркие» остаются
+  // премиальными, как и раньше остаток списка.
+  'aurora_borealis',
+  'golden_hour',
+  'deep',
+  'sakura',
+  'lava',
+  'mint',
+  'nebula',
+  'dunes',
+  'neon',
 };
 
 /// Free indicator (accent) colour ids. Product decision: 3 free —

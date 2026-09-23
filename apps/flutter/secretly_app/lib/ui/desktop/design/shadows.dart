@@ -79,14 +79,6 @@ class DShadows {
   // линии. В разметке такие свечения местами уже были заведены руками, но
   // ровно два места из макета их не получали — как раз эти два.
 
-  /// Свой пузырь: 0 12px 30px rgba(84,96,224,.26).
-  static List<BoxShadow> glowSelfBubble(DColorSet c) => [
-    BoxShadow(
-      color: c.accentPrimaryAlt.withValues(alpha: 0.26),
-      blurRadius: 30,
-      offset: const Offset(0, 12),
-    ),
-  ];
 
   /// Активная плитка рейки: 0 10px 24px rgba(76,141,246,.3).
   static List<BoxShadow> glowRailActive(DColorSet c) => [

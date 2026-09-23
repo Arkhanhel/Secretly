@@ -72,7 +72,44 @@ const Color kDesktopUnsentTickColor = Color(0xFFE53935);
 /// Яркость галочки «отправлено» относительно «доставлено» — как у телефона.
 const double kDesktopSentTickAlpha = 0.55;
 
-Widget deliveryTickGlyph(DeliveryStatus s, Color col) {
+/// Подпись состояния доставки для VoiceOver.
+///
+/// 🔴 Галочки — НАРИСОВАННОЕ состояние: глазом «две галочки» читаются как
+/// «прочитано», а экранному диктору неоткуда это взять — [Icon] без
+/// `semanticLabel` не даёт узла семантики вовсе. Без этой подписи незрячий
+/// слышит текст сообщения и время, но не слышит, ушло оно или нет; для
+/// мессенджера это не украшение, а разница между «сказал» и «не сказал».
+String deliveryStatusLabel(DeliveryStatus s, AppLocalizations l10n) {
+  switch (s) {
+    case DeliveryStatus.sending:
+      return l10n.desktopA11yStatusSending;
+    case DeliveryStatus.scheduled:
+      return l10n.desktopA11yStatusScheduled;
+    case DeliveryStatus.sent:
+      return l10n.desktopA11yStatusSent;
+    case DeliveryStatus.delivered:
+      return l10n.desktopA11yStatusDelivered;
+    case DeliveryStatus.read:
+      return l10n.desktopA11yStatusRead;
+    case DeliveryStatus.failed:
+      return l10n.desktopA11yStatusFailed;
+  }
+}
+
+/// [semanticsLabel] — подпись для экранного диктора; обычно
+/// [deliveryStatusLabel]. `null` оставляет галочку немой: так вызывают там, где
+/// состояние уже названо соседним текстом и повтор был бы шумом.
+Widget deliveryTickGlyph(
+  DeliveryStatus s,
+  Color col, {
+  String? semanticsLabel,
+}) {
+  final glyph = _deliveryTickGlyph(s, col);
+  if (semanticsLabel == null) return glyph;
+  return Semantics(container: true, label: semanticsLabel, child: glyph);
+}
+
+Widget _deliveryTickGlyph(DeliveryStatus s, Color col) {
   switch (s) {
     case DeliveryStatus.sending:
       return Icon(FluentIcons.clock_24_regular, size: 12, color: col);
@@ -1323,9 +1360,15 @@ class _MessageBubbleState extends State<MessageBubble> {
 
     // Цвета перехода берём у темы как раньше; трёхточечный вариант нужен
     // потому, что несколько пресетов без средней точки читаются плоско.
-    final selfColors = c.bubbleSelfMid == null
-        ? <Color>[c.bubbleSelfStart, c.bubbleSelfEnd]
-        : <Color>[c.bubbleSelfStart, c.bubbleSelfMid!, c.bubbleSelfEnd];
+    // 🔴 Точек может быть от двух до ЧЕТЫРЁХ — набор от 23.09.2026 принёс
+    // четырёхцветные переходы. Список собирается по наличию точек, а не
+    // тройным условием: иначе четвёртая молча терялась бы.
+    final selfColors = <Color>[
+      c.bubbleSelfStart,
+      if (c.bubbleSelfMid != null) c.bubbleSelfMid!,
+      if (c.bubbleSelfMid2 != null) c.bubbleSelfMid2!,
+      c.bubbleSelfEnd,
+    ];
 
     // 🔴 Свой пузырь БОЛЬШЕ НЕ НОСИТ ГРАДИЕНТ В ДЕКОРАЦИИ.
     //
@@ -1339,14 +1382,18 @@ class _MessageBubbleState extends State<MessageBubble> {
     // участок — этим занимается [ScreenGradientBox] ниже. Здесь у своего
     // пузыря остаётся только форма.
     final decoration = isSelf
-        // 🔴 Своё свечение из макета (0 12px 30px rgba(84,96,224,.26)). Это не
-        // украшение: им макет отделяет СВОЁ от чужого, не рисуя ни одной
-        // линии. Заливки у своего пузыря здесь нет (её даёт общий переход
-        // ниже), и без тени он лежал на холсте совсем плоско.
-        ? BoxDecoration(
-            borderRadius: br,
-            boxShadow: DShadows.glowSelfBubble(c),
-          )
+        // 🔴 СВЕЧЕНИЯ ПОД СВОИМ ПУЗЫРЁМ БОЛЬШЕ НЕТ (указание владельца
+        // 23.09.2026).
+        //
+        // Оно стояло по макету (0 12px 30px rgba(84,96,224,.26)) и задумывалось
+        // как способ отделить своё от чужого, не рисуя линий. На деле своё и
+        // так отличается заливкой и стороной, а мягкое пятно под КАЖДЫМ своим
+        // сообщением в длинной переписке складывается в сплошную кайму вдоль
+        // правого края — именно это и раздражало.
+        //
+        // Плоско пузырь от этого не стал: заливку даёт общий переход
+        // ([ScreenGradientBox] ниже), форму — скругление.
+        ? BoxDecoration(borderRadius: br)
         : BoxDecoration(
             borderRadius: br,
             color: m.hasMention ? c.mentionBg : c.bubblePeer,
@@ -2778,7 +2825,11 @@ class _MessageBubbleState extends State<MessageBubble> {
     final col = isSelf
         ? Colors.white.withValues(alpha: 0.85)
         : c.deliveryIndicator;
-    return deliveryTickGlyph(s, col);
+    return deliveryTickGlyph(
+      s,
+      col,
+      semanticsLabel: deliveryStatusLabel(s, l10n),
+    );
   }
 
   /// Фишки реакций — отдельной строкой ПОД пузырём, по стороне сообщения.
@@ -3006,20 +3057,24 @@ class _MiniEmojiBtnState extends State<_MiniEmojiBtn> {
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _h = true),
       onExit: (_) => setState(() => _h = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: Container(
-          width: 26,
-          height: 26,
-          margin: const EdgeInsets.symmetric(horizontal: 1),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: _h ? c.hover : Colors.transparent,
-            borderRadius: BorderRadius.circular(DRadii.r8),
+      child: Semantics(
+               button: true,
+               label: widget.emoji,
+               child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            width: 26,
+            height: 26,
+            margin: const EdgeInsets.symmetric(horizontal: 1),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _h ? c.hover : Colors.transparent,
+              borderRadius: BorderRadius.circular(DRadii.r8),
+            ),
+            child: Text(widget.emoji, style: const TextStyle(fontSize: 13)),
           ),
-          child: Text(widget.emoji, style: const TextStyle(fontSize: 13)),
         ),
-      ),
+             ),
     );
   }
 }
@@ -3176,7 +3231,7 @@ class _ReactionChipState extends State<_ReactionChip>
       fg = r.byMe ? const Color(0xFFCFE2FF) : const Color(0xFFB9C6D6);
       border = c.accentPrimary.withValues(alpha: r.byMe ? 0.66 : 0.40);
     }
-    return ScaleTransition(
+    final chip = ScaleTransition(
       scale: _scale,
       child: GestureDetector(
         onTap: widget.onTap,
@@ -3251,6 +3306,23 @@ class _ReactionChipState extends State<_ReactionChip>
           ),
         ),
       ),
+    );
+    // 🔴 Фишка — нарисованная кнопка, и обе её части немые: эмодзи бывает
+    // картинкой (Lottie), а счётчик — это голое число, о котором диктор не
+    // скажет, к чему оно. Эмодзи идёт подписью, счётчик — значением, а
+    // `selected` отвечает на «я уже ставил?»: ровно то, что глаз считывает по
+    // насыщенности фишки.
+    return Semantics(
+      // 🔴 `container: true` ОБЯЗАТЕЛЕН. Без него подпись крепить не к чему:
+      // потомки исключены, своего узла нет — и метка молча пропадает. Ошибка
+      // тихая, разницы на экране никакой, ловится только проверкой семантики.
+      container: true,
+      excludeSemantics: true,
+      button: true,
+      selected: r.byMe,
+      label: r.emoji,
+      value: '${r.count}',
+      child: chip,
     );
   }
 }
@@ -3427,7 +3499,7 @@ class _MetaPill extends StatelessWidget {
           ],
           if (isSelf) ...[
             const SizedBox(width: 4),
-            _deliveryIconLight(delivery),
+            _deliveryIconLight(delivery, l10n),
           ],
         ],
       ),
@@ -3436,8 +3508,12 @@ class _MetaPill extends StatelessWidget {
 
   /// Same U-14 tick model as [_deliveryIcon], on the light-on-media variant.
   /// Delegates so the two can never drift apart again.
-  Widget _deliveryIconLight(DeliveryStatus s) {
-    return deliveryTickGlyph(s, const Color(0xFFFFFFFF));
+  Widget _deliveryIconLight(DeliveryStatus s, AppLocalizations l10n) {
+    return deliveryTickGlyph(
+      s,
+      const Color(0xFFFFFFFF),
+      semanticsLabel: deliveryStatusLabel(s, l10n),
+    );
   }
 }
 
@@ -3561,48 +3637,61 @@ class _VoiceProgressBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = progress.clamp(0.0, 1.0);
     final heights = bars(waveform);
+    final played = (p * _bars).floor();
+    // 🔴 ЗДЕСЬ БЫЛ ЛИШНИЙ [LayoutBuilder], И ОН ЛОМАЛ РАЗМЕТКУ ГОЛОСОВОГО.
+    //
+    // Он считал ширину и применял её ровно в одном месте — `if (w.isNaN)`, —
+    // а `isNaN` после `isFinite ? maxWidth : 160.0` не бывает истинным
+    // никогда. То есть строитель существовал ради значения, которым никто не
+    // пользовался.
+    //
+    // Цена этого была настоящая: голосовой пузырь обёрнут в [IntrinsicWidth]
+    // (ради времени у правого края), а [LayoutBuilder] не умеет отвечать на
+    // вопрос о своей естественной ширине и роняет проверку разметки. В отладке
+    // это исключение на КАЖДОМ голосовом пузыре, в выпуске — молчаливый ноль
+    // вместо ширины. Волне строитель не нужен: столбики растягивает [Expanded].
     final wave = SizedBox(
       height: _height,
-      child: LayoutBuilder(
-        builder: (ctx, constraints) {
-          final w = constraints.maxWidth.isFinite
-              ? constraints.maxWidth
-              : 160.0;
-          final played = (p * _bars).floor();
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              for (var i = 0; i < _bars; i++) ...[
-                if (i > 0) const SizedBox(width: 2.5),
-                Expanded(
-                  child: Container(
-                    height: (_height * heights[i]).clamp(3.0, _height),
-                    decoration: BoxDecoration(
-                      color: i < played ? fill : background,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          for (var i = 0; i < _bars; i++) ...[
+            if (i > 0) const SizedBox(width: 2.5),
+            Expanded(
+              child: Container(
+                height: (_height * heights[i]).clamp(3.0, _height),
+                decoration: BoxDecoration(
+                  color: i < played ? fill : background,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-              ],
-              // Ширина нужна только для перемотки; сама волна тянется сама.
-              if (w.isNaN) const SizedBox.shrink(),
-            ],
-          );
-        },
+              ),
+            ),
+          ],
+        ],
       ),
     );
     final seek = onSeek;
-    if (seek == null) return wave;
-    return LayoutBuilder(
-      builder: (ctx, constraints) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (d) {
-          final w = constraints.maxWidth;
-          if (w <= 0) return;
-          seek((d.localPosition.dx / w).clamp(0.0, 1.0));
-        },
-        child: wave,
-      ),
+    final Widget control = seek == null
+        ? wave
+        : LayoutBuilder(
+            builder: (ctx, constraints) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (d) {
+                final w = constraints.maxWidth;
+                if (w <= 0) return;
+                seek((d.localPosition.dx / w).clamp(0.0, 1.0));
+              },
+              child: wave,
+            ),
+          );
+    // 🔴 Волна — четырнадцать безымянных прямоугольников: для экранного диктора
+    // её нет вовсе, и голосовое звучит как пустой пузырь. Доля проигранного
+    // идёт значением — это единственное, что волна сообщает глазу.
+    return Semantics(
+      container: true,
+      label: AppLocalizations.of(context)!.desktopA11yVoiceProgress,
+      value: '${(p * 100).round()}%',
+      child: ExcludeSemantics(child: control),
     );
   }
 }

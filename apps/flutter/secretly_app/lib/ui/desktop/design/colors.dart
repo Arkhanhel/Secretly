@@ -39,6 +39,7 @@ class DColorSet {
     required this.bubbleSelfStart,
     required this.bubbleSelfEnd,
     this.bubbleSelfMid,
+    this.bubbleSelfMid2,
     required this.bubblePeer,
     required this.unreadDot,
     required this.unreadRoom,
@@ -178,6 +179,11 @@ class DColorSet {
   /// flatter approximation of itself. Null means "two-stop gradient", which is
   /// what the presets without a mid actually want.
   final Color? bubbleSelfMid;
+
+  /// Вторая средняя точка — для переходов из ЧЕТЫРЁХ цветов («Нефтяная
+  /// плёнка», «Синтвейв», «Ртуть» в наборе от 23.09.2026). `null` — переход
+  /// из двух или трёх цветов, как было.
+  final Color? bubbleSelfMid2;
   final Color bubblePeer;
   /// Счётчик непрочитанного у ОБЫЧНОГО чата — ГОЛУБОЙ.
   ///
@@ -280,6 +286,7 @@ class DColorSet {
     Color? bubbleSelfStart,
     Color? bubbleSelfEnd,
     Color? bubbleSelfMid,
+    Color? bubbleSelfMid2,
     Color? bubblePeer,
     Color? unreadDot,
     Color? unreadRoom,
@@ -326,6 +333,7 @@ class DColorSet {
       bubbleSelfStart: bubbleSelfStart ?? this.bubbleSelfStart,
       bubbleSelfEnd: bubbleSelfEnd ?? this.bubbleSelfEnd,
       bubbleSelfMid: bubbleSelfMid ?? this.bubbleSelfMid,
+      bubbleSelfMid2: bubbleSelfMid2 ?? this.bubbleSelfMid2,
       bubblePeer: bubblePeer ?? this.bubblePeer,
       unreadDot: unreadDot ?? this.unreadDot,
       unreadRoom: unreadRoom ?? this.unreadRoom,

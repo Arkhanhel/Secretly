@@ -116,11 +116,13 @@ DColorSet applyThemePreset(
   Color bubbleStart = accent;
   Color bubbleEnd = accentAlt;
   Color? bubbleMid;
+  Color? bubbleMid2;
   if (bubblePresetId != null && bubblePresetId.isNotEmpty) {
     final b = resolveChatBubbleStylePreset(bubblePresetId);
     bubbleStart = dark ? b.darkTop : b.lightTop;
     bubbleEnd = dark ? b.darkBottom : b.lightBottom;
     bubbleMid = dark ? b.darkMid : b.lightMid;
+    bubbleMid2 = dark ? b.darkMid2 : b.lightMid2;
   }
 
   // NOTE: copyWith cannot set a nullable field back to null, so a preset
@@ -133,6 +135,7 @@ DColorSet applyThemePreset(
     bubbleSelfStart: bubbleStart,
     bubbleSelfEnd: bubbleEnd,
     bubbleSelfMid: bubbleMid,
+    bubbleSelfMid2: bubbleMid2,
     // 🔴 Счётчики непрочитанного НЕ идут за темой оформления. Тема меняет
     // настроение окна, а «тут не прочитано» — это сигнал, и перекрашивать его
     // в цвет обоев значит его гасить.
