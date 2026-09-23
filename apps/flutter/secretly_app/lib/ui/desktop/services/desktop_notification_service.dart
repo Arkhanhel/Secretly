@@ -50,6 +50,26 @@ String desktopCallNotificationBody({
   return name;
 }
 
+/// Показывать ли в баннере кнопки «Ответить» и «Прочитано».
+///
+/// 🔴 ТОЛЬКО КОГДА ОТПРАВИТЕЛЬ НАЗВАН. На нулевом уровне показа баннер
+/// сознательно не говорит, кто написал. Поле ответа на таком баннере позволило
+/// бы любому, кто проходит мимо чужого компьютера, отправить сообщение в
+/// переписку, которую баннер отказывается назвать, — а сам хозяин отвечать
+/// вслепую всё равно не станет.
+///
+/// «Запросы» (`req:`) исключены отдельно: им ещё нечего отвечать, и телефон
+/// поступает так же.
+bool notificationActionsAllowed({
+  required int previewLevel,
+  required String convoId,
+}) {
+  if (previewLevel < 1) return false;
+  final id = convoId.trim();
+  if (id.isEmpty || id.startsWith('req:')) return false;
+  return true;
+}
+
 class DesktopNotificationService {
   DesktopNotificationService({required this.controller});
 
@@ -121,6 +141,16 @@ class DesktopNotificationService {
   bool _doNotDisturb = false;
 
   /// Fires the convoId payload of a tapped notification.
+  /// Категория macOS, к которой привязаны кнопки в баннере.
+  ///
+  /// 🔴 ОТВЕТИТЬ И «ПРОЧИТАНО» ПРЯМО ИЗ УВЕДОМЛЕНИЯ. У телефона это есть с
+  /// самого начала (`DarwinNotificationCategory` в `app_controller.dart`), а на
+  /// компьютере не было — и разница заметнее, чем кажется: окно живёт в трее, и
+  /// короткое «ок» требовало развернуть приложение и найти переписку.
+  static const String _macCategoryId = 'secretly_message';
+  static const String _macReplyActionId = 'secretly_reply';
+  static const String _macMarkReadActionId = 'secretly_mark_read';
+
   Stream<String> get onTap => _tapController.stream;
 
   int get previewLevel => _previewLevel;
@@ -277,10 +307,11 @@ class DesktopNotificationService {
       return;
     }
     try {
-      const macSettings = DarwinInitializationSettings(
+      final macSettings = DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
         requestSoundPermission: true,
+        notificationCategories: _macCategories(),
       );
       final linuxSettings = LinuxInitializationSettings(
         defaultActionName: _l10n.desktopNotifOpen,
@@ -390,19 +421,55 @@ class DesktopNotificationService {
     final showText = _previewLevel >= 2;
     final title = showSender ? evt.title : _l10n.appTitle;
     final body = showText ? evt.body : _l10n.notificationBodyNewMessage;
-    await _present(id: id, title: title, body: body, payload: evt.convoId);
+    final canAct = notificationActionsAllowed(
+      previewLevel: _previewLevel,
+      convoId: evt.convoId,
+    );
+    await _present(
+      id: id,
+      title: title,
+      body: body,
+      payload: evt.convoId,
+      withActions: canAct,
+    );
   }
 
   /// Показывает уведомление тем способом, который умеет эта система.
   ///
   /// Нажатие ведёт в ту же переписку обоими путями: полоса уведомлений
   /// бесполезна, если по ней нельзя попасть в разговор.
+  /// Кнопки в баннере. Подписи — те же, что у телефона: одно действие не может
+  /// называться на двух устройствах по-разному.
+  List<DarwinNotificationCategory> _macCategories() =>
+      <DarwinNotificationCategory>[
+        DarwinNotificationCategory(
+          _macCategoryId,
+          actions: <DarwinNotificationAction>[
+            DarwinNotificationAction.text(
+              _macReplyActionId,
+              _l10n.chatMenuReply,
+              buttonTitle: _l10n.send,
+              placeholder: _l10n.messageHint,
+            ),
+            DarwinNotificationAction.plain(
+              _macMarkReadActionId,
+              _l10n.notificationActionMarkRead,
+            ),
+          ],
+        ),
+      ];
+
   Future<void> _present({
     required int id,
     required String title,
     required String body,
     required String payload,
     bool timeSensitive = false,
+
+    /// Показывать ли кнопки «Ответить» и «Прочитано». Решение принимает
+    /// вызывающий: у звонка их быть не должно, у сообщения — должны, но только
+    /// когда отправитель назван.
+    bool withActions = false,
   }) async {
     if (_usesLocalNotifier) {
       try {
@@ -429,6 +496,11 @@ class DesktopNotificationService {
             presentAlert: true,
             presentBanner: true,
             presentSound: _soundEnabled,
+            // 🔴 Группировка ПО ПЕРЕПИСКЕ. Без неё оживший разговор оставляет
+            // столбик отдельных баннеров, в котором не видно, сколько человек
+            // писало. Система складывает их в одну стопку — как на телефоне.
+            threadIdentifier: payload.isEmpty ? null : payload,
+            categoryIdentifier: withActions ? _macCategoryId : null,
             interruptionLevel: timeSensitive
                 ? InterruptionLevel.timeSensitive
                 : null,
@@ -475,7 +547,44 @@ class DesktopNotificationService {
   void _onResponse(NotificationResponse response) {
     final payload = response.payload?.trim() ?? '';
     if (payload.isEmpty) return;
+    if (response.notificationResponseType ==
+        NotificationResponseType.selectedNotificationAction) {
+      unawaited(_handleAction(response, payload));
+      return;
+    }
     _tapController.add(payload);
+  }
+
+  /// Нажали кнопку в баннере.
+  ///
+  /// 🔴 Зовутся ТЕ ЖЕ открытые вызовы контроллера, которыми пользуется телефон
+  /// (`sendMessage` / `sendGroupMessage` / `markChatRead`). Своего пути отправки
+  /// здесь нет и быть не должно: сообщение, ушедшее мимо общего пути, прошло бы
+  /// мимо очереди, повторов и шифрования комнаты.
+  Future<void> _handleAction(
+    NotificationResponse response,
+    String convoId,
+  ) async {
+    final actionId = (response.actionId ?? '').trim();
+    try {
+      if (actionId == _macReplyActionId) {
+        final text = (response.input ?? '').trim();
+        if (text.isEmpty) return;
+        if (convoId.startsWith('group:')) {
+          await controller.sendGroupMessage(groupId: convoId, text: text);
+        } else {
+          await controller.sendMessage(peerProfileId: convoId, text: text);
+        }
+        return;
+      }
+      if (actionId == _macMarkReadActionId) {
+        await controller.markChatRead(peerProfileId: convoId);
+      }
+    } catch (_) {
+      // Отправка из баннера — удобство, а не единственный путь: провал не
+      // должен ронять приём сообщений. Человек увидит, что ответа нет, в самой
+      // переписке — там же, где его обычно и проверяет.
+    }
   }
 
   Future<void> dispose() async {

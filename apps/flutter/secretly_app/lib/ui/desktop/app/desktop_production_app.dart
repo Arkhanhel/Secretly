@@ -46,6 +46,7 @@ import '../services/desktop_deleted_chats.dart';
 import '../services/desktop_app_lock_service.dart';
 import '../../../security/app_security_manager.dart' show SecurityLockScope;
 import '../../security_lock_flow.dart' show AppSecurityLockOverlay;
+import '../services/desktop_dock_badge_service.dart';
 import '../services/desktop_notification_service.dart';
 import '../services/desktop_ui_prefs.dart';
 import '../services/desktop_window_activity.dart';
@@ -339,6 +340,9 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   /// tick. Created per controller instance — [_restart] replaces the
   /// controller wholesale, so the view model goes with it.
   DesktopAppViewModel? _vm;
+
+  /// Число непрочитанных на значке приложения в Dock (macOS).
+  final DesktopDockBadgeService _dockBadge = DesktopDockBadgeService();
 
   @override
   void initState() {
@@ -974,6 +978,10 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       }
       if (total == _lastTrayUnread) return;
       _lastTrayUnread = total;
+      // 🔴 Значок в Dock — ЕДИНСТВЕННЫЙ видимый след непрочитанного, когда окно
+      // спрятано: подсказку в трее надо ещё навести и подождать, а заголовка у
+      // спрятанного окна нет вовсе.
+      unawaited(_dockBadge.set(total));
       try {
         await trayManager.setToolTip(
           total > 0 ? l10n.desktopUnreadTitle(total) : 'Secretly',
@@ -1275,6 +1283,10 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     await _securitySub?.cancel();
     _vm?.dispose();
     _vm = null;
+    // Чужое число на своём значке хуже, чем его отсутствие: при смене
+    // профиля значок снимается сразу, не дожидаясь пересчёта.
+    _lastTrayUnread = -1;
+    unawaited(_dockBadge.clear());
     try {
       await _controller.dispose();
     } catch (_) {}
@@ -1311,6 +1323,10 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     _syncStatus = null;
     _vm?.dispose();
     _vm = null;
+    // Чужое число на своём значке хуже, чем его отсутствие: при смене
+    // профиля значок снимается сразу, не дожидаясь пересчёта.
+    _lastTrayUnread = -1;
+    unawaited(_dockBadge.clear());
     PeerHistoryService.instance.detach();
     _controller.dispose();
     _lockService.dispose();
@@ -1532,6 +1548,20 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
         colorScheme: ColorScheme.fromSeed(
           seedColor: colors.accentPrimary,
           brightness: _controller.darkMode ? Brightness.dark : Brightness.light,
+        ),
+      ),
+      // 🔴 РАЗМЕР ТЕКСТА — ОДНОЙ ТОЧКОЙ НА ВСЁ ОКНО, а не настройкой в каждом
+      // стиле. `MediaQuery` здесь охватывает и окна поверх (настройки, просмотр,
+      // диалоги): они строятся тем же навигатором и наследуют его. Иначе
+      // крупный текст был бы только в переписке, а в настройках прежний — и
+      // человек решил бы, что настройка не сработала.
+      builder: (ctx, child) => ValueListenableBuilder<double>(
+        valueListenable: DesktopUiPrefs.textScale,
+        builder: (ctx2, scale, _) => MediaQuery(
+          data: MediaQuery.of(ctx2).copyWith(
+            textScaler: TextScaler.linear(scale),
+          ),
+          child: child ?? const SizedBox.shrink(),
         ),
       ),
       home: ValueListenableBuilder<bool>(

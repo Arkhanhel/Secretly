@@ -13,7 +13,8 @@ import '../primitives/verified_badge.dart';
 import '../../../app/message_command_utils.dart' show RoomTopicRef;
 import '../../room_topic_marks.dart';
 import '../design/tokens.dart';
-import 'message_bubble.dart' show DeliveryStatus, deliveryTickGlyph;
+import 'message_bubble.dart'
+    show DeliveryStatus, deliveryStatusLabel, deliveryTickGlyph;
 import '../primitives/avatar.dart';
 import '../primitives/context_menu.dart';
 import '../primitives/desktop_text_field.dart';
@@ -550,15 +551,19 @@ class _ChatListPanelState extends State<ChatListPanel> {
               prefixIcon: FluentIcons.search_24_regular,
               suffixIcon: _query.isEmpty
                   ? null
-                  : GestureDetector(
-                      onTap: () {
-                        setState(() => _query = '');
-                        _search.clear();
-                      },
-                      child: Icon(
-                        FluentIcons.dismiss_circle_24_regular,
-                        size: 16,
-                        color: c.textSecondary,
+                  : Semantics(
+                      button: true,
+                      label: AppLocalizations.of(context)!.clear,
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() => _query = '');
+                          _search.clear();
+                        },
+                        child: Icon(
+                          FluentIcons.dismiss_circle_24_regular,
+                          size: 16,
+                          color: c.textSecondary,
+                        ),
                       ),
                     ),
               onChanged: (v) => setState(() => _query = v),
@@ -1404,7 +1409,28 @@ abstract final class ChatRowGeometry {
 /// Счётчик непрочитанного — один на обычную и свёрнутую строку списка.
 ///
 /// [onFill] — строка выделена и залита цветом окна.
+/// Значок непрочитанного: рисунок — числом, вслух — числом СО СЛОВОМ.
+///
+/// 🔴 В обходе значок читается сразу после превью, и голое число там сливается
+/// со временем: «Максим, 11:16, привет, три» не говорит, чего именно три.
+/// Склонение берётся у той же строки, что и заголовок окна.
+///
+/// [Builder] здесь ради `context`: у обоих мест вызова его под рукой нет, а
+/// протаскивать его через две подписи ради подписи — хуже, чем взять на месте.
 Widget _chatUnreadBadge(
+  DColorSet c,
+  ChatListItem item, {
+  required bool onFill,
+}) => Builder(
+  builder: (ctx) => Semantics(
+    container: true,
+    excludeSemantics: true,
+    label: AppLocalizations.of(ctx)?.desktopThreadUnreadCount(item.unread),
+    child: _chatUnreadBadgeVisual(c, item, onFill: onFill),
+  ),
+);
+
+Widget _chatUnreadBadgeVisual(
   DColorSet c,
   ChatListItem item, {
   required bool onFill,
@@ -1935,28 +1961,30 @@ class _DeliveryTick extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final read = delivery == ChatDelivery.read;
+    // Состояние считается ОДИН раз: оно нужно и для рисунка, и для подписи
+    // экранному диктору, а две копии `switch` разошлись бы.
+    final status = switch (delivery) {
+      ChatDelivery.read => DeliveryStatus.read,
+      ChatDelivery.delivered => DeliveryStatus.delivered,
+      _ => DeliveryStatus.sent,
+    };
+    final label = deliveryStatusLabel(status, AppLocalizations.of(context)!);
     if (onFill) {
       return Padding(
         padding: const EdgeInsets.only(left: 2),
         child: deliveryTickGlyph(
-          switch (delivery) {
-            ChatDelivery.read => DeliveryStatus.read,
-            ChatDelivery.delivered => DeliveryStatus.delivered,
-            _ => DeliveryStatus.sent,
-          },
+          status,
           Colors.white,
+          semanticsLabel: label,
         ),
       );
     }
     return Padding(
       padding: const EdgeInsets.only(left: 2),
       child: deliveryTickGlyph(
-        switch (delivery) {
-          ChatDelivery.read => DeliveryStatus.read,
-          ChatDelivery.delivered => DeliveryStatus.delivered,
-          _ => DeliveryStatus.sent,
-        },
+        status,
         read ? colors.deliveryIndicator : colors.textTertiary,
+        semanticsLabel: label,
       ),
     );
   }

@@ -1170,7 +1170,13 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
 
   void _scrollToCurrent() {
     if (_matchIndices.isEmpty) return;
-    final msgIdx = _matchIndices[_matchCursor];
+    _scrollToMessage(_matchIndices[_matchCursor]);
+  }
+
+  /// Прокрутка к сообщению по его месту в списке. Общая для поиска по тексту и
+  /// перехода к дате: два способа доехать до одного и того же места разошлись
+  /// бы, как разошлись когда-то две копии галочек доставки.
+  void _scrollToMessage(int msgIdx) {
     if (msgIdx < 0 || msgIdx >= widget.messages.length) return;
     final id = widget.messages[msgIdx].id;
     // Use the same anchor GlobalKey we attach to the bubble for popovers —
@@ -1186,6 +1192,33 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
         curve: DMotion.easeOutCubic,
       );
     }
+  }
+
+  /// «Перейти к дате»: календарь вместо барабана.
+  ///
+  /// 🔴 На телефоне это барабан из трёх колёс (`search_date_carousel.dart`) —
+  /// там он уместен, пальцем крутить удобно. На компьютере крутить колесо
+  /// мышью мучительно, а системный календарь человек уже знает и он сам
+  /// переведён на все наши языки: своя копия была бы хуже и требовала бы
+  /// перевода заново.
+  Future<void> _goToDate() async {
+    final msgs = widget.messages;
+    if (msgs.isEmpty) return;
+    final stamps = [for (final m in msgs) m.timestampMs];
+    final first = DateTime.fromMillisecondsSinceEpoch(stamps.first);
+    final last = DateTime.fromMillisecondsSinceEpoch(stamps.last);
+    // Границы — по самой переписке: предлагать дни, которых в ней нет, значит
+    // обещать несуществующее.
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: last,
+      firstDate: DateTime(first.year, first.month, first.day),
+      lastDate: last,
+    );
+    if (picked == null || !mounted) return;
+    final idx = indexForDate(stamps, picked);
+    if (idx == null) return;
+    _scrollToMessage(idx);
   }
 
   KeyEventResult _handleShortcut(KeyEvent event) {
@@ -1355,6 +1388,9 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                         current: _matchIndices.isEmpty ? 0 : _matchCursor + 1,
                         hasQuery: _searchQuery.isNotEmpty,
                         onChanged: _runSearch,
+                        onGoToDate: widget.messages.isEmpty
+                            ? null
+                            : () => unawaited(_goToDate()),
                         onPrev: _matchIndices.isEmpty ? null : _prevMatch,
                         onNext: _matchIndices.isEmpty ? null : _nextMatch,
                         onClose: widget.onToggleSearch,
@@ -2021,24 +2057,28 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
             children: [
               Material(
                 color: Colors.transparent,
-                child: HoverListener(
-                  onTap: () => _toBottom(),
-                  builder: (ctx, hovered, pressed) => Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: hovered ? c.elevated : c.chatList,
-                      borderRadius: BorderRadius.circular(DRadii.pill),
-                      border: Border.all(color: c.borderSubtle),
-                      boxShadow: DShadows.card,
-                    ),
-                    child: Icon(
-                      FluentIcons.arrow_down_24_regular,
-                      size: 18,
-                      color: c.textPrimary,
+                child: Semantics(
+                         button: true,
+                         label: AppLocalizations.of(context)!.desktopThreadScrollToBottom,
+                         child: HoverListener(
+                    onTap: () => _toBottom(),
+                    builder: (ctx, hovered, pressed) => Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: hovered ? c.elevated : c.chatList,
+                        borderRadius: BorderRadius.circular(DRadii.pill),
+                        border: Border.all(color: c.borderSubtle),
+                        boxShadow: DShadows.card,
+                      ),
+                      child: Icon(
+                        FluentIcons.arrow_down_24_regular,
+                        size: 18,
+                        color: c.textPrimary,
+                      ),
                     ),
                   ),
-                ),
+                       ),
               ),
               if (_scrolledUp && unread > 0)
                 Positioned(
@@ -3069,6 +3109,25 @@ class _PinnedBar extends StatelessWidget {
   }
 }
 
+/// Первое сообщение того дня или, если в тот день писать не о чем было,
+/// ближайшее ПОЗЖЕ.
+///
+/// 🔴 «Ближайшее позже», а не «ближайшее вообще». Человек, выбирающий 3 июня,
+/// ищет начало разговора того дня и готов читать вниз. Прыжок НАЗАД, в 28 мая,
+/// выглядел бы как промах: он увидел бы переписку, к которой не тянулся, и не
+/// понял бы, сработал ли выбор даты.
+///
+/// Пусто — `null`; позже выбранного дня ничего нет — последнее сообщение: это
+/// честнее, чем не сделать ничего и оставить человека гадать.
+int? indexForDate(List<int> timestampsMs, DateTime day) {
+  if (timestampsMs.isEmpty) return null;
+  final from = DateTime(day.year, day.month, day.day).millisecondsSinceEpoch;
+  for (var i = 0; i < timestampsMs.length; i++) {
+    if (timestampsMs[i] >= from) return i;
+  }
+  return timestampsMs.length - 1;
+}
+
 class _SearchBanner extends StatelessWidget {
   const _SearchBanner({
     required this.controller,
@@ -3077,6 +3136,7 @@ class _SearchBanner extends StatelessWidget {
     required this.current,
     required this.hasQuery,
     required this.onChanged,
+    required this.onGoToDate,
     required this.onPrev,
     required this.onNext,
     required this.onClose,
@@ -3088,6 +3148,9 @@ class _SearchBanner extends StatelessWidget {
   final int current;
   final bool hasQuery;
   final ValueChanged<String> onChanged;
+
+  /// «Перейти к дате». `null` — переписка пуста, и переходить некуда.
+  final VoidCallback? onGoToDate;
   final VoidCallback? onPrev;
   final VoidCallback? onNext;
   final VoidCallback? onClose;
@@ -3146,6 +3209,11 @@ class _SearchBanner extends StatelessWidget {
             ),
             const SizedBox(width: DSpace.s),
           ],
+          DesktopIconButton(
+            icon: FluentIcons.calendar_24_regular,
+            tooltip: l10n.desktopThreadGoToDate,
+            onPressed: onGoToDate,
+          ),
           DesktopIconButton(
             icon: FluentIcons.chevron_up_24_regular,
             tooltip: l10n.desktopThreadPrevMatch,

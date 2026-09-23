@@ -50,6 +50,7 @@ class DesktopUiPrefs {
   static const String _kCamera = 'desktop_preferred_camera_v1';
   static const String _kMic = 'desktop_preferred_mic_v1';
   static const String _kCustomAccent = 'desktop_custom_accent_v1';
+  static const String _kTextScale = 'desktop_text_scale_v1';
   static const String _kHoverBar = 'desktop_message_hover_bar_v1';
   static const String _kLinkPreviews = 'desktop_link_previews_v1';
 
@@ -120,6 +121,36 @@ class DesktopUiPrefs {
   /// внешний вид, которого никто не выбирал.
   static final ValueNotifier<int> customAccentArgb = ValueNotifier<int>(0);
 
+  /// Размер текста в окне: множитель 1,0 — как нарисовано.
+  ///
+  /// 🔴 ЭТО РАЗМЕР ТЕКСТА, А НЕ МАСШТАБ ВСЕГО ОКНА, и названо так нарочно.
+  /// Растянуть окно целиком значило бы растянуть отступы, значки и рамки — то
+  /// есть пересчитать раскладку, выверенную по макету до точки. Текст же лежит
+  /// в строках с ЗАДАННОЙ МИНИМАЛЬНОЙ высотой и растёт, не ломая их.
+  ///
+  /// Обещать «масштаб интерфейса», а дать размер текста было бы неправдой —
+  /// подпись в настройках говорит ровно то, что делает переключатель.
+  static final ValueNotifier<double> textScale = ValueNotifier<double>(1.0);
+
+  /// Разрешённые ступени. Список закрытый: произвольное число из испорченной
+  /// настройки не должно превращать окно в нечитаемое.
+  static const List<double> textScaleSteps = <double>[0.9, 1.0, 1.15, 1.3, 1.5];
+
+  /// Приводит любое значение к ближайшей ступени.
+  static double normalizeTextScale(double? raw) {
+    if (raw == null || !raw.isFinite) return 1.0;
+    var best = 1.0;
+    var bestDiff = double.infinity;
+    for (final s in textScaleSteps) {
+      final d = (s - raw).abs();
+      if (d < bestDiff) {
+        bestDiff = d;
+        best = s;
+      }
+    }
+    return best;
+  }
+
   static bool _loaded = false;
 
   /// Loads persisted values. Safe to call more than once; later calls are
@@ -135,10 +166,22 @@ class DesktopUiPrefs {
       preferredCameraId.value = prefs.getString(_kCamera) ?? '';
       preferredMicId.value = prefs.getString(_kMic) ?? '';
       customAccentArgb.value = prefs.getInt(_kCustomAccent) ?? 0;
+        textScale.value = normalizeTextScale(prefs.getDouble(_kTextScale));
     } catch (_) {
       // Defaults already hold — a preferences failure must not block boot.
     }
     _loaded = true;
+  }
+
+  static Future<void> setTextScale(double value) async {
+    final v = normalizeTextScale(value);
+    textScale.value = v;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_kTextScale, v);
+    } catch (_) {
+      // В памяти уже применено; просто не переживёт перезапуск.
+    }
   }
 
   static Future<void> setEnterToSend(bool value) async {

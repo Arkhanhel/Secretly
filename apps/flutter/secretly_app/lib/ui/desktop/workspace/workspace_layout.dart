@@ -355,15 +355,19 @@ class _WorkspaceLayoutState extends State<WorkspaceLayout> {
                     prefixIcon: FluentIcons.search_24_regular,
                     suffixIcon: _query.isEmpty
                         ? null
-                        : GestureDetector(
-                            onTap: () {
-                              _search.clear();
-                              _applyQuery('');
-                            },
-                            child: Icon(
-                              FluentIcons.dismiss_circle_24_regular,
-                              size: 15,
-                              color: c.textSecondary,
+                        : Semantics(
+                            button: true,
+                            label: AppLocalizations.of(context)!.clear,
+                            child: GestureDetector(
+                              onTap: () {
+                                _search.clear();
+                                _applyQuery('');
+                              },
+                              child: Icon(
+                                FluentIcons.dismiss_circle_24_regular,
+                                size: 15,
+                                color: c.textSecondary,
+                              ),
                             ),
                           ),
                     onChanged: _applyQuery,
@@ -738,7 +742,14 @@ class WorkspaceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
-    return HoverListener(
+    // 🔴 Название строки уходит ВГЛУБЬ. Переключатель стоит в `trailing`, то
+    // есть его собирает вызывающий, а не строка, — дотянуться до него правкой
+    // здесь нельзя. Передавать подпись в каждом из двадцати восьми мест
+    // значило бы двадцать восемь поводов забыть; унаследованное значение
+    // забыть нельзя, и новые строки получают подпись даром.
+    return _WorkspaceRowLabel(
+      label: label,
+      child: HoverListener(
       onTap: onTap,
       cursor: onTap == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
       builder: (ctx, h, p) {
@@ -784,6 +795,7 @@ class WorkspaceRow extends StatelessWidget {
           ),
         );
       },
+      ),
     );
   }
 }
@@ -806,6 +818,27 @@ class WorkspaceSwitch extends StatelessWidget {
   final ValueChanged<bool> onChanged;
 
   @override
-  Widget build(BuildContext context) =>
-      DesktopSwitch(value: value, onChanged: onChanged);
+  Widget build(BuildContext context) => DesktopSwitch(
+    value: value,
+    onChanged: onChanged,
+    semanticsLabel: _WorkspaceRowLabel.of(context),
+  );
+}
+
+/// Название строки настройки — вглубь, для тех, кто внутри неё нарисован.
+///
+/// 🔴 Существует ради экранного диктора. Переключатель в строке — отдельный
+/// предмет обхода, и своего имени у него нет: имя написано слева текстом,
+/// который к нему никак не привязан. Отсюда переключатель берёт его сам.
+class _WorkspaceRowLabel extends InheritedWidget {
+  const _WorkspaceRowLabel({required this.label, required super.child});
+
+  final String label;
+
+  static String? of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<_WorkspaceRowLabel>()
+      ?.label;
+
+  @override
+  bool updateShouldNotify(_WorkspaceRowLabel old) => old.label != label;
 }

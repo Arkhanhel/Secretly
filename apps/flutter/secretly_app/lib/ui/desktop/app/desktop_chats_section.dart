@@ -6127,12 +6127,16 @@ class _SendErrorBanner extends StatelessWidget {
               ),
             ),
             const SizedBox(width: DSpace.s),
-            GestureDetector(
-              onTap: onDismiss,
-              child: Icon(
-                FluentIcons.dismiss_24_regular,
-                size: 16,
-                color: c.textSecondary,
+            Semantics(
+              button: true,
+              label: AppLocalizations.of(context)!.close,
+              child: GestureDetector(
+                onTap: onDismiss,
+                child: Icon(
+                  FluentIcons.dismiss_24_regular,
+                  size: 16,
+                  color: c.textSecondary,
+                ),
               ),
             ),
           ],

@@ -45,11 +45,13 @@ import '../services/desktop_login_item_service.dart';
 import '../services/desktop_notification_service.dart';
 import '../primitives/desktop_segmented.dart';
 import '../primitives/desktop_tooltip.dart';
+import '../services/desktop_global_hotkey_service.dart';
 import '../services/desktop_ui_prefs.dart';
 import '../app/desktop_media_send.dart' show pickDesktopAttachments;
 import '../shell/shortcuts_help.dart' show ShortcutsList;
 import 'support_attachment.dart';
 import 'support_sent.dart';
+import 'delivery_diagnostics.dart';
 import 'workspace_layout.dart';
 
 /// Settings workspace — INLINE in the content pane, NOT a modal.
@@ -1140,6 +1142,36 @@ class _AppearancePaneState extends State<_AppearancePane> {
                   if (ctrl == null || v == 'auto') return;
                   unawaited(ctrl.setDarkMode(v == 'dark'));
                 },
+              ),
+            ),
+          ),
+        ),
+        WorkspaceCard(
+          title: l10n.desktopAppearanceTextSize,
+          description: l10n.desktopAppearanceTextSizeHint,
+          child: WorkspaceRow(
+            label: l10n.desktopAppearanceTextSize,
+            icon: FluentIcons.text_font_size_24_regular,
+            // 🔴 СТУПЕНИ, А НЕ ПОЛЗУНОК. Ползунок даёт произвольное число, при
+            // котором раскладка ведёт себя непредсказуемо, а вернуться к «как
+            // было» становится нечем. Пять ступеней всегда можно обойти и
+            // вернуться ровно на 100 %.
+            trailing: ValueListenableBuilder<double>(
+              valueListenable: DesktopUiPrefs.textScale,
+              builder: (ctx, scale, _) => DesktopSegmented<double>(
+                values: DesktopUiPrefs.textScaleSteps,
+                // 🔴 ЗНАК ПРОЦЕНТА СТАВИТСЯ ПО-РАЗНОМУ. В английском это
+                // «90%» вплотную, в русском и французском — «90 %» через
+                // неразрывный пробел. Собранная руками строка была бы верна
+                // ровно в одном языке из восьми, поэтому её собирает `intl`.
+                labels: [
+                  for (final s in DesktopUiPrefs.textScaleSteps)
+                    NumberFormat.percentPattern(
+                      Localizations.localeOf(context).toString(),
+                    ).format(s),
+                ],
+                value: scale,
+                onChanged: (v) => unawaited(DesktopUiPrefs.setTextScale(v)),
               ),
             ),
           ),
@@ -3709,12 +3741,84 @@ class _StorageBar extends StatelessWidget {
 /// Своей таблицы здесь НЕТ намеренно: она одна, в `shortcuts_help.dart`. Две
 /// таблицы про одни и те же клавиши разошлись бы на первой же новой
 /// комбинации, и тогда одна из них начала бы врать.
-class _ShortcutsPane extends StatelessWidget {
+class _ShortcutsPane extends StatefulWidget {
   const _ShortcutsPane();
 
   @override
+  State<_ShortcutsPane> createState() => _ShortcutsPaneState();
+}
+
+class _ShortcutsPaneState extends State<_ShortcutsPane> {
+  final DesktopGlobalHotKeyService _hotkey = DesktopGlobalHotKeyService();
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_hotkey.load());
+  }
+
+  @override
+  void dispose() {
+    _hotkey.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const _PaneScaffold(children: [ShortcutsList()]);
+    final l10n = AppLocalizations.of(context)!;
+    final c = DColors.of(context);
+    return _PaneScaffold(
+      children: [
+        if (_hotkey.supported)
+          WorkspaceCard(
+            title: l10n.desktopHotkeyGlobalShow,
+            description: l10n.desktopHotkeyGlobalHint,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _hotkey.enabled,
+              builder: (ctx, on, _) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  WorkspaceRow(
+                    label: l10n.desktopHotkeyGlobalShow,
+                    // Сочетание показано прямо в подписи: настройка, которая не
+                    // говорит, ЧТО нажимать, бесполезна.
+                    description: '⌥⌘S',
+                    icon: FluentIcons.keyboard_24_regular,
+                    trailing: WorkspaceSwitch(
+                      value: on,
+                      onChanged: (v) async {
+                        final ok = await _hotkey.setEnabled(v);
+                        if (!ok && mounted) setState(() {});
+                      },
+                    ),
+                  ),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _hotkey.taken,
+                    builder: (ctx2, taken, _) => taken
+                        ? Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              DSpace.l,
+                              0,
+                              DSpace.l,
+                              DSpace.m,
+                            ),
+                            // 🔴 Занятое сочетание — НЕ наша ошибка и не повод
+                            // молчать: переключатель вернулся назад, и человек
+                            // должен знать почему, иначе решит, что сломались мы.
+                            child: Text(
+                              l10n.desktopHotkeyGlobalTaken,
+                              style: DType.label.copyWith(color: c.danger),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        const ShortcutsList(),
+      ],
+    );
   }
 }
 
@@ -5021,13 +5125,22 @@ class _BackupPaneState extends State<_BackupPane> {
             ),
           ),
         const SizedBox(height: DSpace.m),
-        // 🔴 КЛЮЧ ВОССТАНОВЛЕНИЯ — ЕДИНСТВЕННОЕ, ЧТО СПАСАЕТ ПРИ ПОТЕРЕ ВСЕГО.
+        // 🔴 НАБОР ВОССТАНОВЛЕНИЯ — ЕДИНСТВЕННОЕ, ЧТО СПАСАЕТ ПРИ ПОТЕРЕ ВСЕГО.
         //
         // На десктопе его не было НИ ОДНОЙ точки входа, хотя резервные копии
         // здесь есть давно. Разница между ними существенная: копия это данные,
-        // а ключ — способ вернуть себе САМ ПРОФИЛЬ, когда устройств не
-        // осталось. Человек, у которого есть копия и нет ключа, не восстановит
-        // ничего.
+        // а набор — способ вернуть себе САМ ПРОФИЛЬ, когда устройств не
+        // осталось. Человек, у которого есть копия и нет набора, не
+        // восстановит ничего.
+        //
+        // 🔴 НАЗВАНИЕ ОДНО НА ВСЁ ОКНО (23.09.2026). Здесь стояло «ключ
+        // восстановления», а на экране входа — «набор восстановления», при том
+        // что обе кнопки зовут ОДНУ функцию `runRecoveryKitExport`. Человеку
+        // при входе говорили «сохраните набор», а через месяц он искал это в
+        // настройках и видел «ключ» — и не был уверен, то же ли это. Для
+        // единственного, что спасает профиль, такая неуверенность недопустима.
+        // Выбрано «набор»: это перевод телефонного «Recovery Kit», а «ключ»
+        // вдобавок обещал строку, тогда как отдаётся целый набор.
         //
         // Экран показа ключа берём у телефона целиком: там уже продуманы
         // предупреждения и вид «бумажного» ключа, а сверх этого экран ничего не
@@ -5282,8 +5395,15 @@ class _SupportPaneState extends State<_SupportPane> {
             title: l10n.desktopSupportUnavailable,
             child: Text(
               l10n.desktopSupportUnavailableHint,
-              style: DType.label.copyWith(color: c.textSecondary, height: 1.4),
+                style: DType.label.copyWith(color: c.textSecondary, height: 1.4),
             ),
+          ),
+          // 🔴 Диагностика показывается ДАЖЕ когда канал обращений недоступен.
+          // Очередь стоит независимо от того, можем ли мы принять письмо, — и
+          // как раз тогда человеку нужнее всего увидеть, что происходит, и
+          // получить сводку, которую можно передать нам любым другим путём.
+          DesktopDeliveryDiagnostics(
+            healthLoader: widget.controller.deliveryHealthCounters,
           ),
         ],
       );
@@ -5291,6 +5411,9 @@ class _SupportPaneState extends State<_SupportPane> {
     final thread = _thread();
     return _PaneScaffold(
       children: [
+        DesktopDeliveryDiagnostics(
+          healthLoader: widget.controller.deliveryHealthCounters,
+        ),
         WorkspaceCard(
           title: l10n.desktopSupportThread,
           description:

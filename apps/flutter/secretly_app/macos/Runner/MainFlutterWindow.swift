@@ -28,6 +28,12 @@ class MainFlutterWindow: NSWindow {
   /// Запуск при входе в систему — см. [LoginItemBridge].
   private let loginItemBridge = LoginItemBridge()
 
+  /// Число непрочитанных на значке в Dock — см. [DockBadgeBridge].
+  private let dockBadgeBridge = DockBadgeBridge()
+
+  /// Общесистемное «показать Secretly» — см. [GlobalHotKeyBridge].
+  private let globalHotKeyBridge = GlobalHotKeyBridge()
+
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     let windowFrame = self.frame
@@ -52,6 +58,8 @@ class MainFlutterWindow: NSWindow {
     pdfRenderBridge.attach(to: flutterViewController.engine.binaryMessenger)
     sparkleBridge.attach(to: flutterViewController.engine.binaryMessenger)
     loginItemBridge.attach(to: flutterViewController.engine.binaryMessenger)
+    dockBadgeBridge.attach(to: flutterViewController.engine.binaryMessenger)
+    globalHotKeyBridge.attach(to: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
   }
