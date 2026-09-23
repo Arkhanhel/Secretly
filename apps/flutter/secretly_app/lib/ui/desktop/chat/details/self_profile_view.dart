@@ -498,6 +498,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                   // края диска, передний — сам край, он проходит ПЕРЕД лицом, и
                   // портрет читается как находящийся внутри дыры, а не
                   // наклеенный на неё. Раньше слой был один.
+                  avatarDiameter: 88,
                   cover: coverBackWidgetFor(_c.myCoverId),
                   coverFront: coverFrontWidgetFor(_c.myCoverId),
                   // 🔴 «Сменить обложку» — кнопка ПОВЕРХ самой обложки, как в

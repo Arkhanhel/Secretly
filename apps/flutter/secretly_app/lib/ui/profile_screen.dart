@@ -2861,10 +2861,20 @@ class _ProfileScreenState extends State<ProfileScreen>
 
           // Back layer under the photo; [myCoverFront] (black hole only) is the
           // near disk edge drawn OVER the photo → avatar sits INSIDE the hole.
+          // 🔴 Сцены, построенные ВОКРУГ фотографии, должны знать, где она
+          // на самом деле стоит. Обложка занимает полосу высотой
+          // `collapsedButtonsTop + 66` во всю ширину, портрет — квадрат
+          // `avatarSize` по центру на высоте `avatarTop`. Доли считаем от
+          // ЭТОЙ полосы, а не от экрана: у сцены своя система координат.
+          final coverH = collapsedButtonsTop + 66;
+          final avatarCenter = Offset(0.5, (avatarTop + avatarSize / 2) / coverH);
+          final coverAvatarRadius = avatarSize / 2 / screenW;
           final myCover = coverBackWidgetFor(
             controller.myCoverId,
             customImagePath: controller.myCoverImagePath,
             customVideoPath: controller.myCoverVideoPath,
+            avatarCenter: avatarCenter,
+            avatarRadius: coverAvatarRadius,
           );
           final myCoverFront = coverFrontWidgetFor(
             controller.myCoverId,

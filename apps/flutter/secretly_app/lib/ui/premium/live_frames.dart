@@ -73,9 +73,18 @@ const Map<String, AvatarFrame> kLiveFrameKinds = <String, AvatarFrame>{
   'chrome': AvatarFrame.chrome,
 };
 
-List<String> get kLiveFrameIds => kLiveFrameKinds.keys.toList(growable: false);
+/// Рамки, пришедшие отдельно от основного набора, — у них нет значения в его
+/// перечислении, и заводить ради двух штук копию перечисления незачем.
+const List<String> kOwnFrameIds = <String>['drift', 'astronaut'];
 
-bool isLiveFrameId(String? id) => id != null && kLiveFrameKinds.containsKey(id);
+List<String> get kLiveFrameIds => <String>[
+  ...kLiveFrameKinds.keys,
+  ...kOwnFrameIds,
+];
+
+bool isLiveFrameId(String? id) =>
+    id != null &&
+    (kLiveFrameKinds.containsKey(id) || kOwnFrameIds.contains(id));
 
 /// Ниже этого размера движения нет вовсе: портрет меньше пальца, и дёргающееся
 /// ухо на нём читается как дефект отрисовки, а не как жизнь.
@@ -98,7 +107,10 @@ const double kLiveFrameFullPx = 24;
 
 /// Персонаж по идентификатору из профиля. `null` — рамка не живая.
 FrameSim? makeLiveFrame(String? id) {
-  final kind = id == null ? null : kLiveFrameKinds[id];
+  if (id == null) return null;
+  final own = createOwnFrameSim(id);
+  if (own != null) return own;
+  final kind = kLiveFrameKinds[id];
   return kind == null ? null : createFrameSim(kind);
 }
 
@@ -172,6 +184,8 @@ const Map<String, double> _kLiveFrameActionSeconds = <String, double>{
   'sleep': 2.6,
   'pixel': 2.0,
   'chrome': 2.4,
+  'drift': 3.4,
+  'astronaut': 3.0,
 };
 
 Duration liveFrameActionDuration(String? id) => Duration(
@@ -270,6 +284,8 @@ const Map<String, Map<String, String>> _kLiveFrameActions = {
   'weather': {'ru': 'Солнце', 'en': 'Sunshine', 'uk': 'Сонце', 'es': 'Sol', 'pt': 'Sol', 'fr': 'Soleil', 'de': 'Sonne'},
   'sleep': {'ru': 'Разбудить', 'en': 'Wake up', 'uk': 'Розбудити', 'es': 'Despertar', 'pt': 'Acordar', 'fr': 'Réveiller', 'de': 'Wecken'},
   'pixel': {'ru': 'Взорвать', 'en': 'Blow up', 'uk': 'Підірвати', 'es': 'Explotar', 'pt': 'Explodir', 'fr': 'Faire exploser', 'de': 'Sprengen'},
+  'drift': {'ru': 'Газу!', 'en': 'Floor it!', 'uk': 'Газу!', 'es': '¡A fondo!', 'pt': 'Acelera!', 'fr': 'Plein gaz !', 'de': 'Vollgas!'},
+  'astronaut': {'ru': 'Оттолкнуть', 'en': 'Push off', 'uk': 'Відштовхнути', 'es': 'Empujar', 'pt': 'Empurrar', 'fr': 'Pousser', 'de': 'Abstoßen'},
   'chrome': {'ru': 'Капнуть', 'en': 'Drip', 'uk': 'Крапнути', 'es': 'Gotear', 'pt': 'Pingar', 'fr': 'Goutte', 'de': 'Tropfen'},
 };
 

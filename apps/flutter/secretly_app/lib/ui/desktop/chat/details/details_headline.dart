@@ -5,6 +5,7 @@ import '../../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
+import '../../../premium/live_covers.dart' show CoverAvatarGeometry;
 import '../../../premium/live_frames.dart';
 import '../../../premium/cosmetics_catalog.dart' show frameById;
 import '../../primitives/context_menu.dart';
@@ -55,9 +56,15 @@ class DetailsHeadline extends StatelessWidget {
     this.menuSections = const <List<CtxMenuItem>>[],
     this.idLine,
     this.trailing,
+    this.avatarDiameter,
   });
 
   final String name;
+
+  /// Диаметр портрета. Нужен только сценам обложки, построенным ВОКРУГ фото:
+  /// без него луна всходит мимо лица, а прожектор светит в пустоту. `null` —
+  /// сцена берёт своё значение по умолчанию.
+  final double? avatarDiameter;
 
   /// Готовый аватар — вместе с обработчиком нажатия и рамкой. Панель
   /// подробностей строит его сама, потому что у контакта и комнаты разные
@@ -385,7 +392,23 @@ class DetailsHeadline extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                cover!,
+                // 🔴 Геометрия портрета — от НАСТОЯЩЕГО размера шапки, а не от
+                // догадки: высота здесь зависит от содержимого (ник, эмодзи,
+                // значки), и посчитать её заранее нельзя.
+                if (avatarDiameter != null)
+                  LayoutBuilder(
+                    builder: (ctx, bc) => CoverAvatarGeometry(
+                      center: Offset(
+                        0.5,
+                        (DSpace.xl3 * 2 + DSpace.s + avatarDiameter! / 2) /
+                            bc.maxHeight,
+                      ),
+                      radius: avatarDiameter! / 2 / bc.maxWidth,
+                      child: cover!,
+                    ),
+                  )
+                else
+                  cover!,
                 DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(

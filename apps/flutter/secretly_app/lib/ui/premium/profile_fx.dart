@@ -20,6 +20,8 @@ import 'package:flutter/scheduler.dart';
 
 part 'profile_fx/util.dart';
 part 'profile_fx/bridge.dart';
+part 'profile_fx/extras.dart';
+part 'profile_fx/extras_drift_astro.dart';
 part 'profile_fx/frames/avatar_frame.dart';
 part 'profile_fx/frames/characters.dart';
 part 'profile_fx/frames/effects.dart';

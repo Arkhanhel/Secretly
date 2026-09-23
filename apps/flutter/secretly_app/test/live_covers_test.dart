@@ -90,6 +90,49 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('🔴 сцена вокруг фото берёт НАСТОЯЩЕЕ место портрета', (
+    tester,
+  ) async {
+    // Без этого луна всходит мимо лица, а прожектор светит в пустоту: у сцены
+    // свои доли, и знает их только экран, который раскладывает шапку.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CoverAvatarGeometry(
+          center: const Offset(0.5, 0.62),
+          radius: 0.21,
+          child: SizedBox(
+            width: 360,
+            height: 240,
+            child: LiveCoverView(id: 'moon_path'),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(tester.takeException(), isNull);
+    // Явно переданное важнее наследуемого — плитка выбора рисует сцену «как
+    // есть», без портрета.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CoverAvatarGeometry(
+          center: const Offset(0.5, 0.62),
+          radius: 0.21,
+          child: SizedBox(
+            width: 360,
+            height: 240,
+            child: LiveCoverView(
+              id: 'moon_path',
+              avatarCenter: const Offset(0.5, 0.36),
+              avatarRadius: 0.1,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 40));
+    expect(tester.takeException(), isNull);
+  });
+
   test('сцены вокруг фотографии помечены', () {
     for (final id in const ['eclipse', 'moon_path', 'ripples', 'spotlight']) {
       expect(liveCoverUsesAvatar(id), isTrue, reason: id);

@@ -58,7 +58,7 @@ void main() {
     });
 
     test('набор перенесён целиком, идентификаторы не столкнулись', () {
-      expect(kLiveFrameIds.length, 24);
+      expect(kLiveFrameIds.length, 26);
       final ids = kAllAvatarFrames.map((f) => f.id).toList();
       expect(ids.toSet().length, ids.length);
       expect(ids.length, kAvatarFrames.length + kLiveFrameIds.length);

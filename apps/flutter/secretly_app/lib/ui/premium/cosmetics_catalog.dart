@@ -478,6 +478,22 @@ const Map<String, Map<String, String>> _kCosmeticNameTranslations = {
     'fr': '8 bits',
     'de': '8-Bit',
   },
+  'drift': {
+    'uk': 'Дрифт',
+    'es': 'Drift',
+    'pt': 'Drift',
+    'pt_BR': 'Drift',
+    'fr': 'Drift',
+    'de': 'Drift',
+  },
+  'astronaut': {
+    'uk': 'Космонавт',
+    'es': 'Astronauta',
+    'pt': 'Astronauta',
+    'pt_BR': 'Astronauta',
+    'fr': 'Astronaute',
+    'de': 'Astronaut',
+  },
   'chrome': {
     'uk': 'Рідкий хром',
     'es': 'Cromo líquido',
@@ -955,6 +971,18 @@ final List<AvatarFrame> kLivingAvatarFrames = [
     builder: (s) => LiveFrameView(size: s, id: 'pixel'),
   ),
   AvatarFrame(
+    id: 'drift',
+    nameRu: 'Дрифт',
+    nameEn: 'Drift',
+    builder: (s) => LiveFrameView(size: s, id: 'drift'),
+  ),
+  AvatarFrame(
+    id: 'astronaut',
+    nameRu: 'Космонавт',
+    nameEn: 'Astronaut',
+    builder: (s) => LiveFrameView(size: s, id: 'astronaut'),
+  ),
+  AvatarFrame(
     id: 'chrome',
     nameRu: 'Жидкий хром',
     nameEn: 'Liquid chrome',
@@ -1279,6 +1307,8 @@ Widget? coverWidgetFor(
   String? coverId, {
   String? customImagePath,
   String? customVideoPath,
+  Offset? avatarCenter,
+  double? avatarRadius,
 }) {
   if (customVideoPath != null && customVideoPath.isNotEmpty) {
     return _VideoCover(
@@ -1297,6 +1327,17 @@ Widget? coverWidgetFor(
           coverById(coverId)?.builder() ?? const SizedBox.shrink(),
     );
   }
+  // 🔴 Сцены, построенные ВОКРУГ фотографии (затмение, дорожка, круги на
+  // воде, прожектор), обязаны знать, где портрет стоит на самом деле: иначе
+  // луна всходит мимо лица, а прожектор светит в пустоту. Значения приходят
+  // от экрана — он один знает свою раскладку.
+  if (isLiveCoverId(coverId) && avatarCenter != null && avatarRadius != null) {
+    return LiveCoverView(
+      id: coverId!,
+      avatarCenter: avatarCenter,
+      avatarRadius: avatarRadius,
+    );
+  }
   return coverById(coverId)?.builder();
 }
 
@@ -1309,6 +1350,8 @@ Widget? coverBackWidgetFor(
   String? coverId, {
   String? customImagePath,
   String? customVideoPath,
+  Offset? avatarCenter,
+  double? avatarRadius,
 }) {
   final custom =
       (customVideoPath != null && customVideoPath.isNotEmpty) ||
@@ -1320,6 +1363,8 @@ Widget? coverBackWidgetFor(
     coverId,
     customImagePath: customImagePath,
     customVideoPath: customVideoPath,
+    avatarCenter: avatarCenter,
+    avatarRadius: avatarRadius,
   );
 }
 

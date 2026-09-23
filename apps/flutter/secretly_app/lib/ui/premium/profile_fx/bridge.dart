@@ -14,4 +14,20 @@ part of '../profile_fx.dart';
 /// сторона — портрет собирают `FramedAvatar` и `Avatar`, — и рамка ложится
 /// сверху прозрачной накладкой. Фабрика `_create` закрыта, но этот файл
 /// является частью той же библиотеки и потому её видит.
-FrameSim createFrameSim(AvatarFrame frame) => frame._create();
+/// Наши рамки, которых в перечислении набора нет вовсе: «Дрифт» и
+/// «Космонавт» пришли отдельной посылкой, см. `extras_drift_astro.dart`.
+FrameSim? createOwnFrameSim(String id) => switch (id) {
+  'drift' => DriftFrame(),
+  'astronaut' => AstronautFrame(),
+  _ => null,
+};
+
+FrameSim createFrameSim(AvatarFrame frame) => switch (frame) {
+  // 🔴 Две рамки мы рисуем СВОИМИ классами, см. `extras.dart`: у наборного
+  // слайма кольцо ровной толщины и капли по таймеру, а у наборной луны
+  // полумесяц вырезан заливкой цвета фона — на светлой обложке это чёрная
+  // клякса. Остальные двадцать два приходят из выгрузки как есть.
+  AvatarFrame.slime => SlimeFrame(),
+  AvatarFrame.sleep => SleepFrame(),
+  _ => frame._create(),
+};

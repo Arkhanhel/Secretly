@@ -60,29 +60,64 @@ bool isLiveCoverId(String? id) => id != null && kLiveCoverKinds.containsKey(id);
 bool liveCoverUsesAvatar(String? id) =>
     kLiveCoverKinds[id]?.usesAvatar ?? false;
 
+/// Где на обложке стоит портрет — доли от её ширины и высоты.
+///
+/// 🔴 НАСЛЕДУЕМОЙ, А НЕ ПАРАМЕТРОМ. Обложку строит `coverBackWidgetFor` — она
+/// общая для телефона, компьютера и плиток выбора и о раскладке экрана ничего
+/// не знает. Экран, который знает, кладёт геометрию над обложкой, и её берут
+/// только те сцены, которым она нужна.
+class CoverAvatarGeometry extends InheritedWidget {
+  const CoverAvatarGeometry({
+    super.key,
+    required this.center,
+    required this.radius,
+    required super.child,
+  });
+
+  final Offset center;
+  final double radius;
+
+  static CoverAvatarGeometry? of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<CoverAvatarGeometry>();
+
+  @override
+  bool updateShouldNotify(CoverAvatarGeometry old) =>
+      old.center != center || old.radius != radius;
+}
+
 /// Живая обложка. Заполняет отведённое место.
 class LiveCoverView extends StatelessWidget {
   const LiveCoverView({
     super.key,
     required this.id,
-    this.avatarCenter = const Offset(0.5, 0.36),
-    this.avatarRadius = 0.1,
+    this.avatarCenter,
+    this.avatarRadius,
     this.animate = true,
+    this.interactive = true,
   });
 
   final String id;
 
   /// Где на обложке стоит портрет — в долях ширины и высоты. Нужно сценам,
   /// построенным вокруг фотографии.
-  final Offset avatarCenter;
-  final double avatarRadius;
+  final Offset? avatarCenter;
+  final double? avatarRadius;
 
   final bool animate;
+
+  /// Сцена следит за пальцем и отзывается на касание. Выключается в плитках
+  /// выбора: там сцен два десятка сразу, и слушатель на каждой ни к чему.
+  final bool interactive;
 
   @override
   Widget build(BuildContext context) {
     final style = kLiveCoverKinds[id];
     if (style == null) return const SizedBox.shrink();
+    // Явно переданное важнее наследуемого: плитка выбора рисует сцену без
+    // портрета и должна показывать её «как есть».
+    final geo = CoverAvatarGeometry.of(context);
+    final center = avatarCenter ?? geo?.center ?? const Offset(0.5, 0.36);
+    final radius = avatarRadius ?? geo?.radius ?? 0.1;
     // 🔴 Те же четыре условия, что и у рамок: настройка «украшения
     // собеседников», немой тикер под закрытым маршрутом, «меньше движения» в
     // системе и нагрев. Набор сам смотрит только на TickerMode и «меньше
@@ -96,11 +131,14 @@ class LiveCoverView extends StatelessWidget {
       child: fx.ProfileCover(
         style: style,
         animate: allowed,
-        avatarCenter: avatarCenter,
-        avatarRadius: avatarRadius,
-        // Обложка — фон под именем и кнопками: она не должна перехватывать
-        // нажатия, которые человек адресует им.
-        interactive: false,
+        avatarCenter: center,
+        avatarRadius: radius,
+        // 🔴 Касание СЦЕНЫ разрешено. `Listener` в наборе не участвует в
+        // разборе жестов и потому не отбирает нажатия у имени, кнопок и
+        // потягивания шапки — те лежат выше в стопке и получают событие
+        // первыми. Зато круги на воде идут от пальца, а прожектор следит за
+        // ним, как и задумано.
+        interactive: interactive && allowed,
       ),
     );
   }
