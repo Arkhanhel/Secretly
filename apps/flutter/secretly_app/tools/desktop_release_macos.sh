@@ -32,6 +32,11 @@
 #                              xcrun notarytool store-credentials secretly \
 #                                --apple-id <id> --team-id 3HF84UAL32 --password <app-specific>
 #   SECRETLY_MAKE_DMG=1      Build a DMG next to the .app.
+#   SECRETLY_BUILD_NAME      Version shown to people, e.g. 1.8.51. Defaults to
+#                            pubspec.yaml — which LAGS BEHIND on purpose (the
+#                            number always comes from flags at release time),
+#                            so a real release must pass this.
+#   SECRETLY_BUILD_NUMBER    Build number, e.g. 610. Same rule.
 #   SECRETLY_UPDATE_BASE_URL Where the DMG and appcast.xml will be published,
 #                            e.g. https://example.com/updates/. When set (and
 #                            with a DMG), the script signs the DMG with the
@@ -122,8 +127,29 @@ fi
 # -------------------------------------------------------------------------
 # R-01: the actual AOT release build.
 # -------------------------------------------------------------------------
+# 🔴 НОМЕР ВЕРСИИ — ИЗ ФЛАГОВ, А НЕ ИЗ pubspec.yaml.
+#
+# В `pubspec.yaml` версия СОЗНАТЕЛЬНО отстаёт: у этого дерева номер на выпуске
+# всегда задаётся флагами, как у телефонных сборок. Для обновлений это не
+# мелочь: номер попадает в перечень версий, и по нему установленные копии
+# решают, есть ли обновление. Собрать выпуск со старым номером значит либо не
+# предложить обновление никому, либо предложить «обновиться» на то, что уже
+# стоит.
+VERSION_ARGS=()
+if [ -n "${SECRETLY_BUILD_NAME:-}" ]; then
+  VERSION_ARGS+=("--build-name=$SECRETLY_BUILD_NAME")
+fi
+if [ -n "${SECRETLY_BUILD_NUMBER:-}" ]; then
+  VERSION_ARGS+=("--build-number=$SECRETLY_BUILD_NUMBER")
+fi
+if [ ${#VERSION_ARGS[@]} -eq 0 ]; then
+  echo "    (no SECRETLY_BUILD_NAME/NUMBER — taking the version from pubspec.yaml,"
+  echo "     which lags behind; fine for a local build, NOT for a release)"
+fi
+
 echo "==> flutter build macos --release --target=$TARGET"
 flutter build macos --release --target="$TARGET" \
+  ${VERSION_ARGS[@]+"${VERSION_ARGS[@]}"} \
   ${DART_DEFINES[@]+"${DART_DEFINES[@]}"} "$@"
 
 APP_DIR="$PROJECT_DIR/build/macos/Build/Products/Release"
@@ -343,7 +369,19 @@ fi
 # R-12: optional DMG.
 # -------------------------------------------------------------------------
 if [ -n "${SECRETLY_MAKE_DMG:-}" ]; then
-  DMG="$APP_DIR/Secretly.dmg"
+  # 🔴 ИМЯ ОБРАЗА НЕСЁТ ВЕРСИЮ, И ЭТО НЕ КОСМЕТИКА.
+  #
+  # Образы раздаются с `Cache-Control: immutable` на год — так и должно быть,
+  # содержимое версии не меняется никогда. Но при постоянном имени
+  # `Secretly.dmg` тот же адрес указывал бы на РАЗНОЕ содержимое от выпуска к
+  # выпуску, и промежуточные узлы весь год отдавали бы старый образ. Человек
+  # видел бы «обновление есть», а скачивал бы прежнюю версию — и подпись в
+  # перечне на неё не сошлась бы.
+  DMG_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+    "$APP/Contents/Info.plist" 2>/dev/null || echo unknown)"
+  DMG_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
+    "$APP/Contents/Info.plist" 2>/dev/null || echo 0)"
+  DMG="$APP_DIR/Secretly-$DMG_VERSION-$DMG_BUILD.dmg"
   echo "==> packaging $DMG"
   rm -f "$DMG"
   STAGE="$(mktemp -d)"
@@ -423,7 +461,7 @@ fi
 echo
 echo "=============================================================="
 echo " RELEASE ARTIFACT: $APP"
-[ -n "${SECRETLY_MAKE_DMG:-}" ] && echo " DMG:              $APP_DIR/Secretly.dmg"
+[ -n "${SECRETLY_MAKE_DMG:-}" ] && echo " DMG:              ${DMG:-$APP_DIR}"
 echo
 # 🔴 ЯРЛЫК ПОДПИСИ НАЗЫВАЛ «Developer ID» ЛЮБОЙ СЕРТИФИКАТ.
 #
