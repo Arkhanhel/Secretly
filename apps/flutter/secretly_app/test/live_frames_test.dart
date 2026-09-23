@@ -344,15 +344,24 @@ void main() {
       }
     });
 
-    testWidgets('маленький портрет не заводит тикера', (tester) async {
+    testWidgets('🔴 список гасит движение, а персонажа оставляет', (
+      tester,
+    ) async {
+      // Решение владельца 23.09.2026: в шапке чата и на значке внизу рамки
+      // живые, в списках — те же персонажи, но неподвижные. Различает их не
+      // размер (52 в списке против 42 в шапке), а МЕСТО: список выключает
+      // `TickerMode`, и живая рамка это видит.
       await tester.pumpWidget(
         const MaterialApp(
-          home: Center(
-            child: FramedAvatar(
-              size: 40,
-              fallbackSeed: 'seed',
-              fallbackName: 'Имя',
-              frameId: 'music',
+          home: TickerMode(
+            enabled: false,
+            child: Center(
+              child: FramedAvatar(
+                size: 52,
+                fallbackSeed: 'seed',
+                fallbackName: 'Имя',
+                frameId: 'music',
+              ),
             ),
           ),
         ),

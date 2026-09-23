@@ -421,7 +421,7 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
     final current = _c.myCoverId;
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      itemCount: kProfileCovers.length + 2,
+      itemCount: kAllProfileCovers.length + 2,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, i) {
         if (i == 0) {
@@ -454,7 +454,7 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
             onTap: _addCustomCover,
           );
         }
-        final cover = kProfileCovers[i - 2];
+        final cover = kAllProfileCovers[i - 2];
         return _CoverTile(
           coverId: cover.id,
           label: cover.nameLocalized(context),
@@ -682,7 +682,16 @@ class _FrameTile extends StatelessWidget {
             Stack(
               alignment: Alignment.center,
               children: [
-                FramedAvatar(
+                // 🔴 СЕТКА ПРЕВЬЮ — БЕЗ ДВИЖЕНИЯ. Плиток сорок четыре, и живые
+                // рамки рисуются каждая сама: десяток видимых на экране — это
+                // от четырёх до двенадцати миллисекунд на кадр, а «Лава-лампа»
+                // и «Аура» с их буфером под размытием стоят втрое дороже
+                // остальных. Набор просит о том же прямо: «для превью в пикере
+                // используйте animate: false». Крупный портрет выше остаётся
+                // живым — он один.
+                TickerMode(
+                  enabled: false,
+                  child: FramedAvatar(
                   size: 72,
                   frameId: frameId,
                   avatarPath: controller.myAvatarPath,
@@ -690,6 +699,7 @@ class _FrameTile extends StatelessWidget {
                   fallbackName: controller.myNickname.trim().isNotEmpty
                       ? controller.myNickname.trim()
                       : 'Secretly',
+                ),
                 ),
                 if (frameId == null)
                   const Positioned(

@@ -17,6 +17,7 @@ import '../wave1_l10n.dart';
 import '../widgets/premium_glass.dart';
 import 'cosmetic_animation_scope.dart';
 import 'cosmetic_motion_gate.dart';
+import 'live_covers.dart';
 import 'live_frames.dart';
 
 /// Built-in catalog of premium animated avatar FRAMES and profile COVERS
@@ -99,6 +100,199 @@ String _cosmeticNameForLocale(
 /// keyed by the catalog id. Frame and cover ids are disjoint except where the
 /// motif is identical (`bears`, `rainbow`), in which case one entry serves both.
 const Map<String, Map<String, String>> _kCosmeticNameTranslations = {
+  // ── living covers (набор profile_fx, 23.09.2026) ──
+  'snow': {
+    'uk': 'Снігопад',
+    'es': 'Nevada',
+    'pt': 'Nevasca',
+    'pt_BR': 'Nevasca',
+    'fr': 'Chute de neige',
+    'de': 'Schneefall',
+  },
+  'aurora_fx': {
+    'uk': 'Сяйво',
+    'es': 'Aurora',
+    'pt': 'Aurora',
+    'pt_BR': 'Aurora',
+    'fr': 'Aurore',
+    'de': 'Polarlicht',
+  },
+  'embers': {
+    'uk': 'Вуглинки',
+    'es': 'Brasas',
+    'pt': 'Brasas',
+    'pt_BR': 'Brasas',
+    'fr': 'Braises',
+    'de': 'Glut',
+  },
+  'mesh': {
+    'uk': 'Меш',
+    'es': 'Malla',
+    'pt': 'Malha',
+    'pt_BR': 'Malha',
+    'fr': 'Maillage',
+    'de': 'Mesh',
+  },
+  'starfall': {
+    'uk': 'Зорепад',
+    'es': 'Lluvia de estrellas',
+    'pt': 'Chuva de estrelas',
+    'pt_BR': 'Chuva de estrelas',
+    'fr': 'Pluie d’étoiles',
+    'de': 'Sternschnuppen',
+  },
+  'synthwave': {
+    'uk': 'Синтвейв',
+    'es': 'Synthwave',
+    'pt': 'Synthwave',
+    'pt_BR': 'Synthwave',
+    'fr': 'Synthwave',
+    'de': 'Synthwave',
+  },
+  'bokeh': {
+    'uk': 'Боке',
+    'es': 'Bokeh',
+    'pt': 'Bokeh',
+    'pt_BR': 'Bokeh',
+    'fr': 'Bokeh',
+    'de': 'Bokeh',
+  },
+  'ocean': {
+    'uk': 'Океан',
+    'es': 'Océano',
+    'pt': 'Oceano',
+    'pt_BR': 'Oceano',
+    'fr': 'Océan',
+    'de': 'Ozean',
+  },
+  'rain_glass': {
+    'uk': 'Дощ по склу',
+    'es': 'Lluvia en el cristal',
+    'pt': 'Chuva no vidro',
+    'pt_BR': 'Chuva no vidro',
+    'fr': 'Pluie sur la vitre',
+    'de': 'Regen am Glas',
+  },
+  'soap_bubbles': {
+    'uk': 'Мильні бульбашки',
+    'es': 'Pompas de jabón',
+    'pt': 'Bolhas de sabão',
+    'pt_BR': 'Bolhas de sabão',
+    'fr': 'Bulles de savon',
+    'de': 'Seifenblasen',
+  },
+  'topography': {
+    'uk': 'Топографія',
+    'es': 'Topografía',
+    'pt': 'Topografia',
+    'pt_BR': 'Topografia',
+    'fr': 'Topographie',
+    'de': 'Topografie',
+  },
+  'silk': {
+    'uk': 'Шовк',
+    'es': 'Seda',
+    'pt': 'Seda',
+    'pt_BR': 'Seda',
+    'fr': 'Soie',
+    'de': 'Seide',
+  },
+  'constellations': {
+    'uk': 'Сузір’я',
+    'es': 'Constelaciones',
+    'pt': 'Constelações',
+    'pt_BR': 'Constelações',
+    'fr': 'Constellations',
+    'de': 'Sternbilder',
+  },
+  'sakura': {
+    'uk': 'Сакура',
+    'es': 'Sakura',
+    'pt': 'Sakura',
+    'pt_BR': 'Sakura',
+    'fr': 'Sakura',
+    'de': 'Sakura',
+  },
+  'clouds': {
+    'uk': 'Хмари',
+    'es': 'Nubes',
+    'pt': 'Nuvens',
+    'pt_BR': 'Nuvens',
+    'fr': 'Nuages',
+    'de': 'Wolken',
+  },
+  'night_city': {
+    'uk': 'Нічне місто',
+    'es': 'Ciudad nocturna',
+    'pt': 'Cidade à noite',
+    'pt_BR': 'Cidade à noite',
+    'fr': 'Ville de nuit',
+    'de': 'Nachtstadt',
+  },
+  'flow': {
+    'uk': 'Потік',
+    'es': 'Flujo',
+    'pt': 'Fluxo',
+    'pt_BR': 'Fluxo',
+    'fr': 'Flux',
+    'de': 'Fluss',
+  },
+  'hologram': {
+    'uk': 'Голограма',
+    'es': 'Holograma',
+    'pt': 'Holograma',
+    'pt_BR': 'Holograma',
+    'fr': 'Hologramme',
+    'de': 'Hologramm',
+  },
+  'dot_ocean': {
+    'uk': 'Точковий океан',
+    'es': 'Océano de puntos',
+    'pt': 'Oceano de pontos',
+    'pt_BR': 'Oceano de pontos',
+    'fr': 'Océan de points',
+    'de': 'Punkte-Ozean',
+  },
+  'kaleidoscope': {
+    'uk': 'Калейдоскоп',
+    'es': 'Caleidoscopio',
+    'pt': 'Caleidoscópio',
+    'pt_BR': 'Caleidoscópio',
+    'fr': 'Kaléidoscope',
+    'de': 'Kaleidoskop',
+  },
+  'eclipse': {
+    'uk': 'Затемнення',
+    'es': 'Eclipse',
+    'pt': 'Eclipse',
+    'pt_BR': 'Eclipse',
+    'fr': 'Éclipse',
+    'de': 'Finsternis',
+  },
+  'moon_path': {
+    'uk': 'Доріжка',
+    'es': 'Sendero lunar',
+    'pt': 'Trilha lunar',
+    'pt_BR': 'Trilha lunar',
+    'fr': 'Sentier lunaire',
+    'de': 'Mondpfad',
+  },
+  'ripples': {
+    'uk': 'Кола на воді',
+    'es': 'Ondas en el agua',
+    'pt': 'Ondas na água',
+    'pt_BR': 'Ondas na água',
+    'fr': 'Ondes sur l’eau',
+    'de': 'Wellenringe',
+  },
+  'spotlight': {
+    'uk': 'Прожектор',
+    'es': 'Foco',
+    'pt': 'Holofote',
+    'pt_BR': 'Holofote',
+    'fr': 'Projecteur',
+    'de': 'Scheinwerfer',
+  },
   // ── living frames (набор profile_fx, 23.09.2026) ──
   'cat': {
     'uk': 'Рудик',
@@ -882,6 +1076,163 @@ final List<ProfileCover> kProfileCovers = [
   ),
 ];
 
+/// 🔴 ЖИВЫЕ обложки — сцены набора `profile_fx`. Список отдельный от
+/// [kProfileCovers] по той же причине, что и у рамок: там свои, написанные под
+/// шейдер и видео, здесь — выгрузка со страницы дизайна. Выбор человека
+/// разрешает [coverById], который смотрит оба списка.
+final List<ProfileCover> kLivingProfileCovers = [
+  ProfileCover(
+    id: 'snow',
+    nameRu: 'Снегопад',
+    nameEn: 'Snowfall',
+    builder: () => LiveCoverView(id: 'snow'),
+  ),
+  ProfileCover(
+    id: 'aurora_fx',
+    nameRu: 'Сияние',
+    nameEn: 'Aurora',
+    builder: () => LiveCoverView(id: 'aurora_fx'),
+  ),
+  ProfileCover(
+    id: 'embers',
+    nameRu: 'Угли',
+    nameEn: 'Embers',
+    builder: () => LiveCoverView(id: 'embers'),
+  ),
+  ProfileCover(
+    id: 'mesh',
+    nameRu: 'Меш',
+    nameEn: 'Mesh',
+    builder: () => LiveCoverView(id: 'mesh'),
+  ),
+  ProfileCover(
+    id: 'starfall',
+    nameRu: 'Звездопад',
+    nameEn: 'Starfall',
+    builder: () => LiveCoverView(id: 'starfall'),
+  ),
+  ProfileCover(
+    id: 'synthwave',
+    nameRu: 'Синтвейв',
+    nameEn: 'Synthwave',
+    builder: () => LiveCoverView(id: 'synthwave'),
+  ),
+  ProfileCover(
+    id: 'bokeh',
+    nameRu: 'Боке',
+    nameEn: 'Bokeh',
+    builder: () => LiveCoverView(id: 'bokeh'),
+  ),
+  ProfileCover(
+    id: 'ocean',
+    nameRu: 'Океан',
+    nameEn: 'Ocean',
+    builder: () => LiveCoverView(id: 'ocean'),
+  ),
+  ProfileCover(
+    id: 'rain_glass',
+    nameRu: 'Дождь по стеклу',
+    nameEn: 'Rain on glass',
+    builder: () => LiveCoverView(id: 'rain_glass'),
+  ),
+  ProfileCover(
+    id: 'soap_bubbles',
+    nameRu: 'Мыльные пузыри',
+    nameEn: 'Soap bubbles',
+    builder: () => LiveCoverView(id: 'soap_bubbles'),
+  ),
+  ProfileCover(
+    id: 'topography',
+    nameRu: 'Топография',
+    nameEn: 'Topography',
+    builder: () => LiveCoverView(id: 'topography'),
+  ),
+  ProfileCover(
+    id: 'silk',
+    nameRu: 'Шёлк',
+    nameEn: 'Silk',
+    builder: () => LiveCoverView(id: 'silk'),
+  ),
+  ProfileCover(
+    id: 'constellations',
+    nameRu: 'Созвездия',
+    nameEn: 'Constellations',
+    builder: () => LiveCoverView(id: 'constellations'),
+  ),
+  ProfileCover(
+    id: 'sakura_fx',
+    nameRu: 'Сакура',
+    nameEn: 'Sakura',
+    builder: () => LiveCoverView(id: 'sakura_fx'),
+  ),
+  ProfileCover(
+    id: 'clouds',
+    nameRu: 'Облака',
+    nameEn: 'Clouds',
+    builder: () => LiveCoverView(id: 'clouds'),
+  ),
+  ProfileCover(
+    id: 'night_city',
+    nameRu: 'Ночной город',
+    nameEn: 'Night city',
+    builder: () => LiveCoverView(id: 'night_city'),
+  ),
+  ProfileCover(
+    id: 'flow',
+    nameRu: 'Поток',
+    nameEn: 'Flow',
+    builder: () => LiveCoverView(id: 'flow'),
+  ),
+  ProfileCover(
+    id: 'hologram',
+    nameRu: 'Голограмма',
+    nameEn: 'Hologram',
+    builder: () => LiveCoverView(id: 'hologram'),
+  ),
+  ProfileCover(
+    id: 'dot_ocean',
+    nameRu: 'Точечный океан',
+    nameEn: 'Dot ocean',
+    builder: () => LiveCoverView(id: 'dot_ocean'),
+  ),
+  ProfileCover(
+    id: 'kaleidoscope',
+    nameRu: 'Калейдоскоп',
+    nameEn: 'Kaleidoscope',
+    builder: () => LiveCoverView(id: 'kaleidoscope'),
+  ),
+  ProfileCover(
+    id: 'eclipse',
+    nameRu: 'Затмение',
+    nameEn: 'Eclipse',
+    builder: () => LiveCoverView(id: 'eclipse'),
+  ),
+  ProfileCover(
+    id: 'moon_path',
+    nameRu: 'Дорожка',
+    nameEn: 'Moon path',
+    builder: () => LiveCoverView(id: 'moon_path'),
+  ),
+  ProfileCover(
+    id: 'ripples',
+    nameRu: 'Круги на воде',
+    nameEn: 'Ripples',
+    builder: () => LiveCoverView(id: 'ripples'),
+  ),
+  ProfileCover(
+    id: 'spotlight',
+    nameRu: 'Прожектор',
+    nameEn: 'Spotlight',
+    builder: () => LiveCoverView(id: 'spotlight'),
+  ),
+];
+
+/// Всё, что можно ВЫБРАТЬ в обложках.
+final List<ProfileCover> kAllProfileCovers = [
+  ...kProfileCovers,
+  ...kLivingProfileCovers,
+];
+
 AvatarFrame? frameById(String? id) {
   if (id == null || id.isEmpty) return null;
   for (final f in kAllAvatarFrames) {
@@ -899,13 +1250,19 @@ Widget coverStill(String id) => TickerMode(
   // and TickerMode silences the ones that animate through their own widgets
   // (`space`'s dust field, `logos`, the black-hole shader) — a still cover
   // must not drive a ticker by ANY route.
+  //
+  // 🔴 Живые обложки набора рисуются СВОИМ виджетом, и `_AnimatedCover` про
+  // них не знает: без этой ветки плитка выбора оставалась бы пустой у всех,
+  // кроме выбранной. Движение у них гасит тот же `TickerMode`.
   enabled: false,
-  child: _AnimatedCover(kind: id, animate: false),
+  child: isLiveCoverId(id)
+      ? LiveCoverView(id: id, animate: false)
+      : _AnimatedCover(kind: id, animate: false),
 );
 
 ProfileCover? coverById(String? id) {
   if (id == null || id.isEmpty) return null;
-  for (final c in kProfileCovers) {
+  for (final c in kAllProfileCovers) {
     if (c.id == id) return c;
   }
   return null;

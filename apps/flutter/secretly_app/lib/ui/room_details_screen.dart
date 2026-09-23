@@ -1299,7 +1299,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
       ),
       currentId: vm.settings.coverId,
       items: [
-        for (final c in kProfileCovers)
+        for (final c in kAllProfileCovers)
           _RoomCosmeticChoice(
             id: c.id,
             label: c.nameLocalized(context),

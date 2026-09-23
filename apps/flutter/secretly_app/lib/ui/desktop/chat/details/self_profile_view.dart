@@ -15,7 +15,7 @@ import '../../../premium/cosmetics_catalog.dart'
         coverFrontWidgetFor,
         coverWidgetFor,
         kAllAvatarFrames,
-        kProfileCovers;
+        kAllProfileCovers;
 import '../../design/tokens.dart';
 import '../../primitives/avatar.dart';
 import '../../primitives/desktop_tooltip.dart';
@@ -267,7 +267,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
       null, // «Без рамки» / «Без обложки» — removal must always be reachable
       ...(frame
           ? kAllAvatarFrames.map((f) => f.id)
-          : kProfileCovers.map((c) => c.id)),
+          : kAllProfileCovers.map((c) => c.id)),
     ];
     final picked = await DesktopDialog.show<String>(
       context,
@@ -298,7 +298,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                       ? kAllAvatarFrames
                             .firstWhere((f) => f.id == id)
                             .nameLocalized(ctx)
-                      : kProfileCovers
+                      : kAllProfileCovers
                             .firstWhere((c) => c.id == id)
                             .nameLocalized(ctx));
             return HoverListener(

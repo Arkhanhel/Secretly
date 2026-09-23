@@ -304,13 +304,17 @@ class _SearchResultsListScreenState extends State<SearchResultsListScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            FramedAvatar(
+            // Список — без движения, как и лента чатов: см. `chats_screen`.
+            TickerMode(
+              enabled: false,
+              child: FramedAvatar(
               size: 44,
               avatarPath: _senderAvatarPath(hit),
               frameId: _senderFrameId(hit),
               fallbackSeed: _avatarSeed(hit),
               fallbackName: name,
               fallbackId: hit.senderProfileId,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(

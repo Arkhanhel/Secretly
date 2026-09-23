@@ -3539,13 +3539,21 @@ class _ChatLeading extends StatelessWidget {
       );
     } else {
       final seed = fallbackId.isNotEmpty ? fallbackId : title;
-      base = FramedAvatar(
+      // 🔴 СПИСОК — БЕЗ ДВИЖЕНИЯ, НО С ПЕРСОНАЖЕМ. Решение владельца
+      // 23.09.2026. Живая рамка смотрит на `TickerMode`: выключенный здесь,
+      // он оставляет неподвижную позу и не заводит тикера вовсе. Двадцать
+      // рядов по 0.3 мс на кадр — это половина бюджета кадра на слабом
+      // Android, и ровно ради этого в проекте живёт атлас испечённых рамок.
+      base = TickerMode(
+        enabled: false,
+        child: FramedAvatar(
         size: 52,
         frameId: frameId,
         avatarPath: hasAvatar ? p : null,
         fallbackSeed: seed,
         fallbackName: title,
         fallbackId: fallbackId,
+      ),
       );
     }
 
@@ -3594,6 +3602,10 @@ class _ChatLeading extends StatelessWidget {
     // checkmark grows in / out so entering selection feels like a soft bubble
     // rather than a hard cut.
     return AnimatedSize(
+      // 🔴 НЕ РЕЗАТЬ. По умолчанию `AnimatedSize` обрезает по своим границам,
+      // и холст живой рамки — он почти вдвое шире портрета — терял уши, хвост
+      // и ноутбук: работа делалась, а на экране оставалось одно кольцо.
+      clipBehavior: Clip.none,
       duration: const Duration(milliseconds: 240),
       curve: Curves.easeOutBack,
       alignment: Alignment.centerLeft,
