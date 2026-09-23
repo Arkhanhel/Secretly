@@ -297,7 +297,7 @@ class DesktopAppMenu extends StatelessWidget {
           label: l10n.desktopMenuHelp,
           menus: <PlatformMenuItem>[
             // «Проверить обновления» здесь НЕТ намеренно: автообновления в
-            // приложении нет (A-4 в docs/TZ_DESKTOP_RELEASE_2026-09-21.md).
+            // приложении нет.
             // Пункт, который ничего не проверяет, — обещание, которого некому
             // сдержать.
             if (onOpenShortcuts != null)

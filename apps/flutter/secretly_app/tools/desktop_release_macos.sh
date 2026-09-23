@@ -289,7 +289,9 @@ if [ -n "$NOTARY_PROFILE" ]; then
       echo "       this build is signed with: $IDENTITY" >&2
       echo "       set SECRETLY_SIGN_IDENTITY, or create the certificate:" >&2
       echo "       Xcode > Settings > Accounts > Manage Certificates > + " >&2
-      echo "       (see docs/TZ_DESKTOP_RELEASE_2026-09-21.md §1)" >&2
+      echo "       Apple Development is for your own machines and Apple" >&2
+      echo "       Distribution is for the App Store; neither can be" >&2
+      echo "       notarized for download." >&2
       exit 1
       ;;
   esac
@@ -375,7 +377,7 @@ case "${IDENTITY:-}" in
     echo
     echo " 🔴 NOT DISTRIBUTABLE. Gatekeeper opens a DOWNLOADED copy only when it is"
     echo "    signed with a Developer ID Application certificate AND notarized."
-    echo "    See docs/TZ_DESKTOP_RELEASE_2026-09-21.md §1 (item A-1)."
+    echo "    Create one in Xcode: Settings > Accounts > Manage Certificates."
     ;;
 esac
 echo

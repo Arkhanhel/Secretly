@@ -22,7 +22,8 @@
 /// | Windows | **собирается в CI** с 20.09.2026 (работа `Windows — build`). Не отгружается: нет установщика и подписи (A-5), второй запуск не выводит окно вперёд — файл-замок вместо именованного мьютекса (A-6), после сна не переподключается (A-7), PDF показать нечем (A-8). |
 /// | Linux | **not supported.** There is no `linux/` runner directory — `flutter build linux` will fail until someone runs `flutter create --platforms=linux` (A-9). |
 ///
-/// Что осталось до выпуска и в каком порядке — `docs/TZ_DESKTOP_RELEASE_2026-09-21.md`.
+/// Сверять эту таблицу надо по файлу рабочего потока и по выводу
+/// `security find-identity -v -p codesigning`, а не по памяти.
 ///
 /// The runtime guard below still admits all three so a developer can run on
 /// Windows/Linux; that is a developer affordance, not a shipping claim.

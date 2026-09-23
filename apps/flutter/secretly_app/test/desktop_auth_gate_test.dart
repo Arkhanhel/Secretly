@@ -22,7 +22,6 @@ import 'package:secretly_app/app/app_controller.dart';
 import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:secretly_app/ui/desktop/app/desktop_app_view_model.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
-import 'package:secretly_app/ui/desktop/onboarding/desktop_account_setup.dart';
 import 'package:secretly_app/ui/desktop/onboarding/desktop_auth_gate.dart';
 
 void main() {
