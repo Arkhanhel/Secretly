@@ -4,8 +4,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/storage/app_db.dart';
 
-// Замер, гатящий слой 2 номера безопасности
-// (docs/TZ_ACCOUNT_IDENTITY_2026-08-06.md).
+// Замер, гатящий слой 2 номера безопасности.
 //
 // 🔴 ЗАЧЕМ ВООБЩЕ ЗАПРОС. Слой 2 отложен 06.08.2026 с условием «неделю считать
 // события new_device_seen и identity_rotated_accepted». Условие было

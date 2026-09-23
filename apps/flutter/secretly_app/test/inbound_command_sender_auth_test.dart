@@ -20,7 +20,7 @@ import 'package:secretly_app/transport/attested_senders.dart';
 import 'package:secretly_app/transport/keys_client.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// 🔴 ЧУЖИЕ СЛУЖЕБНЫЕ КОМАНДЫ (17.09.2026, docs/TZ_SENDER_AUTH_2026-09-17.md).
+// 🔴 ЧУЖИЕ СЛУЖЕБНЫЕ КОМАНДЫ (17.09.2026).
 //
 // Номер устройства отправителя — слова самого провода: рукопожатие подписи
 // не несёт, реле отправителя не сообщает. Проверено настоящей криптографией:

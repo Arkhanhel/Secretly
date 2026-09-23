@@ -34,7 +34,7 @@ class RemoteDecryptError implements Exception {
 /// Runs the (pure) Double Ratchet decrypt on a long-lived worker isolate so the
 /// heaviest maths in the app stops competing with the thread that draws frames.
 ///
-/// This is step Б of `docs/TZ_HEAT_ISOLATE_AND_PUMP_2026-07-31.md`. It is only
+/// This is step Б. It is only
 /// possible because step А made [DoubleRatchetV3.decrypt] pure: it takes state
 /// and bytes, returns state and bytes, and touches no database and no
 /// callbacks. Nothing here may reintroduce either — see Ф-3.Б: a database call

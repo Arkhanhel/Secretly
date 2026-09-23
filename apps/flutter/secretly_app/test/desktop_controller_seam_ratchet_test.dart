@@ -19,7 +19,6 @@
 // same commit, so what is written here is always the truth rather than a
 // ceiling somebody stopped looking at.
 //
-// See docs/DESKTOP_STRATEGY_REVIEW_2026-09-08.md §6.5.
 
 import 'dart:io';
 

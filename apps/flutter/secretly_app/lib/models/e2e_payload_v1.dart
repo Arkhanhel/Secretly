@@ -385,7 +385,7 @@ class ReceiptEventV1 extends E2eEventV1 {
 }
 
 // ───────────────────────── ROOM SENDER KEY ─────────────────────────
-// docs/TZ_ROOM_SENDER_KEY_2026-07-29.md §4. Nothing emits these yet.
+// Nothing emits these yet.
 //
 // An older client that receives one of these parses it as [UnknownEventV1] and
 // ignores it — which is exactly the coexistence behaviour the migration needs.

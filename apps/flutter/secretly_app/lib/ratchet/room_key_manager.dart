@@ -9,8 +9,7 @@ import '../storage/app_db.dart';
 import 'room_key_chain.dart';
 import 'room_message_signature.dart';
 
-/// Rotation and chain bookkeeping for the room sender key
-/// (docs/TZ_ROOM_SENDER_KEY_2026-07-29.md §6–§7, §9).
+/// Rotation and chain bookkeeping for the room sender key.
 ///
 /// Sits between [RoomKeyChain] (pure crypto) and [AppDb] (pure storage) and
 /// owns the decisions neither of them can make alone: WHEN to rotate, and which

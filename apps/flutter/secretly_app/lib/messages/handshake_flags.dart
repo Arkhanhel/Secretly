@@ -6,9 +6,8 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
-/// Серверный переключатель ОТПРАВКИ повторного prekey (Э-4,
-/// docs/TZ_PREKEY_UNTIL_CONFIRMED_2026-08-01.md), приезжает в дополнительном
-/// блоке `handshake` подписанного `/v1/config`.
+/// Серверный переключатель ОТПРАВКИ повторного prekey (Э-4): приезжает в
+/// дополнительном блоке `handshake` подписанного `/v1/config`.
 ///
 /// **Почему это не сборочный флаг.** До 03.08.2026 переключатель был
 /// `bool.fromEnvironment`. Чтобы включить отправку, требовалась новая сборка,

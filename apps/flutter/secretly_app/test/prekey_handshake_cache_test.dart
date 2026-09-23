@@ -11,7 +11,7 @@ import 'package:secretly_app/security/device_keys.dart';
 import 'package:secretly_app/storage/app_db.dart';
 import 'package:secretly_app/transport/keys_client.dart';
 
-/// Э-4 Ш-3 (docs/TZ_PREKEY_UNTIL_CONFIRMED_2026-08-01.md): the sender caches
+/// Э-4 Ш-3: the sender caches
 /// the handshake it will repeat until the peer confirms.
 ///
 /// WRITE ONLY at this step — nothing reads the cache yet. Repeating starts in

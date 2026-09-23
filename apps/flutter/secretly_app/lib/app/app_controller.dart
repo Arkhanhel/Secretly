@@ -3329,7 +3329,7 @@ class AppController {
     return _deliveredDecryptMaxFailingForMs;
   }
 
-  // И-4a (2026-07-24, docs/TZ_I4_NO_PROACTIVE_SESSION_RESET_2026-07-24.md): the
+  // И-4a (2026-07-24): the
   // receiver-side reactive session reset in _handleDelivered used to fire on the
   // FIRST decrypt miss of ANY class — a transient out-of-order / DB-lock /
   // too-many-skipped miss tore the session down just like a genuine chain
@@ -3357,7 +3357,7 @@ class AppController {
   static bool i4aReactiveResetGateEnabled = _i4aReactiveResetGateEnabledEnv;
   static const int _i4ReactiveResetMinConsecutiveFailures = 3;
 
-  // И-4h (2026-07-24, docs/TZ_I4…, cause C1): the keys server only lists devices
+  // И-4h (2026-07-24, cause C1): the keys server only lists devices
   // seen (register/publish, NOT receive) within a 14-day RELATIVE liveness window,
   // so a companion device opened less than ~once/14 days relative to a busy
   // primary drops off the list. contactDevicesDeleteMissing then RAW-deleted that
@@ -3376,7 +3376,7 @@ class AppController {
   @visibleForTesting
   static bool i4hKeepSessionOnDevicePrune = _i4hKeepSessionOnDevicePruneEnv;
 
-  // И-4k (2026-07-24, docs/TZ_I4…): the FIRST-MESSAGE-to-a-brand-new-account
+  // И-4k (2026-07-24): the FIRST-MESSAGE-to-a-brand-new-account
   // orphan. When two devices establish sessions to each other for the very first
   // time (fresh account), BOTH directions race X3DH bootstrap: the first message
   // can land before the receiver's session settles → genuine-MAC undecryptable.
@@ -3464,8 +3464,6 @@ class AppController {
       // идти пачкой за секунду, и счётчик сам по себе не отличает «насос ещё
       // не дошёл до prekey» от «prekey не существует». Ожидание же ограничено
       // тем, что перешифровка в том же ящике применяется за секунды.
-      //
-      // См. docs/TZ_EPOCH_AHEAD_DEADLOCK_2026-09-11.md.
       if (epochAheadStuckMs < minEpochAheadStuckMs) return false;
       return consecutiveFailures >= minConsecutive;
     }
@@ -3541,7 +3539,7 @@ class AppController {
   bool _senderConvergenceBackstopEnabled = true;
   bool _senderConvergenceSweepRunning = false;
 
-  // ROOM CONVERGENCE (2026-07-29, docs/TZ_ROOM_SENDER_KEY_2026-07-29.md фаза 1).
+  // ROOM CONVERGENCE (2026-07-29, фаза 1).
   // The 1:1 convergence backstop deliberately skips `group:` conversations
   // (app_db.dart convoIdsWithUndeliveredSends), so a room member whose session
   // diverged had NO automatic repair at all — the exact bug class we spent a
@@ -3580,7 +3578,7 @@ class AppController {
   // Disable for a build with --dart-define=SECRETLY_ROOM_CONVERGENCE=false.
   // Const-context fromEnvironment (the 1.7.4+401 lesson: a mutable
   // fromEnvironment reads the DEFAULT at runtime).
-  // ROOM SENDER KEY (docs/TZ_ROOM_SENDER_KEY_2026-07-29.md, фаза 3).
+  // ROOM SENDER KEY (фаза 3).
   //
   // Ships OFF. Receive support lands FIRST and send support follows, because a
   // client has to be able to READ the new format before any client emits it —
@@ -3687,7 +3685,7 @@ class AppController {
 
   /// May the convergence backstop re-key and re-send toward [deviceId]?
   ///
-  /// 🔴 П-5 (Э-0, docs/TZ_DELIVERY_SIGNAL_MODEL_2026-08-01.md). The backstop
+  /// 🔴 П-5 (Э-0). The backstop
   /// used to target whatever sat in the local device cache, which is only
   /// pruned on a roster refresh it never triggered — so a device the server had
   /// evicted stayed a target indefinitely (prod: 298 copies into a superseded
@@ -4459,8 +4457,7 @@ class AppController {
   final List<RoomCallMediaSignalEvent> _roomCallMediaSignalBuffer = [];
   static const int _callSignalBufferMax = 20;
 
-  /// Сколько держим сигнал звонка в очереди для главного изолята
-  /// (docs/TZ_CALL_SIGNALS_CROSS_ISOLATE_2026-08-14.md).
+  /// Сколько держим сигнал звонка в очереди для главного изолята.
   static const int _pendingCallSignalTtlMs = 24 * 60 * 60 * 1000;
   static const int _roomCallMediaSignalBufferMax = 32;
   static const int _recentInboundCallSignalDedupTtlMs = 3 * 60 * 1000;
@@ -5207,8 +5204,7 @@ class AppController {
     return copy;
   }
 
-  /// Вычерпывает очередь сигналов звонка, записанную ФОНОВЫМ изолятом
-  /// (docs/TZ_CALL_SIGNALS_CROSS_ISOLATE_2026-08-14.md).
+  /// Вычерпывает очередь сигналов звонка, записанную ФОНОВЫМ изолятом.
   ///
   /// Зовётся главным изолятом при запуске [CallManager] и на возобновлении
   /// приложения. Возвращённое обрабатывается ТЕМ ЖЕ путём, что и живые сигналы:
@@ -9225,7 +9221,7 @@ class AppController {
   SupportConfig get supportConfig =>
       _entitlements?.supportConfig ?? SupportConfig.defaults;
 
-  /// Submit an E2EE support message (TZ docs/TZ_SUPPORT_TICKETS_2026-07-24.md):
+  /// Submit an E2EE support message:
   /// seals `{text, tech-info}` to the support public key (from signed config)
   /// and posts it to the relay. Throws if support isn't configured or the send
   /// fails — the UI surfaces that.
@@ -32711,7 +32707,7 @@ class AppController {
   /// за 7 и за 30 дней, и по скольким контактам.
   ///
   /// 🔴 ЭТО ТОТ САМЫЙ ЗАМЕР, КОТОРЫЙ ГАТИТ СЛОЙ 2
-  /// (`docs/TZ_ACCOUNT_IDENTITY_2026-08-06.md`). Работа отложена 06.08.2026 с
+  ///. Работа отложена 06.08.2026 с
   /// условием «неделю считать события», а условие было неизмеримым: оба
   /// счётчика (`new_device_seen`, `identity_rotated_accepted`) живут только в
   /// логе устройства, а он кольцевой. Плашка же вставляется в переписку
@@ -36477,7 +36473,7 @@ class AppController {
   /// Личная переписка — всегда переписка С ОТПРАВИТЕЛЕМ (в команде он пишет
   /// свой взгляд: мой профиль). Сообщение, лежащее в другой переписке, чужое.
   /// Свои аппараты — как прежде: им доверяли и раньше, а корень подделки
-  /// «своего» номера закрывается отдельно (docs/TZ_SENDER_AUTH_2026-09-17.md).
+  /// «своего» номера закрывается отдельно.
   Future<_InboundCommandVerdict> _authorizedInboundReactionConvoId({
     required AppDb db,
     required String commandConvoId,
@@ -45653,7 +45649,7 @@ class AppController {
       // сообщение теряется, а журнал об этом не знает.
       //
       // Ловим и ПРОБРАСЫВАЕМ дальше: поведение доставки не меняется ни на шаг,
-      // появляется только запись. См. docs/TZ_NACK_EPOCH_AHEAD_2026-09-11.md, И-4.
+      // появляется только запись.
       int failingBudgetMs = 0;
       try {
         failingBudgetMs = await _decryptFailingBudgetMsFor(db, senderDeviceId);
@@ -47291,8 +47287,7 @@ class AppController {
     }
   }
 
-  /// Applies `gkey` / `gmsg` / `gkeyreq` (docs/TZ_ROOM_SENDER_KEY_2026-07-29.md
-  /// фаза 3). Returns true when everything in [events] was applied — false
+  /// Applies `gkey` / `gmsg` / `gkeyreq` (фаза 3). Returns true when everything in [events] was applied — false
   /// PARKS the wire for a later replay rather than acknowledging it away.
   ///
   /// The receive side ships before the send side on purpose: a client must be
@@ -47641,7 +47636,7 @@ class AppController {
     // С-3, режим наблюдения (17.09.2026): служебные команды «от своего
     // устройства» без подтверждения реле пока принимаются, как раньше, но
     // считаются. Когда счётчик у обновлённых сборок станет нулём, отказ
-    // включается (docs/TZ_ROOMS_KEY_AND_SENDER_AUTH_2026-09-17.md §4).
+    // включается.
     final ownSenderDid = (senderDeviceId ?? '').trim();
     if (!senderAttested &&
         ownSenderDid.isNotEmpty &&
@@ -47660,7 +47655,7 @@ class AppController {
       }
     }
 
-    // ROOM SENDER KEY (docs/TZ_ROOM_SENDER_KEY_2026-07-29.md, фаза 2).
+    // ROOM SENDER KEY (фаза 2).
     // `gkey` / `gkeyreq` / `gmsg` are room-key transport, never timeline
     // entries. The storage path near the end of this method falls back to
     // `firstEvent ??= allEvents.first`, so without this guard a key-carrying
@@ -51179,7 +51174,7 @@ class AppController {
         } catch (_) {
           continue;
         }
-        // 🔴 П-5 (Э-0, docs/TZ_DELIVERY_SIGNAL_MODEL_2026-08-01.md): only ever
+        // 🔴 П-5 (Э-0): only ever
         // re-key and re-send toward devices the peer STILL HAS.
         //
         // `contactDevicesList` is our local cache. It IS pruned — but only when
@@ -51520,7 +51515,7 @@ class AppController {
       final resendKey = '$peerDeviceId::$eventId';
       final last = _resendUndeliveredAtMs[resendKey] ?? 0;
       if (now - last < _resendUndeliveredDebounceMs) continue;
-      // 🔴 LIFETIME CAP (Э-0, docs/TZ_DELIVERY_SIGNAL_MODEL_2026-08-01.md).
+      // 🔴 LIFETIME CAP (Э-0).
       //
       // The debounce above bounds the RATE; nothing bounded the TOTAL. And it
       // lives in memory, so an app restart reopened the gate at once. Measured
@@ -53854,8 +53849,7 @@ class CallSignalEvent {
   final int? sdpMLineIndex;
   final int createdAtMs;
 
-  /// Сериализация для очереди сигналов через границу изолята
-  /// (docs/TZ_CALL_SIGNALS_CROSS_ISOLATE_2026-08-14.md).
+  /// Сериализация для очереди сигналов через границу изолята.
   ///
   /// Поля пишутся ВСЕ: предложение (`sdp`) и кандидаты соединения нужны ровно
   /// так же, как приглашение, — без них звонок покажется и не соединится.

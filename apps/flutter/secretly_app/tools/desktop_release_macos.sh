@@ -5,7 +5,7 @@
 # shippable path: AOT --release, the ffmpeg self-containment fix, optional
 # Developer ID signing + notarization, and an optional DMG.
 #
-# Implements DESKTOP_COMPLETION_TZ_2026-07-21 §7: R-01 (release build),
+# Implements: R-01 (release build),
 # R-02 (target assertion), R-07 (sign embedded natives inside-out),
 # R-08 (ffmpeg dylib fix), R-10 (iCloud xattr trap).
 #

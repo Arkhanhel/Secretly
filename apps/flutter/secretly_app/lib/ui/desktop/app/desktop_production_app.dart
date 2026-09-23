@@ -74,8 +74,7 @@ import '../chat/desktop_link_router.dart';
 ///
 /// Mobile-only services (PushWakeService, app_links, CallForegroundService)
 /// are NOT initialised here — by design. Desktop pushes will be added in a
-/// later slice via WSS keep-alive + local notifications (see
-/// docs/DESKTOP_PRODUCTION_TZ_2026-05-17.md §5.6).
+/// later slice via WSS keep-alive + local notifications.
 class DesktopProductionApp extends StatefulWidget {
   const DesktopProductionApp({super.key});
 
@@ -1497,7 +1496,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Secretly',
-      // U-01 (DESKTOP_COMPLETION_TZ §5.2): the desktop MaterialApp now registers
+      // U-01: the desktop MaterialApp now registers
       // AppLocalizations, exactly like mobile [main.dart]. Before this, any
       // widget calling `context.l10n` crashed on desktop, which is why parts of
       // the desktop tree had to reimplement mobile widgets and why

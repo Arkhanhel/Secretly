@@ -14,7 +14,7 @@ import 'package:secretly_app/security/device_keys.dart';
 import 'package:secretly_app/storage/app_db.dart';
 import 'package:secretly_app/transport/keys_client.dart';
 
-/// Э-4 Ш-2 / П-2 (docs/TZ_PREKEY_UNTIL_CONFIRMED_2026-08-01.md, редакция 2):
+/// Э-4 Ш-2 / П-2 (редакция 2):
 /// the RECEIVER must recognise a repeated handshake and decrypt against the
 /// session it already holds.
 ///

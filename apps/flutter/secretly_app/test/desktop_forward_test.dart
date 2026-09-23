@@ -17,7 +17,7 @@ import 'package:secretly_app/ui/desktop/primitives/context_menu.dart';
 ///    exactly the kind of silent data-fidelity loss that is hard to spot in QA.
 ///
 /// 2. The context menu never renders an action it cannot perform
-///    («no dead affordances», DESKTOP_COMPLETION_TZ principle P-5).
+/// («no dead affordances», principle P-5).
 void main() {
   group('desktop forward wire format', () {
     test('round-trips text and attribution', () {

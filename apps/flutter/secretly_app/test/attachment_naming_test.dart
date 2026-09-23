@@ -4,7 +4,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/attachments/attachment_naming.dart';
 
-/// 🔴 ИМЯ ФАЙЛА (docs/TZ_ATTACHMENT_NAMING_2026-08-14.md).
+/// 🔴 ИМЯ ФАЙЛА.
 ///
 /// ЖАЛОБА 14.08: «отправил другу app-release.apk — у него скачивается .bin, и
 /// при пересылке в другое приложение тоже .bin». Имя у нас БЫЛО — отправитель

@@ -4,7 +4,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/app/app_controller.dart';
 
-/// 🔴 П-5 (Э-0 of docs/TZ_DELIVERY_SIGNAL_MODEL_2026-08-01.md): the convergence
+/// 🔴 П-5 (Э-0): the convergence
 /// backstop must only re-key and re-send toward devices the peer STILL HAS.
 ///
 /// Measured on production 2026-08-01: 298 copies piled into the mailbox of a

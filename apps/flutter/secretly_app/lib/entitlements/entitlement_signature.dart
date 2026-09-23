@@ -99,7 +99,7 @@ String identitySigningMessage({
 /// Mirrors Rust `rooms_signing_message` (v1). A SEPARATE signed block for the
 /// same reason as identity/reliability: `secretly-config-v2` is frozen forever,
 /// so a new switch may never be appended to an existing block.
-/// (docs/TZ_ROOM_SENDER_KEY_2026-07-29.md, F-ROOMSK-2.)
+/// (F-ROOMSK-2.)
 String roomsSigningMessage({
   required bool senderKeySendEnabled,
   required int issuedAtMs,
@@ -111,8 +111,7 @@ String roomsSigningMessage({
 
 /// Зеркало Rust `handshake_signing_message` (v1). Отдельный подписанный блок
 /// по той же причине, что identity/reliability/rooms: `secretly-config-v2`
-/// заморожен навсегда, дописывать в него новый переключатель нельзя.
-/// (Э-4, docs/TZ_PREKEY_UNTIL_CONFIRMED_2026-08-01.md.)
+/// заморожен навсегда, дописывать в него новый переключатель нельзя (Э-4).
 String handshakeSigningMessage({
   required bool prekeyUntilConfirmedSendEnabled,
   required int prekeyUntilConfirmedSendPercent,
@@ -127,7 +126,7 @@ String handshakeSigningMessage({
 /// Mirrors Rust `support_signing_message` (v1). A SEPARATE signed block for the
 /// same reason as identity/reliability: `secretly-config-v2` is frozen forever.
 /// Carries the SUPPORT X25519 public key (recipient for in-app support tickets)
-/// and the feature flag (TZ docs/TZ_SUPPORT_TICKETS_2026-07-24.md).
+/// and the feature flag.
 String supportSigningMessage({
   required bool supportEnabled,
   required String supportPubB64,

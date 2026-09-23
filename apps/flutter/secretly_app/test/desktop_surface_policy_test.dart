@@ -4,7 +4,7 @@
 // Guards the "One Desktop Path" decision: the MOBILE entrypoint must never
 // render the legacy wide layout (Surface B) on a desktop OS. Shipping the
 // mobile main.dart as a desktop app is the documented "double desktop"
-// failure — see docs/DESKTOP_STRATEGY_REVIEW_2026-09-08.md §6.1.
+// failure.
 //
 // These tests run on the VM (a desktop OS), so `isDesktopOs` is true here and
 // the desktop branch is exercised directly.
@@ -66,7 +66,7 @@ void main() {
   test('the tablet breakpoint is unchanged', () {
     // Deliberately still 1180: iPad is a shipped device family and real users
     // are on Surface B in landscape today. Moving them is a product decision
-    // gated on epic T-01…T-06 (DESKTOP_COMPLETION_TZ.md §9), not a cleanup.
+    // gated on epic T-01…T-06, not a cleanup.
     expect(kWideLayoutBreakpoint, 1180);
   });
 }

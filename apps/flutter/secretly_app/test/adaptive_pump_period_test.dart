@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/app/app_controller.dart';
 import 'package:secretly_app/push/background_inbox_fetcher.dart';
 
-/// Adaptive inbox pump (Ф-4, docs/TZ_HEAT_ISOLATE_AND_PUMP_2026-07-31.md).
+/// Adaptive inbox pump (Ф-4).
 ///
 /// The pump used to wake every second forever. The cost is not one poll — it is
 /// that the CPU never reaches deep idle, and every poll runs several SQLCipher

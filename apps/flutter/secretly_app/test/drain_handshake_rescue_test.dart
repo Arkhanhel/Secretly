@@ -14,8 +14,7 @@ import 'package:secretly_app/security/device_keys.dart';
 import 'package:secretly_app/storage/app_db.dart';
 import 'package:secretly_app/transport/relay_client.dart';
 
-/// 🔴 THE ANTIDOTE IS BEHIND THE POISON (2026-08-01, ПК-3 of
-/// docs/TZ_DELIVERY_SIGNAL_MODEL_2026-08-01.md).
+/// 🔴 THE ANTIDOTE IS BEHIND THE POISON (2026-08-01, ПК-3).
 ///
 /// Proven on production: one receiver held 111 undecryptable wires from a
 /// single sender AND — further down the very same mailbox — four session-heal

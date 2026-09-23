@@ -790,7 +790,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       ..writeln(
         'room_convergence: ${AppController.roomConvergenceBackstopEnabled}',
       )
-      // Э-4 (docs/TZ_PREKEY_UNTIL_CONFIRMED_2026-08-01.md): the same rule as
+      // Э-4: the same rule as
       // the two lines above, for the same reason. This is a rollout flag —
       // turning it on changes what PEERS receive — so "which behaviour is
       // actually installed on this phone" has to be answerable without a

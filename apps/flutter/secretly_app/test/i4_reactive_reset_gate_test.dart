@@ -4,8 +4,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/app/app_controller.dart';
 
-/// И-4a — the receiver-side reactive session-reset gate
-/// (docs/TZ_I4_NO_PROACTIVE_SESSION_RESET_2026-07-24.md).
+/// И-4a — the receiver-side reactive session-reset gate.
 ///
 /// Unrepresentability tests for [AppController.i4ReactiveResetAllowed], the pure
 /// predicate that decides whether `_handleDelivered` may tear down + re-handshake
@@ -146,8 +145,7 @@ void main() {
     // 🔴 11.09.2026 — the assumption above USED to be unconditional, and that
     // is what made messages stop arriving: the peer had rekeyed, the prekey
     // wire never came (zero in a whole run), every wire parked, and the repair
-    // was refused 30 times in a row — all with reason=epoch_ahead. See
-    // docs/TZ_EPOCH_AHEAD_DEADLOCK_2026-09-11.md.
+    // was refused 30 times in a row — all with reason=epoch_ahead.
     test('gate ON + epoch-ahead stuck past the grace → reset finally allowed',
         () {
       expect(

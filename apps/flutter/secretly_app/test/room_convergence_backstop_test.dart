@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/app/app_controller.dart';
 import 'package:secretly_app/storage/app_db.dart';
 
-/// Phase 1 of docs/TZ_ROOM_SENDER_KEY_2026-07-29.md — the room-side convergence
+/// Phase 1 — the room-side convergence
 /// backstop.
 ///
 /// Context: the 1:1 backstop's detector explicitly filters out `group:`

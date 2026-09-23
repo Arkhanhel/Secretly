@@ -7,7 +7,7 @@ import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 
-/// Sender-key chain for a room (docs/TZ_ROOM_SENDER_KEY_2026-07-29.md, фаза 2).
+/// Sender-key chain for a room (фаза 2).
 ///
 /// Today a room message is encrypted SEPARATELY for every device of every
 /// member: N×M ratchet steps per message, which is what burns the sender's CPU

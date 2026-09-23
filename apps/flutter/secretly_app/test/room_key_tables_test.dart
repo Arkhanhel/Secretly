@@ -6,7 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/storage/app_db.dart';
 
-/// Storage for the room sender key (docs/TZ_ROOM_SENDER_KEY_2026-07-29.md фаза 2).
+/// Storage for the room sender key (фаза 2).
 ///
 /// The schema tests guard against a table added to only ONE of the two schema
 /// paths — a classic way to ship a feature that works for existing users and

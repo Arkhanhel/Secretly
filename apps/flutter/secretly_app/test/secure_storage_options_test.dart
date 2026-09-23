@@ -67,10 +67,8 @@ void main() {
     expect(
       code.contains('encryptedSharedPreferences'),
       isFalse,
-      reason:
-          'включение требует своей миграции с копией-страховкой, а не '
-          'доверия к checkAndMigrateToEncrypted — см. '
-          'docs/TZ_SEC03_ANDROID_STORAGE_2026-08-26.md',
+      reason: 'включение требует своей миграции с копией-страховкой, а не '
+          'доверия к checkAndMigrateToEncrypted',
     );
     // 🔴 26.08.2026: ОТКАЧЕНО. Смена шифра КЛЮЧА (OAEP) сломала живое
     // устройство — существующий ключ AndroidKeyStore выпущен под PKCS#1 и для

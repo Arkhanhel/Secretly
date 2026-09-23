@@ -1628,7 +1628,7 @@ CREATE TABLE IF NOT EXISTS pending_acks (
         );
       }
       if (oldVersion < 61) {
-        // Э-4 Ш-1 (docs/TZ_PREKEY_UNTIL_CONFIRMED_2026-08-01.md, редакция 2):
+        // Э-4 Ш-1 (редакция 2):
         // carry a handshake in every message until the peer confirms it, the
         // way Signal does, so a receiver that lost its session heals FROM the
         // message instead of needing a round trip.
@@ -1730,8 +1730,7 @@ CREATE TABLE IF NOT EXISTS contact_verification (
       }
 
       if (oldVersion < 67) {
-        // Очередь сигналов звонка через границу изолята
-        // (docs/TZ_CALL_SIGNALS_CROSS_ISOLATE_2026-08-14.md).
+        // Очередь сигналов звонка через границу изолята.
         //
         // 🔴 ЗАЧЕМ (замер 14.08, звонок d41fdf11). Фоновый изолят расшифровал,
         // применил и подтвердил реле приглашение и предложение звонка — и тем
@@ -2390,7 +2389,7 @@ CREATE TABLE IF NOT EXISTS local_kv (
     }
   }
 
-  // ── Resend budget (Э-0 of docs/TZ_DELIVERY_SIGNAL_MODEL_2026-08-01.md) ─────
+  // ── Resend budget (Э-0) ─────
   //
   // 🔴 WHY (proven on prod, 2026-08-01): re-sending an undelivered message had
   // a 90-second debounce and NO lifetime cap, with the debounce map held in
@@ -3399,7 +3398,7 @@ CREATE TABLE IF NOT EXISTS sessions_v3 (
   created_at_ms INTEGER NOT NULL,
   initiator_pending_at_ms INTEGER NOT NULL DEFAULT 0,
   epoch INTEGER NOT NULL DEFAULT 0,
-  -- Э-4 Ш-1 (docs/TZ_PREKEY_UNTIL_CONFIRMED_2026-08-01.md, редакция 2).
+  -- Э-4 Ш-1 (редакция 2).
   --
   -- handshake_base_pub_b64: the initiator's ephemeral public key — the BASE KEY
   -- of the handshake this session was born from. Stable for the session's whole
@@ -3842,7 +3841,7 @@ CREATE TABLE IF NOT EXISTS room_message_receipts (
   PRIMARY KEY(payload_event_id, reader_profile_id)
 );
 ''');
-    // ROOM SENDER KEY (2026-07-29, docs/TZ_ROOM_SENDER_KEY_2026-07-29.md фаза 2).
+    // ROOM SENDER KEY (2026-07-29, фаза 2).
     // Storage only — nothing writes these yet. Kept out of _ensureCriticalTables
     // on purpose: their absence disables a feature, it does not break the app.
     await db.execute('''
@@ -4389,8 +4388,7 @@ CREATE TABLE IF NOT EXISTS chat_folder_members (
     await _createPendingCallSignalsTable(db);
   }
 
-  /// Очередь сигналов звонка через границу изолята
-  /// (docs/TZ_CALL_SIGNALS_CROSS_ISOLATE_2026-08-14.md).
+  /// Очередь сигналов звонка через границу изолята.
   ///
   /// Одно определение на три пути создания — миграцию, `_createSchema` и
   /// `_ensureCriticalTables`. Три расходящихся `CREATE` мы уже проходили на
@@ -5252,7 +5250,7 @@ CREATE TABLE IF NOT EXISTS deferred_room_inbound (
 
   Future<void> sessionV3Delete(
     String peerDeviceId, {
-    // И-4c (2026-07-24, docs/TZ_I4…): a RESET archives the session before
+    // И-4c (2026-07-24): a RESET archives the session before
     // deleting it, so its skipped message keys (out-of-order stragglers under the
     // OLD chain) must SURVIVE — otherwise a legitimately-late, correctly-ordered
     // wire that needed one of those keys can no longer decrypt from the archive.
@@ -5326,7 +5324,7 @@ CREATE TABLE IF NOT EXISTS deferred_room_inbound (
     /// into the archive so a LATE repeat of an older handshake still matches
     /// something and cannot fall through to X3DH and overwrite a newer session.
     String? handshakeBasePubB64,
-    // И-4d (2026-07-24, docs/TZ_I4…): keep the last 8 (was 3) prior sessions per
+    // И-4d (2026-07-24): keep the last 8 (was 3) prior sessions per
     // peer so a burst of re-keys / prekey overwrites can't evict a session that
     // still has in-flight ciphertext under it — the "пачка на одной галочке под
     // старой сессией" (Bug B). Archived rows are tiny; the straggler fallback
@@ -5470,7 +5468,7 @@ CREATE TABLE IF NOT EXISTS deferred_room_inbound (
   }
 
   // ───────────────────────── ROOM SENDER KEY ─────────────────────────
-  // Storage for docs/TZ_ROOM_SENDER_KEY_2026-07-29.md фаза 2. Deliberately
+  // Storage, фаза 2. Deliberately
   // placed next to the pairwise skipped-key accessors above: the room chain is
   // the same idea one level up, and the two should be read side by side.
   //
@@ -9900,8 +9898,7 @@ CREATE TABLE IF NOT EXISTS deferred_room_inbound (
   // Park an inbound ciphertext that could not be decrypted yet so it can be
   // re-decrypted after the session with [senderDeviceId] heals. Idempotent on
   // msg_id (re-delivery of the same message keeps the original row/attempts).
-  /// Кладёт сигнал звонка в очередь, переживающую смерть изолята
-  /// (docs/TZ_CALL_SIGNALS_CROSS_ISOLATE_2026-08-14.md).
+  /// Кладёт сигнал звонка в очередь, переживающую смерть изолята.
   ///
   /// Зовётся ТОЛЬКО фоновым изолятом: главный обрабатывает сигнал сам и в
   /// очереди не нуждается.
@@ -12211,7 +12208,7 @@ CREATE TABLE IF NOT EXISTS deferred_room_inbound (
   /// Сколько раз этому человеку показали «номер безопасности изменился».
   ///
   /// 🔴 ЗАЧЕМ ЭТО ЗАПРОС, А НЕ НОВЫЙ СЧЁТЧИК. Решение по слою 2 (один номер на
-  /// человека вместо номера на устройство, `docs/TZ_ACCOUNT_IDENTITY_2026-08-06.md`)
+  /// человека вместо номера на устройство)
   /// было отложено 06.08.2026 с условием «неделю считать события». Условие
   /// оказалось неизмеримым: `new_device_seen` и `identity_rotated_accepted`
   /// живут только в логе устройства, а он кольцевой и чистится.

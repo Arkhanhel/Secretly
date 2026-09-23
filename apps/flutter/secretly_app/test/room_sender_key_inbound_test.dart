@@ -4,8 +4,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/app/app_controller.dart';
 
-/// Receive side of the room sender key (docs/TZ_ROOM_SENDER_KEY_2026-07-29.md
-/// фаза 3).
+/// Receive side of the room sender key (фаза 3).
 ///
 /// Shipping order matters here: the receive side lands BEFORE the send side,
 /// because a client has to be able to read the new format before any client

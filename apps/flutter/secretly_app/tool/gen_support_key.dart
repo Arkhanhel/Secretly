@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
-// Generates the Support X25519 keypair (TZ docs/TZ_SUPPORT_TICKETS_2026-07-24.md).
+// Generates the Support X25519 keypair.
 // Uses the SAME SupportSeal construction the app + admin console use, so the
 // keys are guaranteed compatible.
 //

@@ -10,7 +10,7 @@ import 'package:secretly_app/ratchet/room_key_chain.dart';
 import 'package:secretly_app/ratchet/room_key_manager.dart';
 import 'package:secretly_app/storage/app_db.dart';
 
-/// The unrepresentability tests from docs/TZ_ROOM_SENDER_KEY_2026-07-29.md §11.
+/// The unrepresentability tests for the room sender key.
 ///
 /// Each one pins an outcome that must be IMPOSSIBLE, not merely unlikely. The
 /// two that matter most are §11.1 (a departed member reading on) and §11.2 (a

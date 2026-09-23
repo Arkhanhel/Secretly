@@ -3,9 +3,8 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'package:flutter/foundation.dart';
 
-/// Server-signed configuration for the in-app Support channel (TZ
-/// docs/TZ_SUPPORT_TICKETS_2026-07-24.md), carried in the additive `support`
-/// block of `/v1/config`.
+/// Server-signed configuration for the in-app Support channel, carried in the
+/// additive `support` block of `/v1/config`.
 ///
 /// **Failure direction is OFF — like [IdentityFlags], not [ReliabilityFlags].**
 /// Support is a NEW feature that needs a real X25519 public key to encrypt

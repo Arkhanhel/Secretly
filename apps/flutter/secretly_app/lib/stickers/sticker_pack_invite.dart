@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
-/// Приглашение в набор стикеров — Ш-2 из `docs/TZ_STICKER_SHARING_2026-08-08.md`.
+/// Приглашение в набор стикеров — Ш-2.
 ///
 /// ЗАЧЕМ. Сегодня уезжают ОТДЕЛЬНЫЕ картинки: получатель видит стикер, но не
 /// может добавить набор себе. Пока делить нечего, второй настройке («кто может

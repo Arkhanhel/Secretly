@@ -1884,7 +1884,7 @@ class RelayClient {
     return RelayRoomCreateResult.fromJson(json);
   }
 
-  /// Submit an E2EE support ticket (TZ docs/TZ_SUPPORT_TICKETS_2026-07-24.md).
+  /// Submit an E2EE support ticket.
   /// [ciphertextB64] is a SupportSeal sealed to the support public key (the relay
   /// stores it opaquely); [replyPubkeyB64] is where the admin seals replies.
   Future<void> submitSupport({
@@ -3748,8 +3748,7 @@ class RelayClient {
             if (failures < _maxDeliveryApplyFailuresPerSeq) {
               // Fail closed: never ACK or advance a delivery we could not apply.
               _reorderBuffer[seq] = next;
-              // 🔴 THE ANTIDOTE IS BEHIND THE POISON (2026-08-01, ПК-3 of
-              // docs/TZ_DELIVERY_SIGNAL_MODEL_2026-08-01.md).
+              // 🔴 THE ANTIDOTE IS BEHIND THE POISON (2026-08-01, ПК-3).
               //
               // Field, proven on prod: a receiver held 111 undecryptable wires
               // from one sender AND — further down the same mailbox — FOUR

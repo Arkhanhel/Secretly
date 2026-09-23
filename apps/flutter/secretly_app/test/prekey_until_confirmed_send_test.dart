@@ -12,7 +12,7 @@ import 'package:secretly_app/security/device_keys.dart';
 import 'package:secretly_app/storage/app_db.dart';
 import 'package:secretly_app/transport/keys_client.dart';
 
-/// Э-4 Ш-4/Ш-5 (docs/TZ_PREKEY_UNTIL_CONFIRMED_2026-08-01.md): carry the
+/// Э-4 Ш-4/Ш-5: carry the
 /// handshake on every message until the peer confirms — the Signal rule.
 ///
 /// Why it matters, measured in the field on 2026-08-02: a session heal whose

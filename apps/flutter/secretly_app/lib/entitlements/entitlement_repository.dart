@@ -247,8 +247,8 @@ class EntitlementRepository {
       );
       _handshakeFlagsResolved = true;
       // In-app Support key + flag: same ride, OFF polarity like identity — only
-      // a VERIFIED block enables the page and supplies the key to seal tickets
-      // to (TZ docs/TZ_SUPPORT_TICKETS_2026-07-24.md).
+      // a VERIFIED block enables the page and supplies the key used to seal
+      // support tickets.
       _supportConfig = SupportConfig.fromConfigResponse(
         config,
         verified: await verifySupportSignature(config),

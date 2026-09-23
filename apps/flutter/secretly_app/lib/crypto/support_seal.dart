@@ -8,7 +8,7 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 
 /// One-shot anonymous "sealed box" for the in-app Support channel (TZ
-/// docs/TZ_SUPPORT_TICKETS_2026-07-24.md, Variant C). It lets a user encrypt a
+/// Variant C). It lets a user encrypt a
 /// support message to the SUPPORT public key (whose private key lives ONLY in
 /// the admin console — the server/relay store ciphertext only), and lets the
 /// admin encrypt a reply back to the user's per-device support key.

@@ -1135,7 +1135,7 @@ CREATE TABLE IF NOT EXISTS room_call_media_participants (
 CREATE INDEX IF NOT EXISTS room_call_media_participants_call_updated_idx ON room_call_media_participants(call_id, updated_at_ms DESC);
 CREATE INDEX IF NOT EXISTS room_call_media_participants_room_profile_idx ON room_call_media_participants(room_id, profile_id, updated_at_ms DESC);
 
--- SUPPORT TICKETS (TZ docs/TZ_SUPPORT_TICKETS_2026-07-24.md). E2EE: the relay
+-- SUPPORT TICKETS. E2EE: the relay
 -- stores ONLY ciphertext (sealed to the support public key, whose private key
 -- lives only in the admin console) + the user's reply pubkey + anonymous
 -- profile_id. Never any plaintext, email, or the support private key.

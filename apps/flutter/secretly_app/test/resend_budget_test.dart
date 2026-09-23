@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:secretly_app/storage/app_db.dart';
 
-/// 🔴 Э-0 of docs/TZ_DELIVERY_SIGNAL_MODEL_2026-08-01.md — the lifetime cap on
+/// 🔴 Э-0 — the lifetime cap on
 /// re-sending one message to one device.
 ///
 /// Proven on production 2026-08-01: re-sending an undelivered message had a

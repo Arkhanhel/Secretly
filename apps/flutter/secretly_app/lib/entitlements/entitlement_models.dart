@@ -77,7 +77,7 @@ class EntitlementLimits {
     // pairwise — every room message is encrypted separately for each device of
     // each member, so cost grows with membership and a large room burns the
     // sender's CPU and battery. Raise only once rooms move to a shared group
-    // key (see docs/TZ_ROOMS_SCALE_2026-07-29.md). Server env is authoritative:
+    // key. Server env is authoritative:
     // SECRETLY_FREE_GROUP_MEMBERS / SECRETLY_PREMIUM_GROUP_MEMBERS.
     groupMembers: 10,
     callParticipants: 8,

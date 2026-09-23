@@ -38,7 +38,7 @@ import 'wire_v3.dart';
 /// material, handshake, or forward-secrecy property is touched.
 const int kGlareWindowMs = 360 * 1000;
 
-/// Э-4 Ш-4 (docs/TZ_PREKEY_UNTIL_CONFIRMED_2026-08-01.md): may this build
+/// Э-4 Ш-4: may this build
 /// REPEAT its handshake on every message until the peer confirms the session?
 ///
 /// 🔴 STARTS OFF, and the order of rollout is the whole point. Turning this on

@@ -8,7 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:secretly_app/storage/app_db.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as ffi;
 
-/// Э-4 Ш-1 (docs/TZ_PREKEY_UNTIL_CONFIRMED_2026-08-01.md, редакция 2):
+/// Э-4 Ш-1 (редакция 2):
 /// the two handshake columns, and the migration onto them.
 ///
 /// This step must change NO behaviour — it only opens the storage. What it must

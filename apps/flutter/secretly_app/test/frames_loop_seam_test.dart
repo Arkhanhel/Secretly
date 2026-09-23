@@ -35,7 +35,7 @@ const double _kSeamLimit = 2.0;
 /// today: they may not get WORSE, and each one drops off this list (and under
 /// [_kSeamLimit]) as it is fixed. Every entry here needs a loop long enough to
 /// hold whole cycles of BOTH its slow and its fast motion, which today collides
-/// with the 96-frame bake cap — see docs/TZ_FRAMES_LOOP_AND_OPTIMIZATION.
+/// with the 96-frame bake cap.
 const Map<String, double> _kSeamDebt = {};
 
 Future<Uint8List> _pixels(ui.Image img) async {

@@ -7,7 +7,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/models/e2e_payload_v1.dart';
 
-/// The three room-key wire types (docs/TZ_ROOM_SENDER_KEY_2026-07-29.md §4).
+/// The three room-key wire types.
 ///
 /// These land in a format that a RELEASED client already parses, so the tests
 /// that matter most are about what a client does with input it was not built

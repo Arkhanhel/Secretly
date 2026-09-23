@@ -4,7 +4,7 @@
 import 'package:flutter/foundation.dart';
 
 /// Server-signed switch for SENDING room messages under the sender key
-/// (docs/TZ_ROOM_SENDER_KEY_2026-07-29.md, F-ROOMSK-2), carried in the additive
+/// (F-ROOMSK-2), carried in the additive
 /// `rooms` block of `/v1/config`.
 ///
 /// **Why this block exists at all.** On 1.7.4+416 a build shipped with the
@@ -73,8 +73,7 @@ class RoomFlags {
   String toString() => 'RoomFlags(senderKeySend: $senderKeySendEnabled)';
 }
 
-/// Второй подписанный блок комнат, `rooms2` (К-2 / К-5, 17.09.2026,
-/// docs/TZ_ROOMS_KEY_AND_SENDER_AUTH_2026-09-17.md).
+/// Второй подписанный блок комнат, `rooms2` (К-2 / К-5, 17.09.2026).
 ///
 /// Отдельный блок, а не новые поля в `rooms`: подписанный текст того блока
 /// заморожен, а выпущенные сборки при несовпадении подписи выключают отправку

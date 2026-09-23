@@ -17,7 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../app/app_controller.dart';
 import 'settings_screen_l10n.dart';
 
-/// In-app Support chat (TZ docs/TZ_SUPPORT_TICKETS_2026-07-24.md, Variant C).
+/// In-app Support chat (Variant C).
 /// The user types (and can attach a photo/file); the message is sealed to the
 /// support key and posted to the relay, and admin replies stream back in-place.
 /// The thread is cached locally per profile so it survives navigating away.

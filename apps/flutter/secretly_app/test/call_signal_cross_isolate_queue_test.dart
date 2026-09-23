@@ -10,8 +10,7 @@ import 'package:secretly_app/app/app_controller.dart';
 import 'package:secretly_app/storage/app_db.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as ffi;
 
-/// 🔴 ОЧЕРЕДЬ СИГНАЛОВ ЗВОНКА ЧЕРЕЗ ГРАНИЦУ ИЗОЛЯТА
-/// (docs/TZ_CALL_SIGNALS_CROSS_ISOLATE_2026-08-14.md).
+/// 🔴 ОЧЕРЕДЬ СИГНАЛОВ ЗВОНКА ЧЕРЕЗ ГРАНИЦУ ИЗОЛЯТА.
 ///
 /// ЗАМЕР 14.08, звонок `d41fdf11`: приглашение и предложение приехали за ТРИ
 /// СЕКУНДЫ до того, как человек нажал «Принять», — но в фоновый изолят. Он их

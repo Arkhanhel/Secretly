@@ -7,8 +7,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ratchet/room_key_chain.dart';
 
-/// Unrepresentability tests for the room sender key
-/// (docs/TZ_ROOM_SENDER_KEY_2026-07-29.md §11).
+/// Unrepresentability tests for the room sender key.
 ///
 /// These are not "does it round-trip" tests. Each one pins a property that must
 /// be IMPOSSIBLE to violate, because the failure mode is a departed member

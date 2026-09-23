@@ -24,8 +24,7 @@ import 'desktop_selector.dart';
 /// invalidation ticks costs one debounced query and republishes only when the
 /// value actually moved. See [DesktopSelectorHub] for the mechanism.
 ///
-/// **Two deviations from the design in
-/// `docs/DESKTOP_TZ/02_ARCHITECTURE_UNIFICATION.md` §2, both deliberate:**
+/// **Two deviations from the original design, both deliberate:**
 ///
 ///  1. *The VM wraps the controller, it does not own it.*
 ///     `_DesktopProductionAppState` constructs the controller, disposes it, and

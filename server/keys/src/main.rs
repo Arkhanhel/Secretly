@@ -132,7 +132,7 @@ struct IdentityPayload {
 }
 
 /// Additive (2026-07-31): SEND kill-switch for the room sender key
-/// (docs/TZ_ROOM_SENDER_KEY_2026-07-29.md, F-ROOMSK-2).
+/// (F-ROOMSK-2).
 ///
 /// Client polarity is fail-OFF, like identity: sealing room messages under the
 /// sender key activates only after a VERIFIED block permits it. This exists
@@ -149,7 +149,7 @@ struct RoomsPayload {
     issued_at_ms: i64,
 }
 
-/// К-2 / К-5 (17.09.2026, docs/TZ_ROOMS_KEY_AND_SENDER_AUTH_2026-09-17.md):
+/// К-2 / К-5 (17.09.2026):
 /// the second rooms block, with its OWN signature. A new block instead of new
 /// fields in `rooms`: that block's signed text is frozen, and changing it would
 /// make every released client distrust it — which turns their room sending off.
@@ -201,7 +201,7 @@ struct UpdatePayload {
 }
 
 /// Additive (2026-08-03): переключатель ОТПРАВКИ повторного prekey (Э-4,
-/// docs/TZ_PREKEY_UNTIL_CONFIRMED_2026-08-01.md) со своей подписью. Клиенты,
+/// со своей подписью. Клиенты,
 /// собранные до этого поля, просто его не увидят.
 ///
 /// ЧЕМ ОТЛИЧАЕТСЯ ОТ БЛОКА `rooms`. Там сервер — только выключатель: включить
@@ -227,7 +227,7 @@ struct HandshakePayload {
 
 /// Additive (2026-07-24): in-app Support feature flag + the X25519 public key
 /// tickets are sealed to. Fail-OFF on the client (empty key / unverified block
-/// hides the page). TZ docs/TZ_SUPPORT_TICKETS_2026-07-24.md.
+/// hides the page). TZ.
 #[derive(Serialize, Clone)]
 struct SupportPayload {
     support_enabled: bool,

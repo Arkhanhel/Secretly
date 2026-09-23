@@ -33,7 +33,7 @@ import 'package:flutter_test/flutter_test.dart';
 ///
 /// **Deliberately out of scope:** `lib/ui/desktop_chats_workspace.dart`
 /// (Surface B). It is legacy, scheduled for removal once the tablet path moves
-/// to Surface A (`DESKTOP_COMPLETION_TZ.md` §9), and it is reached from the
+/// to Surface A, and it is reached from the
 /// *mobile* entrypoint — ratcheting it would protect code we intend to delete.
 void main() {
   // Counts as of 2026-09-08. LOWER these when strings are extracted; never

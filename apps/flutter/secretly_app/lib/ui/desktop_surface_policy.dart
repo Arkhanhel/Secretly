@@ -15,8 +15,7 @@
 /// Until now both sites hand-rolled the same predicate
 /// (`Platform.isWindows || Platform.isLinux || Platform.isMacOS || width >= 1180`),
 /// so building the mobile target on a desktop OS produced a second, divergent
-/// desktop app — the "double buttons" failure mode described in
-/// `docs/DESKTOP_TZ/00_MASTER_PLAN.md` and `docs/DESKTOP_STRATEGY_REVIEW_2026-09-08.md`.
+/// desktop app — the "double buttons" failure mode.
 ///
 /// Policy now:
 ///
@@ -25,7 +24,7 @@
 ///   `--dart-define=SECRETLY_LEGACY_DESKTOP_ON_DESKTOP_OS=true`.
 /// * **Wide tablets** (iPad, large Android) — unchanged. iPad is a shipped
 ///   device family and 11"/12.9" landscape exceeds the breakpoint, so real
-///   users are on Surface B today. Per `DESKTOP_COMPLETION_TZ.md` §9 they move
+///   users are on Surface B today. They move
 ///   to Surface A only after it is split into platform-neutral widgets with
 ///   touch ergonomics (epic T-01…T-06) — not before.
 library;

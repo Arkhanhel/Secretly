@@ -529,7 +529,7 @@ struct AppState {
     // the keys entitlements endpoint; any failure fails OPEN (never block).
     monetization_enabled: bool,
     entitlement_cache: Arc<DashMap<String, (i64, RelayEntitlement)>>,
-    // К-5 (17.09.2026, docs/TZ_ROOMS_KEY_AND_SENDER_AUTH_2026-09-17.md): a room
+    // К-5 (17.09.2026): a room
     // may grow past its owner's tier cap up to `big_room_members`, but only
     // while EVERY live device of every member (and of the one joining) runs
     // build `big_room_min_build` or newer — the first build that carries a
@@ -2318,8 +2318,8 @@ async fn verify_http_auth(
     // другие точки, где записи не стояло. Результат: 0 из 2001 устройства с
     // известной сборкой, то есть измеритель раскатки не работал НИКОГДА.
     //
-    // Это гейт: ТЗ номера безопасности (docs/TZ_ACCOUNT_IDENTITY_2026-08-06.md,
-    // К-5 и пауза между Ш-2 и Ш-3) требует знать долю сборок, умеющих AIK,
+    // Это гейт: требование номера безопасности (К-5 и пауза между Ш-2 и Ш-3)
+    // требует знать долю сборок, умеющих AIK,
     // прежде чем менять то, что решают приёмники. Строить решение поверх
     // неработающего замера нельзя.
     //
@@ -6031,7 +6031,7 @@ async fn http_pending(
     Ok(Json(HttpPendingResp { device_id, items }))
 }
 
-/// К-2 (17.09.2026, docs/TZ_ROOMS_KEY_AND_SENDER_AUTH_2026-09-17.md): a room
+/// К-2 (17.09.2026): a room
 /// member uploads ONE sealed room message and names the devices that asked for
 /// the raw room wire; the relay queues the same row for each of them, with the
 /// authenticated sender attached (С-1). Devices it refuses are reported back so
@@ -9911,7 +9911,7 @@ async fn http_blocks_set(
     Ok(Json(HttpBlocksSetResp { ok: true }))
 }
 
-// ── SUPPORT TICKETS (TZ docs/TZ_SUPPORT_TICKETS_2026-07-24.md) ────────────────
+// ── SUPPORT TICKETS ────────────────
 // E2EE support channel: the relay stores ONLY ciphertext (sealed to the support
 // key, whose private key lives only in the admin console) + the user's reply
 // pubkey + anonymous profile_id. User endpoints are device-signature authed;
