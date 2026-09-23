@@ -25,9 +25,20 @@ import 'package:image/image.dart' as img;
 void main() {
   final dir = Directory('macos/Runner/Assets.xcassets/AppIcon.appiconset');
 
+  const sizes = [16, 32, 64, 128, 256, 512, 1024];
+
   test('набор иконок macOS на месте — все семь размеров', () {
-    if (!dir.existsSync()) return; // в опубликованном дереве файла может не быть
-    for (final s in [16, 32, 64, 128, 256, 512, 1024]) {
+    // 🔴 В ОПУБЛИКОВАННОМ дереве растров нет вовсе: сборщик выкладки не выносит
+    // наружу .png — картинки это оформление, а не код. Каталог при этом
+    // остаётся, в нём лежит Contents.json, поэтому проверять существование
+    // КАТАЛОГА бесполезно: проверка падала бы у каждого, кто читает открытый
+    // код. Смотрим на сами картинки — нет ни одной, значит это выкладка.
+    // А вот неполный набор — уже настоящая беда, и он проверяется.
+    final files = [
+      for (final s in sizes) File('${dir.path}/app_icon_$s.png'),
+    ];
+    if (files.every((f) => !f.existsSync())) return;
+    for (final s in sizes) {
       final f = File('${dir.path}/app_icon_$s.png');
       expect(f.existsSync(), isTrue, reason: 'нет app_icon_$s.png');
       final im = img.decodePng(f.readAsBytesSync())!;
