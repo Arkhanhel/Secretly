@@ -1260,7 +1260,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
       ),
       currentId: vm.settings.frameId,
       items: [
-        for (final f in kAvatarFrames)
+        for (final f in kAllAvatarFrames)
           _RoomCosmeticChoice(
             id: f.id,
             label: f.nameLocalized(context),

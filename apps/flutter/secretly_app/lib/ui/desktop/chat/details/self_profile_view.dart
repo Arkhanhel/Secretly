@@ -14,7 +14,7 @@ import '../../../premium/cosmetics_catalog.dart'
         coverBackWidgetFor,
         coverFrontWidgetFor,
         coverWidgetFor,
-        kAvatarFrames,
+        kAllAvatarFrames,
         kProfileCovers;
 import '../../design/tokens.dart';
 import '../../primitives/avatar.dart';
@@ -266,7 +266,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
     final ids = <String?>[
       null, // «Без рамки» / «Без обложки» — removal must always be reachable
       ...(frame
-          ? kAvatarFrames.map((f) => f.id)
+          ? kAllAvatarFrames.map((f) => f.id)
           : kProfileCovers.map((c) => c.id)),
     ];
     final picked = await DesktopDialog.show<String>(
@@ -291,10 +291,16 @@ class _SelfProfileViewState extends State<SelfProfileView> {
             final label = id == null
                 ? (frame ? l10n.desktopProfileNoFrame : l10n.desktopProfileNoCover)
                 : (frame
-                      ? kAvatarFrames.firstWhere((f) => f.id == id).name(true)
+                      // 🔴 Не `name(true)`: подпись плитки — это подпись
+                      // окна, а окно переведено на восемь языков. Русское имя
+                      // здесь оставалось единственной строкой, которая не
+                      // слушалась выбора языка.
+                      ? kAllAvatarFrames
+                            .firstWhere((f) => f.id == id)
+                            .nameLocalized(ctx)
                       : kProfileCovers
                             .firstWhere((c) => c.id == id)
-                            .name(true));
+                            .nameLocalized(ctx));
             return HoverListener(
               // Sentinel: DesktopDialog.show returns null when DISMISSED, so
               // "no frame" cannot also be null or the two would be identical.

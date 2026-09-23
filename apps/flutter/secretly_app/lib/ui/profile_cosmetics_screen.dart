@@ -381,7 +381,7 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
           crossAxisSpacing: 14,
           childAspectRatio: 0.82,
         ),
-        itemCount: kAvatarFrames.length + 1,
+        itemCount: kAllAvatarFrames.length + 1,
         itemBuilder: (context, i) {
         if (i == 0) {
           return _FrameTile(
@@ -403,7 +403,7 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
             onTap: () => _selectFrame(null),
           );
         }
-        final f = kAvatarFrames[i - 1];
+        final f = kAllAvatarFrames[i - 1];
         return _FrameTile(
           controller: _c,
           frameId: f.id,

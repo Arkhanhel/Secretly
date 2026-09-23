@@ -17,6 +17,7 @@ import '../wave1_l10n.dart';
 import '../widgets/premium_glass.dart';
 import 'cosmetic_animation_scope.dart';
 import 'cosmetic_motion_gate.dart';
+import 'live_frames.dart';
 
 /// Built-in catalog of premium animated avatar FRAMES and profile COVERS
 /// (TZ-MONETIZE-01 — premium cosmetics). Each item is a short stable [id] stored
@@ -98,6 +99,31 @@ String _cosmeticNameForLocale(
 /// keyed by the catalog id. Frame and cover ids are disjoint except where the
 /// motif is identical (`bears`, `rainbow`), in which case one entry serves both.
 const Map<String, Map<String, String>> _kCosmeticNameTranslations = {
+  // ── living frames (23.09.2026) ──
+  'cat': {
+    'uk': 'Рудик',
+    'es': 'Pelirrojo',
+    'pt': 'Ruivo',
+    'pt_BR': 'Ruivo',
+    'fr': 'Rouquin',
+    'de': 'Rotschopf',
+  },
+  'coder': {
+    'uk': 'Кодер',
+    'es': 'Programador',
+    'pt': 'Programador',
+    'pt_BR': 'Programador',
+    'fr': 'Codeur',
+    'de': 'Coder',
+  },
+  'music': {
+    'uk': 'Меломан',
+    'es': 'Melómano',
+    'pt': 'Melómano',
+    'pt_BR': 'Melômano',
+    'fr': 'Mélomane',
+    'de': 'Musikfan',
+  },
   // ── frames ──
   'cosmic': {
     'uk': 'Космос',
@@ -417,6 +443,44 @@ final List<AvatarFrame> kAvatarFrames = [
   ),
 ];
 
+/// 🔴 ЖИВЫЕ рамки — персонажи из макета 23.09.2026. Список ОТДЕЛЬНЫЙ, и это
+/// не аккуратность ради аккуратности: всё, что окружает [kAvatarFrames] —
+/// атлас испечённых кадров, упаковка трёх кадров в каналы, проверка шва
+/// петли, — держится на том, что у рамки ЕСТЬ период. У этих периода нет:
+/// движение считают пружины, а моменты подёргивания берутся из случайных
+/// чисел. Впиши их в тот же список — и семь проверок начнут печь то, чего не
+/// существует.
+///
+/// Выбор пользователя разрешается через [frameById], который смотрит оба
+/// списка, поэтому идентификатор из профиля рисуется везде одинаково.
+final List<AvatarFrame> kLivingAvatarFrames = [
+  AvatarFrame(
+    id: 'cat',
+    nameRu: 'Рыжик',
+    nameEn: 'Ginger',
+    builder: (s) => LiveFrameView(size: s, id: 'cat'),
+  ),
+  AvatarFrame(
+    id: 'coder',
+    nameRu: 'Кодер',
+    nameEn: 'Coder',
+    builder: (s) => LiveFrameView(size: s, id: 'coder'),
+  ),
+  AvatarFrame(
+    id: 'music',
+    nameRu: 'Меломан',
+    nameEn: 'Music lover',
+    builder: (s) => LiveFrameView(size: s, id: 'music'),
+  ),
+];
+
+/// Всё, что можно ВЫБРАТЬ. Экраны выбора ходят сюда, машинерия атласа — в
+/// [kAvatarFrames].
+final List<AvatarFrame> kAllAvatarFrames = [
+  ...kAvatarFrames,
+  ...kLivingAvatarFrames,
+];
+
 final List<ProfileCover> kProfileCovers = [
   ProfileCover(
     id: 'space',
@@ -526,7 +590,7 @@ final List<ProfileCover> kProfileCovers = [
 
 AvatarFrame? frameById(String? id) {
   if (id == null || id.isEmpty) return null;
-  for (final f in kAvatarFrames) {
+  for (final f in kAllAvatarFrames) {
     if (f.id == id) return f;
   }
   return null;

@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../premium/cosmetics_catalog.dart' show frameById;
+import '../../premium/live_frames.dart' show isLiveFrameId;
 import '../../../l10n/app_localizations.dart';
 import '../../widgets/avatar_initials.dart';
 import '../../widgets/shared_palette.dart';
@@ -440,9 +441,23 @@ class Avatar extends StatelessWidget {
         TickerMode.valuesOf(context).enabled &&
         DesktopUiPrefs.animatePeerCosmetics.value &&
         allowAnimatedFrame;
-    final frame = animateFrames ? frameById(frameId) : null;
+    // 🔴 РАМКА ОСТАЁТСЯ, КОГДА ВЫКЛЮЧЕНА АНИМАЦИЯ. Раньше здесь стояло
+    // `animateFrames ? frameById(...) : null`, и выключенная «Анимация рамок и
+    // статусов» убирала рамку ЦЕЛИКОМ: у собеседника пропадало купленное
+    // украшение, а в окне выбора плитки показывали голый портрет — выбирать
+    // приходилось по названию. Настройка называется «анимация», и отвечать она
+    // должна за движение, как на телефоне. Ниже рамка строится всегда, а
+    // `TickerMode` гасит движение: атлас проверяет его сам и отдаёт
+    // неподвижную картинку, не заводя тикера.
+    final frame = frameById(frameId);
     if (frame != null) {
       final inset = size * _frameInset;
+      // Живые рамки не из атласа: канонический размер для них бессмыслен, а
+      // порог «весь персонаж или одно кольцо» считается по НАСТОЯЩЕМУ размеру
+      // портрета — иначе наушники в строке списка легли бы на имя.
+      final canvasPx = isLiveFrameId(frameId)
+          ? size
+          : kDesktopFrameCanonicalPx;
       avatar = SizedBox(
         width: size,
         height: size,
@@ -490,10 +505,13 @@ class Avatar extends StatelessWidget {
                 child: FittedBox(
                   fit: BoxFit.fill,
                   child: RepaintBoundary(
-                    child: SizedBox(
-                      width: kDesktopFrameCanonicalPx,
-                      height: kDesktopFrameCanonicalPx,
-                      child: frame.builder(kDesktopFrameCanonicalPx),
+                    child: TickerMode(
+                      enabled: animateFrames,
+                      child: SizedBox(
+                        width: canvasPx,
+                        height: canvasPx,
+                        child: frame.builder(canvasPx),
+                      ),
                     ),
                   ),
                 ),
