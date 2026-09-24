@@ -3,7 +3,14 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 part of '../profile_fx.dart';
 
-final math.Random _rng = math.Random();
+math.Random _rng = math.Random();
+
+/// Тесты (25.09.2026): закрепить случайность эффектов рамок, чтобы проверки
+/// рисования давали один и тот же кадр. Без зерна рыбки «аквариума» и прочие
+/// частицы вставали каждый раз по-новому, и проверка «рамка не закрывает лицо»
+/// то проходила, то падала. В приложении не вызывается — поведение прежнее.
+@visibleForTesting
+void debugSeedProfileFxRandom(int seed) => _rng = math.Random(seed);
 double _rnd() => _rng.nextDouble();
 const double _tau = math.pi * 2;
 const double _deg = math.pi / 180;
