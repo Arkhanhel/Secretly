@@ -11,7 +11,10 @@ Android and iOS are in the stores:
 [Google Play](https://play.google.com/store/apps/details?id=com.secretly.secretly_app) ·
 [App Store](https://apps.apple.com/app/id6760417329) ·
 [secretlyapp.com](https://www.secretlyapp.com).
-Desktop clients for macOS and Windows are being built and are not released yet.
+Desktop apps for macOS and Windows are available from
+[secretlyapp.com/download](https://www.secretlyapp.com/download). The macOS app
+is signed, notarized by Apple and updates itself; the Windows app is, for now,
+an unsigned zip without an installer.
 
 Written and maintained by Yurii Arkhanhelskyi. Published in the app stores by
 SIA Secretly, Valmiera, Latvia.
@@ -59,6 +62,13 @@ anything about what this protects. It lists what we defend against, and section
 key material is not zeroed because Dart is garbage-collected, and the Double
 Ratchet implementation is ours rather than a reviewed library. We would rather
 you found that in our own documentation than in a blog post.
+
+Two things we fixed after finding them ourselves, both described in the threat
+model: until September 2026 the initiator of a session was not authenticated by
+a signature, so a malicious server could impersonate a device (1.8.58 and later
+sign the handshake); and the app sent the first characters of each message to
+the server for notification previews (the relay discards them since 24 September
+2026, and 1.8.59 no longer sends them).
 
 No independent audit has been done. We will not say otherwise until one has.
 
