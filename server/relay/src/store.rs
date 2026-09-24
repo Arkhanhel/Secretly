@@ -25,6 +25,36 @@ use tokio_rusqlite::params;
 use tokio_rusqlite::rusqlite::{self, OptionalExtension};
 use uuid::Uuid;
 
+/// Приватность (24.09.2026): убрать начало текста сообщения из служебных
+/// данных, прежде чем они лягут на диск.
+///
+/// Приложение отправителя кладёт в `message.preview_text` блока
+/// `chat_message_v1` первые ~180 символов текста — открытым текстом, для
+/// уведомления. Сообщение при этом зашифровано сквозным образом, и его начало
+/// не должно храниться на сервере (а значит, и в ночных копиях базы) и уходить
+/// в push Apple и Google. Трогается ТОЛЬКО это поле и только когда оно есть;
+/// всё остальное остаётся как пришло. Нечитаемый JSON, в котором встречается
+/// `preview_text`, не сохраняется вовсе: пригодным для push он всё равно не был.
+pub(crate) fn strip_transport_meta_preview(raw: Option<&str>) -> Option<String> {
+    let raw = raw?;
+    if !raw.contains("preview_text") {
+        return Some(raw.to_string());
+    }
+    let mut value: serde_json::Value = match serde_json::from_str(raw) {
+        Ok(v) => v,
+        Err(_) => return None,
+    };
+    let removed = value
+        .get_mut("message")
+        .and_then(|m| m.as_object_mut())
+        .map(|m| m.remove("preview_text").is_some())
+        .unwrap_or(false);
+    if !removed {
+        return Some(raw.to_string());
+    }
+    serde_json::to_string(&value).ok()
+}
+
 #[derive(Debug, Clone)]
 pub struct PendingRow {
     pub seq: u64,
@@ -1437,6 +1467,17 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                         [],
                     )?;
                 }
+                // Приватность (24.09.2026): вычистить превью, сохранённые до
+                // этой правки. Идемпотентно, дёшево (LIKE по очереди). Ошибка
+                // НЕ роняет запуск: реле без очистки лучше, чем реле, которое
+                // не поднялось. Новые строки превью уже не получают.
+                let _ = c.execute(
+                    "UPDATE pending SET transport_meta_json = \
+                         json_remove(transport_meta_json, '$.message.preview_text') \
+                     WHERE transport_meta_json LIKE '%\"preview_text\"%' \
+                       AND json_valid(transport_meta_json)",
+                    [],
+                );
                 if !has_pending_last_attempt_ms {
                     // RELIABLE-DELIVERY (2026-07-08): timestamp of the last
                     // delivery attempt for this row. The redeliver-until-ack
@@ -5988,7 +6029,8 @@ CREATE TABLE IF NOT EXISTS support_cleared (
         let device_id_owned = device_id.to_string();
         let msg_id_owned = msg_id.to_string();
         let ciphertext_owned = ciphertext_b64.to_string();
-        let transport_meta_json_owned = transport_meta_json.map(|v| v.to_string());
+        // Приватность (24.09.2026): начало текста сообщения на диск не пишется.
+        let transport_meta_json_owned = strip_transport_meta_preview(transport_meta_json);
         let from_device_id_owned = from_device_id
             .map(|v| v.trim().to_string())
             .filter(|v| !v.is_empty());
@@ -7063,6 +7105,77 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(redeliver[0].from_device_id.as_deref(), Some("S1"));
+    }
+
+    // Приватность (24.09.2026): начало текста сообщения на диск реле не пишется.
+    const META_WITH_PREVIEW: &str = r#"{"kind":"chat_message_v1","message":{"convo_id":"c1","is_group":false,"message_kind":"text","payload_event_id":"e1","created_at_ms":1,"sender_display_name":"Alice","preview_text":"secret words"}}"#;
+
+    #[tokio::test]
+    async fn preview_text_is_never_stored() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(dir.path().join("relay.db")).await.unwrap();
+        let now = 1_700_000_000_000_i64;
+        store
+            .enqueue("R1", "m1", "QQ", Some(META_WITH_PREVIEW), 604_800, now)
+            .await
+            .unwrap();
+        let rows = store.list_pending_from("R1", 1, now, 10).await.unwrap();
+        let meta = rows[0].transport_meta_json.as_deref().unwrap();
+        assert!(!meta.contains("secret words"));
+        assert!(!meta.contains("preview_text"));
+        // Всё остальное на месте — от этих полей зависят push и счётчики.
+        let v: serde_json::Value = serde_json::from_str(meta).unwrap();
+        assert_eq!(v["kind"], "chat_message_v1");
+        assert_eq!(v["message"]["sender_display_name"], "Alice");
+        assert_eq!(v["message"]["payload_event_id"], "e1");
+        assert_eq!(v["message"]["message_kind"], "text");
+    }
+
+    #[test]
+    fn strip_preview_touches_nothing_else() {
+        assert_eq!(strip_transport_meta_preview(None), None);
+        // Другие виды служебных данных — байт в байт.
+        let call = r#"{"kind":"call_signal_v1","call_id":"x","preview":"not ours"}"#;
+        assert_eq!(strip_transport_meta_preview(Some(call)).as_deref(), Some(call));
+        let no_preview = r#"{"kind":"chat_message_v1","message":{"convo_id":"c"}}"#;
+        assert_eq!(
+            strip_transport_meta_preview(Some(no_preview)).as_deref(),
+            Some(no_preview)
+        );
+        // Нечитаемое, но с превью внутри — не сохраняется вовсе.
+        assert_eq!(
+            strip_transport_meta_preview(Some(r#"{"message":{"preview_text":"x""#)),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn previews_stored_before_the_fix_are_scrubbed_on_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("relay.db");
+        let now = 1_700_000_000_000_i64;
+        {
+            let store = RelayStore::open(&path).await.unwrap();
+            store
+                .enqueue("R1", "m1", "QQ", None, 604_800, now)
+                .await
+                .unwrap();
+        }
+        // Так строку записывало реле до правки.
+        {
+            let c = rusqlite::Connection::open(&path).unwrap();
+            c.execute(
+                "UPDATE pending SET transport_meta_json = ?1",
+                [META_WITH_PREVIEW],
+            )
+            .unwrap();
+        }
+        let store = RelayStore::open(&path).await.unwrap();
+        let rows = store.list_pending_from("R1", 1, now, 10).await.unwrap();
+        let meta = rows[0].transport_meta_json.as_deref().unwrap();
+        assert!(!meta.contains("secret words"));
+        assert!(meta.contains("chat_message_v1"));
+        assert!(meta.contains("Alice"));
     }
 
     #[tokio::test]

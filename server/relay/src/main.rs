@@ -911,8 +911,10 @@ struct MessageTransportMetaBody {
     sender_display_name: Option<String>,
     #[serde(default)]
     convo_title: Option<String>,
-    #[serde(default)]
-    preview_text: Option<String>,
+    // 🔴 Приватность (24.09.2026): поля `preview_text` здесь НЕТ намеренно.
+    // Приложение кладёт в него начало текста сообщения открытым текстом;
+    // реле его не читает, не хранит (`store::strip_transport_meta_preview`)
+    // и не отдаёт в push. Неизвестное поле serde пропускает.
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -979,7 +981,6 @@ struct MessageTransportMetaRecord {
     created_at_ms: i64,
     sender_profile_id: Option<String>,
     sender_display_name: Option<String>,
-    preview_text: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -2034,8 +2035,17 @@ fn parse_chat_message_transport_meta(
             .as_deref()
             .and_then(normalize_push_profile_id),
         sender_display_name: normalize_push_text(message.sender_display_name.as_deref(), 80),
-        preview_text: normalize_push_text(message.preview_text.as_deref(), 160),
     }))
+}
+
+/// Текст уведомления по виду сообщения. Содержимого сообщения здесь нет и
+/// быть не может: реле его не знает.
+fn push_body_for_kind(message_kind: &str) -> String {
+    match message_kind {
+        "sticker" => "Sticker".to_string(),
+        "attachment" => "Attachment".to_string(),
+        _ => "New message".to_string(),
+    }
 }
 
 fn parse_call_invite_push_hint(
@@ -11093,13 +11103,11 @@ async fn build_push_wake_payload(
                 } else if privacy_level == 1 {
                     "New message".to_string()
                 } else if message.is_group {
-                    let preview = message.preview_text.clone().unwrap_or_else(|| {
-                        match message.message_kind.as_str() {
-                            "sticker" => "Sticker".to_string(),
-                            "attachment" => "Attachment".to_string(),
-                            _ => "New message".to_string(),
-                        }
-                    });
+                    // Приватность (24.09.2026): текст сообщения в push не
+                    // попадает никогда — только вид сообщения. Сообщение
+                    // зашифровано сквозным образом; его начало не должно
+                    // уходить Apple и Google.
+                    let preview = push_body_for_kind(&message.message_kind);
                     if let Some(sender_name) = sender_name.as_deref() {
                         normalize_push_text(Some(format!("{sender_name}: {preview}").as_str()), 220)
                             .unwrap_or(preview)
@@ -11107,13 +11115,7 @@ async fn build_push_wake_payload(
                         preview
                     }
                 } else {
-                    message.preview_text.clone().unwrap_or_else(|| {
-                        match message.message_kind.as_str() {
-                            "sticker" => "Sticker".to_string(),
-                            "attachment" => "Attachment".to_string(),
-                            _ => "New message".to_string(),
-                        }
-                    })
+                    push_body_for_kind(&message.message_kind)
                 };
                 data.insert(
                     "notification_title".into(),
@@ -15704,7 +15706,10 @@ mod tests {
         .await;
 
         assert_eq!(payload.notification_title, "Alice");
-        assert_eq!(payload.notification_body, "hello there");
+        // Приватность (24.09.2026): даже при «отправитель + текст» текст
+        // сообщения в push не уходит — реле его не знает и не хранит.
+        assert_eq!(payload.notification_body, "New message");
+        assert!(!format!("{:?}", payload.data).contains("hello there"));
         assert_eq!(payload.notification_tag, "sender_profile_push_1");
         assert!(payload.include_notification);
         assert_eq!(
@@ -15787,7 +15792,8 @@ mod tests {
         .await;
 
         assert_eq!(payload.notification_title, "Category Room");
-        assert_eq!(payload.notification_body, "Dina: team hello");
+        assert_eq!(payload.notification_body, "Dina: New message");
+        assert!(!format!("{:?}", payload.data).contains("team hello"));
         assert_eq!(payload.notification_tag, "room:push-category-1");
         assert_eq!(
             payload
@@ -15825,7 +15831,7 @@ mod tests {
         .await;
 
         assert_eq!(payload.notification_title, "Secretly");
-        assert_eq!(payload.notification_body, "spoofed preview");
+        assert_eq!(payload.notification_body, "New message");
         assert_eq!(
             payload
                 .data

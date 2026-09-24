@@ -269,11 +269,34 @@ offline recovery. The slow derivation runs client-side to raise that cost;
 protocols such as OPAQUE would remove the exposure entirely and are not
 implemented.
 
-### 5.7 Push notification metadata
+### 5.7 Push notifications and notification previews
 
-Message delivery uses Firebase Cloud Messaging (Android) and APNs (iOS). Push
-payloads carry no message content — only a wake signal — but the existence and
-timing of a wake-up are visible to the push provider.
+Message delivery uses Firebase Cloud Messaging (Android) and APNs (iOS) to wake
+the app. The existence and timing of a wake-up are visible to the push provider.
+
+**Notification previews — corrected 24 September 2026.** Earlier versions of
+this document said that push payloads carry no message content. That was wrong.
+
+The sender's app attaches a short plaintext preview to every chat message: up to
+180 characters of the message text, plus the sender's display name and, for
+groups, the group title. The relay uses them to build the notification. Before
+24 September 2026 the relay stored the preview together with the queued message,
+and therefore in its database backups. With the default notification setting it
+also put the preview into the push sent through Apple or Google. The recipient's
+"hidden" notification setting changed only what went into the push, not what the
+relay received.
+
+Since 24 September 2026 the relay discards the preview on arrival. It is no
+longer stored and no longer sent to Apple or Google, and previews that were
+already queued have been removed. Two things remain:
+
+- the relay still receives the preview in transit, and still sees the sender's
+  display name and the group title, which it uses for the notification title;
+- database snapshots taken before that date may still contain previews.
+
+The client will stop sending the preview in its next release. After that,
+message text will appear in a notification only when the device decrypts the
+message itself.
 
 ---
 
