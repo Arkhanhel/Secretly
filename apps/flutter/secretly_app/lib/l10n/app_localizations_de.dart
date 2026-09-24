@@ -5887,6 +5887,23 @@ class AppLocalizationsDe extends AppLocalizations {
   String get desktopPlayerMore => 'Mehr in diesem Chat';
 
   @override
+  String get desktopPlayerSpeed => 'Wiedergabegeschwindigkeit';
+
+  @override
+  String get desktopPlayerSpeedNormal => 'Normal';
+
+  @override
+  String get desktopPlayerVolume => 'Lautstärke';
+
+  @override
+  String get desktopUpdateNow => 'Aktualisieren';
+
+  @override
+  String desktopUpdateAvailable(String version) {
+    return 'Version $version verfügbar';
+  }
+
+  @override
   String get desktopDiagTitle => 'Zustellungsdiagnose';
 
   @override

@@ -5887,6 +5887,23 @@ class AppLocalizationsPt extends AppLocalizations {
   String get desktopPlayerMore => 'Mais nesta conversa';
 
   @override
+  String get desktopPlayerSpeed => 'Velocidade de reprodução';
+
+  @override
+  String get desktopPlayerSpeedNormal => 'Normal';
+
+  @override
+  String get desktopPlayerVolume => 'Volume';
+
+  @override
+  String get desktopUpdateNow => 'Atualizar';
+
+  @override
+  String desktopUpdateAvailable(String version) {
+    return 'Versão $version disponível';
+  }
+
+  @override
   String get desktopDiagTitle => 'Diagnóstico de entrega';
 
   @override
@@ -11821,6 +11838,23 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopPlayerMore => 'Mais nesta conversa';
+
+  @override
+  String get desktopPlayerSpeed => 'Velocidade de reprodução';
+
+  @override
+  String get desktopPlayerSpeedNormal => 'Normal';
+
+  @override
+  String get desktopPlayerVolume => 'Volume';
+
+  @override
+  String get desktopUpdateNow => 'Atualizar';
+
+  @override
+  String desktopUpdateAvailable(String version) {
+    return 'Versão $version disponível';
+  }
 
   @override
   String get desktopDiagTitle => 'Diagnóstico de entrega';

@@ -171,25 +171,33 @@ class DesktopWindowChrome extends StatelessWidget {
 
 enum _ChromeSlot { lead, search, island, trail }
 
-/// Раскладка шапки: крошки слева, островок посередине окна, поиск — сразу
-/// слева от островка, кнопки справа.
+/// Раскладка шапки: крошки слева, островок посередине окна, поиск — лупой
+/// сразу слева от островка, кнопки справа.
 ///
-/// Порядок уступок, когда окно узкое: сначала крошки не дают себя задвинуть
-/// под поле (поиск и островок сдвигаются вправо), потом островок сужается до
-/// [islandMin], потом поле до [searchMin], и только затем островок уходит
-/// совсем. Поле поиска не исчезает никогда: это вход в приложение, а музыку
-/// можно остановить и в пузыре.
+/// 🔴 ОСТРОВОК ЕДЕТ ЗА ПОИСКОМ (24.09.2026, указание владельца). Пока поиск
+/// свёрнут в лупу, островок стоит ровно посередине окна. Нажатие на лупу
+/// раскрывает поле вправо, и островок уезжает на столько же: поле растёт в
+/// сторону островка, а не наезжает на крошки. Ширину поиска раскладка не
+/// назначает, а спрашивает у самого поля — оно раскрывается плавно, и
+/// островок едет вместе с ним кадр в кадр.
+///
+/// Когда окно узкое: крошки не дают задвинуть себя под лупу, островок
+/// сужается до [islandMin], а если и так не помещается — уходит совсем. Лупа
+/// не исчезает никогда: это вход в поиск.
 class _ChromeLayout extends MultiChildLayoutDelegate {
   _ChromeLayout({required this.padLeft, required this.padRight});
 
   final double padLeft;
   final double padRight;
 
-  static const double gap = 12;
-  static const double searchWidth = 280;
-  static const double searchMin = 190;
-  static const double islandWidth = 340;
-  static const double islandMin = 220;
+  static const double gap = 10;
+
+  /// Лупа в покое — по ней считается середина: островок посередине окна,
+  /// пока поиск свёрнут.
+  static const double searchCollapsed = 34;
+  static const double searchMax = 260;
+  static const double islandWidth = 440;
+  static const double islandMin = 240;
 
   /// Больше этого крошкам не отдаём: длинное название темы ужмётся
   /// многоточием, а не вытолкнет поиск за середину.
@@ -215,8 +223,13 @@ class _ChromeLayout extends MultiChildLayoutDelegate {
 
     final hasSearch = hasChild(_ChromeSlot.search);
     final hasIsland = hasChild(_ChromeSlot.island);
+    // Место под островок держим, только когда он в принципе поместится:
+    // в тесном окне он всё равно уйдёт, а отнятое у крошек место сжало бы
+    // их до переполнения.
+    final islandFits = hasIsland && right - padLeft >= 2 * islandMin;
     final middleMin =
-        (hasSearch ? searchMin + gap : 0) + (hasIsland ? islandMin + gap : 0);
+        (hasSearch ? searchCollapsed + gap : 0) +
+        (islandFits ? islandMin + gap : 0);
 
     var leadW = 0.0;
     if (hasChild(_ChromeSlot.lead)) {
@@ -233,39 +246,30 @@ class _ChromeLayout extends MultiChildLayoutDelegate {
     }
     final minX = padLeft + leadW + gap;
 
-    var sW = hasSearch ? searchWidth : 0.0;
-    var iW = hasIsland ? islandWidth : 0.0;
-    // Островок — посередине ОКНА, а не свободного места между крошками и
-    // кнопками: середина окна не зависит от того, какой чат открыт.
-    var islandX = (w - islandWidth) / 2;
-    var searchX = hasSearch ? islandX - gap - sW : islandX;
-    if (searchX < minX) {
-      searchX = minX;
-      islandX = hasSearch ? searchX + sW + gap : searchX;
-    }
-    final end = hasIsland ? islandX + iW : searchX + sW;
-    var overflow = end - (right - gap);
-    if (overflow > 0 && hasIsland) {
-      final take = math.min(overflow, iW - islandMin);
-      iW -= take;
-      overflow -= take;
-    }
-    if (overflow > 0 && hasSearch) {
-      final take = math.min(overflow, sW - searchMin);
-      sW -= take;
-      islandX -= take;
-      overflow -= take;
-    }
-    if (overflow > 0 && hasIsland) iW = 0;
+    // Островок — посередине ОКНА при свёрнутой лупе: середина окна не
+    // зависит от того, какой чат открыт.
+    final centeredIslandX = (w - islandWidth) / 2;
+    var searchX = hasSearch
+        ? centeredIslandX - gap - searchCollapsed
+        : centeredIslandX;
+    if (searchX < minX) searchX = minX;
 
+    var searchW = 0.0;
     if (hasSearch) {
+      final room = math.max(searchCollapsed, right - gap - searchX);
       final s = layoutChild(
         _ChromeSlot.search,
-        BoxConstraints(minWidth: sW, maxWidth: sW, maxHeight: h),
+        BoxConstraints(maxWidth: math.min(searchMax, room), maxHeight: h),
       );
+      searchW = s.width;
       put(_ChromeSlot.search, searchX, s);
     }
+
     if (hasIsland) {
+      final islandX = hasSearch ? searchX + searchW + gap : searchX;
+      final avail = right - gap - islandX;
+      var iW = math.min(islandWidth, avail);
+      if (iW < islandMin) iW = 0;
       final s = layoutChild(
         _ChromeSlot.island,
         BoxConstraints(minWidth: iW, maxWidth: iW, maxHeight: h),

@@ -5907,6 +5907,23 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopPlayerMore => 'Ещё в этом чате';
 
   @override
+  String get desktopPlayerSpeed => 'Скорость воспроизведения';
+
+  @override
+  String get desktopPlayerSpeedNormal => 'Обычная';
+
+  @override
+  String get desktopPlayerVolume => 'Громкость';
+
+  @override
+  String get desktopUpdateNow => 'Обновить';
+
+  @override
+  String desktopUpdateAvailable(String version) {
+    return 'Доступна версия $version';
+  }
+
+  @override
   String get desktopDiagTitle => 'Диагностика доставки';
 
   @override

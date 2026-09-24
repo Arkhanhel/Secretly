@@ -5887,6 +5887,23 @@ class AppLocalizationsFr extends AppLocalizations {
   String get desktopPlayerMore => 'Plus dans cette discussion';
 
   @override
+  String get desktopPlayerSpeed => 'Vitesse de lecture';
+
+  @override
+  String get desktopPlayerSpeedNormal => 'Normale';
+
+  @override
+  String get desktopPlayerVolume => 'Volume';
+
+  @override
+  String get desktopUpdateNow => 'Mettre à jour';
+
+  @override
+  String desktopUpdateAvailable(String version) {
+    return 'Version $version disponible';
+  }
+
+  @override
   String get desktopDiagTitle => 'Diagnostic de distribution';
 
   @override

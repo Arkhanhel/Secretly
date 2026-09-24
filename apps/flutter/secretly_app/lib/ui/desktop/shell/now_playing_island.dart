@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/gestures.dart' show PointerScrollEvent;
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
@@ -37,6 +39,7 @@ class DesktopNowPlaying {
     this.duration = Duration.zero,
     this.queue = const <DesktopNowPlayingEntry>[],
     this.queueIndex = 0,
+    this.speed = 1.0,
   });
 
   /// Песня («Исполнитель — Название») или «Голосовое».
@@ -58,11 +61,26 @@ class DesktopNowPlaying {
   final List<DesktopNowPlayingEntry> queue;
   final int queueIndex;
 
+  /// Скорость воспроизведения, 1.0 — обычная.
+  final double speed;
+
   /// Кнопки «назад/вперёд» — только когда есть куда: у одиночной записи они
   /// обещали бы переход, которого нет.
   bool get queued => queue.length > 1;
   bool get canPrevious => queued && queueIndex > 0;
   bool get canNext => queued && queueIndex < queue.length - 1;
+}
+
+/// Ступени скорости — как в Telegram: половина, обычная, полторы, две.
+///
+/// Список закрытый. Плавный ползунок скорости ищут на слух дольше, чем
+/// выбирают одну из четырёх ступеней, а ступени Telegram люди уже знают.
+const List<double> kDesktopPlayerSpeeds = <double>[0.5, 1.0, 1.5, 2.0];
+
+/// «1×», «1.5×», «0.5×» — подпись скорости без лишних нулей.
+String desktopSpeedLabel(double speed) {
+  final whole = speed == speed.roundToDouble();
+  return '${whole ? speed.toStringAsFixed(0) : speed.toString()}×';
 }
 
 /// Островок «сейчас играет» в середине шапки окна.
@@ -75,7 +93,8 @@ class DesktopNowPlaying {
 ///
 /// Островок показывает то же, что общий плеер, которым играют и голосовые, и
 /// песни: пока в плеере есть дорожка — на паузе или нет, — островок на месте;
-/// крестик останавливает плеер и убирает его.
+/// крестик останавливает плеер и убирает его. Кнопки — как у мини-плеера
+/// Telegram: назад, играть, вперёд, скорость, громкость.
 ///
 /// Нажатие на название раскрывает под островком список: всё того же вида в
 /// этой переписке. Отсюда же — переход к сообщению, откуда звук.
@@ -90,6 +109,9 @@ class DesktopNowPlayingIsland extends StatefulWidget {
     this.onNext,
     this.onPlayIndex,
     this.onOpenSource,
+    this.onSetSpeed,
+    this.volume,
+    this.onSetVolume,
   });
 
   /// Что играет; `null` — плеер пуст, и островка нет.
@@ -108,9 +130,19 @@ class DesktopNowPlayingIsland extends StatefulWidget {
   /// Открыть переписку, откуда звук. Получает её идентификатор.
   final ValueChanged<String>? onOpenSource;
 
+  /// Сменить скорость; `null` — кнопки скорости нет.
+  final ValueChanged<double>? onSetSpeed;
+
+  /// Громкость 0..1 и её смена; без обоих — кнопки громкости нет.
+  final ValueListenable<double>? volume;
+  final ValueChanged<double>? onSetVolume;
+
   /// Ниже этой ширины островку не на чем показать название — шапка его
   /// прячет целиком, а не сжимает в неразборчивую полоску.
-  static const double minUsefulWidth = 180;
+  static const double minUsefulWidth = 220;
+
+  /// Высота островка: на семь точек меньше шапки с каждой стороны.
+  static const double height = 34;
 
   @override
   State<DesktopNowPlayingIsland> createState() =>
@@ -158,6 +190,9 @@ class _DesktopNowPlayingIslandState extends State<DesktopNowPlayingIsland> {
             constraints.maxWidth >= DesktopNowPlayingIsland.minUsefulWidth;
         final now = widget.state;
         final show = roomy && now != null;
+        final listWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 360.0;
         return TapRegion(
           groupId: _tapGroup,
           onTapOutside: (_) => _hideList(),
@@ -165,8 +200,9 @@ class _DesktopNowPlayingIslandState extends State<DesktopNowPlayingIsland> {
             link: _link,
             child: OverlayPortal(
               controller: _portal,
-              overlayChildBuilder: (ctx) =>
-                  show ? _playlist(ctx, now) : const SizedBox.shrink(),
+              overlayChildBuilder: (ctx) => show
+                  ? _playlist(ctx, now, listWidth)
+                  : const SizedBox.shrink(),
               child: AnimatedSwitcher(
                 duration: DMotion.fast,
                 switchInCurve: DMotion.easeOutCubic,
@@ -192,6 +228,9 @@ class _DesktopNowPlayingIslandState extends State<DesktopNowPlayingIsland> {
                         },
                         onPrevious: widget.onPrevious,
                         onNext: widget.onNext,
+                        onSetSpeed: widget.onSetSpeed,
+                        volume: widget.volume,
+                        onSetVolume: widget.onSetVolume,
                       )
                     : const SizedBox.shrink(key: ValueKey<String>('empty')),
               ),
@@ -203,7 +242,7 @@ class _DesktopNowPlayingIslandState extends State<DesktopNowPlayingIsland> {
   }
 
   /// Список под островком: вся очередь этого вида и переход к сообщению.
-  Widget _playlist(BuildContext context, DesktopNowPlaying now) {
+  Widget _playlist(BuildContext context, DesktopNowPlaying now, double width) {
     final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final screen = MediaQuery.sizeOf(context);
@@ -221,58 +260,41 @@ class _DesktopNowPlayingIslandState extends State<DesktopNowPlayingIsland> {
         offset: const Offset(0, 8),
         child: TapRegion(
           groupId: _tapGroup,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minWidth: _kListWidth,
-              maxWidth: _kListWidth,
-              maxHeight: maxH,
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: c.elevated,
-                  borderRadius: BorderRadius.circular(DRadii.lg),
-                  border: Border.all(color: c.borderSubtle),
-                  boxShadow: DShadows.dialog,
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.symmetric(
-                          vertical: DSpace.xs,
-                        ),
-                        itemCount: now.queue.length,
-                        itemBuilder: (ctx, i) => _PlaylistRow(
-                          entry: now.queue[i],
-                          current: i == now.queueIndex,
-                          playing: now.playing,
-                          onTap: pick == null
-                              ? null
-                              : () => i == now.queueIndex
-                                    ? widget.onTogglePlay()
-                                    : pick(i),
-                        ),
-                      ),
+          child: _PopoverCard(
+            width: width,
+            maxHeight: maxH,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: DSpace.xs),
+                    itemCount: now.queue.length,
+                    itemBuilder: (ctx, i) => _PlaylistRow(
+                      entry: now.queue[i],
+                      current: i == now.queueIndex,
+                      playing: now.playing,
+                      onTap: pick == null
+                          ? null
+                          : () => i == now.queueIndex
+                                ? widget.onTogglePlay()
+                                : pick(i),
                     ),
-                    if (open != null && convoId.isNotEmpty) ...[
-                      Container(height: 1, color: c.borderSubtle),
-                      _ActionRow(
-                        icon: FluentIcons.chat_arrow_back_20_regular,
-                        label: l10n.desktopPlayerOpenSource,
-                        onTap: () {
-                          _hideList();
-                          open(convoId);
-                        },
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
-              ),
+                if (open != null && convoId.isNotEmpty) ...[
+                  Container(height: 1, color: c.borderSubtle),
+                  _ActionRow(
+                    icon: FluentIcons.chat_arrow_back_20_regular,
+                    label: l10n.desktopPlayerOpenSource,
+                    onTap: () {
+                      _hideList();
+                      open(convoId);
+                    },
+                  ),
+                ],
+              ],
             ),
           ),
         ),
@@ -280,9 +302,6 @@ class _DesktopNowPlayingIslandState extends State<DesktopNowPlayingIsland> {
     );
   }
 }
-
-/// Ширина списка под островком — как у самого островка в шапке.
-const double _kListWidth = 340;
 
 class _IslandBody extends StatelessWidget {
   const _IslandBody({
@@ -295,6 +314,9 @@ class _IslandBody extends StatelessWidget {
     required this.onClose,
     this.onPrevious,
     this.onNext,
+    this.onSetSpeed,
+    this.volume,
+    this.onSetVolume,
   });
 
   final DesktopNowPlaying state;
@@ -305,6 +327,9 @@ class _IslandBody extends StatelessWidget {
   final VoidCallback onClose;
   final VoidCallback? onPrevious;
   final VoidCallback? onNext;
+  final ValueChanged<double>? onSetSpeed;
+  final ValueListenable<double>? volume;
+  final ValueChanged<double>? onSetVolume;
 
   @override
   Widget build(BuildContext context) {
@@ -322,29 +347,40 @@ class _IslandBody extends StatelessWidget {
     final artist = state.artist.trim();
     final spoken = artist.isEmpty ? title : '$title · $artist';
 
-    Widget iconButton(IconData icon, String tip, VoidCallback? onTap) =>
-        DesktopIconButton(
-          icon: icon,
-          size: 22,
-          iconSize: 14,
-          tooltip: tip,
-          onPressed: onTap,
-        );
+    Widget iconButton(
+      IconData icon,
+      String tip,
+      VoidCallback? onTap, {
+      double iconSize = 16,
+    }) => DesktopIconButton(
+      icon: icon,
+      size: 28,
+      iconSize: iconSize,
+      tooltip: tip,
+      onPressed: onTap,
+    );
 
+    // 🔴 Шрифт — обычный, как в Telegram, а не моноширинный. Время держат
+    // цифры ОДНОЙ ширины (tabular figures): отсчёт секунд не дёргает строку, а
+    // надпись при этом читается текстом, а не распечаткой терминала.
     final titleText = Text.rich(
       TextSpan(
         text: title,
-        style: DType.caption.copyWith(
-          fontSize: 12,
+        style: TextStyle(
+          fontFamily: DType.family,
+          fontSize: 13,
           fontWeight: FontWeight.w600,
           color: c.textPrimary,
+          height: 1.2,
         ),
         children: [
           if (artist.isNotEmpty)
             TextSpan(
               text: '  $artist',
-              style: DType.caption.copyWith(
-                fontSize: 12,
+              style: TextStyle(
+                fontFamily: DType.family,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w400,
                 color: c.textTertiary,
               ),
             ),
@@ -390,12 +426,12 @@ class _IslandBody extends StatelessWidget {
                   child: Row(
                     children: [
                       Flexible(child: titleText),
-                      const SizedBox(width: 2),
+                      const SizedBox(width: 3),
                       Icon(
                         listOpen
                             ? FluentIcons.chevron_up_16_regular
                             : FluentIcons.chevron_down_16_regular,
-                        size: 12,
+                        size: 13,
                         color: c.textTertiary,
                       ),
                     ],
@@ -406,19 +442,28 @@ class _IslandBody extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        // Моноширинным, как время у голосового: секунды одинаковой ширины не
-        // дёргают название при каждом тике.
         Text(
           duration > Duration.zero
               ? '${_mmss(position)} / ${_mmss(duration)}'
               : _mmss(position),
-          style: DType.mono.copyWith(fontSize: 10.5, color: c.textSecondary),
+          style: TextStyle(
+            fontFamily: DType.family,
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            color: c.textSecondary,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
-        const SizedBox(width: 2),
+        const SizedBox(width: 4),
+        if (onSetSpeed != null)
+          _SpeedButton(speed: state.speed, onSet: onSetSpeed!),
+        if (volume != null && onSetVolume != null)
+          _VolumeButton(volume: volume!, onSet: onSetVolume!),
         iconButton(
-          FluentIcons.dismiss_16_regular,
+          FluentIcons.dismiss_20_regular,
           l10n.desktopPlayerClose,
           onClose,
+          iconSize: 15,
         ),
       ],
     );
@@ -427,18 +472,18 @@ class _IslandBody extends StatelessWidget {
       container: true,
       label: l10n.desktopPlayerNowPlaying(spoken),
       child: Container(
-        height: 30,
+        height: DesktopNowPlayingIsland.height,
         decoration: BoxDecoration(
           color: c.accentPrimary.withValues(alpha: 0.13),
-          borderRadius: BorderRadius.circular(9),
+          borderRadius: BorderRadius.circular(11),
           border: Border.all(color: c.accentPrimary.withValues(alpha: 0.30)),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           child: Stack(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 3, 0),
+                padding: const EdgeInsets.fromLTRB(3, 0, 3, 0),
                 child: body,
               ),
               Positioned(
@@ -463,6 +508,416 @@ class _IslandBody extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Карточка выпадающего окошка островка: список, скорость, громкость.
+class _PopoverCard extends StatelessWidget {
+  const _PopoverCard({required this.child, this.width, this.maxHeight = 360});
+
+  final Widget child;
+  final double? width;
+  final double maxHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minWidth: width ?? 0,
+        maxWidth: width ?? double.infinity,
+        maxHeight: maxHeight,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: c.elevated,
+            borderRadius: BorderRadius.circular(DRadii.lg),
+            border: Border.all(color: c.borderSubtle),
+            boxShadow: DShadows.dialog,
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// Кнопка с выпадающим окошком под ней: скорость, громкость.
+///
+/// Окошко привязано к кнопке и живёт в слое над окном; щелчок мимо обоих
+/// закрывает его. Колесо мыши над кнопкой — по желанию вызывающего (так
+/// громкость крутится, не открывая ползунка).
+class _PopoverButton extends StatefulWidget {
+  const _PopoverButton({
+    required this.builder,
+    required this.popover,
+    this.onScroll,
+  });
+
+  final Widget Function(BuildContext context, bool open, VoidCallback toggle)
+  builder;
+  final Widget Function(BuildContext context, VoidCallback close) popover;
+
+  /// Колесо над кнопкой: вверх — отрицательное смещение.
+  final ValueChanged<double>? onScroll;
+
+  @override
+  State<_PopoverButton> createState() => _PopoverButtonState();
+}
+
+class _PopoverButtonState extends State<_PopoverButton> {
+  final OverlayPortalController _portal = OverlayPortalController();
+  final LayerLink _link = LayerLink();
+  final Object _group = Object();
+
+  void _toggle() => setState(() {
+    if (_portal.isShowing) {
+      _portal.hide();
+    } else {
+      _portal.show();
+    }
+  });
+
+  void _close() {
+    if (!_portal.isShowing) return;
+    setState(_portal.hide);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget button = widget.builder(context, _portal.isShowing, _toggle);
+    final scroll = widget.onScroll;
+    if (scroll != null) {
+      button = Listener(
+        onPointerSignal: (e) {
+          if (e is PointerScrollEvent) scroll(e.scrollDelta.dy);
+        },
+        child: button,
+      );
+    }
+    return TapRegion(
+      groupId: _group,
+      onTapOutside: (_) => _close(),
+      child: CompositedTransformTarget(
+        link: _link,
+        child: OverlayPortal(
+          controller: _portal,
+          overlayChildBuilder: (ctx) => Align(
+            alignment: Alignment.topLeft,
+            child: CompositedTransformFollower(
+              link: _link,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.bottomCenter,
+              followerAnchor: Alignment.topCenter,
+              offset: const Offset(0, 8),
+              child: TapRegion(
+                groupId: _group,
+                child: widget.popover(ctx, _close),
+              ),
+            ),
+          ),
+          child: button,
+        ),
+      ),
+    );
+  }
+}
+
+/// Скорость: подпись «1×» на кнопке и ступени Telegram в выпадающем окошке.
+///
+/// Не обычная скорость подсвечена акцентом — как в Telegram: ускоренное
+/// голосовое видно сразу, а не только на слух.
+class _SpeedButton extends StatelessWidget {
+  const _SpeedButton({required this.speed, required this.onSet});
+
+  final double speed;
+  final ValueChanged<double> onSet;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final c = DColors.of(context);
+    final changed = (speed - 1.0).abs() > 0.01;
+    return _PopoverButton(
+      builder: (ctx, open, toggle) => DesktopTooltip(
+        message: l10n.desktopPlayerSpeed,
+        child: Semantics(
+          button: true,
+          expanded: open,
+          label: '${l10n.desktopPlayerSpeed} ${desktopSpeedLabel(speed)}',
+          child: HoverListener(
+            onTap: toggle,
+            builder: (ctx, hovered, pressed) => Container(
+              height: 24,
+              margin: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 7),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: open || pressed
+                    ? c.pressed
+                    : (hovered ? c.hover : Colors.transparent),
+                borderRadius: BorderRadius.circular(7),
+                border: Border.all(
+                  color: changed
+                      ? c.accentPrimary.withValues(alpha: 0.7)
+                      : c.textTertiary.withValues(alpha: 0.45),
+                ),
+              ),
+              child: Text(
+                desktopSpeedLabel(speed),
+                style: TextStyle(
+                  fontFamily: DType.family,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: changed ? c.accentPrimary : c.textSecondary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      popover: (ctx, close) => _PopoverCard(
+        width: 150,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: DSpace.xs),
+            for (final s in kDesktopPlayerSpeeds)
+              _SpeedRow(
+                label: s == 1.0
+                    ? '${desktopSpeedLabel(s)}  ·  ${l10n.desktopPlayerSpeedNormal}'
+                    : desktopSpeedLabel(s),
+                selected: (s - speed).abs() < 0.01,
+                onTap: () {
+                  close();
+                  onSet(s);
+                },
+              ),
+            const SizedBox(height: DSpace.xs),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SpeedRow extends StatelessWidget {
+  const _SpeedRow({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: ExcludeSemantics(
+        child: HoverListener(
+          onTap: onTap,
+          builder: (ctx, hovered, pressed) => Container(
+            height: 32,
+            padding: const EdgeInsets.symmetric(horizontal: DSpace.m),
+            color: hovered ? c.hover : Colors.transparent,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontFamily: DType.family,
+                      fontSize: 13,
+                      fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                      color: selected ? c.accentPrimary : c.textPrimary,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+                if (selected)
+                  Icon(
+                    FluentIcons.checkmark_16_regular,
+                    size: 14,
+                    color: c.accentPrimary,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Громкость: значок динамика по уровню и вертикальный ползунок под ним.
+///
+/// Минималистично, как в Telegram: ползунок без подписей и делений, только
+/// дорожка и бегунок. Колесо мыши над значком меняет громкость на двадцатую
+/// долю, не открывая окошка.
+class _VolumeButton extends StatelessWidget {
+  const _VolumeButton({required this.volume, required this.onSet});
+
+  final ValueListenable<double> volume;
+  final ValueChanged<double> onSet;
+
+  static IconData _iconFor(double v) {
+    if (v <= 0.001) return FluentIcons.speaker_mute_20_regular;
+    if (v < 0.5) return FluentIcons.speaker_1_20_regular;
+    return FluentIcons.speaker_2_20_regular;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return ValueListenableBuilder<double>(
+      valueListenable: volume,
+      builder: (ctx, v, _) => _PopoverButton(
+        onScroll: (dy) {
+          if (dy == 0) return;
+          onSet((volume.value + (dy < 0 ? 0.05 : -0.05)).clamp(0.0, 1.0));
+        },
+        builder: (ctx, open, toggle) => DesktopIconButton(
+          icon: _iconFor(v),
+          size: 28,
+          iconSize: 16,
+          tooltip: l10n.desktopPlayerVolume,
+          onPressed: toggle,
+        ),
+        popover: (ctx, close) => _PopoverCard(
+          width: 40,
+          child: ValueListenableBuilder<double>(
+            valueListenable: volume,
+            builder: (ctx, value, _) => _VolumeSlider(
+              value: value,
+              onChanged: onSet,
+              label: l10n.desktopPlayerVolume,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VolumeSlider extends StatelessWidget {
+  const _VolumeSlider({
+    required this.value,
+    required this.onChanged,
+    required this.label,
+  });
+
+  final double value;
+  final ValueChanged<double> onChanged;
+  final String label;
+
+  static const double _h = 120;
+  static const double _pad = 12;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    final v = value.clamp(0.0, 1.0);
+    void at(Offset local) {
+      final t = 1 - ((local.dy - _pad) / (_h - 2 * _pad));
+      onChanged(t.clamp(0.0, 1.0));
+    }
+
+    return Semantics(
+      slider: true,
+      label: label,
+      value: '${(v * 100).round()}%',
+      increasedValue: '${((v + 0.1).clamp(0.0, 1.0) * 100).round()}%',
+      decreasedValue: '${((v - 0.1).clamp(0.0, 1.0) * 100).round()}%',
+      onIncrease: () => onChanged((v + 0.1).clamp(0.0, 1.0)),
+      onDecrease: () => onChanged((v - 0.1).clamp(0.0, 1.0)),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (d) => at(d.localPosition),
+          onVerticalDragUpdate: (d) => at(d.localPosition),
+          child: SizedBox(
+            width: 40,
+            height: _h,
+            child: CustomPaint(
+              painter: _VolumePainter(
+                value: v,
+                track: c.textTertiary.withValues(alpha: 0.35),
+                fill: c.accentPrimary,
+                knob: Colors.white,
+                pad: _pad,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VolumePainter extends CustomPainter {
+  _VolumePainter({
+    required this.value,
+    required this.track,
+    required this.fill,
+    required this.knob,
+    required this.pad,
+  });
+
+  final double value;
+  final Color track;
+  final Color fill;
+  final Color knob;
+  final double pad;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final top = pad;
+    final bottom = size.height - pad;
+    const w = 4.0;
+    final whole = RRect.fromLTRBR(
+      cx - w / 2,
+      top,
+      cx + w / 2,
+      bottom,
+      const Radius.circular(w / 2),
+    );
+    canvas.drawRRect(whole, Paint()..color = track);
+    final y = bottom - (bottom - top) * value;
+    canvas.drawRRect(
+      RRect.fromLTRBR(
+        cx - w / 2,
+        y,
+        cx + w / 2,
+        bottom,
+        const Radius.circular(w / 2),
+      ),
+      Paint()..color = fill,
+    );
+    canvas.drawCircle(
+      Offset(cx, y),
+      6,
+      Paint()..color = Colors.black.withValues(alpha: 0.25),
+    );
+    canvas.drawCircle(Offset(cx, y), 5.5, Paint()..color = knob);
+  }
+
+  @override
+  bool shouldRepaint(_VolumePainter old) =>
+      old.value != value ||
+      old.track != track ||
+      old.fill != fill ||
+      old.knob != knob;
 }
 
 /// Строка списка: значок состояния, название, отправитель.
@@ -499,7 +954,7 @@ class _PlaylistRow extends StatelessWidget {
         child: HoverListener(
           onTap: onTap,
           builder: (ctx, hovered, pressed) => Container(
-            height: 40,
+            height: 42,
             padding: const EdgeInsets.symmetric(horizontal: DSpace.m),
             color: current
                 ? c.accentPrimary.withValues(alpha: 0.12)
@@ -524,8 +979,9 @@ class _PlaylistRow extends StatelessWidget {
                         entry.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: DType.caption.copyWith(
-                          fontSize: 12.5,
+                        style: TextStyle(
+                          fontFamily: DType.family,
+                          fontSize: 13,
                           fontWeight: current
                               ? FontWeight.w600
                               : FontWeight.w400,
@@ -537,8 +993,9 @@ class _PlaylistRow extends StatelessWidget {
                           entry.artist,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: DType.caption.copyWith(
-                            fontSize: 11,
+                          style: TextStyle(
+                            fontFamily: DType.family,
+                            fontSize: 11.5,
                             color: c.textTertiary,
                           ),
                         ),
@@ -587,7 +1044,8 @@ class _ActionRow extends StatelessWidget {
                 const SizedBox(width: DSpace.s),
                 Text(
                   label,
-                  style: DType.caption.copyWith(
+                  style: TextStyle(
+                    fontFamily: DType.family,
                     fontSize: 12.5,
                     color: c.textSecondary,
                   ),
@@ -626,8 +1084,9 @@ class _PlayPauseButton extends StatelessWidget {
         child: HoverListener(
           onTap: onTap,
           builder: (ctx, hovered, pressed) => Container(
-            width: 22,
-            height: 22,
+            width: 28,
+            height: 28,
+            margin: const EdgeInsets.symmetric(horizontal: 1),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
@@ -637,18 +1096,18 @@ class _PlayPauseButton extends StatelessWidget {
             ),
             child: loading
                 ? const SizedBox(
-                    width: 11,
-                    height: 11,
+                    width: 13,
+                    height: 13,
                     child: CircularProgressIndicator(
-                      strokeWidth: 1.6,
+                      strokeWidth: 1.8,
                       valueColor: AlwaysStoppedAnimation(Colors.white),
                     ),
                   )
                 : Icon(
                     playing
-                        ? FluentIcons.pause_16_filled
-                        : FluentIcons.play_16_filled,
-                    size: 12,
+                        ? FluentIcons.pause_20_filled
+                        : FluentIcons.play_20_filled,
+                    size: 15,
                     color: Colors.white,
                   ),
           ),

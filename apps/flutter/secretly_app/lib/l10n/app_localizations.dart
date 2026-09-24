@@ -10918,6 +10918,36 @@ abstract class AppLocalizations {
   /// **'More in this chat'**
   String get desktopPlayerMore;
 
+  /// No description provided for @desktopPlayerSpeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback speed'**
+  String get desktopPlayerSpeed;
+
+  /// No description provided for @desktopPlayerSpeedNormal.
+  ///
+  /// In en, this message translates to:
+  /// **'Normal'**
+  String get desktopPlayerSpeedNormal;
+
+  /// No description provided for @desktopPlayerVolume.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume'**
+  String get desktopPlayerVolume;
+
+  /// No description provided for @desktopUpdateNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Update'**
+  String get desktopUpdateNow;
+
+  /// No description provided for @desktopUpdateAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version} is available'**
+  String desktopUpdateAvailable(String version);
+
   /// No description provided for @desktopDiagTitle.
   ///
   /// In en, this message translates to:

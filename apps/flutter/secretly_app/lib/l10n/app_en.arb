@@ -2865,6 +2865,18 @@
   "desktopPlayerPrevious": "Previous",
   "desktopPlayerNext": "Next",
   "desktopPlayerMore": "More in this chat",
+  "desktopPlayerSpeed": "Playback speed",
+  "desktopPlayerSpeedNormal": "Normal",
+  "desktopPlayerVolume": "Volume",
+  "desktopUpdateNow": "Update",
+  "desktopUpdateAvailable": "Version {version} is available",
+  "@desktopUpdateAvailable": {
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
   "desktopDiagTitle": "Delivery diagnostics",
   "desktopDiagHint": "What to look at when messages are not arriving, and what to send us",
   "desktopDiagQueues": "QUEUES",

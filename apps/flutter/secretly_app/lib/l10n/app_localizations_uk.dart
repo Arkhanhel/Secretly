@@ -5907,6 +5907,23 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopPlayerMore => 'Ще в цьому чаті';
 
   @override
+  String get desktopPlayerSpeed => 'Швидкість відтворення';
+
+  @override
+  String get desktopPlayerSpeedNormal => 'Звичайна';
+
+  @override
+  String get desktopPlayerVolume => 'Гучність';
+
+  @override
+  String get desktopUpdateNow => 'Оновити';
+
+  @override
+  String desktopUpdateAvailable(String version) {
+    return 'Доступна версія $version';
+  }
+
+  @override
   String get desktopDiagTitle => 'Діагностика доставки';
 
   @override

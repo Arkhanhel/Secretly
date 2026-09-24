@@ -628,25 +628,112 @@ class _WindowSearchFieldState extends State<WindowSearchField> {
     );
   }
 
-  /// Поле в шапке: лупа, ввод, справа — ⌘K или «очистить».
+  /// Ширина раскрытого поля и свёрнутой лупы.
+  static const double _kExpandedWidth = 260;
+  static const double _kCollapsedWidth = 34;
+
+  /// Раскрыто, пока в поле курсор или набранный текст.
+  bool get _expanded => _focused || _query.isNotEmpty;
+
+  /// Поиск в шапке: в покое — лупа, по нажатию — поле.
   ///
-  /// 🔴 Заливка и рамка ПОСТОЯННЫЕ, а не «подсветка при наведении»: иначе до
-  /// наведения поле выглядит надписью, а не полем. В фокусе рамка цвета
-  /// акцента — видно, куда пойдёт ввод.
+  /// 🔴 ЛУПА, А НЕ ПОЛЕ (24.09.2026, указание владельца). Поиск по чатам есть
+  /// и над самим списком чатов, а верхний — запасной. Поле во всю ширину
+  /// занимало место, нужное островку «сейчас играет». Теперь в покое это одна
+  /// лупа; нажатие (или ⌘K) раскрывает её в поле, и островок уезжает вправо.
+  ///
+  /// Поле при этом есть в дереве ВСЕГДА, только обрезано до ширины лупы: иначе
+  /// ⌘K не на что было бы поставить курсор — фокус нельзя отдать полю,
+  /// которого ещё нет.
   Widget _field(DColorSet c) {
     final hasText = _query.isNotEmpty;
     final lit = _focused || _hovered;
-    return MouseRegion(
-      cursor: SystemMouseCursors.text,
+    final expanded = _expanded;
+    final shortcut = Platform.isMacOS ? '⌘K' : 'Ctrl K';
+    final row = SizedBox(
+      width: _kExpandedWidth,
+      child: Row(
+        children: [
+          SizedBox(
+            width: _kCollapsedWidth - 2,
+            child: Icon(
+              FluentIcons.search_20_regular,
+              size: 17,
+              color: lit ? c.textSecondary : c.textTertiary,
+            ),
+          ),
+          Expanded(
+            child: Focus(
+              // Стрелки, Enter и Esc перехватываем РАНЬШЕ поля: иначе ↑/↓
+              // двигали бы курсор в строке, а не выбор в выдаче.
+              canRequestFocus: false,
+              skipTraversal: true,
+              onKeyEvent: _onKey,
+              child: TextField(
+                controller: _searchCtl,
+                focusNode: _searchFocus,
+                maxLines: 1,
+                textAlignVertical: TextAlignVertical.center,
+                style: DType.caption.copyWith(
+                  fontSize: 12.5,
+                  color: c.textPrimary,
+                ),
+                cursorColor: c.accentPrimary,
+                cursorHeight: 14,
+                decoration: InputDecoration(
+                  isDense: true,
+                  isCollapsed: true,
+                  border: InputBorder.none,
+                  hintText: desktopSearchScopeLabel(l10n),
+                  hintMaxLines: 1,
+                  hintStyle: DType.caption.copyWith(
+                    fontSize: 12.5,
+                    color: c.textTertiary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (hasText)
+            Padding(
+              padding: const EdgeInsets.only(left: 6, right: 8),
+              child: DesktopTooltip(
+                message: l10n.desktopChatsClear,
+                child: Semantics(
+                  button: true,
+                  label: l10n.desktopChatsClear,
+                  child: GestureDetector(
+                    onTap: () {
+                      _searchCtl.clear();
+                      _searchFocus.requestFocus();
+                    },
+                    child: Icon(
+                      FluentIcons.dismiss_circle_16_filled,
+                      size: 16,
+                      color: c.textTertiary,
+                    ),
+                  ),
+                ),
+              ),
+            )
+          else
+            const SizedBox(width: 8),
+        ],
+      ),
+    );
+    final box = MouseRegion(
+      cursor: expanded ? SystemMouseCursors.text : SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => _searchFocus.requestFocus(),
         child: AnimatedContainer(
-          duration: DMotion.fast,
+          duration: DMotion.base,
+          curve: DMotion.easeOutCubic,
+          width: expanded ? _kExpandedWidth : _kCollapsedWidth,
           height: 30,
-          padding: const EdgeInsets.only(left: 9, right: 6),
+          clipBehavior: Clip.hardEdge,
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: lit ? 0.09 : 0.055),
             borderRadius: BorderRadius.circular(9),
@@ -656,96 +743,23 @@ class _WindowSearchFieldState extends State<WindowSearchField> {
                   : Colors.white.withValues(alpha: _hovered ? 0.12 : 0.07),
             ),
           ),
-          child: Row(
-            children: [
-              Icon(
-                FluentIcons.search_24_regular,
-                size: 17,
-                color: _focused ? c.textSecondary : c.textTertiary,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Focus(
-                  // Стрелки, Enter и Esc перехватываем РАНЬШЕ поля: иначе
-                  // ↑/↓ двигали бы курсор в строке, а не выбор в выдаче.
-                  canRequestFocus: false,
-                  skipTraversal: true,
-                  onKeyEvent: _onKey,
-                  child: TextField(
-                    controller: _searchCtl,
-                    focusNode: _searchFocus,
-                    maxLines: 1,
-                    textAlignVertical: TextAlignVertical.center,
-                    style: DType.caption.copyWith(
-                      fontSize: 12.5,
-                      color: c.textPrimary,
-                    ),
-                    cursorColor: c.accentPrimary,
-                    cursorHeight: 14,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      isCollapsed: true,
-                      border: InputBorder.none,
-                      hintText: desktopSearchScopeLabel(l10n),
-                      hintMaxLines: 1,
-                      hintStyle: DType.caption.copyWith(
-                        fontSize: 12.5,
-                        color: c.textTertiary,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              if (hasText)
-                DesktopTooltip(
-                  message: l10n.desktopChatsClear,
-                  child: Semantics(
-                    button: true,
-                    label: l10n.desktopChatsClear,
-                    child: GestureDetector(
-                      onTap: () {
-                        _searchCtl.clear();
-                        _searchFocus.requestFocus();
-                      },
-                      child: Icon(
-                        FluentIcons.dismiss_circle_16_filled,
-                        size: 16,
-                        color: c.textTertiary,
-                      ),
-                    ),
-                  ),
-                )
-              else if (!_focused)
-                _shortcutBadge(c),
-            ],
+          // Строка поля всегда шириной с раскрытое поле и обрезается рамкой:
+          // так при раскрытии ничего не переносится и не прыгает, а в свёрнутом
+          // виде видна одна лупа.
+          child: OverflowBox(
+            alignment: Alignment.centerLeft,
+            minWidth: _kExpandedWidth,
+            maxWidth: _kExpandedWidth,
+            child: row,
           ),
         ),
       ),
     );
-  }
-
-  /// Подпись сочетания прямо в поле: учит ему того, кто о нём не знал.
-  ///
-  /// На Windows ⌘ нет — там то же сочетание через Ctrl, и подпись должна
-  /// говорить правду о клавиатуре, за которой человек сидит.
-  Widget _shortcutBadge(DColorSet c) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      // Моноширинным — как принято у клавиш: это надпись на клавише, а не
-      // слово. См. DType.meta.
-      child: Text(
-        Platform.isMacOS ? '⌘K' : 'Ctrl K',
-        style: DType.mono.copyWith(
-          fontSize: 10,
-          color: c.textSecondary,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
+    if (expanded) return box;
+    // Свёрнутая лупа подсказывает, что она ищет и каким сочетанием её звать.
+    return DesktopTooltip(
+      message: '${l10n.desktopShortcutsSearchAll} ($shortcut)',
+      child: box,
     );
   }
 

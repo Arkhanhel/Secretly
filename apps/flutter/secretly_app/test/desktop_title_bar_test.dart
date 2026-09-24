@@ -243,8 +243,9 @@ void main() {
 
     Future<({Rect search, Rect island, Rect trail, Rect crumbs})> layout(
       WidgetTester t,
-      double width,
-    ) async {
+      double width, {
+      double searchWidth = 34,
+    }) async {
       t.view.physicalSize = Size(width, 700);
       t.view.devicePixelRatio = 1.0;
       addTearDown(t.view.reset);
@@ -256,14 +257,15 @@ void main() {
                 leading: const DesktopBreadcrumbs(
                   crumbs: ['Чаты', 'Yurii iOS'],
                 ),
-                search: Container(
+                // Поиск сам знает свою ширину: лупа 34, раскрытое поле 260.
+                search: SizedBox(
                   key: searchKey,
+                  width: searchWidth,
                   height: 30,
-                  color: Colors.blue,
                 ),
                 island: Container(
                   key: islandKey,
-                  height: 30,
+                  height: 34,
                   color: Colors.red,
                 ),
                 trailing: const SizedBox(key: trailKey, width: 64, height: 28),
@@ -281,29 +283,39 @@ void main() {
       );
     }
 
-    testWidgets('🔴 островок — посередине окна, поиск — сразу слева', (
-      t,
-    ) async {
+    testWidgets('🔴 при свёрнутой лупе островок — посередине окна', (t) async {
       final r = await layout(t, 1720);
       expect(r.island.center.dx, closeTo(1720 / 2, 0.5));
-      expect(r.island.width, 340);
-      expect(r.search.width, 280);
-      expect(r.island.left - r.search.right, 12);
-      expect(r.trail.right, lessThanOrEqualTo(1720));
+      expect(r.island.width, 440);
+      expect(r.search.width, 34);
+      expect(r.island.left - r.search.right, 10);
       expect(r.crumbs.right, lessThan(r.search.left));
     });
 
-    testWidgets('в узком окне крошки не задвигаются под поле', (t) async {
-      final r = await layout(t, 1100);
+    testWidgets('🔴 раскрытый поиск сдвигает островок вправо', (t) async {
+      final closed = await layout(t, 1720);
+      final open = await layout(t, 1720, searchWidth: 260);
+      expect(
+        open.search.left,
+        closed.search.left,
+        reason: 'поле растёт вправо, к островку, а не на крошки',
+      );
+      expect(open.island.left - open.search.right, 10);
+      expect(open.island.left - closed.island.left, 260 - 34);
+      expect(open.island.right, lessThanOrEqualTo(open.trail.left));
+    });
+
+    testWidgets('в узком окне крошки не задвигаются под лупу', (t) async {
+      final r = await layout(t, 1000);
       expect(r.crumbs.right, lessThan(r.search.left));
       expect(r.search.right, lessThanOrEqualTo(r.island.left));
       expect(r.island.right, lessThanOrEqualTo(r.trail.left));
-      expect(r.island.width, greaterThanOrEqualTo(220));
+      expect(r.island.width, greaterThanOrEqualTo(240));
     });
 
-    testWidgets('совсем тесно — уходит островок, поле остаётся', (t) async {
-      final r = await layout(t, 760);
-      expect(r.search.width, greaterThanOrEqualTo(190));
+    testWidgets('совсем тесно — уходит островок, лупа остаётся', (t) async {
+      final r = await layout(t, 560);
+      expect(r.search.width, 34);
       expect(r.island.width, 0);
       expect(r.search.right, lessThanOrEqualTo(r.trail.left));
     });

@@ -538,6 +538,11 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     try {
       await _lockService.init();
       await _controller.init();
+      // Громкость плеера помнится между запусками (см.
+      // [DesktopUiPrefs.playerVolume]) — ставим её до первого звука.
+      unawaited(
+        _controller.setSharedAudioVolume(DesktopUiPrefs.playerVolume.value),
+      );
       if (!mounted) return;
       // PR4 (SPRINT2_AUDIT §16): construct AFTER controller.init() so the
       // ChangeNotifier subscribes to a populated `relayConnectionChanges`
@@ -1494,6 +1499,12 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
         unawaited(_controller.playSharedAudioQueue(queue: queue, index: index));
       },
       onOpenSource: (convoId) => unawaited(_openConvoOrReport(convoId)),
+      onSetSpeed: (speed) => unawaited(_controller.setSharedAudioSpeed(speed)),
+      volume: DesktopUiPrefs.playerVolume,
+      onSetVolume: (volume) {
+        unawaited(DesktopUiPrefs.setPlayerVolume(volume));
+        unawaited(_controller.setSharedAudioVolume(volume));
+      },
     ),
   );
 
@@ -1928,5 +1939,6 @@ DesktopNowPlaying? desktopNowPlayingOf(SharedAudioPlaybackState s) {
         DesktopNowPlayingEntry(title: t.title, artist: t.artist),
     ],
     queueIndex: s.queueIndex,
+    speed: s.speed,
   );
 }

@@ -53,6 +53,7 @@ class DesktopUiPrefs {
   static const String _kTextScale = 'desktop_text_scale_v1';
   static const String _kHoverBar = 'desktop_message_hover_bar_v1';
   static const String _kLinkPreviews = 'desktop_link_previews_v1';
+  static const String _kPlayerVolume = 'desktop_player_volume_v1';
 
   /// Enter sends the message; Shift+Enter inserts a newline. When false the
   /// roles swap, which is what people coming from IDE-style chats expect.
@@ -132,6 +133,14 @@ class DesktopUiPrefs {
   /// подпись в настройках говорит ровно то, что делает переключатель.
   static final ValueNotifier<double> textScale = ValueNotifier<double>(1.0);
 
+  /// Громкость плеера голосовых и песен, 0..1 (24.09.2026).
+  ///
+  /// Живёт здесь, а не в общем плеере: ползунок громкости есть только у
+  /// островка «сейчас играет» на компьютере, а телефон громкость отдаёт
+  /// системе. Помнится между запусками — как и в Telegram, выставленная
+  /// громкость не должна сбрасываться в полную при каждом открытии окна.
+  static final ValueNotifier<double> playerVolume = ValueNotifier<double>(1.0);
+
   /// Разрешённые ступени. Список закрытый: произвольное число из испорченной
   /// настройки не должно превращать окно в нечитаемое.
   static const List<double> textScaleSteps = <double>[0.9, 1.0, 1.15, 1.3, 1.5];
@@ -167,6 +176,9 @@ class DesktopUiPrefs {
       preferredMicId.value = prefs.getString(_kMic) ?? '';
       customAccentArgb.value = prefs.getInt(_kCustomAccent) ?? 0;
         textScale.value = normalizeTextScale(prefs.getDouble(_kTextScale));
+      playerVolume.value = normalizePlayerVolume(
+        prefs.getDouble(_kPlayerVolume),
+      );
     } catch (_) {
       // Defaults already hold — a preferences failure must not block boot.
     }
@@ -179,6 +191,23 @@ class DesktopUiPrefs {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_kTextScale, v);
+    } catch (_) {
+      // В памяти уже применено; просто не переживёт перезапуск.
+    }
+  }
+
+  /// Приводит громкость к 0..1; испорченное значение — полная громкость.
+  static double normalizePlayerVolume(double? raw) {
+    if (raw == null || !raw.isFinite) return 1.0;
+    return raw.clamp(0.0, 1.0).toDouble();
+  }
+
+  static Future<void> setPlayerVolume(double value) async {
+    final v = normalizePlayerVolume(value);
+    playerVolume.value = v;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_kPlayerVolume, v);
     } catch (_) {
       // В памяти уже применено; просто не переживёт перезапуск.
     }

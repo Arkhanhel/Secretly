@@ -3203,6 +3203,16 @@ class AppController {
     );
   }
 
+  /// Громкость общего плеера, 0..1.
+  ///
+  /// ДОБАВОЧНОЕ (24.09.2026): зовёт только компьютер — ползунок громкости в
+  /// островке «сейчас играет». Мобильные экраны громкость не трогают, и их
+  /// поведение не меняется ни на слог.
+  Future<void> setSharedAudioVolume(double volume) async {
+    final v = volume.isFinite ? volume.clamp(0.0, 1.0).toDouble() : 1.0;
+    await _sharedAudioPlayer.setVolume(v);
+  }
+
   Future<void> seekSharedAudio(Duration position) async {
     final duration = _sharedAudioPlayback.value.duration;
     final clamped = duration > Duration.zero
