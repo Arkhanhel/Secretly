@@ -5864,6 +5864,29 @@ class AppLocalizationsPt extends AppLocalizations {
   String get desktopA11yPause => 'Pausa';
 
   @override
+  String get desktopA11yAudioProgress => 'Reprodução';
+
+  @override
+  String get desktopPlayerClose => 'Fechar leitor';
+
+  @override
+  String get desktopPlayerOpenSource => 'Ir para a mensagem';
+
+  @override
+  String desktopPlayerNowPlaying(String title) {
+    return 'A tocar: $title';
+  }
+
+  @override
+  String get desktopPlayerPrevious => 'Anterior';
+
+  @override
+  String get desktopPlayerNext => 'Seguinte';
+
+  @override
+  String get desktopPlayerMore => 'Mais nesta conversa';
+
+  @override
   String get desktopDiagTitle => 'Diagnóstico de entrega';
 
   @override
@@ -11775,6 +11798,29 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get desktopA11yPause => 'Pausar';
+
+  @override
+  String get desktopA11yAudioProgress => 'Reprodução';
+
+  @override
+  String get desktopPlayerClose => 'Fechar player';
+
+  @override
+  String get desktopPlayerOpenSource => 'Ir para a mensagem';
+
+  @override
+  String desktopPlayerNowPlaying(String title) {
+    return 'Tocando agora: $title';
+  }
+
+  @override
+  String get desktopPlayerPrevious => 'Anterior';
+
+  @override
+  String get desktopPlayerNext => 'Próxima';
+
+  @override
+  String get desktopPlayerMore => 'Mais nesta conversa';
 
   @override
   String get desktopDiagTitle => 'Diagnóstico de entrega';

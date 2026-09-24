@@ -3,6 +3,7 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import '../../../l10n/app_localizations.dart';
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,29 +16,34 @@ import '../chat/details/desktop_selection_store.dart';
 import 'desktop_file_match.dart';
 import '../design/tokens.dart';
 import '../primitives/avatar.dart';
+import '../primitives/desktop_tooltip.dart';
 import '../shell/sidebar.dart' show DesktopSection;
 import '../shell/window_chrome.dart' show desktopSearchScopeLabel;
 
-/// Cmd+K spotlight palette: a modal overlay that lets the user fuzzy-find
-/// across conversations and section shortcuts, then jumps to the picked
-/// chat / section.
+/// Глобальный поиск в шапке окна: настоящее поле и выдача прямо под ним.
 ///
-/// Wiring (see desktop_production_app.dart):
-///   • Cmd+K (shell-level shortcut) → `_openSpotlight()`
-///   • on chat pick → set the matching selection-store + switch section
-///   • Esc / backdrop tap → close
+/// 🔴 БЕЗ ОТДЕЛЬНОГО ОКНА (24.09.2026, указание владельца). Здесь была палитра
+/// ⌘K — окно посреди экрана с затемнением, а в шапке стояла лишь картинка поля,
+/// которая это окно открывала. Нажимая на поле, человек ждёт, что будет
+/// печатать В НЁМ; вместо этого поле исчезало под затемнением, и ввод
+/// начинался в другом месте. Теперь печатают прямо в шапке, а находки
+/// выпадают списком под полем. ⌘K ставит курсор в это же поле.
 ///
-/// The widget is intentionally self-contained: it does its own data load via
-/// [AppController.listConversations] when mounted, so the palette stays
-/// responsive even before the surrounding section is mounted.
-class SpotlightPalette extends StatefulWidget {
-  const SpotlightPalette({
+/// Что и как ищется, не менялось: переписки, люди из контактов, текст
+/// сообщений и имена файлов, закрытые «личные» не видны, пока область
+/// заперта. Выдача обновляется при каждом открытии — переписки могли
+/// появиться, пока поле было закрыто.
+///
+/// Выбор: ↑/↓, Enter — открыть, Esc — очистить и закрыть; щелчок мимо
+/// поля и выдачи закрывает её, набранное остаётся.
+class WindowSearchField extends StatefulWidget {
+  const WindowSearchField({
     super.key,
     required this.controller,
     required this.chatsSelection,
     required this.roomsSelection,
     required this.selectSection,
-    required this.onClose,
+    required this.focusNode,
     this.onOpenSettings,
     this.onOpenProfile,
     this.onOpenProfileChat,
@@ -47,27 +53,43 @@ class SpotlightPalette extends StatefulWidget {
   final DesktopChatSelectionStore chatsSelection;
   final DesktopChatSelectionStore roomsSelection;
   final ValueChanged<DesktopSection> selectSection;
-  final VoidCallback onClose;
+
+  /// Фокус поля. Им владеет окно: по ⌘K оно ставит курсор сюда же.
+  final FocusNode focusNode;
   final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenProfile;
 
-  /// Открыть (при необходимости — завести) переписку с профилем. Так палитра
+  /// Открыть (при необходимости — завести) переписку с профилем. Так поиск
   /// доводит найденного человека до чата: иначе «нашёл» означало бы «увидел
   /// строку и ничего не может сделать».
   final ValueChanged<String>? onOpenProfileChat;
 
+  /// Ширина выпадающей выдачи: строке нужны имя, подпись и место под аватар,
+  /// в ширину поля они не помещаются.
+  static const double dropdownWidth = 480;
+
   @override
-  State<SpotlightPalette> createState() => _SpotlightPaletteState();
+  State<WindowSearchField> createState() => _WindowSearchFieldState();
 }
 
-class _SpotlightPaletteState extends State<SpotlightPalette> {
+class _WindowSearchFieldState extends State<WindowSearchField> {
   /// Подписи окна поиска.
   AppLocalizations get l10n => AppLocalizations.of(context)!;
 
   final TextEditingController _searchCtl = TextEditingController();
-  final FocusNode _searchFocus = FocusNode();
-  final FocusNode _rootFocus = FocusNode();
+  FocusNode get _searchFocus => widget.focusNode;
   final ScrollController _scroll = ScrollController();
+
+  /// Выдача живёт в слое над окном, а привязана к полю.
+  final OverlayPortalController _portal = OverlayPortalController();
+  final LayerLink _link = LayerLink();
+
+  /// Поле и выдача — одна область для «щелчка мимо»: щелчок по строке
+  /// выдачи не должен закрывать её раньше, чем строка сработает.
+  final Object _tapGroup = Object();
+  bool _open = false;
+  bool _focused = false;
+  bool _hovered = false;
 
   List<Conversation> _conversations = const [];
 
@@ -123,7 +145,6 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
   @override
   void initState() {
     super.initState();
-    _load();
     _searchCtl.addListener(() {
       final q = _searchCtl.text;
       if (q == _query) return;
@@ -133,17 +154,57 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
       });
       _scheduleMessageSearch(q);
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _searchFocus.requestFocus();
+    _searchFocus.addListener(_onFocusChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant WindowSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode.removeListener(_onFocusChanged);
+      widget.focusNode.addListener(_onFocusChanged);
+    }
+  }
+
+  void _onFocusChanged() {
+    final has = _searchFocus.hasFocus;
+    if (has != _focused) setState(() => _focused = has);
+    if (has) {
+      _openDropdown();
+    } else {
+      _closeDropdown();
+    }
+  }
+
+  void _openDropdown() {
+    if (_open) return;
+    setState(() {
+      _open = true;
+      _cursor = 0;
     });
+    _portal.show();
+    unawaited(_load());
+  }
+
+  void _closeDropdown() {
+    if (!_open) return;
+    setState(() => _open = false);
+    _portal.hide();
+  }
+
+  /// Поиск сделал своё дело (или его отменили): поле пустое, выдача
+  /// спрятана, курсор ушёл из шапки.
+  void _finish() {
+    _searchCtl.clear();
+    _closeDropdown();
+    _searchFocus.unfocus();
   }
 
   @override
   void dispose() {
     _searchDebounce?.cancel();
+    _searchFocus.removeListener(_onFocusChanged);
     _searchCtl.dispose();
-    _searchFocus.dispose();
-    _rootFocus.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -375,7 +436,7 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
             profileId: pid,
             name: name.isEmpty ? pid : name,
             onActivate: () {
-              widget.onClose();
+              _finish();
               widget.onOpenProfileChat?.call(pid);
             },
           ),
@@ -432,7 +493,7 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
         label: l10n.desktopSettingsTitle,
         icon: FluentIcons.settings_24_regular,
         onActivate: () {
-          widget.onClose();
+          _finish();
           widget.onOpenSettings!.call();
         },
       );
@@ -442,7 +503,7 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
         label: l10n.desktopAccountProfile,
         icon: FluentIcons.person_circle_24_regular,
         onActivate: () {
-          widget.onClose();
+          _finish();
           widget.onOpenProfile!.call();
         },
       );
@@ -473,12 +534,12 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
       widget.chatsSelection.select(c);
       widget.selectSection(DesktopSection.chats);
     }
-    widget.onClose();
+    _finish();
   }
 
   void _jumpToSection(DesktopSection s) {
     widget.selectSection(s);
-    widget.onClose();
+    _finish();
   }
 
   // ---------------- Keyboard ----------------
@@ -487,7 +548,13 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final entries = _entries();
     if (event.logicalKey == LogicalKeyboardKey.escape) {
-      widget.onClose();
+      _finish();
+      return KeyEventResult.handled;
+    }
+    final vertical = event.logicalKey == LogicalKeyboardKey.arrowDown ||
+        event.logicalKey == LogicalKeyboardKey.arrowUp;
+    if (vertical && !_open) {
+      _openDropdown();
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
@@ -540,139 +607,240 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
+    return CompositedTransformTarget(
+      link: _link,
+      child: TapRegion(
+        groupId: _tapGroup,
+        // Щелчок мимо закрывает выдачу и уводит курсор, набранное остаётся:
+        // вернувшись в поле, человек продолжит с того же места.
+        onTapOutside: (_) {
+          if (_open || _searchFocus.hasFocus) {
+            _closeDropdown();
+            _searchFocus.unfocus();
+          }
+        },
+        child: OverlayPortal(
+          controller: _portal,
+          overlayChildBuilder: _dropdown,
+          child: _field(c),
+        ),
+      ),
+    );
+  }
+
+  /// Поле в шапке: лупа, ввод, справа — ⌘K или «очистить».
+  ///
+  /// 🔴 Заливка и рамка ПОСТОЯННЫЕ, а не «подсветка при наведении»: иначе до
+  /// наведения поле выглядит надписью, а не полем. В фокусе рамка цвета
+  /// акцента — видно, куда пойдёт ввод.
+  Widget _field(DColorSet c) {
+    final hasText = _query.isNotEmpty;
+    final lit = _focused || _hovered;
+    return MouseRegion(
+      cursor: SystemMouseCursors.text,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _searchFocus.requestFocus(),
+        child: AnimatedContainer(
+          duration: DMotion.fast,
+          height: 30,
+          padding: const EdgeInsets.only(left: 9, right: 6),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: lit ? 0.09 : 0.055),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(
+              color: _focused
+                  ? c.accentPrimary.withValues(alpha: 0.6)
+                  : Colors.white.withValues(alpha: _hovered ? 0.12 : 0.07),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                FluentIcons.search_24_regular,
+                size: 17,
+                color: _focused ? c.textSecondary : c.textTertiary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Focus(
+                  // Стрелки, Enter и Esc перехватываем РАНЬШЕ поля: иначе
+                  // ↑/↓ двигали бы курсор в строке, а не выбор в выдаче.
+                  canRequestFocus: false,
+                  skipTraversal: true,
+                  onKeyEvent: _onKey,
+                  child: TextField(
+                    controller: _searchCtl,
+                    focusNode: _searchFocus,
+                    maxLines: 1,
+                    textAlignVertical: TextAlignVertical.center,
+                    style: DType.caption.copyWith(
+                      fontSize: 12.5,
+                      color: c.textPrimary,
+                    ),
+                    cursorColor: c.accentPrimary,
+                    cursorHeight: 14,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      isCollapsed: true,
+                      border: InputBorder.none,
+                      hintText: desktopSearchScopeLabel(l10n),
+                      hintMaxLines: 1,
+                      hintStyle: DType.caption.copyWith(
+                        fontSize: 12.5,
+                        color: c.textTertiary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              if (hasText)
+                DesktopTooltip(
+                  message: l10n.desktopChatsClear,
+                  child: Semantics(
+                    button: true,
+                    label: l10n.desktopChatsClear,
+                    child: GestureDetector(
+                      onTap: () {
+                        _searchCtl.clear();
+                        _searchFocus.requestFocus();
+                      },
+                      child: Icon(
+                        FluentIcons.dismiss_circle_16_filled,
+                        size: 16,
+                        color: c.textTertiary,
+                      ),
+                    ),
+                  ),
+                )
+              else if (!_focused)
+                _shortcutBadge(c),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Подпись сочетания прямо в поле: учит ему того, кто о нём не знал.
+  ///
+  /// На Windows ⌘ нет — там то же сочетание через Ctrl, и подпись должна
+  /// говорить правду о клавиатуре, за которой человек сидит.
+  Widget _shortcutBadge(DColorSet c) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      // Моноширинным — как принято у клавиш: это надпись на клавише, а не
+      // слово. См. DType.meta.
+      child: Text(
+        Platform.isMacOS ? '⌘K' : 'Ctrl K',
+        style: DType.mono.copyWith(
+          fontSize: 10,
+          color: c.textSecondary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  /// Выдача — под полем, левым краем по полю.
+  Widget _dropdown(BuildContext context) {
+    final c = DColors.of(context);
     final entries = _entries();
     if (_cursor >= entries.length) {
       _cursor = entries.isEmpty ? 0 : entries.length - 1;
     }
-
-    return Focus(
-      focusNode: _rootFocus,
-      onKeyEvent: _onKey,
-      child: Stack(
-        children: [
-          // Backdrop: tap to dismiss.
-          Positioned.fill(
-            child: Semantics(
-                     button: true,
-                     label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-                     child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: widget.onClose,
-                child: Container(color: const Color(0x99000000)),
-              ),
-                   ),
-          ),
-          // Centered card.
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 620, maxHeight: 480),
-              child: Material(
-                color: Colors.transparent,
-                child: Container(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: DSpace.xl,
-                    vertical: DSpace.xl,
-                  ),
-                  decoration: BoxDecoration(
-                    color: c.elevated,
-                    borderRadius: BorderRadius.circular(DRadii.lg),
-                    border: Border.all(color: c.borderSubtle),
-                    boxShadow: DShadows.dialog,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _searchField(c),
-                      Container(height: 1, color: c.borderSubtle),
-                      Flexible(
-                        // 🔴 «НИЧЕГО НЕ НАЙДЕНО» — ТОЛЬКО КОГДА ОБХОДЫ
-                        // ЗАКОНЧИЛИСЬ.
-                        //
-                        // Обходы идут секундами (сообщения и файлы
-                        // расшифровываются по событию), и всё это время
-                        // палитра писала «Ничего не найдено» над пустотой, а
-                        // потом выкладывала находки. Ответ «нет» до того, как
-                        // поиск закончен, — это неправда, и человек уходит,
-                        // не дождавшись.
-                        child: _loading
-                            ? _loadingRow(c)
-                            : (entries.isEmpty
-                                  ? ((_searchingMessages || _searchingFiles)
-                                        ? _loadingRow(c)
-                                        : _emptyState(c))
-                                  : ListView.builder(
-                                      controller: _scroll,
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: DSpace.xs,
-                                      ),
-                                      itemCount: entries.length,
-                                      itemBuilder: (ctx, i) {
-                                        return _SpotlightRow(
-                                          entry: entries[i],
-                                          selected: i == _cursor,
-                                          onHover: () =>
-                                              setState(() => _cursor = i),
-                                          onTap: () => _activate(entries[i]),
-                                        );
-                                      },
-                                    )),
-                      ),
-                      Container(height: 1, color: c.borderSubtle),
-                      _footer(c),
-                    ],
-                  ),
+    final screen = MediaQuery.sizeOf(context);
+    final maxH = (screen.height - 72).clamp(160.0, 480.0);
+    return Align(
+      alignment: Alignment.topLeft,
+      child: CompositedTransformFollower(
+        link: _link,
+        showWhenUnlinked: false,
+        targetAnchor: Alignment.bottomLeft,
+        followerAnchor: Alignment.topLeft,
+        offset: const Offset(0, 8),
+        child: TapRegion(
+          groupId: _tapGroup,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: WindowSearchField.dropdownWidth,
+              maxWidth: WindowSearchField.dropdownWidth,
+              maxHeight: maxH,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: c.elevated,
+                  borderRadius: BorderRadius.circular(DRadii.lg),
+                  border: Border.all(color: c.borderSubtle),
+                  boxShadow: DShadows.dialog,
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      // 🔴 «НИЧЕГО НЕ НАЙДЕНО» — ТОЛЬКО КОГДА ОБХОДЫ
+                      // ЗАКОНЧИЛИСЬ.
+                      //
+                      // Обходы идут секундами (сообщения и файлы
+                      // расшифровываются по событию), и всё это время выдача
+                      // писала «Ничего не найдено» над пустотой, а потом
+                      // выкладывала находки. Ответ «нет» до того, как поиск
+                      // закончен, — это неправда, и человек уходит, не
+                      // дождавшись.
+                      child: _loading
+                          ? _loadingRow(c)
+                          : (entries.isEmpty
+                                ? ((_searchingMessages || _searchingFiles)
+                                      ? _loadingRow(c)
+                                      : _emptyState(c))
+                                : ListView.builder(
+                                    controller: _scroll,
+                                    shrinkWrap: true,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: DSpace.xs,
+                                    ),
+                                    itemCount: entries.length,
+                                    itemBuilder: (ctx, i) {
+                                      return _SpotlightRow(
+                                        entry: entries[i],
+                                        selected: i == _cursor,
+                                        onHover: () =>
+                                            setState(() => _cursor = i),
+                                        onTap: () => _activate(entries[i]),
+                                      );
+                                    },
+                                  )),
+                    ),
+                    Container(height: 1, color: c.borderSubtle),
+                    _footer(c),
+                  ],
                 ),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _searchField(DColorSet c) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: DSpace.l,
-        vertical: DSpace.m,
-      ),
-      child: Row(
-        children: [
-          Icon(FluentIcons.search_24_regular, size: 20, color: c.textSecondary),
-          const SizedBox(width: DSpace.s),
-          Expanded(
-            child: TextField(
-              controller: _searchCtl,
-              focusNode: _searchFocus,
-              autofocus: true,
-              style: DType.bodyStrong.copyWith(color: c.textPrimary),
-              cursorColor: c.accentPrimary,
-              decoration: InputDecoration(
-                isDense: true,
-                border: InputBorder.none,
-                hintText: '${desktopSearchScopeLabel(l10n)}…',
-                hintStyle: DType.bodyStrong.copyWith(
-                  color: c.textSecondary,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-              onSubmitted: (_) {
-                final entries = _entries();
-                if (entries.isNotEmpty && _cursor < entries.length) {
-                  _activate(entries[_cursor]);
-                }
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
+  // `heightFactor: 1` — строка высотой в своё содержимое. Без него [Center]
+  // растягивался на всё свободное место, и выпадающая выдача ради одной
+  // крутилки раздувалась на полэкрана.
   Widget _loadingRow(DColorSet c) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: DSpace.xl),
       child: Center(
+        heightFactor: 1,
         child: SizedBox(
           width: 22,
           height: 22,
@@ -689,6 +857,7 @@ class _SpotlightPaletteState extends State<SpotlightPalette> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: DSpace.xl),
       child: Center(
+        heightFactor: 1,
         child: Text(
           l10n.desktopListNothingFound,
           style: DType.body.copyWith(color: c.textSecondary),

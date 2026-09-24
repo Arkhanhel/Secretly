@@ -3,6 +3,7 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import '../../../l10n/app_localizations.dart';
 import 'dart:io' show Platform;
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -19,14 +20,15 @@ import '../primitives/hover_listener.dart';
 ///  • draggable region (whole bar minus interactive parts)
 ///  • macOS traffic-light reserve area (the native buttons are overlaid by AppKit)
 ///  • Windows min / max / close controls (we draw them)
-///  • centered title text
+///  • history arrows + breadcrumbs, the global search, the now-playing island
 ///  • optional trailing action slot (badges, settings hook)
 class DesktopWindowChrome extends StatelessWidget {
   const DesktopWindowChrome({
     super.key,
     this.title,
     this.leading,
-    this.center,
+    this.search,
+    this.island,
     this.trailing,
     this.navBack,
     this.navForward,
@@ -38,12 +40,19 @@ class DesktopWindowChrome extends StatelessWidget {
   /// Хлебные крошки слева от поиска.
   ///
   /// 🔴 Здесь же возвращается имя приложения. Заголовок окна (`title`)
-  /// показывается только когда середина пуста, а середину занимает поиск ⌘K —
-  /// то есть «Secretly» не было видно в окне НИГДЕ. На macOS заголовка окна
-  /// нет и в системе: приложение опознаётся только значком в доке.
+  /// показывается только когда крошек нет — иначе «Secretly» не было бы
+  /// видно в окне НИГДЕ: на macOS заголовка окна нет и в системе, приложение
+  /// опознаётся только значком в доке.
   final Widget? leading;
 
-  final Widget? center;
+  /// Поле глобального поиска — слева от середины, сразу перед островком.
+  final Widget? search;
+
+  /// Островок «сейчас играет» — в середине окна. Сам решает, показываться ли:
+  /// шапка держит под него место всегда, чтобы поиск не прыгал, когда музыка
+  /// начинается и кончается.
+  final Widget? island;
+
   final Widget? trailing;
 
   /// «Назад» по истории открытых переписок. `null` — идти некуда, и стрелка
@@ -82,49 +91,70 @@ class DesktopWindowChrome extends StatelessWidget {
           // The whole bar is draggable except for interactive children below.
           Positioned.fill(child: _DragRegion()),
 
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              _isMacOS ? 80 : DSpace.m, // reserve for traffic lights
-              0,
-              _isWindows ? 0 : DSpace.m,
-              0,
+          // 🔴 РАСКЛАДКА ШАПКИ — СВОЯ, А НЕ СТРОКА С РАСПОРКОЙ (24.09.2026).
+          //
+          // Здесь была строка «крошки (гибкие) · распорка · поиск · кнопки», и
+          // поиск «прижимался вправо» только на словах: гибких детей было двое,
+          // крошки и распорка, и свободное место делилось между ними пополам.
+          // Поле вставало около середины, а правая четверть шапки пустовала.
+          //
+          // Теперь в середине окна — островок «сейчас играет», поиск — сразу
+          // слева от него, крошки — от левого края, кнопки — у правого. Место
+          // под островок держится всегда, поэтому поле не прыгает, когда
+          // песня начинается и кончается. См. [_ChromeLayout].
+          CustomMultiChildLayout(
+            delegate: _ChromeLayout(
+              padLeft: _isMacOS ? 80 : DSpace.m, // reserve for traffic lights
+              padRight: _isWindows ? 0 : DSpace.m,
             ),
-            child: Row(
-              children: [
-                // Стрелки истории — сразу за светофором, как в макете. См.
-                // [DesktopNavHistory]: они настоящие, а не нарисованные.
-                _NavArrow(
-                  icon: FluentIcons.chevron_left_20_regular,
-                  tooltip: l10n.desktopWindowBack,
-                  onTap: navBack,
+            children: [
+              LayoutId(
+                id: _ChromeSlot.lead,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Стрелки истории — сразу за светофором, как в макете. См.
+                    // [DesktopNavHistory]: они настоящие, а не нарисованные.
+                    _NavArrow(
+                      icon: FluentIcons.chevron_left_20_regular,
+                      tooltip: l10n.desktopWindowBack,
+                      onTap: navBack,
+                    ),
+                    _NavArrow(
+                      icon: FluentIcons.chevron_right_20_regular,
+                      tooltip: l10n.desktopWindowForward,
+                      onTap: navForward,
+                    ),
+                    const SizedBox(width: DSpace.s),
+                    if (leading != null)
+                      Flexible(child: leading!)
+                    else if (title != null)
+                      Flexible(
+                        child: Text(
+                          title!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: DType.label.copyWith(color: c.textSecondary),
+                        ),
+                      ),
+                  ],
                 ),
-                _NavArrow(
-                  icon: FluentIcons.chevron_right_20_regular,
-                  tooltip: l10n.desktopWindowForward,
-                  onTap: navForward,
+              ),
+              if (search != null)
+                LayoutId(id: _ChromeSlot.search, child: search!),
+              if (island != null)
+                LayoutId(id: _ChromeSlot.island, child: island!),
+              LayoutId(
+                id: _ChromeSlot.trail,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (trailing != null) trailing!,
+                    if (_isWindows) const _WindowsControls(),
+                  ],
                 ),
-                const SizedBox(width: DSpace.s),
-                if (leading != null)
-                  Flexible(child: leading!)
-                else if (title != null && center == null)
-                  Text(
-                    title!,
-                    style: DType.label.copyWith(color: c.textSecondary),
-                  ),
-                // 🔴 Поиск прижат ВПРАВО, а не по центру окна.
-                //
-                // По центру он вставал ровно над перепиской и читался как её
-                // часть — как поиск по открытому чату, которым он не является.
-                // В макете он в правой группе, рядом с кнопками окна: это
-                // орудие ОКНА, а не переписки. Поиск по открытому чату в
-                // шапке чата и остался, отдельной кнопкой.
-                const Spacer(),
-                if (center != null) center!,
-                const SizedBox(width: 6),
-                if (trailing != null) trailing!,
-                if (_isWindows) const _WindowsControls(),
-              ],
-            ),
+              ),
+            ],
           ),
           // Bottom border (1pt subtle line)
           Positioned(
@@ -137,6 +167,116 @@ class DesktopWindowChrome extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _ChromeSlot { lead, search, island, trail }
+
+/// Раскладка шапки: крошки слева, островок посередине окна, поиск — сразу
+/// слева от островка, кнопки справа.
+///
+/// Порядок уступок, когда окно узкое: сначала крошки не дают себя задвинуть
+/// под поле (поиск и островок сдвигаются вправо), потом островок сужается до
+/// [islandMin], потом поле до [searchMin], и только затем островок уходит
+/// совсем. Поле поиска не исчезает никогда: это вход в приложение, а музыку
+/// можно остановить и в пузыре.
+class _ChromeLayout extends MultiChildLayoutDelegate {
+  _ChromeLayout({required this.padLeft, required this.padRight});
+
+  final double padLeft;
+  final double padRight;
+
+  static const double gap = 12;
+  static const double searchWidth = 280;
+  static const double searchMin = 190;
+  static const double islandWidth = 340;
+  static const double islandMin = 220;
+
+  /// Больше этого крошкам не отдаём: длинное название темы ужмётся
+  /// многоточием, а не вытолкнет поиск за середину.
+  static const double leadCap = 360;
+
+  @override
+  void performLayout(Size size) {
+    final w = size.width;
+    final h = size.height;
+    void put(_ChromeSlot id, double x, Size s) =>
+        positionChild(id, Offset(x, (h - s.height) / 2));
+
+    var trailW = 0.0;
+    if (hasChild(_ChromeSlot.trail)) {
+      final s = layoutChild(
+        _ChromeSlot.trail,
+        BoxConstraints.loose(Size(w, h)),
+      );
+      trailW = s.width;
+      put(_ChromeSlot.trail, w - padRight - trailW, s);
+    }
+    final right = w - padRight - trailW - (trailW > 0 ? gap / 2 : 0);
+
+    final hasSearch = hasChild(_ChromeSlot.search);
+    final hasIsland = hasChild(_ChromeSlot.island);
+    final middleMin =
+        (hasSearch ? searchMin + gap : 0) + (hasIsland ? islandMin + gap : 0);
+
+    var leadW = 0.0;
+    if (hasChild(_ChromeSlot.lead)) {
+      final cap = math.max(
+        0.0,
+        math.min(leadCap, right - padLeft - middleMin),
+      );
+      final s = layoutChild(
+        _ChromeSlot.lead,
+        BoxConstraints.loose(Size(cap, h)),
+      );
+      leadW = s.width;
+      put(_ChromeSlot.lead, padLeft, s);
+    }
+    final minX = padLeft + leadW + gap;
+
+    var sW = hasSearch ? searchWidth : 0.0;
+    var iW = hasIsland ? islandWidth : 0.0;
+    // Островок — посередине ОКНА, а не свободного места между крошками и
+    // кнопками: середина окна не зависит от того, какой чат открыт.
+    var islandX = (w - islandWidth) / 2;
+    var searchX = hasSearch ? islandX - gap - sW : islandX;
+    if (searchX < minX) {
+      searchX = minX;
+      islandX = hasSearch ? searchX + sW + gap : searchX;
+    }
+    final end = hasIsland ? islandX + iW : searchX + sW;
+    var overflow = end - (right - gap);
+    if (overflow > 0 && hasIsland) {
+      final take = math.min(overflow, iW - islandMin);
+      iW -= take;
+      overflow -= take;
+    }
+    if (overflow > 0 && hasSearch) {
+      final take = math.min(overflow, sW - searchMin);
+      sW -= take;
+      islandX -= take;
+      overflow -= take;
+    }
+    if (overflow > 0 && hasIsland) iW = 0;
+
+    if (hasSearch) {
+      final s = layoutChild(
+        _ChromeSlot.search,
+        BoxConstraints(minWidth: sW, maxWidth: sW, maxHeight: h),
+      );
+      put(_ChromeSlot.search, searchX, s);
+    }
+    if (hasIsland) {
+      final s = layoutChild(
+        _ChromeSlot.island,
+        BoxConstraints(minWidth: iW, maxWidth: iW, maxHeight: h),
+      );
+      put(_ChromeSlot.island, islandX, s);
+    }
+  }
+
+  @override
+  bool shouldRelayout(_ChromeLayout old) =>
+      old.padLeft != padLeft || old.padRight != padRight;
 }
 
 class _DragRegion extends StatelessWidget {
@@ -310,80 +450,6 @@ class DesktopBreadcrumbs extends StatelessWidget {
 /// многоточием на середине перечисления.
 String desktopSearchScopeLabel(AppLocalizations l10n) =>
     l10n.desktopSearchEverything;
-
-class WindowSearchEntry extends StatelessWidget {
-  const WindowSearchEntry({super.key, required this.onTap, this.width = 320});
-
-  final VoidCallback onTap;
-  final double width;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final c = DColors.of(context);
-    return HoverListener(
-      onTap: onTap,
-      builder: (ctx, hovered, pressed) => Container(
-        width: width,
-        height: 30,
-        padding: const EdgeInsets.only(left: 9, right: 10),
-        // 🔴 Заливка ПОСТОЯННАЯ, а не «подсветка при наведении».
-        //
-        // Поле подсвечивалось только под курсором, то есть до наведения
-        // выглядело надписью, а не полем: человек не знал, что туда можно
-        // нажать, пока случайно не проведёт мышью. В макете у него свой фон и
-        // своя рамка всегда; наведение делает их чуть заметнее.
-        decoration: BoxDecoration(
-          color: hovered
-              ? Colors.white.withValues(alpha: 0.09)
-              : Colors.white.withValues(alpha: 0.055),
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: hovered ? 0.12 : 0.07),
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              FluentIcons.search_24_regular,
-              size: 17,
-              color: c.textTertiary,
-            ),
-            const SizedBox(width: 9),
-            Expanded(
-              child: Text(
-                desktopSearchScopeLabel(l10n),
-                overflow: TextOverflow.ellipsis,
-                style: DType.caption.copyWith(
-                  fontSize: 12.5,
-                  color: c.textTertiary,
-                ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              // Горячая клавиша набрана моноширинным — как в макете и как
-              // принято у клавиш вообще: ⌘K это не слово, а надпись на
-              // клавише. См. DType.meta.
-              child: Text(
-                '⌘K',
-                style: DType.mono.copyWith(
-                  fontSize: 10,
-                  color: c.textSecondary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 /// Стрелка истории в шапке окна.
 ///

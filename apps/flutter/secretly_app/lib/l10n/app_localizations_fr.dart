@@ -5864,6 +5864,29 @@ class AppLocalizationsFr extends AppLocalizations {
   String get desktopA11yPause => 'Pause';
 
   @override
+  String get desktopA11yAudioProgress => 'Lecture';
+
+  @override
+  String get desktopPlayerClose => 'Fermer le lecteur';
+
+  @override
+  String get desktopPlayerOpenSource => 'Aller au message';
+
+  @override
+  String desktopPlayerNowPlaying(String title) {
+    return 'En cours de lecture : $title';
+  }
+
+  @override
+  String get desktopPlayerPrevious => 'Précédent';
+
+  @override
+  String get desktopPlayerNext => 'Suivant';
+
+  @override
+  String get desktopPlayerMore => 'Plus dans cette discussion';
+
+  @override
   String get desktopDiagTitle => 'Diagnostic de distribution';
 
   @override

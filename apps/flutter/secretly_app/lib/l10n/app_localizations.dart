@@ -10876,6 +10876,48 @@ abstract class AppLocalizations {
   /// **'Pause'**
   String get desktopA11yPause;
 
+  /// No description provided for @desktopA11yAudioProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback'**
+  String get desktopA11yAudioProgress;
+
+  /// No description provided for @desktopPlayerClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close player'**
+  String get desktopPlayerClose;
+
+  /// No description provided for @desktopPlayerOpenSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to message'**
+  String get desktopPlayerOpenSource;
+
+  /// No description provided for @desktopPlayerNowPlaying.
+  ///
+  /// In en, this message translates to:
+  /// **'Now playing: {title}'**
+  String desktopPlayerNowPlaying(String title);
+
+  /// No description provided for @desktopPlayerPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous'**
+  String get desktopPlayerPrevious;
+
+  /// No description provided for @desktopPlayerNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get desktopPlayerNext;
+
+  /// No description provided for @desktopPlayerMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More in this chat'**
+  String get desktopPlayerMore;
+
   /// No description provided for @desktopDiagTitle.
   ///
   /// In en, this message translates to:

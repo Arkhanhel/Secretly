@@ -5884,6 +5884,29 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopA11yPause => 'Пауза';
 
   @override
+  String get desktopA11yAudioProgress => 'Відтворення';
+
+  @override
+  String get desktopPlayerClose => 'Закрити плеєр';
+
+  @override
+  String get desktopPlayerOpenSource => 'Перейти до повідомлення';
+
+  @override
+  String desktopPlayerNowPlaying(String title) {
+    return 'Зараз грає: $title';
+  }
+
+  @override
+  String get desktopPlayerPrevious => 'Попередній';
+
+  @override
+  String get desktopPlayerNext => 'Наступний';
+
+  @override
+  String get desktopPlayerMore => 'Ще в цьому чаті';
+
+  @override
   String get desktopDiagTitle => 'Діагностика доставки';
 
   @override

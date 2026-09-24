@@ -2851,6 +2851,20 @@
   "desktopViewerNext": "Next",
   "desktopA11yPlay": "Play",
   "desktopA11yPause": "Pause",
+  "desktopA11yAudioProgress": "Playback",
+  "desktopPlayerClose": "Close player",
+  "desktopPlayerOpenSource": "Go to message",
+  "desktopPlayerNowPlaying": "Now playing: {title}",
+  "@desktopPlayerNowPlaying": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopPlayerPrevious": "Previous",
+  "desktopPlayerNext": "Next",
+  "desktopPlayerMore": "More in this chat",
   "desktopDiagTitle": "Delivery diagnostics",
   "desktopDiagHint": "What to look at when messages are not arriving, and what to send us",
   "desktopDiagQueues": "QUEUES",

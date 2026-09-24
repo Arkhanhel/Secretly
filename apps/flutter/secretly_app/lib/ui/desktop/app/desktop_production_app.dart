@@ -30,6 +30,7 @@ import '../design/theme_bridge.dart';
 import '../design/tokens.dart';
 import '../shell/desktop_app_menu.dart';
 import '../shell/desktop_shell.dart';
+import '../shell/now_playing_island.dart';
 import '../primitives/desktop_snackbar.dart';
 import '../shell/rail_live.dart';
 import '../shell/window_chrome.dart';
@@ -169,6 +170,9 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   ConnectionStatus _connection = ConnectionStatus.connecting;
   DesktopSection _section = DesktopSection.chats;
   Widget? _modalOverlay;
+
+  /// Фокус поля поиска в шапке: по ⌘K курсор ставится туда.
+  final FocusNode _searchFocus = FocusNode(debugLabel: 'window-search');
 
   /// 🔴 Нужен, чтобы корень мог что-то СКАЗАТЬ человеку.
   ///
@@ -1296,6 +1300,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
 
   @override
   void dispose() {
+    _searchFocus.dispose();
     DesktopLinkRouter.handler = null;
     if (_windowListenerAttached) {
       try {
@@ -1445,23 +1450,52 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   /// показывать: выбранную переписку или меня.
   bool _selfProfileOpen = false;
 
+  /// ⌘K — курсор в поле поиска в шапке окна.
+  ///
+  /// Отдельного окна поиска больше нет: печатают прямо в шапке, выдача
+  /// выпадает под полем. См. [WindowSearchField].
   void _openSpotlight() {
-    final selectSection = _shellSelectSection;
-    if (selectSection == null) return;
-    setState(() {
-      _modalOverlay = SpotlightPalette(
-        controller: _controller,
-        chatsSelection: _chatsSelection,
-        roomsSelection: _roomsSelection,
-        selectSection: selectSection,
-        onClose: _closeOverlay,
-        onOpenSettings: _openSettings,
-        onOpenProfile: _openProfile,
-        onOpenProfileChat: (pid) =>
-            unawaited(_openProfileChatByDeepLink(pid)),
-      );
-    });
+    if (_modalOverlay != null) return;
+    _searchFocus.requestFocus();
   }
+
+  /// Поле поиска в шапке — со всем, что ему нужно, чтобы довести находку
+  /// до открытой переписки.
+  Widget _buildSearchField(
+    BuildContext context,
+    ValueChanged<DesktopSection> selectSection,
+  ) => WindowSearchField(
+    controller: _controller,
+    chatsSelection: _chatsSelection,
+    roomsSelection: _roomsSelection,
+    selectSection: selectSection,
+    focusNode: _searchFocus,
+    onOpenSettings: _openSettings,
+    onOpenProfile: _openProfile,
+    onOpenProfileChat: (pid) => unawaited(_openProfileChatByDeepLink(pid)),
+  );
+
+  /// Островок «сейчас играет» — управляет тем же общим плеером, что и
+  /// пузыри голосовых и песен.
+  Widget _buildNowPlaying() => ValueListenableBuilder<SharedAudioPlaybackState>(
+    valueListenable: _controller.sharedAudioPlayback,
+    builder: (ctx, playback, _) => DesktopNowPlayingIsland(
+      state: desktopNowPlayingOf(playback),
+      onTogglePlay: () => unawaited(_controller.toggleSharedAudioPlayback()),
+      onSeek: (position) => unawaited(_controller.seekSharedAudio(position)),
+      onClose: () => unawaited(_controller.stopSharedAudio()),
+      onPrevious: () => unawaited(_controller.playPreviousSharedAudio()),
+      onNext: () => unawaited(_controller.playNextSharedAudio()),
+      // Очередь берём свежую, в миг щелчка: пока список был открыт, плеер
+      // мог уйти к следующей записи сам.
+      onPlayIndex: (index) {
+        final queue = _controller.sharedAudioPlayback.value.queue;
+        if (index < 0 || index >= queue.length) return;
+        unawaited(_controller.playSharedAudioQueue(queue: queue, index: index));
+      },
+      onOpenSource: (convoId) => unawaited(_openConvoOrReport(convoId)),
+    ),
+  );
 
   // GlobalKey on a child of the Overlay so we can target it for showing the
   // IncomingCallToast.
@@ -1680,6 +1714,8 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       onOpenProfile: _openProfile,
       onOpenSettings: _openSettings,
       onOpenSpotlight: _openSpotlight,
+      searchBuilder: _buildSearchField,
+      nowPlaying: _buildNowPlaying(),
       windowTitle: 'Secretly',
       // · 330 из макета. На 360 правая панель забирала тридцать точек у
       // переписки — самого узкого места в трёхполосном окне.
@@ -1870,4 +1906,27 @@ class _OverlayHost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => child;
+}
+
+/// Состояние общего плеера — в описание для островка в шапке.
+///
+/// Открыто и вынесено наружу, чтобы перевод проверялся без окна: островок
+/// сам контроллера не знает (см. [DesktopNowPlaying]).
+DesktopNowPlaying? desktopNowPlayingOf(SharedAudioPlaybackState s) {
+  final track = s.currentTrack;
+  if (track == null) return null;
+  return DesktopNowPlaying(
+    title: track.title,
+    artist: track.artist,
+    sourceConvoId: track.sourceConvoId,
+    playing: s.playing,
+    loading: s.loadingTrackId == track.trackId,
+    position: s.position,
+    duration: s.duration,
+    queue: [
+      for (final t in s.queue)
+        DesktopNowPlayingEntry(title: t.title, artist: t.artist),
+    ],
+    queueIndex: s.queueIndex,
+  );
 }

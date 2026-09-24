@@ -98,11 +98,14 @@ void main() {
     ).readAsStringSync();
 
     test('🔴 пока обходы идут — крутилка, а не «ничего не найдено»', () {
+      // Сверка без учёта пробелов: важна развилка, а не отступ, с которым
+      // её напечатали (выдача переехала из окна под поле — вложенность
+      // сменилась, смысл нет).
+      final flat = palette.replaceAll(RegExp(r'\s+'), ' ');
       expect(
-        palette.contains(
-          '? ((_searchingMessages || _searchingFiles)\n'
-          '                                        ? _loadingRow(c)\n'
-          '                                        : _emptyState(c))',
+        flat.contains(
+          '? ((_searchingMessages || _searchingFiles) '
+          '? _loadingRow(c) : _emptyState(c))',
         ),
         isTrue,
         reason: 'ответ «нет» до конца поиска — неправда',

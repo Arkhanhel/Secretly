@@ -42,6 +42,8 @@ class DesktopShell extends StatefulWidget {
     this.onOpenSettings,
     this.onOpenProfile,
     this.onOpenSpotlight,
+    this.searchBuilder,
+    this.nowPlaying,
     this.navHistory,
     this.onNavigateHistory,
     this.windowTitle = 'Secretly',
@@ -97,7 +99,20 @@ class DesktopShell extends StatefulWidget {
   final ConnectionStatus connectionStatus;
   final VoidCallback? onOpenSettings;
   final VoidCallback? onOpenProfile;
+  /// ⌘K: поставить курсор в поле поиска в шапке.
   final VoidCallback? onOpenSpotlight;
+
+  /// Поле глобального поиска в шапке. Оболочка отдаёт ему свой способ
+  /// переключать разделы: найденная комната открывается в «Комнатах», чат —
+  /// в «Чатах».
+  final Widget Function(
+    BuildContext context,
+    ValueChanged<DesktopSection> selectSection,
+  )?
+  searchBuilder;
+
+  /// Островок «сейчас играет» в середине шапки. `null` — островка нет.
+  final Widget? nowPlaying;
 
   /// История открытых переписок для стрелок в шапке. `null` — стрелок нет
   /// вовсе (например, в тестах, где шапка строится отдельно).
@@ -620,9 +635,8 @@ class _DesktopShellState extends State<DesktopShell> {
                   builder: (ctx, back, forward) => DesktopWindowChrome(
                     title: widget.windowTitle,
                     leading: widget.breadcrumbsBuilder?.call(ctx, _section),
-                    center: widget.onOpenSpotlight == null
-                        ? null
-                        : WindowSearchEntry(onTap: widget.onOpenSpotlight!),
+                    search: widget.searchBuilder?.call(ctx, _selectSection),
+                    island: widget.nowPlaying,
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [

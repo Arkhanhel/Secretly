@@ -4426,15 +4426,28 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   ) {
     final tracks = <SharedAudioTrack>[];
     var targetIndex = -1;
+    // 🔴 ОЧЕРЕДЬ — ОДНОГО ВИДА, КАК В TELEGRAM (24.09.2026).
+    //
+    // Здесь в одну очередь шли и голосовые, и песни, чтобы «дальше/назад»
+    // ходили по любому звуку переписки. На деле после песни сама заиграла
+    // чужая голосовая, а список «что ещё есть в этом чате» под островком в
+    // шапке смешал бы музыку с речью. Песня ведёт к следующей песне,
+    // голосовое — к следующему голосовому.
+    MessageAttachmentKind? wanted;
+    for (final msg in _messages) {
+      if (msg.id == messageId) {
+        wanted = msg.attachment?.kind;
+        break;
+      }
+    }
     for (final msg in _messages) {
       final att = msg.attachment;
-      // Queue both voice notes and music/audio files so seek-next/prev jumps
-      // between any playable audio in the thread.
       if (att == null ||
           (att.kind != MessageAttachmentKind.voice &&
               att.kind != MessageAttachmentKind.audio)) {
         continue;
       }
+      if (wanted != null && att.kind != wanted) continue;
       final payload = _attachmentsByMessageId[msg.id];
       if (payload == null) continue;
       if (msg.id == messageId) targetIndex = tracks.length;
