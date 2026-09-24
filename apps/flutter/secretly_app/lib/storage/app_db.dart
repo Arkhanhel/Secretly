@@ -2415,6 +2415,33 @@ CREATE TABLE IF NOT EXISTS local_kv (
     await localKvSet('$_kHsSigCapablePrefix$id', key);
   }
 
+  /// Счётчики проверки подписи рукопожатия для диагностики — по ним видно,
+  /// сколько рукопожатий пришло подписанными, сколько без подписи и сколько
+  /// отвергнуто. Ошибка чтения — нули: диагностика не должна падать.
+  Future<Map<String, int>> handshakeAuthCounters() async {
+    const names = <String>[
+      'ok',
+      'bad',
+      'missing',
+      'unknown_signed',
+      'unknown_unsigned',
+      'key_conflict',
+      'eval_error',
+      'rejected',
+      'bad_switch_off',
+      'missing_switch_off',
+    ];
+    final out = <String, int>{};
+    for (final n in names) {
+      try {
+        out[n] = await localKvCounterGet('hs_auth.$n');
+      } catch (_) {
+        out[n] = 0;
+      }
+    }
+    return out;
+  }
+
   /// Per-message inbound decrypt-failure budget, kept on disk.
   ///
   /// The in-memory counter this replaces could never reach its threshold on
@@ -10142,6 +10169,10 @@ CREATE TABLE IF NOT EXISTS deferred_room_inbound (
       // atomic with the advance, so this measures the residual advance→
       // event-insert (attribution) gap the journal still legitimately covers.
       'journal_recovered_total': await localKvCounterGet('i2_journal_recovered'),
+      // С-2: сколько рукопожатий отвергнуто по подписи и сколько подписанных
+      // прошло. Отвергнутых в нормальной работе ноль.
+      'hs_auth_ok': await localKvCounterGet('hs_auth.ok'),
+      'hs_auth_rejected': await localKvCounterGet('hs_auth.rejected'),
     };
   }
 

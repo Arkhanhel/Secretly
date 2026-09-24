@@ -9737,16 +9737,6 @@ class AppController {
     });
   }
 
-  /// Применяет серверный переключатель отправки повторного prekey (Э-4).
-  ///
-  /// Как и у комнат, «не удалось проверить» — это НЕТ, а не «оставить как
-  /// было»: конфиг, переставший верифицироваться (ключ сменили, блок срезали,
-  /// сервер откатили), обязан вернуть отправку в спящее состояние, а не просто
-  /// не суметь её включить.
-  ///
-  /// Сборочный флаг остаётся ПЕРЕОПРЕДЕЛЕНИЕМ для полевых проверок: собрал с
-  /// dart-define — отправка включена независимо от сервера. В обычной сборке
-  /// его нет, и решает только сервер.
   /// С-2 (24.09.2026): выключатель отказов проверки подписи рукопожатия.
   ///
   /// Кладётся в базу, а не в память: менеджер сессий читает его и в фоновом
@@ -9769,6 +9759,16 @@ class AppController {
     }
   }
 
+  /// Применяет серверный переключатель отправки повторного prekey (Э-4).
+  ///
+  /// Как и у комнат, «не удалось проверить» — это НЕТ, а не «оставить как
+  /// было»: конфиг, переставший верифицироваться (ключ сменили, блок срезали,
+  /// сервер откатили), обязан вернуть отправку в спящее состояние, а не просто
+  /// не суметь её включить.
+  ///
+  /// Сборочный флаг остаётся ПЕРЕОПРЕДЕЛЕНИЕМ для полевых проверок: собрал с
+  /// dart-define — отправка включена независимо от сервера. В обычной сборке
+  /// его нет, и решает только сервер.
   void _applyHandshakeFlags(EntitlementRepository repo) {
     final resolved = repo.handshakeFlagsResolved;
     final flags = repo.handshakeFlags;
@@ -32864,11 +32864,36 @@ class AppController {
       final share = r.contacts == 0
           ? '—'
           : '${(100 * r.pinned / r.contacts).round()}%';
+      // С-2: вторая строка — подпись рукопожатий. Здесь, а не отдельным
+      // полем экрана: отчёт диагностики телефона собирается из готовых строк,
+      // и экран выпущенной версии трогать ради неё незачем.
       return 'account_identity: со слоем 2 ${r.pinned} из ${r.contacts} '
           'контактов ($share) · сертификат ок=$ok плох=$bad нет=$absent · '
-          'ключ сменился=$changed';
+          'ключ сменился=$changed\n${await handshakeAuthSummary()}';
     } catch (_) {
       return 'account_identity: (ошибка чтения)';
+    }
+  }
+
+  /// С-2 (24.09.2026): сводка проверки подписи рукопожатий одной строкой.
+  ///
+  /// Главное число — «отвергнуто»: в нормальной работе оно ноль. Не ноль —
+  /// либо подделка, либо ошибка, и тогда видно, снят ли отказ выключателем.
+  Future<String> handshakeAuthSummary() async {
+    final db = _db;
+    if (db == null) return 'handshake_auth: (нет базы)';
+    try {
+      final c = await db.handshakeAuthCounters();
+      final off =
+          (await db.localKvGet(AppDb.kvHandshakeAuthEnforceDisabled)) == '1';
+      return 'handshake_auth: подписано ок=${c['ok']} · без подписи='
+          '${c['missing']} · чужая подпись=${c['bad']} · незнакомые '
+          '${c['unknown_signed']}/${c['unknown_unsigned']} · расхождение '
+          'ключей=${c['key_conflict']} · ОТВЕРГНУТО=${c['rejected']} · '
+          'снято выключателем=${(c['bad_switch_off'] ?? 0) + (c['missing_switch_off'] ?? 0)} · '
+          'отказы ${off ? 'ВЫКЛЮЧЕНЫ сервером' : 'действуют'}';
+    } catch (_) {
+      return 'handshake_auth: (ошибка чтения)';
     }
   }
 
@@ -33465,6 +33490,60 @@ class AppController {
     } catch (_) {
       // ignore
     }
+  }
+
+  /// С-2: когда по устройству в последний раз перечитывались ключи после отказа
+  /// подписи рукопожатия.
+  final Map<String, int> _hsRejectRefreshAtMs = <String, int>{};
+
+  /// С-2 (24.09.2026): рукопожатие от устройства, которое уже доказало, что
+  /// подписывает, пришло без подписи или с подписью другим ключом.
+  ///
+  /// 🔴 ПОЧЕМУ СРАЗУ ПЕРЕЧИТАТЬ КЛЮЧИ. В нормальной работе такое бывает ровно в
+  /// одном случае — собеседник законно сменил ключ личности под прежним
+  /// номером устройства (связка ключей ОС стёрлась, номер уцелел), а у нас
+  /// закреплён старый. Обход карантина это тоже лечит, но через минуту-другую,
+  /// а после трёх неудачных повторов конверт пробуется лишь раз в час.
+  /// Перечитанный список устройств проходит обычным путём «ключ сменился»: новый
+  /// ключ принимается с предупреждением «код безопасности изменился» и снятием
+  /// отметки «проверен» — и тогда карантин повторяется сразу.
+  ///
+  /// Подделку это НЕ пропускает: чтобы её подпись сошлась, серверу пришлось бы
+  /// открыто «сменить ключ» устройства — с тем же предупреждением. Ключ не
+  /// поменялся — конверт остаётся в карантине.
+  void _refreshAfterHandshakeAuthReject(String senderDeviceId) {
+    final sid = senderDeviceId.trim();
+    if (sid.isEmpty) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - (_hsRejectRefreshAtMs[sid] ?? 0) < _verifyRefreshThrottleMs) {
+      return;
+    }
+    _hsRejectRefreshAtMs[sid] = now;
+    unawaited(() async {
+      try {
+        final pid = await _resolveProfileIdForDevice(sid);
+        if (pid == null ||
+            pid.isEmpty ||
+            pid.startsWith('group:') ||
+            pid.startsWith('dev:')) {
+          return;
+        }
+        final rotatedBefore = _contactIdentityChangedAtMs[pid] ?? 0;
+        await _refreshContactDevicesForVerification(pid);
+        final rotated = (_contactIdentityChangedAtMs[pid] ?? 0) != rotatedBefore;
+        DiagLog.event('hs', 'reject_refresh', <String, Object?>{
+          'peer': DiagLog.pfx(sid),
+          'rotated': rotated,
+        });
+        if (!rotated) return;
+        // Конверт, на котором случился отказ, к этому моменту уже лёг в
+        // карантин; пауза — чтобы повтор не обогнал саму укладку.
+        await Future<void>.delayed(const Duration(seconds: 3));
+        await _replayAllQuarantine();
+      } catch (_) {
+        // best-effort: обход карантина повторит то же самое позже
+      }
+    }());
   }
 
   // Step 3: throttle for the event-driven "learn the peer's device on first
@@ -45605,6 +45684,11 @@ class AppController {
       });
       // Starts the recovery clock for this peer (first failure only).
       _noteRecoveryFailure(senderDeviceId ?? '');
+      // С-2: отказ по подписи рукопожатия — сразу перечитать ключи
+      // отправителя, не дожидаясь обхода карантина. См. метод.
+      if (e is HandshakeAuthRejectedException) {
+        _refreshAfterHandshakeAuthReject(e.senderDeviceId);
+      }
       // During a quarantine replay we must not re-quarantine, re-ack, or
       // re-trigger a session reset — just report that this ciphertext is still
       // undecryptable so the replay driver leaves it parked.

@@ -25,7 +25,7 @@
 | Threat | Mitigation |
 |--------|-----------|
 | Server reads messages | E2EE: server only stores opaque ciphertext envelopes per device_id |
-| MITM on key exchange | QR-based contact verification; identity fingerprint comparison |
+| MITM on key exchange | QR-based contact verification; identity fingerprint comparison. The session initiator signs the handshake with its identity key (C-2) |
 | Replay attacks | Double Ratchet: each message uses a fresh message key; nonce included in wire |
 | Key compromise (forward secrecy) | Double Ratchet provides forward secrecy (ratchet advances on each message) |
 | Key compromise (break-in recovery) | Double Ratchet provides break-in recovery via DH ratchet steps |
@@ -92,7 +92,7 @@ Identity authenticity is NOT established by the ratchet handshake itself (see th
 
 ### Session Initialization (X3DH-like) — as implemented
 
-> Corrected 2026-09-17 (docs/TZ_ROOMS_KEY_AND_SENDER_AUTH_2026-09-17.md, finding ID-1).
+> Corrected 2026-09-17 (finding ID-1).
 > An earlier version of this section described DH1 = DH(IK_A, SPK_D) and
 > DH2 = DH(ek, IK_D). **The code has never done that.**
 
@@ -104,27 +104,64 @@ Initiator (A) initializing session to recipient device D (lib/ratchet/session_v1
   DH1 = DH(ek_priv, D.signed_prekey_pub)
   DH2 = DH(ek_priv, D.one_time_prekey_pub)   [if available]
   root = HKDF(DH1 || DH2)
-  header = { sender_device_id, sender_eph_pub, spk_id, otk_id }   // NOT signed
+  header = { sender_device_id, sender_eph_pub, spk_id, otk_id,
+             hs_sig }                    // hs_sig since 2026-09-24, see below
 ```
 
 Consequences and mitigations:
 
-- **The initiator is not authenticated by the handshake.** `sender_device_id` is
-  the wire's own claim. Anyone holding D's public bundle can open a session
-  under any device id.
-- **Mitigations in place (2026-09-17):**
+- **The key agreement does not authenticate the initiator.** The initiator's
+  identity key takes no part in the DH, so `sender_device_id` is only the
+  wire's own claim: anyone holding D's public bundle — including the server —
+  can open a session under any device id.
+- **Handshake signature (stage C-2, 24 September 2026).** The initiator signs
+  the handshake with its device identity key (Ed25519):
+
+  ```
+  "secretly-hs-sig-v1" 0x00 ‖ lp(sender_device_id) ‖ lp(recipient_device_id)
+    ‖ lp(sender_eph_pub) ‖ lp(recipient_signed_prekey_pub)
+    ‖ u32(spk_id) ‖ u8(has_otk) ‖ u32(otk_id | 0)          lp = u16 length ‖ bytes
+  ```
+
+  The context and the length prefixes keep these bytes distinct from anything
+  else the same key signs (the raw signed prekey, device certificates). The
+  signature travels in the header, which is the AEAD associated data. The key
+  formula is unchanged, and older builds ignore the field.
+
+  A device that signs also marks its ordinary messages with `hsv: 1`. The mark
+  is part of the associated data, so the server can neither add nor strip it.
+  The receiver verifies the signature against the identity key it has pinned
+  for that device. It **rejects** a handshake only from a device that has
+  already proven it signs — by a valid signature or by an `hsv` message — when
+  the new handshake is unsigned or signed by another key. The session is left
+  untouched and the wire goes to quarantine. Everything else is accepted as
+  before and counted (`hs_auth.*`, shown in delivery diagnostics).
+- **A changed identity key is never accepted silently.** A legitimate change
+  (the OS keychain lost, the device number kept) is picked up from the keys
+  server through the usual "safety number changed" path: the contact's
+  verification is reset and a notice appears, after which the quarantined wire
+  decrypts. For the server, this means impersonating a device that signs
+  requires changing its key in the open.
+- **Server-side switch.** A separately signed `handshake_auth` block in
+  `/v1/config` can lift the rejections (not the checks) if a field problem
+  appears. A silent or stale server changes nothing.
+- **Earlier mitigations remain (2026-09-17):**
   - the relay stamps the authenticated sender (`from_device_id`) on every queued
     message, and the client drops a wire whose header names someone else (C-1);
   - a wire naming the receiving device itself is dropped;
   - "session ended" wipes only after the keys server confirms the registration
     is gone;
   - room messages are signed per sender generation (K-1).
-- **Still open:** a malicious *server* can forge both the relay stamp and the
-  wire. The end-to-end fix — the initiator signs the handshake header with its
-  device identity key, advertised by a bundle capability — is Stage C-2 of the
-  TZ above.
-- Contact verification (safety numbers, account identity certificates) verifies
-  *keys*. Until C-2 it does not by itself bind a session to those keys.
+- **Still open:**
+  - a device that has not yet shown it signs (an older build) can be
+    impersonated by an unsigned handshake. This closes as devices update, and
+    fully only once unsigned handshakes are refused for everyone;
+  - a new device of a known contact is trusted on first use. Requiring an
+    account-key certificate for it is not enforced yet;
+  - replaying an old, genuine signed handshake can break a live session. That
+    denies service; it does not disclose anything;
+  - deniability is partly lost: a signature shows that one device started a
+    session with another at some point. It says nothing about the contents.
 
 ### Message Encryption
 

@@ -48,6 +48,12 @@ The server **can**: observe metadata (§5.2), withhold or delay delivery, and
 attempt to serve a forged prekey bundle to mount a man-in-the-middle attack —
 which is what contact verification exists to detect (§3.3).
 
+The key agreement does not authenticate the initiator (§3.1), so the server
+could also start a session in the name of a device you already know. Handshake
+signatures close this for every device that signs: to succeed, the server has
+to change that device's identity key in the open, which resets verification and
+shows a notice. What remains open is listed in §5.10.
+
 ### A4 — Attacker with physical access to an unlocked device
 
 Out of scope. An unlocked device with the app open is the user's own session.
@@ -80,8 +86,8 @@ It **can** be compelled to serve forged key material to a targeted user — see
 
 ### 3.1 Message confidentiality and integrity
 
-Double Ratchet v3 with X3DH key agreement. Each message uses a fresh key derived
-from a ratcheting chain; keys are discarded after use.
+Double Ratchet v3 with an X3DH-like key agreement. Each message uses a fresh key
+derived from a ratcheting chain; keys are discarded after use.
 
 - **Forward secrecy:** compromising current state does not decrypt past messages.
 - **Break-in recovery:** a compromise heals once a fresh DH ratchet step happens.
@@ -91,6 +97,11 @@ from a ratcheting chain; keys are discarded after use.
   is deleted, so the same ciphertext cannot be opened twice.
 - **Denial of service via skipped keys:** bounded at 200 per step; a message
   claiming a larger gap is rejected before any key is derived.
+- **Initiator authentication:** the initiator's identity key is not part of the
+  DH. Since 24 September 2026 the initiator signs the handshake with that key,
+  and the receiver checks the signature against the key it has pinned for the
+  device (SECURITY_MODEL, "Session Initialization"). It protects a conversation
+  once both devices run a build that has it.
 
 **Note for auditors:** this is our own implementation of the Double Ratchet,
 not a binding to libsignal. That is the single largest thing worth your time.
@@ -286,6 +297,24 @@ any message content — translation itself runs on-device.
 
 Neither model is fetched until the corresponding feature is used. Users for whom
 either trust boundary is unacceptable can simply leave the feature off.
+
+### 5.10 Handshake signatures are being rolled out
+
+The receiver refuses an unsigned handshake only from a device that has already
+shown it signs. Until then the check only counts. So:
+
+- a contact still on an older build can be impersonated by the server with an
+  unsigned handshake. This closes as devices update, and fully only once
+  unsigned handshakes are refused for everyone;
+- a new device of a known contact is trusted on first use. An account-key
+  certificate exists for it but is not yet required;
+- the server can replay an old, genuine signed handshake and break a live
+  session. This denies service and discloses nothing;
+- deniability is partly lost: a signature shows that one device started a
+  session with another at some point. It says nothing about the contents.
+
+A changed identity key is never taken silently: it resets the contact's
+verification and shows a "safety number changed" notice.
 
 ## 6. Out of scope
 

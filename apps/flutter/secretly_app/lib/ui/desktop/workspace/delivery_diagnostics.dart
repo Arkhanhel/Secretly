@@ -36,6 +36,9 @@ class DesktopDeliveryDiagnosticsReport {
     'quarantined=${health['quarantined'] ?? 0}',
     'nacked=${health['nacked'] ?? 0}',
     'receipts_queued=${health['receipts_queued'] ?? 0}',
+    // Подпись рукопожатий (С-2): отвергнутых в нормальной работе ноль.
+    'hs_auth_ok=${health['hs_auth_ok'] ?? 0}',
+    'hs_auth_rejected=${health['hs_auth_rejected'] ?? 0}',
     'clock_offset_ms=$offsetMs',
   ].join('\n');
 }

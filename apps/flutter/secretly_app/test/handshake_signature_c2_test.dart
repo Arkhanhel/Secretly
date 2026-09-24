@@ -447,6 +447,78 @@ void main() {
     }
   });
 
+  test(
+      'Т-9 не сломать: законная смена ключа под прежним номером устройства — '
+      'отказ, пока закреплён старый ключ, и приём того же конверта после '
+      '«ключ сменился»', () async {
+    final w = await _World.create();
+    try {
+      await w.converse(aSigns: true);
+      expect(await w.bDb.handshakeSigCapableKey('Adev'),
+          w.aBundle.identityKeyPubB64);
+
+      // Связка ключей ОС Алисы стёрлась, номер устройства уцелел: приложение
+      // создало НОВЫЙ ключ личности под тем же номером и потеряло сессии.
+      final keys = DeviceKeys.create();
+      await keys.deleteMaterial(profileId: 'Aprof', deviceId: 'Adev');
+      final rotated = await keys.createOrLoadAndAllocateOtk(
+        profileId: 'Aprof',
+        deviceId: 'Adev',
+        allocateOneTimePrekeys: 4,
+      );
+      expect(rotated.identityKeyPubB64, isNot(w.aBundle.identityKeyPubB64));
+      final dir = Directory.systemTemp.createTempSync('c2rot');
+      final a2Db = await AppDb.openForTesting(path: '${dir.path}/a2.db');
+      final a2 = RatchetSessionManagerV3(
+        db: a2Db,
+        deviceKeys: DeviceKeys.create(),
+        keysClient: _FixedBundleKeysClient([_deviceMap('Bdev', w.bBundle,
+            otkIndex: 2)]),
+      );
+      try {
+        final wire = await _enc(a2,
+            selfDeviceId: 'Adev',
+            peerProfileId: 'Bprof',
+            peerDeviceId: 'Bdev',
+            text: 'after rotation',
+            selfProfileId: 'Aprof');
+        expect(_header(wire)[HandshakeSignature.headerField], isNotNull);
+
+        // У Боба закреплён старый ключ, и Алиса доказанная: отказ.
+        await expectLater(
+          _dec(w.b, selfProfileId: 'Bprof', selfDeviceId: 'Bdev', wire: wire),
+          throwsA(isA<HandshakeAuthRejectedException>()),
+        );
+
+        // Приложение перечитало устройства Алисы с сервера ключей и приняло
+        // смену ключа — так делает `_cacheRecipientDeviceStatuses` (с
+        // предупреждением «код безопасности изменился»).
+        final r = await w.bDb.contactDeviceUpsert(
+          profileId: 'Aprof',
+          deviceId: 'Adev',
+          identityKeyPubB64: rotated.identityKeyPubB64,
+          signedPrekeyPubB64: rotated.signedPrekeyPubB64,
+          signedPrekeySigB64: rotated.signedPrekeySigB64,
+          allowIdentityRotation: true,
+        );
+        expect(r.identityRotated, isTrue);
+
+        // Тот же конверт из карантина теперь расшифровывается: отказ не
+        // тронул ни сессию, ни одноразовый ключ Боба.
+        expect(
+            await _dec(w.b,
+                selfProfileId: 'Bprof', selfDeviceId: 'Bdev', wire: wire),
+            'after rotation');
+        expect(await w.bDb.handshakeSigCapableKey('Adev'),
+            rotated.identityKeyPubB64);
+      } finally {
+        await a2Db.close();
+      }
+    } finally {
+      await w.close();
+    }
+  });
+
   test('Т-8 подписываемые байты: контекст, длины, порча любого поля', () async {
     final kp = await Ed25519().newKeyPair();
     final pub = base64Encode((await kp.extractPublicKey()).bytes);
