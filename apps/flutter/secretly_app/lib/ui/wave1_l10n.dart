@@ -123,7 +123,7 @@ const Map<String, Map<String, String>> _wave1TextTranslations = {
     'pt': 'Pessoal',
     'pt_BR': 'Pessoal',
     'fr': 'Personnel',
-    'de': 'Personlich',
+    'de': 'Persönlich',
   },
   'Groups': {
     'uk': 'Групи',

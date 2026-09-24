@@ -6542,10 +6542,11 @@ class AppController {
       convoTitle,
       maxLength: 120,
     );
-    final cleanedPreviewText = _sanitizePushTransportText(
-      previewText,
-      maxLength: 180,
-    );
+    // 🔴 Приватность (24.09.2026): текст сообщения на сервер НЕ уходит.
+    // Раньше сюда клалось до 180 символов открытым текстом — для уведомления;
+    // реле хранило их и отправляло в push Apple и Google. Реле с 24.09 это поле
+    // отбрасывает, а с этой сборки его нет вовсе. [previewText] остаётся в
+    // подписи только ради вызывающих; в провод оно не попадает.
     return jsonEncode(<String, Object?>{
       'kind': 'chat_message_v1',
       'message': <String, Object?>{
@@ -6562,7 +6563,6 @@ class AppController {
         if (cleanedSenderDisplayName != null)
           'sender_display_name': cleanedSenderDisplayName,
         if (cleanedConvoTitle != null) 'convo_title': cleanedConvoTitle,
-        if (cleanedPreviewText != null) 'preview_text': cleanedPreviewText,
       },
     });
   }

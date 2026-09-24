@@ -1471,13 +1471,44 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                 // этой правки. Идемпотентно, дёшево (LIKE по очереди). Ошибка
                 // НЕ роняет запуск: реле без очистки лучше, чем реле, которое
                 // не поднялось. Новые строки превью уже не получают.
-                let _ = c.execute(
+                let scrubbed_rows = c.execute(
                     "UPDATE pending SET transport_meta_json = \
                          json_remove(transport_meta_json, '$.message.preview_text') \
                      WHERE transport_meta_json LIKE '%\"preview_text\"%' \
                        AND json_valid(transport_meta_json)",
                     [],
+                ).unwrap_or(0);
+                // UPDATE убирает поле из строки, но старые байты остаются в
+                // освобождённых страницах файла и в WAL, пока их не перезапишут.
+                // Один раз пересобираем файл (VACUUM) и обрезаем WAL — после
+                // этого в файле базы превью нет физически. Отметка в
+                // relay_maintenance не даёт делать это при каждом запуске;
+                // если очистка всё же что-то нашла — пересобираем снова.
+                // Ошибка — не повод не подниматься: попробуем при следующем.
+                let _ = c.execute(
+                    "CREATE TABLE IF NOT EXISTS relay_maintenance (\
+                         k TEXT PRIMARY KEY, done_at_ms INTEGER NOT NULL)",
+                    [],
                 );
+                let vacuumed: bool = c
+                    .query_row(
+                        "SELECT 1 FROM relay_maintenance WHERE k = 'preview_vacuum_20260924'",
+                        [],
+                        |_| Ok(true),
+                    )
+                    .optional()
+                    .ok()
+                    .flatten()
+                    .unwrap_or(false);
+                if (!vacuumed || scrubbed_rows > 0)
+                    && c.execute_batch("VACUUM; PRAGMA wal_checkpoint(TRUNCATE);").is_ok()
+                {
+                    let _ = c.execute(
+                        "INSERT OR IGNORE INTO relay_maintenance(k, done_at_ms) \
+                         VALUES('preview_vacuum_20260924', CAST(strftime('%s','now') AS INTEGER) * 1000)",
+                        [],
+                    );
+                }
                 if !has_pending_last_attempt_ms {
                     // RELIABLE-DELIVERY (2026-07-08): timestamp of the last
                     // delivery attempt for this row. The redeliver-until-ack
@@ -7176,6 +7207,19 @@ mod tests {
         assert!(!meta.contains("secret words"));
         assert!(meta.contains("chat_message_v1"));
         assert!(meta.contains("Alice"));
+        drop(store);
+        // Физически: ни в файле базы, ни в WAL старых байтов нет (VACUUM +
+        // обрезка WAL). Без VACUUM текст оставался в освобождённых страницах.
+        for f in [path.clone(), dir.path().join("relay.db-wal")] {
+            if let Ok(bytes) = std::fs::read(&f) {
+                let needle = b"secret words";
+                assert!(
+                    !bytes.windows(needle.len()).any(|w| w == needle),
+                    "preview bytes survive in {}",
+                    f.display()
+                );
+            }
+        }
     }
 
     #[tokio::test]

@@ -502,6 +502,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
   }
 
   /// Current perks (live today). (icon, title, subtitle?)
+  // Честность (24.09.2026): в списке только то, что Premium действительно
+  // даёт. Отсюда убраны «без рекламы и слежки», папки, перевод, облачная
+  // копия и отложенные сообщения — всё это есть у всех бесплатно, и подавать
+  // это как платное значило вводить в заблуждение (App Store 2.3.1 / 3.1.1).
   List<(IconData, String, String?)> _currentPerks(BuildContext context) {
     return [
       (
@@ -634,81 +638,6 @@ class _PaywallScreenState extends State<PaywallScreen> {
           ptBr: 'Figurinhas premium e status com emoji',
           fr: 'Stickers premium et statuts emoji',
           de: 'Premium-Sticker und Emoji-Status',
-        ),
-        null,
-      ),
-      (
-        Icons.verified_user_rounded,
-        wave1Text(
-          context,
-          ru: 'Без рекламы и трекеров слежки',
-          en: 'No ads, no tracking',
-          uk: 'Без реклами та трекерів стеження',
-          es: 'Sin anuncios ni rastreadores',
-          pt: 'Sem anúncios nem rastreadores',
-          ptBr: 'Sem anúncios nem rastreadores',
-          fr: 'Sans publicité ni traqueurs',
-          de: 'Keine Werbung, keine Tracker',
-        ),
-        null,
-      ),
-      (
-        Icons.folder_special_rounded,
-        wave1Text(
-          context,
-          ru: 'Папки и умная сортировка чатов',
-          en: 'Chat folders and smart sorting',
-          uk: 'Папки та розумне сортування чатів',
-          es: 'Carpetas y orden inteligente de chats',
-          pt: 'Pastas e ordenação inteligente de conversas',
-          ptBr: 'Pastas e ordenação inteligente de conversas',
-          fr: 'Dossiers et tri intelligent des discussions',
-          de: 'Chat-Ordner und intelligente Sortierung',
-        ),
-        null,
-      ),
-      (
-        Icons.translate_rounded,
-        wave1Text(
-          context,
-          ru: 'ИИ-перевод сообщений на лету',
-          en: 'On-the-fly AI message translation',
-          uk: 'ШІ-переклад повідомлень на льоту',
-          es: 'Traducción de mensajes con IA al instante',
-          pt: 'Tradução de mensagens com IA em tempo real',
-          ptBr: 'Tradução de mensagens com IA em tempo real',
-          fr: 'Traduction des messages par IA à la volée',
-          de: 'KI-Nachrichtenübersetzung in Echtzeit',
-        ),
-        null,
-      ),
-      (
-        Icons.cloud_done_rounded,
-        wave1Text(
-          context,
-          ru: 'Зашифрованный облачный бэкап',
-          en: 'Encrypted cloud backup',
-          uk: 'Зашифрований хмарний бекап',
-          es: 'Copia de seguridad cifrada en la nube',
-          pt: 'Cópia de segurança cifrada na nuvem',
-          ptBr: 'Backup criptografado na nuvem',
-          fr: 'Sauvegarde chiffrée dans le cloud',
-          de: 'Verschlüsseltes Cloud-Backup',
-        ),
-        null,
-      ),
-      (
-        Icons.schedule_send_rounded,
-        wave1Text(
-          context,
-          ru: 'Запланированные сообщения',
-          en: 'Scheduled messages',
-          uk: 'Заплановані повідомлення',
-          es: 'Mensajes programados',
-          pt: 'Mensagens agendadas',
-          ptBr: 'Mensagens agendadas',
-          fr: 'Messages programmés',
-          de: 'Geplante Nachrichten',
         ),
         null,
       ),
