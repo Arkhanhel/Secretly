@@ -21,6 +21,8 @@ import '../../../app/app_controller.dart'
     show AppController, SharedAudioPlaybackState;
 import '../../../stickers/sticker_catalog.dart' show SecretlyStickerDescriptor;
 import '../design/tokens.dart';
+import '../primitives/glass.dart';
+import '../primitives/size_reporter.dart';
 import '../primitives/avatar.dart';
 import '../primitives/context_menu.dart';
 import '../primitives/desktop_button.dart';
@@ -1328,78 +1330,16 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
               stops: const [0.0, 0.58, 1.0],
             ),
           ),
-          child: Column(
+          // 🔴 ШАПКА — ОСТРОВОК НАД ЛЕНТОЙ, А НЕ ПОЛОСА НАД НЕЙ (24.09.2026).
+          //
+          // Владелец: шапка переписки и поле ввода — островки матового
+          // стекла, как на телефоне. Поле ввода плавало над лентой и раньше;
+          // теперь так же плавает и весь верх — шапка, темы комнаты, плашка
+          // созвона, закреплённое и поиск по переписке. Лента идёт на всю
+          // высоту и отступает сверху ровно на высоту верха (её меряет
+          // [DesktopSizeReporter]), а при прокрутке уезжает под стекло.
+          child: Stack(
             children: [
-              if (_selecting)
-                _SelectionBar(
-                  count: _selected.length,
-                  onCancel: _clearSelection,
-                  onCopy: _copySelected,
-                  onForward: widget.onForwardMessages == null
-                      ? null
-                      : () => _runOnSelected(widget.onForwardMessages!),
-                  onSave: widget.onSaveMessages == null
-                      ? null
-                      : () => _runOnSelected(widget.onSaveMessages!),
-                  onDelete: widget.onDeleteMessages == null
-                      ? null
-                      : () => _runOnSelected(widget.onDeleteMessages!),
-                )
-              else
-                _Header(
-                  header: widget.header,
-                  isDirect: widget.isDirect,
-                  onCall: widget.onCall,
-                  onVideoCall: widget.onVideoCall,
-                  onToggleSearch: widget.onToggleSearch,
-                  onToggleDetails: widget.onToggleDetails,
-                  detailsOpen: widget.detailsOpen,
-                  onHeaderMenu: widget.onHeaderMenu,
-                ),
-              if (widget.topicsStrip != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(DSpace.l, 0, DSpace.l, 4),
-                  child: widget.topicsStrip,
-                ),
-              Container(height: 1, color: c.borderSubtle),
-              // Под разделителем, а не над: плашка относится к переписке, а не к
-              // шапке, и подниматься вместе с темами ей незачем.
-              if (widget.callBanner != null) widget.callBanner!,
-              if (_pinnedMessage != null)
-                _PinnedBar(
-                  message: _pinnedMessage!,
-                  onTap: () => _jumpToReply(widget.pinnedPayloadEventId!),
-                  onUnpin: widget.onTogglePinMessage == null
-                      ? null
-                      : () => widget.onTogglePinMessage!(
-                          _pinnedMessage!,
-                          false,
-                        ),
-                ),
-              AnimatedSize(
-                duration: DMotion.fast,
-                curve: DMotion.easeOutCubic,
-                alignment: Alignment.topCenter,
-                child: widget.searchOpen
-                    ? _SearchBanner(
-                        controller: _searchCtl,
-                        focusNode: _searchFocus,
-                        matches: _matchIndices.length,
-                        current: _matchIndices.isEmpty ? 0 : _matchCursor + 1,
-                        hasQuery: _searchQuery.isNotEmpty,
-                        onChanged: _runSearch,
-                        onGoToDate: widget.messages.isEmpty
-                            ? null
-                            : () => unawaited(_goToDate()),
-                        onPrev: _matchIndices.isEmpty ? null : _prevMatch,
-                        onNext: _matchIndices.isEmpty ? null : _nextMatch,
-                        onClose: widget.onToggleSearch,
-                      )
-                    : const SizedBox(width: double.infinity, height: 0),
-              ),
-              Expanded(
-                child: Stack(
-                  children: [
                     if (widget.wallpaperId != null)
                       Positioned.fill(
                         child: IgnorePointer(
@@ -1433,7 +1373,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                       child: RawScrollbar(
                         controller: _scroll,
                         padding: EdgeInsets.only(
-                          top: DSpace.s,
+                          top: _topHeight + DSpace.s,
                           bottom: _composerHeight + DSpace.s,
                           right: 2,
                         ),
@@ -1452,7 +1392,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                       // уходит под него и гаснет в затенении.
                       padding: EdgeInsets.fromLTRB(
                         0,
-                        DSpace.m,
+                        _topHeight + DSpace.m,
                         0,
                         _composerHeight + DSpace.s,
                       ),
@@ -1855,6 +1795,97 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                         ),
                       ),
                     ),
+                    // Затенение под верхом: мягче, чем у края списка чатов, —
+                    // стекло шапки должно показывать проезжающие сообщения.
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      height: _topHeight + 28,
+                      child: DesktopEdgeShade(color: c.thread, strength: 0.72),
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      top: 0,
+                      child: DesktopSizeReporter(
+                        onSize: _onTopSize,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(DSpace.m, DSpace.s, DSpace.m, 0),
+                child: _selecting
+                ? _SelectionBar(
+                  count: _selected.length,
+                  onCancel: _clearSelection,
+                  onCopy: _copySelected,
+                  onForward: widget.onForwardMessages == null
+                      ? null
+                      : () => _runOnSelected(widget.onForwardMessages!),
+                  onSave: widget.onSaveMessages == null
+                      ? null
+                      : () => _runOnSelected(widget.onSaveMessages!),
+                  onDelete: widget.onDeleteMessages == null
+                      ? null
+                      : () => _runOnSelected(widget.onDeleteMessages!),
+                )
+                : _Header(
+                  header: widget.header,
+                  isDirect: widget.isDirect,
+                  onCall: widget.onCall,
+                  onVideoCall: widget.onVideoCall,
+                  onToggleSearch: widget.onToggleSearch,
+                  onToggleDetails: widget.onToggleDetails,
+                  detailsOpen: widget.detailsOpen,
+                  onHeaderMenu: widget.onHeaderMenu,
+                ),
+              ),
+              if (widget.topicsStrip != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(DSpace.l, 0, DSpace.l, 4),
+                  child: widget.topicsStrip,
+                ),
+              // Под разделителем, а не над: плашка относится к переписке, а не к
+              // шапке, и подниматься вместе с темами ей незачем.
+              if (widget.callBanner != null) widget.callBanner!,
+              if (_pinnedMessage != null)
+                _PinnedBar(
+                  message: _pinnedMessage!,
+                  onTap: () => _jumpToReply(widget.pinnedPayloadEventId!),
+                  onUnpin: widget.onTogglePinMessage == null
+                      ? null
+                      : () => widget.onTogglePinMessage!(
+                          _pinnedMessage!,
+                          false,
+                        ),
+                ),
+              AnimatedSize(
+                duration: DMotion.fast,
+                curve: DMotion.easeOutCubic,
+                alignment: Alignment.topCenter,
+                child: widget.searchOpen
+                    ? _SearchBanner(
+                        controller: _searchCtl,
+                        focusNode: _searchFocus,
+                        matches: _matchIndices.length,
+                        current: _matchIndices.isEmpty ? 0 : _matchCursor + 1,
+                        hasQuery: _searchQuery.isNotEmpty,
+                        onChanged: _runSearch,
+                        onGoToDate: widget.messages.isEmpty
+                            ? null
+                            : () => unawaited(_goToDate()),
+                        onPrev: _matchIndices.isEmpty ? null : _prevMatch,
+                        onNext: _matchIndices.isEmpty ? null : _nextMatch,
+                        onClose: widget.onToggleSearch,
+                      )
+                    : const SizedBox(width: double.infinity, height: 0),
+              ),
+                          ],
+                        ),
+                      ),
+                    ),
                     _scrollToBottomFab(c),
                     Positioned(
                       left: 0,
@@ -1866,9 +1897,6 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                       ),
                     ),
                     AttachmentsDropZone(visible: _dropVisible),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
@@ -1882,6 +1910,16 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
   /// пошла запись голосового. Начальное значение — обычное однострочное поле,
   /// чтобы первый кадр не прыгал.
   double _composerHeight = 84;
+
+  /// Высота плавающего верха — шапки и всего, что под ней. Меняется живьём:
+  /// открылся поиск по переписке, появилось закреплённое, пошёл созвон.
+  /// Начальное значение — одна шапка, чтобы первый кадр не прыгал.
+  double _topHeight = 64;
+
+  void _onTopSize(Size size) {
+    if (!mounted || (size.height - _topHeight).abs() < 0.5) return;
+    setState(() => _topHeight = size.height);
+  }
 
   void _onComposerHeight(double h) {
     // Порог в точку: без него округление высоты дало бы бесконечный цикл
@@ -2536,9 +2574,11 @@ class _SelectionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
-    return Container(
-      height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: DSpace.l),
+    return DesktopGlass(
+      radius: 16,
+      child: Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: DSpace.m),
       child: Row(
         children: [
           DesktopIconButton(
@@ -2593,6 +2633,7 @@ class _SelectionBar extends StatelessWidget {
               onPressed: onDelete,
             ),
         ],
+      ),
       ),
     );
   }
@@ -2709,9 +2750,13 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
-    return Container(
-      height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: DSpace.l),
+    // Островок матового стекла, как шапка переписки на телефоне: лента
+    // проезжает под ним и видна размытой. См. [DesktopGlass].
+    return DesktopGlass(
+      radius: 16,
+      child: Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: DSpace.m),
       child: Row(
         children: [
           HoverListener(
@@ -2903,6 +2948,7 @@ class _Header extends StatelessWidget {
               ),
             ),
         ],
+      ),
       ),
     );
   }

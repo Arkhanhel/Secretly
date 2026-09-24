@@ -9,6 +9,7 @@ import '../design/colors.dart';
 import '../design/motion.dart';
 import '../design/spacing.dart';
 import '../design/typography.dart';
+import '../primitives/glass.dart';
 import '../primitives/hover_listener.dart';
 
 /// Identifiers for the built-in categories. Custom folders use their own id,
@@ -77,6 +78,7 @@ class ChatCategoryBar extends StatefulWidget {
     required this.selectedId,
     required this.onSelect,
     this.onContextMenu,
+    this.glass = false,
   });
 
   final List<ChatCategory> categories;
@@ -87,6 +89,14 @@ class ChatCategoryBar extends StatefulWidget {
   /// null for the built-ins, which have nothing to manage.
   final void Function(ChatCategory category, Offset globalPosition)?
   onContextMenu;
+
+  /// Папки — отдельными островками матового стекла, как у телефона. Так они
+  /// стоят над списком чатов, который проезжает под ними (24.09.2026).
+  ///
+  /// Затухания у обрезанных краёв в этом виде нет: оно рисуется маской
+  /// поверх полосы, а стекло под маской читало бы фон уже внутри маски, то
+  /// есть пустоту, и становилось бы плоским.
+  final bool glass;
 
   @override
   State<ChatCategoryBar> createState() => _ChatCategoryBarState();
@@ -262,6 +272,7 @@ class _ChatCategoryBarState extends State<ChatCategoryBar> {
                           category: cat,
                           selected: selected,
                           colors: c,
+                          glass: widget.glass,
                           onTap: () => widget.onSelect(cat.id),
                           onContextMenu: widget.onContextMenu == null
                               ? null
@@ -278,6 +289,7 @@ class _ChatCategoryBarState extends State<ChatCategoryBar> {
       ),
     );
 
+    if (widget.glass) return SizedBox(height: 40, child: strip);
     return SizedBox(
       height: 40,
       child: ValueListenableBuilder<_Edges>(
@@ -353,11 +365,13 @@ class _CategoryChip extends StatelessWidget {
     required this.colors,
     required this.onTap,
     this.onContextMenu,
+    this.glass = false,
   });
 
   final ChatCategory category;
   final bool selected;
   final DColorSet colors;
+  final bool glass;
   final VoidCallback onTap;
   final void Function(Offset globalPosition)? onContextMenu;
 
@@ -383,6 +397,28 @@ class _CategoryChip extends StatelessWidget {
             ? c.elevated
             : (pressed ? c.pressed : (hovered ? c.hover : Colors.transparent));
         final Color fg = selected ? c.textPrimary : c.textSecondary;
+        if (glass) {
+          // Стеклянная «таблетка»: выбранная подкрашена акцентом, наведённая —
+          // чуть светлее. Подпись та же, что у обычного чипа.
+          return DesktopGlass(
+            radius: 15,
+            grouped: true,
+            tint: selected
+                ? c.accentPrimary.withValues(alpha: pressed ? 0.42 : 0.34)
+                : (pressed
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : (hovered
+                            ? Colors.white.withValues(alpha: 0.05)
+                            : null)),
+            child: SizedBox(
+              height: 30,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 13),
+                child: _chipLabel(c, selected ? Colors.white : fg),
+              ),
+            ),
+          );
+        }
         return AnimatedContainer(
           duration: DMotion.fast,
           curve: Curves.easeOutCubic,
@@ -397,48 +433,48 @@ class _CategoryChip extends StatelessWidget {
             color: bg,
             borderRadius: BorderRadius.circular(9),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (category.emoji != null && category.emoji!.isNotEmpty) ...[
-                Text(category.emoji!, style: const TextStyle(fontSize: 13)),
-                const SizedBox(width: DSpace.xs),
-              ],
-              // 🔴 Значка у встроенного фильтра НЕТ — в макете чипы только со
-              // словом. Подпись «Непрочит.» называет фильтр точнее любого
-              // значка, а ряд из четырёх значков подряд превращал полосу в
-              // панель инструментов. Эмодзи папки выше — исключение: это
-              // метка, которую поставил сам человек.
-              Text(
-                category.label,
-                style: TextStyle(
-                  fontFamily: DType.family,
-                  fontSize: 12.5,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                  color: fg,
-                ),
-              ),
-              if (category.locked) ...[
-                const SizedBox(width: DSpace.xs),
-                Icon(FluentIcons.lock_closed_16_filled, size: 11, color: fg),
-              ],
-              if (category.badge > 0) ...[
-                const SizedBox(width: DSpace.xs),
-                _Badge(count: category.badge, colors: c),
-              ],
-            ],
-          ),
+          child: _chipLabel(c, fg),
         );
       },
     );
   }
+
+  /// Подпись чипа — одна на оба вида, обычный и стеклянный.
+  Widget _chipLabel(DColorSet c, Color fg) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (category.emoji != null && category.emoji!.isNotEmpty) ...[
+        Text(category.emoji!, style: const TextStyle(fontSize: 13)),
+        const SizedBox(width: DSpace.xs),
+      ],
+      // 🔴 Значка у встроенного фильтра НЕТ — в макете чипы только со
+      // словом. Подпись «Непрочит.» называет фильтр точнее любого
+      // значка, а ряд из четырёх значков подряд превращал полосу в
+      // панель инструментов. Эмодзи папки выше — исключение: это
+      // метка, которую поставил сам человек.
+      Text(
+        category.label,
+        style: TextStyle(
+          fontFamily: DType.family,
+          fontSize: 12.5,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+          color: fg,
+        ),
+      ),
+      if (category.locked) ...[
+        const SizedBox(width: DSpace.xs),
+        Icon(FluentIcons.lock_closed_16_filled, size: 11, color: fg),
+      ],
+      if (category.badge > 0) ...[
+        const SizedBox(width: DSpace.xs),
+        _Badge(count: category.badge, colors: c),
+      ],
+    ],
+  );
 }
 
 class _Badge extends StatelessWidget {
-  const _Badge({
-    required this.count,
-    required this.colors,
-  });
+  const _Badge({required this.count, required this.colors});
 
   final int count;
   final DColorSet colors;

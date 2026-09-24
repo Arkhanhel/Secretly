@@ -16,6 +16,7 @@ import 'desktop_mentions.dart';
 import 'link_preview_card.dart';
 import 'outgoing_media.dart' show DesktopClipboardMedia;
 import '../services/desktop_ui_prefs.dart';
+import '../primitives/glass.dart';
 import '../primitives/avatar.dart';
 import '../primitives/desktop_button.dart';
 import '../primitives/desktop_tooltip.dart';
@@ -544,13 +545,26 @@ class _ComposerState extends State<Composer> {
               onPick: _applyMention,
               onHover: (i) => setState(() => _mentionCursor = i),
             ),
+          // 🔴 ПОЛЕ ВВОДА — ОДИН ОСТРОВОК МАТОВОГО СТЕКЛА (24.09.2026).
+          //
+          // Превью ссылки, карточка ответа и само поле были тремя плашками с
+          // общей рамкой, каждая со своей заливкой. Теперь это одно стекло,
+          // как у телефона: лента под ним видна размытой. Рамка — только в
+          // фокусе, цвета акцента; в покое край задаёт само стекло.
+          _GlassFrame(
+            focused: _focus.hasFocus,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
           // Карточка ссылки — над карточкой ответа: ответ ближе к полю, потому
           // что относится к набираемому, а карточка — к ссылке внутри него.
           if (_linkBarVisible)
             DesktopLinkPreviewDraftBar(
               draft: widget.linkPreviewDraft!,
-              frameColor: _frameColor(c),
-              frameWidth: _frameWidth,
+              frameColor: Colors.transparent,
+              frameWidth: 0,
+              fill: Colors.transparent,
             ),
           if (widget.context != null)
             _contextCard(c, widget.context!, roundTop: !_linkBarVisible),
@@ -564,17 +578,6 @@ class _ComposerState extends State<Composer> {
             // затенение не прыгает.
             constraints: const BoxConstraints(minHeight: 52, maxHeight: 240),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: c.elevated,
-              // Карточка ответа и поле — ОДИН блок: сверху карточка со
-              // скруглением только вверху, снизу поле со скруглением только
-              // внизу. Общая рамка при этом остаётся замкнутой, а шов между
-              // ними — это верхняя граница поля (ровно как в макете).
-              borderRadius: (widget.context != null || _linkBarVisible)
-                  ? const BorderRadius.vertical(bottom: Radius.circular(12))
-                  : BorderRadius.circular(12),
-              border: Border.all(color: _frameColor(c), width: _frameWidth),
-            ),
             child: _recording
                 ? _recordingBar(c)
                 : Row(
@@ -687,6 +690,9 @@ class _ComposerState extends State<Composer> {
                     ],
                   ),
           ),
+              ],
+            ),
+          ),
           const SizedBox(height: 4),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: DSpace.s),
@@ -747,17 +753,6 @@ class _ComposerState extends State<Composer> {
     );
   }
 
-  /// Цвет и толщина рамки — ОБЩИЕ у карточки ответа и поля.
-  ///
-  /// 🔴 Иначе при наборе получалось два блока вместо одного: поле в фокусе
-  /// берёт акцентную рамку в 1.5 точки, а карточка осталась бы в тихой
-  /// рамке — акцентная линия шва резала сросшийся блок пополам ровно там,
-  /// где он должен читаться цельным.
-  Color _frameColor(DColorSet c) =>
-      _focus.hasFocus ? c.accentPrimary : c.borderSubtle;
-
-  double get _frameWidth => _focus.hasFocus ? 1.5 : 1;
-
   Widget _contextCard(
     DColorSet c,
     ComposerContext ctx, {
@@ -776,19 +771,9 @@ class _ComposerState extends State<Composer> {
         // справа.
         padding: const EdgeInsets.fromLTRB(9, 7, 10, 7),
         decoration: BoxDecoration(
-          color: c.elevated,
-          // Над карточкой ответа может стоять карточка ссылки — тогда
-          // скругление верха у неё, а здесь прямой стык.
-          borderRadius: roundTop
-              ? const BorderRadius.vertical(top: Radius.circular(12))
-              : BorderRadius.zero,
-          // Низа у рамки НЕТ: его роль играет верхняя граница поля — иначе на
-          // шве было бы две линии подряд.
-          border: Border(
-            top: BorderSide(color: _frameColor(c), width: _frameWidth),
-            left: BorderSide(color: _frameColor(c), width: _frameWidth),
-            right: BorderSide(color: _frameColor(c), width: _frameWidth),
-          ),
+          // Внутри стеклянного островка: своей заливки и рамки нет, шов с
+          // полем — одна волосяная черта.
+          border: Border(bottom: BorderSide(color: c.borderHairline)),
         ),
         child: IntrinsicHeight(
           child: Row(
@@ -1141,6 +1126,40 @@ class _MentionList extends StatelessWidget {
             },
           );
         },
+      ),
+    );
+  }
+}
+
+/// Стекло поля ввода с рамкой фокуса.
+///
+/// Рамка — только когда курсор в поле, цвета акцента: видно, куда пойдёт
+/// набор. В покое край задаёт само стекло с бликом по верхней кромке.
+class _GlassFrame extends StatelessWidget {
+  const _GlassFrame({required this.focused, required this.child});
+
+  final bool focused;
+  final Widget child;
+
+  static const double _radius = 18;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    return DesktopGlass(
+      radius: _radius,
+      child: AnimatedContainer(
+        duration: DMotion.fast,
+        foregroundDecoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(_radius),
+          border: Border.all(
+            // Рамка ОБЩАЯ на карточку ответа и поле: при наборе это один
+            // блок, а не два — шов между ними её не режет.
+            color: focused ? c.accentPrimary : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: child,
       ),
     );
   }

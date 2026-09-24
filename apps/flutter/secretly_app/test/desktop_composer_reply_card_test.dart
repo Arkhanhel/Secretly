@@ -8,9 +8,9 @@
 // Получалось две карточки друг над другом, и связь между «кому отвечаю» и
 // «что пишу» держалась только их соседством.
 //
-// В макете это сросшийся блок: у карточки скругление только сверху и нет
-// нижней грани, у поля — скругление только снизу; шов между ними — ровно
-// одна линия, верхняя граница поля.
+// 24.09.2026 блок стал ОДНИМ островком матового стекла, как на телефоне:
+// карточка и поле внутри одного стекла, у карточки своей заливки нет, шов —
+// волосяная черта, рамка фокуса — одна на весь островок.
 
 import 'dart:io';
 
@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/chat/composer.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
+import 'package:secretly_app/ui/desktop/primitives/glass.dart';
 
 Widget host(Widget child) => MaterialApp(
   locale: const Locale('ru'),
@@ -30,101 +31,95 @@ Widget host(Widget child) => MaterialApp(
   ),
 );
 
-/// Оформление ближайшего к [text] предка-`Container` с заливкой.
+/// Оформление ближайшего к [inner] предка-`Container`.
 BoxDecoration decorationAround(WidgetTester t, Finder inner) {
   final box = t.widget<Container>(
-    find
-        .ancestor(of: inner, matching: find.byType(Container))
-        .first,
+    find.ancestor(of: inner, matching: find.byType(Container)).first,
   );
   return box.decoration! as BoxDecoration;
 }
 
+/// Рамка фокуса островка — передний слой ближайшего к полю
+/// `AnimatedContainer`.
+Border frameBorder(WidgetTester t) {
+  final frame = t.widget<AnimatedContainer>(
+    find
+        .ancestor(
+          of: find.byType(EditableText),
+          matching: find.byType(AnimatedContainer),
+        )
+        .first,
+  );
+  return (frame.foregroundDecoration! as BoxDecoration).border! as Border;
+}
+
+Widget reply(TextEditingController ctl, {bool autofocus = false}) => host(
+  Composer(
+    controller: ctl,
+    onSend: (_) {},
+    autofocus: autofocus,
+    context: const ComposerContext.reply(
+      authorName: 'Игорь',
+      preview: 'Плюс 40 % к удержанию на второй день…',
+    ),
+    onClearContext: () {},
+  ),
+);
+
 void main() {
-  testWidgets('◆ у карточки ответа скруглён только верх', (t) async {
-    await t.pumpWidget(
-      host(
-        Composer(
-          controller: TextEditingController(),
-          onSend: (_) {},
-          context: const ComposerContext.reply(
-            authorName: 'Игорь',
-            preview: 'Плюс 40 % к удержанию на второй день…',
-          ),
-          onClearContext: () {},
-        ),
-      ),
+  testWidgets('◆ карточка ответа и поле — в одном стеклянном островке', (
+    t,
+  ) async {
+    await t.pumpWidget(reply(TextEditingController()));
+    final aroundCard = find.ancestor(
+      of: find.text('Ответ · Игорь'),
+      matching: find.byType(DesktopGlass),
     );
+    final aroundField = find.ancestor(
+      of: find.byType(EditableText),
+      matching: find.byType(DesktopGlass),
+    );
+    expect(aroundCard, findsOneWidget);
+    expect(
+      t.element(aroundCard),
+      same(t.element(aroundField)),
+      reason: 'два стекла — это снова две плашки друг над другом',
+    );
+  });
 
+  testWidgets('◆ у карточки нет своей заливки, шов — волосяная черта', (
+    t,
+  ) async {
+    await t.pumpWidget(reply(TextEditingController()));
     final d = decorationAround(t, find.text('Ответ · Игорь'));
-    expect(
-      d.borderRadius,
-      const BorderRadius.vertical(top: Radius.circular(12)),
-    );
-    // Нижней грани нет: её роль играет верхняя граница поля, иначе на шве
-    // было бы две линии подряд.
-    expect((d.border! as Border).bottom, BorderSide.none);
-    expect((d.border! as Border).top.width, 1);
+    expect(d.color, isNull);
+    final b = d.border! as Border;
+    expect(b.top, BorderSide.none);
+    expect(b.bottom.color, kDColorsDark.borderHairline);
   });
 
-  testWidgets('◆ поле под карточкой скруглено только снизу', (t) async {
-    final ctl = TextEditingController();
-    await t.pumpWidget(
-      host(
-        Composer(
-          controller: ctl,
-          onSend: (_) {},
-          context: const ComposerContext.reply(
-            authorName: 'Игорь',
-            preview: 'текст',
-          ),
-          onClearContext: () {},
-        ),
-      ),
-    );
-
-    final d = decorationAround(t, find.byType(EditableText));
-    expect(
-      d.borderRadius,
-      const BorderRadius.vertical(bottom: Radius.circular(12)),
-    );
-  });
-
-  testWidgets('без ответа поле скруглено со всех сторон', (t) async {
+  testWidgets('без ответа поле — тот же островок', (t) async {
     await t.pumpWidget(
       host(Composer(controller: TextEditingController(), onSend: (_) {})),
     );
-    final d = decorationAround(t, find.byType(EditableText));
-    expect(d.borderRadius, BorderRadius.circular(12));
-  });
-
-  testWidgets('🔴 в фокусе рамка у обеих частей ОДНА', (t) async {
-    // Иначе акцентная линия шва режет сросшийся блок пополам ровно там, где
-    // он должен читаться цельным.
-    await t.pumpWidget(
-      host(
-        Composer(
-          controller: TextEditingController(),
-          onSend: (_) {},
-          autofocus: true,
-          context: const ComposerContext.reply(
-            authorName: 'Игорь',
-            preview: 'текст',
-          ),
-          onClearContext: () {},
-        ),
+    final glass = t.widget<DesktopGlass>(
+      find.ancestor(
+        of: find.byType(EditableText),
+        matching: find.byType(DesktopGlass),
       ),
     );
-    await t.pump();
+    expect(glass.radius, 18);
+  });
 
-    final card = decorationAround(t, find.text('Ответ · Игорь')).border!
-        as Border;
-    final field = decorationAround(t, find.byType(EditableText)).border!
-        as Border;
-    expect(card.top.color, field.top.color);
-    expect(card.top.width, field.top.width);
-    expect(card.top.color, kDColorsDark.accentPrimary);
-    expect(card.top.width, 1.5);
+  testWidgets('🔴 в фокусе рамка ОДНА — у всего островка, цвета акцента', (
+    t,
+  ) async {
+    await t.pumpWidget(reply(TextEditingController(), autofocus: true));
+    await t.pump();
+    final b = frameBorder(t);
+    expect(b.top.color, kDColorsDark.accentPrimary);
+    expect(b.top.width, 1.5);
+    expect(b.bottom, b.top, reason: 'рамка замкнута, а не собрана из кусков');
   });
 
   // 🔴 НАЙДЕНО ПО ДОРОГЕ: рамка фокуса была написана, но не перерисовывалась.
@@ -138,18 +133,12 @@ void main() {
   ) async {
     final ctl = TextEditingController();
     await t.pumpWidget(host(Composer(controller: ctl, onSend: (_) {})));
-    expect(
-      (decorationAround(t, find.byType(EditableText)).border! as Border)
-          .top
-          .color,
-      kDColorsDark.borderSubtle,
-    );
+    expect(frameBorder(t).top.color, Colors.transparent);
 
     await t.tap(find.byType(EditableText));
     await t.pump();
-
     expect(ctl.text, isEmpty, reason: 'ни одной буквы не набрано');
-    final b = decorationAround(t, find.byType(EditableText)).border! as Border;
+    final b = frameBorder(t);
     expect(b.top.color, kDColorsDark.accentPrimary);
     expect(b.top.width, 1.5);
   });

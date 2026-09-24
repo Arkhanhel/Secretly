@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../design/tokens.dart';
+import 'glass.dart';
 
 class DesktopTextField extends StatefulWidget {
   const DesktopTextField({
@@ -23,6 +24,7 @@ class DesktopTextField extends StatefulWidget {
     this.textInputAction,
     this.obscureText = false,
     this.focusNode,
+    this.glass = false,
   });
 
   /// Свой узел фокуса — чтобы владелец поля мог поставить в него курсор
@@ -48,6 +50,11 @@ class DesktopTextField extends StatefulWidget {
   /// field that renders its own value in the clear is a leak to anyone
   /// standing behind the screen.
   final bool obscureText;
+
+  /// Поле из матового стекла, скруглённое «таблеткой», — для мест, где под
+  /// полем проезжает список (поиск над чатами). Рамка у такого поля только в
+  /// фокусе: в покое край задаёт само стекло.
+  final bool glass;
 
   @override
   State<DesktopTextField> createState() => _DesktopTextFieldState();
@@ -88,14 +95,27 @@ class _DesktopTextFieldState extends State<DesktopTextField> {
   Widget build(BuildContext context) {
     final c = DColors.of(context);
     final border = _focused ? c.accentPrimary : c.borderSubtle;
-    return AnimatedContainer(
+    final glass = widget.glass;
+    final field = AnimatedContainer(
       duration: DMotion.fast,
       decoration: BoxDecoration(
-        color: c.elevated,
-        borderRadius: BorderRadius.circular(DRadii.sm),
-        border: Border.all(color: border, width: _focused ? 1.5 : 1),
+        color: glass ? Colors.transparent : c.elevated,
+        borderRadius: BorderRadius.circular(glass ? _kGlassRadius : DRadii.sm),
+        border: Border.all(
+          color: glass
+              ? (_focused
+                    ? c.accentPrimary.withValues(alpha: 0.75)
+                    : Colors.transparent)
+              : border,
+          width: _focused ? 1.5 : 1,
+        ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: DSpace.m, vertical: DSpace.s),
+      padding: glass
+          ? const EdgeInsets.symmetric(horizontal: 14, vertical: 9)
+          : const EdgeInsets.symmetric(
+              horizontal: DSpace.m,
+              vertical: DSpace.s,
+            ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -106,7 +126,7 @@ class _DesktopTextFieldState extends State<DesktopTextField> {
           Expanded(
             child: TextField(
               controller: widget.controller,
-      obscureText: widget.obscureText,
+              obscureText: widget.obscureText,
               focusNode: _focus,
               autofocus: widget.autofocus,
               onChanged: widget.onChanged,
@@ -135,5 +155,10 @@ class _DesktopTextFieldState extends State<DesktopTextField> {
         ],
       ),
     );
+    if (!glass) return field;
+    return DesktopGlass(radius: _kGlassRadius, grouped: true, child: field);
   }
 }
+
+/// Скругление стеклянного поля — «таблетка» при высоте в 38 точек.
+const double _kGlassRadius = 19;

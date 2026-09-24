@@ -231,11 +231,17 @@ class DesktopLinkPreviewDraftBar extends StatelessWidget {
     required this.draft,
     required this.frameColor,
     required this.frameWidth,
+    this.fill,
   });
 
   final OutgoingLinkPreviewDraft draft;
   final Color frameColor;
   final double frameWidth;
+
+  /// Заливка карточки. Задают её, когда карточка стоит внутри стеклянного поля
+  /// ввода: тогда своей плашки и рамки у неё нет, шов с полем — волосяная
+  /// черта снизу. `null` — прежний вид со своей заливкой и рамкой.
+  final Color? fill;
 
   @override
   Widget build(BuildContext context) {
@@ -258,7 +264,12 @@ class DesktopLinkPreviewDraftBar extends StatelessWidget {
           // Та же геометрия, что у карточки ответа: верх со скруглением, без
           // нижней черты — её роль играет рамка поля.
           padding: const EdgeInsets.fromLTRB(9, 7, 10, 7),
-          decoration: BoxDecoration(
+          decoration: fill != null
+              ? BoxDecoration(
+                  color: fill,
+                  border: Border(bottom: BorderSide(color: c.borderHairline)),
+                )
+              : BoxDecoration(
             color: c.elevated,
             borderRadius: const BorderRadius.vertical(
               top: Radius.circular(12),

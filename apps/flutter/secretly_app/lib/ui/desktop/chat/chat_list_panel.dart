@@ -13,6 +13,8 @@ import '../primitives/verified_badge.dart';
 import '../../../app/message_command_utils.dart' show RoomTopicRef;
 import '../../room_topic_marks.dart';
 import '../design/tokens.dart';
+import '../primitives/glass.dart';
+import '../primitives/size_reporter.dart';
 import 'message_bubble.dart'
     show DeliveryStatus, deliveryStatusLabel, deliveryTickGlyph;
 import '../primitives/avatar.dart';
@@ -407,6 +409,10 @@ class _ListEntry {
 }
 
 class _ChatListPanelState extends State<ChatListPanel> {
+  /// Высота плавающей шапки — на неё список отступает сверху. Начальное
+  /// значение — шапка с поиском и папками, чтобы первый кадр не прыгал.
+  double _headerHeight = 132;
+
   final _search = TextEditingController();
   final _searchFocus = FocusNode();
   String _query = '';
@@ -530,92 +536,130 @@ class _ChatListPanelState extends State<ChatListPanel> {
       });
     }
 
+    // 🔴 ШАПКА СПИСКА — НАД СПИСКОМ, А НЕ НАД СПЛОШНОЙ ПОЛОСОЙ (24.09.2026).
+    //
+    // Владелец: поиск и папки — островки матового стекла, а вокруг них не
+    // сплошной фон, а прозрачность с затенением кверху. Поэтому список идёт
+    // на всю высоту панели и отступает сверху ровно на высоту шапки, а шапка
+    // плавает над ним: строки уезжают под стекло и видны сквозь него
+    // размытыми. Затенение под шапкой — цветом панели у самого верха и в ноль
+    // книзу: заголовок стоит на ровном основании, а под стеклом видно ленту.
+    //
+    // Все стёкла шапки — одна группа размытия: фон читается один раз на
+    // кадр, а не отдельно для поля и каждой папки.
+    final header = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _PanelHeader(
+          title: widget.title ?? l10n.chatsTitle,
+          onCompose: widget.onCompose,
+          onFilters: widget.onFilters,
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(DSpace.m, 0, DSpace.m, DSpace.s),
+          child: DesktopTextField(
+            // Развернули лупой — курсор сразу в поле, как в телеграме.
+            focusNode: _searchFocus,
+            controller: _search,
+            hintText: l10n.search,
+            prefixIcon: FluentIcons.search_24_regular,
+            glass: true,
+            suffixIcon: _query.isEmpty
+                ? null
+                : Semantics(
+                    button: true,
+                    label: AppLocalizations.of(context)!.clear,
+                    child: GestureDetector(
+                      onTap: () {
+                        setState(() => _query = '');
+                        _search.clear();
+                      },
+                      child: Icon(
+                        FluentIcons.dismiss_circle_24_regular,
+                        size: 16,
+                        color: c.textSecondary,
+                      ),
+                    ),
+                  ),
+            onChanged: (v) => setState(() => _query = v),
+          ),
+        ),
+        // Categories sit directly under the search field: a filter belongs
+        // next to the other filter, not inside the results.
+        if (widget.categories.isNotEmpty) ...[
+          ChatCategoryBar(
+            categories: widget.categories,
+            selectedId: widget.selectedCategoryId,
+            onSelect: widget.onSelectCategory ?? (_) {},
+            onContextMenu: widget.onCategoryContextMenu,
+            glass: true,
+          ),
+          const SizedBox(height: DSpace.xs),
+        ],
+      ],
+    );
+
     final body = Container(
       width: widget.width,
       color: c.chatList,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _PanelHeader(
-            title: widget.title ?? l10n.chatsTitle,
-            onCompose: widget.onCompose,
-            onFilters: widget.onFilters,
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(DSpace.m, 0, DSpace.m, DSpace.s),
-            child: DesktopTextField(
-              // Развернули лупой — курсор сразу в поле, как в телеграме.
-              focusNode: _searchFocus,
-              controller: _search,
-              hintText: l10n.search,
-              prefixIcon: FluentIcons.search_24_regular,
-              suffixIcon: _query.isEmpty
-                  ? null
-                  : Semantics(
-                      button: true,
-                      label: AppLocalizations.of(context)!.clear,
-                      child: GestureDetector(
-                        onTap: () {
-                          setState(() => _query = '');
-                          _search.clear();
-                        },
-                        child: Icon(
-                          FluentIcons.dismiss_circle_24_regular,
-                          size: 16,
-                          color: c.textSecondary,
-                        ),
-                      ),
-                    ),
-              onChanged: (v) => setState(() => _query = v),
-            ),
-          ),
-          // Categories sit directly under the search field: a filter belongs
-          // next to the other filter, not inside the results.
-          if (widget.categories.isNotEmpty) ...[
-            ChatCategoryBar(
-              categories: widget.categories,
-              selectedId: widget.selectedCategoryId,
-              onSelect: widget.onSelectCategory ?? (_) {},
-              onContextMenu: widget.onCategoryContextMenu,
-            ),
-            const SizedBox(height: DSpace.xs),
-          ],
-          Container(height: 1, color: c.borderSubtle),
           Expanded(
-            // 🔴 ЗАТЕНЕНИЕ У НИЖНЕГО КРАЯ СПИСКА — ИЗ МАКЕТА.
-            //
-            // Без него последняя видимая строка обрывается ровной чертой:
-            // список выглядит закончившимся там, где он продолжается.
-            // Шестьдесят точек плавного перехода в цвет панели говорят «ниже
-            // ещё есть» без полосы прокрутки и без единой подписи.
-            //
-            // Лежит ВНУТРИ области списка, а не поверх всей панели: иначе оно
-            // затеняло бы и подвал с состоянием связи, который под ним.
-            // Сквозное для мыши — иначе нижние строки перестали бы нажиматься.
-            child: Stack(
-              children: [
-                Positioned.fill(child: _list(c, visible, entries)),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  height: 60,
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            c.chatList.withValues(alpha: 0),
-                            c.chatList,
-                          ],
+            child: BackdropGroup(
+              child: Stack(
+                children: [
+                  Positioned.fill(child: _list(c, visible, entries)),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    height: _headerHeight + 18,
+                    child: DesktopEdgeShade(color: c.chatList),
+                  ),
+                  // 🔴 ЗАТЕНЕНИЕ У НИЖНЕГО КРАЯ СПИСКА — ИЗ МАКЕТА.
+                  //
+                  // Без него последняя видимая строка обрывается ровной
+                  // чертой: список выглядит закончившимся там, где он
+                  // продолжается. Сквозное для мыши — иначе нижние строки
+                  // перестали бы нажиматься.
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: 60,
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              c.chatList.withValues(alpha: 0),
+                              c.chatList,
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    child: DesktopSizeReporter(
+                      onSize: (s) {
+                        if (!mounted || (s.height - _headerHeight).abs() < 0.5) {
+                          return;
+                        }
+                        setState(() => _headerHeight = s.height);
+                      },
+                      child: header,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           if (widget.footer != null) widget.footer!,
@@ -688,7 +732,12 @@ class _ChatListPanelState extends State<ChatListPanel> {
   ) {
     return visible.isEmpty
                 ? Padding(
-                    padding: const EdgeInsets.all(DSpace.xl2),
+                    padding: EdgeInsets.fromLTRB(
+                      DSpace.xl2,
+                      _headerHeight + DSpace.xl2,
+                      DSpace.xl2,
+                      DSpace.xl2,
+                    ),
                     child: Center(
                       child: Text(
                         _query.isNotEmpty
@@ -705,9 +754,9 @@ class _ChatListPanelState extends State<ChatListPanel> {
                 // Отступ по бокам — под скруглённые строки: плитка,
                 // упёртая в края панели, читается как оборванная.
                 : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(
+                    padding: EdgeInsets.fromLTRB(
                       DSpace.s,
-                      DSpace.xs,
+                      _headerHeight + DSpace.xs,
                       DSpace.s,
                       DSpace.xs,
                     ),
