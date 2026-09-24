@@ -148,6 +148,11 @@ class EntitlementRepository {
   bool _handshakeFlagsResolved = false;
   bool get handshakeFlagsResolved => _handshakeFlagsResolved;
 
+  /// С-2: выключатель отказов проверки подписи рукопожатия; `null` — блок не
+  /// пришёл или не проверен, и тогда ничего не меняется.
+  bool? _handshakeAuthEnforceDisabled;
+  bool? get handshakeAuthEnforceDisabled => _handshakeAuthEnforceDisabled;
+
   bool _roomFlagsResolved = false;
   bool get roomFlagsResolved => _roomFlagsResolved;
 
@@ -246,6 +251,8 @@ class EntitlementRepository {
         verified: await verifyHandshakeSignature(config),
       );
       _handshakeFlagsResolved = true;
+      _handshakeAuthEnforceDisabled =
+          await verifiedHandshakeAuthEnforceDisabled(config);
       // In-app Support key + flag: same ride, OFF polarity like identity — only
       // a VERIFIED block enables the page and supplies the key used to seal
       // support tickets.

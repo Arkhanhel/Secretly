@@ -15,6 +15,7 @@ import '../storage/app_db.dart';
 import '../transport/keys_client.dart';
 import 'decrypt_worker.dart';
 import 'double_ratchet_v3.dart';
+import 'handshake_signature.dart';
 import 'session_v1.dart';
 import 'wire_v3.dart';
 
@@ -102,6 +103,115 @@ class EpochAheadException implements Exception {
       'EpochAheadException(epoch_ahead: wire=$wireEpoch local=$localEpoch)';
 }
 
+/// С-2 (24.09.2026): рукопожатие от устройства, которое уже доказало, что
+/// подписывает свои рукопожатия, пришло без подписи или с чужой подписью.
+///
+/// Наследует [StateError] НАМЕРЕННО: для вызывающего это обычная неудача
+/// расшифровки, и карантин, повторы и лечение работают ровно как раньше.
+/// Сессия при этом не тронута — отказ случается до X3DH, внутри транзакции,
+/// которая откатывается.
+class HandshakeAuthRejectedException extends StateError {
+  HandshakeAuthRejectedException({
+    required this.senderDeviceId,
+    required this.outcome,
+  }) : super('handshake auth rejected ($outcome) for $senderDeviceId');
+
+  final String senderDeviceId;
+  final String outcome;
+}
+
+/// С-2: проверка подписи рукопожатия в два шага.
+///
+/// ДО транзакции расшифровки собираются факты из базы ([_HandshakeAuthVerdict]
+/// создаёт [_evaluateHandshakeAuth]): закреплённый ключ, доказан ли он,
+/// выключатель. Сама подпись проверяется ВНУТРИ транзакции, в момент первого
+/// вида рукопожатия, на уже загруженном SPK ([decide]) — без обращений к базе
+/// и без лишнего чтения связки ключей ОС. Повторы до этого шага не доходят.
+class _HandshakeAuthVerdict {
+  _HandshakeAuthVerdict({
+    required this.senderDeviceId,
+    required this.signatureB64,
+    required this.pinnedCount,
+    required this.key,
+    required this.proven,
+    required this.switchOff,
+  });
+
+  final String senderDeviceId;
+  final String? signatureB64;
+  final int pinnedCount;
+
+  /// Ключ, которым проверять: доказанный (если он среди закреплённых), иначе
+  /// единственный закреплённый; `null` — не знаем, чем проверять.
+  final String? key;
+
+  /// Устройство уже доказало, что подписывает рукопожатия этим [key].
+  final bool proven;
+
+  /// Выключатель с сервера снял отказы (но не проверку и не счёт).
+  final bool switchOff;
+
+  /// `ok` · `bad` · `missing` · `unknown_signed` · `unknown_unsigned` ·
+  /// `key_conflict` · `eval_error`; к отказу, снятому выключателем,
+  /// добавляется `_switch_off`.
+  String outcome = 'eval_error';
+  bool reject = false;
+
+  /// Закреплённый ключ, которым подпись сошлась (только при `ok`).
+  String? provenKey;
+
+  /// Дошла ли расшифровка до первого вида рукопожатия.
+  bool reachedFirstSight = false;
+
+  Future<void> decide({
+    required PrekeyHeaderV1 pre,
+    required String selfDeviceId,
+    required List<int> selfSignedPrekeyPub,
+  }) async {
+    reachedFirstSight = true;
+    try {
+      var wouldReject = false;
+      final k = key;
+      final sig = signatureB64;
+      if (k == null) {
+        outcome = pinnedCount == 0
+            ? (sig == null ? 'unknown_unsigned' : 'unknown_signed')
+            : 'key_conflict';
+      } else if (sig == null) {
+        outcome = 'missing';
+        wouldReject = proven;
+      } else {
+        final ok = await HandshakeSignature.verify(
+          identityKeyPubB64: k,
+          signatureB64: sig,
+          message: HandshakeSignature.message(
+            senderDeviceId: senderDeviceId,
+            recipientDeviceId: selfDeviceId,
+            senderEphemeralPub: base64Decode(pre.senderEphemeralPubB64),
+            recipientSignedPrekeyPub: selfSignedPrekeyPub,
+            signedPrekeyId: pre.recipientSignedPrekeyId,
+            oneTimePrekeyId: pre.recipientOneTimePrekeyId,
+          ),
+        );
+        outcome = ok ? 'ok' : 'bad';
+        wouldReject = !ok && proven;
+        if (ok) provenKey = k;
+      }
+      if (wouldReject && switchOff) {
+        outcome = '${outcome}_switch_off';
+        wouldReject = false;
+      }
+      reject = wouldReject;
+    } catch (_) {
+      // Сбой самой проверки — не отказ: ошибка в нашем коде не должна стоить
+      // доставки.
+      outcome = 'eval_error';
+      reject = false;
+      provenKey = null;
+    }
+  }
+}
+
 class RatchetSessionManagerV3 {
   RatchetSessionManagerV3({
     required this.db,
@@ -120,6 +230,31 @@ class RatchetSessionManagerV3 {
   fetchBundleAuthed;
   final PrekeyHandshakeV1 handshake;
   final DoubleRatchetV3 dr;
+
+  /// С-2: ключи личности, которыми это устройство подписывает рукопожатия,
+  /// по «профиль/устройство». Кешируется только УДАЧНОЕ чтение: ключ, раз
+  /// прочитанный, остаётся в памяти, и минутная недоступность связки ключей
+  /// не превращает подписанное устройство в неподписанное.
+  final Map<String, SimpleKeyPair> _handshakeSigningKeys =
+      <String, SimpleKeyPair>{};
+
+  Future<SimpleKeyPair?> _handshakeSigningKey(
+    String? selfProfileId,
+    String selfDeviceId,
+  ) async {
+    final pid = (selfProfileId ?? '').trim();
+    final did = selfDeviceId.trim();
+    if (pid.isEmpty || did.isEmpty) return null;
+    final cacheKey = '$pid/$did';
+    final cached = _handshakeSigningKeys[cacheKey];
+    if (cached != null) return cached;
+    final kp = await deviceKeys.loadIdentityKeyPairIfPresent(
+      profileId: pid,
+      deviceId: did,
+    );
+    if (kp != null) _handshakeSigningKeys[cacheKey] = kp;
+    return kp;
+  }
 
   /// MESSAGE-LOSS FIX (2026-07-08): per-peer-device serialization of ALL
   /// session-state mutations (encrypt + decrypt). The ratchet session row and
@@ -174,6 +309,10 @@ class RatchetSessionManagerV3 {
     required String peerDeviceId,
     required Uint8List plaintext,
     bool forceSpkOnly = false,
+    // С-2: профиль этого устройства — по нему читается ключ личности для
+    // подписи рукопожатия. Не передан — рукопожатие уходит без подписи, как
+    // до С-2 (так и должно быть у старых вызывающих и в тестах без ключей).
+    String? selfProfileId,
   }) async {
     // SLOW-DRAIN FIX R9 (2026-07-16): the X3DH bundle fetch is a NETWORK call
     // (authed keys-service round trip, up to the 10s HTTP timeout). It used to
@@ -204,6 +343,7 @@ class RatchetSessionManagerV3 {
         plaintext: plaintext,
         forceSpkOnly: forceSpkOnly,
         prefetchedBundle: prefetchedBundle,
+        selfProfileId: selfProfileId,
       ),
     );
   }
@@ -224,8 +364,13 @@ class RatchetSessionManagerV3 {
     required Uint8List plaintext,
     bool forceSpkOnly = false,
     _PeerBundleV1? prefetchedBundle,
+    String? selfProfileId,
   }) async {
     final existing = await db.sessionV3Get(peerDeviceId);
+    // С-2: читается ДО транзакции ниже (связка ключей ОС, не база) и один раз
+    // на отправку: им подписывается рукопожатие и по нему же ставится метка
+    // `hsv` в обычном проводе — оба признака говорят одно и то же.
+    final signingKey = await _handshakeSigningKey(selfProfileId, selfDeviceId);
 
     if (existing == null) {
       // Normally supplied by the pre-lock prefetch above. The in-lock fetch
@@ -274,8 +419,44 @@ class RatchetSessionManagerV3 {
       // across re-keys from the same device, so the receiver can order
       // sessions without any shared counter.
       final sessionEpochMs = DateTime.now().millisecondsSinceEpoch;
-      final headerMap = <String, Object?>{
+
+      // С-2 (24.09.2026): подпись рукопожатия ключом личности. Входит в
+      // [handshakePart] — ту самую часть, что кешируется для повтора Ш-4, —
+      // иначе повтор ушёл бы без подписи. Стоит сразу после полей X3DH и ДО
+      // полей ратчета: байты заголовка — это AAD, а повтор собирает их из кеша
+      // плюс перештампованные dh/pn/n/se в этом же порядке.
+      String? handshakeSigB64;
+      if (signingKey != null) {
+        try {
+          handshakeSigB64 = await HandshakeSignature.sign(
+            identityKeyPair: signingKey,
+            message: HandshakeSignature.message(
+              senderDeviceId: selfDeviceId,
+              recipientDeviceId: peerDeviceId,
+              senderEphemeralPub:
+                  base64Decode(init.header.senderEphemeralPubB64),
+              recipientSignedPrekeyPub:
+                  base64Decode(bundle.signedPrekeyPubB64),
+              signedPrekeyId: init.header.recipientSignedPrekeyId,
+              oneTimePrekeyId: init.header.recipientOneTimePrekeyId,
+            ),
+          );
+        } catch (e) {
+          // Без подписи — как до С-2. Получатель, который знает, что это
+          // устройство подписывает, такое отвергнет; поэтому это событие.
+          handshakeSigB64 = null;
+          DiagLog.event('hs', 'sign_failed', <String, Object?>{
+            'reason': e.runtimeType.toString(),
+          });
+        }
+      }
+      final handshakePart = <String, Object?>{
         ...init.header.toJson(),
+        if (handshakeSigB64 != null)
+          HandshakeSignature.headerField: handshakeSigB64,
+      };
+      final headerMap = <String, Object?>{
+        ...handshakePart,
         'dh_pub_b64': base64Encode(s.dhSelfPub),
         'pn': s.pn,
         'n': s.ns,
@@ -331,7 +512,7 @@ class RatchetSessionManagerV3 {
         await db.sessionV3SetHandshake(
           peerDeviceId,
           baseKeyB64: init.header.senderEphemeralPubB64.trim(),
-          pendingPrekeyHeaderJson: jsonEncode(init.header.toJson()),
+          pendingPrekeyHeaderJson: jsonEncode(handshakePart),
           txn: txn,
         );
       });
@@ -438,12 +619,17 @@ class RatchetSessionManagerV3 {
       }
     }
 
+    // С-2: метка «подписываю рукопожатия» — только если ключ личности на
+    // самом деле прочитан. Устройство, которое не может подписать, не должно
+    // её ставить: получатель по ней начинает отвергать неподписанное.
+    final hsv = signingKey != null ? HandshakeSignature.capabilityVersion : null;
     final headerMap = <String, Object?>{
       'sender_device_id': selfDeviceId,
       'dh_pub_b64': base64Encode(s.dhSelfPub),
       'pn': s.pn,
       'n': s.ns,
       if (rowEpoch > 0) 'se': rowEpoch,
+      if (hsv != null) HandshakeSignature.capabilityField: hsv,
     };
     final headerBytes = Uint8List.fromList(utf8.encode(jsonEncode(headerMap)));
 
@@ -463,6 +649,7 @@ class RatchetSessionManagerV3 {
       n: headerMap['n'] as int,
       ratchetCiphertext: enc.ciphertext,
       se: rowEpoch > 0 ? rowEpoch : null,
+      hsv: hsv,
     );
   }
 
@@ -502,13 +689,154 @@ class RatchetSessionManagerV3 {
     }
     return _withPeerLock(
       lockKey,
-      () => _decryptFromWireLocked(
+      () => _decryptFromWireWithHandshakeAuth(
         selfProfileId: selfProfileId,
         selfDeviceId: selfDeviceId,
         wireBytes: wireBytes,
         onPlaintextBeforeCommit: onPlaintextBeforeCommit,
       ),
     );
+  }
+
+  /// С-2 (24.09.2026): обёртка вокруг [_decryptFromWireLocked].
+  ///
+  /// Всё, что касается базы, — ДО и ПОСЛЕ транзакции расшифровки, никогда
+  /// внутри: вспомогательные методы идут через живой дескриптор и внутри
+  /// открытой транзакции встали бы в взаимоблокировку. Внутри транзакции —
+  /// только одно решение по готовому итогу ([_HandshakeAuthVerdict.reject]).
+  Future<Uint8List> _decryptFromWireWithHandshakeAuth({
+    required String selfProfileId,
+    required String selfDeviceId,
+    required Uint8List wireBytes,
+    Future<void> Function(
+      Uint8List plaintext,
+      String? senderDeviceId,
+      DatabaseExecutor txn,
+    )?
+    onPlaintextBeforeCommit,
+  }) async {
+    final decoded = RatchetWireV3.tryDecode(wireBytes);
+    _HandshakeAuthVerdict? verdict;
+    if (decoded != null && decoded.kind == RatchetWireKindV3.prekey) {
+      verdict = await _evaluateHandshakeAuth(header: decoded.header);
+    }
+    try {
+      final plain = await _decryptFromWireLocked(
+        selfProfileId: selfProfileId,
+        selfDeviceId: selfDeviceId,
+        wireBytes: wireBytes,
+        onPlaintextBeforeCommit: onPlaintextBeforeCommit,
+        handshakeAuth: verdict,
+      );
+      await _rememberHandshakeSigner(decoded, verdict);
+      return plain;
+    } finally {
+      if (verdict != null && verdict.reachedFirstSight) {
+        DiagLog.event('hs', 'auth', <String, Object?>{
+          'peer': DiagLog.pfx(verdict.senderDeviceId),
+          'outcome': verdict.outcome,
+          'rejected': verdict.reject,
+        });
+        await db.localKvCounterInc('hs_auth.${verdict.outcome}');
+        if (verdict.reject) await db.localKvCounterInc('hs_auth.rejected');
+      }
+    }
+  }
+
+  /// Факты для проверки подписи рукопожатия — ДО транзакции расшифровки.
+  ///
+  /// Отказ будет только если устройство уже доказало, что подписывает (признак
+  /// привязан к закреплённому ключу), а это рукопожатие без подписи или с
+  /// подписью, которая не сходится. Всё остальное принимается, как до С-2, и
+  /// только считается: незнакомое устройство, старая сборка, расхождение
+  /// ключей. Любая ошибка здесь — `null`, то есть никакой проверки: сбой в
+  /// нашем коде не должен стоить доставки.
+  Future<_HandshakeAuthVerdict?> _evaluateHandshakeAuth({
+    required Map<String, dynamic> header,
+  }) async {
+    try {
+      final pre = PrekeyHeaderV1.fromJson(header);
+      final sender = pre.senderDeviceId.trim();
+      if (sender.isEmpty) return null;
+      final sigRaw = header[HandshakeSignature.headerField];
+      final sig = sigRaw is String && sigRaw.trim().isNotEmpty
+          ? sigRaw.trim()
+          : null;
+      final pinned = await db.contactDeviceIdentityKeys(sender);
+      final capable = (await db.handshakeSigCapableKey(sender))?.trim() ?? '';
+      final String? key = capable.isNotEmpty && pinned.contains(capable)
+          ? capable
+          : (pinned.length == 1 ? pinned.single : null);
+      final proven = capable.isNotEmpty && key != null && capable == key;
+      // Выключатель с сервера (подписанный блок `handshake_auth`) читается
+      // только для доказанных устройств — отказ возможен лишь у них — и здесь,
+      // а не в памяти приложения, чтобы действовать и в фоновом изоляте.
+      final switchOff = proven &&
+          (await db.localKvGet(AppDb.kvHandshakeAuthEnforceDisabled)) == '1';
+      return _HandshakeAuthVerdict(
+        senderDeviceId: sender,
+        signatureB64: sig,
+        pinnedCount: pinned.length,
+        key: key,
+        proven: proven,
+        switchOff: switchOff,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Когда устройство проверено последний раз на метку `hsv`: запись признака —
+  /// обращение к базе, и делать его на каждое сообщение незачем.
+  final Map<String, int> _hsvCheckedAtMs = <String, int>{};
+  static const int _hsvRecheckMs = 10 * 60 * 1000;
+
+  /// После УДАЧНОЙ расшифровки: запомнить, что устройство подписывает.
+  ///
+  /// Два доказательства:
+  ///  * рукопожатие с верной подписью закреплённым ключом;
+  ///  * обычное сообщение с меткой `hsv` — метка внутри AAD, её не подделать
+  ///    и не снять, не сломав сообщение.
+  /// Признак привязывается к закреплённому ключу. Без единственного
+  /// закреплённого ключа ничего не пишется. Ошибки глотаются: это учёт, а не
+  /// доставка.
+  Future<void> _rememberHandshakeSigner(
+    RatchetWireDecodedV3? decoded,
+    _HandshakeAuthVerdict? verdict,
+  ) async {
+    try {
+      if (verdict != null &&
+          verdict.reachedFirstSight &&
+          verdict.provenKey != null) {
+        await db.handshakeSigCapableSet(
+          verdict.senderDeviceId,
+          verdict.provenKey!,
+        );
+        return;
+      }
+      if (decoded == null || decoded.kind != RatchetWireKindV3.session) return;
+      final hsv = decoded.header[HandshakeSignature.capabilityField];
+      if (hsv is! num || hsv.toInt() < HandshakeSignature.capabilityVersion) {
+        return;
+      }
+      final sender =
+          ((decoded.header['sender_device_id'] as String?) ?? '').trim();
+      if (sender.isEmpty) return;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final last = _hsvCheckedAtMs[sender];
+      if (last != null && now - last < _hsvRecheckMs) return;
+      _hsvCheckedAtMs[sender] = now;
+      final pinned = await db.contactDeviceIdentityKeys(sender);
+      if (pinned.length != 1) return;
+      final current = (await db.handshakeSigCapableKey(sender))?.trim() ?? '';
+      if (current == pinned.single) return;
+      await db.handshakeSigCapableSet(sender, pinned.single);
+      DiagLog.event('hs', 'signer_marked', <String, Object?>{
+        'peer': DiagLog.pfx(sender),
+      });
+    } catch (_) {
+      // учёт не имеет права стоить доставки
+    }
   }
 
   Future<Uint8List> _decryptFromWireLocked({
@@ -521,6 +849,7 @@ class RatchetSessionManagerV3 {
       DatabaseExecutor txn,
     )?
     onPlaintextBeforeCommit,
+    _HandshakeAuthVerdict? handshakeAuth,
   }) async {
     final decoded = RatchetWireV3.tryDecode(wireBytes);
     if (decoded == null) {
@@ -753,6 +1082,25 @@ class RatchetSessionManagerV3 {
           profileId: selfProfileId,
           deviceId: selfDeviceId,
         );
+
+        // С-2 (24.09.2026): здесь и только здесь решается подлинность
+        // начинающего. Повтор живой сессии и архивный повтор выше уже вернулись:
+        // их рукопожатие было принято раньше. Проверка — на уже загруженном
+        // SPK, без обращений к базе. Отказ — до X3DH и до любой записи;
+        // транзакция откатывается, живая сессия не тронута.
+        if (handshakeAuth != null) {
+          await handshakeAuth.decide(
+            pre: pre,
+            selfDeviceId: selfDeviceId,
+            selfSignedPrekeyPub: (await spk.extractPublicKey()).bytes,
+          );
+          if (handshakeAuth.reject) {
+            throw HandshakeAuthRejectedException(
+              senderDeviceId: handshakeAuth.senderDeviceId,
+              outcome: handshakeAuth.outcome,
+            );
+          }
+        }
         SimpleKeyPair? otk;
         if (pre.recipientOneTimePrekeyId != null) {
           otk = await deviceKeys.loadOneTimePrekeyKeyPair(

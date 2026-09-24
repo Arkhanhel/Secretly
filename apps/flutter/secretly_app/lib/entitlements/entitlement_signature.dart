@@ -123,6 +123,19 @@ String handshakeSigningMessage({
       '$issuedAtMs';
 }
 
+/// Зеркало Rust `handshake_auth_signing_message` (v1): блок `handshake_auth`,
+/// С-2 (24.09.2026). Отдельный блок со своей подписью: подписываемые сообщения
+/// других блоков заморожены, новое поле в них сломало бы проверку у всех
+/// выпущенных сборок.
+String handshakeAuthSigningMessage({
+  required bool enforceDisabled,
+  required int issuedAtMs,
+}) {
+  return 'secretly-handshake-auth-v1|'
+      '${_bool(enforceDisabled)}|'
+      '$issuedAtMs';
+}
+
 /// Mirrors Rust `support_signing_message` (v1). A SEPARATE signed block for the
 /// same reason as identity/reliability: `secretly-config-v2` is frozen forever.
 /// Carries the SUPPORT X25519 public key (recipient for in-app support tickets)
@@ -375,6 +388,34 @@ Future<bool> verifyHandshakeSignature(
     signatureB64: sig,
     message: message,
   );
+}
+
+/// С-2 (24.09.2026): выключатель ОТКАЗОВ проверки подписи рукопожатия.
+///
+/// `true` — отказы сняты, `false` — действуют, `null` — блока нет или подпись
+/// не сошлась: тогда вызывающий НИЧЕГО не меняет. Молчащий сервер (старый,
+/// недоступный, срезанный блок) не может ни выключить защиту, ни включить её
+/// обратно — действует последнее проверенное значение, а без него — отказы.
+Future<bool?> verifiedHandshakeAuthEnforceDisabled(
+  Map<String, dynamic> configResponse,
+) async {
+  final sig = (configResponse['handshake_auth_signature'] as String?) ?? '';
+  if (kConfigPublicKeyB64.isEmpty || sig.isEmpty) return null;
+  final payload = configResponse['handshake_auth'];
+  if (payload is! Map) return null;
+  final disabled = payload['enforce_disabled'] == true;
+  final message = utf8.encode(
+    handshakeAuthSigningMessage(
+      enforceDisabled: disabled,
+      issuedAtMs: _int(payload['issued_at_ms']),
+    ),
+  );
+  final ok = await verifyEd25519B64(
+    publicKeyB64: kConfigPublicKeyB64,
+    signatureB64: sig,
+    message: message,
+  );
+  return ok ? disabled : null;
 }
 
 /// Зеркало Rust `rooms2_signing_message` (v1), блок `rooms2` (17.09.2026).

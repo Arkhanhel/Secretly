@@ -225,6 +225,19 @@ struct HandshakePayload {
     issued_at_ms: i64,
 }
 
+/// С-2 (24.09.2026): выключатель ОТКАЗОВ проверки подписи рукопожатия.
+///
+/// Клиент проверяет подпись рукопожатия всегда, а отвергает только рукопожатие
+/// устройства, которое уже доказало, что подписывает. Этот блок снимает именно
+/// отказы — на случай, если в поле найдётся ошибка. По умолчанию `false`:
+/// отказы действуют. Отдельный блок со своей подписью, потому что подписываемое
+/// сообщение `handshake` заморожено выпущенными сборками.
+#[derive(Serialize, Clone, Copy)]
+struct HandshakeAuthPayload {
+    enforce_disabled: bool,
+    issued_at_ms: i64,
+}
+
 /// Additive (2026-07-24): in-app Support feature flag + the X25519 public key
 /// tickets are sealed to. Fail-OFF on the client (empty key / unverified block
 /// hides the page). TZ.
@@ -261,6 +274,10 @@ struct ConfigResponse {
     /// со своей подписью. Старые клиенты игнорируют оба поля.
     handshake: HandshakePayload,
     handshake_signature: String,
+    /// Additive (2026-09-24): выключатель отказов С-2 со своей подписью.
+    /// Старые клиенты игнорируют оба поля.
+    handshake_auth: HandshakeAuthPayload,
+    handshake_auth_signature: String,
     /// Additive (2026-08-03): сведения о новой версии со своей подписью.
     update: UpdatePayload,
     update_signature: String,
@@ -342,6 +359,15 @@ fn handshake_signing_message(p: &HandshakePayload) -> String {
         p.prekey_until_confirmed_send_enabled,
         p.prekey_until_confirmed_send_percent,
         p.issued_at_ms,
+    )
+}
+
+/// Каноническое подписываемое сообщение блока `handshake_auth`. ОБЯЗАНО
+/// совпадать с Dart `handshakeAuthSigningMessage` побайтово.
+fn handshake_auth_signing_message(p: &HandshakeAuthPayload) -> String {
+    format!(
+        "secretly-handshake-auth-v1|{}|{}",
+        p.enforce_disabled, p.issued_at_ms,
     )
 }
 
@@ -457,6 +483,17 @@ async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
         update_url: upd_cfg.update_url.clone(),
         issued_at_ms: payload.issued_at_ms,
     };
+    let handshake_auth = HandshakeAuthPayload {
+        enforce_disabled: hs_cfg.hs_auth_enforce_disabled,
+        issued_at_ms: payload.issued_at_ms,
+    };
+    let handshake_auth_signature = match state.config_signing_key.as_ref() {
+        Some(sk) => base64::engine::general_purpose::STANDARD.encode(
+            sk.sign(handshake_auth_signing_message(&handshake_auth).as_bytes())
+                .to_bytes(),
+        ),
+        None => String::new(),
+    };
     let update_signature = match state.config_signing_key.as_ref() {
         Some(sk) => base64::engine::general_purpose::STANDARD
             .encode(sk.sign(update_signing_message(&update).as_bytes()).to_bytes()),
@@ -474,7 +511,7 @@ async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
     // The reliability flags are part of the seed too — otherwise flipping a
     // kill-switch would keep serving a stale cached response for up to max-age.
     let etag_seed = format!(
-        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
         m.enabled,
         m.free_attachment_bytes,
         m.free_group_members,
@@ -496,6 +533,9 @@ async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
         hs_cfg.prekey_until_confirmed_send_enabled,
         hs_cfg.prekey_until_confirmed_send_percent,
         upd_cfg.latest_build,
+        // С-2: выключатель тоже в зерне — иначе «снять отказы за минуты»
+        // упёрлось бы в кэш.
+        hs_cfg.hs_auth_enforce_disabled,
     );
     let etag = format!(
         "\"{}\"",
@@ -525,6 +565,8 @@ async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
             rooms2_signature,
             handshake,
             handshake_signature,
+            handshake_auth,
+            handshake_auth_signature,
             update,
             update_signature,
             support,
@@ -1641,6 +1683,10 @@ impl UpdateServerConfig {
 struct HandshakeServerConfig {
     prekey_until_confirmed_send_enabled: bool,
     prekey_until_confirmed_send_percent: i64,
+    /// С-2: `SECRETLY_HS_AUTH_ENFORCE_DISABLED=1` снимает отказы проверки
+    /// подписи рукопожатия у всех клиентов. По умолчанию выключено — отказы
+    /// действуют.
+    hs_auth_enforce_disabled: bool,
 }
 
 impl Default for HandshakeServerConfig {
@@ -1648,6 +1694,7 @@ impl Default for HandshakeServerConfig {
         HandshakeServerConfig {
             prekey_until_confirmed_send_enabled: false,
             prekey_until_confirmed_send_percent: 0,
+            hs_auth_enforce_disabled: false,
         }
     }
 }
@@ -1668,9 +1715,17 @@ impl HandshakeServerConfig {
             .and_then(|v| v.trim().parse::<i64>().ok())
             .unwrap_or(0)
             .clamp(0, 100);
+        let hs_auth_enforce_disabled = std::env::var("SECRETLY_HS_AUTH_ENFORCE_DISABLED")
+            .ok()
+            .map(|v| {
+                let v = v.trim().to_ascii_lowercase();
+                v == "1" || v == "true" || v == "yes" || v == "on"
+            })
+            .unwrap_or(false);
         HandshakeServerConfig {
             prekey_until_confirmed_send_enabled: enabled,
             prekey_until_confirmed_send_percent: percent,
+            hs_auth_enforce_disabled,
         }
     }
 }
@@ -5811,6 +5866,41 @@ mod tests {
             billing: Arc::new(billing::BillingVerifyConfig::default()),
         };
         (state, dir)
+    }
+
+    /// С-2: блок `handshake_auth` отдаётся со своей подписью, подпись сходится
+    /// с каноническим сообщением (его зеркало — Dart
+    /// `handshakeAuthSigningMessage`), а выключатель по умолчанию снят.
+    #[tokio::test]
+    async fn config_serves_signed_handshake_auth_block() {
+        let (mut state, _dir) = test_app_state().await;
+        let sk = SigningKey::from_bytes(&[7u8; 32]);
+        let vk = sk.verifying_key();
+        state.config_signing_key = Arc::new(Some(sk));
+
+        for disabled in [false, true] {
+            state.handshake = Arc::new(HandshakeServerConfig {
+                hs_auth_enforce_disabled: disabled,
+                ..HandshakeServerConfig::default()
+            });
+            let response = get_config(State(state.clone())).await.into_response();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            let block = &v["handshake_auth"];
+            assert_eq!(block["enforce_disabled"], serde_json::json!(disabled));
+            let issued = block["issued_at_ms"].as_i64().unwrap();
+            let msg = format!("secretly-handshake-auth-v1|{}|{}", disabled, issued);
+            let sig_b64 = v["handshake_auth_signature"].as_str().unwrap();
+            let sig_bytes = base64::engine::general_purpose::STANDARD
+                .decode(sig_b64)
+                .unwrap();
+            let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).unwrap();
+            assert!(vk.verify_strict(msg.as_bytes(), &sig).is_ok());
+            // Старый блок не тронут: его подпись по-прежнему на месте.
+            assert!(!v["handshake_signature"].as_str().unwrap().is_empty());
+        }
+        assert!(!HandshakeServerConfig::default().hs_auth_enforce_disabled);
     }
 
     #[tokio::test]

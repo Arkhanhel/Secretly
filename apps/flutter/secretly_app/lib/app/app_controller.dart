@@ -9581,6 +9581,7 @@ class AppController {
       _applyRoomFlags(repo);
       _rooms2Flags = repo.rooms2Flags;
       _applyHandshakeFlags(repo);
+      await _applyHandshakeAuthSwitch(repo);
     } catch (_) {
       // best-effort; keep whatever state we already have
     }
@@ -9746,6 +9747,28 @@ class AppController {
   /// Сборочный флаг остаётся ПЕРЕОПРЕДЕЛЕНИЕМ для полевых проверок: собрал с
   /// dart-define — отправка включена независимо от сервера. В обычной сборке
   /// его нет, и решает только сервер.
+  /// С-2 (24.09.2026): выключатель отказов проверки подписи рукопожатия.
+  ///
+  /// Кладётся в базу, а не в память: менеджер сессий читает его и в фоновом
+  /// изоляте. Пишется только ПРОВЕРЕННОЕ значение; молчащий сервер ничего не
+  /// меняет. Ошибка записи не должна ломать применение остальных флагов.
+  Future<void> _applyHandshakeAuthSwitch(EntitlementRepository repo) async {
+    final disabled = repo.handshakeAuthEnforceDisabled;
+    final db = _db;
+    if (disabled == null || db == null) return;
+    try {
+      final want = disabled ? '1' : '0';
+      final have = await db.localKvGet(AppDb.kvHandshakeAuthEnforceDisabled);
+      if (have == want) return;
+      await db.localKvSet(AppDb.kvHandshakeAuthEnforceDisabled, want);
+      DiagLog.event('hs', 'enforce_switch_applied', <String, Object?>{
+        'enforce_disabled': disabled,
+      });
+    } catch (_) {
+      // best-effort, как и остальные флаги
+    }
+  }
+
   void _applyHandshakeFlags(EntitlementRepository repo) {
     final resolved = repo.handshakeFlagsResolved;
     final flags = repo.handshakeFlags;
@@ -9838,6 +9861,7 @@ class AppController {
       _applyRoomFlags(repo);
       _rooms2Flags = repo.rooms2Flags;
       _applyHandshakeFlags(repo);
+      await _applyHandshakeAuthSwitch(repo);
       // Paid-but-not-credited recovery: now that the entitlement repo + verifier
       // are ready, re-deliver any owned/unfinished purchase so a grant lost on a
       // previous launch (or dropped by the bootstrap race before the repo
@@ -49981,6 +50005,10 @@ class AppController {
         peerDeviceId: peerDeviceId,
         plaintext: plaintext,
         forceSpkOnly: forceSpkOnly,
+        // С-2: профиль нужен, чтобы прочитать ключ личности для подписи
+        // рукопожатия. Ключ читается без создания: не тот профиль — просто
+        // без подписи, как до С-2.
+        selfProfileId: _profileId,
       );
     } finally {
       gate.complete();

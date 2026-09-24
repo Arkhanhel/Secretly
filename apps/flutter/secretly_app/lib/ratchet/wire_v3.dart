@@ -64,6 +64,11 @@ class RatchetWireV3 {
     // so the header byte layout (which doubles as the AEAD AAD) is unchanged
     // for header maps built without it; absent for legacy senders.
     int? se,
+    // С-2 (24.09.2026): «это устройство подписывает свои рукопожатия»
+    // (`HandshakeSignature.capabilityField`). Дописывается ПОСЛЕ `se` по той же
+    // причине: байты заголовка — это AAD, и порядок ключей обязан совпасть с
+    // картой, которую отправитель зашифровал. Старые получатели поле пропускают.
+    int? hsv,
   }) {
     final header = <String, Object?>{
       'sender_device_id': senderDeviceId,
@@ -71,6 +76,7 @@ class RatchetWireV3 {
       'pn': pn,
       'n': n,
       if (se != null && se > 0) 'se': se,
+      if (hsv != null && hsv > 0) 'hsv': hsv,
     };
     return _encode(kind: RatchetWireKindV3.session, header: header, ciphertext: ratchetCiphertext);
   }

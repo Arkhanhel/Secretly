@@ -98,6 +98,31 @@ class DeviceKeys {
     return Ed25519().newKeyPairFromSeed(material.identitySeed);
   }
 
+  /// С-2 (24.09.2026): ключ личности ТОЛЬКО если он уже есть.
+  ///
+  /// 🔴 [loadIdentityKeyPair] при отсутствии материала молча СОЗДАЁТ новый и
+  /// записывает его. Для подписи рукопожатия это недопустимо: не тот профиль в
+  /// вызове породил бы чужой ключ, и им подписались бы как «своим». Здесь
+  /// отсутствие или порча материала — `null`, и ничего не пишется.
+  Future<SimpleKeyPair?> loadIdentityKeyPairIfPresent({
+    required String profileId,
+    required String deviceId,
+  }) async {
+    if (profileId.trim().isEmpty || deviceId.trim().isEmpty) return null;
+    try {
+      final raw = await _secureStorage.read(
+        key: _storageKey(profileId: profileId, deviceId: deviceId),
+      );
+      if (raw == null || raw.isEmpty) return null;
+      final material = _DeviceKeyMaterialV1.fromJson(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
+      return Ed25519().newKeyPairFromSeed(material.identitySeed);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// iOS NSE (2026-07-17): base64 of the raw Ed25519 identity SEED, mirrored
   /// into the App Group so the Notification Service Extension can sign
   /// GET /v1/pending in the background. This is the device auth key, NOT a

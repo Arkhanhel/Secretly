@@ -2362,6 +2362,59 @@ CREATE TABLE IF NOT EXISTS local_kv (
     return int.tryParse(v ?? '') ?? 0;
   }
 
+  // ── С-2 (24.09.2026): подпись рукопожатия ─────────────────────────────────
+  // Всё в local_kv — без миграции схемы. Вызывать только ВНЕ транзакции
+  // расшифровки: эти методы идут через живой дескриптор.
+
+  static const String _kHsSigCapablePrefix = 'hs_sig_capable:';
+
+  /// Выключатель отказов С-2 из подписанного `/v1/config` (`'1'` — выключено).
+  /// Пишет приложение, читает менеджер сессий, в том числе фоновый.
+  static const String kvHandshakeAuthEnforceDisabled =
+      'hs_auth.enforce_disabled';
+
+  /// Закреплённые ключи личности устройства по всем профилям, без повторов.
+  /// Больше одного — расхождение: одно устройство под разными ключами.
+  Future<List<String>> contactDeviceIdentityKeys(String deviceId) async {
+    final id = deviceId.trim();
+    if (id.isEmpty) return const <String>[];
+    final rows = await _db.query(
+      'contact_devices',
+      columns: const ['identity_key_pub_b64'],
+      where: 'device_id = ?',
+      whereArgs: [id],
+    );
+    final out = <String>{};
+    for (final r in rows) {
+      final v = (r['identity_key_pub_b64'] as String?)?.trim() ?? '';
+      if (v.isNotEmpty) out.add(v);
+    }
+    return out.toList(growable: false);
+  }
+
+  /// Ключ, которым устройство доказало, что подписывает рукопожатия.
+  /// Признак привязан к КЛЮЧУ: после принятой смены ключа он перестаёт
+  /// совпадать с закреплённым и сам собой не действует.
+  Future<String?> handshakeSigCapableKey(String deviceId) async {
+    final id = deviceId.trim();
+    if (id.isEmpty) return null;
+    try {
+      return await localKvGet('$_kHsSigCapablePrefix$id');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> handshakeSigCapableSet(
+    String deviceId,
+    String identityKeyPubB64,
+  ) async {
+    final id = deviceId.trim();
+    final key = identityKeyPubB64.trim();
+    if (id.isEmpty || key.isEmpty) return;
+    await localKvSet('$_kHsSigCapablePrefix$id', key);
+  }
+
   /// Per-message inbound decrypt-failure budget, kept on disk.
   ///
   /// The in-memory counter this replaces could never reach its threshold on
