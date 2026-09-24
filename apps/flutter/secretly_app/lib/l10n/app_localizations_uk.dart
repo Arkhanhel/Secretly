@@ -2582,9 +2582,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopCallNoMediaBoth => 'Сервер не видав медіаканал: у цьому дзвінку не буде ні звуку, ні відео';
 
   @override
-  String get desktopCallMinimise => 'Згорнути дзвінок';
-
-  @override
   String get desktopCallDiscussion => 'Обговорення';
 
   @override
@@ -5176,31 +5173,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopSendShiftEnter => 'Надіслати · Shift+Enter';
 
   @override
-  String get desktopCallCtlMicOff => 'Вимкнути мікрофон   ⌘D';
-
-  @override
-  String get desktopCallCtlMicOn => 'Увімкнути мікрофон   ⌘D';
-
-  @override
-  String get desktopCallCtlCamOff => 'Вимкнути камеру   ⌘E';
-
-  @override
-  String get desktopCallCtlCamOn => 'Увімкнути камеру   ⌘E';
-
-  @override
   String get desktopCallCtlShareStop => 'Зупинити демонстрацію';
 
   @override
   String get desktopCallCtlShare => 'Демонстрація екрана';
-
-  @override
-  String get desktopCallCtlHandDown => 'Опустити руку';
-
-  @override
-  String get desktopCallCtlHandUp => 'Підняти руку';
-
-  @override
-  String get desktopCallCtlHangUp => 'Завершити   ⌘W';
 
   @override
   String desktopAbsenceDays(int count) {
@@ -5922,6 +5898,51 @@ class AppLocalizationsUk extends AppLocalizations {
   String desktopUpdateAvailable(String version) {
     return 'Доступна версія $version';
   }
+
+  @override
+  String get desktopCallExpand => 'Розгорнути дзвінок';
+
+  @override
+  String get desktopCallMinimiseHint => 'Згорнути в міні-вікно';
+
+  @override
+  String get desktopCallOpenChat => 'Згорнути дзвінок і відкрити чат';
+
+  @override
+  String get desktopCallScreenShareFailed => 'Не вдалося показати екран';
+
+  @override
+  String get desktopCallScreenShareFailedMac => 'Не вдалося показати екран. Дозвольте Secretly запис екрана: Системні параметри → Конфіденційність і безпека → Запис екрана';
+
+  @override
+  String get desktopCallMediaCameraUnavailable => 'Камера недоступна — її використовує інша програма або немає дозволу в налаштуваннях системи';
+
+  @override
+  String get desktopCallMediaMicUnavailable => 'Мікрофон недоступний — перевірте дозвіл у налаштуваннях системи';
+
+  @override
+  String get desktopCallMediaScreenStopped => 'Показ екрана зупинено';
+
+  @override
+  String desktopCallMediaProblem(String detail) {
+    return 'Збій звуку або відео: $detail';
+  }
+
+  @override
+  String desktopCallEndedAfter(String duration) {
+    return 'Дзвінок завершено · $duration';
+  }
+
+  @override
+  String desktopCallDirectWith(String name) {
+    return 'Триває дзвінок · $name';
+  }
+
+  @override
+  String get desktopCallLeaveFailed => 'Не вдалося вийти з дзвінка: сервер не відповів. Спробуйте ще раз.';
+
+  @override
+  String get desktopCallToggleFailed => 'Не вдалося перемкнути: сервер не відповів. Спробуйте ще раз.';
 
   @override
   String get desktopDiagTitle => 'Діагностика доставки';

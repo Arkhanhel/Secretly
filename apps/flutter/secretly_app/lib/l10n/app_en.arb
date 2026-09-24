@@ -1169,7 +1169,6 @@
   "desktopCallLeave": "Leave",
   "desktopCallLeaveCall": "Leave the call",
   "desktopCallNoMediaBoth": "The server gave no media channel: this call will have neither sound nor video",
-  "desktopCallMinimise": "Minimise the call",
   "desktopCallDiscussion": "Discussion",
   "desktopCallDiscussionOf": "Discussion · {title}",
   "desktopCallEncrypted": "The call is end-to-end encrypted",
@@ -2522,15 +2521,8 @@
   "desktopSendRemove": "Remove",
   "desktopSendEnter": "Send · Enter",
   "desktopSendShiftEnter": "Send · Shift+Enter",
-  "desktopCallCtlMicOff": "Turn the microphone off   ⌘D",
-  "desktopCallCtlMicOn": "Turn the microphone on   ⌘D",
-  "desktopCallCtlCamOff": "Turn the camera off   ⌘E",
-  "desktopCallCtlCamOn": "Turn the camera on   ⌘E",
   "desktopCallCtlShareStop": "Stop the screen share",
   "desktopCallCtlShare": "Screen sharing",
-  "desktopCallCtlHandDown": "Lower the hand",
-  "desktopCallCtlHandUp": "Raise the hand",
-  "desktopCallCtlHangUp": "Hang up   ⌘W",
   "desktopAbsenceDays": "{count, plural, one{{count} day} other{{count} days}}",
   "desktopAbsencePastFanout": "This computer has been out of touch for {days}. In that time senders stopped encrypting messages for it, and part of the history will not arrive here. It is intact on the phone — open the chats you need there and the recent history will follow.",
   "desktopAbsenceWithinWindow": "This computer has been out of touch for {days}. Messages are kept on the server for a week, so some of them may not have survived for it. On the phone they are intact.",
@@ -2877,6 +2869,40 @@
       }
     }
   },
+  "desktopCallExpand": "Expand the call",
+  "desktopCallMinimiseHint": "Minimise to a mini window",
+  "desktopCallOpenChat": "Minimise the call and open the chat",
+  "desktopCallScreenShareFailed": "Couldn't share the screen",
+  "desktopCallScreenShareFailedMac": "Couldn't share the screen. Allow Secretly to record the screen: System Settings → Privacy & Security → Screen Recording",
+  "desktopCallMediaCameraUnavailable": "The camera is unavailable — another app is using it or permission is missing in system settings",
+  "desktopCallMediaMicUnavailable": "The microphone is unavailable — check the permission in system settings",
+  "desktopCallMediaScreenStopped": "Screen sharing stopped",
+  "desktopCallMediaProblem": "Audio or video problem: {detail}",
+  "@desktopCallMediaProblem": {
+    "placeholders": {
+      "detail": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopCallEndedAfter": "Call ended · {duration}",
+  "@desktopCallEndedAfter": {
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopCallDirectWith": "On a call · {name}",
+  "@desktopCallDirectWith": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopCallLeaveFailed": "Couldn't leave the call: the server didn't answer. Try again.",
+  "desktopCallToggleFailed": "Couldn't switch it: the server didn't answer. Try again.",
   "desktopDiagTitle": "Delivery diagnostics",
   "desktopDiagHint": "What to look at when messages are not arriving, and what to send us",
   "desktopDiagQueues": "QUEUES",

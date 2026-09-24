@@ -16,6 +16,10 @@ import '../../../l10n/app_localizations.dart';
 import '../../../calls/call_manager.dart';
 import '../../../rooms/room_call_manager.dart';
 import '../calls/active_call_bar.dart';
+import '../calls/call_mini_host.dart';
+import '../calls/call_mini_window.dart' show desktopCallMiniDuration;
+import '../calls/call_presence.dart';
+import '../../call_error_text.dart';
 import '../calls/room_call_window.dart';
 import '../../../calls/call_state.dart';
 import '../../../sync/peer_history_service.dart';
@@ -134,6 +138,16 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   AppController _controller = AppController();
   CallManager? _callManager;
 
+  /// Тот же [CallManager], поданный окнам звонка через [DesktopDirectCall].
+  DesktopDirectCall? _directCall;
+
+  /// Фаза звонка один на один до последнего изменения — чтобы отличить
+  /// «положили трубку в разговоре» от «не взяли входящий».
+  CallPhase _prevDirectPhase = CallPhase.idle;
+
+  /// Звонок, о завершении которого уже сказали.
+  String _endAnnouncedFor = '';
+
   /// 🔴 БЕЗ НЕГО КОМНАТНЫЙ СОЗВОН НА ДЕСКТОПЕ БЫЛ ПУСТОЙ ОБОЛОЧКОЙ
   /// (14.09.2026, живая проверка вдвоём).
   ///
@@ -211,6 +225,9 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       final convo = store.selected;
       if (convo != null && convo.convoId == roomId) return convo.title;
     }
+    // Созвон свёрнут, а комната уже не открыта: имя помнит окно созвона.
+    final remembered = DesktopCallPresence.instance.roomTitle(roomId);
+    if (remembered.isNotEmpty) return remembered;
     return '';
   }
 
@@ -230,7 +247,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     final self = cached?.selfParticipant;
     if (cached == null || self == null || cached.callId != callId) return;
     try {
-      await _controller.updateRelayRoomCallParticipant(
+      final result = await _controller.updateRelayRoomCallParticipant(
         roomId: roomId,
         callId: callId,
         reconnecting: self.isReconnecting,
@@ -240,15 +257,103 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
         screenShareEnabled: self.screenShareEnabled,
         speaking: self.speaking,
       );
+      if (result == null) {
+        _roomCallActionFailed(leave: false);
+        return;
+      }
       await RoomCallManager.instance?.ensureJoined(
         roomId: roomId,
         callId: callId,
         forceRefresh: true,
       );
     } catch (_) {
-      // Отказ виден сразу: кнопка вернётся в прежнее состояние, потому что
-      // рисуется по снимку, а не по нажатию.
+      // Кнопка вернётся в прежнее состояние сама — она рисуется по снимку,
+      // а не по нажатию. Но «почему» надо сказать словами.
+      _roomCallActionFailed(leave: false);
     }
+  }
+
+  /// Включить или выключить свою камеру в созвоне, не открывая его окно.
+  ///
+  /// Тот же путь, что у дока окна созвона: намерение уходит релею, а
+  /// медиа-движок включает дорожку по ответу.
+  Future<void> _toggleRoomCallCamera(bool enable) async {
+    final state = RoomCallManager.instance?.state.value;
+    final roomId = state?.roomId.trim() ?? '';
+    final callId = state?.callId.trim() ?? '';
+    if (roomId.isEmpty || callId.isEmpty) return;
+    final cached = await _controller.getCachedRoomCall(roomId);
+    final self = cached?.selfParticipant;
+    if (cached == null || self == null || cached.callId != callId) return;
+    try {
+      final result = await _controller.updateRelayRoomCallParticipant(
+        roomId: roomId,
+        callId: callId,
+        reconnecting: self.isReconnecting,
+        muted: self.muted,
+        deafened: self.deafened,
+        videoEnabled: enable,
+        screenShareEnabled: self.screenShareEnabled,
+        speaking: self.speaking,
+      );
+      if (result == null) {
+        _roomCallActionFailed(leave: false);
+        return;
+      }
+      await RoomCallManager.instance?.ensureJoined(
+        roomId: roomId,
+        callId: callId,
+        forceRefresh: true,
+      );
+    } catch (_) {
+      _roomCallActionFailed(leave: false);
+    }
+  }
+
+  /// Выйти из созвона, не открывая его окно, — те же вызовы и в том же
+  /// порядке, что у кнопки «Выйти» в окне созвона и на телефоне.
+  Future<void> _leaveRoomCall() async {
+    final state = RoomCallManager.instance?.state.value;
+    final roomId = state?.roomId.trim() ?? '';
+    final callId = state?.callId.trim() ?? '';
+    if (roomId.isEmpty || callId.isEmpty) return;
+    try {
+      final result = await _controller
+          .leaveRelayRoomCall(roomId: roomId, callId: callId)
+          .timeout(const Duration(seconds: 20));
+      if (result == null) {
+        _roomCallActionFailed(leave: true);
+        return;
+      }
+      await RoomCallManager.instance?.clearIfMatches(
+        roomId: roomId,
+        callId: callId,
+      );
+    } catch (_) {
+      _roomCallActionFailed(leave: true);
+    }
+  }
+
+  /// Отказ действия созвона вне его окна — всплывашкой.
+  ///
+  /// 🔴 Релей не ответил — и нажатие «выключить микрофон» или «выйти» не
+  /// меняло ничего, без единого слова. «Думаю, что молчу, а меня слышно» —
+  /// худшее, что может случиться в созвоне.
+  void _roomCallActionFailed({required bool leave}) {
+    final ctx = _overlayHostKey.currentContext;
+    if (ctx == null || !mounted) return;
+    final l10n = AppLocalizations.of(ctx)!;
+    DesktopSnackbar.show(
+      ctx,
+      message: leave ? l10n.desktopCallLeaveFailed : l10n.desktopCallToggleFailed,
+      kind: DSnackKind.error,
+    );
+  }
+
+  /// Свернуть звонок один на один и открыть переписку с собеседником.
+  void _openDirectCallChat(String peerProfileId) {
+    DesktopCallPresence.instance.minimizeDirect();
+    unawaited(_openProfileChatByDeepLink(peerProfileId));
   }
 
   /// Вернуться в окно созвона из полосы.
@@ -261,6 +366,9 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     final vm = _vm;
     final nav = _navigatorKey.currentState;
     if (vm == null || nav == null) return;
+    // Окно этого созвона уже открыто — второе поверх него было бы тем же
+    // созвоном дважды.
+    if (DesktopCallPresence.instance.roomWindowOpen.value == roomId) return;
     nav.push(
       MaterialPageRoute<void>(
         builder: (_) => DesktopRoomCallWindow(
@@ -379,6 +487,11 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     // корень: без этой подписки переключение на «Авто» ничего бы не сделало до
     // следующей перерисовки по любому другому поводу.
     DesktopUiPrefs.themeMode.addListener(_onThemeModeChanged);
+    // Звонок свернули или развернули — перестроить: окно звонка во всё окно
+    // живёт здесь.
+    DesktopCallPresence.instance.directMinimized.addListener(
+      _onCallPresenceChanged,
+    );
     _boot();
   }
 
@@ -1071,6 +1184,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     _callStateListener = _onCallStateChanged;
     cm.state.addListener(_callStateListener!);
     _callManager = cm;
+    _directCall = CallManagerDesktopCall(cm);
     _notifService?.attachCallManager(cm);
     // Комнатные созвоны — свой управляющий, ровно как на телефоне.
     final rcm = RoomCallManager(controller: _controller)..start();
@@ -1145,6 +1259,8 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       unawaited(cm.dispose());
     }
     _callManager = null;
+    _directCall = null;
+    DesktopCallPresence.instance.syncDirect(active: false, callId: '');
     final rcm = _roomCallManager;
     if (RoomCallManager.instance == rcm) {
       RoomCallManager.instance = null;
@@ -1156,10 +1272,74 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     _dismissIncomingToast();
   }
 
+  void _onCallPresenceChanged() {
+    if (mounted) setState(() {});
+  }
+
   void _onCallStateChanged() {
     if (!mounted) return;
+    final s = _callManager?.state.value;
+    if (s != null) {
+      // Новый звонок — во всё окно, даже если прошлый был свёрнут.
+      DesktopCallPresence.instance.syncDirect(
+        active: s.isActive,
+        callId: s.callId,
+      );
+      _announceCallEnd(s);
+      _prevDirectPhase = s.phase;
+    }
     setState(() {});
     _syncIncomingToast();
+  }
+
+  /// 🔴 ЗВОНОК КОНЧАЛСЯ МОЛЧА (24.09.2026). Окно звонка просто исчезало — а
+  /// свёрнутое мини-окно тем более: «не ответил», «отклонил», «связь
+  /// оборвалась» выглядели одинаково, как пропавшее окно. Телефон на этот
+  /// случай держит экран «звонок завершён» две секунды; компьютер говорит
+  /// то же всплывашкой, которая не мешает дальше работать.
+  ///
+  /// Не говорим, когда трубку положил сам человек (он знает) и когда не
+  /// взяли входящий (о пропущенном скажет журнал звонков).
+  void _announceCallEnd(CallState s) {
+    if (s.phase != CallPhase.ended) return;
+    if (s.callId.isEmpty || s.callId == _endAnnouncedFor) return;
+    _endAnnouncedFor = s.callId;
+    final reason = s.endReason;
+    if (reason == CallEndReason.localHangup ||
+        reason == CallEndReason.localDecline) {
+      return;
+    }
+    if (_prevDirectPhase == CallPhase.ringingIncoming) return;
+    final ctx = _overlayHostKey.currentContext;
+    if (ctx == null) return;
+    final l10n = AppLocalizations.of(ctx)!;
+    final connectedAt = s.connectedAtMs;
+    final failure = s.failure;
+    final String message;
+    switch (reason) {
+      case CallEndReason.remoteDecline:
+        message = l10n.callDeclined;
+      case CallEndReason.timeout:
+        message = l10n.callNoAnswer;
+      case CallEndReason.remoteSuperseded:
+        message = l10n.callReplacedByNewerAttempt;
+      case CallEndReason.error:
+        message = failure != null
+            ? callErrorText(l10n, failure)
+            : l10n.callConnectionError;
+      case CallEndReason.remoteHangup:
+      case CallEndReason.localHangup:
+      case CallEndReason.localDecline:
+      case null:
+        message = connectedAt == null
+            ? l10n.callEnded
+            : l10n.desktopCallEndedAfter(desktopCallMiniDuration(connectedAt));
+    }
+    DesktopSnackbar.show(
+      ctx,
+      message: message,
+      kind: reason == CallEndReason.error ? DSnackKind.error : DSnackKind.info,
+    );
   }
 
   void _syncIncomingToast() {
@@ -1326,6 +1506,9 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     _chatsSelection.removeListener(_onChatsSelectionChanged);
     _roomsSelection.removeListener(_onRoomsSelectionChanged);
     DesktopUiPrefs.themeMode.removeListener(_onThemeModeChanged);
+    DesktopCallPresence.instance.directMinimized.removeListener(
+      _onCallPresenceChanged,
+    );
     _navHistory.dispose();
     _chatsSelection.dispose();
     _roomsSelection.dispose();
@@ -1738,6 +1921,11 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
         titleFor: _roomTitleFor,
         onReturn: _returnToRoomCall,
         onToggleMic: _toggleRoomCallMic,
+        onLeave: _leaveRoomCall,
+        direct: _callManager?.state,
+        onDirectReturn: DesktopCallPresence.instance.expandDirect,
+        onDirectToggleMic: () async => _callManager?.toggleMute(),
+        onDirectEnd: () => unawaited(_callManager?.hangup()),
       ),
       // Крошки собираются ЗДЕСЬ: знание о выбранном чате и открытой теме
       // живёт в складах выбора, а оболочка про них не знает.
@@ -1855,6 +2043,9 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     final children = <Widget>[shell];
     if (modal != null) children.add(modal);
     if (callOverlay != null) children.add(callOverlay);
+    // Мини-окна свёрнутых звонков — поверх всего окна, но ПОД замками: запертое
+    // приложение не должно показывать, с кем идёт разговор.
+    children.add(Positioned.fill(child: _buildCallMiniHost()));
     return ValueListenableBuilder<bool>(
       valueListenable: _lockService.locked,
       builder: (ctx, locked, _) {
@@ -1887,14 +2078,19 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
 
   Widget? _buildActiveCallOverlay() {
     final cm = _callManager;
-    if (cm == null) return null;
+    final call = _directCall;
+    if (cm == null || call == null) return null;
     final s = cm.state.value;
     if (!s.isActive) return null;
     // Ringing-incoming surfaces as a toast, not a full screen.
     if (s.phase == CallPhase.ringingIncoming) return null;
+    // Свёрнут — живёт мини-окном (см. [_buildCallMiniHost]).
+    final presence = DesktopCallPresence.instance;
+    if (presence.directMinimized.value) return null;
+    final peer = s.peerProfileId.trim();
     return Positioned.fill(
       child: OneToOneCallScreen(
-        callManager: cm,
+        call: call,
         // Пустое имя экран звонка подпишет сам — без сырого profile_id.
         peerName: s.peerName.trim(),
         // FIX (2026-07-13, call avatar): the shared CallState now carries the
@@ -1902,7 +2098,25 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
         // it into the desktop call screen instead of showing initials only.
         peerImage: Avatar.fileImage(s.peerAvatarPath),
         onEnd: () => unawaited(cm.hangup()),
+        onMinimize: presence.minimizeDirect,
+        onOpenChat: peer.isEmpty ? null : () => _openDirectCallChat(peer),
       ),
+    );
+  }
+
+  /// Мини-окна свёрнутых звонков. Сами решают, показываться ли.
+  Widget _buildCallMiniHost() {
+    return DesktopCallMiniHost(
+      direct: _directCall,
+      onDirectEnd: () => unawaited(_callManager?.hangup()),
+      selfProfileId: _controller.profileId,
+      loadRoomMembers: _controller.listRoomMembersDetailed,
+      loadRoomCall: _controller.getCachedRoomCall,
+      roomTitleFor: _roomTitleFor,
+      onRoomToggleMic: _toggleRoomCallMic,
+      onRoomToggleCamera: _toggleRoomCallCamera,
+      onRoomLeave: _leaveRoomCall,
+      onRoomExpand: _returnToRoomCall,
     );
   }
 }

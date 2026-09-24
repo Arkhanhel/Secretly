@@ -163,8 +163,13 @@ void main() {
       // Нажать на микрофон во время созвона нужно быстро и не глядя. Если то
       // же нажатие иногда открывает список, человек промахнётся ровно тогда,
       // когда хотел просто замолчать.
-      expect(call.contains('final void Function(BuildContext anchorContext)? onExpand;'), isTrue);
-      expect(call.contains('message: l10n.desktopCallPickDevice'), isTrue);
+      // 24.09.2026 кнопка дока стала общей для обоих звонков —
+      // `calls/call_controls.dart`.
+      final controls = File(
+        'lib/ui/desktop/calls/call_controls.dart',
+      ).readAsStringSync();
+      expect(controls.contains('final void Function(BuildContext anchorContext)? onExpand;'), isTrue);
+      expect(controls.contains('message: l10n.desktopCallPickDevice'), isTrue);
     });
 
     test('окно подписано на список устройств', () {
@@ -339,8 +344,12 @@ void main() {
     // Док стоит у нижнего края окна: список, раскрытый вниз, ложился поверх
     // самих кнопок — выбираешь динамик, а под пальцем «Выйти». Проверено
     // живьём.
-    expect(call.contains('_menuAnchorAbove(anchorContext, routes.length)'), isTrue);
-    expect(call.contains('origin.dy - height - 8'), isTrue);
+    expect(call.contains('callMenuAnchorAbove(anchorContext, routes.length)'), isTrue);
+    // Сам расчёт — общий для обоих звонков.
+    final controls = File(
+      'lib/ui/desktop/calls/call_controls.dart',
+    ).readAsStringSync();
+    expect(controls.contains('origin.dy - height - 8'), isTrue);
   });
 
   // Шапка окна созвона по макету.
@@ -348,17 +357,25 @@ void main() {
   // 🔴 Было: высота 52, замок в чипе и таймер тем же шрифтом, что и всё
   // остальное. В макете — 46, эквалайзер и МОНОШИРИННЫЕ цифры: таймер,
   // набранный пропорциональным шрифтом, дёргает строку на каждой секунде.
+  // С 24.09.2026 цифры одной ширины дают обычным шрифтом окна: моноширинный
+  // владелец назвал «ужасным» в мини-плеере, а строку не дёргает и так.
   group('шапка созвона', () {
     test('высота и поля из макета', () {
       expect(call.contains('height: 46,'), isTrue);
       expect(call.contains('EdgeInsets.fromLTRB(isMacOS ? 78 : 14, 0, 14, 0)'), isTrue);
     });
 
-    test('чип: 26, радиус, мятная плёнка и моноширинный таймер', () {
+    test('чип: 26, радиус, мятная плёнка и цифры одной ширины', () {
       expect(call.contains('height: 26,'), isTrue);
       expect(call.contains('c.voice.withValues(alpha: 0.14)'), isTrue);
-      expect(call.contains('style: DType.mono.copyWith('), isTrue);
-      expect(call.contains('color: c.mintSoft'), isTrue);
+      // 24.09.2026: цифры не пляшут — но обычным шрифтом окна, а не
+      // моноширинным (владелец о таком же таймере мини-плеера).
+      final i = call.indexOf('l10n.desktopCallDurationOnAir(');
+      expect(i, greaterThan(0));
+      final timer = call.substring(i, i + 900);
+      expect(timer.contains('fontFeatures: const [FontFeature.tabularFigures()]'), isTrue);
+      expect(timer.contains('DType.mono'), isFalse);
+      expect(timer.contains('color: c.mintSoft'), isTrue);
     });
 
     test('🔴 замок не выброшен молча, а переехал в подсказку', () {

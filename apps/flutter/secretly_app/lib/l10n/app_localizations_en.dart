@@ -2576,9 +2576,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get desktopCallNoMediaBoth => 'The server gave no media channel: this call will have neither sound nor video';
 
   @override
-  String get desktopCallMinimise => 'Minimise the call';
-
-  @override
   String get desktopCallDiscussion => 'Discussion';
 
   @override
@@ -5158,31 +5155,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get desktopSendShiftEnter => 'Send · Shift+Enter';
 
   @override
-  String get desktopCallCtlMicOff => 'Turn the microphone off   ⌘D';
-
-  @override
-  String get desktopCallCtlMicOn => 'Turn the microphone on   ⌘D';
-
-  @override
-  String get desktopCallCtlCamOff => 'Turn the camera off   ⌘E';
-
-  @override
-  String get desktopCallCtlCamOn => 'Turn the camera on   ⌘E';
-
-  @override
   String get desktopCallCtlShareStop => 'Stop the screen share';
 
   @override
   String get desktopCallCtlShare => 'Screen sharing';
-
-  @override
-  String get desktopCallCtlHandDown => 'Lower the hand';
-
-  @override
-  String get desktopCallCtlHandUp => 'Raise the hand';
-
-  @override
-  String get desktopCallCtlHangUp => 'Hang up   ⌘W';
 
   @override
   String desktopAbsenceDays(int count) {
@@ -5902,6 +5878,51 @@ class AppLocalizationsEn extends AppLocalizations {
   String desktopUpdateAvailable(String version) {
     return 'Version $version is available';
   }
+
+  @override
+  String get desktopCallExpand => 'Expand the call';
+
+  @override
+  String get desktopCallMinimiseHint => 'Minimise to a mini window';
+
+  @override
+  String get desktopCallOpenChat => 'Minimise the call and open the chat';
+
+  @override
+  String get desktopCallScreenShareFailed => 'Couldn\'t share the screen';
+
+  @override
+  String get desktopCallScreenShareFailedMac => 'Couldn\'t share the screen. Allow Secretly to record the screen: System Settings → Privacy & Security → Screen Recording';
+
+  @override
+  String get desktopCallMediaCameraUnavailable => 'The camera is unavailable — another app is using it or permission is missing in system settings';
+
+  @override
+  String get desktopCallMediaMicUnavailable => 'The microphone is unavailable — check the permission in system settings';
+
+  @override
+  String get desktopCallMediaScreenStopped => 'Screen sharing stopped';
+
+  @override
+  String desktopCallMediaProblem(String detail) {
+    return 'Audio or video problem: $detail';
+  }
+
+  @override
+  String desktopCallEndedAfter(String duration) {
+    return 'Call ended · $duration';
+  }
+
+  @override
+  String desktopCallDirectWith(String name) {
+    return 'On a call · $name';
+  }
+
+  @override
+  String get desktopCallLeaveFailed => 'Couldn\'t leave the call: the server didn\'t answer. Try again.';
+
+  @override
+  String get desktopCallToggleFailed => 'Couldn\'t switch it: the server didn\'t answer. Try again.';
 
   @override
   String get desktopDiagTitle => 'Delivery diagnostics';

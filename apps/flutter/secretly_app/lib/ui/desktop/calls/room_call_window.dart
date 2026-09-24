@@ -8,6 +8,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../../app/app_controller.dart';
@@ -29,9 +30,12 @@ import '../chat/details/room_notes_pane.dart';
 import '../design/tokens.dart';
 import '../services/desktop_ui_prefs.dart';
 import '../services/demo_rooms.dart';
+import 'call_controls.dart';
+import 'call_presence.dart';
 import 'call_stage_pick.dart';
 import '../primitives/avatar.dart';
 import '../primitives/hover_listener.dart';
+import '../shell/window_chrome.dart';
 
 /// Окно комнатного созвона для десктопа.
 ///
@@ -128,6 +132,14 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
   void initState() {
     super.initState();
     _myProfileId = widget.controller.profileId;
+    // Окно открыто — мини-окна этого созвона нет. Сообщаем после кадра:
+    // корень и мини-окно перестраиваются по этому признаку, а менять дерево
+    // посреди его постройки нельзя.
+    final presence = DesktopCallPresence.instance;
+    presence.rememberRoomTitle(widget.groupId, widget.title);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) presence.roomWindowOpened(widget.groupId, this);
+    });
     unawaited(_loadMembers());
     // Камеры спрашиваем один раз при открытии окна: перечисление устройств —
     // обращение к системе, из `build` его звать нельзя.
@@ -159,6 +171,11 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
 
   @override
   void dispose() {
+    // Тоже после кадра: во время разборки дерева перестраивать его нельзя.
+    final owner = this;
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => DesktopCallPresence.instance.roomWindowClosed(owner),
+    );
     RoomCallManager.instance?.state.removeListener(_onRuntime);
     RoomCallManager.instance?.audioRouteState.removeListener(_onRuntime);
     _callSel.removeListener(_onRuntime);
@@ -167,6 +184,54 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
     _ticker?.cancel();
     _statsTimer?.cancel();
     super.dispose();
+  }
+
+  /// Свернуть окно созвона в мини-окно. Созвон при этом идёт дальше.
+  ///
+  /// Признак «окно закрыто» снимаем СРАЗУ, не дожидаясь конца анимации:
+  /// мини-окно проявляется, пока окно созвона уезжает, а не после.
+  void _minimize() {
+    DesktopCallPresence.instance.roomWindowClosed(this);
+    Navigator.of(context).maybePop();
+  }
+
+  /// Сочетания окна созвона: Esc — свернуть; ⌘D / Ctrl+D — микрофон;
+  /// ⌘E / Ctrl+E — камера; ⌘W / Ctrl+W — выйти.
+  ///
+  /// Работают и из поля чата созвона: ни одно из них поле ввода не занимает.
+  KeyEventResult _onKey(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent) return KeyEventResult.ignored;
+    if (e.logicalKey == LogicalKeyboardKey.escape) {
+      _minimize();
+      return KeyEventResult.handled;
+    }
+    final hw = HardwareKeyboard.instance;
+    final isMac = !kIsWeb && Platform.isMacOS;
+    final command = isMac ? hw.isMetaPressed : hw.isControlPressed;
+    if (!command || hw.isShiftPressed || hw.isAltPressed) {
+      return KeyEventResult.ignored;
+    }
+    bool letter(LogicalKeyboardKey l, PhysicalKeyboardKey p) =>
+        e.logicalKey == l || e.physicalKey == p;
+    final call = _call;
+    final self = call?.selfParticipant;
+    final joined = self?.isJoined ?? false;
+    if (letter(LogicalKeyboardKey.keyW, PhysicalKeyboardKey.keyW)) {
+      if (!joined) return KeyEventResult.ignored;
+      unawaited(_leave());
+      return KeyEventResult.handled;
+    }
+    if (!joined || _busy != null) return KeyEventResult.ignored;
+    if (letter(LogicalKeyboardKey.keyD, PhysicalKeyboardKey.keyD)) {
+      unawaited(_updateSelf(muted: !self!.muted));
+      return KeyEventResult.handled;
+    }
+    if (letter(LogicalKeyboardKey.keyE, PhysicalKeyboardKey.keyE)) {
+      if (!_mediaBackendReady) return KeyEventResult.ignored;
+      unawaited(_updateSelf(videoEnabled: !_videoLive(self!)));
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   /// Кто говорил последним — память сцены. См. [pickStageVideo].
@@ -386,7 +451,11 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
         screenShareEnabled: screenShareEnabled ?? self.screenShareEnabled,
         speaking: self.speaking,
       );
-      if (result != null && (result.selfParticipant?.isJoined ?? false)) {
+      // 🔴 `null` — это ОТКАЗ: релей не ответил, и переключение не
+      // случилось. Раньше это молчало — кнопка оставалась прежней без
+      // объяснения, и «думаю, что молчу» расходилось с правдой.
+      if (result == null) throw StateError(_l10n.desktopCallToggleFailed);
+      if (result.selfParticipant?.isJoined ?? false) {
         await RoomCallManager.instance?.ensureJoined(
           roomId: widget.groupId,
           callId: call.callId,
@@ -415,6 +484,10 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
           callId: call.callId,
         );
         if (mounted) Navigator.of(context).maybePop();
+      } else {
+        // Выйти не вышло — сказать, а не оставить человека жать «Выйти» ещё
+        // и ещё, не понимая, почему он всё ещё в созвоне.
+        throw StateError(_l10n.desktopCallLeaveFailed);
       }
     });
   }
@@ -498,7 +571,10 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
     final call = _call;
     final selfJoined = call?.selfParticipant?.isJoined ?? false;
 
-    return Scaffold(
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: Scaffold(
       backgroundColor: c.bg,
       body: Column(
         children: [
@@ -508,7 +584,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
             joinedCount: _joined.length,
             fullScreen: _fullScreen,
             anyoneSpeaking: _speakingDeviceIds().isNotEmpty,
-            onBack: () => Navigator.of(context).maybePop(),
+            onBack: _minimize,
             onToggleFullScreen: _toggleFullScreen,
           ),
           Expanded(
@@ -588,6 +664,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
                   ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -881,7 +958,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
     final selected = media.selectedVideoInputId;
     await ContextMenu.show(
       anchorContext,
-      globalPosition: _menuAnchorAbove(anchorContext, _cameras.length),
+      globalPosition: callMenuAnchorAbove(anchorContext, _cameras.length),
       sections: <List<CtxMenuItem>>[
         [
           for (final cam in _cameras)
@@ -916,7 +993,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
     final selected = manager.audioRouteState.value.selectedRouteId;
     await ContextMenu.show(
       anchorContext,
-      globalPosition: _menuAnchorAbove(anchorContext, routes.length),
+      globalPosition: callMenuAnchorAbove(anchorContext, routes.length),
       sections: <List<CtxMenuItem>>[
         [
           for (final r in routes)
@@ -924,44 +1001,12 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
               label: r.label,
               icon: r.deviceId == selected
                   ? FluentIcons.checkmark_24_regular
-                  : _routeIcon(r.kind),
+                  : callAudioRouteIcon(r.kind),
               onTap: () => unawaited(manager.selectAudioRoute(r.deviceId)),
             ),
         ],
       ],
     );
-  }
-
-  /// Меню раскрывается ВВЕРХ от кнопки.
-  ///
-  /// 🔴 Проверено живьём: док стоит у нижнего края окна, и список,
-  /// раскрытый вниз, ложился ПОВЕРХ самих кнопок дока — выбираешь динамик, а
-  /// под пальцем «Выйти».
-  ///
-  /// Высота считается той же формулой, что и внутри [ContextMenu]
-  /// (32 на пункт плюс поля): меню умеет прижиматься к экрану, но не умеет
-  /// раскрываться вверх, а якорь — единственное, чем это задаётся снаружи.
-  Offset _menuAnchorAbove(BuildContext anchorContext, int itemCount) {
-    final box = anchorContext.findRenderObject() as RenderBox?;
-    if (box == null) return Offset.zero;
-    final origin = box.localToGlobal(Offset.zero);
-    final height = itemCount * 32.0 + 12;
-    return Offset(origin.dx, (origin.dy - height - 8).clamp(8.0, origin.dy));
-  }
-
-  static IconData _routeIcon(CallAudioRouteKind kind) {
-    switch (kind) {
-      case CallAudioRouteKind.bluetooth:
-        return FluentIcons.bluetooth_24_regular;
-      case CallAudioRouteKind.wiredHeadset:
-        return FluentIcons.headphones_24_regular;
-      case CallAudioRouteKind.earpiece:
-        return FluentIcons.call_24_regular;
-      case CallAudioRouteKind.speaker:
-        return FluentIcons.speaker_2_24_regular;
-      case CallAudioRouteKind.unknown:
-        return FluentIcons.speaker_2_24_regular;
-    }
   }
 
   Widget _participantStrip(DColorSet c) {
@@ -1418,30 +1463,18 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
     // главных переключателей есть ПОДПИСИ. «Выйти» отделён чертой: это
     // единственная кнопка, которая заканчивает разговор, и стоять вплотную к
     // «выключить микрофон» ей нельзя.
-    final dock = Container(
-      height: 62,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: c.elevated,
-        borderRadius: BorderRadius.circular(DRadii.lg),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.45),
-            blurRadius: 44,
-            offset: const Offset(0, 20),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _DockToggle(
+    final dock = CallDock(
+      expand: true,
+      children: [
+          CallDockToggle(
             icon: muted
                 ? FluentIcons.mic_off_24_filled
                 : FluentIcons.mic_24_filled,
             label: _l10n.callControlMute,
-            tooltip: muted ? _l10n.desktopCallMicOn : _l10n.desktopCallMicOff,
+            tooltip: callTooltipWithShortcut(
+              muted ? _l10n.desktopCallMicOn : _l10n.desktopCallMicOff,
+              'D',
+            ),
             on: !muted,
             enabled: !busy,
             onTap: () => unawaited(_updateSelf(muted: !muted)),
@@ -1458,13 +1491,16 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
             onExpand: _audioRoutes().length > 1 ? _pickAudioRoute : null,
           ),
           const SizedBox(width: 8),
-          _DockToggle(
+          CallDockToggle(
             icon: videoOn
                 ? FluentIcons.video_24_filled
                 : FluentIcons.video_off_24_filled,
             label: _l10n.callControlCamera,
             tooltip: _mediaBackendReady
-                ? (videoOn ? _l10n.desktopCallCamOff : _l10n.desktopCallCamOn)
+                ? callTooltipWithShortcut(
+                    videoOn ? _l10n.desktopCallCamOff : _l10n.desktopCallCamOn,
+                    'E',
+                  )
                 : _l10n.desktopCallNoMediaVideo,
             on: videoOn,
             enabled: !busy && _mediaBackendReady,
@@ -1479,7 +1515,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
           // одного человека с камерой сетка из одной плитки — это та же
           // сцена, только меньше.
           if (_joined.length > 1) ...[
-            _DockToggle(
+            CallDockToggle(
               icon: _gridMode
                   ? FluentIcons.person_24_filled
                   : FluentIcons.grid_24_filled,
@@ -1488,31 +1524,51 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
                   ? _l10n.desktopCallShowOneLarge
                   : _l10n.desktopCallShowGrid,
               on: _gridMode,
+              // Одна большая сцена — не сбой: без этого «Сетка» стояла
+              // красной, пока ею не пользуются.
+              neutralWhenOff: true,
               enabled: !busy,
               onTap: () => setState(() => _gridMode = !_gridMode),
             ),
             const SizedBox(width: 8),
           ],
-          _DockToggle(
+          CallDockToggle(
             icon: FluentIcons.share_screen_start_24_filled,
             label: _l10n.desktopCallScreen,
             tooltip: _mediaBackendReady
                 ? (shareOn ? _l10n.desktopCallShareStop : _l10n.desktopCallShareStart)
                 : _l10n.desktopCallNoMediaScreen,
             on: shareOn,
+            // 🔴 Экран, который сейчас НЕ показывают, — обычное состояние, а
+            // не тревога: кнопка стояла красной весь созвон. Идущий показ,
+            // наоборот, подсвечен — его видят все, и об этом надо помнить.
+            neutralWhenOff: true,
+            highlighted: shareOn,
             enabled: !busy && _mediaBackendReady,
             onTap: () => unawaited(_updateSelf(screenShareEnabled: !shareOn)),
           ),
-          Container(
-            width: 1,
-            height: 26,
-            margin: const EdgeInsets.symmetric(horizontal: 12),
-            color: Colors.white.withValues(alpha: 0.10),
+          const SizedBox(width: 8),
+          // 🔴 СВЕРНУТЬ — В ДОКЕ, А НЕ ТОЛЬКО СТРЕЛКОЙ В УГЛУ (24.09.2026,
+          // владелец: созвон «должен не мешать пользоваться другими чатами»).
+          // Стрелка в шапке была единственным входом и не читалась как
+          // «свернуть», а после неё от созвона оставалась одна строка.
+          // Теперь созвон уходит в мини-окно с живой картинкой.
+          CallDockToggle(
+            icon: FluentIcons.picture_in_picture_enter_24_regular,
+            label: _l10n.callMinimize,
+            tooltip: callTooltipWithShortcut(
+              _l10n.desktopCallMinimiseHint,
+              'Esc',
+            ),
+            on: true,
+            enabled: true,
+            onTap: _minimize,
           ),
-          _DockToggle(
+          const CallDockDivider(),
+          CallDockToggle(
             icon: FluentIcons.call_end_24_filled,
             label: _l10n.desktopCallLeave,
-            tooltip: _l10n.desktopCallLeaveCall,
+            tooltip: callTooltipWithShortcut(_l10n.desktopCallLeaveCall, 'W'),
             on: false,
             danger: true,
             // 🔴 ВСЕГДА ДОСТУПЕН, даже когда идёт другое действие. Зависший
@@ -1521,13 +1577,17 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
             enabled: true,
             onTap: () => unawaited(_leave()),
           ),
-        ],
-      ),
+      ],
     );
 
-    if (_mediaBackendReady) return dock;
     // 🔴 Сказать словами ровно один раз и над доком, а не подсказкой у каждой
     // погасшей кнопки: человек должен понять, что сломано не приложение.
+    // Отказ последнего действия (микрофон, камера, выход) важнее сбоя
+    // движка: он про то, что человек только что нажал.
+    final notice = !_mediaBackendReady
+        ? _l10n.desktopCallNoMediaBoth
+        : (_actionError ?? _mediaProblem());
+    if (notice == null) return dock;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1549,7 +1609,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  _l10n.desktopCallNoMediaBoth,
+                  notice,
                   style: DType.tiny.copyWith(color: c.warning),
                 ),
               ),
@@ -1559,6 +1619,31 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
         dock,
       ],
     );
+  }
+
+  /// Что сломалось у своих камеры, микрофона или показа экрана — словами.
+  ///
+  /// 🔴 ОТКАЗЫ ДВИЖКА ПРОВАЛИВАЛИСЬ МОЛЧА. Камеру держит другое приложение,
+  /// нет разрешения на запись экрана — движок пишет это в своё состояние, и
+  /// телефон это показывает. Окно компьютера не читало его вовсе: кнопка
+  /// нажималась, а камера так и не включалась, без единого слова почему.
+  String? _mediaProblem() {
+    final raw = _runtime?.localMedia.errorMessage?.trim() ?? '';
+    if (raw.isEmpty) return null;
+    switch (raw) {
+      case 'camera unavailable':
+        return _l10n.desktopCallMediaCameraUnavailable;
+      case 'microphone unavailable':
+        return _l10n.desktopCallMediaMicUnavailable;
+      case 'screen share permission denied':
+      case 'screen share unavailable':
+        return (!kIsWeb && Platform.isMacOS)
+            ? _l10n.desktopCallScreenShareFailedMac
+            : _l10n.desktopCallScreenShareFailed;
+      case 'screen share stopped':
+        return _l10n.desktopCallMediaScreenStopped;
+    }
+    return _l10n.desktopCallMediaProblem(_stripDartPrefix(raw));
   }
 }
 
@@ -1608,26 +1693,44 @@ class _Header extends StatelessWidget {
     // кнопка «свернуть созвон» оказывалась ПОД ними — то есть нажать на неё
     // было нельзя, а выглядело это как неработающая кнопка.
     final isMacOS = !kIsWeb && Platform.isMacOS;
+    // 🔴 КНОПКИ ОКНА WINDOWS — ЗДЕСЬ (24.09.2026). Окно созвона ложится
+    // поверх шапки приложения целиком, а на Windows «свернуть, развернуть,
+    // закрыть» рисуем мы сами, в той шапке: пока шёл созвон, окно нельзя было
+    // ни свернуть, ни закрыть, ни даже сдвинуть.
+    final isWindows = !kIsWeb && Platform.isWindows;
     return Container(
       // 46 и поля 14 — из макета. Было 52: лишние шесть точек у окна, где
       // ценность имеет площадь сцены.
       height: 46,
-      padding: EdgeInsets.fromLTRB(isMacOS ? 78 : 14, 0, 14, 0),
       decoration: BoxDecoration(
         color: c.sidebar,
         border: Border(bottom: BorderSide(color: c.borderSubtle)),
       ),
+      child: Stack(
+        children: [
+          const Positioned.fill(child: DesktopWindowDragRegion()),
+          Row(
+            children: [
+              Expanded(
+                child: Padding(
+      padding: EdgeInsets.fromLTRB(isMacOS ? 78 : 14, 0, 14, 0),
       child: Row(
         children: [
           _ChromeButton(
-            icon: FluentIcons.chevron_left_24_regular,
-            tooltip: l10n.desktopCallMinimise,
+            icon: FluentIcons.picture_in_picture_enter_24_regular,
+            tooltip: callTooltipWithShortcut(l10n.desktopCallMinimiseHint, 'Esc'),
             onTap: onBack,
           ),
           const SizedBox(width: DSpace.s),
           // Эквалайзер вместо говорящей головы — как в макете.
           Icon(FluentIcons.pulse_24_filled, size: 18, color: c.success),
           const SizedBox(width: 6),
+          // 🔴 Имя и чип — ОДНОЙ растягиваемой частью строки: с `Flexible` у
+          // имени и распоркой после чипа свободное место делилось пополам, и
+          // кнопка «во весь экран» стояла посреди шапки.
+          Expanded(
+            child: Row(
+              children: [
           Flexible(
             child: Text(
               // Имя комнаты бывает неизвестно — например, когда вернулись в
@@ -1672,19 +1775,28 @@ class _Header extends StatelessWidget {
                       // «N в эфире» оставлено сверх макета: в комнате это
                       // первый вопрос, а место в чипе есть.
                       l10n.desktopCallDurationOnAir(_duration(call!.startedAtMs), joinedCount),
-                      // Моноширинным, как в макете: цифры таймера не должны
-                      // дёргать строку каждую секунду.
-                      style: DType.mono.copyWith(
+                      // Цифры таймера не должны дёргать строку каждую
+                      // секунду — но не моноширинным шрифтом (24.09.2026,
+                      // владелец о таком же таймере мини-плеера: «убери этот
+                      // ужасный шрифт, сделай обычный, как в Telegram»).
+                      // Обычный шрифт окна с цифрами одной ширины.
+                      style: TextStyle(
+                        fontFamily: DType.family,
                         fontSize: 10.5,
                         height: 1.0,
+                        fontWeight: FontWeight.w600,
                         color: c.mintSoft,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-          const Spacer(),
+              ],
+            ),
+          ),
+          const SizedBox(width: DSpace.m),
           _ChromeButton(
             icon: fullScreen
                 ? FluentIcons.full_screen_minimize_24_regular
@@ -1693,6 +1805,13 @@ class _Header extends StatelessWidget {
                 ? l10n.desktopCallExitFullScreen
                 : l10n.desktopCallFullScreen,
             onTap: onToggleFullScreen,
+          ),
+        ],
+      ),
+                ),
+              ),
+              if (isWindows) const DesktopWindowsCaptionButtons(),
+            ],
           ),
         ],
       ),
@@ -2676,129 +2795,6 @@ class _ParticipantRow extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Прямоугольная кнопка дока со ЗНАЧКОМ И ПОДПИСЬЮ.
-///
-/// Подпись — не украшение. Во время созвона кнопку ищут глазами и за секунду;
-/// перечёркнутый прямоугольник без слова «Экран» одинаково похож на «выключить
-/// видео» и на «остановить показ», и узнать разницу можно было только наведя
-/// мышь и дождавшись подсказки.
-class _DockToggle extends StatelessWidget {
-  const _DockToggle({
-    required this.icon,
-    required this.label,
-    required this.tooltip,
-    required this.on,
-    required this.enabled,
-    required this.onTap,
-    this.danger = false,
-    this.onExpand,
-  });
-
-  final IconData icon;
-  final String label;
-  final String tooltip;
-
-  /// Возможность ВКЛЮЧЕНА сейчас (микрофон открыт, камера идёт).
-  final bool on;
-  final bool enabled;
-  final bool danger;
-  final VoidCallback onTap;
-
-  /// Шеврон справа: открывает список устройств. `null` — кнопка простая.
-  ///
-  /// 🔴 Шеврон СВОЙ отдельной кнопкой, а не частью нажатия. Нажать на
-  /// микрофон во время созвона нужно быстро и не глядя; если то же нажатие
-  /// иногда открывает список, человек промахнётся ровно в тот момент, когда
-  /// хотел просто замолчать.
-  final void Function(BuildContext anchorContext)? onExpand;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final c = DColors.of(context);
-    // Выключенная возможность — красноватая, включённая — обычная: во время
-    // созвона тревожит именно «меня не слышно», а не «микрофон работает».
-    final tone = danger ? c.danger : (on ? c.textPrimary : c.danger);
-    final button = DesktopTooltip(
-      message: tooltip,
-      child: HoverListener(
-        onTap: enabled ? onTap : null,
-        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-        builder: (ctx, hovered, pressed) => AnimatedContainer(
-          duration: DMotion.fast,
-          height: 40,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: danger
-                ? c.danger.withValues(alpha: pressed ? 0.28 : 0.16)
-                : (hovered || pressed
-                      ? Colors.white.withValues(alpha: pressed ? 0.12 : 0.08)
-                      : Colors.white.withValues(alpha: 0.05)),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Opacity(
-            opacity: enabled ? 1 : 0.5,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 18, color: tone),
-                const SizedBox(width: 7),
-                Text(
-                  label,
-                  style: DType.tiny.copyWith(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w600,
-                    color: danger ? c.danger : c.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    if (onExpand == null) return button;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        button,
-        const SizedBox(width: 2),
-        Builder(
-          builder: (anchor) => DesktopTooltip(
-            message: l10n.desktopCallPickDevice,
-            child: HoverListener(
-              onTap: enabled ? () => onExpand!(anchor) : null,
-              cursor: enabled
-                  ? SystemMouseCursors.click
-                  : SystemMouseCursors.basic,
-              builder: (ctx, hovered, pressed) => AnimatedContainer(
-                duration: DMotion.fast,
-                width: 28,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: hovered || pressed
-                      ? Colors.white.withValues(alpha: pressed ? 0.12 : 0.08)
-                      : Colors.white.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Opacity(
-                  opacity: enabled ? 1 : 0.5,
-                  child: Icon(
-                    FluentIcons.chevron_up_20_filled,
-                    size: 14,
-                    color: c.textSecondary,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

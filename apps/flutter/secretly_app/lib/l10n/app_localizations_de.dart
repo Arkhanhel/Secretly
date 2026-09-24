@@ -2576,9 +2576,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get desktopCallNoMediaBoth => 'Der Server hat keinen Medienkanal bereitgestellt: In diesem Anruf gibt es weder Ton noch Video';
 
   @override
-  String get desktopCallMinimise => 'Anruf minimieren';
-
-  @override
   String get desktopCallDiscussion => 'Gespräch';
 
   @override
@@ -5158,31 +5155,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get desktopSendShiftEnter => 'Senden · Shift+Enter';
 
   @override
-  String get desktopCallCtlMicOff => 'Mikrofon ausschalten   ⌘D';
-
-  @override
-  String get desktopCallCtlMicOn => 'Mikrofon einschalten   ⌘D';
-
-  @override
-  String get desktopCallCtlCamOff => 'Kamera ausschalten   ⌘E';
-
-  @override
-  String get desktopCallCtlCamOn => 'Kamera einschalten   ⌘E';
-
-  @override
   String get desktopCallCtlShareStop => 'Bildschirmfreigabe beenden';
 
   @override
   String get desktopCallCtlShare => 'Bildschirmfreigabe';
-
-  @override
-  String get desktopCallCtlHandDown => 'Hand senken';
-
-  @override
-  String get desktopCallCtlHandUp => 'Hand heben';
-
-  @override
-  String get desktopCallCtlHangUp => 'Auflegen   ⌘W';
 
   @override
   String desktopAbsenceDays(int count) {
@@ -5902,6 +5878,51 @@ class AppLocalizationsDe extends AppLocalizations {
   String desktopUpdateAvailable(String version) {
     return 'Version $version verfügbar';
   }
+
+  @override
+  String get desktopCallExpand => 'Anruf maximieren';
+
+  @override
+  String get desktopCallMinimiseHint => 'In ein Mini-Fenster verkleinern';
+
+  @override
+  String get desktopCallOpenChat => 'Anruf verkleinern und Chat öffnen';
+
+  @override
+  String get desktopCallScreenShareFailed => 'Bildschirm konnte nicht geteilt werden';
+
+  @override
+  String get desktopCallScreenShareFailedMac => 'Bildschirm konnte nicht geteilt werden. Erlauben Sie Secretly die Bildschirmaufnahme: Systemeinstellungen → Datenschutz & Sicherheit → Bildschirmaufnahme';
+
+  @override
+  String get desktopCallMediaCameraUnavailable => 'Die Kamera ist nicht verfügbar – eine andere App nutzt sie oder die Berechtigung fehlt in den Systemeinstellungen';
+
+  @override
+  String get desktopCallMediaMicUnavailable => 'Das Mikrofon ist nicht verfügbar – prüfen Sie die Berechtigung in den Systemeinstellungen';
+
+  @override
+  String get desktopCallMediaScreenStopped => 'Bildschirmfreigabe beendet';
+
+  @override
+  String desktopCallMediaProblem(String detail) {
+    return 'Audio- oder Videoproblem: $detail';
+  }
+
+  @override
+  String desktopCallEndedAfter(String duration) {
+    return 'Anruf beendet · $duration';
+  }
+
+  @override
+  String desktopCallDirectWith(String name) {
+    return 'Laufender Anruf · $name';
+  }
+
+  @override
+  String get desktopCallLeaveFailed => 'Der Anruf konnte nicht verlassen werden: Der Server hat nicht geantwortet. Versuchen Sie es erneut.';
+
+  @override
+  String get desktopCallToggleFailed => 'Umschalten fehlgeschlagen: Der Server hat nicht geantwortet. Versuchen Sie es erneut.';
 
   @override
   String get desktopDiagTitle => 'Zustellungsdiagnose';

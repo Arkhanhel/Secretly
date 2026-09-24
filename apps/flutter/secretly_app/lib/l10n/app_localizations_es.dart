@@ -2576,9 +2576,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get desktopCallNoMediaBoth => 'El servidor no facilitó un canal de medios: esta llamada no tendrá ni sonido ni vídeo';
 
   @override
-  String get desktopCallMinimise => 'Minimizar la llamada';
-
-  @override
   String get desktopCallDiscussion => 'Conversación';
 
   @override
@@ -5158,31 +5155,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get desktopSendShiftEnter => 'Enviar · Shift+Enter';
 
   @override
-  String get desktopCallCtlMicOff => 'Desactivar el micrófono   ⌘D';
-
-  @override
-  String get desktopCallCtlMicOn => 'Activar el micrófono   ⌘D';
-
-  @override
-  String get desktopCallCtlCamOff => 'Desactivar la cámara   ⌘E';
-
-  @override
-  String get desktopCallCtlCamOn => 'Activar la cámara   ⌘E';
-
-  @override
   String get desktopCallCtlShareStop => 'Detener la pantalla compartida';
 
   @override
   String get desktopCallCtlShare => 'Compartir pantalla';
-
-  @override
-  String get desktopCallCtlHandDown => 'Bajar la mano';
-
-  @override
-  String get desktopCallCtlHandUp => 'Levantar la mano';
-
-  @override
-  String get desktopCallCtlHangUp => 'Colgar   ⌘W';
 
   @override
   String desktopAbsenceDays(int count) {
@@ -5902,6 +5878,51 @@ class AppLocalizationsEs extends AppLocalizations {
   String desktopUpdateAvailable(String version) {
     return 'Versión $version disponible';
   }
+
+  @override
+  String get desktopCallExpand => 'Ampliar la llamada';
+
+  @override
+  String get desktopCallMinimiseHint => 'Minimizar a una miniventana';
+
+  @override
+  String get desktopCallOpenChat => 'Minimizar la llamada y abrir el chat';
+
+  @override
+  String get desktopCallScreenShareFailed => 'No se pudo compartir la pantalla';
+
+  @override
+  String get desktopCallScreenShareFailedMac => 'No se pudo compartir la pantalla. Permite a Secretly grabar la pantalla: Ajustes del Sistema → Privacidad y seguridad → Grabación de pantalla';
+
+  @override
+  String get desktopCallMediaCameraUnavailable => 'La cámara no está disponible: otra app la está usando o falta el permiso en los ajustes del sistema';
+
+  @override
+  String get desktopCallMediaMicUnavailable => 'El micrófono no está disponible: revisa el permiso en los ajustes del sistema';
+
+  @override
+  String get desktopCallMediaScreenStopped => 'Se detuvo el uso compartido de pantalla';
+
+  @override
+  String desktopCallMediaProblem(String detail) {
+    return 'Problema de audio o vídeo: $detail';
+  }
+
+  @override
+  String desktopCallEndedAfter(String duration) {
+    return 'Llamada finalizada · $duration';
+  }
+
+  @override
+  String desktopCallDirectWith(String name) {
+    return 'En llamada · $name';
+  }
+
+  @override
+  String get desktopCallLeaveFailed => 'No se pudo salir de la llamada: el servidor no respondió. Inténtalo de nuevo.';
+
+  @override
+  String get desktopCallToggleFailed => 'No se pudo cambiar: el servidor no respondió. Inténtalo de nuevo.';
 
   @override
   String get desktopDiagTitle => 'Diagnóstico de entrega';

@@ -89,7 +89,7 @@ class DesktopWindowChrome extends StatelessWidget {
       child: Stack(
         children: [
           // The whole bar is draggable except for interactive children below.
-          Positioned.fill(child: _DragRegion()),
+          const Positioned.fill(child: DesktopWindowDragRegion()),
 
           // 🔴 РАСКЛАДКА ШАПКИ — СВОЯ, А НЕ СТРОКА С РАСПОРКОЙ (24.09.2026).
           //
@@ -150,7 +150,7 @@ class DesktopWindowChrome extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (trailing != null) trailing!,
-                    if (_isWindows) const _WindowsControls(),
+                    if (_isWindows) const DesktopWindowsCaptionButtons(),
                   ],
                 ),
               ),
@@ -283,7 +283,14 @@ class _ChromeLayout extends MultiChildLayoutDelegate {
       old.padLeft != padLeft || old.padRight != padRight;
 }
 
-class _DragRegion extends StatelessWidget {
+/// Место, за которое окно таскают мышью; двойной щелчок разворачивает.
+///
+/// Открыто, потому что нужно не только шапке окна: окна созвона ложатся
+/// поверх неё целиком, и без своей такой полосы окно во время звонка нельзя
+/// было даже сдвинуть.
+class DesktopWindowDragRegion extends StatelessWidget {
+  const DesktopWindowDragRegion({super.key});
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
@@ -301,8 +308,15 @@ class _DragRegion extends StatelessWidget {
   }
 }
 
-class _WindowsControls extends StatelessWidget {
-  const _WindowsControls();
+/// Кнопки окна Windows: свернуть, развернуть, закрыть.
+///
+/// 🔴 ОТКРЫТЫ, ПОТОМУ ЧТО ОКНА СОЗВОНА ЛОЖАТСЯ ПОВЕРХ ШАПКИ (24.09.2026).
+/// Рамки у окна на Windows нет — эти три кнопки рисуем мы, и живут они в
+/// шапке. Звонок во весь экран и окно группового созвона закрывали её
+/// целиком: пока шёл разговор, окно нельзя было ни свернуть, ни закрыть.
+/// На macOS светофор системный и виден всегда.
+class DesktopWindowsCaptionButtons extends StatelessWidget {
+  const DesktopWindowsCaptionButtons({super.key});
 
   @override
   Widget build(BuildContext context) {

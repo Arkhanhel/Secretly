@@ -54,6 +54,7 @@ class DesktopUiPrefs {
   static const String _kHoverBar = 'desktop_message_hover_bar_v1';
   static const String _kLinkPreviews = 'desktop_link_previews_v1';
   static const String _kPlayerVolume = 'desktop_player_volume_v1';
+  static const String _kCallMiniCorner = 'desktop_call_mini_corner_v1';
 
   /// Enter sends the message; Shift+Enter inserts a newline. When false the
   /// roles swap, which is what people coming from IDE-style chats expect.
@@ -141,6 +142,13 @@ class DesktopUiPrefs {
   /// громкость не должна сбрасываться в полную при каждом открытии окна.
   static final ValueNotifier<double> playerVolume = ValueNotifier<double>(1.0);
 
+  /// Угол, к которому прилипает мини-окно свёрнутого звонка: `topLeft`,
+  /// `topRight`, `bottomLeft`, `bottomRight`. Помнится между запусками —
+  /// утащенное в свой угол мини-окно не должно в каждом звонке появляться
+  /// в чужом.
+  static final ValueNotifier<String> callMiniCorner =
+      ValueNotifier<String>('topRight');
+
   /// Разрешённые ступени. Список закрытый: произвольное число из испорченной
   /// настройки не должно превращать окно в нечитаемое.
   static const List<double> textScaleSteps = <double>[0.9, 1.0, 1.15, 1.3, 1.5];
@@ -179,6 +187,7 @@ class DesktopUiPrefs {
       playerVolume.value = normalizePlayerVolume(
         prefs.getDouble(_kPlayerVolume),
       );
+      callMiniCorner.value = prefs.getString(_kCallMiniCorner) ?? 'topRight';
     } catch (_) {
       // Defaults already hold — a preferences failure must not block boot.
     }
@@ -208,6 +217,16 @@ class DesktopUiPrefs {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setDouble(_kPlayerVolume, v);
+    } catch (_) {
+      // В памяти уже применено; просто не переживёт перезапуск.
+    }
+  }
+
+  static Future<void> setCallMiniCorner(String value) async {
+    callMiniCorner.value = value;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kCallMiniCorner, value);
     } catch (_) {
       // В памяти уже применено; просто не переживёт перезапуск.
     }

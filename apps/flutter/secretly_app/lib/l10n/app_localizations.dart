@@ -4936,12 +4936,6 @@ abstract class AppLocalizations {
   /// **'The server gave no media channel: this call will have neither sound nor video'**
   String get desktopCallNoMediaBoth;
 
-  /// No description provided for @desktopCallMinimise.
-  ///
-  /// In en, this message translates to:
-  /// **'Minimise the call'**
-  String get desktopCallMinimise;
-
   /// No description provided for @desktopCallDiscussion.
   ///
   /// In en, this message translates to:
@@ -9544,30 +9538,6 @@ abstract class AppLocalizations {
   /// **'Send · Shift+Enter'**
   String get desktopSendShiftEnter;
 
-  /// No description provided for @desktopCallCtlMicOff.
-  ///
-  /// In en, this message translates to:
-  /// **'Turn the microphone off   ⌘D'**
-  String get desktopCallCtlMicOff;
-
-  /// No description provided for @desktopCallCtlMicOn.
-  ///
-  /// In en, this message translates to:
-  /// **'Turn the microphone on   ⌘D'**
-  String get desktopCallCtlMicOn;
-
-  /// No description provided for @desktopCallCtlCamOff.
-  ///
-  /// In en, this message translates to:
-  /// **'Turn the camera off   ⌘E'**
-  String get desktopCallCtlCamOff;
-
-  /// No description provided for @desktopCallCtlCamOn.
-  ///
-  /// In en, this message translates to:
-  /// **'Turn the camera on   ⌘E'**
-  String get desktopCallCtlCamOn;
-
   /// No description provided for @desktopCallCtlShareStop.
   ///
   /// In en, this message translates to:
@@ -9579,24 +9549,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Screen sharing'**
   String get desktopCallCtlShare;
-
-  /// No description provided for @desktopCallCtlHandDown.
-  ///
-  /// In en, this message translates to:
-  /// **'Lower the hand'**
-  String get desktopCallCtlHandDown;
-
-  /// No description provided for @desktopCallCtlHandUp.
-  ///
-  /// In en, this message translates to:
-  /// **'Raise the hand'**
-  String get desktopCallCtlHandUp;
-
-  /// No description provided for @desktopCallCtlHangUp.
-  ///
-  /// In en, this message translates to:
-  /// **'Hang up   ⌘W'**
-  String get desktopCallCtlHangUp;
 
   /// No description provided for @desktopAbsenceDays.
   ///
@@ -10947,6 +10899,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Version {version} is available'**
   String desktopUpdateAvailable(String version);
+
+  /// No description provided for @desktopCallExpand.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand the call'**
+  String get desktopCallExpand;
+
+  /// No description provided for @desktopCallMinimiseHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimise to a mini window'**
+  String get desktopCallMinimiseHint;
+
+  /// No description provided for @desktopCallOpenChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimise the call and open the chat'**
+  String get desktopCallOpenChat;
+
+  /// No description provided for @desktopCallScreenShareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t share the screen'**
+  String get desktopCallScreenShareFailed;
+
+  /// No description provided for @desktopCallScreenShareFailedMac.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t share the screen. Allow Secretly to record the screen: System Settings → Privacy & Security → Screen Recording'**
+  String get desktopCallScreenShareFailedMac;
+
+  /// No description provided for @desktopCallMediaCameraUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The camera is unavailable — another app is using it or permission is missing in system settings'**
+  String get desktopCallMediaCameraUnavailable;
+
+  /// No description provided for @desktopCallMediaMicUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The microphone is unavailable — check the permission in system settings'**
+  String get desktopCallMediaMicUnavailable;
+
+  /// No description provided for @desktopCallMediaScreenStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen sharing stopped'**
+  String get desktopCallMediaScreenStopped;
+
+  /// No description provided for @desktopCallMediaProblem.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio or video problem: {detail}'**
+  String desktopCallMediaProblem(String detail);
+
+  /// No description provided for @desktopCallEndedAfter.
+  ///
+  /// In en, this message translates to:
+  /// **'Call ended · {duration}'**
+  String desktopCallEndedAfter(String duration);
+
+  /// No description provided for @desktopCallDirectWith.
+  ///
+  /// In en, this message translates to:
+  /// **'On a call · {name}'**
+  String desktopCallDirectWith(String name);
+
+  /// No description provided for @desktopCallLeaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t leave the call: the server didn\'t answer. Try again.'**
+  String get desktopCallLeaveFailed;
+
+  /// No description provided for @desktopCallToggleFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t switch it: the server didn\'t answer. Try again.'**
+  String get desktopCallToggleFailed;
 
   /// No description provided for @desktopDiagTitle.
   ///

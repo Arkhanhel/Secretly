@@ -1,250 +1,281 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
-import '../../../l10n/app_localizations.dart';
-import 'package:flutter/material.dart';
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'dart:io' show Platform;
 
+import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
+
+import '../../../calls/call_audio_route.dart';
+import '../../../l10n/app_localizations.dart';
 import '../design/tokens.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../primitives/hover_listener.dart';
 
-/// Bottom control dock for a call. Floating pill — works on top of any
-/// background (avatar/video).
-class CallControls extends StatelessWidget {
-  const CallControls({
+/// Сочетание клавиш так, как его пишет своя система: «⌘D» на Mac и «Ctrl+D»
+/// на Windows.
+///
+/// 🔴 Подсказки звонка обещали «⌘D», «⌘E», «⌘W» — готовой строкой в
+/// переводах, одинаковой для обеих систем, — а самих сочетаний не было
+/// нигде. На Windows подсказка к тому же называла клавишу, которой на её
+/// клавиатуре нет. Теперь сочетания настоящие (см. окна звонков), а подпись
+/// собирается здесь.
+String callShortcutLabel(String key) {
+  if (key == 'Esc') return key;
+  return (!kIsWeb && Platform.isMacOS) ? '⌘$key' : 'Ctrl+$key';
+}
+
+/// Подсказка кнопки с её сочетанием через три пробела — как в меню.
+String callTooltipWithShortcut(String action, String key) =>
+    '$action   ${callShortcutLabel(key)}';
+
+/// Панель кнопок звонка — приподнятая карточка под сценой.
+///
+/// 🔴 ОДНА НА ОБА ЗВОНКА. Звонок один на один рисовал свою полосу кружков
+/// без подписей, групповой созвон — карточку с подписями. Человек, который
+/// звонит и так, и так, учил два пульта, а кнопки «свернуть» не было ни в
+/// одном из них.
+class CallDock extends StatelessWidget {
+  const CallDock({super.key, required this.children, this.expand = false});
+
+  final List<Widget> children;
+
+  /// Во всю ширину сцены (групповой созвон — по макету) или по кнопкам
+  /// (звонок один на один: карточка висит над картинкой и не должна её
+  /// перечёркивать от края до края).
+  final bool expand;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    return Container(
+      height: 62,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: c.elevated,
+        borderRadius: BorderRadius.circular(DRadii.lg),
+        border: Border.all(color: c.textPrimary.withValues(alpha: 0.07)),
+        // Тень — по теме: густая тень тёмной темы на светлом фоне ложилась
+        // под карточкой серой плитой.
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: c.isDark ? 0.45 : 0.10),
+            blurRadius: c.isDark ? 44 : 24,
+            offset: Offset(0, c.isDark ? 20 : 8),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: children,
+      ),
+    );
+  }
+}
+
+/// Черта в доке: отделяет «закончить разговор» от остальных кнопок.
+class CallDockDivider extends StatelessWidget {
+  const CallDockDivider({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    return Container(
+      width: 1,
+      height: 26,
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      color: c.textPrimary.withValues(alpha: 0.10),
+    );
+  }
+}
+
+/// Кнопка дока: значок и подпись, при надобности — шеврон выбора устройства.
+///
+/// Подпись — не украшение. Во время созвона кнопку ищут глазами и за секунду;
+/// перечёркнутый прямоугольник без слова «Экран» одинаково похож на «выключить
+/// видео» и на «остановить показ», и узнать разницу можно было только наведя
+/// мышь и дождавшись подсказки.
+class CallDockToggle extends StatelessWidget {
+  const CallDockToggle({
     super.key,
-    required this.micOn,
-    required this.camOn,
-    required this.sharingScreen,
-    required this.handRaised,
-    this.compact = false,
-    this.onToggleMic,
-    this.onToggleCam,
-    this.onToggleScreenShare,
-    this.onToggleHand,
-    this.onOpenChat,
-    this.onOpenParticipants,
-    this.onMore,
-    required this.onEnd,
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.on,
+    required this.enabled,
+    required this.onTap,
+    this.danger = false,
+    this.highlighted = false,
+    this.neutralWhenOff = false,
+    this.onExpand,
   });
 
-  final bool micOn;
-  final bool camOn;
-  final bool sharingScreen;
-  final bool handRaised;
-  final bool compact;
-  final VoidCallback? onToggleMic;
-  final VoidCallback? onToggleCam;
-  final VoidCallback? onToggleScreenShare;
-  final VoidCallback? onToggleHand;
-  final VoidCallback? onOpenChat;
-  final VoidCallback? onOpenParticipants;
-  final VoidCallback? onMore;
-  final VoidCallback onEnd;
+  final IconData icon;
+  final String label;
+  final String tooltip;
+
+  /// Возможность ВКЛЮЧЕНА сейчас (микрофон открыт, камера идёт).
+  final bool on;
+  final bool enabled;
+  final bool danger;
+
+  /// Идёт то, что человек включил сам и должен видеть издалека: показ экрана.
+  final bool highlighted;
+
+  /// Выключенное — не тревога. Камера в голосовом звонке выключена не по
+  /// сбою, а по сути звонка: красить её красным — пугать без причины.
+  final bool neutralWhenOff;
+  final VoidCallback onTap;
+
+  /// Шеврон справа: открывает список устройств. `null` — кнопка простая.
+  ///
+  /// 🔴 Шеврон СВОЙ отдельной кнопкой, а не частью нажатия. Нажать на
+  /// микрофон во время созвона нужно быстро и не глядя; если то же нажатие
+  /// иногда открывает список, человек промахнётся ровно в тот момент, когда
+  /// хотел просто замолчать.
+  final void Function(BuildContext anchorContext)? onExpand;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
-    final pad = compact ? const EdgeInsets.symmetric(horizontal: 8, vertical: 6)
-                       : const EdgeInsets.symmetric(horizontal: 12, vertical: 10);
-    final gap = compact ? 4.0 : 6.0;
-    final size = compact ? 36.0 : 44.0;
-
-    Widget btn({
-      required IconData on,
-      required IconData off,
-      required bool isOn,
-      required String tooltipOn,
-      required String tooltipOff,
-      VoidCallback? onTap,
-      bool dangerWhenOff = false,
-    }) {
-      return _CallControlButton(
-        icon: isOn ? on : off,
-        tooltip: isOn ? tooltipOn : tooltipOff,
-        size: size,
-        active: !isOn && dangerWhenOff,
-        onTap: onTap,
+    // Выключенная возможность — красноватая, включённая — обычная: во время
+    // созвона тревожит именно «меня не слышно», а не «микрофон работает».
+    final tone = danger
+        ? c.danger
+        : highlighted
+        ? Colors.white
+        : (on || neutralWhenOff ? c.textPrimary : c.danger);
+    // 🔴 ЗАЛИВКА — ОТ ЦВЕТА ТЕКСТА ТЕМЫ, А НЕ БЕЛАЯ. Белая плёнка по белой
+    // карточке светлой темы не видна вовсе: кнопки дока в светлой теме
+    // выглядели надписями без кнопок и не отзывались на наведение.
+    Color fill(bool hovered, bool pressed) {
+      if (danger) return c.danger.withValues(alpha: pressed ? 0.28 : 0.16);
+      if (highlighted) {
+        return c.accentPrimary.withValues(
+          alpha: pressed ? 0.95 : (hovered ? 0.88 : 0.78),
+        );
+      }
+      return c.textPrimary.withValues(
+        alpha: pressed ? 0.12 : (hovered ? 0.08 : 0.05),
       );
     }
 
-    return Container(
-      padding: pad,
-      decoration: BoxDecoration(
-        color: c.elevated.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(DRadii.pill),
-        border: Border.all(color: c.borderSubtle),
-        boxShadow: DShadows.floating,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          btn(
-            on: FluentIcons.mic_24_filled,
-            off: FluentIcons.mic_off_24_filled,
-            isOn: micOn,
-            tooltipOn: l10n.desktopCallCtlMicOff,
-            tooltipOff: l10n.desktopCallCtlMicOn,
-            onTap: onToggleMic,
-            dangerWhenOff: true,
-          ),
-          SizedBox(width: gap),
-          btn(
-            on: FluentIcons.video_24_filled,
-            off: FluentIcons.video_off_24_filled,
-            isOn: camOn,
-            tooltipOn: l10n.desktopCallCtlCamOff,
-            tooltipOff: l10n.desktopCallCtlCamOn,
-            onTap: onToggleCam,
-            dangerWhenOff: true,
-          ),
-          SizedBox(width: gap),
-          _CallControlButton(
-            icon: sharingScreen
-                ? FluentIcons.share_screen_stop_24_filled
-                : FluentIcons.share_screen_start_24_filled,
-            tooltip: sharingScreen ? l10n.desktopCallCtlShareStop : l10n.desktopCallCtlShare,
-            size: size,
-            highlighted: sharingScreen,
-            onTap: onToggleScreenShare,
-          ),
-          SizedBox(width: gap),
-          _CallControlButton(
-            icon: handRaised
-                ? FluentIcons.hand_right_24_filled
-                : FluentIcons.hand_right_24_regular,
-            tooltip: handRaised ? l10n.desktopCallCtlHandDown : l10n.desktopCallCtlHandUp,
-            size: size,
-            highlighted: handRaised,
-            onTap: onToggleHand,
-          ),
-          if (!compact) ...[
-            SizedBox(width: gap),
-            _CallControlButton(
-              icon: FluentIcons.chat_24_regular,
-              tooltip: l10n.contactDetailsChat,
-              size: size,
-              onTap: onOpenChat,
-            ),
-            SizedBox(width: gap),
-            _CallControlButton(
-              icon: FluentIcons.people_24_regular,
-              tooltip: l10n.desktopRoomTabMembers,
-              size: size,
-              onTap: onOpenParticipants,
-            ),
-            SizedBox(width: gap),
-            _CallControlButton(
-              icon: FluentIcons.more_horizontal_24_regular,
-              tooltip: l10n.desktopThreadMore,
-              size: size,
-              onTap: onMore,
-            ),
-          ],
-          SizedBox(width: gap + 4),
-          _EndCallButton(size: size, onTap: onEnd),
-        ],
-      ),
-    );
-  }
-}
-
-class _CallControlButton extends StatelessWidget {
-  const _CallControlButton({
-    required this.icon,
-    required this.tooltip,
-    required this.size,
-    this.active = false,
-    this.highlighted = false,
-    this.onTap,
-  });
-  final IconData icon;
-  final String tooltip;
-  final double size;
-  final bool active;
-  final bool highlighted;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = DColors.of(context);
-    final disabled = onTap == null;
-    return DesktopTooltip(
+    final button = DesktopTooltip(
       message: tooltip,
-      child: HoverListener(
-        onTap: onTap,
-        cursor: disabled ? SystemMouseCursors.basic : SystemMouseCursors.click,
-        builder: (ctx, hovered, pressed) {
-          Color bg;
-          Color fg;
-          if (active) {
-            bg = c.danger.withValues(alpha: pressed ? 0.95 : hovered ? 0.85 : 0.75);
-            fg = Colors.white;
-          } else if (highlighted) {
-            bg = c.accentPrimary.withValues(alpha: pressed ? 0.95 : hovered ? 0.85 : 0.75);
-            fg = Colors.white;
-          } else {
-            bg = hovered ? c.hover : Colors.transparent;
-            if (pressed) bg = c.pressed;
-            fg = c.textPrimary;
-          }
-          return AnimatedContainer(
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        toggled: danger ? null : on,
+        label: label,
+        child: HoverListener(
+          onTap: enabled ? onTap : null,
+          cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+          builder: (ctx, hovered, pressed) => AnimatedContainer(
             duration: DMotion.fast,
-            width: size,
-            height: size,
-            decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-            alignment: Alignment.center,
-            child: AnimatedScale(
-              duration: DMotion.fast,
-              scale: pressed ? 0.92 : 1.0,
-              child: Icon(icon, size: size * 0.46, color: fg),
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: fill(hovered, pressed),
+              borderRadius: BorderRadius.circular(12),
             ),
-          );
-        },
+            child: Opacity(
+              opacity: enabled ? 1 : 0.5,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 18, color: tone),
+                  const SizedBox(width: 7),
+                  Text(
+                    label,
+                    style: DType.tiny.copyWith(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: danger
+                          ? c.danger
+                          : (highlighted ? Colors.white : c.textSecondary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
+    );
+    if (onExpand == null) return button;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        button,
+        const SizedBox(width: 2),
+        Builder(
+          builder: (anchor) => DesktopTooltip(
+            message: l10n.desktopCallPickDevice,
+            child: HoverListener(
+              onTap: enabled ? () => onExpand!(anchor) : null,
+              cursor: enabled
+                  ? SystemMouseCursors.click
+                  : SystemMouseCursors.basic,
+              builder: (ctx, hovered, pressed) => AnimatedContainer(
+                duration: DMotion.fast,
+                width: 28,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: c.textPrimary.withValues(
+                    alpha: pressed ? 0.12 : (hovered ? 0.08 : 0.05),
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Opacity(
+                  opacity: enabled ? 1 : 0.5,
+                  child: Icon(
+                    FluentIcons.chevron_up_20_filled,
+                    size: 14,
+                    color: c.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _EndCallButton extends StatelessWidget {
-  const _EndCallButton({required this.size, required this.onTap});
-  final double size;
-  final VoidCallback onTap;
+/// Меню раскрывается ВВЕРХ от кнопки.
+///
+/// 🔴 Проверено живьём: док стоит у нижнего края окна, и список,
+/// раскрытый вниз, ложился ПОВЕРХ самих кнопок дока — выбираешь динамик, а
+/// под пальцем «Выйти».
+///
+/// Высота считается той же формулой, что и внутри `ContextMenu` (32 на пункт
+/// плюс поля): меню умеет прижиматься к экрану, но не умеет раскрываться
+/// вверх, а якорь — единственное, чем это задаётся снаружи.
+Offset callMenuAnchorAbove(BuildContext anchorContext, int itemCount) {
+  final box = anchorContext.findRenderObject() as RenderBox?;
+  if (box == null) return Offset.zero;
+  final origin = box.localToGlobal(Offset.zero);
+  final height = itemCount * 32.0 + 12;
+  return Offset(origin.dx, (origin.dy - height - 8).clamp(8.0, origin.dy));
+}
 
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final c = DColors.of(context);
-    return DesktopTooltip(
-      message: l10n.desktopCallCtlHangUp,
-      child: HoverListener(
-        onTap: onTap,
-        builder: (ctx, hovered, pressed) {
-          return AnimatedContainer(
-            duration: DMotion.fast,
-            width: size * 1.6,
-            height: size,
-            decoration: BoxDecoration(
-              color: pressed
-                  ? c.danger.withValues(alpha: 0.85)
-                  : (hovered ? c.danger.withValues(alpha: 0.95) : c.danger),
-              borderRadius: BorderRadius.circular(DRadii.pill),
-              boxShadow: [
-                BoxShadow(
-                  color: c.danger.withValues(alpha: 0.35),
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: const Center(
-              child: Icon(FluentIcons.call_end_24_filled, color: Colors.white, size: 22),
-            ),
-          );
-        },
-      ),
-    );
+/// Значок устройства вывода звука в списке выбора.
+IconData callAudioRouteIcon(CallAudioRouteKind kind) {
+  switch (kind) {
+    case CallAudioRouteKind.bluetooth:
+      return FluentIcons.bluetooth_24_regular;
+    case CallAudioRouteKind.wiredHeadset:
+      return FluentIcons.headphones_24_regular;
+    case CallAudioRouteKind.earpiece:
+      return FluentIcons.call_24_regular;
+    case CallAudioRouteKind.speaker:
+      return FluentIcons.speaker_2_24_regular;
+    case CallAudioRouteKind.unknown:
+      return FluentIcons.speaker_2_24_regular;
   }
 }
