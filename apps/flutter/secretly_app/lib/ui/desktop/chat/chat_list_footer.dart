@@ -5,10 +5,14 @@ import '../../../l10n/app_localizations.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 
+import 'dart:async';
+
 import '../app/desktop_sync_status.dart';
 import '../design/tokens.dart';
 import '../primitives/desktop_button.dart';
 import '../primitives/desktop_tooltip.dart';
+import '../primitives/hover_listener.dart';
+import '../services/desktop_update_service.dart';
 
 /// Подвал панели списка: состояние связи слева, вход в архив справа.
 ///
@@ -64,10 +68,20 @@ class ChatListFooter extends StatelessWidget {
             ? MainAxisAlignment.center
             : MainAxisAlignment.start,
         children: [
-          if (compact)
-            _SyncPill(sync: sync, compact: true)
-          else
-            Expanded(child: _SyncPill(sync: sync)),
+          if (compact) ...[
+            _SyncPill(sync: sync, compact: true),
+            const _UpdateButton(compact: true),
+          ] else
+            // «Обновить» — вплотную к состоянию связи: оба отвечают на
+            // вопрос «в порядке ли моё приложение».
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(child: _SyncPill(sync: sync)),
+                  const _UpdateButton(),
+                ],
+              ),
+            ),
           if (compact && sync != null && onOpenArchive != null)
             const SizedBox(width: DSpace.xs),
           if (onOpenArchive != null)
@@ -134,6 +148,7 @@ class _SyncPill extends StatelessWidget {
     }
     return Align(
       alignment: Alignment.centerLeft,
+      widthFactor: 1,
       child: Container(
         height: 28,
         padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -171,5 +186,83 @@ class _SyncPill extends StatelessWidget {
     return hsl
         .withLightness(hsl.lightness < 0.72 ? 0.72 : hsl.lightness)
         .toColor();
+  }
+}
+
+/// Кнопка «Обновить» — появляется, когда вышла новая версия.
+///
+/// 🔴 ЗАЧЕМ (24.09.2026, указание владельца). Обновление находилось, но
+/// узнавал о нём человек, только если Sparkle сам решал показать окно. Теперь
+/// найденная версия видна всё время, пока её не поставили: кнопка цвета
+/// акцента рядом с «Синхронизировано», подсказка называет номер. На Mac
+/// нажатие открывает окно Sparkle (скачает, проверит подпись, поставит), на
+/// Windows — скачивание нового архива.
+class _UpdateButton extends StatelessWidget {
+  const _UpdateButton({this.compact = false});
+
+  /// Свёрнутый список: одна круглая кнопка со значком, подпись — в подсказке.
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<DesktopUpdateOffer?>(
+      valueListenable: DesktopUpdateService.instance.available,
+      builder: (ctx, offer, _) {
+        if (offer == null) return const SizedBox.shrink();
+        final l10n = AppLocalizations.of(ctx)!;
+        final c = DColors.of(ctx);
+        final hint = l10n.desktopUpdateAvailable(offer.version);
+        return Padding(
+          padding: EdgeInsets.only(left: compact ? DSpace.xs : 6),
+          child: DesktopTooltip(
+            message: hint,
+            child: Semantics(
+              button: true,
+              label: '${l10n.desktopUpdateNow}. $hint',
+              child: ExcludeSemantics(
+                child: HoverListener(
+                  onTap: () => unawaited(DesktopUpdateService.instance.install()),
+                  builder: (ctx, hovered, pressed) => Container(
+                    height: 28,
+                    width: compact ? 28 : null,
+                    padding: compact
+                        ? EdgeInsets.zero
+                        : const EdgeInsets.symmetric(horizontal: 10),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: pressed
+                          ? c.accentPrimary.withValues(alpha: 0.8)
+                          : (hovered ? c.accentPrimaryAlt : c.accentPrimary),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          FluentIcons.arrow_download_16_filled,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                        if (!compact) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            l10n.desktopUpdateNow,
+                            style: DType.tiny.copyWith(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 }

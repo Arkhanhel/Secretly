@@ -71,6 +71,25 @@ final class SparkleBridge: NSObject {
       switch call.method {
       case "status":
         result(self.status())
+      case "probe":
+        // Тихая проверка: без окон, только ответ «есть ли новее». По нему
+        // Flutter показывает кнопку «Обновить» рядом с состоянием связи
+        // (24.09.2026). Ответ приходит обратно вызовами `updateAvailable` /
+        // `noUpdate` — см. делегат ниже.
+        guard let updater = self.controller?.updater else {
+          result(FlutterError(
+            code: "not_configured",
+            message: self.failure ?? "updater is not configured",
+            details: nil
+          ))
+          return
+        }
+        if updater.sessionInProgress {
+          result(nil)
+          return
+        }
+        updater.checkForUpdateInformation()
+        result(nil)
       case "check":
         guard let controller = self.controller else {
           result(FlutterError(
@@ -125,7 +144,7 @@ final class SparkleBridge: NSObject {
     // просто без проверки версий.
     let candidate = SPUStandardUpdaterController(
       startingUpdater: false,
-      updaterDelegate: nil,
+      updaterDelegate: self,
       userDriverDelegate: nil
     )
     do {
@@ -137,5 +156,23 @@ final class SparkleBridge: NSObject {
       failure = "\(error)"
       NSLog("[Secretly] updater did not start: \(error)")
     }
+  }
+}
+
+/// Что нашла проверка — в сторону Flutter.
+///
+/// Делегат зовётся и тихой проверкой (`probe`), и суточной по расписанию, и
+/// ручной из меню: какая бы ни нашла новую версию, кнопка «Обновить» внизу
+/// окна должна о ней знать. Номер — для подсказки «Доступна версия …».
+extension SparkleBridge: SPUUpdaterDelegate {
+  func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+    channel?.invokeMethod("updateAvailable", arguments: [
+      "version": item.displayVersionString,
+      "build": item.versionString,
+    ])
+  }
+
+  func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
+    channel?.invokeMethod("noUpdate", arguments: nil)
   }
 }
