@@ -35,6 +35,7 @@ import '../../../models/e2e_payload_v1.dart';
 import 'message_rich_text.dart';
 import 'noto_emoji_lottie.dart';
 import 'screen_gradient.dart';
+import 'voice_waveform.dart';
 
 enum DeliveryStatus { sending, scheduled, sent, delivered, read, failed }
 
@@ -2146,16 +2147,22 @@ class _MessageBubbleState extends State<MessageBubble> {
         ? Colors.white.withValues(alpha: 0.22)
         : c.accentPrimary.withValues(alpha: 0.18);
     final btnIcon = isSelf ? Colors.white : c.accentPrimary;
+    // Непроигранная часть волны — тем же цветом, что проигранная, только
+    // прозрачнее, как в Telegram. Серый у чужого пузыря читался как
+    // выключенная полоса, а не как ещё не прослушанное.
     final barBg = isSelf
-        ? Colors.white.withValues(alpha: 0.25)
-        : c.borderSubtle;
+        ? Colors.white.withValues(alpha: 0.38)
+        : c.accentPrimary.withValues(alpha: 0.32);
     final barFill = isSelf ? Colors.white : c.accentPrimary;
 
     return HoverListener(
       builder: (ctx, hovered, pressed) => Container(
         padding: const EdgeInsets.fromLTRB(10, 10, 13, 8),
         decoration: decoration,
-        constraints: const BoxConstraints(minWidth: 230, maxWidth: 320),
+        constraints: BoxConstraints(
+          minWidth: voiceBubbleMinWidth(duration),
+          maxWidth: 320,
+        ),
         child: IntrinsicWidth(
           // 🔴 IntrinsicWidth — ради ВРЕМЕНИ У ПРАВОГО КРАЯ. Без него `Align` в
           // подвале растянулся бы на всю доступную ширину и раздул бы пузырь до
@@ -2186,11 +2193,12 @@ class _MessageBubbleState extends State<MessageBubble> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _VoiceProgressBar(
+                      DesktopVoiceWaveform(
                         progress: progress,
-                        background: barBg,
-                        fill: barFill,
+                        unplayed: barBg,
+                        played: barFill,
                         waveform: att.waveform,
+                        semanticsLabel: l10n.desktopA11yVoiceProgress,
                         // Перемотка только у ЗВУЧАЩЕЙ записи: ткнуть в волну
                         // неоткрытого голосового значит «начни отсюда», а
                         // плеер такого не умеет — обещать нечего.
@@ -2353,9 +2361,13 @@ class _MessageBubbleState extends State<MessageBubble> {
         : c.accentPrimary;
     const btnIcon = Colors.white;
     final barBg = isSelf
-        ? Colors.white.withValues(alpha: 0.25)
-        : c.borderSubtle;
+        ? Colors.white.withValues(alpha: 0.38)
+        : c.accentPrimary.withValues(alpha: 0.32);
     final barFill = isSelf ? Colors.white : c.accentPrimary;
+    final seek = widget.onSeekVoice == null
+        ? null
+        : (double f) => widget.onSeekVoice!(item, f);
+    final wave = att.waveform;
 
     return Row(
       children: [
@@ -2385,14 +2397,28 @@ class _MessageBubbleState extends State<MessageBubble> {
                 title,
                 style: DType.bodyStrong.copyWith(color: fg),
               ),
+              // Полоса — только у ЗВУЧАЩЕЙ песни, как в Telegram: у молчащей
+              // она показывала бы ноль и ничего больше.
               if (isActive) ...[
                 const SizedBox(height: 5),
-                _VoiceProgressBar(
-                  progress: progress,
-                  background: barBg,
-                  fill: barFill,
-                  waveform: att.waveform,
-                ),
+                if (wave != null && wave.isNotEmpty)
+                  DesktopVoiceWaveform(
+                    progress: progress,
+                    unplayed: barBg,
+                    played: barFill,
+                    waveform: wave,
+                    height: 18,
+                    semanticsLabel: l10n.desktopA11yAudioProgress,
+                    onSeek: seek,
+                  )
+                else
+                  DesktopAudioSeekLine(
+                    progress: progress,
+                    unplayed: barBg,
+                    played: barFill,
+                    semanticsLabel: l10n.desktopA11yAudioProgress,
+                    onSeek: seek,
+                  ),
               ],
               const SizedBox(height: 3),
               Text(status, style: DType.caption.copyWith(color: fgSoft)),
@@ -3583,154 +3609,6 @@ class _VoicePlayButtonState extends State<_VoicePlayButton> {
       ),
     );
   }
-}
-
-/// Thin horizontal progress bar for voice notes. Background line + a fill
-/// strip whose width is the current playback fraction. We don't render a
-/// waveform on desktop (yet) — a flat bar is enough to communicate
-/// progress and is dramatically cheaper than the mobile per-sample
-/// waveform.
-/// Волна голосового — столбики, как в макете и как на телефоне.
-///
-/// 🔴 Была ровная полоска в четыре точки. Полоска сообщает ровно одно —
-/// «сколько проиграно», — и ничем не отличается от полоски загрузки файла. По
-/// волне же видно, ГДЕ в записи говорили, а где пауза: именно так люди ищут
-/// нужное место в чужом голосовом, не переслушивая целиком.
-///
-/// Столбиков 14 (из макета) независимо от длины записи: огибающая приходит
-/// произвольной длины, и её приходится сводить к постоянному числу — иначе
-/// короткое голосовое рисовало бы три толстых столба, а длинное — сто
-/// волосков.
-///
-/// Нажатие перематывает: волна занимает всю ширину пузыря и сама просится,
-/// чтобы по ней ткнули.
-class _VoiceProgressBar extends StatelessWidget {
-  const _VoiceProgressBar({
-    required this.progress,
-    required this.background,
-    required this.fill,
-    this.waveform,
-    this.onSeek,
-  });
-
-  /// Normalised 0..1 playback progress. Out-of-range values clamp.
-  final double progress;
-  final Color background;
-  final Color fill;
-
-  /// Огибающая громкости 0..100 произвольной длины; `null` — ровный узор.
-  final List<int>? waveform;
-
-  /// Перемотка: доля 0..1. `null` — волна просто рисуется.
-  final ValueChanged<double>? onSeek;
-
-  static const int _bars = 14;
-  static const double _height = 26;
-
-  /// Сводит огибающую любой длины к [_bars] столбикам. См.
-  /// [voiceWaveformBars] — считает там, чтобы это можно было проверить без
-  /// отрисовки пузыря.
-  static List<double> bars(List<int>? raw) => voiceWaveformBars(raw);
-
-
-  @override
-  Widget build(BuildContext context) {
-    final p = progress.clamp(0.0, 1.0);
-    final heights = bars(waveform);
-    final played = (p * _bars).floor();
-    // 🔴 ЗДЕСЬ БЫЛ ЛИШНИЙ [LayoutBuilder], И ОН ЛОМАЛ РАЗМЕТКУ ГОЛОСОВОГО.
-    //
-    // Он считал ширину и применял её ровно в одном месте — `if (w.isNaN)`, —
-    // а `isNaN` после `isFinite ? maxWidth : 160.0` не бывает истинным
-    // никогда. То есть строитель существовал ради значения, которым никто не
-    // пользовался.
-    //
-    // Цена этого была настоящая: голосовой пузырь обёрнут в [IntrinsicWidth]
-    // (ради времени у правого края), а [LayoutBuilder] не умеет отвечать на
-    // вопрос о своей естественной ширине и роняет проверку разметки. В отладке
-    // это исключение на КАЖДОМ голосовом пузыре, в выпуске — молчаливый ноль
-    // вместо ширины. Волне строитель не нужен: столбики растягивает [Expanded].
-    final wave = SizedBox(
-      height: _height,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          for (var i = 0; i < _bars; i++) ...[
-            if (i > 0) const SizedBox(width: 2.5),
-            Expanded(
-              child: Container(
-                height: (_height * heights[i]).clamp(3.0, _height),
-                decoration: BoxDecoration(
-                  color: i < played ? fill : background,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-    final seek = onSeek;
-    final Widget control = seek == null
-        ? wave
-        : LayoutBuilder(
-            builder: (ctx, constraints) => GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (d) {
-                final w = constraints.maxWidth;
-                if (w <= 0) return;
-                seek((d.localPosition.dx / w).clamp(0.0, 1.0));
-              },
-              child: wave,
-            ),
-          );
-    // 🔴 Волна — четырнадцать безымянных прямоугольников: для экранного диктора
-    // её нет вовсе, и голосовое звучит как пустой пузырь. Доля проигранного
-    // идёт значением — это единственное, что волна сообщает глазу.
-    return Semantics(
-      container: true,
-      label: AppLocalizations.of(context)!.desktopA11yVoiceProgress,
-      value: '${(p * 100).round()}%',
-      child: ExcludeSemantics(child: control),
-    );
-  }
-}
-
-/// Сводит огибающую громкости любой длины к 14 столбикам макета усреднением.
-///
-/// 🔴 Постоянное число столбиков — не прихоть: огибающая приходит произвольной
-/// длины, и рисовать её «как есть» значит показывать у короткого голосового
-/// три толстых столба, а у длинного — сотню волосков. Четырнадцать — из
-/// макета.
-///
-/// Пустая огибающая даёт спокойный симметричный узор: он честно говорит
-/// «данных о громкости нет», а не притворяется записью. Пол в 0,12 нужен
-/// затем, что нулевой столбик читается как дыра в волне, тогда как тишина в
-/// середине записи — это тишина, а не обрыв.
-List<double> voiceWaveformBars(List<int>? raw) {
-  const bars = 14;
-  final src = raw ?? const <int>[];
-  if (src.isEmpty) {
-    return List<double>.generate(
-      bars,
-      (i) => 0.35 + 0.3 * (1 - (2 * i / (bars - 1) - 1).abs()),
-    );
-  }
-  final out = <double>[];
-  for (var i = 0; i < bars; i++) {
-    final from = (src.length * i) ~/ bars;
-    final to = (src.length * (i + 1)) ~/ bars;
-    final hi = to > from ? to : from + 1;
-    var sum = 0;
-    var n = 0;
-    for (var j = from; j < hi && j < src.length; j++) {
-      sum += src[j];
-      n++;
-    }
-    final avg = n == 0 ? 0.0 : sum / n / 100.0;
-    out.add(avg.clamp(0.12, 1.0));
-  }
-  return out;
 }
 
 /// Следующая скорость по кругу: 1× → 1.5× → 2× → 1×.
