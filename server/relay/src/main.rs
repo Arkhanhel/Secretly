@@ -502,6 +502,9 @@ struct AppState {
     /// Limits how fast one device can try many different slugs.
     invite_redeem_caller_limiter: Arc<StringKeyRateLimiter>,
     max_msg_ttl_seconds: u32,
+    /// Срок служебных посылок между устройствами ОДНОГО аккаунта; 0 = выкл.
+    /// См. [`own_device_control_ttl`].
+    own_device_control_ttl_seconds: u32,
     max_pending_per_device: u64,
     keys_internal_base_url: Arc<String>,
     internal_key: Arc<String>,
@@ -1982,6 +1985,54 @@ fn is_session_heal_transport_meta(transport_meta_json: Option<&str>) -> bool {
     serde_json::from_str::<TransportMetaEnvelope>(raw)
         .map(|envelope| envelope.kind == "session_heal_v1")
         .unwrap_or(false)
+}
+
+/// Срок, который клиент по умолчанию ставит служебной посылке
+/// (`_controlMessageTtlSeconds` в `app_controller.dart`).
+const CLIENT_CONTROL_TTL_SECONDS: u32 = 60 * 60;
+
+/// 🔴 МОСТ ДЛЯ СВОИХ УСТРОЙСТВ (25.09.2026).
+///
+/// Всё, что телефон пересылает на ПК того же аккаунта, — копии своих
+/// сообщений, вложений, реакций, правок, отметки «прочитано», состояние
+/// чатов, запросы и порции истории — клиент шлёт служебной посылкой со
+/// сроком 1 час. ПК, выключенный дольше часа, терял всё это навсегда: в ночь
+/// на 25.09 истекли все 23 копии ответов владельца, за неделю — 48 из 56.
+/// Сами сообщения собеседникам живут 7 дней, поэтому переписка на ПК
+/// выглядела «наполовину пустой», а прочитанное — непрочитанным.
+///
+/// Чинится это в клиенте (срок копий), но выпущенные телефоны так и будут
+/// слать час. Поэтому реле продлевает срок ровно таким посылкам:
+/// - отправитель и получатель — устройства одного профиля, и это разные
+///   устройства;
+/// - клиент попросил срок служебной посылки по умолчанию (час). Звонки
+///   (90 с), «печатает» (20 с) и сами сообщения (7 дней) идут со своими
+///   сроками и сюда не попадают;
+/// - это не лечение сессии (`session_heal_v1`) и не сигнал звонка: их поздняя
+///   доставка бессмысленна.
+///
+/// Срок никогда не укорачивается; 0 в настройке — прежнее поведение.
+fn own_device_control_ttl(
+    own_device_ttl_seconds: u32,
+    capped_ttl_seconds: u32,
+    sender_profile_id: &str,
+    receiver_profile_id: &str,
+    from_device_id: &str,
+    to_device_id: &str,
+    is_session_heal: bool,
+    is_call_signal: bool,
+) -> u32 {
+    if own_device_ttl_seconds <= capped_ttl_seconds
+        || capped_ttl_seconds != CLIENT_CONTROL_TTL_SECONDS
+        || is_session_heal
+        || is_call_signal
+        || sender_profile_id.is_empty()
+        || sender_profile_id != receiver_profile_id
+        || from_device_id == to_device_id
+    {
+        return capped_ttl_seconds;
+    }
+    own_device_ttl_seconds
 }
 
 fn parse_chat_message_transport_meta(
@@ -5682,6 +5733,19 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         let _ = tx.send(Message::Text(serde_json::to_string(&err).unwrap().into()));
                         continue;
                     }
+                    let store_ttl = own_device_control_ttl(
+                        state.own_device_control_ttl_seconds,
+                        capped_ttl,
+                        &sender_pid,
+                        &receiver_pid,
+                        &did,
+                        &to_device_id,
+                        is_session_heal_transport_meta(transport_meta_json.as_deref()),
+                        call_signal.is_some(),
+                    );
+                    if store_ttl != capped_ttl {
+                        tracing::info!(from_device_ref=%log_fingerprint(&did), to_device_ref=%to_device_ref, msg_ref=%msg_ref, ttl_seconds=store_ttl, "own-device control ttl extended");
+                    }
 
                     // Basic spam control: cap per-recipient pending queue.
                     if let Ok(cnt) = state.store.pending_count(&to_device_id, now_ms()).await {
@@ -5708,7 +5772,7 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                             &msg_id,
                             &ciphertext_b64,
                             transport_meta_json.as_deref(),
-                            capped_ttl,
+                            store_ttl,
                             ws_now,
                             if is_scheduled { deliver_at } else { 0 },
                             Some(did.as_str()),
@@ -6279,6 +6343,9 @@ async fn http_send(
 
     // Block enforcement (best-effort in dev when auth is disabled).
     // We only enforce if we can identify the sender device id (from auth headers).
+    // The ttl stored for the row may differ from the signed `capped_ttl` only
+    // by the own-device bridge below — the signature check above is untouched.
+    let mut store_ttl = capped_ttl;
     if let Some(from_device_id) = from_device_id_opt.as_ref() {
         let sender_pid = fetch_profile_id(&state, &from_device_id)
             .await
@@ -6294,6 +6361,19 @@ async fn http_send(
         {
             return Err((StatusCode::FORBIDDEN, "blocked".into()));
         }
+        store_ttl = own_device_control_ttl(
+            state.own_device_control_ttl_seconds,
+            capped_ttl,
+            &sender_pid,
+            &receiver_pid,
+            from_device_id,
+            &req.to_device_id,
+            is_session_heal_transport_meta(req.transport_meta_json.as_deref()),
+            call_signal.is_some(),
+        );
+        if store_ttl != capped_ttl {
+            tracing::info!(from_device_ref=%log_fingerprint(from_device_id), to_device_ref=%to_device_ref, msg_ref=%msg_ref, ttl_seconds=store_ttl, "own-device control ttl extended");
+        }
     }
 
     let http_now = now_ms();
@@ -6306,7 +6386,7 @@ async fn http_send(
             &req.msg_id,
             &req.ciphertext_b64,
             req.transport_meta_json.as_deref(),
-            capped_ttl,
+            store_ttl,
             http_now,
             if is_scheduled { deliver_at } else { 0 },
             from_device_id_opt.as_deref(),
@@ -13698,6 +13778,11 @@ async fn main() {
         .min(30 * 24 * 3600)
         .max(60);
 
+    // Мост для своих устройств (25.09.2026): 0 = выключено, иначе срок в
+    // секундах, не длиннее общего предела. См. `own_device_control_ttl`.
+    let own_device_control_ttl_seconds =
+        u32_from_env("SECRETLY_RELAY_OWN_DEVICE_CONTROL_TTL_SECONDS", 0).min(max_msg_ttl_seconds);
+
     // Cap pending queue per device to avoid unbounded DB growth.
     let max_pending_per_device = u32_from_env("SECRETLY_RELAY_MAX_PENDING_PER_DEVICE", 5000)
         .min(100_000)
@@ -13719,6 +13804,7 @@ async fn main() {
         invite_redeem_slug_limiter,
         invite_redeem_caller_limiter,
         max_msg_ttl_seconds,
+        own_device_control_ttl_seconds,
         max_pending_per_device,
         keys_internal_base_url: Arc::new(keys_internal_base_url),
         internal_key: Arc::new(internal_key),
@@ -14104,6 +14190,7 @@ mod tests {
             invite_redeem_slug_limiter: Arc::new(StringKeyRateLimiter::new(10_000, 10_000.0)),
             invite_redeem_caller_limiter: Arc::new(StringKeyRateLimiter::new(10_000, 10_000.0)),
             max_msg_ttl_seconds: 7 * 24 * 3600,
+            own_device_control_ttl_seconds: 0,
             max_pending_per_device: 5_000,
             keys_internal_base_url: Arc::new("http://127.0.0.1:1".into()),
             internal_key: Arc::new(String::new()),
@@ -16474,6 +16561,35 @@ mod tests {
         assert!(!is_session_heal_transport_meta(None));
         assert!(!is_session_heal_transport_meta(Some("")));
         assert!(!is_session_heal_transport_meta(Some("not json")));
+    }
+
+    // 🔴 Мост для своих устройств (25.09.2026): продлевается ТОЛЬКО служебная
+    // посылка по умолчанию между разными устройствами одного профиля.
+    #[test]
+    fn own_device_control_ttl_extends_only_own_default_control_traffic() {
+        let three_days = 3 * 24 * 3600;
+        let week = 7 * 24 * 3600;
+        let ttl = |cfg, capped, from_pid, to_pid, from_did, to_did, heal, call| {
+            own_device_control_ttl(cfg, capped, from_pid, to_pid, from_did, to_did, heal, call)
+        };
+        // Выключено по умолчанию — прежнее поведение.
+        assert_eq!(ttl(0, 3600, "P", "P", "phone", "desk", false, false), 3600);
+        // Телефон → ПК того же профиля, служебная посылка по умолчанию.
+        assert_eq!(ttl(three_days, 3600, "P", "P", "phone", "desk", false, false), three_days);
+        // Собеседнику — как раньше: квитанции чужим не копятся.
+        assert_eq!(ttl(three_days, 3600, "P", "Q", "phone", "desk", false, false), 3600);
+        // Лечение сессии и сигналы звонка поздно доставлять бессмысленно.
+        assert_eq!(ttl(three_days, 3600, "P", "P", "phone", "desk", true, false), 3600);
+        assert_eq!(ttl(three_days, 3600, "P", "P", "phone", "desk", false, true), 3600);
+        // Свои сроки не трогаются: «печатает», звонок, сами сообщения.
+        assert_eq!(ttl(three_days, 20, "P", "P", "phone", "desk", false, false), 20);
+        assert_eq!(ttl(three_days, 90, "P", "P", "phone", "desk", false, false), 90);
+        assert_eq!(ttl(three_days, week, "P", "P", "phone", "desk", false, false), week);
+        // Никогда не укорачивает.
+        assert_eq!(ttl(1800, 3600, "P", "P", "phone", "desk", false, false), 3600);
+        // Сам себе и неизвестный профиль — нет.
+        assert_eq!(ttl(three_days, 3600, "P", "P", "desk", "desk", false, false), 3600);
+        assert_eq!(ttl(three_days, 3600, "", "", "phone", "desk", false, false), 3600);
     }
 
     #[tokio::test]
