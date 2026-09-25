@@ -2188,6 +2188,86 @@ LIMIT 1
         Ok(out)
     }
 
+    /// Состояние ОДНОГО устройства профиля — без окна живости (25.09.2026, Н-2).
+    ///
+    /// Нужна ровно для одного случая: устройство спрашивает роспись своего же
+    /// профиля, а окно его уже скрыло. Клиент при запуске сверяет роспись ДО
+    /// регистрации и, не найдя себя, объявляет «удалено» — ПК показывает
+    /// ложное «доступ отозван», телефон — «сбросьте профиль», а регистрации,
+    /// которая вернула бы устройство в окно, так и не случается. Отсюда оно
+    /// узнаёт, что зарегистрировано. `None` — такого устройства у профиля нет.
+    pub async fn device_status_for_profile(
+        &self,
+        profile_id: &str,
+        device_id: &str,
+    ) -> Result<Option<DeviceStatusRow>, String> {
+        let pid = profile_id.to_string();
+        let did = device_id.to_string();
+        self.conn
+            .call(move |c| -> Result<Option<DeviceStatusRow>, rusqlite::Error> {
+                c.query_row(
+                    "SELECT d.device_id,
+                            CASE WHEN b.device_id IS NULL THEN 0 ELSE 1 END AS has_bundle,
+                            b.identity_key_pub_b64,
+                            b.signed_prekey_pub_b64,
+                            b.signed_prekey_sig_b64
+                     FROM devices d
+                     LEFT JOIN device_key_bundles b
+                       ON b.profile_id = d.profile_id AND b.device_id = d.device_id
+                     WHERE d.profile_id = ?1 AND d.device_id = ?2",
+                    params![pid, did],
+                    |row| {
+                        Ok(DeviceStatusRow {
+                            device_id: row.get(0)?,
+                            has_bundle: row.get::<_, i64>(1)? != 0,
+                            identity_key_pub_b64: row.get(2)?,
+                            signed_prekey_pub_b64: row.get(3)?,
+                            signed_prekey_sig_b64: row.get(4)?,
+                        })
+                    },
+                )
+                .optional()
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Отмечает, что устройство на связи (25.09.2026, Н-2). Раньше
+    /// `last_seen_ms` двигали только регистрация и публикация ключей, то есть
+    /// запуск приложения: работающий, но не перезапускаемый ПК через 14 суток
+    /// скрывался окном от собеседников, хотя всё это время был онлайн.
+    /// Возвращает, изменилась ли строка. Частоту ограничивает вызывающий.
+    pub async fn touch_device_last_seen(&self, device_id: &str, now_ms: i64) -> Result<bool, String> {
+        let did = device_id.to_string();
+        let n = self
+            .conn
+            .call(move |c| -> Result<usize, rusqlite::Error> {
+                c.execute(
+                    "UPDATE devices SET last_seen_ms = ?2 WHERE device_id = ?1 AND last_seen_ms < ?2",
+                    params![did, now_ms],
+                )
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(n > 0)
+    }
+
+    #[cfg(test)]
+    pub async fn device_last_seen_ms(&self, device_id: &str) -> Result<Option<i64>, String> {
+        let did = device_id.to_string();
+        self.conn
+            .call(move |c| -> Result<Option<i64>, rusqlite::Error> {
+                c.query_row(
+                    "SELECT last_seen_ms FROM devices WHERE device_id = ?1",
+                    params![did],
+                    |row| row.get(0),
+                )
+                .optional()
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     pub async fn list_companion_devices(&self, profile_id: &str) -> Result<Vec<String>, String> {
         let pid = profile_id.to_string();
         let out = self

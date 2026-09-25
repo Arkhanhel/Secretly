@@ -1432,6 +1432,10 @@ struct AppState {
     limiter: Arc<IpRateLimiter>,
     challenges: Arc<DashMap<String, DeviceChallenge>>,
     used_nonces: Arc<DashMap<String, i64>>,
+    /// Когда устройству последний раз двигали `last_seen_ms` (Н-2): не чаще
+    /// раза в [`DEVICE_SEEN_STAMP_INTERVAL_MS`], чтобы подписанные чтения не
+    /// превращались в запись на каждый запрос.
+    device_seen_stamps: Arc<DashMap<String, i64>>,
     internal_key: Arc<String>,
     deployment_id: Arc<String>,
     release_channel: Arc<String>,
@@ -2881,8 +2885,39 @@ async fn verify_profile_search_auth(
     if !verify_ed25519_b64(&ik, &signature_b64, &msg) {
         return Err((StatusCode::UNAUTHORIZED, "bad signature".into()));
     }
+    note_device_seen(state, &requester_device_id).await;
 
     Ok(())
+}
+
+/// Как часто подписанный вызов может двигать `devices.last_seen_ms`.
+const DEVICE_SEEN_STAMP_INTERVAL_MS: i64 = 60 * 60 * 1000;
+
+/// 🔴 Н-2 (25.09.2026): устройство, которое пользуется ключами, живо.
+///
+/// `last_seen_ms` двигали только регистрация и публикация ключей — то есть
+/// запуск приложения. Работающий, но не перезапускаемый ПК через 14 суток
+/// скрывался относительным окном живости: собеседники переставали шифровать
+/// на него, хотя он всё это время был онлайн. Теперь его отмечает любой
+/// успешно подписанный вызов — не чаще раза в час (метка в памяти, чтобы
+/// частые чтения росписи не брали блокировку записи на каждом запросе).
+/// Внутренние вызовы реле сюда не попадают: они не называют устройство.
+async fn note_device_seen(state: &AppState, device_id: &str) {
+    let now = now_ms();
+    if let Some(prev) = state.device_seen_stamps.get(device_id) {
+        if now - *prev < DEVICE_SEEN_STAMP_INTERVAL_MS {
+            return;
+        }
+    }
+    state.device_seen_stamps.insert(device_id.to_string(), now);
+    if state.device_seen_stamps.len() > 100_000 {
+        state
+            .device_seen_stamps
+            .retain(|_, stamped| now - *stamped < DEVICE_SEEN_STAMP_INTERVAL_MS);
+    }
+    if let Err(e) = state.store.touch_device_last_seen(device_id, now).await {
+        tracing::warn!(error = %e, "device last_seen stamp failed");
+    }
 }
 
 async fn verify_requester_device_auth(
@@ -2949,6 +2984,7 @@ async fn verify_requester_device_auth(
     if !verify_ed25519_b64(&ik, &signature_b64, &msg) {
         return Err((StatusCode::UNAUTHORIZED, "bad signature".into()));
     }
+    note_device_seen(state, &requester_device_id).await;
 
     if let Some(expected_profile_id) = expected_profile_id {
         let requester_profile_id = state
@@ -3031,6 +3067,7 @@ async fn verify_device_lookup_auth(
     if !verify_ed25519_b64(&ik, &signature_b64, &msg) {
         return Err((StatusCode::UNAUTHORIZED, "bad signature".into()));
     }
+    note_device_seen(state, &requester_device_id).await;
 
     Ok(())
 }
@@ -4813,11 +4850,40 @@ async fn list_devices(
         }
     }
 
-    let devices = state
+    let mut devices = state
         .store
         .list_device_statuses(&profile_id)
         .await
         .unwrap_or_default();
+    // 🔴 Н-2 (25.09.2026): устройство видит в росписи своего профиля САМО
+    // СЕБЯ, даже если окно живости скрыло его от остальных.
+    //
+    // Клиент при запуске сверяет роспись ДО регистрации (app_controller,
+    // `resolveMissingCurrentDevice`) и, не найдя себя, объявляет «удалено»:
+    // ПК показывал ложное «доступ отозван на другом устройстве», телефон —
+    // «сбросьте профиль», и регистрация, которая вернула бы устройство в
+    // окно, не случалась никогда. Показываем ТОЛЬКО ему: подпись запроса
+    // проверена выше, строка берётся с условием «этот профиль»; собеседники
+    // скрытое устройство по-прежнему не видят. Лечит и выпущенные сборки.
+    if require_list_devices_auth_enabled() && !internal_key_matches(&state, &headers) {
+        let req_did = header_str(&headers, "x-secretly-device-id")
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if !req_did.is_empty() && !devices.iter().any(|d| d.device_id == req_did) {
+            match state.store.device_status_for_profile(&profile_id, &req_did).await {
+                Ok(Some(own)) => {
+                    tracing::info!(
+                        device_ref = %log_fingerprint(&req_did),
+                        "list_devices: requester hidden from the live roster, shown to itself"
+                    );
+                    devices.push(own);
+                }
+                Ok(None) => {}
+                Err(e) => tracing::warn!(error = %e, "list_devices: own-device lookup failed"),
+            }
+        }
+    }
     let device_ids = devices
         .iter()
         .map(|device| device.device_id.clone())
@@ -5571,6 +5637,7 @@ async fn main() {
         limiter,
         challenges: Arc::new(DashMap::new()),
         used_nonces: Arc::new(DashMap::new()),
+        device_seen_stamps: Arc::new(DashMap::new()),
         internal_key: Arc::new(env::var("SECRETLY_INTERNAL_KEY").unwrap_or_default()),
         deployment_id: Arc::new(deployment_id),
         release_channel: Arc::new(release_channel),
@@ -5862,6 +5929,7 @@ mod tests {
             limiter: Arc::new(IpRateLimiter::new(10_000, 10_000.0)),
             challenges: Arc::new(DashMap::new()),
             used_nonces: Arc::new(DashMap::new()),
+            device_seen_stamps: Arc::new(DashMap::new()),
             internal_key: Arc::new("internal-test-key".into()),
             deployment_id: Arc::new(String::new()),
             release_channel: Arc::new(String::new()),
@@ -7574,6 +7642,149 @@ mod tests {
         assert_eq!(response.items.len(), 1);
         assert_eq!(response.items[0].profile_id, "profile_search_target_2");
         assert_eq!(response.items[0].nickname.as_deref(), Some("Alice"));
+    }
+
+    // 🔴 Н-2 (25.09.2026): ПК, скрытый окном живости, видит в росписи своего
+    // профиля САМ СЕБЯ — иначе при запуске он объявляет себя «удалённым» и
+    // навсегда остаётся за окном. Собеседники скрытое устройство не видят,
+    // пока оно не выйдет на связь; подписанный вызов отмечает, что оно живо.
+    #[tokio::test]
+    async fn list_devices_shows_a_hidden_device_to_itself_and_revives_it() {
+        let (state, _dir) = test_app_state().await;
+        let phone_key = SigningKey::from_bytes(&[91u8; 32]);
+        let desk_key = SigningKey::from_bytes(&[92u8; 32]);
+        let peer_key = SigningKey::from_bytes(&[93u8; 32]);
+        let day = 24 * 60 * 60 * 1000;
+        let long_ago = now_ms() - 20 * day;
+        let b64 = |k: &SigningKey| {
+            base64::engine::general_purpose::STANDARD.encode(k.verifying_key().to_bytes())
+        };
+        state.store.insert_profile("profile_h2", long_ago, None).await.unwrap();
+        state.store.insert_profile("profile_h2_peer", now_ms(), None).await.unwrap();
+        assert!(state
+            .store
+            .register_device("profile_h2", "dev_h2_desk", Some(&b64(&desk_key)), long_ago)
+            .await
+            .unwrap());
+        assert!(state
+            .store
+            .register_device("profile_h2", "dev_h2_phone", Some(&b64(&phone_key)), now_ms())
+            .await
+            .unwrap());
+        assert!(state
+            .store
+            .register_device("profile_h2_peer", "dev_h2_peer", Some(&b64(&peer_key)), now_ms())
+            .await
+            .unwrap());
+        // ПК и телефон — разные классы: скрывает ТОЛЬКО окно живости, правило
+        // замены здесь ни при чём (как у владельца).
+        assert!(state
+            .store
+            .upsert_device_metadata("profile_h2", "dev_h2_desk", "desktop", None, long_ago)
+            .await
+            .unwrap());
+
+        async fn ids_seen_by(
+            state: &AppState,
+            did: &str,
+            key: &SigningKey,
+            nonce: &str,
+        ) -> Vec<String> {
+            let headers = signed_auth_headers(did, key, nonce, |ts_ms, nonce_b64| {
+                keys_list_devices_auth_message(did, "profile_h2", ts_ms, nonce_b64)
+            });
+            list_devices(State(state.clone()), headers, Path("profile_h2".to_string()))
+                .await
+                .unwrap()
+                .0
+                .device_ids
+        }
+
+        // Собеседник скрытого ПК не видит.
+        let peer_view = ids_seen_by(&state, "dev_h2_peer", &peer_key, "h2-peer-1").await;
+        assert!(peer_view.contains(&"dev_h2_phone".to_string()));
+        assert!(!peer_view.contains(&"dev_h2_desk".to_string()));
+
+        // Сам ПК себя видит — и это именно показ самому себе, а не оживление:
+        // свежая метка в памяти глушит отметку «на связи», last_seen стоит.
+        state
+            .device_seen_stamps
+            .insert("dev_h2_desk".to_string(), now_ms());
+        let desk_view = ids_seen_by(&state, "dev_h2_desk", &desk_key, "h2-desk-1").await;
+        assert!(desk_view.contains(&"dev_h2_desk".to_string()));
+        assert_eq!(
+            state.store.device_last_seen_ms("dev_h2_desk").await.unwrap(),
+            Some(long_ago),
+            "показ самому себе не должен сам двигать last_seen"
+        );
+        let peer_view_still = ids_seen_by(&state, "dev_h2_peer", &peer_key, "h2-peer-2").await;
+        assert!(
+            !peer_view_still.contains(&"dev_h2_desk".to_string()),
+            "собеседникам скрытое устройство не показывается"
+        );
+
+        // Подписанный вызов ПК отмечает, что он жив.
+        state.device_seen_stamps.remove("dev_h2_desk");
+        let _ = ids_seen_by(&state, "dev_h2_desk", &desk_key, "h2-desk-2").await;
+        let stamped = state
+            .store
+            .device_last_seen_ms("dev_h2_desk")
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(now_ms() - stamped < 60_000, "last_seen не сдвинулся");
+
+        // Ожил — и собеседник снова шифрует на него.
+        let peer_view_after = ids_seen_by(&state, "dev_h2_peer", &peer_key, "h2-peer-3").await;
+        assert!(peer_view_after.contains(&"dev_h2_desk".to_string()));
+    }
+
+    // Удалённое из профиля устройство показ самому себе НЕ возвращает: строки
+    // нет — нечего показывать, и отметка «на связи» её не создаёт.
+    #[tokio::test]
+    async fn list_devices_does_not_resurrect_a_removed_device() {
+        let (state, _dir) = test_app_state().await;
+        let phone_key = SigningKey::from_bytes(&[95u8; 32]);
+        let gone_key = SigningKey::from_bytes(&[96u8; 32]);
+        seed_profile_device(&state, "profile_h2_rm", "dev_h2_rm_phone", &phone_key).await;
+        let gone_pub =
+            base64::engine::general_purpose::STANDARD.encode(gone_key.verifying_key().to_bytes());
+        assert!(state
+            .store
+            .register_device("profile_h2_rm", "dev_h2_rm_gone", Some(&gone_pub), now_ms())
+            .await
+            .unwrap());
+        assert!(state
+            .store
+            .delete_device("profile_h2_rm", "dev_h2_rm_gone")
+            .await
+            .unwrap());
+
+        note_device_seen(&state, "dev_h2_rm_gone").await;
+        assert_eq!(
+            state.store.device_last_seen_ms("dev_h2_rm_gone").await.unwrap(),
+            None
+        );
+        assert!(state
+            .store
+            .device_status_for_profile("profile_h2_rm", "dev_h2_rm_gone")
+            .await
+            .unwrap()
+            .is_none());
+    }
+
+    // Отметка «на связи» — не чаще раза в час: частые подписанные чтения не
+    // должны превращаться в запись на каждый запрос.
+    #[tokio::test]
+    async fn device_seen_stamp_is_throttled_to_once_an_hour() {
+        let (state, _dir) = test_app_state().await;
+        let key = SigningKey::from_bytes(&[94u8; 32]);
+        seed_profile_device(&state, "profile_h2_t", "dev_h2_t", &key).await;
+        note_device_seen(&state, "dev_h2_t").await;
+        let first = *state.device_seen_stamps.get("dev_h2_t").unwrap();
+        note_device_seen(&state, "dev_h2_t").await;
+        let second = *state.device_seen_stamps.get("dev_h2_t").unwrap();
+        assert_eq!(first, second, "второй вызов в пределах часа обязан молчать");
     }
 
     #[tokio::test]
