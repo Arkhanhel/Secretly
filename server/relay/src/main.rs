@@ -17718,6 +17718,96 @@ mod tests {
         assert_eq!(pending[0].from_device_id.as_deref(), Some(sender_device_id));
     }
 
+    // 🔴 Мост для своих устройств (25.09.2026) — через настоящий обработчик
+    // подписанной отправки, а не только правило: телефон → ПК того же профиля
+    // со сроком по умолчанию лежит 3 дня; собеседнику и лечению сессии — час.
+    #[tokio::test]
+    async fn http_send_keeps_own_device_control_traffic_for_the_bridge_ttl() {
+        let (base, _dir) = test_app_state().await;
+        let three_days: u32 = 3 * 24 * 3600;
+        let state = AppState {
+            own_device_control_ttl_seconds: three_days,
+            ..base
+        };
+        let phone_key = SigningKey::from_bytes(&[37u8; 32]);
+        let desk_key = SigningKey::from_bytes(&[38u8; 32]);
+        let peer_key = SigningKey::from_bytes(&[39u8; 32]);
+        cache_authenticated_device(&state, "dev_own_phone", "profile_own", &phone_key);
+        cache_authenticated_device(&state, "dev_own_desk", "profile_own", &desk_key);
+        cache_authenticated_device(&state, "dev_peer", "profile_peer", &peer_key);
+
+        async fn send(
+            state: &AppState,
+            key: &SigningKey,
+            to: &str,
+            msg_id: &str,
+            meta: Option<&str>,
+        ) {
+            let req = HttpSendReq {
+                deliver_at_ms: None,
+                to_device_id: to.to_string(),
+                msg_id: msg_id.into(),
+                ciphertext_b64: "QUJD".into(),
+                transport_meta_json: meta.map(str::to_string),
+                ttl_seconds: 3600,
+            };
+            let headers = signed_auth_headers("dev_own_phone", key, msg_id, |ts_ms, nonce_b64| {
+                http_send_auth_message(
+                    "dev_own_phone",
+                    to,
+                    &req.msg_id,
+                    &req.ciphertext_b64,
+                    req.transport_meta_json.as_deref(),
+                    req.ttl_seconds,
+                    ts_ms,
+                    nonce_b64,
+                )
+            });
+            let resp = http_send(State(state.clone()), headers, Json(req))
+                .await
+                .unwrap()
+                .0;
+            assert!(resp.ok);
+        }
+
+        let before = now_ms();
+        send(&state, &phone_key, "dev_own_desk", "00000000-0000-0000-0000-000000000041", None).await;
+        send(
+            &state,
+            &phone_key,
+            "dev_own_desk",
+            "00000000-0000-0000-0000-000000000042",
+            Some(r#"{"kind":"session_heal_v1"}"#),
+        )
+        .await;
+        send(&state, &phone_key, "dev_peer", "00000000-0000-0000-0000-000000000043", None).await;
+        let after = now_ms();
+
+        let desk = state
+            .store
+            .list_pending_from("dev_own_desk", 1, now_ms(), 10)
+            .await
+            .unwrap();
+        let ttl_of = |rows: &[store::PendingRow], id: &str| {
+            let row = rows.iter().find(|r| r.msg_id == id).expect("row");
+            (row.expires_at_ms - before, row.expires_at_ms - after)
+        };
+        let (hi, lo) = ttl_of(&desk, "00000000-0000-0000-0000-000000000041");
+        assert!(
+            lo <= three_days as i64 * 1000 && hi >= three_days as i64 * 1000,
+            "копия на свой ПК — 3 дня"
+        );
+        let (hi, lo) = ttl_of(&desk, "00000000-0000-0000-0000-000000000042");
+        assert!(lo <= 3600 * 1000 && hi >= 3600 * 1000, "лечение сессии — час");
+        let peer = state
+            .store
+            .list_pending_from("dev_peer", 1, now_ms(), 10)
+            .await
+            .unwrap();
+        let (hi, lo) = ttl_of(&peer, "00000000-0000-0000-0000-000000000043");
+        assert!(lo <= 3600 * 1000 && hi >= 3600 * 1000, "собеседнику — час");
+    }
+
     #[test]
     fn deliver_frame_names_the_sender_only_when_known() {
         // ИД-1 / С-1: a legacy row (no sender) serialises exactly as before, so
