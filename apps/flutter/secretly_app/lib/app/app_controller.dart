@@ -50917,6 +50917,44 @@ class AppController {
     }
   }
 
+  /// Решение по заявке «не смог расшифровать» — чистая функция (Н-1).
+  ///
+  /// * посылки не знаем ([row] null) → [NackResendDecision.unknownWire]:
+  ///   повторять нечего, но лечение сессии С ЗАЯВИТЕЛЕМ допустимо — оно
+  ///   касается только его собственной сессии и переписки;
+  /// * посылка ушла ДРУГОМУ устройству → [NackResendDecision.notAddressee]:
+  ///   не делать ничего;
+  /// * посылка его, но без события (служебная, квитанция) →
+  ///   [NackResendDecision.noEvent]: лечим сессию, повторять нечего;
+  /// * посылка его, но событие из ДРУГОЙ переписки →
+  ///   [NackResendDecision.foreignConvo]: лечим сессию, содержимое не шлём;
+  /// * иначе → [NackResendDecision.resend].
+  ///
+  /// «Чья посылка» решает ТОЛЬКО устройство: номер посылки уникален на
+  /// устройство, и получить провод могло лишь то, которому он шёл. Лечить
+  /// сессию с ним безопасно. Переписка — граница СОДЕРЖИМОГО, а не лечения:
+  /// квитанции комнат несут `convo_id = group:…`, и отказ по переписке
+  /// оставил бы сломанную сессию с участником без ремонта.
+  @visibleForTesting
+  static NackResendDecision nackResendDecision({
+    required OutboxNackTarget? row,
+    required String requesterDeviceId,
+    required String requesterProfileId,
+  }) {
+    if (row == null) return NackResendDecision.unknownWire;
+    final to = row.toDeviceId.trim();
+    final requester = requesterDeviceId.trim();
+    if (to.isEmpty || requester.isEmpty || to != requester) {
+      return NackResendDecision.notAddressee;
+    }
+    if (row.eventIdRef.trim().isEmpty) return NackResendDecision.noEvent;
+    final convo = row.convoId.trim();
+    if (convo.isNotEmpty && convo != requesterProfileId.trim()) {
+      return NackResendDecision.foreignConvo;
+    }
+    return NackResendDecision.resend;
+  }
+
   /// TZ Epic A2 — SENDER side: a peer device positively reported that our wire
   /// [relayMsgId] is undecryptable for it. React with a TARGETED heal — rekey
   /// that device (shared debounce with every other reset path) and re-send all
@@ -50971,6 +51009,37 @@ class AppController {
       'msg': DiagLog.pfx(id),
       'dev': DiagLog.pfx(dev),
     });
+    // 🔴 Н-1 (25.09.2026): ПРЕЖДЕ ЛЮБОГО ДЕЙСТВИЯ — чья это посылка.
+    //
+    // Повтор ниже перешифровывает сохранённый открытый текст события на
+    // устройство ЗАЯВИТЕЛЯ. Раньше проверялось только «не комната», и любой, у
+    // кого есть сессия с нами, называл номер посылки, ушедшей КОМУ-ТО ДРУГОМУ,
+    // — и получал это сообщение. Номера посылок знает реле: сервер мог читать
+    // переписку в обход сквозного шифрования. Теперь посылка, адресованная
+    // другому устройству, не вызывает НИЧЕГО — ни повтора, ни сброса сессии,
+    // ни свипа.
+    final nackDb = _db;
+    OutboxNackTarget? target;
+    if (nackDb != null) {
+      try {
+        target = await nackDb.outboxNackTarget(id);
+      } catch (_) {
+        target = null;
+      }
+    }
+    final decision = nackResendDecision(
+      row: target,
+      requesterDeviceId: dev,
+      requesterProfileId: pid,
+    );
+    if (decision == NackResendDecision.notAddressee) {
+      DiagLog.event('inbox', 'nack_skip', {
+        'reason': 'not_addressee',
+        'msg': DiagLog.pfx(id),
+        'dev': DiagLog.pfx(dev),
+      });
+      return;
+    }
     // Shared debounce with the receiver escalator + convergence backstop so a
     // NACK burst can never rekey-storm (the floor is per DEVICE, and the
     // per-msg debounce above already bounds this path).
@@ -50997,19 +51066,13 @@ class AppController {
     // fresh re-encrypt of the ORIGINAL content reaches them. This is the exact
     // "1 of 3 arrived, no notification" loss: proven in the field with two wires
     // stuck on `secretbox auth` forever while the sweep never touched them.
-    final nackDb = _db;
-    if (nackDb != null) {
+    if (decision == NackResendDecision.resend && target != null) {
+      final resendTarget = target;
       unawaited(() async {
         try {
-          final ref = await nackDb.outboxEventRefByMsgId(id);
-          if (ref == null) {
-            // We no longer hold the outbound row (TTL-pruned / never ours).
-            DiagLog.event('inbox', 'nack_resend_miss', {'msg': DiagLog.pfx(id)});
-            return;
-          }
           await _resendOneEventReEncrypted(
-            eventId: ref['event_id_ref'] ?? '',
-            payloadEventId: ref['payload_event_id'] ?? '',
+            eventId: resendTarget.eventIdRef,
+            payloadEventId: resendTarget.payloadEventId,
             peerProfileId: pid,
             peerDeviceId: dev,
           );
@@ -51017,6 +51080,14 @@ class AppController {
           // best-effort; the blanket sweep + reset ping still ran above.
         }
       }());
+    } else {
+      // We no longer hold the outbound row (never ours / its chat deleted), the
+      // wire carried no event (a control message, a receipt), or its event
+      // belongs to another conversation — nothing to re-encrypt to this peer.
+      DiagLog.event('inbox', 'nack_resend_miss', {
+        'msg': DiagLog.pfx(id),
+        'why': decision.name,
+      });
     }
     // The NACK proves wires we sent this device died undecrypted — and receipt
     // wires die WITH their content (their queue rows are deleted the moment
@@ -52311,6 +52382,16 @@ class AppController {
         });
         return false;
       }
+      // 🔴 Н-1, второй рубеж (25.09.2026): содержимое уходит только в ТУ ЖЕ
+      // переписку 1:1. У вложений в строке исходящих `convo_id` не заполнен,
+      // поэтому проверка по событию обязательна, а не «на всякий случай».
+      if (convo.isNotEmpty && convo != peerProfileId.trim()) {
+        DiagLog.event('send', 'nack_resend_skip_foreign_convo', {
+          'event': DiagLog.pfx(eventId),
+          'dev': DiagLog.pfx(peerDeviceId),
+        });
+        return false;
+      }
     } catch (_) {
       // Unreadable row: fall through — the payload decrypt below fails anyway.
     }
@@ -53337,6 +53418,16 @@ Map<String, Object?>? _parseGroupMessageCommand(String text) {
 
 Map<String, Object?>? _parseTypingCommand(String text) {
   return _decodeCommandPayload(text, AppController._typingCmdPrefix);
+}
+
+/// Что делать с заявкой «не смог расшифровать» (Н-1, 25.09.2026) — см.
+/// [AppController.nackResendDecision].
+enum NackResendDecision {
+  resend,
+  noEvent,
+  foreignConvo,
+  notAddressee,
+  unknownWire,
 }
 
 Map<String, Object?>? _parseSelfMirrorMessageCommand(String text) {

@@ -151,6 +151,15 @@ class DbKeyUnverified implements Exception {
   String toString() => 'DbKeyUnverified($cause)';
 }
 
+/// Кому и в какой переписке ушла посылка — для проверки заявки «не смог
+/// расшифровать» (Н-1, 25.09.2026). См. [AppDb.outboxNackTarget].
+typedef OutboxNackTarget = ({
+  String toDeviceId,
+  String convoId,
+  String eventIdRef,
+  String payloadEventId,
+});
+
 class AppDb {
   AppDb._(this._db);
 
@@ -12225,6 +12234,36 @@ HAVING COUNT(*) > 1;
       'payload_event_id':
           ((rows.first['payload_event_id'] as String?) ?? '').trim(),
     };
+  }
+
+  /// 🔴 Кому и в какой переписке ушла посылка [msgId] (25.09.2026, Н-1).
+  ///
+  /// Заявка «не смог расшифровать» называет номер посылки, и по нему событие
+  /// перешифровывается заново. Без этих полей нельзя проверить, что заявитель
+  /// и есть адресат: [outboxEventRefByMsgId] отдаёт только событие, и повтор
+  /// уходил тому, кто попросил. Номер посылки знает реле, так что сервер мог
+  /// получить чужое сообщение открытым текстом. Строка возвращается, даже если
+  /// у неё нет события (служебная посылка), — чтобы отличить «посылка не тебе»
+  /// от «посылки не знаю».
+  Future<OutboxNackTarget?> outboxNackTarget(String msgId) async {
+    final id = msgId.trim();
+    if (id.isEmpty) return null;
+    final rows = await _db.query(
+      'outbox',
+      columns: ['to_device_id', 'convo_id', 'event_id_ref', 'payload_event_id'],
+      where: 'msg_id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    String s(String k) => ((r[k] as String?) ?? '').trim();
+    return (
+      toDeviceId: s('to_device_id'),
+      convoId: s('convo_id'),
+      eventIdRef: s('event_id_ref'),
+      payloadEventId: s('payload_event_id'),
+    );
   }
 
   Future<void> outboxMarkSent(String msgId) async {
