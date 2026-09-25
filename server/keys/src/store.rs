@@ -984,6 +984,36 @@ pub struct EntitlementRecord {
     pub updated_at_ms: i64,
 }
 
+/// 🔴 Возраст профиля, в котором перенос подписки — ход свежей установки, а не
+/// решение человека (25.09.2026).
+///
+/// Телефон заводит серверный профиль при первом запуске, ещё до выбора
+/// «восстановить / создать», и в ту же секунду молча предъявляет чек магазина.
+/// Если такой перенос взводит защиту от перекидывания, настоящий профиль,
+/// восстановленный через минуту, сутки остаётся без подписки: так было у двух
+/// человек — 24.09 (профиль-однодневка прожил на сервере одну секунду) и 20.09
+/// (33 часа без премиума).
+pub const RECEIPT_CLAIM_FRESH_PROFILE_MS: i64 = 10 * 60 * 1000;
+
+/// Outcome of [`KeysStore::entitlement_claim_by_receipt`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReceiptClaim {
+    /// Moved; the anti-flap window now runs from this move.
+    Moved,
+    /// Moved into a profile created minutes ago — the automatic claim of a
+    /// fresh install. The window is NOT armed, so the profile restored right
+    /// after it takes the purchase back at once.
+    MovedToFreshProfile,
+    /// Blocked by the anti-flap window, or the target profile is unknown.
+    Refused,
+}
+
+impl ReceiptClaim {
+    pub fn moved(self) -> bool {
+        !matches!(self, ReceiptClaim::Refused)
+    }
+}
+
 /// Outcome of [`KeysStore::entitlement_rebind`].
 pub enum EntitlementRebind {
     /// The entitlement was moved; carries the row under its new `profile_id`.
@@ -2388,19 +2418,26 @@ ON CONFLICT(profile_id) DO UPDATE SET
     /// rather than fighting over it on every launch. The first move is always
     /// allowed, which is the reinstall case.
     ///
-    /// Returns false when the guard blocks the move or the target profile is
-    /// unknown; the caller then keeps the old refusal.
+    /// A move INTO a profile younger than [`RECEIPT_CLAIM_FRESH_PROFILE_MS`]
+    /// does not arm the window: that is the phone's automatic claim on first
+    /// launch, made before the person could restore their real profile. The
+    /// real profile, restored a minute later, then takes the purchase straight
+    /// back — and its move arms the window, so the next throwaway profile of a
+    /// reinstall within a day is refused instead.
+    ///
+    /// Returns [`ReceiptClaim::Refused`] when the guard blocks the move or the
+    /// target profile is unknown; the caller then keeps the old refusal.
     pub async fn entitlement_claim_by_receipt(
         &self,
         from: &str,
         to: &str,
         now_ms: i64,
         min_interval_ms: i64,
-    ) -> Result<bool, String> {
+    ) -> Result<ReceiptClaim, String> {
         let from = from.to_string();
         let to = to.to_string();
         self.conn
-            .call(move |c| -> Result<bool, rusqlite::Error> {
+            .call(move |c| -> Result<ReceiptClaim, rusqlite::Error> {
                 let tx = c.transaction()?;
                 let last_move: i64 = tx.query_row(
                     "SELECT COALESCE((SELECT migrated_at_ms FROM entitlements WHERE profile_id = ?1), 0)",
@@ -2408,16 +2445,24 @@ ON CONFLICT(profile_id) DO UPDATE SET
                     |row| row.get(0),
                 )?;
                 if last_move > 0 && now_ms.saturating_sub(last_move) < min_interval_ms {
-                    return Ok(false);
+                    return Ok(ReceiptClaim::Refused);
                 }
-                let target_exists: i64 = tx.query_row(
-                    "SELECT EXISTS(SELECT 1 FROM profiles WHERE profile_id = ?1)",
-                    params![to.clone()],
-                    |row| row.get(0),
-                )?;
-                if target_exists == 0 {
-                    return Ok(false);
-                }
+                let target_created: Option<i64> = tx
+                    .query_row(
+                        "SELECT created_at_ms FROM profiles WHERE profile_id = ?1",
+                        params![to.clone()],
+                        |row| row.get(0),
+                    )
+                    .optional()?;
+                let Some(target_created) = target_created else {
+                    return Ok(ReceiptClaim::Refused);
+                };
+                // A profile "created" after `now_ms` is a clock artefact, not a
+                // fresh install — it keeps the old behaviour and arms the window.
+                let fresh = target_created > 0
+                    && now_ms >= target_created
+                    && now_ms - target_created < RECEIPT_CLAIM_FRESH_PROFILE_MS;
+                let armed_at_ms = if fresh { 0 } else { now_ms };
                 // The target's own row (if any) loses to the receipt: a free or
                 // expired row must not block the purchase it does not own.
                 tx.execute(
@@ -2425,12 +2470,18 @@ ON CONFLICT(profile_id) DO UPDATE SET
                     params![to.clone()],
                 )?;
                 let moved = tx.execute(
-                    "UPDATE entitlements SET profile_id = ?1, migrated_at_ms = ?2, updated_at_ms = ?2 \
-                     WHERE profile_id = ?3",
-                    params![to, now_ms, from],
+                    "UPDATE entitlements SET profile_id = ?1, migrated_at_ms = ?2, updated_at_ms = ?3 \
+                     WHERE profile_id = ?4",
+                    params![to, armed_at_ms, now_ms, from],
                 )?;
                 tx.commit()?;
-                Ok(moved > 0)
+                Ok(if moved == 0 {
+                    ReceiptClaim::Refused
+                } else if fresh {
+                    ReceiptClaim::MovedToFreshProfile
+                } else {
+                    ReceiptClaim::Moved
+                })
             })
             .await
             .map_err(|e| e.to_string())

@@ -26,7 +26,10 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod billing;
 mod store;
-use store::{EntitlementRebind, EntitlementRecord, KeysStore, OneTimePrekey, ProfileInactivityStatus};
+use store::{
+    EntitlementRebind, EntitlementRecord, KeysStore, OneTimePrekey, ProfileInactivityStatus,
+    ReceiptClaim,
+};
 
 const KEYS_HTTP_BODY_LIMIT_BYTES: usize = 1024 * 1024;
 
@@ -1111,7 +1114,7 @@ async fn apply_verified_purchase(
             // on the profile that happened to redeem it first. That refusal was
             // the reason a reinstalled user lost a live subscription and was
             // told, wrongly, that no purchase existed.
-            let moved = state
+            let claim = state
                 .store
                 .entitlement_claim_by_receipt(
                     &existing,
@@ -1121,7 +1124,7 @@ async fn apply_verified_purchase(
                 )
                 .await
                 .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
-            if !moved {
+            if !claim.moved() {
                 // Blocked by the anti-flap guard (or an unknown target): keep
                 // the old refusal, and name both sides so an operator can
                 // rebind by hand if this is a genuine support case.
@@ -1136,11 +1139,21 @@ async fn apply_verified_purchase(
                     "receipt already redeemed by another profile".into(),
                 ));
             }
-            tracing::info!(
-                "redeem: receipt moved to the profile presenting it — from={} to={}",
-                existing,
-                profile_id
-            );
+            if claim == ReceiptClaim::MovedToFreshProfile {
+                // Свежая установка забрала чек автоматически; окно не взведено,
+                // и восстановленный следом настоящий профиль вернёт его сразу.
+                tracing::info!(
+                    "redeem: receipt moved to a fresh profile (anti-flap window not armed) — from={} to={}",
+                    existing,
+                    profile_id
+                );
+            } else {
+                tracing::info!(
+                    "redeem: receipt moved to the profile presenting it — from={} to={}",
+                    existing,
+                    profile_id
+                );
+            }
         }
     }
     let granted = state
@@ -6625,7 +6638,8 @@ mod tests {
             .store
             .entitlement_claim_by_receipt(old, new, day, day)
             .await
-            .unwrap());
+            .unwrap()
+            .moved());
         let moved = state.store.entitlement_get(new).await.unwrap().expect("moved");
         assert_eq!(moved.tier, "premium");
         assert_eq!(moved.store_tx_id.as_deref(), Some("tx-claim-1"));
@@ -6637,7 +6651,8 @@ mod tests {
             .store
             .entitlement_claim_by_receipt(new, third, day + 1, day)
             .await
-            .unwrap());
+            .unwrap()
+            .moved());
         assert!(state.store.entitlement_get(third).await.unwrap().is_none());
         assert!(state.store.entitlement_get(new).await.unwrap().is_some());
 
@@ -6646,7 +6661,8 @@ mod tests {
             .store
             .entitlement_claim_by_receipt(new, third, day * 3, day)
             .await
-            .unwrap());
+            .unwrap()
+            .moved());
         assert_eq!(
             state
                 .store
@@ -6662,7 +6678,118 @@ mod tests {
             .store
             .entitlement_claim_by_receipt(third, "profile_that_does_not_exist", day * 9, day)
             .await
-            .unwrap());
+            .unwrap()
+            .moved());
+    }
+
+    // 🔴 ПЕРЕУСТАНОВКА НЕ ЗАПИРАЕТ ПОДПИСКУ НА СУТКИ (25.09.2026).
+    //
+    // Телефон при первом запуске заводит серверный профиль и в ту же секунду
+    // сам предъявляет чек. Раньше этот перенос взводил окно, и настоящий
+    // профиль, восстановленный через минуту, получал 409 на сутки: 24.09
+    // (профиль-однодневка прожил одну секунду) и 20.09 (33 часа без премиума).
+    #[tokio::test]
+    async fn fresh_install_claim_does_not_lock_out_the_restored_profile() {
+        let (state, _dir) = test_app_state().await;
+        let day = RECEIPT_CLAIM_MIN_INTERVAL_MS;
+        let fresh_ms = store::RECEIPT_CLAIM_FRESH_PROFILE_MS;
+        let t = 10 * day;
+        let real = "profile_restore_real";
+        let throwaway = "profile_restore_throwaway";
+        let throwaway2 = "profile_restore_throwaway_2";
+        let deliberate = "profile_restore_deliberate";
+        state.store.insert_profile(real, 1_000, None).await.unwrap();
+        state
+            .store
+            .insert_profile(throwaway, t - 2_000, None)
+            .await
+            .unwrap();
+        state
+            .store
+            .entitlement_upsert(EntitlementRecord {
+                profile_id: real.to_string(),
+                tier: "premium".into(),
+                source: "play".into(),
+                store_tx_id: Some("tx-fresh-1".into()),
+                expires_at_ms: Some(t + 365 * day),
+                grace_until_ms: None,
+                updated_at_ms: 1,
+            })
+            .await
+            .unwrap();
+        let owner = |state: &AppState| {
+            let store = state.store.clone();
+            async move {
+                store
+                    .entitlement_profile_for_store_tx("tx-fresh-1")
+                    .await
+                    .unwrap()
+            }
+        };
+
+        // Первый запуск свежей установки забирает чек, но окно не взводит.
+        assert_eq!(
+            state
+                .store
+                .entitlement_claim_by_receipt(real, throwaway, t, day)
+                .await
+                .unwrap(),
+            ReceiptClaim::MovedToFreshProfile
+        );
+        // Через минуту человек восстановил настоящий профиль — подписка
+        // возвращается сразу, а не через сутки.
+        assert_eq!(
+            state
+                .store
+                .entitlement_claim_by_receipt(throwaway, real, t + 60_000, day)
+                .await
+                .unwrap(),
+            ReceiptClaim::Moved
+        );
+        assert_eq!(owner(&state).await.as_deref(), Some(real));
+
+        // Этот возврат окно взвёл: однодневка следующей переустановки в течение
+        // суток уже не забирает подписку у настоящего профиля.
+        state
+            .store
+            .insert_profile(throwaway2, t + 120_000, None)
+            .await
+            .unwrap();
+        assert_eq!(
+            state
+                .store
+                .entitlement_claim_by_receipt(real, throwaway2, t + 121_000, day)
+                .await
+                .unwrap(),
+            ReceiptClaim::Refused
+        );
+        assert_eq!(owner(&state).await.as_deref(), Some(real));
+
+        // Профиль ровно десятиминутной давности — уже не однодневка: перенос
+        // к нему взводит окно, как раньше, и вернуть его сразу нельзя.
+        let later = t + 60_000 + day + 1;
+        state
+            .store
+            .insert_profile(deliberate, later - fresh_ms, None)
+            .await
+            .unwrap();
+        assert_eq!(
+            state
+                .store
+                .entitlement_claim_by_receipt(real, deliberate, later, day)
+                .await
+                .unwrap(),
+            ReceiptClaim::Moved
+        );
+        assert_eq!(
+            state
+                .store
+                .entitlement_claim_by_receipt(deliberate, real, later + 1, day)
+                .await
+                .unwrap(),
+            ReceiptClaim::Refused
+        );
+        assert_eq!(owner(&state).await.as_deref(), Some(deliberate));
     }
 
     // 🔴 ЗАЩИТА ОТ ПОНИЖЕНИЯ ПОКУПКИ (17.09.2026, перенос 7435c11d).
