@@ -46,6 +46,8 @@ import '../onboarding/desktop_auth_gate.dart';
 import '../onboarding/desktop_recovery_kit_gate.dart';
 import '../services/desktop_update_service.dart';
 import '../services/desktop_absence.dart';
+import '../services/desktop_diag_file_log.dart';
+import '../services/desktop_history_catch_up.dart';
 import '../services/desktop_nav_history.dart';
 import '../services/desktop_deleted_chats.dart';
 import '../services/desktop_app_lock_service.dart';
@@ -649,6 +651,8 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
 
   Future<void> _boot() async {
     try {
+      // Журнал событий — первым: разбирать потерю сообщения без него нечем.
+      await DesktopDiagFileLog.start();
       await _lockService.init();
       await _controller.init();
       // Громкость плеера помнится между запусками (см.
@@ -686,7 +690,15 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       // forget — the service has its own busy gate, staleness check,
       // and timeout, so it's safe to call on every boot.
       PeerHistoryService.instance.attach(_controller);
-      unawaited(PeerHistoryService.instance.maybeSyncOnBoot());
+      // 🔴 25.09.2026: вместо «последних 250 раз в сутки» — догон с момента,
+      // когда ПК последний раз был на связи, и повтор, пока телефон не ответит.
+      unawaited(
+        DesktopHistoryCatchUp.start(
+          relayConnectionChanges: _controller.relayConnectionChanges,
+          ownDeviceActivity: _controller.ownDeviceActivity,
+          relayOnline: () => _controller.relayOnline,
+        ),
+      );
       _wireListeners();
       _initCallManager();
       await _initNotificationService();
@@ -1465,6 +1477,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     _disposeCallManager();
     // Drop the peer-history binding so a stale controller can't be poked
     // mid-restart. `_boot()` re-attaches once the new controller is up.
+    DesktopHistoryCatchUp.stop();
     PeerHistoryService.instance.detach();
     await _changedSub?.cancel();
     await _relaySub?.cancel();
@@ -1520,6 +1533,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     // профиля значок снимается сразу, не дожидаясь пересчёта.
     _lastTrayUnread = -1;
     unawaited(_dockBadge.clear());
+    DesktopHistoryCatchUp.stop();
     PeerHistoryService.instance.detach();
     _controller.dispose();
     _lockService.dispose();

@@ -92,7 +92,26 @@ class DiagLog {
     });
 
     callOpLog(_tag, '$scope.$name', fields: sanitized);
+
+    final extra = sink;
+    if (extra != null) {
+      try {
+        final buf = StringBuffer('event=$scope.$name');
+        sanitized.forEach((k, v) => buf.write(' $k=$v'));
+        extra(buf.toString());
+      } catch (_) {
+        // Журнал не имеет права ронять то, что он описывает.
+      }
+    }
   }
+
+  /// Дополнительный приёмник событий (25.09.2026). На телефоне пуст: там
+  /// события уходят в logcat через канал `secretly/log`. На macOS этого канала
+  /// нет, и всё, что писал DiagLog, пропадало — разобрать, почему ПК потерял
+  /// сообщение, было нечем. ПК ставит сюда запись в файл
+  /// (`DesktopDiagFileLog`). Строка уже очищена: идентификаторы обрезаны,
+  /// текста сообщений в ней нет.
+  static void Function(String line)? sink;
 
   // --- internals --------------------------------------------------------
 

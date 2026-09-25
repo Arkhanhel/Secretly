@@ -2362,6 +2362,23 @@ CREATE TABLE IF NOT EXISTS local_kv (
     return int.tryParse(v ?? '') ?? 0;
   }
 
+  /// Ключи [local_kv], начинающиеся с [prefix]. Сравнение по подстроке, а не
+  /// `LIKE`: в префиксах есть `_`, а для `LIKE` это любой символ.
+  Future<List<String>> localKvKeysWithPrefix(String prefix) async {
+    if (prefix.isEmpty) return const <String>[];
+    await _ensureLocalKvTable();
+    final rows = await _db.query(
+      'local_kv',
+      columns: const ['k'],
+      where: 'substr(k, 1, ?) = ?',
+      whereArgs: [prefix.length, prefix],
+    );
+    return rows
+        .map((r) => (r['k'] as String?) ?? '')
+        .where((k) => k.isNotEmpty)
+        .toList(growable: false);
+  }
+
   // ── С-2 (24.09.2026): подпись рукопожатия ─────────────────────────────────
   // Всё в local_kv — без миграции схемы. Вызывать только ВНЕ транзакции
   // расшифровки: эти методы идут через живой дескриптор.
@@ -11419,6 +11436,85 @@ HAVING COUNT(*) > 1;
       orderBy: 'created_at_ms DESC, rowid DESC',
       limit: limit,
     );
+  }
+
+  /// 🔴 Помечает прочитанными ВСЕ непрочитанные входящие переписки с временем
+  /// отправителя не позже [upToMs] (25.09.2026).
+  ///
+  /// Одним запросом и без предела: `listUnreadIncomingForConvo` отдаёт не
+  /// больше 500 самых новых, и более старые непрочитанные так и оставались
+  /// висеть. Условия — те же, что у счётчика непрочитанных, чтобы помеченное
+  /// здесь и посчитанное там совпадали. Возвращает число помеченных строк.
+  Future<int> markIncomingReadThrough({
+    required String convoId,
+    required String selfDeviceId,
+    Iterable<String> excludedSenderDeviceIds = const <String>[],
+    required int upToMs,
+    required int readAtMs,
+  }) async {
+    if (convoId.trim().isEmpty || upToMs <= 0) return 0;
+    final senderFilter = _buildUnreadExcludedSenderFilter(
+      selfDeviceId: selfDeviceId,
+      excludedSenderDeviceIds: excludedSenderDeviceIds,
+    );
+    final where = StringBuffer(
+      'convo_id = ? AND read_at_ms IS NULL AND created_at_ms <= ? '
+      'AND $_unreadMessageTypeSql',
+    );
+    final args = <Object>[readAtMs, convoId, upToMs];
+    if (senderFilter.sql.isNotEmpty) {
+      where.write(' AND ${senderFilter.sql}');
+      args.addAll(senderFilter.args);
+    }
+    return _db.rawUpdate('UPDATE events SET read_at_ms = ? WHERE $where', args);
+  }
+
+  /// Время отправителя, до которого переписка [convoId] заведомо прочитана
+  /// мной (25.09.2026): моё последнее видимое сообщение (раз ответил — значит
+  /// видел всё, что было до) или последнее прочитанное входящее (прочтение
+  /// идёт по всей переписке сразу). 0 — ни того, ни другого.
+  ///
+  /// Отложенные сообщения не в счёт: они уходят сами, без человека.
+  Future<int> readThroughAnchorMs({
+    required String convoId,
+    required String selfDeviceId,
+    Iterable<String> ownDeviceIds = const <String>[],
+  }) async {
+    if (convoId.trim().isEmpty) return 0;
+    final own = _normalizeUnreadExcludedSenderDeviceIds(
+      selfDeviceId: selfDeviceId,
+      excludedSenderDeviceIds: ownDeviceIds,
+    );
+    var anchor = 0;
+    if (own.isNotEmpty) {
+      final placeholders = List.filled(own.length, '?').join(',');
+      final mine = await _db.rawQuery(
+        'SELECT MAX(created_at_ms) AS m FROM events WHERE convo_id = ? '
+        "AND type IN ('msg', 'att', 'sticker') "
+        'AND sender_device_id IN ($placeholders) '
+        'AND (scheduled_at_ms IS NULL OR scheduled_at_ms <= 0)',
+        <Object>[convoId, ...own],
+      );
+      anchor = ((mine.first['m'] as num?) ?? 0).toInt();
+    }
+    final senderFilter = _buildUnreadExcludedSenderFilter(
+      selfDeviceId: selfDeviceId,
+      excludedSenderDeviceIds: ownDeviceIds,
+    );
+    final readWhere = StringBuffer(
+      'convo_id = ? AND read_at_ms IS NOT NULL AND $_unreadMessageTypeSql',
+    );
+    final readArgs = <Object>[convoId];
+    if (senderFilter.sql.isNotEmpty) {
+      readWhere.write(' AND ${senderFilter.sql}');
+      readArgs.addAll(senderFilter.args);
+    }
+    final read = await _db.rawQuery(
+      'SELECT MAX(created_at_ms) AS m FROM events WHERE $readWhere',
+      readArgs,
+    );
+    final readMax = ((read.first['m'] as num?) ?? 0).toInt();
+    return readMax > anchor ? readMax : anchor;
   }
 
   Future<void> markEventsReadByIds(

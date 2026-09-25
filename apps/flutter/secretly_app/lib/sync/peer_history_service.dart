@@ -40,7 +40,11 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app/app_controller.dart';
-import 'peer_history_protocol.dart' show kPeerHistoryMaxRequestsInFlight;
+import 'peer_history_protocol.dart'
+    show
+        kPeerHistoryMaxChunksPerRequest,
+        kPeerHistoryMaxRequestsInFlight,
+        PeerHistoryChunkProgress;
 
 /// SharedPreferences key for "last successful peer-history sync at (epoch ms)".
 /// Read on boot; written when a request cycle terminates with
@@ -73,6 +77,30 @@ const Duration kPeerHistoryResponseTimeout = Duration(seconds: 25);
 /// [kPeerHistoryMaxRequestsInFlight] this caps how often a user can
 /// manually trigger a sync (or how often boot-time logic can retry).
 const Duration kPeerHistoryRateWindow = Duration(minutes: 5);
+
+/// Сколько страниц (по [kPeerHistoryMaxChunksPerRequest] порций) проходит один
+/// догон ПК — предел работы для телефона: 20 × 250 = 5000 событий.
+const int kPeerHistoryCatchUpMaxPages = 20;
+
+/// Срок запроса догона на реле. Запрос нужен, лишь пока его ждут; неотвеченные
+/// повторы не должны копиться у выключенного телефона, чтобы он, вернувшись,
+/// не отвечал на каждый.
+const int kPeerHistoryCatchUpRequestTtlSeconds = 120;
+
+/// Итог одного догона ([PeerHistoryService.catchUp]).
+enum PeerHistoryCatchUpOutcome {
+  /// Телефон ответил, окно пройдено до конца (или до предела страниц).
+  completed,
+
+  /// Ни одной порции: телефон выключен или не на экране. Повторить позже.
+  noResponse,
+
+  /// Уже идёт другой цикл, или сработал ограничитель частоты.
+  busy,
+
+  /// Сервис не подключён к контроллеру.
+  unavailable,
+}
 
 /// Lightweight singleton — wired by `DesktopProductionApp._boot()` and
 /// (PR7) `MyApp._init()` on mobile. Each entrypoint owns its lifecycle
@@ -177,6 +205,119 @@ class PeerHistoryService {
     final requestId = _newRequestId(nowMs);
     await prefs.setString(kPrefsPeerHistoryInFlightRequestId, requestId);
     await _runCycle(controller: controller, requestId: requestId, prefs: prefs);
+  }
+
+  /// 🔴 ДОГОН ПК С МОМЕНТА ОТКЛЮЧЕНИЯ (25.09.2026).
+  ///
+  /// Прежний путь ([maybeSyncOnBoot]) спрашивал «последние 250 событий по всем
+  /// чатам» и не чаще раза в сутки. ПК, включённый вчера утром, вечерней
+  /// переписки не догонял вовсе, а после бурного дня 250 событий не хватало.
+  /// Здесь просим всё, что новее [sinceMs], и листаем курсором телефона
+  /// (`sinceMs`/`cursor` выпущенные телефоны понимают давно), пока он не
+  /// скажет «всё» — или до [maxPages] страниц.
+  ///
+  /// Телефон отвечает, только пока он на экране. Не ответил — [PeerHistoryCatchUpOutcome.noResponse],
+  /// и решение повторить остаётся за вызывающим (`DesktopHistoryCatchUp`).
+  /// Повторный импорт того, что уже есть, безвреден: он сверяется по ключу
+  /// строки и по логическому id.
+  Future<PeerHistoryCatchUpOutcome> catchUp({
+    required int sinceMs,
+    int maxPages = kPeerHistoryCatchUpMaxPages,
+  }) async {
+    final controller = _controller;
+    if (controller == null) return PeerHistoryCatchUpOutcome.unavailable;
+    if (_busy) return PeerHistoryCatchUpOutcome.busy;
+    final startMs = DateTime.now().millisecondsSinceEpoch;
+    if (!_canSpendToken(startMs)) {
+      _requestsRejected += 1;
+      return PeerHistoryCatchUpOutcome.busy;
+    }
+    _busy = true;
+    final preCycleBackfilled = controller.peerHistoryBackfilledCount;
+    try {
+      String? cursor;
+      for (var page = 0; page < maxPages; page++) {
+        final requestId = _newRequestId(DateTime.now().millisecondsSinceEpoch);
+        final last = await _requestPageAndWait(
+          controller: controller,
+          requestId: requestId,
+          sinceMs: sinceMs,
+          cursor: cursor,
+        );
+        if (last == null) {
+          // На первой странице — телефон молчит; на следующих — оборвалось
+          // посередине: и то и другое повторяем позже с того же окна.
+          return PeerHistoryCatchUpOutcome.noResponse;
+        }
+        final next = last.nextCursor;
+        if (last.done || next == null || next.isEmpty) break;
+        cursor = next;
+      }
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt(
+          kPrefsPeerHistoryLastSyncAtMs,
+          DateTime.now().millisecondsSinceEpoch,
+        );
+      } catch (_) {
+        // Отметка для прежнего пути — не повод считать догон неудачным.
+      }
+      return PeerHistoryCatchUpOutcome.completed;
+    } catch (_) {
+      return PeerHistoryCatchUpOutcome.noResponse;
+    } finally {
+      _busy = false;
+      final delta = controller.peerHistoryBackfilledCount - preCycleBackfilled;
+      _backfilledCount += delta < 0 ? 0 : delta;
+      _requestsCompleted += 1;
+      _lastRunAtMs = DateTime.now().millisecondsSinceEpoch;
+    }
+  }
+
+  /// Одна страница догона: запрос и ожидание его порций. Возвращает последнюю
+  /// порцию страницы или null, если не пришло ни одной.
+  Future<PeerHistoryChunkProgress?> _requestPageAndWait({
+    required AppController controller,
+    required String requestId,
+    required int sinceMs,
+    String? cursor,
+  }) async {
+    PeerHistoryChunkProgress? last;
+    var chunks = 0;
+    final pageDone = Completer<void>();
+    Timer? silence;
+    void armSilence() {
+      silence?.cancel();
+      silence = Timer(kPeerHistoryResponseTimeout, () {
+        if (!pageDone.isCompleted) pageDone.complete();
+      });
+    }
+
+    // Подписка — ДО запроса: порция может прийти раньше, чем вернётся отправка.
+    final sub = controller.peerHistoryChunks.listen((progress) {
+      if (progress.requestId != requestId) return;
+      last = progress;
+      chunks += 1;
+      if (progress.done || chunks >= kPeerHistoryMaxChunksPerRequest) {
+        if (!pageDone.isCompleted) pageDone.complete();
+      } else {
+        armSilence();
+      }
+    });
+    try {
+      armSilence();
+      await controller.requestPeerHistory(
+        requestId: requestId,
+        sinceMs: sinceMs > 0 ? sinceMs : null,
+        cursor: cursor,
+        ttlSeconds: kPeerHistoryCatchUpRequestTtlSeconds,
+      );
+      await pageDone.future;
+    } finally {
+      silence?.cancel();
+      await sub.cancel();
+    }
+    return last;
   }
 
   /// Token-bucket gate: returns `true` (and consumes a token) when the

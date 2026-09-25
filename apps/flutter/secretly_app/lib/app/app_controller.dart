@@ -2096,6 +2096,35 @@ class AppController {
   @visibleForTesting
   static const int outboxUserMessageTtlSeconds = _outboxUserMessageTtlSeconds;
 
+  static const String _selfMirrorFamilyPrefix = '__secretly_self_mirror_';
+  static const int _selfMirrorReceiptTtlSeconds = 3 * 24 * 60 * 60;
+
+  /// 🔴 КОПИИ ДЛЯ СВОИХ УСТРОЙСТВ ЖИВУТ, КАК САМИ СООБЩЕНИЯ (25.09.2026).
+  ///
+  /// Копии своих сообщений, вложений, наклеек, правок и реакций, отметки
+  /// «прочитано», состояние чатов и папки уходили служебной посылкой со сроком
+  /// 1 час. ПК, выключенный дольше часа, терял их навсегда: в ночь на 25.09 на
+  /// реле истекли все 23 копии ответов владельца, и переписка на ПК выглядела
+  /// наполовину пустой, а прочитанное — непрочитанным. Для групп ровно эту
+  /// ошибку чинили в июле (см. `sendControlMessage`); для своих устройств — нет.
+  ///
+  /// Квитанции о доставке и прочтении МОИХ сообщений — самые частые, по одной
+  /// на каждое событие собеседника, — получают 3 дня: неделя таких копий у
+  /// очень активного человека подбирается к пределу очереди реле (5000 на
+  /// устройство), а пропущенная квитанция стоит лишь галочки.
+  ///
+  /// Меняется только срок по умолчанию: вызов, выбравший свой срок, его и
+  /// сохраняет.
+  @visibleForTesting
+  static int selfMirrorTtlSecondsFor(String controlText, int ttlSeconds) {
+    if (ttlSeconds != _controlMessageTtlSeconds) return ttlSeconds;
+    if (!controlText.startsWith(_selfMirrorFamilyPrefix)) return ttlSeconds;
+    if (controlText.startsWith(kSelfMirrorReceiptCommandPrefix)) {
+      return _selfMirrorReceiptTtlSeconds;
+    }
+    return _outboxUserMessageTtlSeconds;
+  }
+
   /// A room key must outlive an offline member — see the note where it is sent.
   @visibleForTesting
   static const int roomKeyGrantTtlSeconds = _outboxUserMessageTtlSeconds;
@@ -5640,6 +5669,9 @@ class AppController {
           await _retryPendingNoDeviceSend().timeout(const Duration(seconds: 12));
         } catch (_) {}
       }
+      try {
+        await _flushParkedReadWatermarks().timeout(const Duration(seconds: 10));
+      } catch (_) {}
     } finally {
       _flushOutboundOnResumeInFlight = false;
     }
@@ -28302,6 +28334,7 @@ class AppController {
         controlText.startsWith(_groupMsgCmdPrefix)) {
       ttlSeconds = _outboxUserMessageTtlSeconds;
     }
+    ttlSeconds = selfMirrorTtlSecondsFor(controlText, ttlSeconds);
 
     final now = DateTime.now().millisecondsSinceEpoch;
     final payload = E2ePayloadV1(
@@ -34368,6 +34401,13 @@ class AppController {
             reasonCode: MessageFailureReason.noDeliverableTarget,
           );
         } catch (_) {}
+      } else {
+        unawaited(
+          _mirrorFlushedParkedPayloadToOwnDevices(
+            profileId: profileId,
+            payloadBytes: entry.payloadBytes,
+          ),
+        );
       }
       await _dropPendingNoDeviceEntry(
         profileId: profileId,
@@ -34376,6 +34416,87 @@ class AppController {
     }
     _changed.add(null);
     _kickRelayOutbox(relay);
+  }
+
+  /// 🔴 Копия отложенной отправки на свои устройства (25.09.2026).
+  ///
+  /// Когда у собеседника не было устройств или сервер ключей не ответил,
+  /// сообщение ложилось в очередь, и `sendMessage` выходил, не дойдя до копии
+  /// для своих устройств. Очередь потом доставляла его собеседнику, а ПК так
+  /// и не узнавал, что его написали. Копия уходит здесь — когда сообщение
+  /// действительно отправлено. Повтор безвреден: приёмник пишет копию под её
+  /// собственным ключом и сверяет логический id.
+  Future<void> _mirrorFlushedParkedPayloadToOwnDevices({
+    required String profileId,
+    required Uint8List payloadBytes,
+  }) async {
+    final convoId = profileId.trim();
+    final myPid = (_profileId ?? '').trim();
+    if (convoId.isEmpty || convoId.startsWith('group:') || convoId == myPid) {
+      return;
+    }
+    final E2ePayloadV1 payload;
+    try {
+      payload = E2ePayloadV1.decode(payloadBytes);
+    } catch (_) {
+      return;
+    }
+    if (payload.events.isEmpty) return;
+    final ev = payload.events.first;
+    try {
+      if (ev is MsgEventV1) {
+        // Служебные команды (групповые конверты, удаление у всех, копии) —
+        // не сообщение, зеркалить нечего.
+        if (isHiddenMessageControlText(ev.text) ||
+            isDeleteForAllCommandText(ev.text)) {
+          return;
+        }
+        await _mirrorTextMessageToOwnDevices(
+          convoId: convoId,
+          messageText: ev.text,
+          payloadEventId: ev.eventId,
+          createdAtMs: payload.createdAtMs,
+          replyToPayloadEventId: ev.replyToEventId,
+          linkPreview: ev.linkPreview,
+        );
+      } else if (ev is AttachmentEventV1) {
+        await _mirrorAttachmentToOwnDevices(
+          convoId: convoId,
+          msgEventId: ev.eventId,
+          blobId: ev.blobId,
+          fileKeyB64: ev.fileKeyB64,
+          sizeBytes: ev.sizeBytes,
+          createdAtMs: payload.createdAtMs,
+          blobAccessTokenB64: ev.blobAccessTokenB64,
+          mime: ev.mime,
+          replyToPayloadEventId: ev.replyToEventId,
+          mediaGroupId: ev.mediaGroupId,
+          caption: ev.caption,
+          filename: ev.filename,
+          videoNote: ev.videoNote,
+          durationMs: ev.durationMs,
+          waveform: ev.waveform,
+          musicTitle: ev.musicTitle,
+          musicArtist: ev.musicArtist,
+        );
+      } else if (ev is StickerEventV1) {
+        await _mirrorStickerToOwnDevices(
+          convoId: convoId,
+          msgEventId: ev.eventId,
+          packId: ev.packId,
+          packVersion: ev.packVersion,
+          stickerId: ev.stickerId,
+          createdAtMs: payload.createdAtMs,
+          emojiHint: ev.emojiHint,
+          label: ev.label,
+          animated: ev.animated,
+          format: ev.format,
+          replyToPayloadEventId: ev.replyToEventId,
+        );
+      }
+    } catch (_) {
+      // Копия — не повод ломать доставку собеседнику.
+    }
   }
 
   /// Called by the service watchdog — fallback for when no new message was
@@ -34456,7 +34577,20 @@ class AppController {
     final did = (deviceId ?? '').trim();
     if (did.isEmpty) return;
     _knownOwnDeviceIds.add(did);
+    if (did != (_deviceId ?? '').trim() &&
+        !_ownDeviceActivity.isClosed &&
+        _ownDeviceActivity.hasListener) {
+      _ownDeviceActivity.add(did);
+    }
   }
+
+  /// Другое МОЁ устройство только что что-то прислало (25.09.2026). Для
+  /// догона истории на ПК: телефон отвечает на запрос, только пока он на
+  /// экране, и такой знак — лучший момент повторить неотвеченный запрос.
+  final StreamController<String> _ownDeviceActivity =
+      StreamController<String>.broadcast();
+
+  Stream<String> get ownDeviceActivity => _ownDeviceActivity.stream;
 
   Future<void> _loadKnownOwnDeviceIdsFromDb() async {
     final db = _db;
@@ -34905,6 +35039,7 @@ class AppController {
               payloadB64: base64Encode(plainBytes),
               payloadEventId: (row['payload_event_id'] as String?)?.trim(),
               localState: (row['local_state'] as String?)?.trim(),
+              readAtMs: (row['read_at_ms'] as num?)?.toInt(),
             ),
           );
           if (convoId.startsWith('group:')) {
@@ -35121,11 +35256,13 @@ class AppController {
     if (chunk.events.isEmpty) {
       _peerHistoryLastChunkAtMs = DateTime.now().millisecondsSinceEpoch;
       _changed.add(null);
+      _emitPeerHistoryChunk(chunk);
       return;
     }
 
     final myPid = (_profileId ?? '').trim();
     var inserted = 0;
+    final unreadImportedConvos = <String>{};
     for (final ev in chunk.events) {
       // Skip rows that already exist locally — cheap pre-check so we
       // don't burn CPU re-encrypting payloads that conflictAlgorithm
@@ -35205,6 +35342,17 @@ class AppController {
             ? 'sent'
             : 'received';
       }
+      // 🔴 Прочитанность приезжает вместе с историей (25.09.2026). Раньше
+      // каждое догнанное входящее ложилось непрочитанным. Своё сообщение
+      // непрочитанным не бывает вовсе — даже если его устройство (например,
+      // прежняя установка телефона) здесь не известно как своё.
+      final isIncomingRow = localState == MessageLocalState.received;
+      final importedReadAtMs = !isIncomingRow
+          ? (ev.readAtMs ?? DateTime.now().millisecondsSinceEpoch)
+          : ev.readAtMs;
+      if (isIncomingRow && importedReadAtMs == null) {
+        unreadImportedConvos.add(ev.convoId);
+      }
 
       try {
         // Ensure the convo row exists so the chat list reflects the
@@ -35237,6 +35385,7 @@ class AppController {
           ciphertextB64: localCipher,
           createdAtMs: ev.createdAtMs,
           localState: localState,
+          readAtMs: importedReadAtMs,
           payloadEventId:
               (ev.payloadEventId != null && ev.payloadEventId!.isNotEmpty)
               ? ev.payloadEventId
@@ -35249,11 +35398,80 @@ class AppController {
       }
     }
 
+    if (_isDesktopOrWebPlatform && unreadImportedConvos.isNotEmpty) {
+      await _desktopSettleImportedReadState(unreadImportedConvos);
+    }
+
     _peerHistoryLastChunkAtMs = DateTime.now().millisecondsSinceEpoch;
     _peerHistoryBackfilledCount += inserted;
     if (inserted > 0) {
       _changed.add(null);
     }
+    _emitPeerHistoryChunk(chunk);
+  }
+
+  /// 🔴 ПК: догнанные из истории входящие не должны висеть непрочитанными,
+  /// если человек их уже видел (25.09.2026).
+  ///
+  /// Старые телефоны прочитанность в истории не присылают. Тогда судим по
+  /// самой переписке: входящее не позже моего последнего сообщения (ответил —
+  /// значит видел всё до) или последнего прочитанного входящего (прочтение
+  /// идёт по всей переписке сразу) считается прочитанным. Касается только
+  /// переписок, куда история только что положила непрочитанное, и только ПК:
+  /// живые сообщения так не помечаются — пришедшее с опозданием можно и не
+  /// видеть, даже если ответ был позже.
+  Future<void> _desktopSettleImportedReadState(Set<String> convoIds) async {
+    final db = _db;
+    final did = (_deviceId ?? '').trim();
+    if (db == null || did.isEmpty) return;
+    final own = _ownDeviceIdsForUnreadQueries();
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    var total = 0;
+    for (final convoId in convoIds) {
+      try {
+        final anchor = await db.readThroughAnchorMs(
+          convoId: convoId,
+          selfDeviceId: did,
+          ownDeviceIds: own,
+        );
+        if (anchor <= 0) continue;
+        total += await db.markIncomingReadThrough(
+          convoId: convoId,
+          selfDeviceId: did,
+          excludedSenderDeviceIds: own,
+          upToMs: anchor,
+          readAtMs: nowMs,
+        );
+      } catch (_) {
+        // Не вышло — останется непрочитанным, как было.
+      }
+    }
+    if (total > 0) {
+      DiagLog.event('peer_history', 'import_read_settled', {
+        'convos': convoIds.length,
+        'marked': total,
+      });
+    }
+  }
+
+  /// Порции истории — для догона ПК (`PeerHistoryService.catchUp`): по ним он
+  /// узнаёт, ответил ли телефон на ЕГО запрос и есть ли продолжение.
+  final StreamController<PeerHistoryChunkProgress> _peerHistoryChunks =
+      StreamController<PeerHistoryChunkProgress>.broadcast();
+
+  Stream<PeerHistoryChunkProgress> get peerHistoryChunks =>
+      _peerHistoryChunks.stream;
+
+  void _emitPeerHistoryChunk(PeerHistoryChunk chunk) {
+    if (_peerHistoryChunks.isClosed || !_peerHistoryChunks.hasListener) return;
+    _peerHistoryChunks.add(
+      PeerHistoryChunkProgress(
+        requestId: chunk.requestId,
+        done: chunk.done,
+        nextCursor: chunk.nextCursor,
+        events: chunk.events.length,
+      ),
+    );
   }
 
   /// PR6: hydrate a single group room from a [PeerHistoryGroupMeta].
@@ -35426,6 +35644,9 @@ class AppController {
     int limit = kPeerHistoryMaxEventsPerChunk,
     String? cursor,
     String? convoId,
+    // Догон ПК (25.09.2026) ставит короткий срок: запрос нужен, лишь пока его
+    // ждут, а неотвеченные повторы не должны копиться у выключенного телефона.
+    int? ttlSeconds,
   }) async {
     final pid = (_profileId ?? '').trim();
     final did = (_deviceId ?? '').trim();
@@ -35452,13 +35673,24 @@ class AppController {
     );
     final cmd = encodePeerHistoryRequest(req);
     try {
-      await sendControlMessage(
-        peerProfileId: pid,
-        controlText: cmd,
-        strict: false,
-        forceRelayFlush: false,
-        targetDeviceIds: ownTargets,
-      );
+      if (ttlSeconds != null) {
+        await sendControlMessage(
+          peerProfileId: pid,
+          controlText: cmd,
+          strict: false,
+          forceRelayFlush: true,
+          targetDeviceIds: ownTargets,
+          ttlSeconds: ttlSeconds,
+        );
+      } else {
+        await sendControlMessage(
+          peerProfileId: pid,
+          controlText: cmd,
+          strict: false,
+          forceRelayFlush: false,
+          targetDeviceIds: ownTargets,
+        );
+      }
     } catch (e) {
       callLog('AppCtrl', 'requestPeerHistory send failed: $e');
     }
@@ -36100,6 +36332,39 @@ class AppController {
     }
   }
 
+  /// 🔴 Своё сообщение, пришедшее копией, может уже лежать в этой переписке
+  /// под другим ключом (25.09.2026).
+  ///
+  /// Копия пишется под `selfsync:<id>:<устройство>`, а та же строка из догона
+  /// истории — под ключом телефона. Пока копии жили час, они почти всегда
+  /// успевали раньше истории; теперь они живут неделю и приходят после неё,
+  /// и без этой сверки сообщение задвоилось бы. Сверка — по логическому id в
+  /// ЭТОЙ переписке, как у импорта истории (`27739d6f`). При сбое сверки
+  /// пишем: потерять своё сообщение хуже, чем показать его дважды.
+  Future<bool> _selfMirrorPayloadAlreadyApplied({
+    required String convoId,
+    required String payloadEventId,
+  }) async {
+    final db = _db;
+    final id = payloadEventId.trim();
+    if (db == null || id.isEmpty || convoId.trim().isEmpty) return false;
+    try {
+      final exists = await db.eventExistsForPayload(
+        convoId: convoId,
+        payloadEventId: id,
+      );
+      if (exists) {
+        DiagLog.event('selfsync', 'mirror_payload_dedup_skip', {
+          'convo': DiagLog.pfx(convoId),
+          'evt': DiagLog.pfx(id),
+        });
+      }
+      return exists;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _mirrorTextMessageToOwnDevices({
     required String convoId,
     required String messageText,
@@ -36194,6 +36459,9 @@ class AppController {
         strict: false,
         forceRelayFlush: false,
         targetDeviceIds: ownTargets,
+        // Правка на своё устройство живёт, как само сообщение (25.09.2026):
+        // префикс у неё общий с правкой собеседнику, поэтому срок — явно.
+        ttlSeconds: _outboxUserMessageTtlSeconds,
       );
     } catch (_) {
       // best-effort only
@@ -43727,6 +43995,18 @@ class AppController {
   }) async {
     if (readUpToMs <= 0) return;
 
+    // 🔴 Фоновый режим своих устройств не видит (25.09.2026): раньше отметка
+    // здесь просто терялась, и ПК считал прочитанное непрочитанным. Теперь она
+    // ждёт в зашифрованной базе и уходит при выходе на экран
+    // (`_flushOutboundOnResume`).
+    if (_backgroundInboundMode) {
+      await _parkReadWatermarkForOwnDevices(
+        convoId: convoId,
+        readUpToMs: readUpToMs,
+      );
+      return;
+    }
+
     final command = buildSelfMirrorReadCommand(
       convoId: convoId,
       readUpToMs: readUpToMs,
@@ -43746,6 +44026,54 @@ class AppController {
         'convo': DiagLog.pfx(convoId),
         'err': _shortErrorTag(e),
       });
+    }
+  }
+
+  static const String _parkedReadMirrorKvPrefix = 'parked_read_mirror_v1:';
+
+  Future<void> _parkReadWatermarkForOwnDevices({
+    required String convoId,
+    required int readUpToMs,
+  }) async {
+    final db = _db;
+    final id = convoId.trim();
+    if (db == null || id.isEmpty || readUpToMs <= 0) return;
+    try {
+      final key = '$_parkedReadMirrorKvPrefix$id';
+      final previous = int.tryParse(await db.localKvGet(key) ?? '') ?? 0;
+      if (readUpToMs > previous) {
+        await db.localKvSet(key, '$readUpToMs');
+      }
+    } catch (_) {
+      // Отметка потеряется — следующее прочтение этой переписки её перекроет.
+    }
+  }
+
+  /// Отправляет отметки «прочитано», отложенные в фоновом режиме.
+  Future<void> _flushParkedReadWatermarks() async {
+    if (_backgroundInboundMode) return;
+    final db = _db;
+    if (db == null) return;
+    List<String> keys;
+    try {
+      keys = await db.localKvKeysWithPrefix(_parkedReadMirrorKvPrefix);
+    } catch (_) {
+      return;
+    }
+    for (final key in keys) {
+      final convoId = key.substring(_parkedReadMirrorKvPrefix.length);
+      int upToMs = 0;
+      try {
+        upToMs = int.tryParse(await db.localKvGet(key) ?? '') ?? 0;
+        await db.localKvDelete(key);
+      } catch (_) {
+        continue;
+      }
+      if (convoId.isEmpty || upToMs <= 0) continue;
+      await _mirrorReadWatermarkToOwnDevices(
+        convoId: convoId,
+        readUpToMs: upToMs,
+      );
     }
   }
 
@@ -44148,6 +44476,39 @@ class AppController {
     final db = _db;
     final did = (_deviceId ?? '').trim();
     if (db == null || did.isEmpty) return;
+
+    // 🔴 ПК (25.09.2026): помечаем всё до водораздела одним запросом. Путь ниже
+    // берёт лишь 500 самых новых непрочитанных, и после долгого отключения
+    // более старые так и висели непрочитанными. Телефон — прежним путём.
+    if (_isDesktopOrWebPlatform) {
+      int marked;
+      try {
+        marked = await db.markIncomingReadThrough(
+          convoId: cmd.convoId,
+          selfDeviceId: did,
+          excludedSenderDeviceIds: _ownDeviceIdsForUnreadQueries(),
+          upToMs: cmd.readUpToMs,
+          readAtMs: cmd.appliedAtMs > 0
+              ? cmd.appliedAtMs
+              : DateTime.now().millisecondsSinceEpoch,
+        );
+      } catch (_) {
+        return;
+      }
+      if (marked <= 0) return;
+      try {
+        await _nativeMsgNotifChannel.invokeMethod('cancel', <String, dynamic>{
+          'convoId': cmd.convoId,
+        });
+      } catch (_) {}
+      DiagLog.event('selfsync', 'read_mirror_applied', {
+        'convo': DiagLog.pfx(cmd.convoId),
+        'marked': marked,
+        'up_to_ms': cmd.readUpToMs,
+      });
+      if (!_changed.isClosed) _changed.add(null);
+      return;
+    }
 
     List<Map<String, Object?>> unread;
     try {
@@ -48248,7 +48609,11 @@ class AppController {
             );
             final syntheticEventId = 'selfsync:$msgEventId:$effectiveSenderDid';
             final existing = await db.eventGet(syntheticEventId);
-            if (existing == null) {
+            if (existing == null &&
+                !await _selfMirrorPayloadAlreadyApplied(
+                  convoId: convoId,
+                  payloadEventId: msgEventId,
+                )) {
               await db.convoEnsure1to1(peerProfileId: convoId);
               await db.insertEvent(
                 eventId: syntheticEventId,
@@ -48453,7 +48818,11 @@ class AppController {
             final syntheticEventId =
                 'selfsync:att:$msgEventId:$effectiveSenderDid';
             final existing = await db.eventGet(syntheticEventId);
-            if (existing == null) {
+            if (existing == null &&
+                !await _selfMirrorPayloadAlreadyApplied(
+                  convoId: convoId,
+                  payloadEventId: msgEventId,
+                )) {
               await db.convoEnsure1to1(peerProfileId: convoId);
               await db.insertEvent(
                 eventId: syntheticEventId,
@@ -48526,7 +48895,11 @@ class AppController {
             final syntheticEventId =
                 'selfsync:sticker:$msgEventId:$effectiveSenderDid';
             final existing = await db.eventGet(syntheticEventId);
-            if (existing == null) {
+            if (existing == null &&
+                !await _selfMirrorPayloadAlreadyApplied(
+                  convoId: convoId,
+                  payloadEventId: msgEventId,
+                )) {
               await db.convoEnsure1to1(peerProfileId: convoId);
               await db.insertEvent(
                 eventId: syntheticEventId,
@@ -52427,6 +52800,8 @@ class AppController {
     await _callSignals.close();
     await _roomCallMediaSignals.close();
     await _relayConnectionChanges.close();
+    await _peerHistoryChunks.close();
+    await _ownDeviceActivity.close();
     await _inAppNotifsController.close();
     await security.dispose();
     await _changed.close();

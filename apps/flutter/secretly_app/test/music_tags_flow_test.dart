@@ -397,7 +397,9 @@ void main() {
       final calls = RegExp(
         r'_mirrorAttachmentToOwnDevices\(\n([\s\S]*?)\n          \),',
       ).allMatches(src).toList();
-      expect(calls, hasLength(3));
+      // Четвёртая — копия отложенной отправки (25.09.2026): уходит, когда
+      // сообщение, ждавшее устройств собеседника, наконец отправлено.
+      expect(calls, hasLength(4));
       for (final m in calls) {
         expect(m.group(1)!.contains('musicTitle:'), isTrue);
         expect(m.group(1)!.contains('musicArtist:'), isTrue);
@@ -406,6 +408,11 @@ void main() {
       expect(
         calls.where((m) => m.group(1)!.contains('waveform: waveform,')),
         hasLength(2),
+      );
+      // Отложенная берёт волну из самого события.
+      expect(
+        calls.where((m) => m.group(1)!.contains('waveform: ev.waveform,')),
+        hasLength(1),
       );
     });
   });

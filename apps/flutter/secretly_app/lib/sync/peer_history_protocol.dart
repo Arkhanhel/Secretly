@@ -170,6 +170,7 @@ class PeerHistoryChunkEvent {
     required this.payloadB64,
     this.payloadEventId,
     this.localState,
+    this.readAtMs,
   });
 
   final String eventId;
@@ -190,6 +191,12 @@ class PeerHistoryChunkEvent {
   /// an incoming message. `null` = let the receiver derive it.
   final String? localState;
 
+  /// Когда строку прочитали на отвечающем устройстве (25.09.2026). Без этого
+  /// каждое догнанное входящее ложилось непрочитанным, хотя на телефоне его
+  /// давно прочли. `null` — не прочитано или ответ от старой сборки: тогда
+  /// приёмник решает сам.
+  final int? readAtMs;
+
   Map<String, Object?> toJson() => {
         'eventId': eventId,
         'convoId': convoId,
@@ -199,6 +206,7 @@ class PeerHistoryChunkEvent {
         'payloadB64': payloadB64,
         if (payloadEventId != null) 'payloadEventId': payloadEventId,
         if (localState != null) 'localState': localState,
+        if (readAtMs != null) 'readAtMs': readAtMs,
       };
 
   static PeerHistoryChunkEvent? fromJson(Map<String, Object?> j) {
@@ -234,6 +242,7 @@ class PeerHistoryChunkEvent {
           : null,
       localState:
           j['localState'] is String ? j['localState'] as String : null,
+      readAtMs: _positiveIntOrNull(j['readAtMs']),
     );
   }
 }
@@ -516,6 +525,22 @@ class PeerHistoryChunk {
   }
 }
 
+/// Что запросивший узнал из очередной порции (25.09.2026): чья она, последняя
+/// ли и откуда продолжать. Сами события к этому времени уже записаны.
+class PeerHistoryChunkProgress {
+  const PeerHistoryChunkProgress({
+    required this.requestId,
+    required this.done,
+    required this.nextCursor,
+    required this.events,
+  });
+
+  final String requestId;
+  final bool done;
+  final String? nextCursor;
+  final int events;
+}
+
 // ---------------------------------------------------------------------------
 // Wire encode / decode helpers.
 //
@@ -568,4 +593,15 @@ Map<String, Object?>? _decode(String text, String prefix) {
     return null;
   }
   return null;
+}
+
+int? _positiveIntOrNull(Object? raw) {
+  final int? v = raw is int
+      ? raw
+      : raw is num
+      ? raw.toInt()
+      : raw is String
+      ? int.tryParse(raw)
+      : null;
+  return (v != null && v > 0) ? v : null;
 }
