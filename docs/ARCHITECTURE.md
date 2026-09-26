@@ -135,8 +135,10 @@ while the defects it lists are open; the ones with security impact are in
 ## Groups (rooms)
 
 Rooms have a membership list on the relay and a sender key per room. When every
-member's devices support it, a room message is encrypted once under the sender
-key rather than once per member, which is what makes larger rooms possible;
+member's devices support it **and the build was compiled with
+`SECRETLY_ROOM_SENDER_KEY=true`** (see `docs/VERIFY.md`), a room message is
+encrypted once under the sender key rather than once per member, which is what
+makes larger rooms possible;
 otherwise the sender falls back to one pairwise ciphertext per device. The
 membership list itself is not signed — the relay decides who is in a room, and
 the threat model says what that allows.

@@ -58,7 +58,7 @@ Substitute your own hosts. Four values are required:
 | `SECRETLY_KEYS_BASE_URL` | key server: identities, prekey bundles, backups |
 | `SECRETLY_RELAY_HTTP_BASE_URL` | relay over HTTPS |
 | `SECRETLY_RELAY_WS_URL` | relay WebSocket endpoint |
-| `SECRETLY_CONFIG_PUBLIC_KEY_B64` | public half of the key that signs `/v1/config`; the client refuses an unsigned or wrongly signed configuration |
+| `SECRETLY_CONFIG_PUBLIC_KEY_B64` | public half of the key that signs `/v1/config`. Without it the client verifies nothing; with it, a configuration whose signature does not check out is not trusted — and the client then falls back to full, open access rather than locking anyone out. That fail-open is deliberate for the paid tier: a signature problem must never cost someone their messenger. Security flags in the same document keep their last verified value instead |
 
 Generate the signing keypair yourself — the private half stays on your key
 server as `SECRETLY_KEYS_CONFIG_SIGNING_KEY`. Ours is not in this repository and

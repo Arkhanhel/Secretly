@@ -1573,7 +1573,7 @@ impl MonetizationConfig {
         MonetizationConfig {
             enabled,
             free_attachment_bytes: int_env("SECRETLY_FREE_ATTACHMENT_BYTES", 104_857_600),
-            free_group_members: int_env("SECRETLY_FREE_GROUP_MEMBERS", 50),
+            free_group_members: int_env("SECRETLY_FREE_GROUP_MEMBERS", 10),
             free_call_participants: int_env("SECRETLY_FREE_CALL_PARTICIPANTS", 8),
             free_owned_groups: int_env("SECRETLY_FREE_OWNED_GROUPS", 5),
             free_joined_groups: int_env("SECRETLY_FREE_JOINED_GROUPS", 20),
@@ -1581,7 +1581,7 @@ impl MonetizationConfig {
                 "SECRETLY_PREMIUM_ATTACHMENT_BYTES",
                 1_073_741_824,
             ),
-            premium_group_members: int_env("SECRETLY_PREMIUM_GROUP_MEMBERS", 500),
+            premium_group_members: int_env("SECRETLY_PREMIUM_GROUP_MEMBERS", 10),
             premium_call_participants: int_env("SECRETLY_PREMIUM_CALL_PARTICIPANTS", 50),
             premium_owned_groups: int_env("SECRETLY_PREMIUM_OWNED_GROUPS", 100),
             // -1 = unlimited joined groups for premium.
@@ -6847,7 +6847,7 @@ mod tests {
             json["payload"]["free_limits"]["attachment_bytes"],
             104_857_600i64
         );
-        assert_eq!(json["payload"]["free_limits"]["group_members"], 50);
+        assert_eq!(json["payload"]["free_limits"]["group_members"], 10);
         assert_eq!(json["payload"]["free_limits"]["owned_groups"], 5);
         assert_eq!(json["payload"]["free_limits"]["joined_groups"], 20);
         assert_eq!(
@@ -7168,7 +7168,7 @@ mod tests {
         assert!(!resp.features.custom_id);
         assert!(!resp.features.premium_stickers);
         assert_eq!(resp.limits.attachment_bytes, 104_857_600);
-        assert_eq!(resp.limits.group_members, 50);
+        assert_eq!(resp.limits.group_members, 10);
         assert_eq!(resp.limits.owned_groups, 5);
         assert_eq!(resp.limits.joined_groups, 20);
         assert_eq!(resp.expires_at_ms, None);
@@ -7211,7 +7211,13 @@ mod tests {
         assert!(resp.features.custom_id);
         assert!(resp.features.premium_stickers);
         assert_eq!(resp.limits.attachment_bytes, 1_073_741_824);
-        assert_eq!(resp.limits.group_members, 500);
+        // 🔴 Потолок комнаты ОДИНАКОВ на обоих тарифах и не является различием
+        // тарифов: пока сообщение комнаты рассылается попарно каждому
+        // устройству, большая комната сжигает батарею отправителя. Клиент
+        // держит 10 на обоих тарифах, прод — тоже; умолчания сервера
+        // приведены к ним 26.09.2026, чтобы тот, кто поднимет свой сервер,
+        // не получил молча другое поведение.
+        assert_eq!(resp.limits.group_members, 10);
         assert_eq!(resp.limits.owned_groups, 100);
         assert_eq!(resp.limits.joined_groups, -1);
         assert!(resp.expires_at_ms.is_some());
