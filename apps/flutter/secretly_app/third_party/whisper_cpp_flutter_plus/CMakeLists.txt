@@ -1,5 +1,14 @@
 cmake_minimum_required(VERSION 3.22)
 project(whisper_flutter LANGUAGES C CXX)
+# Secretly vendoring patch (26.09.2026): Google Play отклоняет бандл, если
+# LOAD-сегменты .so выровнены меньше чем на 16 КБ (устройства со страницами
+# памяти 16 КБ, Android 15+). Плагин собирается NDK по умолчанию для AGP
+# (r27, 4 КБ), а не NDK приложения (r28), — все его библиотеки (ggml*, whisper,
+# parakeet, whisper_flutter) выходили с 4 КБ с 06.09. Флаг задан ДО
+# add_subdirectory, чтобы дошёл до всех общих библиотек дерева.
+if(ANDROID)
+  string(APPEND CMAKE_SHARED_LINKER_FLAGS " -Wl,-z,max-page-size=16384")
+endif()
 set(CMAKE_CXX_STANDARD 17)
 set(BUILD_SHARED_LIBS OFF)
 set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
