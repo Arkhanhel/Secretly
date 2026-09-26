@@ -5883,6 +5883,23 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String desktopUpdateDownloading(int percent) {
+    return 'A transferir $percent%';
+  }
+
+  @override
+  String get desktopUpdateVerifying => 'A verificar…';
+
+  @override
+  String get desktopUpdateInstalling => 'A instalar…';
+
+  @override
+  String get desktopUpdateManual => 'Transferir do site';
+
+  @override
+  String get desktopUpdateFailedHint => 'Não foi possível instalar a atualização automaticamente. O instalador está no nosso site.';
+
+  @override
   String get desktopCallExpand => 'Expandir a chamada';
 
   @override
@@ -11858,6 +11875,23 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String desktopUpdateAvailable(String version) {
     return 'Versão $version disponível';
   }
+
+  @override
+  String desktopUpdateDownloading(int percent) {
+    return 'Baixando $percent%';
+  }
+
+  @override
+  String get desktopUpdateVerifying => 'Verificando…';
+
+  @override
+  String get desktopUpdateInstalling => 'Instalando…';
+
+  @override
+  String get desktopUpdateManual => 'Baixar do site';
+
+  @override
+  String get desktopUpdateFailedHint => 'Não foi possível instalar a atualização automaticamente. O instalador está no nosso site.';
 
   @override
   String get desktopCallExpand => 'Expandir a chamada';

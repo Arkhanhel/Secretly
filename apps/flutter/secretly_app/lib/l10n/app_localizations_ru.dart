@@ -5903,6 +5903,23 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String desktopUpdateDownloading(int percent) {
+    return 'Загрузка $percent%';
+  }
+
+  @override
+  String get desktopUpdateVerifying => 'Проверка…';
+
+  @override
+  String get desktopUpdateInstalling => 'Установка…';
+
+  @override
+  String get desktopUpdateManual => 'Скачать с сайта';
+
+  @override
+  String get desktopUpdateFailedHint => 'Не удалось обновиться автоматически. Установщик есть на сайте.';
+
+  @override
   String get desktopCallExpand => 'Развернуть звонок';
 
   @override

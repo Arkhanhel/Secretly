@@ -17,6 +17,22 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
+  // 🔴 ОДНО ИМЯ ДЛЯ WINDOWS (26.09.2026, владелец: «чтобы приложение было в
+  // диспетчере задач как и телеграм»). По этому имени Windows связывает между
+  // собой кнопку на панели задач, закреплённый ярлык, список переходов и
+  // уведомления. Ставим ДО создания окна: панель задач читает имя в тот
+  // момент, когда окно появляется, и позже его уже не перечитывает.
+  // Ровно это же имя стоит у ярлыка «Пуска» (windows/installer/secretly.iss)
+  // и у уведомлений (`localNotifier.setup(appName: 'Secretly')`), иначе
+  // Windows считала бы их тремя разными приложениями.
+  if (HMODULE shell32 = ::LoadLibraryW(L"shell32.dll")) {
+    using SetAppIdPtr = HRESULT(WINAPI*)(PCWSTR);
+    if (auto set_app_id = reinterpret_cast<SetAppIdPtr>(::GetProcAddress(
+            shell32, "SetCurrentProcessExplicitAppUserModelID"))) {
+      set_app_id(L"Secretly");
+    }
+  }
+
   flutter::DartProject project(L"data");
 
   std::vector<std::string> command_line_arguments =
@@ -39,5 +55,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
 
   ::CoUninitialize();
-  return EXIT_SUCCESS;
+  // Уходим сразу и наверняка. Обычный возврат ещё раскручивает глобальные
+  // объекты плагинов, и одна застрявшая нить оставляла бы процесс в списке
+  // задач без окна — то самое «закрыл, а оно висит».
+  ::ExitProcess(EXIT_SUCCESS);
 }

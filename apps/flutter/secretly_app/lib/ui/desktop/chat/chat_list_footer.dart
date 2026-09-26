@@ -126,6 +126,7 @@ class _SyncPill extends StatelessWidget {
         l10n.desktopRailConnecting,
       ),
       DesktopSyncPhase.reconnecting => (c.warning, l10n.desktopSyncReconnecting),
+      DesktopSyncPhase.offline => (c.danger, l10n.desktopRailOffline),
     };
     if (compact) {
       return DesktopTooltip(
@@ -196,7 +197,9 @@ class _SyncPill extends StatelessWidget {
 /// найденная версия видна всё время, пока её не поставили: кнопка цвета
 /// акцента рядом с «Синхронизировано», подсказка называет номер. На Mac
 /// нажатие открывает окно Sparkle (скачает, проверит подпись, поставит), на
-/// Windows — скачивание нового архива.
+/// Windows — установщик: скачать, проверить подпись, поставить тихо (с
+/// 26.09.2026). Пока он работает, кнопка показывает этап; если не вышло —
+/// ведёт на страницу загрузки.
 class _UpdateButton extends StatelessWidget {
   const _UpdateButton({this.compact = false});
 
@@ -205,64 +208,89 @@ class _UpdateButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final service = DesktopUpdateService.instance;
     return ValueListenableBuilder<DesktopUpdateOffer?>(
-      valueListenable: DesktopUpdateService.instance.available,
-      builder: (ctx, offer, _) {
-        if (offer == null) return const SizedBox.shrink();
-        final l10n = AppLocalizations.of(ctx)!;
-        final c = DColors.of(ctx);
-        final hint = l10n.desktopUpdateAvailable(offer.version);
-        return Padding(
-          padding: EdgeInsets.only(left: compact ? DSpace.xs : 6),
-          child: DesktopTooltip(
-            message: hint,
-            child: Semantics(
-              button: true,
-              label: '${l10n.desktopUpdateNow}. $hint',
-              child: ExcludeSemantics(
-                child: HoverListener(
-                  onTap: () => unawaited(DesktopUpdateService.instance.install()),
-                  builder: (ctx, hovered, pressed) => Container(
-                    height: 28,
-                    width: compact ? 28 : null,
-                    padding: compact
-                        ? EdgeInsets.zero
-                        : const EdgeInsets.symmetric(horizontal: 10),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: pressed
-                          ? c.accentPrimary.withValues(alpha: 0.8)
-                          : (hovered ? c.accentPrimaryAlt : c.accentPrimary),
-                      borderRadius: BorderRadius.circular(9),
+      valueListenable: service.available,
+      builder: (ctx, offer, _) => ValueListenableBuilder<DesktopUpdateProgress?>(
+        valueListenable: service.progress,
+        builder: (ctx, progress, _) => _build(ctx, offer, progress),
+      ),
+    );
+  }
+
+  Widget _build(
+    BuildContext ctx,
+    DesktopUpdateOffer? offer,
+    DesktopUpdateProgress? progress,
+  ) {
+    if (offer == null) return const SizedBox.shrink();
+    final l10n = AppLocalizations.of(ctx)!;
+    final c = DColors.of(ctx);
+    final failed = progress?.phase == DesktopUpdatePhase.failed;
+    final busy = progress != null && !failed;
+    final label = switch (progress?.phase) {
+      DesktopUpdatePhase.downloading => l10n.desktopUpdateDownloading(
+        ((progress?.fraction ?? 0) * 100).round(),
+      ),
+      DesktopUpdatePhase.verifying => l10n.desktopUpdateVerifying,
+      DesktopUpdatePhase.launching => l10n.desktopUpdateInstalling,
+      DesktopUpdatePhase.failed => l10n.desktopUpdateManual,
+      null => l10n.desktopUpdateNow,
+    };
+    final hint = failed
+        ? l10n.desktopUpdateFailedHint
+        : l10n.desktopUpdateAvailable(offer.version);
+    return Padding(
+      padding: EdgeInsets.only(left: compact ? DSpace.xs : 6),
+      child: DesktopTooltip(
+        message: hint,
+        child: Semantics(
+          button: !busy,
+          label: '$label. $hint',
+          child: ExcludeSemantics(
+            child: HoverListener(
+              onTap: busy
+                  ? null
+                  : () => unawaited(DesktopUpdateService.instance.install()),
+              builder: (ctx, hovered, pressed) => Container(
+                height: 28,
+                width: compact ? 28 : null,
+                padding: compact
+                    ? EdgeInsets.zero
+                    : const EdgeInsets.symmetric(horizontal: 10),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: pressed
+                      ? c.accentPrimary.withValues(alpha: 0.8)
+                      : (hovered ? c.accentPrimaryAlt : c.accentPrimary),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      FluentIcons.arrow_download_16_filled,
+                      size: 14,
+                      color: Colors.white,
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          FluentIcons.arrow_download_16_filled,
-                          size: 14,
+                    if (!compact) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        label,
+                        style: DType.tiny.copyWith(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
                           color: Colors.white,
                         ),
-                        if (!compact) ...[
-                          const SizedBox(width: 6),
-                          Text(
-                            l10n.desktopUpdateNow,
-                            style: DType.tiny.copyWith(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

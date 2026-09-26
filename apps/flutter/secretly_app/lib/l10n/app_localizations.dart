@@ -10906,6 +10906,36 @@ abstract class AppLocalizations {
   /// **'Version {version} is available'**
   String desktopUpdateAvailable(String version);
 
+  /// No description provided for @desktopUpdateDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading {percent}%'**
+  String desktopUpdateDownloading(int percent);
+
+  /// No description provided for @desktopUpdateVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying…'**
+  String get desktopUpdateVerifying;
+
+  /// No description provided for @desktopUpdateInstalling.
+  ///
+  /// In en, this message translates to:
+  /// **'Installing…'**
+  String get desktopUpdateInstalling;
+
+  /// No description provided for @desktopUpdateManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Download from the site'**
+  String get desktopUpdateManual;
+
+  /// No description provided for @desktopUpdateFailedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'The update could not be installed automatically. The installer is on our website.'**
+  String get desktopUpdateFailedHint;
+
   /// No description provided for @desktopCallExpand.
   ///
   /// In en, this message translates to:

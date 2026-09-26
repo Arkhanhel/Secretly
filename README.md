@@ -78,6 +78,10 @@ closed (section 5.10). And the app sent the first characters of each message to
 the server for notification previews; the relay discards them since 24 September
 2026, and 1.8.59 no longer sends them.
 
+[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) is the shorter, more practical list: what
+is broken right now, who it affects, and when we expect to fix it. It is the
+first file we would want to read about someone else's messenger.
+
 No independent audit has been done. We will not say otherwise until one has.
 
 Found something? [`SECURITY.md`](SECURITY.md) has the process. Please do not open
@@ -154,6 +158,8 @@ is guarding nothing, and we have found a few of those.
 
 ## Also here
 
+[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) ·
+[`METRICS_METHOD.md`](METRICS_METHOD.md) — where every number we publish comes from ·
 [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) ·
 [`CHANGELOG.md`](CHANGELOG.md) ·
 [`AUTHORS`](AUTHORS) ·

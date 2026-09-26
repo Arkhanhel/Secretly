@@ -2,14 +2,45 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:convert' show base64Decode;
+import 'dart:io'
+    show Directory, File, HttpException, Platform, Process, ProcessStartMode;
+import 'dart:isolate';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../../version/app_package_info.dart';
+
+/// Открытый ключ EdDSA, которым подписаны обновления, — тот же, что
+/// `SUPublicEDKey` у Sparkle на Mac (`macos/Runner/Info.plist`; тест сверяет,
+/// что они не разошлись). Это открытая половина ключа, ей место в коде.
+/// Закрытая хранится только у владельца.
+const String kDesktopUpdatePublicKeyB64 =
+    'D9ZGqnx7HEv5Qe6TYKXxd/Zf9dxkONCfy8J7rmuz3Ks=';
+
+/// Как запускается проверенный установщик Windows (Inno Setup,
+/// `windows/installer/secretly.iss`): без окон, закрыть старую копию, после
+/// установки открыть новую. Аргументы — здесь, а не в перечне версий:
+/// подменённый перечень не должен вписать установщику свои ключи.
+const List<String> kWindowsSilentInstallArgs = [
+  '/VERYSILENT',
+  '/SUPPRESSMSGBOXES',
+  '/NORESTART',
+  '/CLOSEAPPLICATIONS',
+  '/LAUNCH=1',
+];
+
+/// Куда вести человека, если само обновиться не вышло.
+const String kDesktopDownloadPageUrl = 'https://www.secretlyapp.com/download';
+
+/// Больше этого установщик не бывает; поле `length` в перечне — не повод
+/// скачивать гигабайты.
+const int kWindowsInstallerMaxBytes = 400 * 1024 * 1024;
 
 /// Найденная новая версия — то, что нужно кнопке «Обновить».
 @immutable
@@ -18,31 +49,66 @@ class DesktopUpdateOffer {
     required this.version,
     this.build,
     this.downloadUrl,
+    this.edSignature,
+    this.length,
   });
 
   /// Версия для человека: «1.8.56».
   final String version;
   final int? build;
 
-  /// Только Windows: откуда скачать новый архив. На macOS ставит Sparkle.
+  /// Только Windows: откуда скачать новую версию. На macOS ставит Sparkle.
   final String? downloadUrl;
+
+  /// Подпись EdDSA файла из перечня (`sparkle:edSignature`), base64.
+  final String? edSignature;
+
+  /// Размер файла в байтах из перечня.
+  final int? length;
+
+  /// Установщик, который можно поставить из приложения: `.exe` с подписью
+  /// и размером. Всё остальное (старые записи с архивом) открывается в
+  /// браузере, как раньше.
+  bool get isWindowsInstaller {
+    final url = downloadUrl?.toLowerCase() ?? '';
+    return url.endsWith('.exe') &&
+        (edSignature ?? '').isNotEmpty &&
+        (length ?? 0) > 0 &&
+        length! <= kWindowsInstallerMaxBytes;
+  }
 
   @override
   bool operator ==(Object other) =>
       other is DesktopUpdateOffer &&
       other.version == version &&
       other.build == build &&
-      other.downloadUrl == downloadUrl;
+      other.downloadUrl == downloadUrl &&
+      other.edSignature == edSignature &&
+      other.length == length;
 
   @override
-  int get hashCode => Object.hash(version, build, downloadUrl);
+  int get hashCode =>
+      Object.hash(version, build, downloadUrl, edSignature, length);
+}
+
+/// Этап обновления на Windows — для кнопки.
+enum DesktopUpdatePhase { downloading, verifying, launching, failed }
+
+@immutable
+class DesktopUpdateProgress {
+  const DesktopUpdateProgress(this.phase, {this.fraction});
+
+  final DesktopUpdatePhase phase;
+
+  /// 0..1, только пока идёт загрузка.
+  final double? fraction;
 }
 
 /// Обновление приложения, скачанного с сайта.
 ///
 /// На macOS — тонкая сторона Flutter к `Runner/SparkleBridge.swift`: там
 /// живёт и сама проверка, и её окна. На Windows Sparkle нет — там служба сама
-/// читает перечень версий и, найдя новее, предлагает скачать архив.
+/// читает перечень версий и, найдя новее, предлагает обновиться.
 ///
 /// 🔴 КНОПКА «ОБНОВИТЬ» (24.09.2026, указание владельца). Суточная проверка
 /// Sparkle показывала окно, только когда сама решала проверить; нашедший
@@ -50,6 +116,16 @@ class DesktopUpdateOffer {
 /// спрашивает про новую версию при запуске и раз в четыре часа, и найденная
 /// версия ложится в [available] — по нему внизу окна рядом с «Синхронизировано»
 /// появляется кнопка.
+///
+/// 🔴 УСТАНОВЩИК НА WINDOWS (26.09.2026, указание владельца: «чтобы человек
+/// одной кнопкой установил»). Если в перечне установщик `.exe` с подписью,
+/// кнопка скачивает его сама, сверяет размер и подпись EdDSA тем же ключом,
+/// что Sparkle на Mac, запускает тихую установку и закрывает приложение —
+/// установщик ставит новую версию поверх и открывает её. Файл, не прошедший
+/// проверку, удаляется и НЕ запускается: вместо него — страница загрузки.
+/// Скачанный самим приложением файл не несёт пометки «из интернета», поэтому
+/// SmartScreen при обновлении не вмешивается; первый раз человек ставит
+/// установщик с сайта.
 ///
 /// 🔴 ПОКА НЕ НАСТРОЕНО — ПУНКТА МЕНЮ НЕТ. Обновлятору нужны адрес перечня
 /// версий и открытый ключ, которым проверяется подпись пакета; пока их не
@@ -77,9 +153,38 @@ class DesktopUpdateService {
   final ValueNotifier<DesktopUpdateOffer?> available =
       ValueNotifier<DesktopUpdateOffer?>(null);
 
+  /// Идёт ли установка на Windows и на каком она этапе; `null` — не идёт.
+  final ValueNotifier<DesktopUpdateProgress?> progress =
+      ValueNotifier<DesktopUpdateProgress?>(null);
+
   /// Почему её нет, если её нет. Для раздела «О программе» и для журнала —
   /// молчаливое «не работает» не даёт ни починить, ни объяснить.
   String? lastError;
+
+  /// Подмены для тестов: скачивание, запуск установщика, выход, ключ.
+  @visibleForTesting
+  Future<File> Function(
+    Uri url,
+    int expectedLength,
+    void Function(double fraction) onProgress,
+  )? debugDownloader;
+
+  @visibleForTesting
+  Future<void> Function(String path, List<String> args)? debugLauncher;
+
+  @visibleForTesting
+  Future<void> Function()? debugQuit;
+
+  @visibleForTesting
+  Future<void> Function(Uri url)? debugOpenUrl;
+
+  @visibleForTesting
+  String? debugPublicKeyB64;
+
+  /// Тесты идут на Mac, где кнопка ведёт в Sparkle; этим флагом они
+  /// проверяют путь Windows.
+  @visibleForTesting
+  bool debugWindowsPath = false;
 
   bool _loaded = false;
   Timer? _first;
@@ -88,8 +193,7 @@ class DesktopUpdateService {
   /// Sparkle — только macOS.
   static bool get supported => !kIsWeb && Platform.isMacOS;
 
-  /// Своя проверка перечня — Windows: установщика там нет, но знать о новой
-  /// версии человек должен.
+  /// Своя проверка перечня — Windows.
   static bool get windowsFeed => !kIsWeb && Platform.isWindows;
 
   Future<void> load() async {
@@ -146,6 +250,8 @@ class DesktopUpdateService {
   }
 
   Future<void> _probeWindowsFeed() async {
+    // Пока ставится одно обновление, перечень его не подменяет.
+    if (progress.value != null) return;
     try {
       final uri = Uri.parse(windowsFeedUrl);
       final res = await http.get(uri).timeout(const Duration(seconds: 20));
@@ -175,16 +281,137 @@ class DesktopUpdateService {
   /// Нажатие «Обновить».
   ///
   /// На Mac — окно Sparkle: скачает, проверит подпись EdDSA и поставит. На
-  /// Windows установщика нет — новый архив скачивается в браузере.
+  /// Windows — установщик из перечня: скачать, проверить, поставить тихо; для
+  /// старых записей с архивом — архив в браузере. После неудачи кнопка ведёт
+  /// на страницу загрузки.
   Future<void> install() async {
-    if (supported) return check();
-    final url = available.value?.downloadUrl;
-    if (url == null) return;
+    if (supported && !debugWindowsPath) return check();
+    final current = progress.value;
+    if (current != null) {
+      if (current.phase == DesktopUpdatePhase.failed) {
+        await _open(Uri.parse(kDesktopDownloadPageUrl));
+      }
+      return;
+    }
+    final offer = available.value;
+    final url = offer?.downloadUrl;
+    if (offer == null || url == null) return;
+    if (offer.isWindowsInstaller) {
+      await _installWindowsSetup(offer);
+      return;
+    }
+    await _open(Uri.parse(url));
+  }
+
+  Future<void> _installWindowsSetup(DesktopUpdateOffer offer) async {
+    File? file;
     try {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      progress.value = const DesktopUpdateProgress(
+        DesktopUpdatePhase.downloading,
+        fraction: 0,
+      );
+      file = await (debugDownloader ?? _download)(
+        Uri.parse(offer.downloadUrl!),
+        offer.length!,
+        (fraction) => progress.value = DesktopUpdateProgress(
+          DesktopUpdatePhase.downloading,
+          fraction: fraction.clamp(0.0, 1.0),
+        ),
+      );
+      progress.value =
+          const DesktopUpdateProgress(DesktopUpdatePhase.verifying);
+      final ok = await verifyUpdateFile(
+        file,
+        signatureB64: offer.edSignature!,
+        expectedLength: offer.length!,
+        publicKeyB64: debugPublicKeyB64 ?? kDesktopUpdatePublicKeyB64,
+      );
+      if (!ok) {
+        throw const _UpdateRejected('signature or size mismatch');
+      }
+      progress.value =
+          const DesktopUpdateProgress(DesktopUpdatePhase.launching);
+      await (debugLauncher ?? _launchDetached)(
+        file.path,
+        kWindowsSilentInstallArgs,
+      );
+      // Закрываемся сами: крестик окна у нас прячет в трей, и установщик
+      // иначе упёрся бы в занятые файлы.
+      await (debugQuit ?? _quitForUpdate)();
+    } catch (e) {
+      lastError = '$e';
+      progress.value = const DesktopUpdateProgress(DesktopUpdatePhase.failed);
+      final f = file;
+      if (f != null) {
+        try {
+          await f.delete();
+        } catch (_) {}
+      }
+    }
+  }
+
+  Future<void> _open(Uri uri) async {
+    try {
+      final open = debugOpenUrl;
+      if (open != null) {
+        await open(uri);
+      } else {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
     } catch (e) {
       lastError = '$e';
     }
+  }
+
+  static Future<File> _download(
+    Uri uri,
+    int expectedLength,
+    void Function(double fraction) onProgress,
+  ) async {
+    final dir = Directory(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}secretly-update',
+    );
+    await dir.create(recursive: true);
+    final file = File(
+      '${dir.path}${Platform.pathSeparator}${windowsInstallerFileName(uri)}',
+    );
+    final client = http.Client();
+    try {
+      final res = await client
+          .send(http.Request('GET', uri))
+          .timeout(const Duration(seconds: 30));
+      if (res.statusCode != 200) {
+        throw HttpException('HTTP ${res.statusCode}', uri: uri);
+      }
+      final sink = file.openWrite();
+      var received = 0;
+      try {
+        await for (final chunk
+            in res.stream.timeout(const Duration(seconds: 60))) {
+          received += chunk.length;
+          if (received > expectedLength) {
+            throw const _UpdateRejected('file is larger than announced');
+          }
+          sink.add(chunk);
+          onProgress(received / expectedLength);
+        }
+      } finally {
+        await sink.close();
+      }
+      return file;
+    } finally {
+      client.close();
+    }
+  }
+
+  static Future<void> _launchDetached(String path, List<String> args) async {
+    await Process.start(path, args, mode: ProcessStartMode.detached);
+  }
+
+  /// Выход тем же путём, что и «Выйти» в трее.
+  static Future<void> _quitForUpdate() async {
+    await windowManager.setPreventClose(false);
+    await windowManager.destroy();
   }
 
   @visibleForTesting
@@ -193,7 +420,65 @@ class DesktopUpdateService {
     _periodic?.cancel();
     _loaded = false;
     available.value = null;
+    progress.value = null;
+    debugDownloader = null;
+    debugLauncher = null;
+    debugQuit = null;
+    debugOpenUrl = null;
+    debugPublicKeyB64 = null;
+    debugWindowsPath = false;
   }
+}
+
+class _UpdateRejected implements Exception {
+  const _UpdateRejected(this.reason);
+
+  final String reason;
+
+  @override
+  String toString() => 'update rejected: $reason';
+}
+
+/// Имя файла установщика для временной папки: только из последней части
+/// адреса, только безопасные символы, всегда `.exe`.
+@visibleForTesting
+String windowsInstallerFileName(Uri uri) {
+  final last = uri.pathSegments.isEmpty ? '' : uri.pathSegments.last;
+  final safe = last.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+  if (safe.isEmpty || !safe.toLowerCase().endsWith('.exe')) {
+    return 'Secretly-Setup.exe';
+  }
+  return safe;
+}
+
+/// Сверить скачанный файл с перечнем: размер и подпись EdDSA (Ed25519 над
+/// байтами файла — так подписывает `sign_update` из Sparkle). Считается в
+/// отдельном изоляте: файл в десятки мегабайт не должен замораживать окно.
+Future<bool> verifyUpdateFile(
+  File file, {
+  required String signatureB64,
+  required int expectedLength,
+  String publicKeyB64 = kDesktopUpdatePublicKeyB64,
+}) {
+  final path = file.path;
+  return Isolate.run(() async {
+    try {
+      final bytes = await File(path).readAsBytes();
+      if (bytes.length != expectedLength) return false;
+      final signature = base64Decode(signatureB64.trim());
+      final publicKey = base64Decode(publicKeyB64.trim());
+      if (signature.length != 64 || publicKey.length != 32) return false;
+      return await Ed25519().verify(
+        bytes,
+        signature: Signature(
+          signature,
+          publicKey: SimplePublicKey(publicKey, type: KeyPairType.ed25519),
+        ),
+      );
+    } catch (_) {
+      return false;
+    }
+  });
 }
 
 /// Разбор перечня версий Windows. Открытая функция — чтобы проверять разбор
@@ -201,8 +486,8 @@ class DesktopUpdateService {
 ///
 /// Формат — тот же RSS Sparkle, что у macOS: `<item>` с `sparkle:version`
 /// (номер сборки), `sparkle:shortVersionString` (версия для человека) и
-/// `<enclosure url=…>`. Берётся самая новая запись; если она не новее
-/// [currentBuild] — обновления нет.
+/// `<enclosure url=… length=… sparkle:edSignature=…>`. Берётся самая новая
+/// запись; если она не новее [currentBuild] — обновления нет.
 ///
 /// 🔴 Ссылка на скачивание принимается ТОЛЬКО с того же адреса, что и сам
 /// перечень: подменённый по дороге перечень не должен уводить человека
@@ -224,13 +509,23 @@ DesktopUpdateOffer? parseWindowsFeed(
     final build = int.tryParse(tag('version') ?? '');
     if (build == null) continue;
     final version = (tag('shortVersionString') ?? '$build').trim();
-    final url = RegExp(r'<enclosure[^>]*\burl="([^"]+)"').firstMatch(body)?.group(1);
+    final enclosure = RegExp(r'<enclosure\b[^>]*>').firstMatch(body)?.group(0);
+    if (enclosure == null) continue;
+    String? attr(String name) =>
+        RegExp('(?:^|\\s)$name="([^"]+)"').firstMatch(enclosure)?.group(1);
+    final url = attr('url');
     final parsed = url == null ? null : Uri.tryParse(url);
     final safe =
         parsed != null && parsed.scheme == 'https' && parsed.host == feedHost;
     if (!safe) continue;
     if (best == null || build > (best.build ?? 0)) {
-      best = DesktopUpdateOffer(version: version, build: build, downloadUrl: url);
+      best = DesktopUpdateOffer(
+        version: version,
+        build: build,
+        downloadUrl: url,
+        edSignature: attr('sparkle:edSignature'),
+        length: int.tryParse(attr('length') ?? ''),
+      );
     }
   }
   if (best == null || (best.build ?? 0) <= currentBuild) return null;

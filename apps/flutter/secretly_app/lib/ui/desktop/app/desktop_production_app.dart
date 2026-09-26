@@ -173,7 +173,8 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   // keep painting frames nobody can see.
   final DesktopWindowActivity _windowActivity = DesktopWindowActivity();
   StreamSubscription<void>? _changedSub;
-  StreamSubscription<bool>? _relaySub;
+  /// Отписка от выдержанного состояния связи (см. [_wireListeners]).
+  VoidCallback? _detachSyncPhase;
   StreamSubscription<void>? _securitySub;
   StreamSubscription<void>? _restartSub;
   StreamSubscription<String>? _notifTapSub;
@@ -531,9 +532,19 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     // termination path is the tray «Выйти» menu item (see main_desktop.dart).
     if (!_isNativeDesktop) return;
     final prevent = await windowManager.isPreventClose();
-    if (prevent) {
-      await _hideToTray();
+    if (!prevent) return;
+    // 🔴 ЗАКРЫТЬ ПРОСЯТ НЕ ВСЕГДА РУКОЙ ЧЕЛОВЕКА (26.09.2026). Windows шлёт то
+    // же самое сообщение из «Диспетчера задач» по «Завершить задачу» и при
+    // выключении компьютера. Спрятать окно в ответ на такую просьбу — это
+    // процесс, который не уходит: человек «закрыл» приложение, а оно живёт в
+    // списке. Спрятанное окно закрыть рукой нельзя, поэтому просьба закрыть
+    // уже спрятанное окно — всегда системная, и она означает «выйти».
+    final visible = await windowManager.isVisible();
+    if (!visible || !DesktopWindowActivity.trayReady) {
+      await quitDesktopApp();
+      return;
     }
+    await _hideToTray();
   }
 
   /// Спрятать окно в трей: кнопка закрытия, ⌘W и пункт трея «Скрыть окно»
@@ -720,9 +731,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       );
       setState(() {
         _ready = true;
-        _connection = _controller.relayOnline
-            ? ConnectionStatus.connected
-            : ConnectionStatus.connecting;
+        _connection = _syncStatus?.connection ?? ConnectionStatus.connecting;
       });
       // If a deep-link was buffered while we were booting, dispatch it now.
       final pending = _pendingDeepLink;
@@ -1168,15 +1177,25 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       if (mounted) setState(() {});
     });
 
-    _relaySub?.cancel();
-    _relaySub = _controller.relayConnectionChanges.listen((online) {
-      if (!mounted) return;
-      setState(() {
-        _connection = online
-            ? ConnectionStatus.connected
-            : ConnectionStatus.connecting;
-      });
-    });
+    // 🔴 ОДИН ИСТОЧНИК НА ОБА УКАЗАТЕЛЯ (26.09.2026). Точка на портрете и
+    // пилюля в подвале показывают одно и то же состояние связи, но считали
+    // его порознь: пилюля — по выдержанному состоянию, точка — по каждому
+    // событию сокета. На запуске, где подключений подряд несколько, они
+    // мигали вразнобой. Теперь точка берёт то же выдержанное состояние.
+    _detachSyncPhase?.call();
+    _detachSyncPhase = null;
+    final sync = _syncStatus;
+    if (sync != null) {
+      void onSyncPhase() {
+        if (!mounted) return;
+        final next = sync.connection;
+        if (next == _connection) return;
+        setState(() => _connection = next);
+      }
+
+      sync.addListener(onSyncPhase);
+      _detachSyncPhase = () => sync.removeListener(onSyncPhase);
+    }
 
     _restartSub?.cancel();
     _restartSub = _controller.restartRequested.listen((_) => _restart());
@@ -1480,7 +1499,8 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     DesktopHistoryCatchUp.stop();
     PeerHistoryService.instance.detach();
     await _changedSub?.cancel();
-    await _relaySub?.cancel();
+    _detachSyncPhase?.call();
+    _detachSyncPhase = null;
     await _restartSub?.cancel();
     await _securitySub?.cancel();
     _vm?.dispose();
@@ -1510,7 +1530,8 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     unawaited(_disposeNotificationService());
     _disposeCallManager();
     _changedSub?.cancel();
-    _relaySub?.cancel();
+    _detachSyncPhase?.call();
+    _detachSyncPhase = null;
     _restartSub?.cancel();
     _securitySub?.cancel();
     _deepLinkSub?.cancel();

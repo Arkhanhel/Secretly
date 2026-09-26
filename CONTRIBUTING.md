@@ -87,9 +87,15 @@ Commit messages in Conventional Commits format, in English or Russian.
 ## What to discuss before writing code
 
 - Changes to the protocol or the storage format.
-- New dependencies, especially copyleft ones. The FFmpeg package with the
-  `-gpl` suffix cannot be used: it would make the commercial half of the model
-  impossible, and that half funds the project.
+- New dependencies, especially copyleft ones. Right now the app ships the
+  `full-gpl` build of FFmpegKit, which includes x264 and is therefore GPL. An
+  earlier version of this file said that build "cannot be used"; it was in the
+  app the whole time, and we corrected the claim on 26 September 2026 rather
+  than the other way round. The GPL build is being replaced by the LGPL one
+  (`ffmpeg_kit_flutter_new_full`) with the platforms' own hardware video
+  encoders — see NOTICE. Until that lands, do not add anything else under the
+  GPL: the commercial half of the model funds the project, and that half cannot
+  ship GPL code.
 - Large interface rework.
 
 Open an issue describing the intent before you start. That way nobody spends a

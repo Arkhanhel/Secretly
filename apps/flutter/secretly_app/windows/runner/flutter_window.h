@@ -5,6 +5,7 @@
 #include <flutter/flutter_view_controller.h>
 
 #include <memory>
+#include <optional>
 
 #include "win32_window.h"
 
@@ -23,6 +24,12 @@ class FlutterWindow : public Win32Window {
                          LPARAM const lparam) noexcept override;
 
  private:
+  // Рамка окна и выход по завершению сеанса Windows — до плагинов.
+  // `std::nullopt` — сообщение нас не касается, пусть идёт дальше.
+  std::optional<LRESULT> HandleFrameMessage(HWND window, UINT const message,
+                                            WPARAM const wparam,
+                                            LPARAM const lparam) noexcept;
+
   // The project to run.
   flutter::DartProject project_;
 

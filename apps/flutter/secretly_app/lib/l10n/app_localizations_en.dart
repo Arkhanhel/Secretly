@@ -5883,6 +5883,23 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String desktopUpdateDownloading(int percent) {
+    return 'Downloading $percent%';
+  }
+
+  @override
+  String get desktopUpdateVerifying => 'Verifying…';
+
+  @override
+  String get desktopUpdateInstalling => 'Installing…';
+
+  @override
+  String get desktopUpdateManual => 'Download from the site';
+
+  @override
+  String get desktopUpdateFailedHint => 'The update could not be installed automatically. The installer is on our website.';
+
+  @override
   String get desktopCallExpand => 'Expand the call';
 
   @override

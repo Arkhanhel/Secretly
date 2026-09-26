@@ -41,6 +41,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../../app/app_controller.dart';
+import '../shell/sidebar.dart' show ConnectionStatus;
 
 /// Coarse relay/backfill phase shown in the desktop UI.
 enum DesktopSyncPhase {
@@ -60,6 +61,11 @@ enum DesktopSyncPhase {
   /// We were online and the WS dropped. Reconnect path is debounced via
   /// `_scheduleRelayReconnectKick` in [AppController].
   reconnecting,
+
+  /// Связи нет дольше [DesktopSyncStatusController.kOfflineAfter]. Отдельно от
+  /// [reconnecting]: «Переподключение…» через минуту молчания — это уже не
+  /// сообщение о состоянии, а заставка. Красная точка честнее.
+  offline,
 }
 
 /// Immutable snapshot. Compared by value in the controller's `notifyListeners`
@@ -103,19 +109,32 @@ class DesktopSyncStatus {
 class DesktopSyncStatusController extends ChangeNotifier
     implements ValueListenable<DesktopSyncStatus> {
   DesktopSyncStatusController({required AppController controller})
-      : _controller = controller {
-    // Seed from whatever AppController reports right now. The stream
+      : this.fromRelay(
+          changes: controller.relayConnectionChanges,
+          online: controller.relayOnline,
+        );
+
+  /// Только то, что классу нужно на самом деле: состояние связи сейчас и поток
+  /// его изменений. Отдельный вход существует ради проверок — собрать целый
+  /// [AppController] ради двух значений тест не может, а выдержки времени
+  /// здесь такие, что проверять их надо обязательно.
+  DesktopSyncStatusController.fromRelay({
+    required Stream<bool> changes,
+    required bool online,
+  }) {
+    // Seed from whatever the relay reports right now. The stream
     // listener fires for future changes; this primes the initial state
-    // so a controller already connected before we subscribed surfaces as
+    // so a connection that came up before we subscribed surfaces as
     // `syncing → online` rather than stuck in `connecting`.
-    _value = controller.relayOnline
+    _value = online
         ? DesktopSyncStatus(
             phase: DesktopSyncPhase.syncing,
             changedAtMs: DateTime.now().millisecondsSinceEpoch,
           )
         : DesktopSyncStatus.initial;
+    _everConnected = online;
     _scheduleSettleIfNeeded();
-    _sub = controller.relayConnectionChanges.listen(_onRelayConnChanged);
+    _sub = changes.listen(_onRelayConnChanged);
   }
 
   /// How long the banner sits in [DesktopSyncPhase.syncing] before
@@ -126,13 +145,10 @@ class DesktopSyncStatusController extends ChangeNotifier
   /// feeling snappy on a cold boot with no missed events.
   static const Duration kSyncSettleDelay = Duration(seconds: 3);
 
-  // Held for future peer-to-device history sync (PR5) — when we ask
-  // another of the user's own devices for a history dump we'll need to
-  // call back into [AppController] to fan out the control message.
-  // ignore: unused_field
-  final AppController _controller;
   StreamSubscription<bool>? _sub;
   Timer? _settleTimer;
+  Timer? _dropTimer;
+  Timer? _offlineTimer;
   DesktopSyncStatus _value = DesktopSyncStatus.initial;
   bool _everConnected = false;
 
@@ -148,23 +164,63 @@ class DesktopSyncStatusController extends ChangeNotifier
     _scheduleSettleIfNeeded();
   }
 
+  /// 🔴 СКОЛЬКО ЖДАТЬ, ПРЕЖДЕ ЧЕМ СКАЗАТЬ О ПОТЕРЕ СВЯЗИ (26.09.2026, владелец:
+  /// «если закрыть приложение и открыть заново, то внизу „соединение“ мигает
+  /// вместе с „подключением“»).
+  ///
+  /// Связь рвётся и восстанавливается чаще, чем об этом стоит рассказывать:
+  /// [RelayClient.connect] сам начинает с `disconnect()`, поэтому каждый
+  /// повторный заход — это пара «оборвалось / подключилось» за доли секунды.
+  /// Замер 14.08.2026 насчитал 33 таких переключения за сеанс. Подпись,
+  /// меняющаяся 33 раза, не сообщает ничего — она просто мигает, и мигает
+  /// сильнее всего на запуске, когда подключений подряд несколько.
+  ///
+  /// Поэтому обрыв показывается не сразу: если за это время связь вернулась,
+  /// человек не узнает о ней вовсе — и правильно, ему нечего было делать с
+  /// этим знанием. Полторы секунды — дольше любого повторного захода и короче
+  /// того, что человек считает «задумалось».
+  static const Duration kDropGrace = Duration(milliseconds: 1500);
+
+  /// Через сколько молчания «Переподключение…» сменяется на «Нет соединения».
+  static const Duration kOfflineAfter = Duration(seconds: 25);
+
   void _onRelayConnChanged(bool connected) {
     if (connected) {
+      _cancelDropTimers();
       _everConnected = true;
       _set(DesktopSyncPhase.syncing);
       _scheduleSettleIfNeeded();
-    } else {
-      // We only transition to `reconnecting` if we'd been online before.
-      // Otherwise we stay in `connecting` so the cold-boot story stays
-      // coherent: first thing the user sees is "Подключение…", not
-      // "Переподключение…".
-      _set(
-        _everConnected
-            ? DesktopSyncPhase.reconnecting
-            : DesktopSyncPhase.connecting,
-      );
-      _cancelSettle();
+      return;
     }
+    // Холодный запуск: мы и так показываем «Подключение…», ждать нечего.
+    if (!_everConnected) {
+      _cancelSettle();
+      _set(DesktopSyncPhase.connecting);
+      return;
+    }
+    // Уже сообщили об обрыве — второй раз не пересчитываем: иначе череда
+    // неудачных попыток каждый раз отодвигала бы «Нет соединения».
+    if (_value.phase == DesktopSyncPhase.reconnecting ||
+        _value.phase == DesktopSyncPhase.offline ||
+        _dropTimer != null) {
+      return;
+    }
+    _cancelSettle();
+    _dropTimer = Timer(kDropGrace, () {
+      _dropTimer = null;
+      _set(DesktopSyncPhase.reconnecting);
+      _offlineTimer = Timer(kOfflineAfter, () {
+        _offlineTimer = null;
+        _set(DesktopSyncPhase.offline);
+      });
+    });
+  }
+
+  void _cancelDropTimers() {
+    _dropTimer?.cancel();
+    _dropTimer = null;
+    _offlineTimer?.cancel();
+    _offlineTimer = null;
   }
 
   void _set(DesktopSyncPhase next) {
@@ -192,11 +248,23 @@ class DesktopSyncStatusController extends ChangeNotifier
     _settleTimer = null;
   }
 
+  /// Состояние связи для точки на портрете в рейке. Оба указателя внизу окна
+  /// берут его отсюда: пока их считали порознь, они успевали спорить друг с
+  /// другом — один говорил «Подключение…», другой уже «Подключено».
+  ConnectionStatus get connection => switch (_value.phase) {
+        DesktopSyncPhase.syncing || DesktopSyncPhase.online =>
+          ConnectionStatus.connected,
+        DesktopSyncPhase.connecting || DesktopSyncPhase.reconnecting =>
+          ConnectionStatus.connecting,
+        DesktopSyncPhase.offline => ConnectionStatus.offline,
+      };
+
   @override
   void dispose() {
     _sub?.cancel();
     _sub = null;
     _cancelSettle();
+    _cancelDropTimers();
     super.dispose();
   }
 }

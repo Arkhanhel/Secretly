@@ -92,9 +92,9 @@ BEGIN
             VALUE "CompanyName", "Yurii Arkhanhelskyi" "\0"
             VALUE "FileDescription", "Secretly" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "secretly_app" "\0"
+            VALUE "InternalName", "Secretly" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2025-2026 Yurii Arkhanhelskyi. All rights reserved." "\0"
-            VALUE "OriginalFilename", "secretly_app.exe" "\0"
+            VALUE "OriginalFilename", "Secretly.exe" "\0"
             VALUE "ProductName", "Secretly" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END

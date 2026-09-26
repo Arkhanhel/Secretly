@@ -190,7 +190,12 @@ Future<void> main() async {
     // (running headless in CI etc.).
     try {
       await _setupTray();
-    } catch (_) {}
+      DesktopWindowActivity.trayReady = true;
+    } catch (_) {
+      // Значка нет — крестик окна будет закрывать приложение целиком, а не
+      // прятать его туда, откуда не достать.
+      DesktopWindowActivity.trayReady = false;
+    }
 
     // 4. PR3.10 (SPRINT2_AUDIT §15): warm up the desktop reactions «Недавние»
     // cache so the first right-click + expand has the recents row ready
@@ -265,8 +270,7 @@ class _TrayBridge with TrayListener {
         unawaited(hide != null ? hide() : windowManager.hide());
         break;
       case 'quit':
-        unawaited(windowManager.setPreventClose(false));
-        unawaited(windowManager.destroy());
+        unawaited(quitDesktopApp());
         break;
     }
   }

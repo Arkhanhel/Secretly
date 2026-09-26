@@ -1,8 +1,93 @@
 #include "flutter_window.h"
 
+#include <windowsx.h>
+
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
+
+namespace {
+
+// 🔴 РАМКА ВОКРУГ ОКНА (26.09.2026, владелец: «везде по бокам какая-то рамка
+// вокруг окна приложения кроме верхней части, это раздражает и выглядит
+// дёшево»).
+//
+// Окно у нас без системной шапки: её рисует само приложение. Плагин
+// `window_manager` добивается этого так: в ответ на WM_NCCALCSIZE он ужимает
+// клиентскую область на 8 точек слева, справа и снизу — и НИ НА ОДНУ сверху
+// (`window_manager_plugin.cpp`, ветка `title_bar_style_ == "hidden"`). Отступы
+// нужны ему, чтобы окно можно было тянуть за края: тянет их Windows, а тянуть
+// она умеет только за нерабочую область. Но эту нерабочую область Windows ещё
+// и ЗАКРАШИВАЕТ — системным цветом рамки. Отсюда и полоса с трёх сторон, и
+// отсутствие её сверху.
+//
+// Здесь мы перехватываем те же два сообщения ДО плагина:
+//
+//   WM_NCCALCSIZE — клиентская область равна всему окну, поэтому приложение
+//                   рисует до самого края и системной рамке негде взяться;
+//   WM_NCHITTEST  — зоны перетаскивания краёв мы считаем сами, внутри окна.
+//
+// Так делают Telegram, VS Code и пакет `bitsdojo_window`. Плагин этих двух
+// сообщений больше не видит; всё остальное (перетаскивание за шапку, кнопки
+// окна, полноэкранный режим) остаётся за ним.
+
+// Толщина зоны, за которую окно тянут мышью, в точках интерфейса. Шесть —
+// как у невидимой рамки Windows; в углах зона шире, там её ищут на ощупь.
+constexpr int kResizeGripDip = 6;
+constexpr int kResizeCornerDip = 14;
+
+// Настоящий номер сборки Windows. `IsWindows11OrGreater` из VersionHelpers
+// про Windows 11 не знает, а манифест совместимости подделывает ответ
+// `GetVersionEx`, поэтому спрашиваем ядро напрямую.
+bool IsWindows11OrLater() {
+  static const bool result = [] {
+    using RtlGetVersionPtr = LONG(WINAPI*)(PRTL_OSVERSIONINFOW);
+    HMODULE ntdll = ::GetModuleHandleW(L"ntdll.dll");
+    if (!ntdll) return false;
+    auto rtl_get_version = reinterpret_cast<RtlGetVersionPtr>(
+        ::GetProcAddress(ntdll, "RtlGetVersion"));
+    if (!rtl_get_version) return false;
+    RTL_OSVERSIONINFOW info = {};
+    info.dwOSVersionInfoSize = sizeof(info);
+    if (rtl_get_version(&info) != 0) return false;
+    return info.dwMajorVersion > 10 ||
+           (info.dwMajorVersion == 10 && info.dwBuildNumber >= 22000);
+  }();
+  return result;
+}
+
+int ScaleForWindow(HWND hwnd, int dip) {
+  static const auto get_dpi_for_window =
+      reinterpret_cast<UINT(WINAPI*)(HWND)>(::GetProcAddress(
+          ::GetModuleHandleW(L"user32.dll"), "GetDpiForWindow"));
+  const UINT dpi = get_dpi_for_window ? get_dpi_for_window(hwnd) : 96;
+  return ::MulDiv(dip, dpi == 0 ? 96 : dpi, 96);
+}
+
+// Можно ли окно тянуть за края прямо сейчас. Полноэкранный режим (так
+// открывается видеозвонок) плагин делает, снимая со стиля WS_THICKFRAME, —
+// спрашиваем ровно то, что он меняет, а не сравниваем размеры с экраном:
+// окно, растянутое человеком по размеру монитора, края терять не должно.
+bool IsResizableWindow(HWND hwnd) {
+  return (::GetWindowLong(hwnd, GWL_STYLE) & WS_THICKFRAME) != 0;
+}
+
+// Развёрнутое окно Windows делает шире экрана на толщину рамки. Если этого не
+// учесть, у развёрнутого окна срежет края. Клиентскую область кладём ровно в
+// рабочую часть экрана — так же поступает и сам плагин.
+void ClampToWorkArea(HWND hwnd, NCCALCSIZE_PARAMS* params) {
+  // Монитор ищем по прямоугольнику окна, а не по самому окну: развёрнутое из
+  // свёрнутого окно Windows на мгновение считает стоящим на левом мониторе.
+  HMONITOR monitor =
+      ::MonitorFromRect(&params->rgrc[0], MONITOR_DEFAULTTONEAREST);
+  if (!monitor) return;
+  MONITORINFO mi = {};
+  mi.cbSize = sizeof(mi);
+  if (!::GetMonitorInfo(monitor, &mi)) return;
+  params->rgrc[0] = mi.rcWork;
+}
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -47,10 +132,88 @@ void FlutterWindow::OnDestroy() {
   Win32Window::OnDestroy();
 }
 
+std::optional<LRESULT> FlutterWindow::HandleFrameMessage(
+    HWND hwnd, UINT const message, WPARAM const wparam,
+    LPARAM const lparam) noexcept {
+  switch (message) {
+    case WM_NCCALCSIZE: {
+      if (wparam != TRUE) return std::nullopt;
+      auto* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lparam);
+      if (::IsZoomed(hwnd)) {
+        ClampToWorkArea(hwnd, params);
+      } else if (IsResizableWindow(hwnd) && !IsWindows11OrLater()) {
+        // Windows 10 рисует поверх самой верхней строки окна светлую черту, и
+        // убрать её нельзя — только оставить снаружи клиентской области.
+        params->rgrc[0].top += 1;
+      }
+      // Клиентская область — всё окно. Ни одного отступа: рамке неоткуда
+      // взяться (см. примечание в начале файла).
+      return 0;
+    }
+    case WM_NCHITTEST: {
+      // Полей у окна больше нет, поэтому системная проверка вернёт «рабочая
+      // область» для всего окна. Края считаем сами.
+      const LRESULT system = ::DefWindowProc(hwnd, message, wparam, lparam);
+      if (system != HTCLIENT) return system;
+      if (::IsZoomed(hwnd) || !IsResizableWindow(hwnd)) return std::nullopt;
+
+      POINT cursor = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      if (!::ScreenToClient(hwnd, &cursor)) return std::nullopt;
+      RECT client = {};
+      if (!::GetClientRect(hwnd, &client)) return std::nullopt;
+
+      const int grip = ScaleForWindow(hwnd, kResizeGripDip);
+      const int corner = ScaleForWindow(hwnd, kResizeCornerDip);
+      const bool left = cursor.x < grip;
+      const bool right = cursor.x >= client.right - grip;
+      const bool top = cursor.y < grip;
+      const bool bottom = cursor.y >= client.bottom - grip;
+      // В углу ловим по более широкой зоне, иначе в неё не попасть мышью.
+      const bool corner_left = cursor.x < corner;
+      const bool corner_right = cursor.x >= client.right - corner;
+      const bool corner_top = cursor.y < corner;
+      const bool corner_bottom = cursor.y >= client.bottom - corner;
+
+      if ((top && corner_left) || (left && corner_top)) return HTTOPLEFT;
+      if ((top && corner_right) || (right && corner_top)) return HTTOPRIGHT;
+      if ((bottom && corner_left) || (left && corner_bottom))
+        return HTBOTTOMLEFT;
+      if ((bottom && corner_right) || (right && corner_bottom))
+        return HTBOTTOMRIGHT;
+      if (left) return HTLEFT;
+      if (right) return HTRIGHT;
+      if (top) return HTTOP;
+      if (bottom) return HTBOTTOM;
+      // Остальное — рабочая область: за шапку окно тянет само приложение.
+      return std::nullopt;
+    }
+    case WM_ENDSESSION: {
+      // 🔴 Выключение или выход из системы. Крестик у нас прячет окно в трей,
+      // и без этой ветки Windows ждала бы нас до упора, а потом убивала —
+      // «приложение мешает завершению работы». Уходим сами: база пишется
+      // синхронно, терять при выходе нечего.
+      if (wparam == TRUE) {
+        ::ExitProcess(0);
+      }
+      return std::nullopt;
+    }
+    default:
+      return std::nullopt;
+  }
+}
+
 LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // Рамка окна — до плагина: WM_NCCALCSIZE и WM_NCHITTEST он обрабатывает
+  // по-своему, и его ответ как раз и рисует полосу по краям. Всё остальное
+  // достаётся ему нетронутым.
+  if (std::optional<LRESULT> frame =
+          HandleFrameMessage(hwnd, message, wparam, lparam)) {
+    return *frame;
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

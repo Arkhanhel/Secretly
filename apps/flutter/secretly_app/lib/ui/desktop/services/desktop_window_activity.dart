@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'dart:async';
+import 'dart:io' as io;
+
 import 'package:flutter/foundation.dart';
+import 'package:window_manager/window_manager.dart';
+
 import '../../widgets/telegram_wallpaper.dart' show ChatWallpaperAnimMode;
 
 /// Tracks whether the desktop window is actually on screen.
@@ -60,8 +65,59 @@ class DesktopWindowActivity {
   /// зарегистрировало — трей прячет окно сам.
   static Future<void> Function()? hideHandler;
 
+  /// Удалось ли поставить значок в трее.
+  ///
+  /// 🔴 От этого зависит, что делает крестик окна. Прятать окно можно только
+  /// туда, откуда его можно достать: без значка спрятанное окно — это процесс
+  /// без окна, который человек находит разве что в «Диспетчере задач».
+  /// Постановка значка обёрнута в `try` (безголовый прогон, чужая оболочка
+  /// рабочего стола), и тогда крестик обязан закрывать приложение целиком.
+  static bool trayReady = false;
+
   void dispose() => visible.dispose();
 }
+
+/// Закрыть приложение по-настоящему.
+///
+/// 🔴 ОДИН ПУТЬ ВЫХОДА НА ВСЕ СЛУЧАИ (26.09.2026, владелец: «при закрытии
+/// процесс закрывался профессионально»). Сюда приходят: пункт трея «Выйти»,
+/// «Завершить задачу» в «Диспетчере задач» и крестик окна, когда прятать
+/// некуда. Раньше пункт трея слал два несвязанных вызова подряд, а остальные
+/// пути не звали ничего — процесс оставался в списке без окна.
+///
+/// Подстраховка по времени обязательна: разрушение окна уходит на
+/// платформенную сторону, и если та не ответит — застрявший плагин, занятая
+/// нить, — процесс висел бы вечно. Три секунды с запасом покрывают обычное
+/// закрытие; после них уходим сами.
+Future<void> quitDesktopApp({
+  Future<void> Function()? destroy,
+  void Function()? exitProcess,
+  Duration backstop = const Duration(seconds: 3),
+}) async {
+  if (_quitting) return;
+  _quitting = true;
+  final leave = exitProcess ?? () => io.exit(0);
+  final timer = Timer(backstop, leave);
+  try {
+    if (destroy != null) {
+      await destroy();
+    } else {
+      await windowManager.setPreventClose(false);
+      await windowManager.destroy();
+    }
+    // Окно закрылось само — добивать процесс незачем: сообщений больше нет,
+    // цикл окна кончится и приложение уйдёт своим ходом.
+    timer.cancel();
+  } catch (_) {
+    timer.cancel();
+    leave();
+  }
+}
+
+bool _quitting = false;
+
+@visibleForTesting
+void debugResetDesktopQuit() => _quitting = false;
 
 /// Каким режимом рисовать обои чата прямо сейчас.
 ///

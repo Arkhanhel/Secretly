@@ -2870,6 +2870,18 @@
       }
     }
   },
+  "desktopUpdateDownloading": "Downloading {percent}%",
+  "@desktopUpdateDownloading": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "desktopUpdateVerifying": "Verifying…",
+  "desktopUpdateInstalling": "Installing…",
+  "desktopUpdateManual": "Download from the site",
+  "desktopUpdateFailedHint": "The update could not be installed automatically. The installer is on our website.",
   "desktopCallExpand": "Expand the call",
   "desktopCallMinimiseHint": "Minimise to a mini window",
   "desktopCallOpenChat": "Minimise the call and open the chat",
