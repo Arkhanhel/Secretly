@@ -40,6 +40,7 @@ class ServiceHealthStatus {
     this.serviceStartedAtMs,
     this.maxRequestBodyBytes,
     this.maxAttachmentBytes,
+    this.onlineOnly = false,
   });
 
   final int httpStatusCode;
@@ -57,6 +58,10 @@ class ServiceHealthStatus {
   final int? serviceStartedAtMs;
   final int? maxRequestBodyBytes;
   final int? maxAttachmentBytes;
+
+  /// П-4: реле исполняет `online_only` («печатает» только тем, кто на связи).
+  /// Клиент ставит поле только тогда — иначе тратил бы долю раскатки впустую.
+  final bool onlineOnly;
 
   bool get isHealthy => reachable && status == 'ok';
 
@@ -165,6 +170,7 @@ class ServiceHealthStatus {
       serviceStartedAtMs: serviceStartedAtMs,
       maxRequestBodyBytes: maxRequestBodyBytes,
       maxAttachmentBytes: maxAttachmentBytes,
+      onlineOnly: json['online_only'] == true,
     );
   }
 

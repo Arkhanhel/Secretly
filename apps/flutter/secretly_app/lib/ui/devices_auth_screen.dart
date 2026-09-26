@@ -516,6 +516,14 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
           ru: 'Основной аккаунт нужно создать на телефоне, а desktop подключать через QR.',
           en: 'Create the main account on a phone first, then link desktop with QR.',
         );
+      // П-5 (25.09.2026): код выдаёт только регистрация КОМПЬЮТЕРА; на
+      // телефоне ветка недостижима и нужна лишь полноте switch.
+      case DesktopLinkFailureCode.desktopDeviceUnlinked:
+        return _label(
+          context,
+          ru: 'Этот компьютер отвязан от профиля. Привяжите его снова по QR с телефона.',
+          en: 'This computer was unlinked from the profile. Link it again with a QR from your phone.',
+        );
       case DesktopLinkFailureCode.invalidQrPayload:
         return _label(
           context,

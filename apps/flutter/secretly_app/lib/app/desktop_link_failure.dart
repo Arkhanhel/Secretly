@@ -15,6 +15,10 @@ enum DesktopLinkFailureCode {
   desktopCompanionEntitlementRequired,
   desktopCompanionLimitReached,
   desktopPrimaryDeviceRequired,
+
+  /// П-5 (25.09.2026): этот компьютер отвязан от профиля (надгробие на
+  /// сервере). Вернуть его можно только новой привязкой с телефона.
+  desktopDeviceUnlinked,
   invalidQrPayload,
   qrExpired,
   serverBindingMismatch,
@@ -77,6 +81,8 @@ String _defaultDesktopLinkFailureMessage(DesktopLinkFailureCode code) {
       return 'Desktop companion limit reached for this profile. Remove an old desktop session or increase the available companion seats.';
     case DesktopLinkFailureCode.desktopPrimaryDeviceRequired:
       return 'Create the main Secretly account on a phone first, then link desktop by QR.';
+    case DesktopLinkFailureCode.desktopDeviceUnlinked:
+      return 'This computer was unlinked from your Secretly ID. Link it again from your phone: the chats on this computer will be replaced with a copy from the phone.';
     case DesktopLinkFailureCode.invalidQrPayload:
       return 'Unsupported QR payload';
     case DesktopLinkFailureCode.qrExpired:

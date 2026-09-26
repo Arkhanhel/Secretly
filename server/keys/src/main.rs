@@ -241,6 +241,33 @@ struct HandshakeAuthPayload {
     issued_at_ms: i64,
 }
 
+/// ТЗ мультиустройства (25.09.2026, §2): все пункты П-1…П-5 управляются этим
+/// блоком, все поля — с первого дня. Подписываемое сообщение ЗАМОРОЖЕНО:
+/// дописать поле потом значит молча сломать подпись у всех выпущенных сборок
+/// (ожог 19.07). Понадобится новое поле — новый блок `multidevice2`.
+///
+/// Каждое поле по умолчанию 0, и 0 у клиента всегда означает «как без блока»:
+/// скачок ратчета — встроенный, доли — никому, дни — не предупреждать и не
+/// отвязывать. Направление отказа записано в таблице §2 ТЗ.
+#[derive(Serialize, Clone, Copy)]
+struct MultidevicePayload {
+    /// П-3: насколько номер провода может опережать цепочку. 0 — встроенное.
+    ratchet_jump_mobile: i64,
+    ratchet_jump_desktop: i64,
+    /// П-4: доля отправителей, шлющих «печатает» только устройствам на связи.
+    ephemeral_online_only_percent: i64,
+    /// П-5: через сколько дней молчания ПК предупреждать и отвязывать.
+    companion_warn_days: i64,
+    companion_unlink_days: i64,
+    /// П-2: доля устройств с новым повтором по заявке «не смог расшифровать».
+    nack_v2_percent: i64,
+    /// П-2, фаза 2: журнал правок и реакций для досылки.
+    send_journal_percent: i64,
+    /// П-1: доля отправителей со сверкой росписи устройств.
+    device_check_percent: i64,
+    issued_at_ms: i64,
+}
+
 /// Additive (2026-07-24): in-app Support feature flag + the X25519 public key
 /// tickets are sealed to. Fail-OFF on the client (empty key / unverified block
 /// hides the page). TZ.
@@ -281,6 +308,10 @@ struct ConfigResponse {
     /// Старые клиенты игнорируют оба поля.
     handshake_auth: HandshakeAuthPayload,
     handshake_auth_signature: String,
+    /// Additive (2026-09-25): выключатели мультиустройства со своей подписью,
+    /// см. [`MultidevicePayload`]. Старые клиенты игнорируют оба поля.
+    multidevice: MultidevicePayload,
+    multidevice_signature: String,
     /// Additive (2026-08-03): сведения о новой версии со своей подписью.
     update: UpdatePayload,
     update_signature: String,
@@ -371,6 +402,23 @@ fn handshake_auth_signing_message(p: &HandshakeAuthPayload) -> String {
     format!(
         "secretly-handshake-auth-v1|{}|{}",
         p.enforce_disabled, p.issued_at_ms,
+    )
+}
+
+/// Каноническое подписываемое сообщение блока `multidevice`. ОБЯЗАНО
+/// совпадать с Dart `multideviceSigningMessage` побайтово. Заморожено.
+fn multidevice_signing_message(p: &MultidevicePayload) -> String {
+    format!(
+        "secretly-multidevice-v1|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        p.ratchet_jump_mobile,
+        p.ratchet_jump_desktop,
+        p.ephemeral_online_only_percent,
+        p.companion_warn_days,
+        p.companion_unlink_days,
+        p.nack_v2_percent,
+        p.send_journal_percent,
+        p.device_check_percent,
+        p.issued_at_ms,
     )
 }
 
@@ -509,12 +557,31 @@ async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
         ),
         None => String::new(),
     };
+    let md_cfg = state.multidevice.as_ref();
+    let multidevice = MultidevicePayload {
+        ratchet_jump_mobile: md_cfg.ratchet_jump_mobile,
+        ratchet_jump_desktop: md_cfg.ratchet_jump_desktop,
+        ephemeral_online_only_percent: md_cfg.ephemeral_online_only_percent,
+        companion_warn_days: md_cfg.companion_warn_days,
+        companion_unlink_days: md_cfg.companion_unlink_days,
+        nack_v2_percent: md_cfg.nack_v2_percent,
+        send_journal_percent: md_cfg.send_journal_percent,
+        device_check_percent: md_cfg.device_check_percent,
+        issued_at_ms: payload.issued_at_ms,
+    };
+    let multidevice_signature = match state.config_signing_key.as_ref() {
+        Some(sk) => base64::engine::general_purpose::STANDARD.encode(
+            sk.sign(multidevice_signing_message(&multidevice).as_bytes())
+                .to_bytes(),
+        ),
+        None => String::new(),
+    };
     // ETag over the static (limits/flag) part — note issued_at_ms changes each
     // call, so derive the ETag from the limits+flag only for cache stability.
     // The reliability flags are part of the seed too — otherwise flipping a
     // kill-switch would keep serving a stale cached response for up to max-age.
     let etag_seed = format!(
-        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
         m.enabled,
         m.free_attachment_bytes,
         m.free_group_members,
@@ -539,6 +606,11 @@ async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
         // С-2: выключатель тоже в зерне — иначе «снять отказы за минуты»
         // упёрлось бы в кэш.
         hs_cfg.hs_auth_enforce_disabled,
+        // Блок мультиустройства целиком: любой откат — это смена его полей.
+        multidevice_signing_message(&MultidevicePayload {
+            issued_at_ms: 0,
+            ..multidevice
+        }),
     );
     let etag = format!(
         "\"{}\"",
@@ -570,6 +642,8 @@ async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
             handshake_signature,
             handshake_auth,
             handshake_auth_signature,
+            multidevice,
+            multidevice_signature,
             update,
             update_signature,
             support,
@@ -1451,6 +1525,7 @@ struct AppState {
     rooms: Arc<RoomsConfig>,
     rooms2: Arc<Rooms2Config>,
     handshake: Arc<HandshakeServerConfig>,
+    multidevice: Arc<MultideviceServerConfig>,
     update: Arc<UpdateServerConfig>,
     support: Arc<SupportServerConfig>,
     // Server Ed25519 key used to sign /v1/config (and later entitlements). None
@@ -1747,6 +1822,59 @@ impl HandshakeServerConfig {
     }
 }
 
+/// Потолок скачка ратчета, который сервер вообще согласен объявить: эталон
+/// Signal (`MAX_FORWARD_JUMPS`). Клиент зажимает ещё раз, в [200, 25 000].
+const MULTIDEVICE_RATCHET_JUMP_MAX: i64 = 25_000;
+
+/// Источник блока `multidevice` (ТЗ мультиустройства §2). По умолчанию всё 0 —
+/// блок едет тёмным, клиенты ведут себя как без него. Значения — только из
+/// переменных `SECRETLY_KEYS_MD_*` (накладка `65-multidevice.conf`); выключение
+/// без сборки: переменная → `daemon-reload` → restart keys.
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+struct MultideviceServerConfig {
+    ratchet_jump_mobile: i64,
+    ratchet_jump_desktop: i64,
+    ephemeral_online_only_percent: i64,
+    companion_warn_days: i64,
+    companion_unlink_days: i64,
+    nack_v2_percent: i64,
+    send_journal_percent: i64,
+    device_check_percent: i64,
+}
+
+impl MultideviceServerConfig {
+    fn from_env() -> Self {
+        Self::from_lookup(|key| std::env::var(key).ok())
+    }
+
+    /// Разбор без обращения к окружению процесса — чтобы тесты не делили
+    /// глобальные переменные. Зажим здесь, на сервере: клиент не обязан
+    /// защищаться от опечатки оператора, и «110 %» не должно значить «всем».
+    fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Self {
+        let int = |key: &str| {
+            get(key)
+                .and_then(|v| v.trim().parse::<i64>().ok())
+                .unwrap_or(0)
+                .max(0)
+        };
+        let percent = |key: &str| int(key).min(100);
+        let jump = |key: &str| int(key).min(MULTIDEVICE_RATCHET_JUMP_MAX);
+        // Дни — не больше года: больший порог означает «никогда», и сказать это
+        // надо нулём, а не числом, которое переполнит чьи-то миллисекунды.
+        let days = |key: &str| int(key).min(365);
+        MultideviceServerConfig {
+            ratchet_jump_mobile: jump("SECRETLY_KEYS_MD_RATCHET_JUMP_MOBILE"),
+            ratchet_jump_desktop: jump("SECRETLY_KEYS_MD_RATCHET_JUMP_DESKTOP"),
+            ephemeral_online_only_percent: percent("SECRETLY_KEYS_MD_EPHEMERAL_ONLINE_ONLY_PERCENT"),
+            companion_warn_days: days("SECRETLY_KEYS_MD_COMPANION_WARN_DAYS"),
+            companion_unlink_days: days("SECRETLY_KEYS_MD_COMPANION_UNLINK_DAYS"),
+            nack_v2_percent: percent("SECRETLY_KEYS_MD_NACK_V2_PERCENT"),
+            send_journal_percent: percent("SECRETLY_KEYS_MD_SEND_JOURNAL_PERCENT"),
+            device_check_percent: percent("SECRETLY_KEYS_MD_DEVICE_CHECK_PERCENT"),
+        }
+    }
+}
+
 /// Server-side source for the additive Support block. Default OFF (fail-OFF):
 /// the feature ships dark until a human sets SECRETLY_SUPPORT_PUB_B64 (the
 /// X25519 public key from ops/support/gen_support_key.sh) and
@@ -1900,8 +2028,9 @@ async fn rate_limit(
     req: Request<Body>,
     next: middleware::Next,
 ) -> axum::response::Response {
-    // Health should always be reachable.
-    if req.uri().path() == "/health" {
+    // Health should always be reachable; П-1: so should the relay's internal
+    // calls with the internal key (they all share 127.0.0.1's bucket).
+    if rate_limit_exempt(req.uri().path(), internal_key_matches(&state, req.headers())) {
         return next.run(req).await;
     }
 
@@ -4679,6 +4808,35 @@ async fn register_device_proof(
         });
     }
 
+    // 🔴 П-5 (25.09.2026): отвязанный номер не регистрируется.
+    //
+    // Проверка — после секрета профиля: об отвязке узнаёт только тот, кто
+    // вправе управлять профилем. Код НОВЫЙ, `device_unlinked`: выпущенные ПК
+    // неизвестный код показывают как «нужно основное устройство» с текстом
+    // сервера. НЕ `signature_invalid` и НЕ `device_identity_key_mismatch` —
+    // на них выпущенные клиенты заводят новый номер и регистрируются заново,
+    // и отвязка обходилась бы.
+    match state.store.device_tombstone(&req.device_id, now_ms()).await {
+        Ok(Some(tomb)) => {
+            tracing::info!(
+                device_ref = %log_fingerprint(&req.device_id),
+                reason = %tomb.reason,
+                "register refused: device unlinked"
+            );
+            return Json(reg_proof_fail(
+                "device_unlinked",
+                "This device was unlinked from the profile. Link it again from your primary device.",
+            ));
+        }
+        Ok(None) => {}
+        Err(_) => {
+            return Json(reg_proof_fail(
+                "store_error",
+                "unexpected database error while checking device state",
+            ));
+        }
+    }
+
     let device_class = normalize_device_class(req.device_class.as_deref());
     let device_label = sanitize_device_label(req.device_label.as_deref());
     // Profile-secret-proven path (require_profile_secret passed above), so the
@@ -4971,18 +5129,395 @@ async fn delete_device(
         verify_requester_device_auth(&state, &headers, msg, true, Some(&req.profile_id)).await?;
     }
 
-    let ok = state
+    // 🔴 П-5 (25.09.2026): удаление по просьбе — это ОТВЯЗКА с надгробием.
+    // Без него выключенный ПК при следующем запуске перерегистрировался с
+    // сохранённым секретом профиля, и «Завершить сеанс» не держалось.
+    // Все пути клиента, что сюда приходят, удаляют номер, который больше не
+    // используется: чужой ПК, старый номер после смены, старый номер ПК после
+    // повторной привязки (она берёт НОВЫЙ номер) — надгробие им не мешает.
+    let reason = if internal_key_matches(&state, &headers) {
+        "removed_by_server"
+    } else {
+        "ended_by_owner"
+    };
+    let class = state
         .store
-        .delete_device(&req.profile_id, &req.device_id)
+        .device_class_of(&req.device_id)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let tombstone = deletion_tombstones(&class);
+    let ok = if tombstone {
+        state
+            .store
+            .unlink_device(
+                &req.profile_id,
+                &req.device_id,
+                reason,
+                now_ms(),
+                store::UnlinkGuard::Owner,
+            )
+            .await
+    } else {
+        state.store.delete_device(&req.profile_id, &req.device_id).await
+    }
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
     if ok {
+        tracing::info!(
+            device_ref = %log_fingerprint(&req.device_id),
+            reason,
+            tombstone,
+            "device removed on request"
+        );
         let _ = state
             .store
             .mark_profile_active(&req.profile_id, now_ms())
             .await;
     }
     Ok(Json(DeleteDeviceResponse { ok }))
+}
+
+/// 🔴 П-5: надгробие при удалении — только ПК и вебу.
+///
+/// Телефон — корень доверия профиля: он одобряет привязку компаньонов. Выпущенный
+/// ПК показывает «Отключить» и на строке телефона; с надгробием одно такое
+/// нажатие запирало бы телефон навсегда (регистрация — `device_unlinked`), а с
+/// ним и весь профиль. Телефону — прежнее удаление без надгробия: при следующем
+/// запуске он перерегистрируется, как было всегда.
+fn deletion_tombstones(device_class: &str) -> bool {
+    matches!(device_class, "desktop" | "web")
+}
+
+/// П-5: ответ на вопрос устройства «что со мной?».
+#[derive(Serialize)]
+struct DeviceSelfStatusResponse {
+    /// `active` — в росписи; `hidden` — зарегистрировано, но окно живости его
+    /// скрыло (регистрироваться дальше, не объявлять «удалено»); `unlinked` —
+    /// отвязано, есть надгробие; `unknown` — такого устройства сервер не знает.
+    status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    unlinked_at_ms: Option<i64>,
+    now_ms: i64,
+}
+
+fn keys_device_self_status_auth_message(device_id: &str, ts_ms: i64, nonce_b64: &str) -> Vec<u8> {
+    format!(
+        "SECRETLY-KEYS-DEVICE-SELF-STATUS-V1\ndevice_id={}\nts_ms={}\nnonce_b64={}\n",
+        device_id, ts_ms, nonce_b64
+    )
+    .into_bytes()
+}
+
+/// 🔴 П-5: GET /v1/device/self_status — подписанный вопрос устройства о себе.
+///
+/// Работает и для ОТВЯЗАННОГО устройства: его строки уже нет, поэтому ключ
+/// личности для проверки подписи берётся из надгробия. Так ПК отличает
+/// «отвязан» от «скрыт окном» и показывает правду, а не ложное «доступ отозван
+/// на другом устройстве». Незнакомому (ни строки, ни надгробия) — `unknown`
+/// без проверки: подписи сверять не с чем, а сказать «не знаю» безопасно.
+async fn device_self_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<DeviceSelfStatusResponse>, (StatusCode, String)> {
+    let did = header_str(&headers, "x-secretly-device-id")
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if !is_valid_id(&did, 128) {
+        return Err((StatusCode::BAD_REQUEST, "bad device_id".into()));
+    }
+    let ts_ms = header_str(&headers, "x-secretly-ts-ms")
+        .and_then(|v| v.parse::<i64>().ok())
+        .ok_or((StatusCode::UNAUTHORIZED, "bad x-secretly-ts-ms".into()))?;
+    let nonce_b64 = header_str(&headers, "x-secretly-nonce-b64")
+        .ok_or((StatusCode::UNAUTHORIZED, "missing x-secretly-nonce-b64".into()))?
+        .to_string();
+    let signature_b64 = header_str(&headers, "x-secretly-signature-b64")
+        .ok_or((StatusCode::UNAUTHORIZED, "missing x-secretly-signature-b64".into()))?
+        .to_string();
+    let now = now_ms();
+    if (ts_ms - now).abs() > 5 * 60 * 1000 {
+        return Err((StatusCode::UNAUTHORIZED, "timestamp out of range".into()));
+    }
+
+    let live_key = state
+        .store
+        .identity_key_for_device(&did)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+        .filter(|k| !k.is_empty());
+    let tombstone = if live_key.is_none() {
+        state
+            .store
+            .device_tombstone(&did, now)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+    } else {
+        None
+    };
+    let key = live_key
+        .clone()
+        .or_else(|| tombstone.as_ref().and_then(|t| t.identity_key_pub_b64.clone()));
+    let Some(key) = key else {
+        return Ok(Json(DeviceSelfStatusResponse {
+            status: "unknown",
+            reason: None,
+            unlinked_at_ms: None,
+            now_ms: now,
+        }));
+    };
+    check_and_mark_nonce(&state, &did, &nonce_b64, now)?;
+    let msg = keys_device_self_status_auth_message(&did, ts_ms, &nonce_b64);
+    if !verify_ed25519_b64(&key, &signature_b64, &msg) {
+        return Err((StatusCode::UNAUTHORIZED, "bad signature".into()));
+    }
+
+    if live_key.is_some() {
+        let profile_id = state
+            .store
+            .profile_id_for_device(&did)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+            .unwrap_or_default();
+        let visible = state
+            .store
+            .list_device_statuses(&profile_id)
+            .await
+            .unwrap_or_default()
+            .iter()
+            .any(|d| d.device_id == did);
+        // Сначала ответ, потом отметка «на связи»: иначе «скрыт» не увидеть
+        // никогда — отметка сама возвращает устройство в окно (Н-2).
+        note_device_seen(&state, &did).await;
+        return Ok(Json(DeviceSelfStatusResponse {
+            status: if visible { "active" } else { "hidden" },
+            reason: None,
+            unlinked_at_ms: None,
+            now_ms: now,
+        }));
+    }
+    let tomb = tombstone.expect("key came from the tombstone");
+    Ok(Json(DeviceSelfStatusResponse {
+        status: "unlinked",
+        reason: Some(tomb.reason),
+        unlinked_at_ms: Some(tomb.unlinked_at_ms),
+        now_ms: now,
+    }))
+}
+
+#[derive(Serialize)]
+struct OwnDeviceEntry {
+    device_id: String,
+    device_class: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    device_label: Option<String>,
+    created_at_ms: i64,
+    last_seen_ms: i64,
+    /// Когда сервер отвяжет это устройство за молчание; null — никогда
+    /// (отвязка выключена, это телефон, самое свежее или последнее).
+    planned_unlink_at_ms: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct OwnTombstoneEntry {
+    device_id: String,
+    reason: String,
+    unlinked_at_ms: i64,
+}
+
+#[derive(Serialize)]
+struct OwnDevicesResponse {
+    devices: Vec<OwnDeviceEntry>,
+    tombstones: Vec<OwnTombstoneEntry>,
+    warn_after_days: i64,
+    unlink_after_days: i64,
+    now_ms: i64,
+}
+
+fn keys_own_devices_auth_message(
+    requester_device_id: &str,
+    profile_id: &str,
+    ts_ms: i64,
+    nonce_b64: &str,
+) -> Vec<u8> {
+    format!(
+        "SECRETLY-KEYS-OWN-DEVICES-V1\nrequester_device_id={}\nprofile_id={}\nts_ms={}\nnonce_b64={}\n",
+        requester_device_id, profile_id, ts_ms, nonce_b64
+    )
+    .into_bytes()
+}
+
+const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+
+/// Когда задание отвяжет устройство за молчание, или None — никогда.
+fn planned_unlink_at_ms(
+    unlink_after_days: i64,
+    device_class: &str,
+    freshest: bool,
+    devices_in_profile: usize,
+    last_seen_ms: i64,
+) -> Option<i64> {
+    if unlink_after_days <= 0
+        || !matches!(device_class, "desktop" | "web")
+        || freshest
+        || devices_in_profile <= 1
+    {
+        return None;
+    }
+    Some(last_seen_ms.saturating_add(unlink_after_days.saturating_mul(DAY_MS)))
+}
+
+/// 🔴 П-5: GET /v1/profile/{id}/own_devices — устройства профиля ДЛЯ ВЛАДЕЛЬЦА.
+///
+/// Класс, подпись, время связи и срок отвязки — это присутствие, поэтому только
+/// устройству ТОГО ЖЕ профиля (иначе 403). Публичная роспись `/devices` не
+/// расширяется.
+async fn own_devices(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(profile_id): Path<String>,
+) -> Result<Json<OwnDevicesResponse>, (StatusCode, String)> {
+    if !is_valid_id(&profile_id, 128) {
+        return Err((StatusCode::BAD_REQUEST, "bad profile_id".into()));
+    }
+    let ts_ms = header_str(&headers, "x-secretly-ts-ms")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0);
+    let nonce_b64 = header_str(&headers, "x-secretly-nonce-b64").unwrap_or("");
+    let req_did = header_str(&headers, "x-secretly-device-id").unwrap_or("");
+    let msg = keys_own_devices_auth_message(req_did, &profile_id, ts_ms, nonce_b64);
+    verify_requester_device_auth(&state, &headers, msg, true, Some(&profile_id)).await?;
+
+    let now = now_ms();
+    let md = state.multidevice.as_ref();
+    let rows = state
+        .store
+        .own_devices(&profile_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let total = rows.len();
+    let devices = rows
+        .into_iter()
+        .map(|r| OwnDeviceEntry {
+            planned_unlink_at_ms: planned_unlink_at_ms(
+                md.companion_unlink_days,
+                &r.device_class,
+                r.freshest,
+                total,
+                r.last_seen_ms,
+            ),
+            device_id: r.device_id,
+            device_class: r.device_class,
+            device_label: r.device_label,
+            created_at_ms: r.created_at_ms,
+            last_seen_ms: r.last_seen_ms,
+        })
+        .collect();
+    let tombstones = state
+        .store
+        .device_tombstones_for_profile(&profile_id, now)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+        .into_iter()
+        .map(|t| OwnTombstoneEntry {
+            device_id: t.device_id,
+            reason: t.reason,
+            unlinked_at_ms: t.unlinked_at_ms,
+        })
+        .collect();
+    Ok(Json(OwnDevicesResponse {
+        devices,
+        tombstones,
+        warn_after_days: md.companion_warn_days,
+        unlink_after_days: md.companion_unlink_days,
+        now_ms: now,
+    }))
+}
+
+/// П-5: отвязка по молчанию только считает, пока её явно не включили.
+/// Неделя в этом режиме — прежде чем удалять по-настоящему (ТЗ §6 шаг 4).
+fn companion_unlink_dry_run() -> bool {
+    match env::var("SECRETLY_KEYS_COMPANION_UNLINK_DRY_RUN") {
+        Ok(v) => !(v.trim() == "0" || v.trim().eq_ignore_ascii_case("false")),
+        Err(_) => true,
+    }
+}
+
+/// 🔴 П-5: один проход отвязки ПК, молчащих дольше `companion_unlink_days`
+/// блока multidevice (один источник правды с тем, что видят клиенты; 0 —
+/// выключено). Вызывает хранилище напрямую, НЕ обработчик: тот помечает
+/// профиль активным, и отвязка продлевала бы жизнь брошенному аккаунту.
+/// Возвращает (кандидатов, отвязано).
+async fn run_companion_unlink_pass(state: &AppState, now: i64, dry_run: bool) -> (usize, usize) {
+    if let Err(e) = state.store.prune_device_tombstones(now).await {
+        tracing::warn!(error = %e, "device tombstone prune failed");
+    }
+    let days = state.multidevice.companion_unlink_days;
+    if days <= 0 {
+        return (0, 0);
+    }
+    let cutoff = now - days * DAY_MS;
+    let candidates = match state.store.companion_unlink_candidates(cutoff, 500).await {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "companion unlink candidates failed");
+            return (0, 0);
+        }
+    };
+    let mut unlinked = 0;
+    for c in &candidates {
+        let silent_days = (now - c.last_seen_ms) / DAY_MS;
+        if dry_run {
+            // INFO, а не WARN: проход каждый час, и строка на кандидата
+            // утопила бы фон предупреждений, по которому сверяют выкладки.
+            // Итог прохода — одной строкой WARN ниже.
+            tracing::info!(
+                device_ref = %log_fingerprint(&c.device_id),
+                profile_ref = %log_fingerprint(&c.profile_id),
+                silent_days,
+                "companion unlink candidate (dry run)"
+            );
+            continue;
+        }
+        match state
+            .store
+            .unlink_device(
+                &c.profile_id,
+                &c.device_id,
+                "inactive",
+                now,
+                store::UnlinkGuard::SilentCompanion { cutoff_ms: cutoff },
+            )
+            .await
+        {
+            Ok(true) => {
+                unlinked += 1;
+                tracing::warn!(
+                    device_ref = %log_fingerprint(&c.device_id),
+                    profile_ref = %log_fingerprint(&c.profile_id),
+                    silent_days,
+                    "companion unlinked after inactivity"
+                );
+            }
+            Ok(false) => {}
+            Err(e) => tracing::warn!(error = %e, "companion unlink failed"),
+        }
+    }
+    (candidates.len(), unlinked)
+}
+
+async fn run_companion_unlink_loop(state: AppState) {
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    loop {
+        interval.tick().await;
+        let dry_run = companion_unlink_dry_run();
+        let (candidates, unlinked) = run_companion_unlink_pass(&state, now_ms(), dry_run).await;
+        if candidates > 0 {
+            tracing::warn!(candidates, unlinked, dry_run, "companion unlink pass");
+        }
+    }
 }
 
 async fn delete_profile(
@@ -5308,6 +5843,137 @@ async fn fetch_bundle(
         .await
         .unwrap_or_default();
     Ok(Json(FetchBundleResponse { devices }))
+}
+
+/// 🔴 П-1 (25.09.2026): сводка множества устройств — hex первых 16 байт
+/// sha256("md-set-v1\n" + отсортированные номера через "\n", без повторов).
+/// ОБЯЗАНА совпадать с клиентом (`deviceSetDigest`) — закреплено тестами с
+/// обеих сторон.
+fn device_set_digest(ids: &[String]) -> String {
+    let mut sorted: Vec<&str> = ids.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+    sorted.sort_unstable();
+    sorted.dedup();
+    let mut h = Sha256::new();
+    h.update(b"md-set-v1\n");
+    h.update(sorted.join("\n").as_bytes());
+    h.finalize()[..16].iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn keys_fetch_device_bundle_auth_message(
+    requester_device_id: &str,
+    device_id: &str,
+    ts_ms: i64,
+    nonce_b64: &str,
+) -> Vec<u8> {
+    format!(
+        "SECRETLY-KEYS-FETCH-DEVICE-BUNDLE-V1\nrequester_device_id={}\ndevice_id={}\nts_ms={}\nnonce_b64={}\n",
+        requester_device_id, device_id, ts_ms, nonce_b64
+    )
+    .into_bytes()
+}
+
+/// 🔴 П-1: GET /v1/device/{id}/bundle — связка ОДНОГО устройства.
+///
+/// Одноразовый ключ снимается только у него (выдача связок профиля снимает у
+/// каждого устройства ради одного). Отдаётся только АДРЕСУЕМОМУ устройству —
+/// тому, что в росписи «кому слать»; проверка ДО снятия ключа, чтобы отказ
+/// ничего не сжигал. Ответ того же вида, что у выдачи профиля.
+async fn fetch_device_bundle(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(device_id): Path<String>,
+) -> Result<Json<FetchBundleResponse>, (StatusCode, String)> {
+    if !is_valid_id(&device_id, 128) {
+        return Err((StatusCode::BAD_REQUEST, "bad device_id".into()));
+    }
+    let ts_ms = header_str(&headers, "x-secretly-ts-ms")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0);
+    let nonce_b64 = header_str(&headers, "x-secretly-nonce-b64").unwrap_or("");
+    let req_did = header_str(&headers, "x-secretly-device-id").unwrap_or("");
+    let msg = keys_fetch_device_bundle_auth_message(req_did, &device_id, ts_ms, nonce_b64);
+    verify_requester_device_auth(&state, &headers, msg, true, None).await?;
+
+    let profile_id = state
+        .store
+        .profile_id_for_device(&device_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+        .ok_or((StatusCode::NOT_FOUND, "unknown device".into()))?;
+    let addressable = state
+        .store
+        .addressable_device_ids(&profile_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    if !addressable.iter().any(|d| d == &device_id) {
+        tracing::info!(
+            device_ref = %log_fingerprint(&device_id),
+            "device bundle refused: not addressable"
+        );
+        return Err((StatusCode::NOT_FOUND, "device not addressable".into()));
+    }
+    let Some((_, bundle)) = state
+        .store
+        .fetch_bundle_for_device(&device_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+    else {
+        return Err((StatusCode::NOT_FOUND, "no bundle".into()));
+    };
+    Ok(Json(FetchBundleResponse {
+        devices: vec![bundle],
+    }))
+}
+
+#[derive(Deserialize)]
+struct AddressableQuery {
+    /// Своему профилю адресат — без устройства-отправителя.
+    #[serde(default)]
+    exclude_device_id: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AddressableResponse {
+    digest: String,
+    device_ids: Vec<String>,
+    now_ms: i64,
+}
+
+/// 🔴 П-1: GET /internal/profile/{id}/addressable — для реле, только с
+/// внутренним ключом (и мимо лимита по адресу: все запросы реле идут с
+/// 127.0.0.1 и делят один бакет). Отдаёт множество «кому слать» и его сводку.
+async fn internal_addressable(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(profile_id): Path<String>,
+    Query(q): Query<AddressableQuery>,
+) -> Result<Json<AddressableResponse>, (StatusCode, String)> {
+    if !internal_key_matches(&state, &headers) {
+        return Err((StatusCode::FORBIDDEN, "forbidden".into()));
+    }
+    if !is_valid_id(&profile_id, 128) {
+        return Err((StatusCode::BAD_REQUEST, "bad profile_id".into()));
+    }
+    let exclude = q.exclude_device_id.unwrap_or_default();
+    let exclude = exclude.trim();
+    let device_ids: Vec<String> = state
+        .store
+        .addressable_device_ids(&profile_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+        .into_iter()
+        .filter(|d| d != exclude)
+        .collect();
+    Ok(Json(AddressableResponse {
+        digest: device_set_digest(&device_ids),
+        device_ids,
+        now_ms: now_ms(),
+    }))
+}
+
+/// Внутренние пути с верным внутренним ключом — мимо лимита по адресу.
+fn rate_limit_exempt(path: &str, internal_key_ok: bool) -> bool {
+    path == "/health" || (internal_key_ok && path.starts_with("/internal/"))
 }
 
 fn port_from_env(var: &str, default_port: u16) -> u16 {
@@ -5648,6 +6314,7 @@ async fn main() {
         rooms: Arc::new(RoomsConfig::from_env()),
         rooms2: Arc::new(Rooms2Config::from_env()),
         handshake: Arc::new(HandshakeServerConfig::from_env()),
+        multidevice: Arc::new(MultideviceServerConfig::from_env()),
         update: Arc::new(UpdateServerConfig::from_env()),
         support: Arc::new(SupportServerConfig::from_env()),
         config_signing_key: Arc::new(config_signing_key),
@@ -5656,6 +6323,7 @@ async fn main() {
     };
 
     tokio::spawn(run_inactive_profile_cleanup_loop(state.clone()));
+    tokio::spawn(run_companion_unlink_loop(state.clone()));
 
     let app = Router::new()
         .route("/health", get(health))
@@ -5698,13 +6366,17 @@ async fn main() {
         .route("/v1/device/challenge", get(device_challenge))
         .route("/v1/device/register_proof", post(register_device_proof))
         .route("/v1/device/delete", post(delete_device))
+        .route("/v1/device/self_status", get(device_self_status))
         .route("/v1/profile/delete", post(delete_profile))
         .route("/v1/device/{device_id}", get(device_lookup))
         .route("/v1/device/{device_id}/identity", get(device_identity))
         .route("/v1/profile/{profile_id}", get(profile_exists))
         .route("/v1/profile/{profile_id}/devices", get(list_devices))
+        .route("/v1/profile/{profile_id}/own_devices", get(own_devices))
         .route("/v1/keys/publish", post(publish_keys))
         .route("/v1/keys/bundle/{profile_id}", get(fetch_bundle))
+        .route("/v1/device/{device_id}/bundle", get(fetch_device_bundle))
+        .route("/internal/profile/{profile_id}/addressable", get(internal_addressable))
         .layer(DefaultBodyLimit::max(KEYS_HTTP_BODY_LIMIT_BYTES))
         .layer(middleware::from_fn_with_state(state.clone(), rate_limit))
         .with_state(state);
@@ -5940,6 +6612,7 @@ mod tests {
             rooms: Arc::new(RoomsConfig::default()),
             rooms2: Arc::new(Rooms2Config::default()),
             handshake: Arc::new(HandshakeServerConfig::default()),
+            multidevice: Arc::new(MultideviceServerConfig::default()),
             update: Arc::new(UpdateServerConfig::default()),
             support: Arc::new(SupportServerConfig::default()),
             config_signing_key: Arc::new(None),
@@ -5982,6 +6655,160 @@ mod tests {
             assert!(!v["handshake_signature"].as_str().unwrap().is_empty());
         }
         assert!(!HandshakeServerConfig::default().hs_auth_enforce_disabled);
+    }
+
+    const MULTIDEVICE_ENV_KEYS: [&str; 8] = [
+        "SECRETLY_KEYS_MD_RATCHET_JUMP_MOBILE",
+        "SECRETLY_KEYS_MD_RATCHET_JUMP_DESKTOP",
+        "SECRETLY_KEYS_MD_EPHEMERAL_ONLINE_ONLY_PERCENT",
+        "SECRETLY_KEYS_MD_COMPANION_WARN_DAYS",
+        "SECRETLY_KEYS_MD_COMPANION_UNLINK_DAYS",
+        "SECRETLY_KEYS_MD_NACK_V2_PERCENT",
+        "SECRETLY_KEYS_MD_SEND_JOURNAL_PERCENT",
+        "SECRETLY_KEYS_MD_DEVICE_CHECK_PERCENT",
+    ];
+
+    /// Подписываемое сообщение `multidevice` — договор с Dart
+    /// `multideviceSigningMessage`. Расхождение не падает громко: подпись
+    /// просто перестаёт сходиться у всех, и блок молча становится «тёмным».
+    #[test]
+    fn multidevice_signing_message_is_byte_stable() {
+        let p = MultidevicePayload {
+            ratchet_jump_mobile: 2000,
+            ratchet_jump_desktop: 5000,
+            ephemeral_online_only_percent: 10,
+            companion_warn_days: 30,
+            companion_unlink_days: 45,
+            nack_v2_percent: 50,
+            send_journal_percent: 0,
+            device_check_percent: 100,
+            issued_at_ms: 42,
+        };
+        assert_eq!(
+            multidevice_signing_message(&p),
+            "secretly-multidevice-v1|2000|5000|10|30|45|50|0|100|42"
+        );
+    }
+
+    /// Без переменных блок тёмный; опечатки оператора зажимаются здесь.
+    #[test]
+    fn multidevice_config_defaults_dark_and_clamps_operator_typos() {
+        assert_eq!(
+            MultideviceServerConfig::from_lookup(|_| None),
+            MultideviceServerConfig::default()
+        );
+        let d = MultideviceServerConfig::default();
+        assert_eq!(
+            (d.ratchet_jump_mobile, d.nack_v2_percent, d.companion_unlink_days),
+            (0, 0, 0)
+        );
+        let values = [
+            "999999", " 5000 ", "110", "-3", "100000", "ten", "5", "100",
+        ];
+        let env: std::collections::HashMap<&str, &str> =
+            MULTIDEVICE_ENV_KEYS.into_iter().zip(values).collect();
+        let c = MultideviceServerConfig::from_lookup(|k| env.get(k).map(|v| v.to_string()));
+        assert_eq!(
+            c,
+            MultideviceServerConfig {
+                ratchet_jump_mobile: 25_000,
+                ratchet_jump_desktop: 5000,
+                ephemeral_online_only_percent: 100,
+                companion_warn_days: 0,
+                companion_unlink_days: 365,
+                nack_v2_percent: 0,
+                send_journal_percent: 5,
+                device_check_percent: 100,
+            }
+        );
+    }
+
+    /// Накладка `65-multidevice.conf` называет только те переменные, которые
+    /// сервер читает: опечатка в имени — это молчаливый ноль, то есть
+    /// выключенный флаг при «включённой» накладке. В публичной выкладке
+    /// каталога `ops/` нет — тогда проверять нечего.
+    #[test]
+    fn multidevice_drop_in_names_only_known_variables() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../ops/vps/units/secretly-keys.service.d/65-multidevice.conf"
+        );
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let mut named = Vec::new();
+        for line in text.lines().map(str::trim) {
+            let Some(rest) = line.strip_prefix("Environment=") else {
+                continue;
+            };
+            let key = rest.split('=').next().unwrap_or("").trim();
+            assert!(MULTIDEVICE_ENV_KEYS.contains(&key), "неизвестная переменная {key}");
+            named.push(key.to_string());
+        }
+        for key in MULTIDEVICE_ENV_KEYS {
+            assert!(named.iter().any(|n| n == key), "накладка не называет {key}");
+        }
+    }
+
+    /// Блок отдаётся со своей подписью, по умолчанию тёмный, и смена любого
+    /// поля меняет ETag — иначе откат упирался бы в кэш.
+    #[tokio::test]
+    async fn config_serves_signed_multidevice_block() {
+        let (mut state, _dir) = test_app_state().await;
+        let sk = SigningKey::from_bytes(&[7u8; 32]);
+        let vk = sk.verifying_key();
+        state.config_signing_key = Arc::new(Some(sk));
+
+        async fn fetch(state: &AppState) -> (serde_json::Value, String) {
+            let response = get_config(State(state.clone())).await.into_response();
+            assert_eq!(response.status(), StatusCode::OK);
+            let etag = response
+                .headers()
+                .get(axum::http::header::ETAG)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (serde_json::from_slice(&body).unwrap(), etag)
+        }
+
+        let (dark, dark_etag) = fetch(&state).await;
+        for field in [
+            "ratchet_jump_mobile",
+            "ratchet_jump_desktop",
+            "ephemeral_online_only_percent",
+            "companion_warn_days",
+            "companion_unlink_days",
+            "nack_v2_percent",
+            "send_journal_percent",
+            "device_check_percent",
+        ] {
+            assert_eq!(dark["multidevice"][field], serde_json::json!(0), "{field}");
+        }
+
+        state.multidevice = Arc::new(MultideviceServerConfig {
+            ratchet_jump_mobile: 2000,
+            ratchet_jump_desktop: 5000,
+            ephemeral_online_only_percent: 10,
+            companion_warn_days: 30,
+            companion_unlink_days: 45,
+            nack_v2_percent: 50,
+            send_journal_percent: 0,
+            device_check_percent: 100,
+        });
+        let (v, etag) = fetch(&state).await;
+        assert_ne!(etag, dark_etag, "смена блока обязана менять ETag");
+        let issued = v["multidevice"]["issued_at_ms"].as_i64().unwrap();
+        let msg = format!("secretly-multidevice-v1|2000|5000|10|30|45|50|0|100|{issued}");
+        let sig_bytes = base64::engine::general_purpose::STANDARD
+            .decode(v["multidevice_signature"].as_str().unwrap())
+            .unwrap();
+        let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).unwrap();
+        assert!(vk.verify_strict(msg.as_bytes(), &sig).is_ok());
+        // Соседние блоки на месте.
+        assert!(!v["handshake_signature"].as_str().unwrap().is_empty());
+        assert!(!v["handshake_auth_signature"].as_str().unwrap().is_empty());
     }
 
     #[tokio::test]
@@ -7771,6 +8598,522 @@ mod tests {
             .await
             .unwrap()
             .is_none());
+    }
+
+    // ── П-5 (25.09.2026): жизнь ПК явная ─────────────────────────────────
+
+    fn p5_pub(k: &SigningKey) -> String {
+        base64::engine::general_purpose::STANDARD.encode(k.verifying_key().to_bytes())
+    }
+
+    async fn p5_register_desktop(
+        state: &AppState,
+        profile_id: &str,
+        secret_b64: &str,
+        device_id: &str,
+        key: &SigningKey,
+    ) -> RegisterDeviceProofResponse {
+        let challenge = device_challenge(
+            State(state.clone()),
+            Query(DeviceChallengeQuery {
+                profile_id: profile_id.into(),
+                device_id: device_id.into(),
+            }),
+        )
+        .await
+        .0;
+        let mut req = RegisterDeviceProofRequest {
+            profile_id: profile_id.into(),
+            device_id: device_id.into(),
+            identity_key_pub_b64: p5_pub(key),
+            ts_ms: now_ms(),
+            nonce_b64: challenge.nonce_b64,
+            signature_b64: String::new(),
+            device_class: Some("desktop".into()),
+            device_label: Some("Desk".into()),
+            replaces_device_id: None,
+        };
+        req.signature_b64 = signature_b64(key, &register_proof_message(&req));
+        register_device_proof(State(state.clone()), profile_secret_headers(secret_b64), Json(req))
+            .await
+            .0
+    }
+
+    async fn p5_allow_one_desktop(state: &AppState, profile_id: &str) {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-secretly-internal-key", HeaderValue::from_static("internal-test-key"));
+        let resp = set_desktop_companion_entitlement(
+            State(state.clone()),
+            headers,
+            Path(profile_id.to_string()),
+            Json(SetDesktopCompanionEntitlementRequest {
+                limit: Some(1),
+                source: Some("test".into()),
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert!(resp.ok);
+    }
+
+    /// Устройство профиля с заданным классом и временем последней связи.
+    async fn p5_device(state: &AppState, pid: &str, did: &str, key: &SigningKey, class: &str, seen: i64) {
+        assert!(state
+            .store
+            .register_device(pid, did, Some(&p5_pub(key)), seen)
+            .await
+            .unwrap());
+        assert!(state
+            .store
+            .upsert_device_metadata(pid, did, class, None, seen)
+            .await
+            .unwrap());
+    }
+
+    // 🔴 «Завершить сеанс» держится: выключенный ПК, включившись, не
+    // перерегистрируется; новая привязка (новый номер) проходит, и отвязанный
+    // не занимает место компаньона.
+    #[tokio::test]
+    async fn owner_delete_tombstones_the_device_and_refuses_its_reregistration() {
+        let (state, _dir) = test_app_state().await;
+        let phone_key = SigningKey::from_bytes(&[81u8; 32]);
+        let desk_key = SigningKey::from_bytes(&[82u8; 32]);
+        let pid = "profile_p5_del";
+        let secret =
+            seed_profile_device_with_secret(&state, pid, "dev_p5_phone", &phone_key, 71).await;
+        p5_allow_one_desktop(&state, pid).await;
+        let first = p5_register_desktop(&state, pid, &secret, "dev_p5_desk", &desk_key).await;
+        assert!(first.ok, "{:?}", first.error_code);
+
+        let mut headers = signed_auth_headers("dev_p5_phone", &phone_key, "p5-del", |ts, n| {
+            keys_delete_device_auth_message("dev_p5_phone", pid, "dev_p5_desk", ts, n)
+        });
+        headers.extend(profile_secret_headers(&secret));
+        let resp = delete_device(
+            State(state.clone()),
+            headers,
+            Json(DeleteDeviceRequest {
+                profile_id: pid.into(),
+                device_id: "dev_p5_desk".into(),
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert!(resp.ok);
+        let tomb = state
+            .store
+            .device_tombstone("dev_p5_desk", now_ms())
+            .await
+            .unwrap()
+            .expect("надгробие");
+        assert_eq!(tomb.reason, "ended_by_owner");
+        assert_eq!(tomb.identity_key_pub_b64, Some(p5_pub(&desk_key)));
+
+        let again = p5_register_desktop(&state, pid, &secret, "dev_p5_desk", &desk_key).await;
+        assert!(!again.ok);
+        assert_eq!(again.error_code.as_deref(), Some("device_unlinked"));
+
+        let relinked = p5_register_desktop(
+            &state,
+            pid,
+            &secret,
+            "dev_p5_desk_new",
+            &SigningKey::from_bytes(&[83u8; 32]),
+        )
+        .await;
+        assert!(relinked.ok, "{:?}", relinked.error_code);
+    }
+
+    // 🔴 «Отключить» на строке ТЕЛЕФОНА (выпущенный ПК такую кнопку
+    // показывает) не запирает телефон: удаление без надгробия, как раньше.
+    #[tokio::test]
+    async fn deleting_a_phone_leaves_no_tombstone() {
+        let (state, _dir) = test_app_state().await;
+        let phone_key = SigningKey::from_bytes(&[101u8; 32]);
+        let desk_key = SigningKey::from_bytes(&[102u8; 32]);
+        let pid = "profile_p5_phone_del";
+        state.store.insert_profile(pid, now_ms(), None).await.unwrap();
+        p5_device(&state, pid, "dev_pd_phone", &phone_key, "mobile", now_ms()).await;
+        p5_device(&state, pid, "dev_pd_desk", &desk_key, "desktop", now_ms()).await;
+        let mut headers = HeaderMap::new();
+        headers.insert("x-secretly-internal-key", HeaderValue::from_static("internal-test-key"));
+        let resp = delete_device(
+            State(state.clone()),
+            headers,
+            Json(DeleteDeviceRequest {
+                profile_id: pid.into(),
+                device_id: "dev_pd_phone".into(),
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert!(resp.ok);
+        assert_eq!(state.store.device_last_seen_ms("dev_pd_phone").await.unwrap(), None);
+        assert!(state
+            .store
+            .device_tombstone("dev_pd_phone", now_ms())
+            .await
+            .unwrap()
+            .is_none());
+        assert!(deletion_tombstones("desktop") && deletion_tombstones("web"));
+        assert!(!deletion_tombstones("mobile"));
+    }
+
+    /// Подписываемые строки П-5 — договор с Dart (`AuthSigner`). Расхождение
+    /// не падает громко: подпись просто перестаёт сходиться.
+    #[test]
+    fn device_self_status_message_is_byte_stable() {
+        assert_eq!(
+            String::from_utf8(keys_device_self_status_auth_message("dev-1", 42, "bm9uY2U=")).unwrap(),
+            "SECRETLY-KEYS-DEVICE-SELF-STATUS-V1\ndevice_id=dev-1\nts_ms=42\nnonce_b64=bm9uY2U=\n"
+        );
+        assert_eq!(
+            String::from_utf8(keys_own_devices_auth_message("dev-1", "P", 42, "n")).unwrap(),
+            "SECRETLY-KEYS-OWN-DEVICES-V1\nrequester_device_id=dev-1\nprofile_id=P\nts_ms=42\nnonce_b64=n\n"
+        );
+    }
+
+    async fn p5_self_status(
+        state: &AppState,
+        did: &str,
+        key: &SigningKey,
+        nonce: &str,
+    ) -> Result<DeviceSelfStatusResponse, (StatusCode, String)> {
+        let headers = signed_auth_headers(did, key, nonce, |ts, n| {
+            keys_device_self_status_auth_message(did, ts, n)
+        });
+        device_self_status(State(state.clone()), headers).await.map(|j| j.0)
+    }
+
+    #[tokio::test]
+    async fn self_status_tells_hidden_active_unlinked_and_unknown() {
+        let (state, _dir) = test_app_state().await;
+        let phone_key = SigningKey::from_bytes(&[84u8; 32]);
+        let desk_key = SigningKey::from_bytes(&[85u8; 32]);
+        let pid = "profile_p5_status";
+        let day = 24 * 60 * 60 * 1000;
+        state.store.insert_profile(pid, now_ms(), None).await.unwrap();
+        p5_device(&state, pid, "dev_p5s_phone", &phone_key, "mobile", now_ms()).await;
+        p5_device(&state, pid, "dev_p5s_desk", &desk_key, "desktop", now_ms() - 20 * day).await;
+
+        // Скрыт окном — «hidden», а не «удалён»; сам вопрос отмечает «на связи».
+        let s = p5_self_status(&state, "dev_p5s_desk", &desk_key, "p5s-1").await.unwrap();
+        assert_eq!(s.status, "hidden");
+        let s = p5_self_status(&state, "dev_p5s_desk", &desk_key, "p5s-2").await.unwrap();
+        assert_eq!(s.status, "active");
+
+        // Отвязан — подпись сверяется ключом из надгробия.
+        assert!(state
+            .store
+            .unlink_device(pid, "dev_p5s_desk", "inactive", now_ms(), store::UnlinkGuard::Owner)
+            .await
+            .unwrap());
+        let s = p5_self_status(&state, "dev_p5s_desk", &desk_key, "p5s-3").await.unwrap();
+        assert_eq!(s.status, "unlinked");
+        assert_eq!(s.reason.as_deref(), Some("inactive"));
+        assert!(s.unlinked_at_ms.is_some());
+        let forged = p5_self_status(&state, "dev_p5s_desk", &phone_key, "p5s-4").await;
+        assert_eq!(forged.err().map(|e| e.0), Some(StatusCode::UNAUTHORIZED));
+
+        let unknown = p5_self_status(&state, "dev_p5s_nobody", &desk_key, "p5s-5").await.unwrap();
+        assert_eq!(unknown.status, "unknown");
+    }
+
+    #[tokio::test]
+    async fn own_devices_is_for_the_owner_only_and_plans_unlink_for_silent_desktops() {
+        let (base, _dir) = test_app_state().await;
+        let state = AppState {
+            multidevice: Arc::new(MultideviceServerConfig {
+                companion_warn_days: 10,
+                companion_unlink_days: 45,
+                ..MultideviceServerConfig::default()
+            }),
+            ..base
+        };
+        let phone_key = SigningKey::from_bytes(&[86u8; 32]);
+        let desk_key = SigningKey::from_bytes(&[87u8; 32]);
+        let old_key = SigningKey::from_bytes(&[88u8; 32]);
+        let peer_key = SigningKey::from_bytes(&[89u8; 32]);
+        let pid = "profile_p5_own";
+        let day = 24 * 60 * 60 * 1000;
+        state.store.insert_profile(pid, now_ms(), None).await.unwrap();
+        p5_device(&state, pid, "dev_p5o_phone", &phone_key, "mobile", now_ms()).await;
+        let desk_seen = now_ms() - 20 * day;
+        p5_device(&state, pid, "dev_p5o_desk", &desk_key, "desktop", desk_seen).await;
+        p5_device(&state, pid, "dev_p5o_old", &old_key, "desktop", now_ms() - 60 * day).await;
+        assert!(state
+            .store
+            .unlink_device(pid, "dev_p5o_old", "ended_by_owner", now_ms(), store::UnlinkGuard::Owner)
+            .await
+            .unwrap());
+        seed_profile_device(&state, "profile_p5_peer", "dev_p5o_peer", &peer_key).await;
+
+        let headers = signed_auth_headers("dev_p5o_phone", &phone_key, "p5o-1", |ts, n| {
+            keys_own_devices_auth_message("dev_p5o_phone", pid, ts, n)
+        });
+        let resp = own_devices(State(state.clone()), headers, Path(pid.to_string()))
+            .await
+            .unwrap()
+            .0;
+        assert_eq!((resp.warn_after_days, resp.unlink_after_days), (10, 45));
+        assert_eq!(resp.devices.len(), 2);
+        let phone = resp.devices.iter().find(|d| d.device_id == "dev_p5o_phone").unwrap();
+        assert_eq!(phone.planned_unlink_at_ms, None, "телефон не отвязывается никогда");
+        let desk = resp.devices.iter().find(|d| d.device_id == "dev_p5o_desk").unwrap();
+        assert_eq!(desk.device_class, "desktop");
+        assert_eq!(desk.planned_unlink_at_ms, Some(desk_seen + 45 * day));
+        assert_eq!(resp.tombstones.len(), 1);
+        assert_eq!(resp.tombstones[0].device_id, "dev_p5o_old");
+
+        let headers = signed_auth_headers("dev_p5o_peer", &peer_key, "p5o-2", |ts, n| {
+            keys_own_devices_auth_message("dev_p5o_peer", pid, ts, n)
+        });
+        let err = own_devices(State(state.clone()), headers, Path(pid.to_string()))
+            .await
+            .err()
+            .expect("чужому — отказ");
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
+
+    fn p5_unlink_state(base: AppState, days: i64) -> AppState {
+        AppState {
+            multidevice: Arc::new(MultideviceServerConfig {
+                companion_unlink_days: days,
+                ..MultideviceServerConfig::default()
+            }),
+            ..base
+        }
+    }
+
+    // 🔴 Никогда телефон, никогда самое свежее, никогда последнее устройство;
+    // «только считать» ничего не удаляет.
+    #[tokio::test]
+    async fn companion_unlink_pass_spares_phones_the_freshest_and_the_last_device() {
+        let (base, _dir) = test_app_state().await;
+        let state = p5_unlink_state(base, 45);
+        let day = 24 * 60 * 60 * 1000;
+        let now = now_ms();
+        let k = |b: u8| SigningKey::from_bytes(&[b; 32]);
+        for pid in ["p5u_1", "p5u_2", "p5u_3", "p5u_4"] {
+            state.store.insert_profile(pid, now, None).await.unwrap();
+        }
+        // 1: свежий телефон + молчащий ПК → кандидат.
+        p5_device(&state, "p5u_1", "u1_phone", &k(90), "mobile", now).await;
+        p5_device(&state, "p5u_1", "u1_desk", &k(91), "desktop", now - 60 * day).await;
+        // 2: единственное устройство профиля — ПК → нельзя.
+        p5_device(&state, "p5u_2", "u2_desk", &k(92), "desktop", now - 60 * day).await;
+        // 3: молчащий телефон + свежий ПК → ни того, ни другого.
+        p5_device(&state, "p5u_3", "u3_phone", &k(93), "mobile", now - 60 * day).await;
+        p5_device(&state, "p5u_3", "u3_desk", &k(94), "desktop", now).await;
+        // 4: два молчащих ПК — свежее из них остаётся.
+        p5_device(&state, "p5u_4", "u4_old", &k(95), "desktop", now - 70 * day).await;
+        p5_device(&state, "p5u_4", "u4_new", &k(96), "desktop", now - 60 * day).await;
+
+        let (candidates, unlinked) = run_companion_unlink_pass(&state, now, true).await;
+        assert_eq!((candidates, unlinked), (2, 0), "только считать");
+        assert!(state.store.device_last_seen_ms("u1_desk").await.unwrap().is_some());
+
+        let (candidates, unlinked) = run_companion_unlink_pass(&state, now, false).await;
+        assert_eq!((candidates, unlinked), (2, 2));
+        for gone in ["u1_desk", "u4_old"] {
+            assert_eq!(state.store.device_last_seen_ms(gone).await.unwrap(), None);
+            let t = state.store.device_tombstone(gone, now).await.unwrap().unwrap();
+            assert_eq!(t.reason, "inactive");
+        }
+        for kept in ["u1_phone", "u2_desk", "u3_phone", "u3_desk", "u4_new"] {
+            assert!(state.store.device_last_seen_ms(kept).await.unwrap().is_some(), "{kept}");
+        }
+    }
+
+    #[tokio::test]
+    async fn companion_unlink_rechecks_the_candidate_inside_the_transaction() {
+        let (base, _dir) = test_app_state().await;
+        let state = p5_unlink_state(base, 45);
+        let day = 24 * 60 * 60 * 1000;
+        let now = now_ms();
+        state.store.insert_profile("p5r", now, None).await.unwrap();
+        p5_device(&state, "p5r", "r_phone", &SigningKey::from_bytes(&[97u8; 32]), "mobile", now).await;
+        p5_device(&state, "p5r", "r_desk", &SigningKey::from_bytes(&[98u8; 32]), "desktop", now - 60 * day).await;
+        // ПК вышел на связь между выборкой и удалением.
+        assert!(state.store.touch_device_last_seen("r_desk", now).await.unwrap());
+        let cutoff = now - 45 * day;
+        let done = state
+            .store
+            .unlink_device("p5r", "r_desk", "inactive", now, store::UnlinkGuard::SilentCompanion { cutoff_ms: cutoff })
+            .await
+            .unwrap();
+        assert!(!done);
+        assert!(state.store.device_tombstone("r_desk", now).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn companion_unlink_is_off_while_days_is_zero() {
+        let (state, _dir) = test_app_state().await;
+        let day = 24 * 60 * 60 * 1000;
+        let now = now_ms();
+        state.store.insert_profile("p5z", now, None).await.unwrap();
+        p5_device(&state, "p5z", "z_phone", &SigningKey::from_bytes(&[99u8; 32]), "mobile", now).await;
+        p5_device(&state, "p5z", "z_desk", &SigningKey::from_bytes(&[100u8; 32]), "desktop", now - 400 * day).await;
+        assert_eq!(run_companion_unlink_pass(&state, now, false).await, (0, 0));
+        assert!(state.store.device_last_seen_ms("z_desk").await.unwrap().is_some());
+    }
+
+    // ── П-1 (25.09.2026): одно определение «кому слать» ─────────────────
+
+    /// Сводка — договор с клиентом (`deviceSetDigest`) и реле: значения
+    /// посчитаны независимо (Python sha256).
+    #[test]
+    fn device_set_digest_is_byte_stable() {
+        let v = |xs: &[&str]| xs.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(device_set_digest(&v(&["b", "a"])), "c06a1d67738a6a2cb1fb597dc982308f");
+        assert_eq!(device_set_digest(&v(&["a", "b", "a", " "])), "c06a1d67738a6a2cb1fb597dc982308f");
+        assert_eq!(device_set_digest(&v(&[])), "42acae4d4ca6376c3a13ea785a4378e8");
+        assert_eq!(
+            device_set_digest(&v(&["dev-2", "dev-1", "dev-3"])),
+            "1200c6f396506d7bab48fa1a114953dd"
+        );
+    }
+
+    #[test]
+    fn device_bundle_message_is_byte_stable() {
+        // Та же строка закреплена в Dart (device_check_test.dart).
+        assert_eq!(
+            String::from_utf8(keys_fetch_device_bundle_auth_message("me", "dev-1", 42, "n")).unwrap(),
+            "SECRETLY-KEYS-FETCH-DEVICE-BUNDLE-V1\nrequester_device_id=me\ndevice_id=dev-1\nts_ms=42\nnonce_b64=n\n"
+        );
+    }
+
+    async fn p1_publish(state: &AppState, pid: &str, did: &str, key: &SigningKey, at: i64, otks: i64) {
+        let prekeys = (0..otks)
+            .map(|i| store::OneTimePrekey {
+                prekey_id: i + 1,
+                prekey_pub_b64: format!("otk-{did}-{i}"),
+            })
+            .collect();
+        assert!(state
+            .store
+            .publish_key_bundle(pid, did, &p5_pub(key), "spk", "sig", prekeys, at, None, None)
+            .await
+            .unwrap());
+    }
+
+    #[tokio::test]
+    async fn addressable_is_the_roster_with_a_bundle() {
+        let (state, _dir) = test_app_state().await;
+        let day = 24 * 60 * 60 * 1000;
+        let now = now_ms();
+        let k = |b: u8| SigningKey::from_bytes(&[b; 32]);
+        state.store.insert_profile("p1a", now, None).await.unwrap();
+        p5_device(&state, "p1a", "a_phone", &k(110), "mobile", now).await;
+        p1_publish(&state, "p1a", "a_phone", &k(110), now, 1).await;
+        // Зарегистрирован, но связки нет — слать некуда.
+        p5_device(&state, "p1a", "a_nobundle", &k(111), "desktop", now).await;
+        // Со связкой, но скрыт окном.
+        p5_device(&state, "p1a", "a_hidden", &k(112), "desktop", now - 30 * day).await;
+        p1_publish(&state, "p1a", "a_hidden", &k(112), now - 30 * day, 1).await;
+        assert_eq!(
+            state.store.addressable_device_ids("p1a").await.unwrap(),
+            vec!["a_phone".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn device_bundle_takes_one_prekey_of_that_device_only() {
+        let (state, _dir) = test_app_state().await;
+        let day = 24 * 60 * 60 * 1000;
+        let now = now_ms();
+        let k = |b: u8| SigningKey::from_bytes(&[b; 32]);
+        state.store.insert_profile("p1b", now, None).await.unwrap();
+        p5_device(&state, "p1b", "b_phone", &k(113), "mobile", now).await;
+        p1_publish(&state, "p1b", "b_phone", &k(113), now, 3).await;
+        p5_device(&state, "p1b", "b_desk", &k(114), "desktop", now).await;
+        p1_publish(&state, "p1b", "b_desk", &k(114), now, 3).await;
+        p5_device(&state, "p1b", "b_hidden", &k(115), "desktop", now - 30 * day).await;
+        p1_publish(&state, "p1b", "b_hidden", &k(115), now - 30 * day, 3).await;
+        let asker = k(116);
+        seed_profile_device(&state, "p1b_peer", "b_peer", &asker).await;
+
+        async fn fetch(state: &AppState, asker: &SigningKey, did: &str, nonce: &str) -> Result<FetchBundleResponse, (StatusCode, String)> {
+            let headers = signed_auth_headers("b_peer", asker, nonce, |ts, n| {
+                keys_fetch_device_bundle_auth_message("b_peer", did, ts, n)
+            });
+            fetch_device_bundle(State(state.clone()), headers, Path(did.to_string()))
+                .await
+                .map(|j| j.0)
+        }
+        async fn otk_count(state: &AppState, did: &str) -> i64 {
+            state.store.one_time_prekey_count(did).await.unwrap()
+        }
+
+        let resp = fetch(&state, &asker, "b_phone", "p1b-1").await.unwrap();
+        assert_eq!(resp.devices.len(), 1);
+        assert_eq!(resp.devices[0].device_id, "b_phone");
+        assert!(resp.devices[0].one_time_prekey.is_some());
+        assert_eq!(otk_count(&state, "b_phone").await, 2);
+        assert_eq!(otk_count(&state, "b_desk").await, 3, "у соседа ключи не сгорают");
+
+        // Неадресуемому — отказ, и ключ НЕ снят.
+        let refused = fetch(&state, &asker, "b_hidden", "p1b-2").await;
+        assert_eq!(refused.err().map(|e| e.0), Some(StatusCode::NOT_FOUND));
+        assert_eq!(otk_count(&state, "b_hidden").await, 3);
+    }
+
+    #[tokio::test]
+    async fn internal_addressable_needs_the_internal_key_and_can_exclude_the_sender() {
+        let (state, _dir) = test_app_state().await;
+        let now = now_ms();
+        let k = |b: u8| SigningKey::from_bytes(&[b; 32]);
+        state.store.insert_profile("p1c", now, None).await.unwrap();
+        for (did, b) in [("dev-1", 117u8), ("dev-2", 118u8), ("dev-3", 119u8)] {
+            p5_device(&state, "p1c", did, &k(b), "mobile", now).await;
+            p1_publish(&state, "p1c", did, &k(b), now, 0).await;
+        }
+        let err = internal_addressable(
+            State(state.clone()),
+            HeaderMap::new(),
+            Path("p1c".into()),
+            Query(AddressableQuery { exclude_device_id: None }),
+        )
+        .await
+        .err()
+        .expect("без ключа — отказ");
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+
+        let mut headers = HeaderMap::new();
+        headers.insert("x-secretly-internal-key", HeaderValue::from_static("internal-test-key"));
+        let all = internal_addressable(
+            State(state.clone()),
+            headers.clone(),
+            Path("p1c".into()),
+            Query(AddressableQuery { exclude_device_id: None }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(all.digest, "1200c6f396506d7bab48fa1a114953dd");
+        assert_eq!(all.device_ids.len(), 3);
+        let own = internal_addressable(
+            State(state.clone()),
+            headers,
+            Path("p1c".into()),
+            Query(AddressableQuery { exclude_device_id: Some("dev-3".into()) }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(own.device_ids, vec!["dev-1".to_string(), "dev-2".to_string()]);
+        assert_eq!(own.digest, device_set_digest(&own.device_ids));
+    }
+
+    #[test]
+    fn internal_paths_skip_the_ip_limit_only_with_the_key() {
+        assert!(rate_limit_exempt("/health", false));
+        assert!(rate_limit_exempt("/internal/profile/p/addressable", true));
+        assert!(!rate_limit_exempt("/internal/profile/p/addressable", false));
+        assert!(!rate_limit_exempt("/v1/keys/bundle/p", true));
     }
 
     // Отметка «на связи» — не чаще раза в час: частые подписанные чтения не

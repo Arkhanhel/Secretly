@@ -12,6 +12,7 @@ import '../security/auth_signer.dart';
 import '../security/device_keys.dart';
 import '../security/secure_secrets.dart';
 import '../storage/app_db.dart';
+import '../transport/relay_protocol.dart' show isOnlineOnlyOutboxRow;
 import '../transport/resilient_http_client.dart';
 import 'background_inbox_fetcher.dart';
 import 'clock_retry.dart';
@@ -241,6 +242,8 @@ class BackgroundWorker {
                         transportMetaJson.trim().isNotEmpty)
                       'transport_meta_json': transportMetaJson.trim(),
                     if (deliverAtMs > 0) 'deliver_at_ms': deliverAtMs,
+                    // П-4: строка «только на связи» несёт поле и здесь.
+                    if (isOnlineOnlyOutboxRow(row)) 'online_only': true,
                   }),
                 )
                 .timeout(const Duration(seconds: 8));

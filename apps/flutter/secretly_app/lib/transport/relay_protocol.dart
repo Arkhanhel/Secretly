@@ -3,6 +3,8 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart' as crypto;
+
 class ClientMsg {
   static String hello({required String deviceId, String clientBuild = ''}) =>
       jsonEncode({
@@ -53,6 +55,11 @@ class ClientMsg {
     // SERVER-SIDE SCHEDULED DELIVERY (2026-07-17): relay release time; omitted
     // / 0 = deliver immediately (default for every normal message).
     int deliverAtMs = 0,
+    // П-4 (25.09.2026): «только тем, кто на связи» — для «печатает». Поле
+    // уходит только когда true: иначе кадр побайтово прежний.
+    bool onlineOnly = false,
+    // П-1 (25.09.2026): сводка росписи адресата — только если задана.
+    String? rcptDigest,
   }) {
     return jsonEncode({
       'type': 'send',
@@ -63,6 +70,8 @@ class ClientMsg {
       if (transportMetaJson != null && transportMetaJson.trim().isNotEmpty)
         'transport_meta_json': transportMetaJson.trim(),
       if (deliverAtMs > 0) 'deliver_at_ms': deliverAtMs,
+      if (onlineOnly) 'online_only': true,
+      if (rcptDigest != null && rcptDigest.isNotEmpty) 'rcpt_digest': rcptDigest,
     });
   }
 
@@ -97,7 +106,14 @@ sealed class ServerMsg {
         deviceId: m['device_id'] as String,
         nextSeq: (m['next_seq'] as num).toInt(),
       ),
-      'sent_ok' => SentOk(msgId: m['msg_id'] as String),
+      'sent_ok' => SentOk(
+        msgId: m['msg_id'] as String,
+        delivery: m['delivery'] is String ? m['delivery'] as String : null,
+        deviceSetStale: m['device_set_stale'] == true,
+        deviceIds: m['device_ids'] is List
+            ? (m['device_ids'] as List).whereType<String>().toList()
+            : null,
+      ),
       'deliver' => Deliver(
         deviceId: m['device_id'] as String,
         seq: (m['seq'] as num).toInt(),
@@ -132,10 +148,48 @@ class Welcome extends ServerMsg {
   final int nextSeq;
 }
 
+/// П-4 (25.09.2026): метка строки исходящих «только тем, кто на связи».
+/// Столбец `transport_hint` уже есть — миграции не нужно.
+const String onlineOnlyTransportHint = 'online_only';
+
+/// Строка исходящих помечена «только на связи» — все три пути отправки
+/// (сокет, HTTP, фоновый воркер) обязаны нести поле `online_only`.
+bool isOnlineOnlyOutboxRow(Map<String, Object?> row) =>
+    (row['transport_hint'] as String?) == onlineOnlyTransportHint;
+
 class SentOk extends ServerMsg {
-  SentOk({required this.msgId});
+  SentOk({
+    required this.msgId,
+    this.delivery,
+    this.deviceSetStale = false,
+    this.deviceIds,
+  });
 
   final String msgId;
+
+  /// П-4: только для посылок `online_only` — `dropped_offline` (получатель
+  /// не на связи, ничего не записано) или `realtime`. Иначе null.
+  final String? delivery;
+
+  /// П-1: сводка росписи отправителя устарела; [deviceIds] — настоящий
+  /// список «кому слать» адресата.
+  final bool deviceSetStale;
+  final List<String>? deviceIds;
+}
+
+/// 🔴 П-1 (25.09.2026): сводка множества устройств — hex первых 16 байт
+/// sha256("md-set-v1\n" + отсортированные номера через "\n", без повторов).
+/// ОБЯЗАНА совпадать с сервером ключей (`device_set_digest`) — закреплено
+/// одинаковыми значениями с обеих сторон. Сортировка Dart (по UTF-16) и Rust
+/// (по байтам UTF-8) совпадают для номеров устройств: это ASCII.
+String deviceSetDigest(Iterable<String> ids) {
+  final sorted = ids.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet().toList()
+    ..sort();
+  final digest = crypto.sha256.convert(
+    utf8.encode('md-set-v1\n${sorted.join('\n')}'),
+  );
+  final b = digest.bytes.sublist(0, 16);
+  return b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
 }
 
 class Deliver extends ServerMsg {

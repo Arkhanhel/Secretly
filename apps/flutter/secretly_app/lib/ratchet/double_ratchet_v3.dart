@@ -114,7 +114,9 @@ class DoubleRatchetDecryptResultV3 {
   /// have not arrived yet. Empty on the common in-order path.
   ///
   /// Bounded by [DoubleRatchetV3.maxSkip] per skip loop, so this never grows
-  /// unbounded however absurd a wire's counter claims to be.
+  /// unbounded however absurd a wire's counter claims to be — and, when
+  /// [DoubleRatchetV3.maxStoredSkipped] is set, by that: only the NEWEST keys
+  /// come back (П-3, 25.09.2026).
   final List<SkippedKeyRecordV3> skippedToStore;
 
   /// True when the message was opened with the pre-loaded skipped key, i.e.
@@ -138,12 +140,24 @@ class DoubleRatchetV3 {
     Cipher? aead,
     Hkdf? hkdf,
     this.maxSkip = 200,
+    this.maxStoredSkipped,
   })  : hkdf = hkdf ?? Hkdf(hmac: Hmac.sha256(), outputLength: 32),
         aead = aead ?? Xchacha20.poly1305Aead();
 
   final Hkdf hkdf;
   final Cipher aead;
+
+  /// How far a wire's counter may run ahead of the chain, PER skip loop (there
+  /// are two per wire: the old chain up to `pn`, the new one up to `n`).
   final int maxSkip;
+
+  /// П-3 (25.09.2026): how many of the skipped keys one wire may hand back for
+  /// storing — the NEWEST ones. The rest are still derived (the chain has to
+  /// move past them) but not returned, so a long offline gap cannot flood the
+  /// key table. `null` = no cap: exactly the behaviour before this field
+  /// existed. Not "= maxSkip": with two loops a wire could already return up to
+  /// twice that, and capping it would have changed what old builds store.
+  final int? maxStoredSkipped;
 
   Future<SimpleKeyPair> newDhKeyPair() async {
     final seed = _randomBytes(32);
@@ -330,10 +344,15 @@ class DoubleRatchetV3 {
       nr: s.nr + 1,
     );
 
+    final cap = maxStoredSkipped;
     return DoubleRatchetDecryptResultV3(
       updated: updated,
       plaintext: plain,
-      skippedToStore: skippedToStore,
+      // Only the tail: loops append in derivation order (old chain, then the
+      // new one, each ascending), so the tail is the newest.
+      skippedToStore: cap != null && cap >= 0 && skippedToStore.length > cap
+          ? skippedToStore.sublist(skippedToStore.length - cap)
+          : skippedToStore,
     );
   }
 

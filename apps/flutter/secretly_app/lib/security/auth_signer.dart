@@ -263,6 +263,38 @@ class AuthSigner {
     );
   }
 
+  /// П-5 (25.09.2026): «что со мной?» — устройство спрашивает о себе.
+  /// ОБЯЗАНО совпадать с Rust `keys_device_self_status_auth_message`.
+  static List<int> keysDeviceSelfStatusMessage({
+    required String deviceId,
+    required int tsMs,
+    required String nonceB64,
+  }) {
+    return utf8.encode(
+      'SECRETLY-KEYS-DEVICE-SELF-STATUS-V1\n'
+      'device_id=$deviceId\n'
+      'ts_ms=$tsMs\n'
+      'nonce_b64=$nonceB64\n',
+    );
+  }
+
+  /// П-1 (25.09.2026): связка ОДНОГО устройства. ОБЯЗАНО совпадать с Rust
+  /// `keys_fetch_device_bundle_auth_message`.
+  static List<int> keysFetchDeviceBundleMessage({
+    required String requesterDeviceId,
+    required String deviceId,
+    required int tsMs,
+    required String nonceB64,
+  }) {
+    return utf8.encode(
+      'SECRETLY-KEYS-FETCH-DEVICE-BUNDLE-V1\n'
+      'requester_device_id=$requesterDeviceId\n'
+      'device_id=$deviceId\n'
+      'ts_ms=$tsMs\n'
+      'nonce_b64=$nonceB64\n',
+    );
+  }
+
   static List<int> keysListDevicesMessage({
     required String requesterDeviceId,
     required String profileId,

@@ -91,6 +91,10 @@ import '../media/video_compressor.dart';
 import '../l10n/app_localizations.dart';
 import '../crypto/support_seal.dart';
 import '../messages/room_flags.dart' show Rooms2Flags;
+import '../messages/multidevice_flags.dart';
+import '../ratchet/ratchet_skip_limits.dart';
+import '../transport/relay_protocol.dart'
+    show deviceSetDigest, onlineOnlyTransportHint;
 import '../messages/identity_flags.dart';
 import '../messages/support_flags.dart';
 import '../messages/message_delivery_state.dart';
@@ -993,6 +997,16 @@ class AppController {
   static const int _roomCallMediaSignalTtlSeconds = 90;
   static const int _typingSignalTtlSeconds = 20;
   static const int _typingVisibleMs = 7000;
+
+  /// П-4: после `dropped_offline` от реле «печатает» этому устройству не
+  /// шлём минуту; любое входящее от него снимает метку раньше.
+  static const int _typingDroppedOfflineHoldMs = 60 * 1000;
+
+  /// П-4: «печатает» старше этого по часам отправителя не рисуем. Не 10 с, как
+  /// в ТЗ: часы у людей бывают сбиты на минуты (урок 12.09), и короткий порог
+  /// навсегда гасил бы индикатор такому собеседнику. Две минуты отсекают
+  /// настоящий мусор — переигровку карантина и догон через часы.
+  static const int _typingStaleMs = 120 * 1000;
   static const int _outgoingSendStallMs = 20 * 1000;
   static const int _outgoingSendRecoveryDelayMs = 1500;
   static const int _attachmentCacheMaxBytes = 256 * 1024 * 1024;
@@ -1117,6 +1131,11 @@ class AppController {
   int _pushTokenBootstrapAttempts = 0;
   bool _pendingReceiptFlushInFlight = false;
   bool _pendingReceiptFlushQueued = false;
+  // 25.09.2026: срок жизни строки очереди отчётов, которую сброс раз за разом
+  // не может отправить, и редкая сводка, когда слать нечего, — вместо строки
+  // на каждый такт качалки.
+  static const int _pendingReceiptMaxAgeMs = 7 * 24 * 60 * 60 * 1000;
+  int _receiptFlushIdleLoggedAtMs = 0;
   int _lastReceiptFlushFailureAtMs = 0;
   int _lastWatchdogReceiptFlushAtMs = 0;
   int _receiptFlushFailureCount = 0;
@@ -3704,6 +3723,15 @@ class AppController {
   @visibleForTesting
   set rooms2FlagsForTesting(Rooms2Flags value) => _rooms2Flags = value;
 
+  /// Выключатели мультиустройства (ТЗ 25.09.2026, §2). Пока только
+  /// принимаются и пишутся в журнал: поведение по ним включают П-1…П-5.
+  MultideviceFlags _multideviceFlags = MultideviceFlags.defaults;
+  MultideviceFlags get multideviceFlags => _multideviceFlags;
+
+  @visibleForTesting
+  set multideviceFlagsForTesting(MultideviceFlags value) =>
+      _multideviceFlags = value;
+
   /// Номер этой сборки (как его видит реле), 0 — неизвестен.
   static int get appBuildNumber {
     final raw = AppPackageInfo.buildNumberFromEnv.trim();
@@ -4418,6 +4446,10 @@ class AppController {
     _relay = relay;
     relay.onUnknownDevice = _onRelaySaysUnknownDevice;
     relay.onDeviceAccepted = _onRelayAcceptedOwnDevice;
+    relay.onOnlineOnlyDropped = _noteTypingDroppedOffline;
+    relay.deviceCheckDigestFor = _deviceCheckDigestForRow;
+    relay.onDeviceSetStale = _onDeviceSetStale;
+    relay.onUnknownRecipientDevice = _onUnknownRecipientDevice;
     _relayOnline = relayOnline;
     _transportBlocked = transportBlocked;
   }
@@ -5671,6 +5703,10 @@ class AppController {
       }
       try {
         await _flushParkedReadWatermarks().timeout(const Duration(seconds: 10));
+      } catch (_) {}
+      // П-2: заявки, пришедшие в фоне, ждали выхода на экран.
+      try {
+        await _flushQueuedNacksV2().timeout(const Duration(seconds: 20));
       } catch (_) {}
     } finally {
       _flushOutboundOnResumeInFlight = false;
@@ -7989,11 +8025,13 @@ class AppController {
   /// chat uses, addressed once per member with the ROOM as its convoId, so an
   /// older peer understands it without any change.
   ///
-  /// Best-effort by construction: the signal carries a few seconds of TTL, is
-  /// never queued for an offline member (a typing state that arrives late is
-  /// worse than none), and a member we cannot reach is simply skipped. The
-  /// composer already debounces start/stop, so this costs one small control
-  /// message per member per typing burst — not per keystroke.
+  /// Best-effort by construction: the signal carries a few seconds of TTL and a
+  /// member we cannot reach is simply skipped. It IS queued on the relay for
+  /// an offline member for those seconds (and used to wake them with an empty
+  /// push) — unless the П-4 rollout sends it `online_only`, see
+  /// [sendTypingState]. The composer already debounces start/stop, so this
+  /// costs one small control message per member per typing burst — not per
+  /// keystroke.
   Future<void> sendRoomTypingState({
     required String groupId,
     required bool typing,
@@ -8018,10 +8056,15 @@ class AppController {
     }
   }
 
+  /// [durable] — посылка обязана дойти и до устройства не на связи: так её
+  /// шлёт объявление смены личности И-1, которому «печатает» нужен ради
+  /// prekey-провода от нового устройства. Такая посылка никогда не идёт
+  /// «только на связи» и не пропускается по правилам П-4.
   Future<void> sendTypingState({
     required String peerProfileId,
     required String convoId,
     required bool typing,
+    bool durable = false,
   }) async {
     final pid = peerProfileId.trim();
     var cid = _normalizeTypingConvoId(convoId);
@@ -8042,6 +8085,26 @@ class AppController {
     };
     final text =
         '$_typingCmdPrefix${base64Url.encode(utf8.encode(jsonEncode(payload)))}';
+    // П-4 (25.09.2026): «печатает» только устройствам на связи — по доле
+    // раскатки и только если реле это умеет. Иначе путь побайтово прежний.
+    if (!durable && _typingOnlineOnlyEnabled) {
+      final targets = await _typingOnlineOnlyTargetsFor(pid);
+      if (targets.isEmpty) return;
+      try {
+        await sendControlMessage(
+          peerProfileId: pid,
+          controlText: text,
+          ttlSeconds: _typingSignalTtlSeconds,
+          strict: false,
+          forceRelayFlush: true,
+          targetDeviceIds: targets,
+          transportHint: onlineOnlyTransportHint,
+        );
+      } catch (_) {
+        // Best-effort typing signal.
+      }
+      return;
+    }
     try {
       await sendControlMessage(
         peerProfileId: pid,
@@ -8054,6 +8117,260 @@ class AppController {
       // Best-effort typing signal.
     }
   }
+
+  // ── П-1 (25.09.2026): сверка росписи устройств при отправке ────────────
+
+  bool get _deviceCheckActive =>
+      _multideviceFlags.deviceCheckFor((_deviceId ?? '').trim());
+
+  /// Один раз на пару (событие, профиль): реле ответит по каждой строке
+  /// сообщения, а действовать надо единожды.
+  final Set<String> _deviceSetStaleHandled = <String>{};
+  final Map<String, int> _deviceCheckRosterRefreshAtMs = <String, int>{};
+  static const int _deviceCheckRosterRefreshMinMs = 30 * 1000;
+
+  /// П-1: сводка для строки исходящих — только посылки 1:1 с событием (текст,
+  /// вложение, наклейка). Служебные, квитанции, пинги лечения, «печатает»,
+  /// комнаты и копии на свои устройства — без сводки (ТЗ §8 п. 7).
+  ///
+  /// Сводка — по кэшу росписи адресата (`contact_devices` = `/devices` со
+  /// связкой, то же, что «кому слать» на сервере), ДО фильтра активности на
+  /// реле: иначе фильтр давал бы вечное расхождение. Отступление от ТЗ
+  /// записано: берётся роспись на момент отправки, а не на момент шифрования.
+  Future<String?> _deviceCheckDigestForRow(Map<String, Object?> row) async {
+    if (!_deviceCheckActive) return null;
+    final db = _db;
+    if (db == null) return null;
+    final convo = ((row['convo_id'] as String?) ?? '').trim();
+    final eventRef = ((row['event_id_ref'] as String?) ?? '').trim();
+    final hint = ((row['transport_hint'] as String?) ?? '').trim();
+    final myPid = (_profileId ?? '').trim();
+    if (convo.isEmpty ||
+        eventRef.isEmpty ||
+        convo.startsWith('group:') ||
+        convo.startsWith('dev:') ||
+        convo == myPid ||
+        hint == onlineOnlyTransportHint) {
+      return null;
+    }
+    final rows = await db.contactDevicesList(convo);
+    final ids = [
+      for (final r in rows)
+        if (((r['device_id'] as String?) ?? '').trim().isNotEmpty)
+          (r['device_id'] as String).trim(),
+    ];
+    if (ids.isEmpty) return null;
+    return deviceSetDigest(ids);
+  }
+
+  /// П-1: реле сказало, что роспись адресата посылки [msgId] устарела.
+  /// Обновить роспись (не чаще раза в 30 с на профиль) и дослать событие
+  /// недостающим устройствам — только тем, кого клиент выбрал бы сейчас (с
+  /// фильтром активности), только 1:1 с локальной копией и через бюджет Э-0.
+  void _onDeviceSetStale(String msgId, List<String> deviceIds) {
+    if (!_deviceCheckActive) return;
+    unawaited(() async {
+      final db = _db;
+      final did = (_deviceId ?? '').trim();
+      if (db == null || did.isEmpty) return;
+      try {
+        final target = await db.outboxNackTarget(msgId);
+        final convo = target?.convoId.trim() ?? '';
+        final eventRef = target?.eventIdRef.trim() ?? '';
+        if (target == null || convo.isEmpty || eventRef.isEmpty) return;
+        if (!_deviceSetStaleHandled.add('$eventRef|$convo')) return;
+        if (_deviceSetStaleHandled.length > 2048) _deviceSetStaleHandled.clear();
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final last = _deviceCheckRosterRefreshAtMs[convo] ?? 0;
+        if (now - last >= _deviceCheckRosterRefreshMinMs) {
+          _deviceCheckRosterRefreshAtMs[convo] = now;
+          try {
+            await refreshContactDevices(convo);
+          } catch (_) {
+            // Лимит или сеть — досылка по старому кэшу ниже всё равно честна.
+          }
+        }
+        final wanted = await _listRecipientDevicesForSend(
+          peerProfileId: convo,
+          selfDeviceId: did,
+        );
+        final serverSet = deviceIds.map((d) => d.trim()).toSet();
+        final already = await db.outboxDeviceIdsForEvent(eventRef);
+        final missing = [
+          for (final d in wanted)
+            if (serverSet.contains(d) && !already.contains(d) && !isOwnDeviceId(d)) d,
+        ];
+        DiagLog.event('send', 'device_set_stale', {
+          'peer': DiagLog.pfx(convo),
+          'server': serverSet.length,
+          'missing': missing.length,
+        });
+        for (final dev in missing) {
+          var epoch = 0;
+          try {
+            epoch = await db.sessionV3EpochFor(dev);
+          } catch (_) {}
+          final hasRoom = await db.resendBudgetHasRoom(
+            eventId: eventRef,
+            deviceId: dev,
+            epoch: epoch,
+            maxAttempts: _resendUndeliveredMaxLifetimeAttempts,
+          );
+          if (!hasRoom) continue;
+          await _resendOneEventReEncrypted(
+            eventId: eventRef,
+            payloadEventId: target.payloadEventId,
+            peerProfileId: convo,
+            peerDeviceId: dev,
+            onEnqueued: (newMsgId) => db.resendPendingMark(
+              msgId: newMsgId,
+              eventId: eventRef,
+              deviceId: dev,
+              epoch: epoch,
+            ),
+          );
+        }
+      } catch (e) {
+        DiagLog.event('send', 'device_set_stale_failed', {'err': _shortErrorTag(e)});
+      }
+    }());
+  }
+
+  /// П-1: реле не знает устройства-адресата — роспись профиля устарела.
+  void _onUnknownRecipientDevice(String toDeviceId) {
+    if (!_deviceCheckActive) return;
+    unawaited(() async {
+      try {
+        final pid = (await _resolveProfileIdForDevice(toDeviceId) ?? '').trim();
+        if (pid.isEmpty) return;
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final last = _deviceCheckRosterRefreshAtMs[pid] ?? 0;
+        if (now - last < _deviceCheckRosterRefreshMinMs) return;
+        _deviceCheckRosterRefreshAtMs[pid] = now;
+        DiagLog.event('send', 'unknown_recipient_refresh', {
+          'peer': DiagLog.pfx(pid),
+        });
+        await refreshContactDevices(pid);
+      } catch (_) {}
+    }());
+  }
+
+  /// П-1: связка ОДНОГО устройства за долей; null — прежний путь (связки
+  /// профиля). Отказ сервера тоже null: менеджер откатится сам.
+  Future<List<Map<String, Object?>>?> _fetchDeviceBundleAuthed(
+    String deviceId,
+  ) async {
+    if (!_deviceCheckActive) return null;
+    final keys = _keys;
+    if (keys == null) return null;
+    final auth = await _buildKeysAuthEnvelope(
+      buildMessage:
+          ({required requesterDeviceId, required tsMs, required nonceB64}) =>
+              AuthSigner.keysFetchDeviceBundleMessage(
+                requesterDeviceId: requesterDeviceId,
+                deviceId: deviceId,
+                tsMs: tsMs,
+                nonceB64: nonceB64,
+              ),
+    );
+    if (auth == null) return null;
+    try {
+      return await keys.fetchDeviceBundle(
+        deviceId,
+        requesterDeviceId: auth.requesterDeviceId,
+        tsMs: auth.tsMs,
+        nonceB64: auth.nonceB64,
+        signatureB64: auth.signatureB64,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// П-4: реле ответило, что [toDeviceId] не на связи.
+  final Map<String, int> _typingDroppedOfflineAtMs = <String, int>{};
+
+  void _noteTypingDroppedOffline(String toDeviceId) {
+    final dev = toDeviceId.trim();
+    if (dev.isEmpty) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _typingDroppedOfflineAtMs[dev] = now;
+    if (_typingDroppedOfflineAtMs.length > 512) {
+      _typingDroppedOfflineAtMs.removeWhere(
+        (_, at) => now - at >= _typingDroppedOfflineHoldMs,
+      );
+    }
+  }
+
+  bool get _typingOnlineOnlyEnabled =>
+      (_relayHealthStatus?.onlineOnly ?? false) &&
+      _multideviceFlags.ephemeralOnlineOnlyFor((_deviceId ?? '').trim());
+
+  /// П-4: кому слать «печатает» «только на связи». Пропускаем устройство, если
+  /// с ним нет ПОДТВЕРЖДЁННОЙ сессии (первая посылка новому устройству — это
+  /// prekey-рукопожатие, и брошенный реле «печатает» оставил бы следующие
+  /// сообщения без сессии) или если реле минуту назад сказало, что оно не на
+  /// связи. Без сокета реле — никому: это и есть «ключ не тратится впустую».
+  @visibleForTesting
+  static List<String> typingOnlineOnlyTargets({
+    required List<String> devices,
+    required Map<String, int> sessionPendingAtMs,
+    required Map<String, int> droppedOfflineAtMs,
+    required int nowMs,
+  }) {
+    final out = <String>[];
+    for (final raw in devices) {
+      final d = raw.trim();
+      if (d.isEmpty) continue;
+      final pending = sessionPendingAtMs[d];
+      if (pending == null || pending > 0) continue;
+      final dropped = droppedOfflineAtMs[d];
+      if (dropped != null && nowMs - dropped < _typingDroppedOfflineHoldMs) {
+        continue;
+      }
+      out.add(d);
+    }
+    return out;
+  }
+
+  Future<List<String>> _typingOnlineOnlyTargetsFor(String peerProfileId) async {
+    final db = _db;
+    final did = _deviceId;
+    if (db == null || did == null || !_relayOnline) return const <String>[];
+    List<String> devices;
+    try {
+      devices = await _listRecipientDevicesForSend(
+        peerProfileId: peerProfileId,
+        selfDeviceId: did,
+      );
+    } catch (_) {
+      return const <String>[];
+    }
+    final pending = <String, int>{};
+    for (final d in devices) {
+      try {
+        final row = await db.sessionV3Get(d);
+        if (row != null) {
+          pending[d] = (row['initiator_pending_at_ms'] as num?)?.toInt() ?? 0;
+        }
+      } catch (_) {
+        // Нет чтения — нет уверенности в сессии: пропускаем устройство.
+      }
+    }
+    return typingOnlineOnlyTargets(
+      devices: devices,
+      sessionPendingAtMs: pending,
+      droppedOfflineAtMs: _typingDroppedOfflineAtMs,
+      nowMs: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  /// П-4: «печатает» с отметкой отправителя старше [_typingStaleMs] — мусор.
+  @visibleForTesting
+  static bool typingStartIsStale({
+    required int createdAtMs,
+    required int nowMs,
+  }) => createdAtMs > 0 && nowMs - createdAtMs > _typingStaleMs;
 
   void _setConversationTyping({
     required String convoId,
@@ -8691,6 +9008,11 @@ class AppController {
           message: failure.message,
           cause: failure,
         );
+      case KeysPolicyFailureCode.deviceUnlinked:
+        return DesktopLinkFailure(
+          DesktopLinkFailureCode.desktopDeviceUnlinked,
+          cause: failure,
+        );
       default:
         return DesktopLinkFailure(
           DesktopLinkFailureCode.desktopPrimaryDeviceRequired,
@@ -8846,6 +9168,119 @@ class AppController {
 
   bool get desktopDeviceRemovedFromAccount => _desktopDeviceRemovedFromAccount;
 
+  /// П-5: текст для отвязанного компьютера — дата и причина с сервера. Без
+  /// ответа сервера — общий текст без догадок о причине.
+  @visibleForTesting
+  static String desktopUnlinkedMessage(KeysDeviceSelfStatus? status) {
+    final base = DesktopLinkFailure(
+      DesktopLinkFailureCode.desktopDeviceUnlinked,
+    ).message;
+    final at = status?.unlinkedAtMs;
+    if (status == null || !status.isUnlinked || at == null || at <= 0) {
+      return base;
+    }
+    final d = DateTime.fromMillisecondsSinceEpoch(at, isUtc: true).toLocal();
+    final date =
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final why = switch (status.reason) {
+      'inactive' => 'it was offline for too long',
+      'ended_by_owner' => 'its session was ended from another of your devices',
+      'removed_by_server' => 'it was removed by the server',
+      _ => null,
+    };
+    return why == null
+        ? 'This computer was unlinked from your Secretly ID on $date. '
+              'Link it again from your phone: the chats on this computer will '
+              'be replaced with a copy from the phone.'
+        : 'This computer was unlinked from your Secretly ID on $date: $why. '
+              'Link it again from your phone: the chats on this computer will '
+              'be replaced with a copy from the phone.';
+  }
+
+  /// П-5: подписанный вопрос серверу ключей «что со мной?». null — не вышло
+  /// (нет сети, ключа, старый сервер): решает прежний путь.
+  Future<KeysDeviceSelfStatus?> _desktopSelfStatus() async {
+    final pid = (_profileId ?? '').trim();
+    final did = (_deviceId ?? '').trim();
+    if (pid.isEmpty || did.isEmpty) return null;
+    final keys = _keys ?? KeysClient(baseUrl: keysBaseUrl);
+    try {
+      final identity = await DeviceKeys.create().loadIdentityKeyPair(
+        profileId: pid,
+        deviceId: did,
+      );
+      final tsMs = ServerClock.instance.nowMs();
+      final nonceB64 = AuthSigner.randomNonceB64(bytes: 16);
+      final signatureB64 = await AuthSigner.signEd25519B64(
+        identityKeyPair: identity,
+        message: AuthSigner.keysDeviceSelfStatusMessage(
+          deviceId: did,
+          tsMs: tsMs,
+          nonceB64: nonceB64,
+        ),
+      );
+      final status = await keys
+          .deviceSelfStatus(
+            deviceId: did,
+            tsMs: tsMs,
+            nonceB64: nonceB64,
+            signatureB64: signatureB64,
+          )
+          .timeout(const Duration(seconds: 10));
+      DiagLog.event('keys', 'self_status', {'status': status.status});
+      return status;
+    } catch (e) {
+      DiagLog.event('keys', 'self_status_failed', {'err': _shortErrorTag(e)});
+      return null;
+    }
+  }
+
+  Future<void> _enterDesktopUnlinkedMode(
+    SharedPreferences prefs,
+    KeysDeviceSelfStatus? status,
+  ) async {
+    final message = desktopUnlinkedMessage(status);
+    DiagLog.event('keys', 'desktop_unlinked', {
+      'reason': status?.reason ?? '',
+    });
+    _desktopKeysPulseTimer?.cancel();
+    _desktopKeysPulseTimer = null;
+    await _enterDesktopCurrentDeviceRemovedMode(
+      prefs: prefs,
+      result: AppRuntimeLifecycleCoordinator.desktopUnauthenticatedMode(
+        warning: message,
+        error: message,
+      ),
+    );
+    _setAuthFlowState(
+      _authFlowState,
+      failure: DesktopLinkFailure(
+        DesktopLinkFailureCode.desktopDeviceUnlinked,
+        message: message,
+      ),
+    );
+  }
+
+  /// П-5: подписанный «я на связи» раз в 6 часов, пока ПК работает. Отметку
+  /// «на связи» (Н-2) ставит любой подписанный вызов, но ПК, который только
+  /// читает, мог неделями не делать ни одного — и попадал под отвязку за
+  /// молчание, будучи включённым. Заодно пульс замечает отвязку на ходу.
+  Timer? _desktopKeysPulseTimer;
+  static const Duration _desktopKeysPulseInterval = Duration(hours: 6);
+
+  void _startDesktopKeysPulse(SharedPreferences prefs) {
+    if (!_isDesktopOrWebPlatform) return;
+    _desktopKeysPulseTimer?.cancel();
+    _desktopKeysPulseTimer = Timer.periodic(_desktopKeysPulseInterval, (_) {
+      unawaited(() async {
+        final status = await _desktopSelfStatus();
+        if (status != null && status.isUnlinked) {
+          await _enterDesktopUnlinkedMode(prefs, status);
+        }
+      }());
+    });
+  }
+
   Future<void> _enterDesktopCurrentDeviceRemovedMode({
     required SharedPreferences prefs,
     required DesktopUnauthenticatedModeResult result,
@@ -8853,6 +9288,8 @@ class AppController {
     _desktopDeviceRemovedFromAccount = true;
     _pumpTimer?.cancel();
     _mainAliveHeartbeatTimer?.cancel();
+    _desktopKeysPulseTimer?.cancel();
+    _desktopKeysPulseTimer = null;
     _pumpTimer = null;
     _serviceWatchdogTimer?.cancel();
     _serviceWatchdogTimer = null;
@@ -9614,6 +10051,7 @@ class AppController {
       _rooms2Flags = repo.rooms2Flags;
       _applyHandshakeFlags(repo);
       await _applyHandshakeAuthSwitch(repo);
+      _applyMultideviceFlags(repo);
     } catch (_) {
       // best-effort; keep whatever state we already have
     }
@@ -9819,6 +10257,37 @@ class AppController {
     });
   }
 
+  /// Блок `multidevice` (ТЗ 25.09.2026, §2). Сервер не ответил — остаётся
+  /// прежнее (при старте это [MultideviceFlags.defaults]); ответил — берётся
+  /// его значение, а непроверенный блок уже превращён репозиторием в нули:
+  /// «не удалось проверить» не оставляет включённым то, что было включено.
+  void _applyMultideviceFlags(EntitlementRepository repo) {
+    if (!repo.multideviceFlagsResolved) return;
+    final next = repo.multideviceFlags;
+    if (next == _multideviceFlags) return;
+    _multideviceFlags = next;
+    DiagLog.event('multidevice', 'flags_applied', next.toLogFields());
+    _ratchetV3?.setLiveSkipJump(_ratchetLiveSkipJump);
+  }
+
+  /// П-3: скачок ратчета живой сессии. Сервер молчит (поле 0) — встроенный:
+  /// ПК 5 000, телефон прежние 200 (см. [RatchetSkipLimits]).
+  int get _ratchetLiveSkipJump {
+    final desktop = _isDesktopOrWebPlatform;
+    return _multideviceFlags.ratchetJumpFor(
+      desktop: desktop,
+      builtIn: desktop
+          ? RatchetSkipLimits.builtInDesktopJump
+          : RatchetSkipLimits.builtInMobileJump,
+    );
+  }
+
+  /// П-3, шаг 6: сколько один проход переигровки карантина может считать.
+  /// При прежнем пределе (200) — без ограничения, как раньше; при поднятом
+  /// каждый неподдающийся провод стоит до 5 000 выводов ключа, и проход по
+  /// сотне таких держал бы базу десятки секунд. Остаток — в следующий проход.
+  Duration? get _quarantineReplayBudget => _ratchetV3?.liveLimits.replayBudget;
+
   /// Сборочное переопределение: снимок значения на момент старта, ДО того как
   /// сервер что-либо сказал. Хранится отдельно, потому что сам
   /// [kPrekeyUntilConfirmedSend] дальше меняется сервером.
@@ -9894,6 +10363,7 @@ class AppController {
       _rooms2Flags = repo.rooms2Flags;
       _applyHandshakeFlags(repo);
       await _applyHandshakeAuthSwitch(repo);
+      _applyMultideviceFlags(repo);
       // Paid-but-not-credited recovery: now that the entitlement repo + verifier
       // are ready, re-deliver any owned/unfinished purchase so a grant lost on a
       // previous launch (or dropped by the bootstrap race before the repo
@@ -10472,6 +10942,10 @@ class AppController {
     _relay = relay;
     relay.onUnknownDevice = _onRelaySaysUnknownDevice;
     relay.onDeviceAccepted = _onRelayAcceptedOwnDevice;
+    relay.onOnlineOnlyDropped = _noteTypingDroppedOffline;
+    relay.deviceCheckDigestFor = _deviceCheckDigestForRow;
+    relay.onDeviceSetStale = _onDeviceSetStale;
+    relay.onUnknownRecipientDevice = _onUnknownRecipientDevice;
     _kickRelayOutbox(relay);
 
     _blob = BlobClient(
@@ -10520,6 +10994,8 @@ class AppController {
           deviceKeys: DeviceKeys.create(),
           keysClient: keys,
           fetchBundleAuthed: _fetchBundleAuthed,
+          liveSkipJump: _ratchetLiveSkipJump,
+          fetchDeviceBundleAuthed: _fetchDeviceBundleAuthed,
         );
       }
     }
@@ -11443,6 +11919,8 @@ class AppController {
         deviceKeys: DeviceKeys.create(),
         keysClient: keys,
         fetchBundleAuthed: _fetchBundleAuthed,
+        liveSkipJump: _ratchetLiveSkipJump,
+        fetchDeviceBundleAuthed: _fetchDeviceBundleAuthed,
       );
       await _rebindRelayRuntimeForCurrentIdentity(prefs: prefs);
     } on CurrentDeviceRelinkRequiredException catch (e) {
@@ -12076,6 +12554,18 @@ class AppController {
     }
   }
 
+  /// Очередь не пуста, а слать некому (адресат не определился): одна строка
+  /// в десять минут, а не строка на каждый такт качалки.
+  void _noteReceiptFlushIdle({required int pending, required int unresolved}) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _receiptFlushIdleLoggedAtMs < 10 * 60 * 1000) return;
+    _receiptFlushIdleLoggedAtMs = now;
+    DiagLog.event('receipt', 'flush_idle', {
+      'pending_count': pending,
+      'unresolved': unresolved,
+    });
+  }
+
   Future<int> _flushPendingReceiptsBestEffort() async {
     if (_pendingReceiptFlushInFlight) {
       _pendingReceiptFlushQueued = true;
@@ -12104,10 +12594,17 @@ class AppController {
         // real send/receive events.
         return 0;
       }
-      DiagLog.event('receipt', 'flush_start', {
-        'pending_count': pending.length,
-      });
 
+      // Строки, которые не уйдут никогда (адресаты — только свои устройства),
+      // и те, что не уходят дольше срока жизни. По возрасту убирается ТОЛЬКО
+      // то, что этот проход отправить не смог: годную строку сброс уносит в
+      // исходящие, как бы стара она ни была (сбитые часы, долгий простой).
+      final dropOwnOnly = <PendingReceiptRecord>[];
+      final dropStale = <PendingReceiptRecord>[];
+      final passStartMs = DateTime.now().millisecondsSinceEpoch;
+      bool isStale(PendingReceiptRecord r) =>
+          passStartMs - r.updatedAtMs > _pendingReceiptMaxAgeMs;
+      var unresolved = 0;
       final resolvedProfileIdByDeviceId = <String, String?>{};
       final currentDevicesByProfileId = <String, List<String>>{};
       final grouped = <String, List<PendingReceiptRecord>>{};
@@ -12145,6 +12642,11 @@ class AppController {
           peerProfileId = recordConvoId;
         }
         if (peerProfileId.isEmpty) {
+          if (isStale(record)) {
+            dropStale.add(record);
+          } else {
+            unresolved += 1;
+          }
           continue;
         }
         // FIX-C3 (delivery): address the receipt to the peer's CURRENT live
@@ -12171,13 +12673,27 @@ class AppController {
         if (peerDeviceId.isNotEmpty && !isOwnDeviceId(peerDeviceId)) {
           targetDeviceIds.add(peerDeviceId);
         }
+        // П-2: заявку «не смог расшифровать» — ТОЛЬКО устройству, что прислало
+        // непрочитанный провод. Рассылка ещё на восемь устройств заставляла
+        // каждое из них сбросить здоровую сессию, прежде чем выяснить, что
+        // посылка не его. Неизвестен отправитель — прежняя рассылка.
+        final nackOnlyToSender =
+            _nackV2Active &&
+            targetDeviceIds.isNotEmpty &&
+            MessageReceiptState.normalize(record.status) ==
+                MessageReceiptState.nackUndecryptable;
         for (final d
             in currentDevicesByProfileId[peerProfileId] ?? const <String>[]) {
+          if (nackOnlyToSender) break;
           if (isOwnDeviceId(d)) continue;
           targetDeviceIds.add(d);
           if (targetDeviceIds.length >= 8) break;
         }
         if (targetDeviceIds.isEmpty) {
+          // Пусто, только если отчёт указывает на своё устройство: чужое
+          // устройство отправителя в цели попадает всегда. Своим отчёты не
+          // шлются никогда (им состояние идёт зеркалами) — строку убрать.
+          dropOwnOnly.add(record);
           continue;
         }
         for (final targetDeviceId in targetDeviceIds) {
@@ -12193,6 +12709,22 @@ class AppController {
         }
       }
 
+      if (dropOwnOnly.isNotEmpty || dropStale.isNotEmpty) {
+        await db.pendingReceiptDeleteRecords([...dropOwnOnly, ...dropStale]);
+        DiagLog.event('receipt', 'flush_drop', {
+          'own_only': dropOwnOnly.length,
+          'stale': dropStale.length,
+        });
+      }
+      if (grouped.isEmpty) {
+        _noteReceiptFlushIdle(pending: pending.length, unresolved: unresolved);
+        return 0;
+      }
+      DiagLog.event('receipt', 'flush_start', {
+        'pending_count': pending.length,
+        'groups': grouped.length,
+      });
+
       final now = DateTime.now().millisecondsSinceEpoch;
       for (final entry in grouped.entries) {
         final batchKey = entry.key;
@@ -12204,6 +12736,24 @@ class AppController {
         final peerDeviceId = groupedDeviceIds[batchKey] ?? '';
         if (peerProfileId.isEmpty || peerDeviceId.isEmpty) {
           continue;
+        }
+        // П-2: эпохи непрочитанных проводов для заявок — заранее, сборка ниже
+        // синхронная.
+        final nackSe = <String, int>{};
+        if (_nackV2Active) {
+          for (final record in records) {
+            if (MessageReceiptState.normalize(record.status) !=
+                MessageReceiptState.nackUndecryptable) {
+              continue;
+            }
+            try {
+              final raw = await db.localKvGet(
+                '$_nackSePrefix${record.payloadEventId}',
+              );
+              final se = int.tryParse((raw ?? '').split('|').first);
+              if (se != null && se > 0) nackSe[record.payloadEventId] = se;
+            } catch (_) {}
+          }
         }
         final receiptEvents = records
             .map(
@@ -12219,6 +12769,7 @@ class AppController {
                         MessageReceiptState.nackUndecryptable
                     ? 'msg_id'
                     : null,
+                refSe: nackSe[record.payloadEventId],
               ),
             )
             .toList(growable: false);
@@ -12264,6 +12815,12 @@ class AppController {
             'to_dev': DiagLog.pfx(peerDeviceId),
             'reason': _classifyShortReason(error),
           });
+          // Не шифруется неделю — адресата уже нет; строки не держать вечно.
+          final stale = records.where(isStale).toList(growable: false);
+          if (stale.isNotEmpty) {
+            await db.pendingReceiptDeleteRecords(stale);
+            DiagLog.event('receipt', 'flush_drop', {'stale': stale.length});
+          }
           continue;
         }
       }
@@ -13066,6 +13623,18 @@ class AppController {
     // deferring the execution one step is free.
 
     if (registrationPolicyFailure != null) {
+      // 🔴 П-5 (25.09.2026): компьютер отвязан (надгробие). Правду — с датой и
+      // причиной из самопроверки — и режим «удалён»: он закрывает сеть, НЕ
+      // стирает базу и ведёт к привязке с телефона. Новый номер без одобрения
+      // телефона отвязку не обходит, поэтому ротация здесь не делается.
+      if (_isDesktopOrWebPlatform &&
+          registrationPolicyFailure.code ==
+              KeysPolicyFailureCode.deviceUnlinked) {
+        await _enterDesktopUnlinkedMode(prefs, await _desktopSelfStatus());
+        throw CurrentDeviceRelinkRequiredException(
+          desktopUnlinkedMessage(null),
+        );
+      }
       if (_isDesktopOrWebPlatform) {
         final failure = _desktopLinkFailureFromKeysPolicy(
           registrationPolicyFailure,
@@ -13128,6 +13697,18 @@ class AppController {
     }
 
     if (registrationPolicyFailure != null) {
+      // 🔴 П-5 (25.09.2026): компьютер отвязан (надгробие). Правду — с датой и
+      // причиной из самопроверки — и режим «удалён»: он закрывает сеть, НЕ
+      // стирает базу и ведёт к привязке с телефона. Новый номер без одобрения
+      // телефона отвязку не обходит, поэтому ротация здесь не делается.
+      if (_isDesktopOrWebPlatform &&
+          registrationPolicyFailure.code ==
+              KeysPolicyFailureCode.deviceUnlinked) {
+        await _enterDesktopUnlinkedMode(prefs, await _desktopSelfStatus());
+        throw CurrentDeviceRelinkRequiredException(
+          desktopUnlinkedMessage(null),
+        );
+      }
       if (_isDesktopOrWebPlatform) {
         final failure = _desktopLinkFailureFromKeysPolicy(
           registrationPolicyFailure,
@@ -13414,6 +13995,9 @@ class AppController {
             peerProfileId: peer,
             convoId: peer,
             typing: false,
+            // Объявлению нужен prekey-провод, а не «печатает»: оно обязано
+            // дойти до устройства не на связи (П-4).
+            durable: true,
           );
           sent += 1;
         } catch (_) {
@@ -15109,6 +15693,8 @@ class AppController {
           deviceKeys: DeviceKeys.create(),
           keysClient: keys,
           fetchBundleAuthed: _fetchBundleAuthed,
+          liveSkipJump: _ratchetLiveSkipJump,
+          fetchDeviceBundleAuthed: _fetchDeviceBundleAuthed,
         );
 
         // BACKGROUND DRAIN (2026-07-16): keep the background fetcher's base
@@ -15150,6 +15736,10 @@ class AppController {
         _relay = relay;
     relay.onUnknownDevice = _onRelaySaysUnknownDevice;
     relay.onDeviceAccepted = _onRelayAcceptedOwnDevice;
+    relay.onOnlineOnlyDropped = _noteTypingDroppedOffline;
+    relay.deviceCheckDigestFor = _deviceCheckDigestForRow;
+    relay.onDeviceSetStale = _onDeviceSetStale;
+    relay.onUnknownRecipientDevice = _onUnknownRecipientDevice;
         _kickRelayOutbox(relay);
 
         // Attachments use Relay HTTP blob API.
@@ -15647,8 +16237,11 @@ class AppController {
             (_) {
               unawaited(_runQuarantineRecoverySweep());
               unawaited(_runSilenceRecoverySweep());
+              unawaited(_runNackV2Housekeeping());
             },
           );
+          // П-5: только ПК — телефон отмечается своими вызовами, как раньше.
+          _startDesktopKeysPulse(prefs);
 
           // 🔴 НЕ на критическом пути (03.08.2026). Раньше здесь стояло
           // `await`, и первый кадр ждал полного экспорта зашифрованной базы
@@ -46256,7 +46849,13 @@ class AppController {
           // is already in the mailbox; NACKing would just trigger a redundant
           // second rekey.
           if (e is! EpochAheadException) {
-            unawaited(_emitNackUndecryptable(msgId, senderDeviceId));
+            unawaited(
+              _emitNackUndecryptable(
+                msgId,
+                senderDeviceId,
+                ciphertextB64: ciphertextB64,
+              ),
+            );
           }
         } catch (quarantineErr) {
           // best-effort: if the quarantine insert fails we fall back to the
@@ -46541,6 +47140,10 @@ class AppController {
     final now = DateTime.now().millisecondsSinceEpoch;
     String? senderProfileId;
     final capsDid = (senderDeviceId ?? '').trim();
+    // П-4: устройство прислало что-то — значит, на связи.
+    if (capsDid.isNotEmpty && _typingDroppedOfflineAtMs.isNotEmpty) {
+      _typingDroppedOfflineAtMs.remove(capsDid);
+    }
     if (payload.caps.isNotEmpty &&
         capsDid.isNotEmpty &&
         capsDid != (_deviceId ?? '').trim()) {
@@ -46735,7 +47338,14 @@ class AppController {
       }
       var recovered = 0;
       var retiredSuperseded = 0;
+      final budget = _quarantineReplayBudget;
+      final spent = Stopwatch()..start();
+      var deferred = 0;
       for (final row in rows) {
+        if (budget != null && spent.elapsed > budget) {
+          deferred += 1;
+          continue;
+        }
         // PERF(frames): ratchet decrypt is CPU-bound pure-Dart math on the UI
         // isolate — force a timer-task boundary per row so vsync frames can
         // interleave with a long replay burst instead of freezing the UI.
@@ -46829,6 +47439,12 @@ class AppController {
       if (skippedHopeless > 0) {
         DiagLog.event('inbox', 'quarantine_replay_throttled', {
           'skipped': skippedHopeless,
+          'sender_dev': DiagLog.pfx(sid),
+        });
+      }
+      if (deferred > 0) {
+        DiagLog.event('inbox', 'quarantine_replay_budget', {
+          'deferred': deferred,
           'sender_dev': DiagLog.pfx(sid),
         });
       }
@@ -47043,7 +47659,14 @@ class AppController {
       final rows = await db.inboxQuarantineListAll(limit: 500);
       var recovered = 0;
       var skippedHopeless = 0;
+      final budget = _quarantineReplayBudget;
+      final spent = Stopwatch()..start();
+      var deferred = 0;
       for (final row in rows) {
+        if (budget != null && spent.elapsed > budget) {
+          deferred += 1;
+          continue;
+        }
         // PERF(frames): this runs on relay (re)connect and boot — yield per
         // row so a 500-row replay cannot freeze startup/scroll (see the
         // per-sender replay loop above for the rationale).
@@ -47116,6 +47739,11 @@ class AppController {
       if (skippedHopeless > 0) {
         DiagLog.event('inbox', 'quarantine_replay_throttled', {
           'skipped': skippedHopeless,
+        });
+      }
+      if (deferred > 0) {
+        DiagLog.event('inbox', 'quarantine_replay_budget', {
+          'deferred': deferred,
         });
       }
       await db.inboxQuarantinePrune(
@@ -48313,6 +48941,7 @@ class AppController {
                 relayMsgId: payloadEventId,
                 peerDeviceId: senderDidTrim,
                 peerProfileId: receiptSenderProfileId,
+                refSe: receiptEvent.refSe,
               ),
             );
           }
@@ -48391,6 +49020,12 @@ class AppController {
         }
         // Hidden control either way: a mirror from a device that is NOT ours
         // is dropped rather than rendered.
+        //
+        // 25.09.2026: «dropped» держалось на одном `continue`, а его мало — без
+        // отметки сообщение проваливалось в путь обычного: скрытой строкой в
+        // чат с самим собой и вечным отчётом своему же устройству (очередь
+        // отчётов росла без конца). Так же у папок и состояния чата ниже.
+        handledCommand = true;
         continue;
       }
 
@@ -48410,6 +49045,7 @@ class AppController {
         if (senderIsOwn) {
           await _applySelfMirrorFolder(folderCmd);
         }
+        handledCommand = true;
         continue;
       }
 
@@ -48429,6 +49065,7 @@ class AppController {
         if (senderIsOwn) {
           await _applySelfMirrorConvoState(convoStateCmd);
         }
+        handledCommand = true;
         continue;
       }
 
@@ -49037,7 +49674,18 @@ class AppController {
         resolvedConvoId = _normalizeTypingConvoId(resolvedConvoId);
         if (resolvedConvoId.isNotEmpty) {
           final isTyping = action == 'start' || action == 'typing';
-          if (isTyping) {
+          // П-4: устаревший «печатает» (переигровка карантина, догон через
+          // часы) не рисуем — по той же доле, что и отправку.
+          final staleStart =
+              isTyping &&
+              _multideviceFlags.ephemeralOnlineOnlyFor(
+                (_deviceId ?? '').trim(),
+              ) &&
+              typingStartIsStale(
+                createdAtMs: (typingCmd['createdAtMs'] as num?)?.toInt() ?? 0,
+                nowMs: now,
+              );
+          if (isTyping && !staleStart) {
             _setConversationTyping(
               convoId: resolvedConvoId,
               typing: true,
@@ -50178,10 +50826,14 @@ class AppController {
     // Send delivered receipt back to sender for any known peer (no contact check —
     // contacts table may be empty after reinstall/data-clear, which would otherwise
     // leave the sender permanently on 1 tick even after recipient reads the message).
+    //
+    // 25.09.2026: своему же сообщению — нет. Сброс свои устройства не адресует
+    // (им состояние идёт зеркалами), и такой отчёт вечно висел в очереди.
     if (spid != null &&
         spid.isNotEmpty &&
         senderDeviceId != null &&
         senderDeviceId.isNotEmpty &&
+        !inboundDirectIsOwnSend &&
         did != null &&
         did.isNotEmpty &&
         (firstEvent is MsgEventV1 ||
@@ -50876,7 +51528,11 @@ class AppController {
     }
   }
 
-  Future<void> _emitNackUndecryptable(String msgId, String? senderDeviceId) async {
+  Future<void> _emitNackUndecryptable(
+    String msgId,
+    String? senderDeviceId, {
+    String? ciphertextB64,
+  }) async {
     if (_backgroundInboundMode) return; // NACK is an outbound wire; foreground sends it
     if (!_nackReceiptsEnabled) return;
     final db = _db;
@@ -50891,6 +51547,17 @@ class AppController {
     if (_nackEmittedAtMsByMsgId.length > 512) {
       final cutoff = now - 10 * _nackDebounceMs;
       _nackEmittedAtMsByMsgId.removeWhere((_, ts) => ts < cutoff);
+    }
+    // П-2: эпоха сессии непрочитанного провода — отправителю, чтобы он не
+    // сбрасывал здоровую сессию из-за провода от старой.
+    if (_nackV2Active) {
+      try {
+        final ct = ciphertextB64 ?? await db.inboxQuarantineCiphertext(id);
+        final se = ct == null ? null : wireSessionEpoch(ct);
+        if (se != null) await db.localKvSet('$_nackSePrefix$id', '$se|$now');
+      } catch (_) {
+        // Без эпохи отправитель поступит по-старому.
+      }
     }
     String peerProfileId = '';
     try {
@@ -50955,6 +51622,300 @@ class AppController {
     return NackResendDecision.resend;
   }
 
+  // ── П-2 (25.09.2026): повтор по заявке — адресно, один раз, без лишних сбросов ──
+
+  static const String _nackSePrefix = 'nse:';
+  static const String _nackQueuePrefix = 'rtq:';
+  static const String _nackAnsweredPrefix = 'rtr:';
+  static const int _nackV2KeepMs = 7 * 24 * 60 * 60 * 1000;
+
+  /// П-2: на одну названную посылку отвечаем один раз за это окно. Позже —
+  /// снова, но только в пределах бюджета Э-0: повтор мог потеряться сам, а
+  /// получатель перезаявляет безнадёжный провод раз в час.
+  static const int _nackAnsweredHoldMs = 6 * 60 * 60 * 1000;
+
+  @visibleForTesting
+  static bool nackV2AnsweredRecently({
+    required String? answeredMark,
+    required int nowMs,
+  }) {
+    final at = int.tryParse((answeredMark ?? '').trim()) ?? 0;
+    return at > 0 && nowMs - at < _nackAnsweredHoldMs;
+  }
+  int _nackV2HousekeepingAtMs = 0;
+
+  /// П-2 включён для ЭТОГО устройства (доля `nack_v2_percent`). Проверка
+  /// адресата Н-1 действует всегда и от доли не зависит.
+  bool get _nackV2Active =>
+      _multideviceFlags.nackV2For((_deviceId ?? '').trim());
+
+  /// Эпоха сессии (`se` заголовка) провода; null — не разобрать или нет поля.
+  @visibleForTesting
+  static int? wireSessionEpoch(String ciphertextB64) {
+    try {
+      final decoded = RatchetWireV3.tryDecode(base64Decode(ciphertextB64));
+      final se = decoded?.header['se'];
+      return se is num && se > 0 ? se.toInt() : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// П-2: сбрасывать ли сессию по заявке. Провод умер под ТЕКУЩЕЙ сессией —
+  /// она сломана, сброс. Под старой — сессия уже новая, только повтор. Поля нет
+  /// (старый получатель) — как раньше, сброс.
+  @visibleForTesting
+  static bool nackV2ShouldResetSession({
+    required int? refSe,
+    required int currentEpoch,
+  }) => refSe == null || refSe <= 0 || refSe >= currentEpoch;
+
+  Future<void> _handleNackV2({
+    required String relayMsgId,
+    required String peerDeviceId,
+    required String peerProfileId,
+    required int? refSe,
+  }) async {
+    if (!_nackReceiptsEnabled) {
+      DiagLog.event('inbox', 'nack_skip', const {'reason': 'disabled'});
+      return;
+    }
+    final db = _db;
+    final dev = peerDeviceId.trim();
+    final id = relayMsgId.trim();
+    if (db == null || id.isEmpty || dev.isEmpty || isOwnDeviceId(dev)) {
+      DiagLog.event('inbox', 'nack_skip', {
+        'reason': isOwnDeviceId(dev) ? 'own_device' : 'empty_ref',
+        'dev': DiagLog.pfx(dev),
+      });
+      return;
+    }
+    if (_backgroundInboundMode) {
+      // Фон: подтверждение уже ушло, и без записи заявка терялась бы навсегда.
+      // Отрабатывается при выходе на экран.
+      try {
+        await db.localKvSet(
+          '$_nackQueuePrefix$id',
+          jsonEncode(<String, Object?>{
+            'dev': dev,
+            'pid': peerProfileId.trim(),
+            'se': refSe,
+            'at': DateTime.now().millisecondsSinceEpoch,
+          }),
+        );
+        DiagLog.event('inbox', 'nack_queued_background', {
+          'msg': DiagLog.pfx(id),
+        });
+      } catch (_) {}
+      return;
+    }
+    await _processNackV2(
+      id: id,
+      dev: dev,
+      pidHint: peerProfileId.trim(),
+      refSe: refSe,
+    );
+  }
+
+  Future<void> _processNackV2({
+    required String id,
+    required String dev,
+    required String pidHint,
+    required int? refSe,
+  }) async {
+    final db = _db;
+    if (db == null) return;
+    try {
+      if (nackV2AnsweredRecently(
+        answeredMark: await db.localKvGet('$_nackAnsweredPrefix$id'),
+        nowMs: DateTime.now().millisecondsSinceEpoch,
+      )) {
+        DiagLog.event('inbox', 'nack_skip', {
+          'reason': 'answered',
+          'msg': DiagLog.pfx(id),
+        });
+        return;
+      }
+      var pid = pidHint;
+      if (pid.isEmpty) {
+        try {
+          pid = (await _resolveProfileIdForDevice(dev)) ?? '';
+        } catch (_) {}
+      }
+      if (pid.isEmpty) {
+        DiagLog.event('inbox', 'nack_skip', {
+          'reason': 'no_profile',
+          'dev': DiagLog.pfx(dev),
+        });
+        return;
+      }
+      DiagLog.event('inbox', 'nack_received', {
+        'msg': DiagLog.pfx(id),
+        'dev': DiagLog.pfx(dev),
+        'v': 2,
+      });
+      OutboxNackTarget? target;
+      try {
+        target = await db.outboxNackTarget(id);
+      } catch (_) {
+        target = null;
+      }
+      final decision = nackResendDecision(
+        row: target,
+        requesterDeviceId: dev,
+        requesterProfileId: pid,
+      );
+      if (decision == NackResendDecision.notAddressee) {
+        DiagLog.event('inbox', 'nack_skip', {
+          'reason': 'not_addressee',
+          'msg': DiagLog.pfx(id),
+          'dev': DiagLog.pfx(dev),
+        });
+        return;
+      }
+      var epoch = 0;
+      try {
+        epoch = await db.sessionV3EpochFor(dev);
+      } catch (_) {
+        epoch = 0;
+      }
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final reset = nackV2ShouldResetSession(refSe: refSe, currentEpoch: epoch);
+      if (reset) {
+        final lastReset = _sessionResetPingAtMs[dev] ?? 0;
+        if (now - lastReset >= _sessionResetPingDebounceMs) {
+          _resetPingGraceTimers.remove(dev)?.cancel();
+          _sessionResetPingAtMs[dev] = now;
+          // Сначала провод лечения В ОЧЕРЕДИ, потом повтор — иначе повтор мог
+          // уйти под сессией, которую сброс тут же заменит.
+          await _sendSessionResetPingNow(dev, _resetCausePeerNack);
+          unawaited(_refreshHeldScheduledWires());
+          try {
+            epoch = await db.sessionV3EpochFor(dev);
+          } catch (_) {}
+        }
+      } else {
+        DiagLog.event('inbox', 'nack_no_reset', {
+          'msg': DiagLog.pfx(id),
+          'dev': DiagLog.pfx(dev),
+        });
+      }
+      if (decision == NackResendDecision.resend && target != null) {
+        final t = target;
+        final hasRoom = await db.resendBudgetHasRoom(
+          eventId: t.eventIdRef,
+          deviceId: dev,
+          epoch: epoch,
+          maxAttempts: _resendUndeliveredMaxLifetimeAttempts,
+        );
+        if (!hasRoom) {
+          DiagLog.event('inbox', 'nack_skip', {
+            'reason': 'budget',
+            'msg': DiagLog.pfx(id),
+          });
+        } else {
+          await _resendOneEventReEncrypted(
+            eventId: t.eventIdRef,
+            payloadEventId: t.payloadEventId,
+            peerProfileId: pid,
+            peerDeviceId: dev,
+            onEnqueued: (msgId) => db.resendPendingMark(
+              msgId: msgId,
+              eventId: t.eventIdRef,
+              deviceId: dev,
+              epoch: epoch,
+            ),
+          );
+        }
+      } else {
+        DiagLog.event('inbox', 'nack_resend_miss', {
+          'msg': DiagLog.pfx(id),
+          'why': decision.name,
+        });
+      }
+      // Общего свипа «недоставленного» здесь больше НЕТ (цель Э-3): его
+      // покрывает одноразовый свип после завершённого перевыпуска сессии.
+      unawaited(_reEmitReceiptStateFor(peerProfileId: pid, peerDeviceId: dev));
+      await db.localKvSet('$_nackAnsweredPrefix$id', '$now');
+    } catch (e) {
+      DiagLog.event('inbox', 'nack_v2_failed', {'err': _shortErrorTag(e)});
+    } finally {
+      try {
+        await db.localKvDelete('$_nackQueuePrefix$id');
+      } catch (_) {}
+    }
+  }
+
+  /// П-2: заявки, записанные в фоне, — при выходе на экран, не больше 50 за
+  /// проход; старше недели — выбрасываются (провод истёк на реле).
+  Future<void> _flushQueuedNacksV2() async {
+    final db = _db;
+    if (db == null || _backgroundInboundMode || !_nackV2Active) return;
+    final keys = await db.localKvKeysWithPrefix(_nackQueuePrefix);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    var done = 0;
+    for (final k in keys) {
+      if (done >= 50) break;
+      final id = k.substring(_nackQueuePrefix.length);
+      Map<String, Object?>? entry;
+      try {
+        final raw = await db.localKvGet(k);
+        final decoded = raw == null ? null : jsonDecode(raw);
+        entry = decoded is Map ? decoded.cast<String, Object?>() : null;
+      } catch (_) {
+        entry = null;
+      }
+      final at = (entry?['at'] as num?)?.toInt() ?? 0;
+      final dev = ((entry?['dev'] as String?) ?? '').trim();
+      if (entry == null || dev.isEmpty || now - at > _nackV2KeepMs) {
+        await db.localKvDelete(k);
+        continue;
+      }
+      await _processNackV2(
+        id: id,
+        dev: dev,
+        pidHint: ((entry['pid'] as String?) ?? '').trim(),
+        refSe: (entry['se'] as num?)?.toInt(),
+      );
+      done += 1;
+    }
+  }
+
+  /// П-2: уборка раз в час — отправленные строки исходящих и журнал попыток
+  /// старше недели (порциями), отметки заявок старше недели.
+  Future<void> _runNackV2Housekeeping() async {
+    final db = _db;
+    if (db == null || !_nackV2Active) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _nackV2HousekeepingAtMs < const Duration(hours: 1).inMilliseconds) {
+      return;
+    }
+    _nackV2HousekeepingAtMs = now;
+    try {
+      final cutoff = now - _nackV2KeepMs;
+      final outbox = await db.outboxPruneSentOlderThan(cutoffMs: cutoff);
+      final attempts = await db.messageAttemptLogPruneOlderThan(cutoffMs: cutoff);
+      var marks = 0;
+      for (final prefix in [_nackAnsweredPrefix, _nackSePrefix]) {
+        for (final k in await db.localKvKeysWithPrefix(prefix)) {
+          final raw = await db.localKvGet(k) ?? '';
+          final at = int.tryParse(raw.split('|').last) ?? 0;
+          if (now - at > _nackV2KeepMs) {
+            await db.localKvDelete(k);
+            marks += 1;
+          }
+        }
+      }
+      if (outbox + attempts + marks > 0) {
+        DiagLog.event('send', 'nack_v2_housekeeping', {
+          'outbox': outbox,
+          'attempts': attempts,
+          'marks': marks,
+        });
+      }
+    } catch (_) {}
+  }
+
   /// TZ Epic A2 — SENDER side: a peer device positively reported that our wire
   /// [relayMsgId] is undecryptable for it. React with a TARGETED heal — rekey
   /// that device (shared debounce with every other reset path) and re-send all
@@ -50964,7 +51925,18 @@ class AppController {
     required String relayMsgId,
     required String peerDeviceId,
     required String peerProfileId,
+    int? refSe,
   }) async {
+    // П-2: новый повтор — за долей nack_v2_percent; иначе путь прежний.
+    if (_nackV2Active) {
+      await _handleNackV2(
+        relayMsgId: relayMsgId,
+        peerDeviceId: peerDeviceId,
+        peerProfileId: peerProfileId,
+        refSe: refSe,
+      );
+      return;
+    }
     if (_backgroundInboundMode) return; // rekey+resend is outbound; foreground does it
     // Every early return below is LOGGED. On 2026-07-19 a peer received five
     // NACKs, silently did nothing, and it took an hour of relay-log archaeology
@@ -52353,6 +53325,8 @@ class AppController {
     required String payloadEventId,
     required String peerProfileId,
     required String peerDeviceId,
+    // П-2: кадр уже в исходящих — вызывающий помечает его для бюджета Э-0.
+    Future<void> Function(String msgId)? onEnqueued,
   }) async {
     final db = _db;
     final ratchet = _ratchetV3;
@@ -52492,6 +53466,11 @@ class AppController {
         'event': DiagLog.pfx(eventId),
         'dev': DiagLog.pfx(peerDeviceId),
       });
+      if (onEnqueued != null) {
+        try {
+          await onEnqueued(msgId);
+        } catch (_) {}
+      }
       _kickRelayOutbox();
       return true;
     } catch (_) {
@@ -52538,7 +53517,16 @@ class AppController {
       });
       return;
     }
-    unawaited(() async {
+    unawaited(_sendSessionResetPingNow(peerDeviceId, cause));
+  }
+
+  /// Тело [_dispatchSessionResetPing], которое можно ДОЖДАТЬСЯ (П-2, 25.09.2026):
+  /// возвращается, когда провод лечения уже в исходящих. Прежние вызывающие
+  /// зовут его без ожидания — поведение побайтово то же. Новый повтор по заявке
+  /// ждёт его, чтобы повтор не ушёл под сессией, которую сброс тут же заменит
+  /// (сброс сначала ищет профиль и лишь потом встаёт в очередь шифрования).
+  Future<void> _sendSessionResetPingNow(String peerDeviceId, String cause) async {
+    {
       try {
         final db = _db;
         final selfDid = _deviceId;
@@ -52640,7 +53628,7 @@ class AppController {
           'err': e.toString().substring(0, math.min(80, e.toString().length)),
         });
       }
-    }());
+    }
   }
 
   /// Send ONE debounced reciprocal confirm-ping to [peerDeviceId] after we
@@ -52814,6 +53802,8 @@ class AppController {
   Future<void> dispose() async {
     _pumpTimer?.cancel();
     _mainAliveHeartbeatTimer?.cancel();
+    _desktopKeysPulseTimer?.cancel();
+    _desktopKeysPulseTimer = null;
     _serviceWatchdogTimer?.cancel();
     _quarantineRecoverySweepTimer?.cancel();
     _quarantineRecoverySweepTimer = null;

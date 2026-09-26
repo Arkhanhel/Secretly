@@ -137,6 +137,7 @@ abstract class E2eEventV1 {
         refEventId: json['ref_event_id'] as String,
         status: json['status'] as String,
         refKind: json['ref_kind'] as String?,
+        refSe: (json['ref_se'] as num?)?.toInt(),
       ),
       'att' => AttachmentEventV1(
         eventId: json['event_id'] as String,
@@ -354,6 +355,7 @@ class ReceiptEventV1 extends E2eEventV1 {
     required this.refEventId,
     required this.status,
     this.refKind,
+    this.refSe,
   });
 
   /// Receipt event id (unique).
@@ -374,6 +376,13 @@ class ReceiptEventV1 extends E2eEventV1 {
   /// clients (which never read it) are byte-compatible.
   final String? refKind;
 
+  /// П-2 (25.09.2026): только у заявки `nack_undecryptable` — эпоха сессии
+  /// (`se` заголовка), под которой шёл непрочитанный провод. По ней отправитель
+  /// решает, сломана ли ТЕКУЩАЯ сессия (сбросить) или провод от старой (только
+  /// повторить). Необязательное: старые приёмники его не читают, старые
+  /// получатели не шлют — тогда поведение прежнее.
+  final int? refSe;
+
   @override
   Map<String, Object?> toJson() => {
     'type': 'rcpt',
@@ -381,6 +390,7 @@ class ReceiptEventV1 extends E2eEventV1 {
     'ref_event_id': refEventId,
     'status': status,
     if (refKind != null && refKind!.isNotEmpty) 'ref_kind': refKind,
+    if (refSe != null && refSe! > 0) 'ref_se': refSe,
   };
 }
 

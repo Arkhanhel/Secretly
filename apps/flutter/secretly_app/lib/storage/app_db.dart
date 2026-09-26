@@ -5602,6 +5602,55 @@ CREATE TABLE IF NOT EXISTS deferred_room_inbound (
     );
   }
 
+  /// П-3 (25.09.2026): все пропущенные ключи одного провода — одним пакетом.
+  /// При поднятом пределе их до 2 000, и поштучная запись — это 2 000 походов
+  /// к базе внутри открытой транзакции, пока список чатов и отправка ждут.
+  /// Строки те же, что у [skippedKeyUpsert]; конфликт так же игнорируется.
+  Future<void> skippedKeysUpsertMany({
+    required String peerDeviceId,
+    required List<({String dhPubB64, int msgNum, String mkB64})> keys,
+    DatabaseExecutor? txn,
+  }) async {
+    if (keys.isEmpty) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final batch = (txn ?? _db).batch();
+    for (final k in keys) {
+      batch.insert('skipped_message_keys', {
+        'peer_device_id': peerDeviceId,
+        'dh_pub_b64': k.dhPubB64,
+        'msg_num': k.msgNum,
+        'mk_b64': k.mkB64,
+        'created_at_ms': now,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// П-3 (25.09.2026): оставить [keep] самых новых пропущенных ключей одного
+  /// устройства собеседника. Возраст (7 суток, [skippedKeysPrune]) по-прежнему
+  /// чистит отдельно; это — потолок по количеству, чтобы долгий офлайн с
+  /// большим скачком не раздувал таблицу. Возвращает число удалённых строк.
+  Future<int> skippedKeysTrimForPeer({
+    required String peerDeviceId,
+    required int keep,
+    DatabaseExecutor? txn,
+  }) async {
+    if (keep < 0) return 0;
+    return (txn ?? _db).rawDelete(
+      '''
+DELETE FROM skipped_message_keys
+WHERE peer_device_id = ?
+  AND rowid NOT IN (
+    SELECT rowid FROM skipped_message_keys
+    WHERE peer_device_id = ?
+    ORDER BY created_at_ms DESC, msg_num DESC
+    LIMIT ?
+  )
+''',
+      [peerDeviceId, peerDeviceId, keep],
+    );
+  }
+
   // ───────────────────────── ROOM SENDER KEY ─────────────────────────
   // Storage, фаза 2. Deliberately
   // placed next to the pairwise skipped-key accessors above: the room chain is
@@ -10264,6 +10313,65 @@ CREATE TABLE IF NOT EXISTS deferred_room_inbound (
   /// Снимает провод с парковки. Возвращает `true`, если строка там была —
   /// вызывающему это нужно, чтобы отличить снятие настоящей парковки от
   /// холостого вызова и не засорять журнал (см. `quarantine_orphan_cleared`).
+  /// П-2: шифротекст запаркованного провода — чтобы прочитать из заголовка
+  /// эпоху сессии для заявки. null — провода в карантине нет.
+  Future<String?> inboxQuarantineCiphertext(String msgId) async {
+    final rows = await _db.query(
+      'inbox_quarantine',
+      columns: const ['ciphertext_b64'],
+      where: 'msg_id = ?',
+      whereArgs: [msgId.trim()],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['ciphertext_b64'] as String?;
+  }
+
+  /// П-1 (25.09.2026): на какие устройства уже ушло событие [eventIdRef].
+  Future<Set<String>> outboxDeviceIdsForEvent(String eventIdRef) async {
+    final id = eventIdRef.trim();
+    if (id.isEmpty) return const <String>{};
+    final rows = await _db.query(
+      'outbox',
+      columns: const ['to_device_id'],
+      where: 'event_id_ref = ?',
+      whereArgs: [id],
+    );
+    return {
+      for (final r in rows)
+        if (((r['to_device_id'] as String?) ?? '').trim().isNotEmpty)
+          (r['to_device_id'] as String).trim(),
+    };
+  }
+
+  /// П-2 (25.09.2026): чистка отправленных строк исходящих старше [cutoffMs] —
+  /// ПОРЦИЯМИ по [limit]: первая чистка после обновления удалит накопленное за
+  /// всё время, и одним запросом это держало бы базу. Позже 7 суток посылка
+  /// всё равно истекла на реле: отвечать на заявку по ней нечем и незачем.
+  /// Трогает только состояние `sent` — неотправленное не удаляется никогда.
+  Future<int> outboxPruneSentOlderThan({
+    required int cutoffMs,
+    int limit = 5000,
+  }) {
+    return _db.rawDelete(
+      'DELETE FROM outbox WHERE rowid IN ('
+      'SELECT rowid FROM outbox WHERE state = ? AND created_at_ms < ? LIMIT ?)',
+      [OutboxSendState.sent, cutoffMs, limit],
+    );
+  }
+
+  /// П-2: журнал попыток отправки старше [cutoffMs] — порциями, как выше.
+  Future<int> messageAttemptLogPruneOlderThan({
+    required int cutoffMs,
+    int limit = 5000,
+  }) {
+    return _db.rawDelete(
+      'DELETE FROM message_attempt_log WHERE id IN ('
+      'SELECT id FROM message_attempt_log WHERE started_at_ms < ? LIMIT ?)',
+      [cutoffMs, limit],
+    );
+  }
+
   Future<bool> inboxQuarantineDelete(String msgId) async {
     final removed = await _db.delete(
       'inbox_quarantine',
@@ -12734,6 +12842,29 @@ HAVING COUNT(*) > 1;
     );
     if (rows.isEmpty) return 0;
     return (rows.first['n'] as num?)?.toInt() ?? 0;
+  }
+
+  /// 25.09.2026: убрать строки, которые не уйдут никогда, — отчёт, у которого
+  /// из адресатов остались только свои устройства. Иначе строку удаляет лишь
+  /// постановка в исходящие, и такая висела вечно: сброс раз в секунду
+  /// перебирал её впустую, а после 512 застрявших (выборка — самые старые)
+  /// свежие отчёты переставали в неё попадать вовсе.
+  Future<int> pendingReceiptDeleteRecords(
+    Iterable<PendingReceiptRecord> records,
+  ) async {
+    final keys = records.toList(growable: false);
+    if (keys.isEmpty) return 0;
+    return _db.transaction((txn) async {
+      var removed = 0;
+      for (final record in keys) {
+        removed += await txn.delete(
+          'pending_receipts',
+          where: 'peer_device_id = ? AND payload_event_id = ?',
+          whereArgs: [record.peerDeviceId, record.payloadEventId],
+        );
+      }
+      return removed;
+    });
   }
 
   /// Recent INBOUND events of [convoId] from [peerDeviceId]'s owner, with

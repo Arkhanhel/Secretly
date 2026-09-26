@@ -171,8 +171,10 @@ class DecryptWorker {
     // subclass to prove per-peer serialization and saw an empty log.
     //
     // An exact runtimeType check, not `is DoubleRatchetV3`: a subclass passes
-    // `is` and is exactly the case we must exclude. `maxSkip` is forwarded
-    // explicitly below because it is configuration, not behaviour.
+    // `is` and is exactly the case we must exclude. `maxSkip` and
+    // `maxStoredSkipped` are forwarded explicitly below because they are
+    // configuration, not behaviour — and dropping one would silently put the
+    // worker back on the stock limits (П-3).
     if (ratchet.runtimeType != DoubleRatchetV3) return inPlace();
 
     if (!await _ensureStarted()) return inPlace();
@@ -186,6 +188,7 @@ class DecryptWorker {
       port.send(<String, dynamic>{
         'id': id,
         'maxSkip': ratchet.maxSkip,
+        'maxStored': ratchet.maxStoredSkipped,
         'state': _encodeState(state),
         'dh': headerDhPubB64,
         'pn': pn,
@@ -284,7 +287,10 @@ class DecryptWorker {
       final id = message['id'] as int?;
       if (id == null) continue;
       try {
-        final dr = DoubleRatchetV3(maxSkip: message['maxSkip'] as int? ?? 200);
+        final dr = DoubleRatchetV3(
+          maxSkip: message['maxSkip'] as int? ?? 200,
+          maxStoredSkipped: message['maxStored'] as int?,
+        );
         final result = await dr.decrypt(
           state: _decodeState(message['state'] as Map),
           headerDhPubB64: message['dh'] as String,

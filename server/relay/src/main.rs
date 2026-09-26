@@ -154,6 +154,9 @@ struct HealthResponse {
     service_started_at_ms: i64,
     max_request_body_bytes: i64,
     max_attachment_bytes: i64,
+    /// П-4: реле исполняет `online_only`. Клиент включает поведение только
+    /// тогда, иначе тратил бы долю раскатки на реле, которое поле не знает.
+    online_only: bool,
 }
 
 #[derive(Deserialize)]
@@ -303,6 +306,7 @@ async fn health(
         service_started_at_ms: state.service_started_at_ms,
         max_request_body_bytes: RELAY_HTTP_BODY_LIMIT_BYTES as i64,
         max_attachment_bytes: RELAY_MAX_ATTACHMENT_BYTES,
+        online_only: state.online_only_enabled,
     };
     (status_code, Json(body))
 }
@@ -505,11 +509,23 @@ struct AppState {
     /// Срок служебных посылок между устройствами ОДНОГО аккаунта; 0 = выкл.
     /// См. [`own_device_control_ttl`].
     own_device_control_ttl_seconds: u32,
+    /// П-4: исполнять ли `online_only` («печатает» только тем, кто на связи).
+    /// Выключено — поле игнорируется, всё побайтово как раньше.
+    online_only_enabled: bool,
+    /// П-1: сверять ли сводку росписи отправителя (`rcpt_digest`). Выключено —
+    /// поле игнорируется, всё побайтово как раньше.
+    device_check_enabled: bool,
+    /// П-1: множество «кому слать» по профилю (с исключённым устройством) —
+    /// кэш на 30 с, чтобы не бить ключи на каждой посылке.
+    addressable_cache: Arc<DashMap<String, (i64, AddressableSet)>>,
     max_pending_per_device: u64,
     keys_internal_base_url: Arc<String>,
     internal_key: Arc<String>,
     http: HttpClient,
     identity_cache: Arc<DashMap<String, String>>,
+    /// П-5 (25.09.2026): когда ключ личности попал в кэш — для срока в
+    /// [`IDENTITY_CACHE_TTL_MS`]. Нет отметки — запись вечная, как раньше.
+    identity_cache_at: Arc<DashMap<String, i64>>,
     profile_cache: Arc<DashMap<String, String>>,
     used_nonces: Arc<DashMap<String, i64>>,
     push_wake_last_ms: Arc<DashMap<String, i64>>,
@@ -842,6 +858,14 @@ enum ClientMsg {
         // survives the SENDER's phone sleeping.
         #[serde(default)]
         deliver_at_ms: Option<i64>,
+        /// П-4 (25.09.2026): «только тем, кто на связи» — для «печатает». Не в
+        /// подписи (прецедент — `deliver_at_ms`). Старые клиенты не шлют.
+        #[serde(default)]
+        online_only: bool,
+        /// П-1: сводка множества устройств адресата, на которое отправитель
+        /// шифрует ЭТО сообщение. Не в подписи. Старые клиенты не шлют.
+        #[serde(default)]
+        rcpt_digest: Option<String>,
     },
     Ack {
         device_id: String,
@@ -1118,12 +1142,32 @@ fn verify_ed25519_b64(pub_b64: &str, sig_b64: &str, msg: &[u8]) -> bool {
     pk.verify_strict(msg, &sig).is_ok()
 }
 
+/// 🔴 П-5 (25.09.2026): сколько реле верит закэшированному ключу личности.
+///
+/// Кэш был вечным: устройство, удалённое (отвязанное) на сервере ключей,
+/// продолжало проходить проверку подписи на реле до его перезапуска. Теперь
+/// через 10 минут ключ перечитывается; ответ «такого устройства нет» выбрасывает
+/// запись. Недоступность ключей — не повод отказывать: тогда верим старой
+/// записи, иначе сбой сервера ключей ронял бы доставку всем.
+const IDENTITY_CACHE_TTL_MS: i64 = 10 * 60 * 1000;
+
+fn identity_cache_is_fresh(inserted_at_ms: Option<i64>, now_ms: i64) -> bool {
+    match inserted_at_ms {
+        None => true,
+        Some(at) => now_ms - at < IDENTITY_CACHE_TTL_MS,
+    }
+}
+
 async fn fetch_identity_pub_b64(state: &AppState, device_id: &str) -> Option<String> {
     if !is_valid_id(device_id, 128) {
         return None;
     }
-    if let Some(v) = state.identity_cache.get(device_id) {
-        return Some(v.value().clone());
+    let cached = state.identity_cache.get(device_id).map(|v| v.value().clone());
+    if let Some(v) = cached.as_ref() {
+        let at = state.identity_cache_at.get(device_id).map(|t| *t);
+        if identity_cache_is_fresh(at, now_ms()) {
+            return Some(v.clone());
+        }
     }
 
     let url = format!(
@@ -1136,21 +1180,30 @@ async fn fetch_identity_pub_b64(state: &AppState, device_id: &str) -> Option<Str
     if !state.internal_key.is_empty() {
         req = req.header("x-secretly-internal-key", state.internal_key.as_str());
     }
-    let resp = req.send().await.ok()?;
+    // Сбой связи с ключами — старая запись (если была) остаётся в силе.
+    let Ok(resp) = req.send().await else {
+        return cached;
+    };
     if !resp.status().is_success() {
-        return None;
+        return cached;
     }
-    let body: KeysDeviceIdentityResp = resp.json().await.ok()?;
+    let Ok(body) = resp.json::<KeysDeviceIdentityResp>().await else {
+        return cached;
+    };
     if !body.exists {
+        // Ключи прямо говорят: устройства нет (удалено, отвязано).
+        if cached.is_some() {
+            tracing::info!(device_ref = %log_fingerprint(device_id), "identity cache dropped: device gone on keys");
+        }
+        state.identity_cache.remove(device_id);
+        state.identity_cache_at.remove(device_id);
         return None;
     }
-    let ik = body.identity_key_pub_b64?;
-    if ik.is_empty() {
-        return None;
-    }
+    let ik = body.identity_key_pub_b64.filter(|k| !k.is_empty())?;
     state
         .identity_cache
         .insert(device_id.to_string(), ik.clone());
+    state.identity_cache_at.insert(device_id.to_string(), now_ms());
     Some(ik)
 }
 
@@ -2033,6 +2086,154 @@ fn own_device_control_ttl(
         return capped_ttl_seconds;
     }
     own_device_ttl_seconds
+}
+
+/// Срок посылки «только тем, кто на связи», если получатель на связи: её
+/// запись нужна лишь для порядка seq, храниться дольше незачем.
+const ONLINE_ONLY_MAX_TTL_SECONDS: u32 = 30;
+
+/// Что делать с посылкой, которую клиент пометил `online_only` (П-4,
+/// 25.09.2026, «печатает»).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OnlineOnlyRoute {
+    /// Обычный путь, побайтово прежний.
+    Normal,
+    /// Получатель не на связи: ни строки, ни seq, ни дедупа, ни пуша.
+    DropOffline,
+    /// Получатель на связи: запись с коротким сроком (seq держит порядок у
+    /// приёмника, который читает строго по seq), живая доставка, без пуша.
+    Realtime { ttl_seconds: u32 },
+}
+
+/// 🔴 П-4: правило для посылки `online_only`.
+///
+/// Поле честно исполняется ТОЛЬКО для голой посылки: без транспортной меты
+/// (сигналы звонка, лечение сессии, синхронизация звонка комнаты несут мету, и
+/// их поздняя доставка — не наша забота здесь) и без отложенной доставки.
+/// Всё прочее — обычный путь: поле не может превратить важное в теряемое.
+/// Выключено переменной — поле игнорируется целиком.
+fn online_only_route(
+    enabled: bool,
+    online_only: bool,
+    transport_meta_json: Option<&str>,
+    deliver_at_ms: Option<i64>,
+    now_ms: i64,
+    recipient_connected: bool,
+    capped_ttl_seconds: u32,
+) -> OnlineOnlyRoute {
+    if !enabled || !online_only {
+        return OnlineOnlyRoute::Normal;
+    }
+    if transport_meta_json.map(str::trim).is_some_and(|m| !m.is_empty()) {
+        return OnlineOnlyRoute::Normal;
+    }
+    if deliver_at_ms.unwrap_or(0) > now_ms {
+        return OnlineOnlyRoute::Normal;
+    }
+    if !recipient_connected {
+        return OnlineOnlyRoute::DropOffline;
+    }
+    OnlineOnlyRoute::Realtime {
+        ttl_seconds: capped_ttl_seconds.min(ONLINE_ONLY_MAX_TTL_SECONDS),
+    }
+}
+
+/// Запускать ли запасной пуш для только что записанной посылки. Повтор того
+/// же msg_id (дедуп) не будит второй раз; посылка «только на связи» (П-4) не
+/// будит никогда — пустой тихий пуш каждые 3,5 с, пока кто-то печатает, и был
+/// тем, от чего П-4 лечит.
+fn should_schedule_fallback_push(dedup: bool, route: OnlineOnlyRoute) -> bool {
+    !dedup && !matches!(route, OnlineOnlyRoute::Realtime { .. })
+}
+
+/// П-1 (25.09.2026): множество «кому слать» профиля по мнению сервера ключей.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+struct AddressableSet {
+    digest: String,
+    device_ids: Vec<String>,
+}
+
+const ADDRESSABLE_CACHE_TTL_MS: i64 = 30 * 1000;
+
+async fn fetch_addressable(
+    state: &AppState,
+    profile_id: &str,
+    exclude_device_id: Option<&str>,
+    bypass_cache: bool,
+) -> Option<AddressableSet> {
+    let exclude = exclude_device_id.unwrap_or("");
+    let key = format!("{profile_id}|{exclude}");
+    let now = now_ms();
+    if !bypass_cache {
+        if let Some(entry) = state.addressable_cache.get(&key) {
+            if now - entry.0 < ADDRESSABLE_CACHE_TTL_MS {
+                return Some(entry.1.clone());
+            }
+        }
+    }
+    let mut url = format!(
+        "{}/internal/profile/{}/addressable",
+        state.keys_internal_base_url.trim_end_matches('/'),
+        profile_id
+    );
+    if !exclude.is_empty() {
+        url.push_str("?exclude_device_id=");
+        url.push_str(exclude);
+    }
+    let mut req = state.http.get(url);
+    if !state.internal_key.is_empty() {
+        req = req.header("x-secretly-internal-key", state.internal_key.as_str());
+    }
+    let resp = req.send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let set: AddressableSet = resp.json().await.ok()?;
+    if state.addressable_cache.len() > 50_000 {
+        state
+            .addressable_cache
+            .retain(|_, v| now - v.0 < ADDRESSABLE_CACHE_TTL_MS);
+    }
+    state.addressable_cache.insert(key, (now, set.clone()));
+    Some(set)
+}
+
+/// 🔴 П-1: сверка сводки росписи отправителя с настоящей. Посылка при этом
+/// записывается ВСЕГДА — отказа нет. Расхождение перед сигналом перепроверяется
+/// ОДИН раз мимо кэша: только что зарегистрированное устройство не должно давать
+/// ложного «устарело». Своему профилю — без устройства-отправителя (так считает
+/// и клиент). Возвращает настоящий список, если сводка устарела. Сбой ключей —
+/// молчание: сверка подсказка, а не проверка.
+async fn device_set_check(
+    state: &AppState,
+    rcpt_digest: Option<&str>,
+    to_device_id: &str,
+    sender_device_id: Option<&str>,
+    sender_profile_id: Option<&str>,
+) -> Option<Vec<String>> {
+    if !state.device_check_enabled {
+        return None;
+    }
+    let digest = rcpt_digest.map(str::trim).filter(|d| !d.is_empty())?;
+    let recipient_pid = fetch_profile_id(state, to_device_id).await?;
+    let exclude = match (sender_profile_id, sender_device_id) {
+        (Some(sp), Some(sd)) if sp == recipient_pid => Some(sd),
+        _ => None,
+    };
+    let first = fetch_addressable(state, &recipient_pid, exclude, false).await?;
+    if first.digest == digest {
+        return None;
+    }
+    let fresh = fetch_addressable(state, &recipient_pid, exclude, true).await?;
+    if fresh.digest == digest {
+        return None;
+    }
+    tracing::info!(
+        to_device_ref = %log_fingerprint(to_device_id),
+        devices = fresh.device_ids.len(),
+        "device_set_check mismatch"
+    );
+    Some(fresh.device_ids)
 }
 
 fn parse_chat_message_transport_meta(
@@ -3248,6 +3449,16 @@ enum ServerMsg {
     },
     SentOk {
         msg_id: String,
+        /// П-4: только для посылок `online_only` — `dropped_offline` или
+        /// `realtime`. Иначе поля нет, и ответ побайтово прежний.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        delivery: Option<String>,
+        /// П-1 (25.09.2026): сводка росписи отправителя не совпала с настоящей
+        /// — вот настоящий список «кому слать». Иначе полей нет.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        device_set_stale: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        device_ids: Option<Vec<String>>,
     },
     Deliver {
         device_id: String,
@@ -3277,6 +3488,12 @@ struct HttpSendReq {
     // SERVER-SIDE SCHEDULED DELIVERY (2026-07-17): see ClientMsg::Send.
     #[serde(default)]
     deliver_at_ms: Option<i64>,
+    /// П-4: see `ClientMsg::Send`.
+    #[serde(default)]
+    online_only: bool,
+    /// П-1: see `ClientMsg::Send`.
+    #[serde(default)]
+    rcpt_digest: Option<String>,
 }
 
 /// К-2 (17.09.2026): one sealed room message, handed to many devices.
@@ -3313,6 +3530,14 @@ const ROOM_BROADCAST_MAX_RECIPIENTS: usize = 400;
 struct HttpSendResp {
     ok: bool,
     seq: u64,
+    /// П-4: см. `ServerMsg::SentOk`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    delivery: Option<&'static str>,
+    /// П-1: см. `ServerMsg::SentOk`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    device_set_stale: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    device_ids: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -5632,6 +5857,8 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     transport_meta_json,
                     ttl_seconds,
                     deliver_at_ms,
+                    online_only,
+                    rcpt_digest,
                 }) => {
                     let from_device_ref = log_fingerprint(&did);
                     let to_device_ref = log_fingerprint(&to_device_id);
@@ -5746,6 +5973,35 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     if store_ttl != capped_ttl {
                         tracing::info!(from_device_ref=%log_fingerprint(&did), to_device_ref=%to_device_ref, msg_ref=%msg_ref, ttl_seconds=store_ttl, "own-device control ttl extended");
                     }
+                    // П-4: «печатает» не хранится для устройств не на связи.
+                    let route = online_only_route(
+                        state.online_only_enabled,
+                        online_only,
+                        transport_meta_json.as_deref(),
+                        deliver_at_ms,
+                        now_ms(),
+                        state.conns.contains_key(&to_device_id),
+                        capped_ttl,
+                    );
+                    if route == OnlineOnlyRoute::DropOffline {
+                        tracing::info!(to_device_ref=%to_device_ref, msg_ref=%msg_ref, "ws online-only dropped; recipient offline");
+                        let _ = tx.send(Message::Text(
+                            serde_json::to_string(&ServerMsg::SentOk {
+                                msg_id: msg_id.clone(),
+                                delivery: Some("dropped_offline".into()),
+                                device_set_stale: None,
+                                device_ids: None,
+                            })
+                            .unwrap()
+                            .into(),
+                        ));
+                        continue;
+                    }
+                    let realtime_only = matches!(route, OnlineOnlyRoute::Realtime { .. });
+                    let store_ttl = match route {
+                        OnlineOnlyRoute::Realtime { ttl_seconds } => ttl_seconds,
+                        _ => store_ttl,
+                    };
 
                     // Basic spam control: cap per-recipient pending queue.
                     if let Ok(cnt) = state.store.pending_count(&to_device_id, now_ms()).await {
@@ -5831,6 +6087,9 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         let _ = tx.send(Message::Text(
                             serde_json::to_string(&ServerMsg::SentOk {
                                 msg_id: msg_id.clone(),
+                                delivery: None,
+                                device_set_stale: None,
+                                device_ids: None,
                             })
                             .unwrap()
                             .into(),
@@ -5839,7 +6098,8 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         continue;
                     }
 
-                    if !enq.dedup {
+                    // П-4: посылка «только на связи» пуш не будит — никогда.
+                    if should_schedule_fallback_push(enq.dedup, route) {
                         // Снимается СИНХРОННО, до `spawn`: внутри задачи это
                         // значение уже относилось бы к другому моменту.
                         let had_live_socket = state.conns.contains_key(&to_device_id);
@@ -5855,14 +6115,31 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         ));
                     }
 
-                    let _ = tx.send(Message::Text(
-                        serde_json::to_string(&ServerMsg::SentOk {
-                            msg_id: msg_id.clone(),
-                        })
-                        .unwrap()
-                        .into(),
-                    ));
+                    // П-4: для «только на связи» ответ идёт ПОСЛЕ попытки
+                    // доставки — отправителю важен её итог, а не запись.
+                    if !realtime_only {
+                        // П-1: сверка росписи — подсказка в том же ответе.
+                        let stale = device_set_check(
+                            &state,
+                            rcpt_digest.as_deref(),
+                            &to_device_id,
+                            Some(did.as_str()),
+                            Some(sender_pid.as_str()),
+                        )
+                        .await;
+                        let _ = tx.send(Message::Text(
+                            serde_json::to_string(&ServerMsg::SentOk {
+                                msg_id: msg_id.clone(),
+                                delivery: None,
+                                device_set_stale: stale.as_ref().map(|_| true),
+                                device_ids: stale,
+                            })
+                            .unwrap()
+                            .into(),
+                        ));
+                    }
 
+                    let mut live_ok = false;
                     if let Some(recipient_tx) = state.conns.get(&to_device_id).map(|v| v.clone()) {
                         let deliver = ServerMsg::Deliver {
                             device_id: to_device_id.clone(),
@@ -5881,10 +6158,25 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                             remove_conn_if_same(&state, &to_device_id, &recipient_tx);
                             tracing::info!(to_device_ref=%to_device_ref, seq=enq.seq, msg_ref=%msg_ref, "ws recipient send failed; rely on scheduled fallback push");
                         } else {
+                            live_ok = true;
                             tracing::info!(to_device_ref=%to_device_ref, seq=enq.seq, msg_ref=%msg_ref, "ws delivered realtime; skip push");
                         }
                     } else {
                         tracing::info!(to_device_ref=%to_device_ref, seq=enq.seq, msg_ref=%msg_ref, "ws recipient offline; rely on scheduled fallback push");
+                    }
+                    if realtime_only {
+                        let delivery = if live_ok { "realtime" } else { "dropped_offline" };
+                        tracing::info!(to_device_ref=%to_device_ref, seq=enq.seq, msg_ref=%msg_ref, ttl_seconds=store_ttl, delivery, "ws online-only outcome");
+                        let _ = tx.send(Message::Text(
+                            serde_json::to_string(&ServerMsg::SentOk {
+                                msg_id: msg_id.clone(),
+                                delivery: Some(delivery.into()),
+                                device_set_stale: None,
+                                device_ids: None,
+                            })
+                            .unwrap()
+                            .into(),
+                        ));
                     }
                 }
                 Ok(ClientMsg::Ack {
@@ -6376,6 +6668,31 @@ async fn http_send(
         }
     }
 
+    // П-4: «печатает» не хранится для устройств не на связи.
+    let route = online_only_route(
+        state.online_only_enabled,
+        req.online_only,
+        req.transport_meta_json.as_deref(),
+        req.deliver_at_ms,
+        now_ms(),
+        state.conns.contains_key(&req.to_device_id),
+        capped_ttl,
+    );
+    if route == OnlineOnlyRoute::DropOffline {
+        tracing::info!(to_device_ref=%to_device_ref, msg_ref=%msg_ref, "http online-only dropped; recipient offline");
+        return Ok(Json(HttpSendResp {
+            ok: true,
+            seq: 0,
+            delivery: Some("dropped_offline"),
+            device_set_stale: None,
+            device_ids: None,
+        }));
+    }
+    let realtime_only = matches!(route, OnlineOnlyRoute::Realtime { .. });
+    if let OnlineOnlyRoute::Realtime { ttl_seconds } = route {
+        store_ttl = ttl_seconds;
+    }
+
     let http_now = now_ms();
     let deliver_at = req.deliver_at_ms.unwrap_or(0).max(0);
     let is_scheduled = deliver_at > http_now;
@@ -6405,6 +6722,9 @@ async fn http_send(
         return Ok(Json(HttpSendResp {
             ok: true,
             seq: enq.seq,
+            delivery: None,
+            device_set_stale: None,
+            device_ids: None,
         }));
     }
     if let (Some(from_device_id), Some(call_signal)) =
@@ -6423,7 +6743,8 @@ async fn http_send(
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
     }
-    if !enq.dedup {
+    // П-4: посылка «только на связи» пуш не будит — никогда.
+    if should_schedule_fallback_push(enq.dedup, route) {
         // Снимается СИНХРОННО, до `spawn`, и до попытки отдать конверт в сокет
         // несколькими строками ниже: нас интересует картина на момент
         // постановки, а не на момент, когда задача до неё дойдёт.
@@ -6440,6 +6761,7 @@ async fn http_send(
         ));
     }
 
+    let mut live_ok = false;
     if let Some(recipient_tx) = state.conns.get(&req.to_device_id).map(|v| v.clone()) {
         let deliver = ServerMsg::Deliver {
             device_id: req.to_device_id.clone(),
@@ -6458,15 +6780,43 @@ async fn http_send(
             remove_conn_if_same(&state, &req.to_device_id, &recipient_tx);
             tracing::info!(to_device_ref=%to_device_ref, seq=enq.seq, msg_ref=%msg_ref, "http recipient send failed; rely on scheduled fallback push");
         } else {
+            live_ok = true;
             tracing::info!(to_device_ref=%to_device_ref, seq=enq.seq, msg_ref=%msg_ref, "http delivered realtime; skip push");
         }
     } else {
         tracing::info!(to_device_ref=%to_device_ref, seq=enq.seq, msg_ref=%msg_ref, "http recipient offline; rely on scheduled fallback push");
     }
 
+    let delivery = if realtime_only {
+        let d = if live_ok { "realtime" } else { "dropped_offline" };
+        tracing::info!(to_device_ref=%to_device_ref, seq=enq.seq, msg_ref=%msg_ref, ttl_seconds=store_ttl, delivery=d, "http online-only outcome");
+        Some(d)
+    } else {
+        None
+    };
+    // П-1: сверка росписи — подсказка в успешном ответе (старые тело не читают).
+    let stale = if realtime_only {
+        None
+    } else {
+        let sender_pid = match from_device_id_opt.as_deref() {
+            Some(d) => fetch_profile_id(&state, d).await,
+            None => None,
+        };
+        device_set_check(
+            &state,
+            req.rcpt_digest.as_deref(),
+            &req.to_device_id,
+            from_device_id_opt.as_deref(),
+            sender_pid.as_deref(),
+        )
+        .await
+    };
     Ok(Json(HttpSendResp {
         ok: true,
         seq: enq.seq,
+        delivery,
+        device_set_stale: stale.as_ref().map(|_| true),
+        device_ids: stale,
     }))
 }
 
@@ -12728,6 +13078,7 @@ async fn http_profile_delete(
 
     for device_id in &cleanup_device_ids {
         state.identity_cache.remove(device_id);
+        state.identity_cache_at.remove(device_id);
         state.profile_cache.remove(device_id);
         state.push_wake_last_ms.remove(device_id);
     }
@@ -12739,6 +13090,7 @@ async fn http_profile_delete(
         .collect::<Vec<_>>();
     for device_id in cached_profile_devices {
         state.identity_cache.remove(&device_id);
+        state.identity_cache_at.remove(&device_id);
         state.profile_cache.remove(&device_id);
         state.push_wake_last_ms.remove(&device_id);
     }
@@ -13805,6 +14157,13 @@ async fn main() {
         invite_redeem_caller_limiter,
         max_msg_ttl_seconds,
         own_device_control_ttl_seconds,
+        online_only_enabled: env::var("SECRETLY_RELAY_ONLINE_ONLY_ENABLED")
+            .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false),
+        device_check_enabled: env::var("SECRETLY_RELAY_DEVICE_CHECK_ENABLED")
+            .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false),
+        addressable_cache: Arc::new(DashMap::new()),
         max_pending_per_device,
         keys_internal_base_url: Arc::new(keys_internal_base_url),
         internal_key: Arc::new(internal_key),
@@ -13814,6 +14173,7 @@ async fn main() {
             .build()
             .expect("build relay internal http client"),
         identity_cache: Arc::new(DashMap::new()),
+        identity_cache_at: Arc::new(DashMap::new()),
         profile_cache: Arc::new(DashMap::new()),
         used_nonces: Arc::new(DashMap::new()),
         push_wake_last_ms: Arc::new(DashMap::new()),
@@ -14191,6 +14551,9 @@ mod tests {
             invite_redeem_caller_limiter: Arc::new(StringKeyRateLimiter::new(10_000, 10_000.0)),
             max_msg_ttl_seconds: 7 * 24 * 3600,
             own_device_control_ttl_seconds: 0,
+            online_only_enabled: false,
+            device_check_enabled: false,
+            addressable_cache: Arc::new(DashMap::new()),
             max_pending_per_device: 5_000,
             keys_internal_base_url: Arc::new("http://127.0.0.1:1".into()),
             internal_key: Arc::new(String::new()),
@@ -14200,6 +14563,7 @@ mod tests {
                 .build()
                 .unwrap(),
             identity_cache: Arc::new(DashMap::new()),
+            identity_cache_at: Arc::new(DashMap::new()),
             profile_cache: Arc::new(DashMap::new()),
             used_nonces: Arc::new(DashMap::new()),
             push_wake_last_ms: Arc::new(DashMap::new()),
@@ -17246,6 +17610,8 @@ mod tests {
             transport_meta_json: None,
             ttl_seconds: 60,
             deliver_at_ms: None,
+            online_only: false,
+            rcpt_digest: None,
         })
         .unwrap();
         socket
@@ -17605,6 +17971,8 @@ mod tests {
         let receiver_profile_id = "profile_receiver_1";
         let req = HttpSendReq {
             deliver_at_ms: None,
+            online_only: false,
+            rcpt_digest: None,
             to_device_id: receiver_device_id.to_string(),
             msg_id: "00000000-0000-0000-0000-000000000031".into(),
             ciphertext_b64: "QUJD".into(),
@@ -17666,6 +18034,8 @@ mod tests {
         let receiver_device_id = "dev_receiver_2";
         let req = HttpSendReq {
             deliver_at_ms: None,
+            online_only: false,
+            rcpt_digest: None,
             to_device_id: receiver_device_id.to_string(),
             msg_id: "00000000-0000-0000-0000-000000000032".into(),
             ciphertext_b64: "QUJD".into(),
@@ -17745,6 +18115,8 @@ mod tests {
         ) {
             let req = HttpSendReq {
                 deliver_at_ms: None,
+                online_only: false,
+                rcpt_digest: None,
                 to_device_id: to.to_string(),
                 msg_id: msg_id.into(),
                 ciphertext_b64: "QUJD".into(),
@@ -17806,6 +18178,439 @@ mod tests {
             .unwrap();
         let (hi, lo) = ttl_of(&peer, "00000000-0000-0000-0000-000000000043");
         assert!(lo <= 3600 * 1000 && hi >= 3600 * 1000, "собеседнику — час");
+    }
+
+    // ── П-4 (25.09.2026): «печатает» только тем, кто на связи ─────────────
+
+    #[test]
+    fn online_only_route_honours_the_field_only_for_bare_immediate_wires() {
+        use OnlineOnlyRoute::*;
+        let now = 1_000_000;
+        let r = |enabled, flag, meta: Option<&str>, at: Option<i64>, online, ttl| {
+            online_only_route(enabled, flag, meta, at, now, online, ttl)
+        };
+        assert_eq!(r(false, true, None, None, false, 20), Normal, "выключено");
+        assert_eq!(r(true, false, None, None, false, 20), Normal, "поле не задано");
+        assert_eq!(
+            r(true, true, Some(r#"{"kind":"call_signal_v1"}"#), None, false, 20),
+            Normal,
+            "мета — не голая посылка"
+        );
+        assert_eq!(r(true, true, Some("  "), None, false, 20), DropOffline);
+        assert_eq!(r(true, true, None, Some(now + 60_000), false, 20), Normal, "отложенная");
+        assert_eq!(r(true, true, None, Some(now - 1), false, 20), DropOffline);
+        assert_eq!(r(true, true, None, None, false, 20), DropOffline);
+        assert_eq!(r(true, true, None, None, true, 20), Realtime { ttl_seconds: 20 });
+        assert_eq!(r(true, true, None, None, true, 3600), Realtime { ttl_seconds: 30 });
+    }
+
+    // П-5: ключ личности в кэше реле живёт 10 минут; запись без отметки
+    // (так кладут тесты и старый путь) — как раньше, вечная.
+    #[test]
+    fn identity_cache_expires_after_ten_minutes() {
+        let now = 100 * 60 * 1000;
+        assert!(identity_cache_is_fresh(None, now));
+        assert!(identity_cache_is_fresh(Some(now - 9 * 60 * 1000), now));
+        assert!(!identity_cache_is_fresh(Some(now - 10 * 60 * 1000), now));
+    }
+
+    // 🔴 Отвязанное на ключах устройство перестаёт проходить на реле: после
+    // срока ключ перечитывается, «exists: false» выбрасывает запись.
+    #[tokio::test]
+    async fn stale_identity_is_dropped_when_keys_says_the_device_is_gone() {
+        let keys = Router::new().route(
+            "/v1/device/{device_id}/identity",
+            get(|| async { Json(serde_json::json!({"exists": false})) }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, keys).await.unwrap();
+        });
+        let (base, _dir) = test_app_state().await;
+        let state = AppState {
+            keys_internal_base_url: Arc::new(format!("http://{addr}")),
+            ..base
+        };
+        state.identity_cache.insert("dev_gone".into(), "KEY".into());
+        state
+            .identity_cache_at
+            .insert("dev_gone".into(), now_ms() - 11 * 60 * 1000);
+        assert_eq!(fetch_identity_pub_b64(&state, "dev_gone").await, None);
+        assert!(state.identity_cache.get("dev_gone").is_none());
+        // Свежая запись к ключам не ходит — как раньше.
+        state.identity_cache.insert("dev_fresh".into(), "K2".into());
+        state.identity_cache_at.insert("dev_fresh".into(), now_ms());
+        assert_eq!(fetch_identity_pub_b64(&state, "dev_fresh").await.as_deref(), Some("K2"));
+        server.abort();
+    }
+
+    // Недоступный сервер ключей не роняет проверку: протухшая запись в силе.
+    #[tokio::test]
+    async fn stale_identity_survives_an_unreachable_keys_server() {
+        let (state, _dir) = test_app_state().await;
+        state.identity_cache.insert("dev_ic".into(), "KEY".into());
+        state
+            .identity_cache_at
+            .insert("dev_ic".into(), now_ms() - 60 * 60 * 1000);
+        assert_eq!(
+            fetch_identity_pub_b64(&state, "dev_ic").await.as_deref(),
+            Some("KEY")
+        );
+    }
+
+    // ── П-1 (25.09.2026): сверка росписи ──────────────────────────────────
+
+    /// Маленький сервер ключей: отдаёт заданное множество и запоминает, какое
+    /// устройство реле просило исключить.
+    async fn p1_keys(
+        set: Arc<std::sync::Mutex<AddressableSet>>,
+        seen_exclude: Arc<std::sync::Mutex<Vec<String>>>,
+    ) -> (String, JoinHandle<()>) {
+        let app = Router::new().route(
+            "/internal/profile/{pid}/addressable",
+            get(move |Query(q): Query<std::collections::HashMap<String, String>>| {
+                let set = set.clone();
+                let seen = seen_exclude.clone();
+                async move {
+                    seen.lock().unwrap().push(q.get("exclude_device_id").cloned().unwrap_or_default());
+                    let s = set.lock().unwrap().clone();
+                    Json(serde_json::json!({"digest": s.digest, "device_ids": s.device_ids, "now_ms": 1}))
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let h = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        (format!("http://{addr}"), h)
+    }
+
+    async fn p1_send(state: &AppState, key: &SigningKey, from: &str, to: &str, msg_id: &str, digest: Option<&str>) -> HttpSendResp {
+        let req = HttpSendReq {
+            deliver_at_ms: None,
+            online_only: false,
+            rcpt_digest: digest.map(str::to_string),
+            to_device_id: to.to_string(),
+            msg_id: msg_id.into(),
+            ciphertext_b64: "QUJD".into(),
+            transport_meta_json: None,
+            ttl_seconds: 3600,
+        };
+        let headers = signed_auth_headers(from, key, msg_id, |ts_ms, nonce_b64| {
+            http_send_auth_message(from, to, &req.msg_id, &req.ciphertext_b64, None, req.ttl_seconds, ts_ms, nonce_b64)
+        });
+        http_send(State(state.clone()), headers, Json(req)).await.unwrap().0
+    }
+
+    #[tokio::test]
+    async fn device_set_check_reports_a_stale_digest_and_still_stores_the_wire() {
+        let set = Arc::new(std::sync::Mutex::new(AddressableSet {
+            digest: "d-real".into(),
+            device_ids: vec!["dc_b".into(), "dc_b2".into()],
+        }));
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (keys_url, keys) = p1_keys(set.clone(), seen.clone()).await;
+        let (base, _dir) = test_app_state().await;
+        let state = AppState {
+            device_check_enabled: true,
+            keys_internal_base_url: Arc::new(keys_url),
+            ..base
+        };
+        let a = SigningKey::from_bytes(&[71u8; 32]);
+        let b = SigningKey::from_bytes(&[72u8; 32]);
+        cache_authenticated_device(&state, "dc_a", "profile_dc_a", &a);
+        cache_authenticated_device(&state, "dc_b", "profile_dc_b", &b);
+
+        // Совпало — ответ без добавочных полей.
+        let ok = p1_send(&state, &a, "dc_a", "dc_b", "00000000-0000-0000-0000-000000000071", Some("d-real")).await;
+        assert_eq!((ok.device_set_stale, ok.device_ids.clone()), (None, None));
+        // Не совпало — подсказка с настоящим списком; посылка записана.
+        let stale = p1_send(&state, &a, "dc_a", "dc_b", "00000000-0000-0000-0000-000000000072", Some("d-old")).await;
+        assert_eq!(stale.device_set_stale, Some(true));
+        assert_eq!(stale.device_ids, Some(vec!["dc_b".to_string(), "dc_b2".to_string()]));
+        let rows = state.store.list_pending_from("dc_b", 1, now_ms(), 10).await.unwrap();
+        assert_eq!(rows.len(), 2, "отказа нет — обе посылки записаны");
+        // Чужому профилю ничего не исключается.
+        assert!(seen.lock().unwrap().iter().all(|e| e.is_empty()));
+        keys.abort();
+    }
+
+    #[tokio::test]
+    async fn device_set_check_rechecks_past_the_cache_before_signalling() {
+        let set = Arc::new(std::sync::Mutex::new(AddressableSet {
+            digest: "d-new".into(),
+            device_ids: vec!["rc_b".into(), "rc_b_new".into()],
+        }));
+        let (keys_url, keys) = p1_keys(set, Arc::new(std::sync::Mutex::new(Vec::new()))).await;
+        let (base, _dir) = test_app_state().await;
+        let state = AppState {
+            device_check_enabled: true,
+            keys_internal_base_url: Arc::new(keys_url),
+            ..base
+        };
+        let a = SigningKey::from_bytes(&[73u8; 32]);
+        let b = SigningKey::from_bytes(&[74u8; 32]);
+        cache_authenticated_device(&state, "rc_a", "profile_rc_a", &a);
+        cache_authenticated_device(&state, "rc_b", "profile_rc_b", &b);
+        // В кэше — прежнее множество: новое устройство только что зарегистрировалось.
+        state.addressable_cache.insert(
+            "profile_rc_b|".into(),
+            (now_ms(), AddressableSet { digest: "d-old".into(), device_ids: vec!["rc_b".into()] }),
+        );
+        let resp = p1_send(&state, &a, "rc_a", "rc_b", "00000000-0000-0000-0000-000000000073", Some("d-new")).await;
+        assert_eq!(resp.device_set_stale, None, "ложного «устарело» быть не должно");
+        keys.abort();
+    }
+
+    #[tokio::test]
+    async fn device_set_check_is_off_by_default_and_excludes_the_sender_on_own_profile() {
+        let set = Arc::new(std::sync::Mutex::new(AddressableSet {
+            digest: "d-x".into(),
+            device_ids: vec!["own_desk".into()],
+        }));
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (keys_url, keys) = p1_keys(set, seen.clone()).await;
+        let (base, _dir) = test_app_state().await;
+        assert!(!base.device_check_enabled);
+        let off_state = AppState {
+            keys_internal_base_url: Arc::new(keys_url.clone()),
+            ..base
+        };
+        let phone = SigningKey::from_bytes(&[75u8; 32]);
+        let desk = SigningKey::from_bytes(&[76u8; 32]);
+        cache_authenticated_device(&off_state, "own_phone", "profile_own_dc", &phone);
+        cache_authenticated_device(&off_state, "own_desk", "profile_own_dc", &desk);
+        let off = p1_send(&off_state, &phone, "own_phone", "own_desk", "00000000-0000-0000-0000-000000000074", Some("zzz")).await;
+        assert_eq!(off.device_set_stale, None, "выключено — поле игнорируется");
+        assert!(seen.lock().unwrap().is_empty(), "и к ключам не ходим");
+
+        let on_state = AppState {
+            device_check_enabled: true,
+            ..off_state
+        };
+        let _ = p1_send(&on_state, &phone, "own_phone", "own_desk", "00000000-0000-0000-0000-000000000075", Some("zzz")).await;
+        assert!(
+            seen.lock().unwrap().iter().all(|e| e == "own_phone"),
+            "своему профилю — без устройства-отправителя"
+        );
+        keys.abort();
+    }
+
+    #[test]
+    fn online_only_realtime_never_schedules_a_fallback_push() {
+        use OnlineOnlyRoute::*;
+        assert!(should_schedule_fallback_push(false, Normal));
+        assert!(!should_schedule_fallback_push(true, Normal), "дедуп не будит");
+        assert!(!should_schedule_fallback_push(false, Realtime { ttl_seconds: 20 }));
+        assert!(!should_schedule_fallback_push(true, Realtime { ttl_seconds: 20 }));
+    }
+
+    #[test]
+    fn sent_ok_and_http_resp_are_byte_identical_without_delivery() {
+        let legacy = serde_json::to_value(ServerMsg::SentOk {
+            msg_id: "m".into(),
+            delivery: None,
+            device_set_stale: None,
+            device_ids: None,
+        })
+        .unwrap();
+        assert!(legacy.get("delivery").is_none());
+        let http = serde_json::to_value(HttpSendResp {
+            ok: true,
+            seq: 3,
+            delivery: None,
+            device_set_stale: None,
+            device_ids: None,
+        })
+        .unwrap();
+        assert_eq!(http, serde_json::json!({"ok": true, "seq": 3}));
+        // Старый клиент поле не шлёт — это false, а не ошибка разбора.
+        let req: HttpSendReq = serde_json::from_str(
+            r#"{"to_device_id":"d","msg_id":"m","ciphertext_b64":"QQ==","transport_meta_json":null,"ttl_seconds":20}"#,
+        )
+        .unwrap();
+        assert!(!req.online_only);
+    }
+
+    async fn online_only_http_send(
+        state: &AppState,
+        key: &SigningKey,
+        from: &str,
+        to: &str,
+        msg_id: &str,
+        meta: Option<&str>,
+    ) -> HttpSendResp {
+        let req = HttpSendReq {
+            deliver_at_ms: None,
+            online_only: true,
+            rcpt_digest: None,
+            to_device_id: to.to_string(),
+            msg_id: msg_id.into(),
+            ciphertext_b64: "QUJD".into(),
+            transport_meta_json: meta.map(str::to_string),
+            ttl_seconds: 20,
+        };
+        let headers = signed_auth_headers(from, key, msg_id, |ts_ms, nonce_b64| {
+            http_send_auth_message(
+                from,
+                to,
+                &req.msg_id,
+                &req.ciphertext_b64,
+                req.transport_meta_json.as_deref(),
+                req.ttl_seconds,
+                ts_ms,
+                nonce_b64,
+            )
+        });
+        http_send(State(state.clone()), headers, Json(req))
+            .await
+            .unwrap()
+            .0
+    }
+
+    // 🔴 Не на связи — ни строки, ни seq; на связи — короткий срок и живая
+    // доставка; выключено — побайтово прежний путь.
+    #[tokio::test]
+    async fn http_send_online_only_drops_offline_and_delivers_online_briefly() {
+        let (base, _dir) = test_app_state().await;
+        let state = AppState {
+            online_only_enabled: true,
+            ..base
+        };
+        let a_key = SigningKey::from_bytes(&[61u8; 32]);
+        let b_key = SigningKey::from_bytes(&[62u8; 32]);
+        cache_authenticated_device(&state, "dev_oo_a", "profile_oo_a", &a_key);
+        cache_authenticated_device(&state, "dev_oo_b", "profile_oo_b", &b_key);
+
+        let resp = online_only_http_send(
+            &state, &a_key, "dev_oo_a", "dev_oo_b",
+            "00000000-0000-0000-0000-000000000061", None,
+        )
+        .await;
+        assert!(resp.ok);
+        assert_eq!((resp.seq, resp.delivery), (0, Some("dropped_offline")));
+        let rows = state.store.list_pending_from("dev_oo_b", 1, now_ms(), 10).await.unwrap();
+        assert!(rows.is_empty(), "устройству не на связи ничего не пишем");
+
+        let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
+        state.conns.insert("dev_oo_b".to_string(), tx);
+        let before = now_ms();
+        let resp = online_only_http_send(
+            &state, &a_key, "dev_oo_a", "dev_oo_b",
+            "00000000-0000-0000-0000-000000000062", None,
+        )
+        .await;
+        assert_eq!(resp.delivery, Some("realtime"));
+        assert_eq!(resp.seq, 1, "seq держит порядок у приёмника");
+        match rx.try_recv() {
+            Ok(Message::Text(t)) => assert!(t.contains("00000000-0000-0000-0000-000000000062")),
+            other => panic!("ждали живую доставку, пришло {other:?}"),
+        }
+        let rows = state.store.list_pending_from("dev_oo_b", 1, now_ms(), 10).await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].expires_at_ms - before <= 30_000 + 1_000, "срок не больше 30 с");
+
+        // Мета (звонок, лечение) — обычный путь даже при флаге.
+        state.conns.remove("dev_oo_b");
+        let resp = online_only_http_send(
+            &state, &a_key, "dev_oo_a", "dev_oo_b",
+            "00000000-0000-0000-0000-000000000063",
+            Some(r#"{"kind":"session_heal_v1"}"#),
+        )
+        .await;
+        assert_eq!(resp.delivery, None);
+        assert_eq!(resp.seq, 2);
+    }
+
+    #[tokio::test]
+    async fn http_send_online_only_is_ignored_when_the_switch_is_off() {
+        let (state, _dir) = test_app_state().await;
+        assert!(!state.online_only_enabled, "по умолчанию выключено");
+        let a_key = SigningKey::from_bytes(&[63u8; 32]);
+        let b_key = SigningKey::from_bytes(&[64u8; 32]);
+        cache_authenticated_device(&state, "dev_oo_c", "profile_oo_c", &a_key);
+        cache_authenticated_device(&state, "dev_oo_d", "profile_oo_d", &b_key);
+        let before = now_ms();
+        let resp = online_only_http_send(
+            &state, &a_key, "dev_oo_c", "dev_oo_d",
+            "00000000-0000-0000-0000-000000000064", None,
+        )
+        .await;
+        assert_eq!((resp.seq, resp.delivery), (1, None));
+        let rows = state.store.list_pending_from("dev_oo_d", 1, now_ms(), 10).await.unwrap();
+        assert_eq!(rows.len(), 1, "как раньше: пишется даже не на связи");
+        assert!(rows[0].expires_at_ms - before >= 19_000);
+    }
+
+    #[tokio::test]
+    async fn ws_send_online_only_to_offline_recipient_is_dropped() {
+        let (base, _dir) = test_app_state().await;
+        let state = AppState {
+            online_only_enabled: true,
+            ..base
+        };
+        let key = SigningKey::from_bytes(&[65u8; 32]);
+        cache_authenticated_device(&state, "dev_oo_ws_a", "profile_oo_ws_a", &key);
+        state
+            .profile_cache
+            .insert("dev_oo_ws_b".to_string(), "profile_oo_ws_b".to_string());
+        let store = state.store.clone();
+
+        let (url, server_handle) = start_test_ws_server(state).await;
+        let (mut socket, _) = connect_async(&url).await.unwrap();
+        socket
+            .send(ClientWsMessage::Text(
+                signed_ws_hello_text("dev_oo_ws_a", &key, "ws-online-only").into(),
+            ))
+            .await
+            .unwrap();
+        expect_ws_welcome(&mut socket, "dev_oo_ws_a", 1).await;
+        let send = serde_json::to_string(&ClientMsg::Send {
+            to_device_id: "dev_oo_ws_b".to_string(),
+            msg_id: "123e4567-e89b-12d3-a456-426614174061".to_string(),
+            ciphertext_b64: "QUJD".to_string(),
+            transport_meta_json: None,
+            ttl_seconds: 20,
+            deliver_at_ms: None,
+            online_only: true,
+            rcpt_digest: None,
+        })
+        .unwrap();
+        socket.send(ClientWsMessage::Text(send.into())).await.unwrap();
+        match recv_ws_server_msg(&mut socket).await {
+            ServerMsg::SentOk { msg_id, delivery, .. } => {
+                assert_eq!(msg_id, "123e4567-e89b-12d3-a456-426614174061");
+                assert_eq!(delivery.as_deref(), Some("dropped_offline"));
+            }
+            other => panic!("ждали sent_ok, пришло {other:?}"),
+        }
+        let rows = store.list_pending_from("dev_oo_ws_b", 1, now_ms(), 10).await.unwrap();
+        assert!(rows.is_empty());
+        let _ = socket.close(None).await;
+        server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn health_says_whether_online_only_is_honoured() {
+        let (base, _dir) = test_app_state().await;
+        let off = health(State(base.clone()), Query(HealthQuery { client_protocol_version: None }))
+            .await
+            .into_response();
+        let body = to_bytes(off.into_body(), usize::MAX).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(v["online_only"], serde_json::json!(false));
+        let on_state = AppState {
+            online_only_enabled: true,
+            ..base
+        };
+        let on = health(State(on_state), Query(HealthQuery { client_protocol_version: None }))
+            .await
+            .into_response();
+        let body = to_bytes(on.into_body(), usize::MAX).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(v["online_only"], serde_json::json!(true));
     }
 
     #[test]

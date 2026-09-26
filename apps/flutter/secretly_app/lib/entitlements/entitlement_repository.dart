@@ -29,6 +29,7 @@ import 'entitlement_models.dart';
 import 'entitlement_signature.dart';
 import '../version/app_update_info.dart';
 import '../messages/handshake_flags.dart';
+import '../messages/multidevice_flags.dart';
 import '../transport/server_clock.dart';
 
 /// Supplies the requester device id and Ed25519 signatures for owner-only
@@ -148,6 +149,14 @@ class EntitlementRepository {
   bool _handshakeFlagsResolved = false;
   bool get handshakeFlagsResolved => _handshakeFlagsResolved;
 
+  /// Выключатели мультиустройства (ТЗ 25.09.2026, §2). Непроверенный или
+  /// отсутствующий блок — [MultideviceFlags.defaults], то есть «как без блока».
+  MultideviceFlags _multideviceFlags = MultideviceFlags.defaults;
+  MultideviceFlags get multideviceFlags => _multideviceFlags;
+
+  bool _multideviceFlagsResolved = false;
+  bool get multideviceFlagsResolved => _multideviceFlagsResolved;
+
   /// С-2: выключатель отказов проверки подписи рукопожатия; `null` — блок не
   /// пришёл или не проверен, и тогда ничего не меняется.
   bool? _handshakeAuthEnforceDisabled;
@@ -253,6 +262,13 @@ class EntitlementRepository {
       _handshakeFlagsResolved = true;
       _handshakeAuthEnforceDisabled =
           await verifiedHandshakeAuthEnforceDisabled(config);
+      // Мультиустройство: тот же ответ, отказ к нулям — непроверенный блок
+      // ничего не включает и ничего не оставляет включённым.
+      _multideviceFlags = MultideviceFlags.fromConfigResponse(
+        config,
+        verified: await verifyMultideviceSignature(config),
+      );
+      _multideviceFlagsResolved = true;
       // In-app Support key + flag: same ride, OFF polarity like identity — only
       // a VERIFIED block enables the page and supplies the key used to seal
       // support tickets.

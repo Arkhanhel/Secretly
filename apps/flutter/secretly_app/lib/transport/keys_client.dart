@@ -47,6 +47,9 @@ enum KeysPolicyFailureCode {
   profileNotFound,
   deviceIdentityKeyMismatch,
   storeError,
+  /// П-5 (25.09.2026): номер устройства отвязан (надгробие). Привязывать
+  /// заново — только с телефона; новый номер без одобрения не поможет.
+  deviceUnlinked,
   unknown,
 }
 
@@ -86,6 +89,34 @@ class KeysPolicyFailure implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// П-5: ответ сервера ключей на вопрос устройства о себе.
+class KeysDeviceSelfStatus {
+  const KeysDeviceSelfStatus({
+    required this.status,
+    this.reason,
+    this.unlinkedAtMs,
+    required this.nowMs,
+  });
+
+  /// `active` | `hidden` | `unlinked` | `unknown`.
+  final String status;
+
+  /// `ended_by_owner` | `inactive` | `removed_by_server` — только у `unlinked`.
+  final String? reason;
+  final int? unlinkedAtMs;
+  final int nowMs;
+
+  bool get isUnlinked => status == 'unlinked';
+
+  static KeysDeviceSelfStatus fromJson(Map<String, dynamic> json) =>
+      KeysDeviceSelfStatus(
+        status: (json['status'] as String? ?? 'unknown').trim(),
+        reason: (json['reason'] as String?)?.trim(),
+        unlinkedAtMs: (json['unlinked_at_ms'] as num?)?.toInt(),
+        nowMs: (json['now_ms'] as num?)?.toInt() ?? 0,
+      );
 }
 
 class KeysDeviceStatus {
@@ -150,6 +181,8 @@ KeysPolicyFailureCode _keysPolicyFailureCodeFromWire(String? wireCode) {
       return KeysPolicyFailureCode.deviceIdentityKeyMismatch;
     case 'store_error':
       return KeysPolicyFailureCode.storeError;
+    case 'device_unlinked':
+      return KeysPolicyFailureCode.deviceUnlinked;
     default:
       return KeysPolicyFailureCode.unknown;
   }
@@ -492,6 +525,31 @@ class KeysClient {
     return items;
   }
 
+  /// П-5: подписанный вопрос устройства о себе (`/v1/device/self_status`).
+  /// Работает и для отвязанного: его подпись сервер сверяет ключом из
+  /// надгробия. Кроме ответа, сервер отмечает устройство «на связи» (Н-2).
+  Future<KeysDeviceSelfStatus> deviceSelfStatus({
+    required String deviceId,
+    required int tsMs,
+    required String nonceB64,
+    required String signatureB64,
+  }) async {
+    final uri = baseUrl.resolve('/v1/device/self_status');
+    final resp = await _get(
+      uri,
+      headers: <String, String>{
+        'x-secretly-device-id': deviceId,
+        'x-secretly-ts-ms': tsMs.toString(),
+        'x-secretly-nonce-b64': nonceB64,
+        'x-secretly-signature-b64': signatureB64,
+      },
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw StateError('deviceSelfStatus failed: ${resp.statusCode}');
+    }
+    return KeysDeviceSelfStatus.fromJson(_decodeJsonMap(resp, 'deviceSelfStatus'));
+  }
+
   Future<List<String>> listDevices(
     String profileId, {
     String? requesterDeviceId,
@@ -709,6 +767,35 @@ class KeysClient {
     }
     final json = jsonDecode(resp.body) as Map<String, dynamic>;
     return json['ok'] == true;
+  }
+
+  /// П-1: связка ОДНОГО устройства (`/v1/device/{id}/bundle`) — одноразовый
+  /// ключ снимается только у него. Ответ того же вида, что у [fetchBundle].
+  Future<List<Map<String, Object?>>> fetchDeviceBundle(
+    String deviceId, {
+    required String requesterDeviceId,
+    required int tsMs,
+    required String nonceB64,
+    required String signatureB64,
+  }) async {
+    final uri = baseUrl.resolve('/v1/device/${Uri.encodeComponent(deviceId)}/bundle');
+    final resp = await _get(
+      uri,
+      headers: <String, String>{
+        'x-secretly-device-id': requesterDeviceId,
+        'x-secretly-ts-ms': tsMs.toString(),
+        'x-secretly-nonce-b64': nonceB64,
+        'x-secretly-signature-b64': signatureB64,
+      },
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw StateError('fetchDeviceBundle failed: ${resp.statusCode}');
+    }
+    final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    return (json['devices'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map((d) => d.map((k, v) => MapEntry(k, v as Object?)))
+        .toList(growable: false);
   }
 
   Future<List<Map<String, Object?>>> fetchBundle(

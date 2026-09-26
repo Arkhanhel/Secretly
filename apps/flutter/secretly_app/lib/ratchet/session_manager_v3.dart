@@ -16,6 +16,7 @@ import '../transport/keys_client.dart';
 import 'decrypt_worker.dart';
 import 'double_ratchet_v3.dart';
 import 'handshake_signature.dart';
+import 'ratchet_skip_limits.dart';
 import 'session_v1.dart';
 import 'wire_v3.dart';
 
@@ -218,18 +219,94 @@ class RatchetSessionManagerV3 {
     required this.deviceKeys,
     required this.keysClient,
     this.fetchBundleAuthed,
+    this.fetchDeviceBundleAuthed,
     PrekeyHandshakeV1? handshake,
     DoubleRatchetV3? dr,
+    DoubleRatchetV3? drArchive,
+    int? liveSkipJump,
   }) : handshake = handshake ?? PrekeyHandshakeV1(),
-       dr = dr ?? DoubleRatchetV3();
+       _liveInjected = dr != null,
+       _liveLimits = RatchetSkipLimits.forJump(
+         liveSkipJump ?? RatchetSkipLimits.legacyJump,
+       ),
+       drArchive = drArchive ?? DoubleRatchetV3(),
+       _drLive =
+           dr ??
+           RatchetSkipLimits.forJump(
+             liveSkipJump ?? RatchetSkipLimits.legacyJump,
+           ).buildRatchet();
 
   final AppDb db;
   final DeviceKeys deviceKeys;
   final KeysClient keysClient;
   final Future<List<Map<String, Object?>>> Function(String profileId)?
   fetchBundleAuthed;
+
+  /// П-1 (25.09.2026): связка ОДНОГО устройства — одноразовый ключ снимается
+  /// только у него. null в ответе (выключено долей, старый сервер, отказ) —
+  /// прежняя выдача связок профиля, побайтово как раньше.
+  final Future<List<Map<String, Object?>>?> Function(String deviceId)?
+  fetchDeviceBundleAuthed;
   final PrekeyHandshakeV1 handshake;
-  final DoubleRatchetV3 dr;
+
+  /// П-3: ратчет ЖИВОЙ сессии — с пределами [liveLimits]. Им же шифруем.
+  DoubleRatchetV3 get dr => _drLive;
+  DoubleRatchetV3 _drLive;
+  final bool _liveInjected;
+  RatchetSkipLimits _liveLimits;
+  RatchetSkipLimits get liveLimits => _liveLimits;
+
+  /// П-3: ратчет АРХИВНЫХ сессий — всегда прежние 200 и хранение без потолка.
+  /// При неудаче живой сессии пробуются до 8 архивных (И-4d); с большим
+  /// пределом неподдающийся провод стоил бы 9 × 5 000 выводов ключа — таймаут
+  /// воркера, пересчёт на UI-изоляте и ANR.
+  final DoubleRatchetV3 drArchive;
+
+  /// П-3: скачок для живой сессии (контроллер — по блоку `multidevice`).
+  /// Архив не трогает. Подсунутый тестом ратчет не подменяется: его поведение
+  /// и есть предмет теста.
+  void setLiveSkipJump(int jump) {
+    final next = RatchetSkipLimits.forJump(jump);
+    if (next == _liveLimits) return;
+    _liveLimits = next;
+    if (!_liveInjected) _drLive = next.buildRatchet();
+    DiagLog.event('inbox', 'ratchet_limits', {
+      'jump': next.jump,
+      'per_wire': next.storedPerWire ?? 0,
+    });
+  }
+
+  /// Насколько провод опережает цепочку — ровно так, как посчитает
+  /// [DoubleRatchetV3.decrypt]: при смене DH старая цепь до `pn` плюс новая
+  /// до `n`, иначе `n - nr`. Только для журнала; считать дёшево, ключей нет.
+  @visibleForTesting
+  static int skipJumpFor({
+    required DoubleRatchetStateV3 state,
+    required String headerDhPubB64,
+    required int pn,
+    required int n,
+  }) {
+    final List<int> header;
+    try {
+      header = base64Decode(headerDhPubB64);
+    } catch (_) {
+      return 0;
+    }
+    final remote = state.dhRemotePub;
+    var same = remote != null && remote.length == header.length;
+    if (same) {
+      for (var i = 0; i < header.length; i++) {
+        if (remote[i] != header[i]) {
+          same = false;
+          break;
+        }
+      }
+    }
+    if (same) return n > state.nr ? n - state.nr : 0;
+    final oldChain =
+        state.recvChainKey != null && pn > state.nr ? pn - state.nr : 0;
+    return oldChain + (n > 0 ? n : 0);
+  }
 
   /// С-2: ключи личности, которыми это устройство подписывает рукопожатия,
   /// по «профиль/устройство». Кешируется только УДАЧНОЕ чтение: ключ, раз
@@ -941,7 +1018,27 @@ class RatchetSessionManagerV3 {
       required int n,
       required List<int> ciphertext,
       required List<int> aad,
+      // П-3: архивная сессия — всегда прежние пределы (см. [drArchive]).
+      bool archive = false,
     }) async {
+      final ratchet = archive ? drArchive : _drLive;
+      final limits = archive ? RatchetSkipLimits.legacy : _liveLimits;
+      // П-3: сколько на самом деле пропускается — видно в поле по журналу.
+      final jump = archive
+          ? 0
+          : skipJumpFor(
+              state: state,
+              headerDhPubB64: headerDhPubB64,
+              pn: pn,
+              n: n,
+            );
+      if (jump > RatchetSkipLimits.legacyJump) {
+        DiagLog.event('inbox', 'ratchet_jump', {
+          'jump': jump,
+          'limit': ratchet.maxSkip,
+          'dev': DiagLog.pfx(state.peerDeviceId),
+        });
+      }
       final preloaded = await loadSkippedTxn(
         peerDeviceId: state.peerDeviceId,
         dhPubB64: headerDhPubB64,
@@ -955,16 +1052,28 @@ class RatchetSessionManagerV3 {
       // We are INSIDE an open transaction here (Н-5). That is why the worker
       // must never touch the database: a query from there would wait on a lock
       // this isolate holds, and neither would ever finish.
-      final dec = await DecryptWorker.instance.decrypt(
-        ratchet: dr,
-        state: state,
-        headerDhPubB64: headerDhPubB64,
-        pn: pn,
-        n: n,
-        ciphertext: ciphertext,
-        preloadedSkippedKey: preloaded,
-        aad: aad,
-      );
+      final DoubleRatchetDecryptResultV3 dec;
+      try {
+        dec = await DecryptWorker.instance.decrypt(
+          ratchet: ratchet,
+          state: state,
+          headerDhPubB64: headerDhPubB64,
+          pn: pn,
+          n: n,
+          ciphertext: ciphertext,
+          preloadedSkippedKey: preloaded,
+          aad: aad,
+        );
+      } catch (e) {
+        if (!archive && e.toString().contains('too many skipped messages')) {
+          DiagLog.event('inbox', 'ratchet_jump_too_far', {
+            'jump': jump,
+            'limit': ratchet.maxSkip,
+            'dev': DiagLog.pfx(state.peerDeviceId),
+          });
+        }
+        rethrow;
+      }
       if (dec.consumedPreloadedKey) {
         // Single-use: leaving it would let the same ciphertext open twice.
         await deleteSkippedTxn(
@@ -973,12 +1082,38 @@ class RatchetSessionManagerV3 {
           msgNum: n,
         );
       }
-      for (final rec in dec.skippedToStore) {
-        await storeSkippedTxn(
+      if (ratchet.maxStoredSkipped == null) {
+        // Прежний путь, побайтово: телефон и архив.
+        for (final rec in dec.skippedToStore) {
+          await storeSkippedTxn(
+            peerDeviceId: state.peerDeviceId,
+            dhPubB64: rec.dhPubB64,
+            msgNum: rec.msgNum,
+            messageKey: rec.messageKey,
+          );
+        }
+      } else if (dec.skippedToStore.isNotEmpty) {
+        // П-3: до 2 000 ключей — одним пакетом, не 2 000 походами к базе.
+        await db.skippedKeysUpsertMany(
           peerDeviceId: state.peerDeviceId,
-          dhPubB64: rec.dhPubB64,
-          msgNum: rec.msgNum,
-          messageKey: rec.messageKey,
+          keys: [
+            for (final rec in dec.skippedToStore)
+              (
+                dhPubB64: rec.dhPubB64,
+                msgNum: rec.msgNum,
+                mkB64: base64Encode(rec.messageKey),
+              ),
+          ],
+          txn: txn,
+        );
+      }
+      final perPeer = limits.storedPerPeer;
+      if (perPeer != null && dec.skippedToStore.isNotEmpty) {
+        // П-3: потолок на устройство собеседника, в той же транзакции.
+        await db.skippedKeysTrimForPeer(
+          peerDeviceId: state.peerDeviceId,
+          keep: perPeer,
+          txn: txn,
         );
       }
       return dec;
@@ -1065,6 +1200,7 @@ class RatchetSessionManagerV3 {
                 n: (header['n'] as num?)?.toInt() ?? 0,
                 ciphertext: decoded.ciphertext,
                 aad: decoded.headerBytes,
+                archive: true,
               );
               s = dec.updated;
               await journalBeforeCommit(dec.plaintext, pre.senderDeviceId);
@@ -1306,6 +1442,7 @@ class RatchetSessionManagerV3 {
               n: n,
               ciphertext: decoded.ciphertext,
               aad: decoded.headerBytes,
+              archive: true,
             );
             s = dec.updated;
             await journalBeforeCommit(dec.plaintext, senderDeviceId);
@@ -1571,9 +1708,22 @@ class RatchetSessionManagerV3 {
     required String peerProfileId,
     required String peerDeviceId,
   }) async {
-    final devices = await (fetchBundleAuthed != null
-        ? fetchBundleAuthed!(peerProfileId)
-        : keysClient.fetchBundle(peerProfileId));
+    List<Map<String, Object?>>? single;
+    final one = fetchDeviceBundleAuthed;
+    if (one != null) {
+      try {
+        single = await one(peerDeviceId);
+      } catch (_) {
+        single = null;
+      }
+      if (single != null && !single.any((d) => d['device_id'] == peerDeviceId)) {
+        single = null;
+      }
+    }
+    final devices = single ??
+        await (fetchBundleAuthed != null
+            ? fetchBundleAuthed!(peerProfileId)
+            : keysClient.fetchBundle(peerProfileId));
 
     final match = devices
         .where((d) => d['device_id'] == peerDeviceId)

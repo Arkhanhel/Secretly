@@ -1500,6 +1500,45 @@ class RelayClient {
   /// пока свежий номер после восстановления ещё регистрировался).
   void Function()? onDeviceAccepted;
 
+  /// П-4 (25.09.2026): реле не стало хранить посылку «только на связи» —
+  /// получатель [toDeviceId] не на связи. Контроллер не шлёт ему «печатает»
+  /// минуту: ключ цепочки не тратится на заведомо недоставляемое.
+  void Function(String toDeviceId)? onOnlineOnlyDropped;
+
+  /// П-1 (25.09.2026): сводка росписи адресата для строки исходящих; null —
+  /// сводку не ставить. Сам вызов null — сверка выключена (доля
+  /// `device_check_percent`), и пути отправки побайтово прежние.
+  Future<String?> Function(Map<String, Object?> row)? deviceCheckDigestFor;
+
+  /// П-1: реле сказало, что сводка отправителя устарела; [deviceIds] —
+  /// настоящий список «кому слать» адресата посылки [msgId].
+  void Function(String msgId, List<String> deviceIds)? onDeviceSetStale;
+
+  /// П-1: реле не знает устройства-адресата (HTTP 400) — роспись устарела.
+  void Function(String toDeviceId)? onUnknownRecipientDevice;
+
+  Future<String?> _rowDeviceDigest(Map<String, Object?> row) async {
+    final f = deviceCheckDigestFor;
+    if (f == null) return null;
+    try {
+      return await f(row);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _noteOnlineOnlyDropped(String msgId) async {
+    final cb = onOnlineOnlyDropped;
+    if (cb == null) return;
+    try {
+      final target = await db.outboxNackTarget(msgId);
+      final to = target?.toDeviceId.trim() ?? '';
+      if (to.isNotEmpty) cb(to);
+    } catch (_) {
+      // Только подсказка отправителю; её потеря стоит одной лишней посылки.
+    }
+  }
+
   void _noteRelayRequestSucceeded() {
     if (_rateLimitedUntilMs == 0 && _rateLimitBackoffMs == 0) return;
     _rateLimitedUntilMs = 0;
@@ -3349,8 +3388,19 @@ class RelayClient {
               } catch (_) {}
               unawaited(pumpOutbox());
             }());
-          case SentOk(:final msgId):
+          case SentOk(
+            :final msgId,
+            :final delivery,
+            :final deviceSetStale,
+            :final deviceIds,
+          ):
             await db.outboxMarkSent(msgId);
+            if (delivery == 'dropped_offline') {
+              unawaited(_noteOnlineOnlyDropped(msgId));
+            }
+            if (deviceSetStale && deviceIds != null) {
+              onDeviceSetStale?.call(msgId, deviceIds);
+            }
             // 🔴 ВОТ ЗДЕСЬ переотправка становится потраченной попыткой: реле
             // подтвердило приём. Кадр, не доехавший из-за лимита или мёртвого
             // соединения, бюджета больше не стоит (замер 15.08: пять попыток
@@ -4336,6 +4386,8 @@ class RelayClient {
         final deliverAtMs = (row['deliver_at_ms'] as num?)?.toInt() ?? 0;
         final attemptCount = (row['attempt_count'] as num?)?.toInt() ?? 0;
         final createdAtMs = (row['created_at_ms'] as num?)?.toInt() ?? 0;
+        final onlineOnly = isOnlineOnlyOutboxRow(row);
+        final rcptDigest = await _rowDeviceDigest(row);
 
         final nowMs = DateTime.now().millisecondsSinceEpoch;
         if (createdAtMs > 0 &&
@@ -4398,6 +4450,8 @@ class RelayClient {
               ttlSeconds: ttlSeconds,
               transportMetaJson: transportMetaJson,
               deliverAtMs: deliverAtMs,
+              onlineOnly: onlineOnly,
+              rcptDigest: rcptDigest,
             ),
           );
           // If SENT_OK doesn't arrive, we'll retry.
@@ -4469,6 +4523,8 @@ class RelayClient {
         final deliverAtMs = (row['deliver_at_ms'] as num?)?.toInt() ?? 0;
         final attemptCount = (row['attempt_count'] as num?)?.toInt() ?? 0;
         final createdAtMs = (row['created_at_ms'] as num?)?.toInt() ?? 0;
+        final onlineOnly = isOnlineOnlyOutboxRow(row);
+        final rcptDigest = await _rowDeviceDigest(row);
 
         final nowMs = DateTime.now().millisecondsSinceEpoch;
         if (createdAtMs > 0 &&
@@ -4562,11 +4618,27 @@ class RelayClient {
                   // part of the request signature — it is not sensitive; the
                   // relay holds vs delivers, nothing more).
                   if (deliverAtMs > 0) 'deliver_at_ms': deliverAtMs,
+                  // П-4: тоже вне подписи, по тому же прецеденту.
+                  if (onlineOnly) 'online_only': true,
+                  // П-1: сводка росписи — вне подписи, как и выше.
+                  if (rcptDigest != null) 'rcpt_digest': rcptDigest,
                 }),
               )
               .timeout(_httpTimeout);
           if (resp.statusCode >= 200 && resp.statusCode < 300) {
             await db.outboxMarkSent(msgId);
+            if (onlineOnly && resp.body.contains('dropped_offline')) {
+              unawaited(_noteOnlineOnlyDropped(msgId));
+            }
+            if (rcptDigest != null && resp.body.contains('device_set_stale')) {
+              try {
+                final j = jsonDecode(resp.body);
+                final ids = j is Map && j['device_ids'] is List
+                    ? (j['device_ids'] as List).whereType<String>().toList()
+                    : null;
+                if (ids != null) onDeviceSetStale?.call(msgId, ids);
+              } catch (_) {}
+            }
             await db.messageAttemptLogAppend(
               correlationId: correlationId,
               localEventId: localEventId,
@@ -4594,6 +4666,12 @@ class RelayClient {
               resp.statusCode == 401 ||
               resp.statusCode == 403 ||
               resp.statusCode == 404) {
+            // П-1: «устройства больше нет» — повод обновить роспись адресата,
+            // а не только молча отметить сбой (при включённой сверке).
+            if (resp.statusCode == 400 &&
+                resp.body.contains('unknown recipient device')) {
+              onUnknownRecipientDevice?.call(toDeviceId);
+            }
             await db.messageAttemptLogAppend(
               correlationId: correlationId,
               localEventId: localEventId,

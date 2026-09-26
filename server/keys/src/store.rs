@@ -58,6 +58,52 @@ pub(crate) const SUPERSEDED_HANDOVER_GRACE_MS: i64 = 5 * 60 * 1000;
 /// под правило не попадает.
 pub(crate) const SUPERSEDED_SILENCE_MS: i64 = 15 * 60 * 1000;
 
+/// П-5: надгробие отвязанного устройства живёт 90 суток — как срок чистки
+/// реле. Дольше незачем: за это время выпущенный клиент либо вышел на связь и
+/// узнал об отвязке, либо не выйдет уже никогда.
+pub(crate) const DEVICE_TOMBSTONE_TTL_MS: i64 = 90 * 24 * 60 * 60 * 1000;
+
+/// П-5: надгробие отвязанного устройства.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceTombstoneRow {
+    pub device_id: String,
+    pub profile_id: String,
+    pub identity_key_pub_b64: Option<String>,
+    pub reason: String,
+    pub unlinked_at_ms: i64,
+    pub expires_at_ms: i64,
+}
+
+/// П-5: своё устройство — только для владельца профиля.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnDeviceRow {
+    pub device_id: String,
+    pub device_class: String,
+    pub device_label: Option<String>,
+    pub created_at_ms: i64,
+    pub last_seen_ms: i64,
+    /// Самое свежее устройство профиля — автоматика его не отвязывает.
+    pub freshest: bool,
+}
+
+/// П-5: кто отвязывает — от этого зависят проверки внутри транзакции.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnlinkGuard {
+    /// Воля владельца («Завершить сеанс») или сервера: без условий.
+    Owner,
+    /// Задание по молчанию: условия кандидата перепроверяются В ТРАНЗАКЦИИ —
+    /// устройство могло выйти на связь (или соседа удалили) после выборки.
+    SilentCompanion { cutoff_ms: i64 },
+}
+
+/// П-5: кандидат на отвязку по молчанию.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnlinkCandidateRow {
+    pub profile_id: String,
+    pub device_id: String,
+    pub last_seen_ms: i64,
+}
+
 pub(crate) fn device_liveness_window_ms_from_env() -> i64 {
     device_liveness_window_ms_from_days(
         std::env::var("SECRETLY_KEYS_DEVICE_LIVENESS_WINDOW_DAYS")
@@ -1181,6 +1227,21 @@ CREATE TABLE IF NOT EXISTS entitlements (
 
 CREATE UNIQUE INDEX IF NOT EXISTS entitlements_store_tx_idx
   ON entitlements(store_tx_id) WHERE store_tx_id IS NOT NULL;
+
+-- П-5 (25.09.2026): надгробия отвязанных устройств. Новая таблица — только
+-- CREATE IF NOT EXISTS, он выполняется при каждом открытии: и свежая, и
+-- существующая база получают её одинаково.
+CREATE TABLE IF NOT EXISTS device_tombstones (
+    device_id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    identity_key_pub_b64 TEXT,
+    reason TEXT NOT NULL,
+    unlinked_at_ms INTEGER NOT NULL,
+    expires_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS device_tombstones_profile_idx
+  ON device_tombstones(profile_id, unlinked_at_ms);
 "#,
                 )?;
 
@@ -2671,6 +2732,260 @@ FROM entitlements WHERE profile_id = ?1
         Ok(deleted)
     }
 
+    /// 🔴 П-5 (25.09.2026): ОТВЯЗКА — удаление регистрации С НАДГРОБИЕМ.
+    ///
+    /// Просто удалённая строка не держит: выпущенные клиенты при следующем
+    /// запуске перерегистрируются с сохранённым секретом профиля, и «Завершить
+    /// сеанс» для выключенного ПК не действовал. Надгробие запрещает
+    /// регистрацию ИМЕННО ЭТОГО номера (код `device_unlinked`) и хранит его
+    /// ключ личности: им отвязанный ПК подписывает вопрос «что со мной?».
+    /// Новая привязка идёт с новым номером и одобрением телефона — её
+    /// надгробие не касается.
+    ///
+    /// Одна транзакция: надгробие без удаления или удаление без надгробия —
+    /// ровно та полуправда, которую отвязка лечит. Строки не было — ничего не
+    /// пишем и возвращаем false.
+    ///
+    /// НЕ для вытеснения по потолку: там устройство не отвязано волей
+    /// человека, и запирать его навсегда нельзя.
+    ///
+    /// [UnlinkGuard::SilentCompanion] перепроверяет условия кандидата внутри
+    /// транзакции: вышедший на связь или оставшийся последним — не трогаем.
+    pub async fn unlink_device(
+        &self,
+        profile_id: &str,
+        device_id: &str,
+        reason: &str,
+        now_ms: i64,
+        guard: UnlinkGuard,
+    ) -> Result<bool, String> {
+        let pid = profile_id.to_string();
+        let did = device_id.to_string();
+        let why = reason.to_string();
+        self.conn
+            .call(move |c| -> Result<bool, rusqlite::Error> {
+                let tx = c.transaction()?;
+                if let UnlinkGuard::SilentCompanion { cutoff_ms } = guard {
+                    let still: i64 = tx.query_row(
+                        "SELECT COUNT(*) FROM devices d
+                           JOIN device_metadata m ON m.device_id = d.device_id
+                          WHERE d.profile_id = ?1 AND d.device_id = ?2
+                            AND m.device_class IN ('desktop', 'web')
+                            AND d.last_seen_ms < ?3
+                            AND d.last_seen_ms < (SELECT MAX(x.last_seen_ms) FROM devices x WHERE x.profile_id = ?1)
+                            AND (SELECT COUNT(*) FROM devices y WHERE y.profile_id = ?1) > 1",
+                        params![pid, did, cutoff_ms],
+                        |row| row.get(0),
+                    )?;
+                    if still == 0 {
+                        tx.commit()?;
+                        return Ok(false);
+                    }
+                }
+                let identity: Option<String> = tx
+                    .query_row(
+                        "SELECT COALESCE(NULLIF(d.identity_key_pub_b64, ''), b.identity_key_pub_b64)
+                           FROM devices d
+                           LEFT JOIN device_key_bundles b ON b.device_id = d.device_id
+                          WHERE d.profile_id = ?1 AND d.device_id = ?2",
+                        params![pid, did],
+                        |row| row.get::<_, Option<String>>(0),
+                    )
+                    .optional()?
+                    .flatten();
+                let n = tx.execute(
+                    "DELETE FROM devices WHERE profile_id = ?1 AND device_id = ?2",
+                    params![pid, did],
+                )?;
+                if n == 0 {
+                    tx.commit()?;
+                    return Ok(false);
+                }
+                tx.execute("DELETE FROM device_metadata WHERE device_id = ?1", params![did])?;
+                tx.execute(
+                    "DELETE FROM device_key_bundles WHERE profile_id = ?1 AND device_id = ?2",
+                    params![pid, did],
+                )?;
+                tx.execute("DELETE FROM one_time_prekeys WHERE device_id = ?1", params![did])?;
+                tx.execute(
+                    "INSERT OR REPLACE INTO device_tombstones(device_id, profile_id, identity_key_pub_b64, reason, unlinked_at_ms, expires_at_ms)
+                     VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![did, pid, identity, why, now_ms, now_ms + DEVICE_TOMBSTONE_TTL_MS],
+                )?;
+                tx.commit()?;
+                Ok(true)
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Класс устройства из метаданных; нет строки — `mobile`, как в схеме.
+    pub async fn device_class_of(&self, device_id: &str) -> Result<String, String> {
+        let did = device_id.to_string();
+        self.conn
+            .call(move |c| -> Result<String, rusqlite::Error> {
+                Ok(c.query_row(
+                    "SELECT device_class FROM device_metadata WHERE device_id = ?1",
+                    params![did],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?
+                .unwrap_or_else(|| "mobile".to_string()))
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// П-5: действующее надгробие устройства, если есть.
+    pub async fn device_tombstone(
+        &self,
+        device_id: &str,
+        now_ms: i64,
+    ) -> Result<Option<DeviceTombstoneRow>, String> {
+        let did = device_id.to_string();
+        self.conn
+            .call(move |c| -> Result<Option<DeviceTombstoneRow>, rusqlite::Error> {
+                c.query_row(
+                    "SELECT device_id, profile_id, identity_key_pub_b64, reason, unlinked_at_ms, expires_at_ms
+                       FROM device_tombstones WHERE device_id = ?1 AND expires_at_ms > ?2",
+                    params![did, now_ms],
+                    |row| {
+                        Ok(DeviceTombstoneRow {
+                            device_id: row.get(0)?,
+                            profile_id: row.get(1)?,
+                            identity_key_pub_b64: row.get(2)?,
+                            reason: row.get(3)?,
+                            unlinked_at_ms: row.get(4)?,
+                            expires_at_ms: row.get(5)?,
+                        })
+                    },
+                )
+                .optional()
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// П-5: действующие надгробия профиля — для экрана «Устройства» владельца.
+    pub async fn device_tombstones_for_profile(
+        &self,
+        profile_id: &str,
+        now_ms: i64,
+    ) -> Result<Vec<DeviceTombstoneRow>, String> {
+        let pid = profile_id.to_string();
+        self.conn
+            .call(move |c| -> Result<Vec<DeviceTombstoneRow>, rusqlite::Error> {
+                let mut stmt = c.prepare(
+                    "SELECT device_id, profile_id, identity_key_pub_b64, reason, unlinked_at_ms, expires_at_ms
+                       FROM device_tombstones WHERE profile_id = ?1 AND expires_at_ms > ?2
+                      ORDER BY unlinked_at_ms DESC",
+                )?;
+                let mut rows = stmt.query(params![pid, now_ms])?;
+                let mut out = Vec::new();
+                while let Some(row) = rows.next()? {
+                    out.push(DeviceTombstoneRow {
+                        device_id: row.get(0)?,
+                        profile_id: row.get(1)?,
+                        identity_key_pub_b64: row.get(2)?,
+                        reason: row.get(3)?,
+                        unlinked_at_ms: row.get(4)?,
+                        expires_at_ms: row.get(5)?,
+                    });
+                }
+                Ok(out)
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn prune_device_tombstones(&self, now_ms: i64) -> Result<usize, String> {
+        self.conn
+            .call(move |c| -> Result<usize, rusqlite::Error> {
+                c.execute(
+                    "DELETE FROM device_tombstones WHERE expires_at_ms <= ?1",
+                    params![now_ms],
+                )
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// П-5: все устройства профиля с классом, подписью и временем связи —
+    /// только для владельца (эндпоинт проверяет подпись своего профиля).
+    /// Публичную роспись это не расширяет: время связи — это присутствие.
+    pub async fn own_devices(&self, profile_id: &str) -> Result<Vec<OwnDeviceRow>, String> {
+        let pid = profile_id.to_string();
+        self.conn
+            .call(move |c| -> Result<Vec<OwnDeviceRow>, rusqlite::Error> {
+                let mut stmt = c.prepare(
+                    "SELECT d.device_id,
+                            COALESCE(m.device_class, 'mobile'),
+                            m.device_label,
+                            d.created_at_ms,
+                            d.last_seen_ms,
+                            d.last_seen_ms >= (SELECT MAX(last_seen_ms) FROM devices WHERE profile_id = ?1)
+                       FROM devices d
+                       LEFT JOIN device_metadata m ON m.device_id = d.device_id
+                      WHERE d.profile_id = ?1
+                      ORDER BY d.created_at_ms ASC",
+                )?;
+                let mut rows = stmt.query(params![pid])?;
+                let mut out = Vec::new();
+                while let Some(row) = rows.next()? {
+                    out.push(OwnDeviceRow {
+                        device_id: row.get(0)?,
+                        device_class: row.get(1)?,
+                        device_label: row.get(2)?,
+                        created_at_ms: row.get(3)?,
+                        last_seen_ms: row.get(4)?,
+                        freshest: row.get::<_, i64>(5)? != 0,
+                    });
+                }
+                Ok(out)
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// 🔴 П-5: кандидаты на отвязку по молчанию. Три условия вместе:
+    /// - класс ПК или веб — телефон автоматика не трогает НИКОГДА;
+    /// - молчит дольше порога (`last_seen_ms < cutoff_ms`);
+    /// - НЕ самое свежее устройство профиля и у профиля есть другое
+    ///   устройство — профиль не остаётся без устройств ни при каком раскладе
+    ///   (компьютерный аккаунт существует: у него единственное устройство — ПК).
+    pub async fn companion_unlink_candidates(
+        &self,
+        cutoff_ms: i64,
+        limit: usize,
+    ) -> Result<Vec<UnlinkCandidateRow>, String> {
+        self.conn
+            .call(move |c| -> Result<Vec<UnlinkCandidateRow>, rusqlite::Error> {
+                let mut stmt = c.prepare(
+                    "SELECT d.profile_id, d.device_id, d.last_seen_ms
+                       FROM devices d
+                       JOIN device_metadata m ON m.device_id = d.device_id
+                      WHERE m.device_class IN ('desktop', 'web')
+                        AND d.last_seen_ms < ?1
+                        AND d.last_seen_ms < (SELECT MAX(x.last_seen_ms) FROM devices x WHERE x.profile_id = d.profile_id)
+                        AND (SELECT COUNT(*) FROM devices y WHERE y.profile_id = d.profile_id) > 1
+                      ORDER BY d.last_seen_ms ASC
+                      LIMIT ?2",
+                )?;
+                let mut rows = stmt.query(params![cutoff_ms, limit as i64])?;
+                let mut out = Vec::new();
+                while let Some(row) = rows.next()? {
+                    out.push(UnlinkCandidateRow {
+                        profile_id: row.get(0)?,
+                        device_id: row.get(1)?,
+                        last_seen_ms: row.get(2)?,
+                    });
+                }
+                Ok(out)
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     pub async fn delete_profile(&self, profile_id: &str) -> Result<bool, String> {
         let pid = profile_id.to_string();
         let deleted = self
@@ -2999,5 +3314,113 @@ FROM entitlements WHERE profile_id = ?1
             .await
             .map_err(|e| e.to_string())?;
         Ok(bundles)
+    }
+
+    #[cfg(test)]
+    pub async fn one_time_prekey_count(&self, device_id: &str) -> Result<i64, String> {
+        let did = device_id.to_string();
+        self.conn
+            .call(move |c| -> Result<i64, rusqlite::Error> {
+                c.query_row(
+                    "SELECT COUNT(*) FROM one_time_prekeys WHERE device_id = ?1",
+                    params![did],
+                    |r| r.get(0),
+                )
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// 🔴 П-1 (25.09.2026): ОДНО определение «кому слать» — роспись профиля
+    /// (`list_device_statuses`: окно по `devices.last_seen_ms` + вытеснение
+    /// в пределах класса) С опубликованной связкой. Ровно это множество берёт
+    /// клиент (он требует связку), поэтому сверка на реле не может вечно
+    /// расходиться с клиентом («обнови — снова не то»). Отвязанных здесь нет:
+    /// их строк нет. Отсортировано — для сводки.
+    pub async fn addressable_device_ids(&self, profile_id: &str) -> Result<Vec<String>, String> {
+        let mut ids: Vec<String> = self
+            .list_device_statuses(profile_id)
+            .await?
+            .into_iter()
+            .filter(|d| d.has_bundle)
+            .map(|d| d.device_id)
+            .collect();
+        ids.sort();
+        ids.dedup();
+        Ok(ids)
+    }
+
+    /// 🔴 П-1: связка ОДНОГО устройства; одноразовый ключ снимается только у
+    /// него. Выдача связок профиля (`fetch_bundles_for_profile`) снимает по
+    /// ключу у КАЖДОГО устройства профиля ради сессии с одним — одноразовые
+    /// ключи сгорали. Адресуемость проверяет вызывающий (иначе вернулась бы
+    /// ошибка 06.08: мёртвый номер из кэша получал связку и письма в пустоту).
+    /// Возвращает (профиль, связка) или None.
+    pub async fn fetch_bundle_for_device(
+        &self,
+        device_id: &str,
+    ) -> Result<Option<(String, DeviceKeyBundle)>, String> {
+        let did = device_id.to_string();
+        self.conn
+            .call(move |c| -> Result<Option<(String, DeviceKeyBundle)>, rusqlite::Error> {
+                let tx = c.transaction()?;
+                let row = tx
+                    .query_row(
+                        "SELECT b.profile_id, b.identity_key_pub_b64, b.signed_prekey_pub_b64,
+                                b.signed_prekey_sig_b64, b.account_identity_pub_b64, b.device_cert_b64
+                           FROM device_key_bundles b
+                           JOIN devices d ON d.device_id = b.device_id AND d.profile_id = b.profile_id
+                          WHERE b.device_id = ?1",
+                        params![did],
+                        |r| {
+                            Ok((
+                                r.get::<_, String>(0)?,
+                                r.get::<_, String>(1)?,
+                                r.get::<_, String>(2)?,
+                                r.get::<_, String>(3)?,
+                                r.get::<_, Option<String>>(4)?,
+                                r.get::<_, Option<String>>(5)?,
+                            ))
+                        },
+                    )
+                    .optional()?;
+                let Some((profile_id, ik, spk, sig, account, cert)) = row else {
+                    tx.commit()?;
+                    return Ok(None);
+                };
+                let otk: Option<OneTimePrekey> = tx
+                    .query_row(
+                        "SELECT prekey_id, prekey_pub_b64 FROM one_time_prekeys WHERE device_id = ?1 ORDER BY created_at_ms ASC LIMIT 1",
+                        params![did],
+                        |r| {
+                            Ok(OneTimePrekey {
+                                prekey_id: r.get(0)?,
+                                prekey_pub_b64: r.get(1)?,
+                            })
+                        },
+                    )
+                    .optional()?;
+                if let Some(ref k) = otk {
+                    tx.execute(
+                        "DELETE FROM one_time_prekeys WHERE device_id = ?1 AND prekey_id = ?2",
+                        params![did, k.prekey_id],
+                    )?;
+                }
+                tx.commit()?;
+                Ok(Some((
+                    profile_id,
+                    DeviceKeyBundle {
+                        device_id: did.clone(),
+                        identity_key_pub_b64: ik,
+                        signed_prekey_pub_b64: spk,
+                        signed_prekey_sig_b64: sig,
+                        one_time_prekey: otk,
+                        account_identity_pub_b64: account,
+                        device_cert_b64: cert,
+                    },
+                )))
+            })
+            .await
+            .map_err(|e| e.to_string())
     }
 }

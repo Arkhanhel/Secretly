@@ -418,6 +418,62 @@ Future<bool?> verifiedHandshakeAuthEnforceDisabled(
   return ok ? disabled : null;
 }
 
+/// Зеркало Rust `multidevice_signing_message` (v1): блок `multidevice`, ТЗ
+/// мультиустройства §2 (25.09.2026). ЗАМОРОЖЕНО: новое поле — только новым
+/// блоком `multidevice2`, иначе подпись молча перестанет сходиться у всех.
+String multideviceSigningMessage({
+  required int ratchetJumpMobile,
+  required int ratchetJumpDesktop,
+  required int ephemeralOnlineOnlyPercent,
+  required int companionWarnDays,
+  required int companionUnlinkDays,
+  required int nackV2Percent,
+  required int sendJournalPercent,
+  required int deviceCheckPercent,
+  required int issuedAtMs,
+}) {
+  return 'secretly-multidevice-v1|'
+      '$ratchetJumpMobile|'
+      '$ratchetJumpDesktop|'
+      '$ephemeralOnlineOnlyPercent|'
+      '$companionWarnDays|'
+      '$companionUnlinkDays|'
+      '$nackV2Percent|'
+      '$sendJournalPercent|'
+      '$deviceCheckPercent|'
+      '$issuedAtMs';
+}
+
+/// Проверяет блок `multidevice`. Подпись сверяется по СЫРЫМ числам сервера —
+/// зажим идёт потом, в `MultideviceFlags.fromConfigResponse`. При false
+/// вызывающий обязан взять `MultideviceFlags.defaults`.
+Future<bool> verifyMultideviceSignature(
+  Map<String, dynamic> configResponse,
+) async {
+  final sig = (configResponse['multidevice_signature'] as String?) ?? '';
+  if (kConfigPublicKeyB64.isEmpty || sig.isEmpty) return false;
+  final payload = configResponse['multidevice'];
+  if (payload is! Map) return false;
+  final message = utf8.encode(
+    multideviceSigningMessage(
+      ratchetJumpMobile: _int(payload['ratchet_jump_mobile']),
+      ratchetJumpDesktop: _int(payload['ratchet_jump_desktop']),
+      ephemeralOnlineOnlyPercent: _int(payload['ephemeral_online_only_percent']),
+      companionWarnDays: _int(payload['companion_warn_days']),
+      companionUnlinkDays: _int(payload['companion_unlink_days']),
+      nackV2Percent: _int(payload['nack_v2_percent']),
+      sendJournalPercent: _int(payload['send_journal_percent']),
+      deviceCheckPercent: _int(payload['device_check_percent']),
+      issuedAtMs: _int(payload['issued_at_ms']),
+    ),
+  );
+  return verifyEd25519B64(
+    publicKeyB64: kConfigPublicKeyB64,
+    signatureB64: sig,
+    message: message,
+  );
+}
+
 /// Зеркало Rust `rooms2_signing_message` (v1), блок `rooms2` (17.09.2026).
 String rooms2SigningMessage({
   required bool rawBroadcastEnabled,
