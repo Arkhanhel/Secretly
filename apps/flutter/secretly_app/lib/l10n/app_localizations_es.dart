@@ -2587,6 +2587,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get desktopCallEncrypted => 'La llamada está cifrada de extremo a extremo';
 
   @override
+  String get desktopRoomCallTransportEncrypted => 'Cifrada en tránsito hasta nuestro servidor de medios; aún no de extremo a extremo';
+
+  @override
   String desktopCallDurationOnAir(Object duration, Object count) {
     return '$duration · $count en directo';
   }
@@ -3215,7 +3218,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get desktopPrivacyEncryption => 'Cifrado';
 
   @override
-  String get desktopPrivacyEncryptionHint => 'Todos los mensajes y llamadas están cifrados de extremo a extremo. Las claves solo están en tus dispositivos.';
+  String get desktopPrivacyEncryptionHint => 'Los mensajes, los archivos y las llamadas individuales están cifrados de extremo a extremo; las claves solo están en tus dispositivos. Por ahora, las llamadas grupales solo se cifran en tránsito.';
 
   @override
   String get desktopPrivacyE2eeActive => 'El cifrado de extremo a extremo está activo';
@@ -3224,7 +3227,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get desktopPrivacyWhoSees => 'Quién ve';
 
   @override
-  String get desktopPrivacyWhoSeesHint => 'Los mismos ajustes de visibilidad que en la aplicación móvil.';
+  String get desktopPrivacyWhoSeesHint => 'Los mismos ajustes de visibilidad que en tu teléfono. «Contactos» lo aplica la aplicación; el servidor solo garantiza «Nadie».';
 
   @override
   String get desktopPrivacyVisibility => 'Visibilidad';
@@ -3248,7 +3251,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get desktopPrivacyAutoDelete => 'Eliminar mi cuenta';
 
   @override
-  String get desktopPrivacyAutoDeleteHint => 'Si no inicias sesión durante más tiempo del elegido, la cuenta y todos los mensajes se eliminan automáticamente. La cuenta atrás se reinicia con cada inicio de sesión.';
+  String get desktopPrivacyAutoDeleteHint => 'Si no inicias sesión durante más tiempo del elegido, eliminamos de nuestros servidores la cuenta, las claves, la copia del servidor y las colas de mensajes. La cuenta atrás se reinicia con cada inicio de sesión.';
 
   @override
   String get desktopPrivacyIfAbsent => 'Si no inicio sesión';
@@ -3593,7 +3596,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get desktopAboutTagline => 'Un mensajero seguro con cifrado de extremo a extremo. Sin nube. Sin publicidad. Código abierto.';
+  String get desktopAboutTagline => 'Un mensajero cifrado de extremo a extremo. Sin publicidad. Código fuente bajo AGPL-3.0.';
 
   @override
   String get desktopAboutLicences => 'Licencias';
@@ -3639,7 +3642,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get desktopSecurityE2ee => 'Cifrado de extremo a extremo';
 
   @override
-  String get desktopSecurityE2eeHint => 'Todos los mensajes, llamadas y archivos se cifran en tu dispositivo. Las claves nunca salen de tus dispositivos: el servidor solo ve texto cifrado.';
+  String get desktopSecurityE2eeHint => 'Los mensajes, los archivos y las llamadas individuales se cifran en tu dispositivo, y las claves nunca salen de tus dispositivos. El servidor no puede leer el contenido, pero sí ve datos de servicio, como quién escribe a quién y cuándo. Por ahora, las llamadas grupales solo se cifran en tránsito.';
 
   @override
   String get desktopSecurityVerifiedDevices => 'Dispositivos verificados';
@@ -4480,7 +4483,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get desktopContactCopyIdShort => 'Copiar ID';
 
   @override
-  String get desktopContactDisappearing => 'Mensajes que desaparecen';
+  String get desktopContactDisappearing => 'Eliminación automática en mis dispositivos';
 
   @override
   String get desktopContactDeleteChat => 'Eliminar el chat';
@@ -4545,7 +4548,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get desktopThreadDisappearingOn => 'Los mensajes que desaparecen están activados';
+  String get desktopThreadDisappearingOn => 'La eliminación automática está activada, solo en mis dispositivos';
 
   @override
   String get desktopThreadCallAction => 'Llamar';

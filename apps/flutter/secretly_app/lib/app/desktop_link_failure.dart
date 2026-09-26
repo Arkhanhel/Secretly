@@ -31,6 +31,14 @@ enum DesktopLinkFailureCode {
   decisionDeclined,
   invalidSyncPayload,
   syncInterrupted,
+
+  /// A (26.09.2026): ключ ПК в QR не совпал с ключом, что отдаёт сервер.
+  /// Возможна подмена — переписку такому устройству не отправляем.
+  desktopIdentityMismatch,
+
+  /// A (26.09.2026): на телефоне строгий режим, а QR от ПК старой версии —
+  /// без ключа, проверить компьютер нечем.
+  strictModeNeedsVerifiedDesktop,
 }
 
 class DesktopLinkFailure implements Exception {
@@ -107,5 +115,9 @@ String _defaultDesktopLinkFailureMessage(DesktopLinkFailureCode code) {
       return 'Invalid desktop sync payload. Regenerate QR and retry.';
     case DesktopLinkFailureCode.syncInterrupted:
       return 'Secure sync was interrupted before completion. Generate a new QR and retry.';
+    case DesktopLinkFailureCode.desktopIdentityMismatch:
+      return 'The key of this computer does not match the key on the server. Nothing was sent. Generate a new QR on the computer; if it repeats, do not link it.';
+    case DesktopLinkFailureCode.strictModeNeedsVerifiedDesktop:
+      return 'Strict mode is on: this computer cannot be verified by its QR. Update Secretly on the computer, or turn strict mode off for the time of linking.';
   }
 }

@@ -2593,6 +2593,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopCallEncrypted => 'Дзвінок захищено наскрізним шифруванням';
 
   @override
+  String get desktopRoomCallTransportEncrypted => 'Шифрується під час передавання до нашого медіасервера — поки не наскрізне';
+
+  @override
   String desktopCallDurationOnAir(Object duration, Object count) {
     return '$duration · $count в ефірі';
   }
@@ -3221,7 +3224,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopPrivacyEncryption => 'Шифрування';
 
   @override
-  String get desktopPrivacyEncryptionHint => 'Усі повідомлення та дзвінки захищено наскрізним шифруванням. Ключі є лише на ваших пристроях.';
+  String get desktopPrivacyEncryptionHint => 'Повідомлення, файли та дзвінки один на один захищено наскрізним шифруванням; ключі — лише на ваших пристроях. Групові дзвінки поки шифруються лише під час передавання.';
 
   @override
   String get desktopPrivacyE2eeActive => 'Наскрізне шифрування активне';
@@ -3230,7 +3233,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopPrivacyWhoSees => 'Хто бачить';
 
   @override
-  String get desktopPrivacyWhoSeesHint => 'Ті самі налаштування видимості, що й у мобільному застосунку.';
+  String get desktopPrivacyWhoSeesHint => 'Ті самі налаштування видимості, що й у телефоні. «Контакти» враховує застосунок; сервер гарантує лише «Ніхто».';
 
   @override
   String get desktopPrivacyVisibility => 'Видимість';
@@ -3254,7 +3257,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopPrivacyAutoDelete => 'Видалити мій обліковий запис';
 
   @override
-  String get desktopPrivacyAutoDeleteHint => 'Якщо ви не заходите довше за обраний строк, обліковий запис і всі повідомлення видаляються автоматично. Відлік скидається за кожного входу.';
+  String get desktopPrivacyAutoDeleteHint => 'Якщо ви не заходите довше за обраний строк, з наших серверів видаляються обліковий запис, ключі, серверна копія та черги повідомлень. Відлік скидається за кожного входу.';
 
   @override
   String get desktopPrivacyIfAbsent => 'Якщо не заходжу';
@@ -3599,7 +3602,7 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get desktopAboutTagline => 'Захищений месенджер із наскрізним шифруванням. Без хмари. Без реклами. Відкритий код.';
+  String get desktopAboutTagline => 'Месенджер із наскрізним шифруванням. Без реклами. Вихідний код — AGPL-3.0.';
 
   @override
   String get desktopAboutLicences => 'Ліцензії';
@@ -3645,7 +3648,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopSecurityE2ee => 'Наскрізне шифрування';
 
   @override
-  String get desktopSecurityE2eeHint => 'Усі повідомлення, дзвінки та файли шифруються на вашому пристрої. Ключі не залишають ваші пристрої — сервер бачить лише шифротекст.';
+  String get desktopSecurityE2eeHint => 'Повідомлення, файли та дзвінки один на один шифруються на вашому пристрої, ключі не залишають ваші пристрої. Сервер не читає вміст, але бачить службові дані — наприклад, хто кому пише і коли. Групові дзвінки поки шифруються лише під час передавання.';
 
   @override
   String get desktopSecurityVerifiedDevices => 'Перевірені пристрої';
@@ -4488,7 +4491,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopContactCopyIdShort => 'Скопіювати ID';
 
   @override
-  String get desktopContactDisappearing => 'Зникомі повідомлення';
+  String get desktopContactDisappearing => 'Автовидалення на моїх пристроях';
 
   @override
   String get desktopContactDeleteChat => 'Видалити чат';
@@ -4553,7 +4556,7 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get desktopThreadDisappearingOn => 'Зникомі повідомлення ввімкнено';
+  String get desktopThreadDisappearingOn => 'Автовидалення ввімкнено — лише на моїх пристроях';
 
   @override
   String get desktopThreadCallAction => 'Подзвонити';

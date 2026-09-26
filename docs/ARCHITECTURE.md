@@ -30,13 +30,16 @@ XChaCha20-Poly1305 seal/open pair, loaded over FFI by
 Android (arm64, the only ABI shipped); everywhere else a byte-compatible
 pure-Dart implementation (`apps/flutter/secretly_app/lib/crypto/dart_crypto_provider.dart`) does the same
 work, and either can read what the other wrote. The end-to-end ratchet does not
-use it: **X3DH and the Double Ratchet are pure Dart**, under `apps/flutter/secretly_app/lib/ratchet/`. A
+use it: **the X3DH-like handshake and the Double Ratchet are pure Dart**, under `apps/flutter/secretly_app/lib/ratchet/`. A
 leftover demo binding, `apps/flutter/secretly_app/lib/rust_core.dart`, exposes only `version` and `add`
 and is called by nothing.
 
-**The two servers are deliberately separate.** The key server knows who exists;
-the relay knows what moved. Neither holds both halves, and a compromise of one
-does not hand over the other.
+**The two servers are separate programs, not separate security domains.** The
+key server knows who exists; the relay knows what moved. Today both run on one
+VPS under the same system user, share a data directory and share an internal
+key, so a compromise of one host gives both halves. The split is a code
+boundary; making it a security boundary (separate users, keys and hosts) is
+planned work.
 
 ## What each server knows
 
@@ -75,10 +78,15 @@ point:
 
 It holds ciphertext in per-device mailboxes until the recipient acknowledges it,
 or until the envelope expires (seven days for a message). It sees source device,
-destination device, size and timing — and cannot see content.
+destination device, size and timing, plus the sender's display name and a
+group's title that travel beside the ciphertext for notification titles. It also
+keeps each room's name, description, avatar and member list with roles. It
+cannot see message content.
 
-**Group sender attribution is forgotten after 30 days.** For one-to-one messages
-the relay never stores the sender at all.
+**Group sender attribution is forgotten after 30 days.** Since 17 September 2026
+the relay also records the sending device on every queued message, one-to-one
+included, so that recipients can check who sent it; the record goes away with
+the message — on delivery, or after seven days at most.
 
 ## Client modules
 
@@ -86,13 +94,13 @@ the relay never stores the sender at all.
 |---|---|---|
 | `ui` | 171k | four platforms' interfaces, including a separate desktop workspace |
 | `app` | 54k | `AppController` — the orchestrator |
-| `l10n` | 21k | eight languages |
+| `l10n` | 59k | eight localisations (generated) |
 | `storage` | 13k | SQLCipher schema, outbox, event log |
 | `calls` | 13k | WebRTC session, ICE policy, call journal |
 | `transport` | 8k | HTTP and WebSocket clients, DNS fallback, server clock |
 | `security` | 5k | device keys, secure storage, backup format, account identity |
 | `rooms` | 4.4k | group membership, sender keys, invites |
-| `ratchet` | 3.7k | Double Ratchet and X3DH |
+| `ratchet` | 4.6k | Double Ratchet, X3DH-like handshake, room key chains |
 | `entitlements`, `billing` | 3.2k | paid tier |
 | `push`, `sync`, `attachments`, `messages` | 4.7k | delivery support |
 
@@ -105,7 +113,8 @@ library. If you have limited time, spend it there — and see `THREAT_MODEL.md`
 
 1. The sender resolves the recipient's device list (`/v1/profile/{id}/devices`,
    signed) and fetches key bundles for any device it has no session with.
-2. X3DH establishes the session; the Double Ratchet advances per message.
+2. An X3DH-like handshake establishes the session (signed by the initiator
+   since 1.8.58); the Double Ratchet advances per message.
 3. One ciphertext is produced **per recipient device**, plus one per the sender's
    own other devices.
 4. Each ciphertext is queued in the local outbox, then uploaded to `/v1/send`.
@@ -125,9 +134,12 @@ while the defects it lists are open; the ones with security impact are in
 
 ## Groups (rooms)
 
-Rooms have a membership list on the relay and a sender key per room. A room
-message is encrypted once under the sender key rather than once per member,
-which is what makes larger rooms possible.
+Rooms have a membership list on the relay and a sender key per room. When every
+member's devices support it, a room message is encrypted once under the sender
+key rather than once per member, which is what makes larger rooms possible;
+otherwise the sender falls back to one pairwise ciphertext per device. The
+membership list itself is not signed — the relay decides who is in a room, and
+the threat model says what that allows.
 
 **Rooms are less protected than one-to-one conversations, and we say so.** The
 gate that blocks sending to unverified devices is wired into every one-to-one
@@ -135,11 +147,20 @@ path and none of the room paths.
 
 ## Calls
 
-WebRTC with DTLS-SRTP. ICE servers and the network policy come from the relay
-(`/v1/ice/{device}`); STUN and TURN run on our own coturn. The policy can be
-`p2p_preferred`, `relay_preferred` or `relay_only`; production uses
-`relay_preferred`, and a per-user setting can force `relay_only` to hide the
-caller's address at the cost of latency.
+**One-to-one calls:** WebRTC with DTLS-SRTP, directly between the two devices.
+Offer, answer and ICE candidates travel inside the end-to-end encrypted channel.
+ICE servers and the network policy come from the relay (`/v1/ice/{device}`);
+STUN and TURN run on our own coturn. The policy can be `p2p_preferred`,
+`relay_preferred` or `relay_only`. Production uses `relay_preferred`, which only
+puts TURN first in the list — the ICE transport policy stays `all`, so the other
+party sees your address. A per-user setting forces `relay_only` to hide it, at
+the cost of latency.
+
+**Group calls:** audio, video and screen sharing go through our self-hosted
+LiveKit media server (SFU) on the same host. They are encrypted in transit
+between each device and the server, **not end to end**: the server can decode
+them. End-to-end encryption for group calls is the next piece of work on
+calls.
 
 ## Backup
 

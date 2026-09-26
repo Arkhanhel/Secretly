@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'dart:convert' show JsonUtf8Encoder, base64Decode;
+
 import '../security/restore_payload_validation.dart'
   show validateSafeBackupDbSnapshot, validateSafeBackupFiles, validateServerBindingValue;
 import '../security/secure_secrets.dart' show SecureSecrets;
@@ -34,6 +36,7 @@ class DesktopLinkRequest {
     required this.createdAtMs,
     required this.expiresAtMs,
     required this.status,
+    this.identityKeyB64 = '',
   });
 
   final String requestId;
@@ -44,6 +47,10 @@ class DesktopLinkRequest {
   final int createdAtMs;
   final int expiresAtMs;
   final String status;
+
+  /// A (26.09.2026): открытый ключ личности этого ПК — едет в QR, чтобы
+  /// телефон сверил его с ключом на сервере. Пусто — заявка старого формата.
+  final String identityKeyB64;
 
   bool get isAwaitingDecision => status == 'pending' || status == 'scanned';
 
@@ -58,6 +65,7 @@ class DesktopLinkRequest {
     int? createdAtMs,
     int? expiresAtMs,
     String? status,
+    String? identityKeyB64,
   }) {
     return DesktopLinkRequest(
       requestId: requestId ?? this.requestId,
@@ -68,6 +76,7 @@ class DesktopLinkRequest {
       createdAtMs: createdAtMs ?? this.createdAtMs,
       expiresAtMs: expiresAtMs ?? this.expiresAtMs,
       status: status ?? this.status,
+      identityKeyB64: identityKeyB64 ?? this.identityKeyB64,
     );
   }
 
@@ -81,6 +90,7 @@ class DesktopLinkRequest {
       'created_at_ms': createdAtMs,
       'expires_at_ms': expiresAtMs,
       'status': status,
+      if (identityKeyB64.isNotEmpty) 'identity_key_b64': identityKeyB64,
     };
   }
 
@@ -115,6 +125,7 @@ class DesktopLinkRequest {
       createdAtMs: createdAtMs,
       expiresAtMs: expiresAtMs,
       status: status.isEmpty ? 'pending' : status,
+      identityKeyB64: ((m['identity_key_b64'] as String?) ?? '').trim(),
     );
   }
 }
@@ -128,6 +139,7 @@ class DesktopLinkQrPayload {
     required this.deviceLabel,
     required this.expiresAtMs,
     required this.serverBinding,
+    this.identityKeyB64 = '',
   });
 
   final String requestId;
@@ -137,6 +149,9 @@ class DesktopLinkQrPayload {
   final String deviceLabel;
   final int? expiresAtMs;
   final String serverBinding;
+
+  /// A (26.09.2026): ключ личности ПК из QR. Пусто — QR старого ПК.
+  final String identityKeyB64;
 
   bool isExpiredAt(int nowMs) => expiresAtMs != null && nowMs > expiresAtMs!;
 
@@ -164,8 +179,115 @@ class DesktopLinkQrPayload {
       deviceLabel: (parsed['device_label'] ?? '').trim(),
       expiresAtMs: int.tryParse((parsed['expires_at_ms'] ?? '').trim()),
       serverBinding: (parsed['server_binding'] ?? '').trim(),
+      identityKeyB64: (parsed['identity_key'] ?? '').trim(),
     );
   }
+}
+
+/// A (26.09.2026): ключ ПК из QR против ключа, что отдаёт сервер ключей.
+///
+/// Пакет привязки — вся переписка и ключ шифрования данных — шифруется на ключ
+/// ПК. Раньше этот ключ брался только у сервера: подменённый сервер получил бы
+/// всё. QR показан на экране самого ПК, поэтому совпадение с ним — настоящая
+/// проверка (так же у Signal), и строгий режим такому ПК доверяет.
+enum DesktopLinkIdentityCheck { verified, mismatch, notProvided, serverKeyMissing }
+
+DesktopLinkIdentityCheck checkDesktopLinkIdentity({
+  required String qrKeyB64,
+  required String? serverKeyB64,
+}) {
+  final qr = qrKeyB64.trim();
+  if (qr.isEmpty) return DesktopLinkIdentityCheck.notProvided;
+  final server = (serverKeyB64 ?? '').trim();
+  if (server.isEmpty) return DesktopLinkIdentityCheck.serverKeyMissing;
+  try {
+    final a = base64Decode(qr);
+    final b = base64Decode(server);
+    if (a.isEmpty || a.length != b.length) {
+      return DesktopLinkIdentityCheck.mismatch;
+    }
+    var diff = 0;
+    for (var i = 0; i < a.length; i++) {
+      diff |= a[i] ^ b[i];
+    }
+    return diff == 0
+        ? DesktopLinkIdentityCheck.verified
+        : DesktopLinkIdentityCheck.mismatch;
+  } catch (_) {
+    return DesktopLinkIdentityCheck.mismatch;
+  }
+}
+
+/// B (26.09.2026): бюджет медиа при привязке ПК.
+///
+/// Привязка складывала ВСЮ медиатеку в память (base64 → JSON → байты — три
+/// копии), и iPhone падал с «Out of memory». Теперь не больше [maxTotalBytes],
+/// файл крупнее [maxFileBytes] пропускается; счётчики — для пометки
+/// «перенесено не всё».
+class DesktopLinkMediaBudget {
+  DesktopLinkMediaBudget({
+    int maxTotalBytes = defaultMaxTotalBytes,
+    this.maxFileBytes = defaultMaxFileBytes,
+  }) : _maxTotalBytes = maxTotalBytes;
+
+  static const int defaultMaxTotalBytes = 48 * 1024 * 1024;
+  static const int defaultMaxFileBytes = 12 * 1024 * 1024;
+
+  int _maxTotalBytes;
+  int get maxTotalBytes => _maxTotalBytes;
+  final int maxFileBytes;
+  int usedBytes = 0;
+  int included = 0;
+  int skipped = 0;
+  int skippedBytes = 0;
+
+  /// Взять файл размером [bytes]? Да — место занято; нет — учтён пропуск.
+  bool admit(int bytes) {
+    if (bytes > maxFileBytes || usedBytes + bytes > maxTotalBytes) {
+      skipped += 1;
+      skippedBytes += bytes;
+      return false;
+    }
+    usedBytes += bytes;
+    included += 1;
+    return true;
+  }
+
+  /// Весь пакет едет ОДНИМ вложением под потолком [attachmentCeilingBytes]
+  /// (бесплатный — 100 МиБ). Снимок базы в нём не входит в бюджет медиа,
+  /// поэтому медиа сжимается до остатка: base64 раздувает байты на треть,
+  /// плюс запас на ключи JSON, контакты и настройки. Иначе у кого тяжёлая
+  /// база, вместо «Out of memory» было бы «вложение слишком большое».
+  void fitUnderAttachmentCeiling({
+    required int attachmentCeilingBytes,
+    required int otherPayloadBytes,
+  }) {
+    const reserveBytes = 2 * 1024 * 1024;
+    final room = attachmentCeilingBytes - otherPayloadBytes - reserveBytes;
+    final rawRoom = room <= 0 ? 0 : room * 3 ~/ 4;
+    if (rawRoom < _maxTotalBytes) _maxTotalBytes = rawRoom;
+  }
+}
+
+/// Длина [value] в JSON (UTF-8) — без сборки всей строки в памяти.
+int desktopLinkJsonUtf8Length(Object? value) {
+  final counter = _CountingByteSink();
+  final sink = JsonUtf8Encoder().startChunkedConversion(counter);
+  sink.add(value);
+  sink.close();
+  return counter.count;
+}
+
+class _CountingByteSink implements Sink<List<int>> {
+  int count = 0;
+
+  @override
+  void add(List<int> chunk) {
+    count += chunk.length;
+  }
+
+  @override
+  void close() {}
 }
 
 class DesktopLinkSyncPayload {

@@ -2593,6 +2593,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopCallEncrypted => 'Созвон защищён сквозным шифрованием';
 
   @override
+  String get desktopRoomCallTransportEncrypted => 'Шифруется при передаче до нашего медиасервера — пока не сквозное';
+
+  @override
   String desktopCallDurationOnAir(Object duration, Object count) {
     return '$duration · $count в эфире';
   }
@@ -3221,7 +3224,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopPrivacyEncryption => 'Шифрование';
 
   @override
-  String get desktopPrivacyEncryptionHint => 'Все сообщения и звонки защищены сквозным шифрованием. Ключи находятся только на ваших устройствах.';
+  String get desktopPrivacyEncryptionHint => 'Сообщения, файлы и звонки один на один защищены сквозным шифрованием; ключи — только на ваших устройствах. Групповые звонки пока шифруются только при передаче.';
 
   @override
   String get desktopPrivacyE2eeActive => 'Сквозное шифрование активно';
@@ -3230,7 +3233,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopPrivacyWhoSees => 'Кто видит';
 
   @override
-  String get desktopPrivacyWhoSeesHint => 'Те же настройки видимости, что и в мобильном приложении.';
+  String get desktopPrivacyWhoSeesHint => 'Те же настройки видимости, что и в телефоне. «Контакты» соблюдает приложение; сервер гарантирует только «Никто».';
 
   @override
   String get desktopPrivacyVisibility => 'Видимость';
@@ -3254,7 +3257,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopPrivacyAutoDelete => 'Удалить мой аккаунт';
 
   @override
-  String get desktopPrivacyAutoDeleteHint => 'Если вы не заходите дольше выбранного срока, аккаунт и все сообщения удаляются автоматически. Отсчёт сбрасывается при каждом входе.';
+  String get desktopPrivacyAutoDeleteHint => 'Если вы не заходите дольше выбранного срока, с наших серверов удаляются аккаунт, ключи, серверная копия и очереди сообщений. Отсчёт сбрасывается при каждом входе.';
 
   @override
   String get desktopPrivacyIfAbsent => 'Если не захожу';
@@ -3599,7 +3602,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get desktopAboutTagline => 'Защищённый мессенджер с end-to-end шифрованием. Без облака. Без рекламы. Открытый исходный код.';
+  String get desktopAboutTagline => 'Мессенджер со сквозным шифрованием. Без рекламы. Исходный код — AGPL-3.0.';
 
   @override
   String get desktopAboutLicences => 'Лицензии';
@@ -3645,7 +3648,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopSecurityE2ee => 'Сквозное шифрование';
 
   @override
-  String get desktopSecurityE2eeHint => 'Все сообщения, звонки и файлы шифруются на вашем устройстве. Ключи не покидают ваши устройства — сервер видит только шифртекст.';
+  String get desktopSecurityE2eeHint => 'Сообщения, файлы и звонки один на один шифруются на вашем устройстве, ключи не покидают ваши устройства. Сервер не читает содержимое, но видит служебные данные — например, кто кому пишет и когда. Групповые звонки пока шифруются только при передаче.';
 
   @override
   String get desktopSecurityVerifiedDevices => 'Проверенные устройства';
@@ -4488,7 +4491,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopContactCopyIdShort => 'Скопировать ID';
 
   @override
-  String get desktopContactDisappearing => 'Исчезающие сообщения';
+  String get desktopContactDisappearing => 'Автоудаление на моих устройствах';
 
   @override
   String get desktopContactDeleteChat => 'Удалить чат';
@@ -4553,7 +4556,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get desktopThreadDisappearingOn => 'Исчезающие сообщения включены';
+  String get desktopThreadDisappearingOn => 'Автоудаление включено — только на моих устройствах';
 
   @override
   String get desktopThreadCallAction => 'Позвонить';

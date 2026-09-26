@@ -16,11 +16,24 @@ The application uses third-party software under its own licences. Listed below
 are the components whose terms require attribution.
 
 FFmpeg (via ffmpeg_kit_flutter_new)
-    GNU Lesser General Public License version 3.0
     https://ffmpeg.org
-    Used for video processing. The library is linked dynamically and can be
-    replaced with your own build — the LGPL requires that this remain possible.
-    The build with the "-gpl" suffix is deliberately not used.
+    Used for video processing: trimming, video messages, compression and
+    animated avatars.
+
+    Current builds use the "full-gpl" variant of FFmpegKit on every platform.
+    That build includes GPL-licensed components, notably the x264 H.264
+    encoder, so FFmpeg as shipped in our binaries is licensed under the GNU
+    General Public License, not the LGPL. An earlier version of this notice
+    said the GPL build was not used; that was wrong, and we corrected it on
+    26 September 2026.
+
+    The GPL applies to those components as written. The additional permission
+    in LICENSE-EXCEPTION is ours to give only for our own code; it does not
+    extend to FFmpeg or x264. We are moving to the LGPL variant, with the
+    platforms' own hardware video encoders in place of x264. Until then, the
+    corresponding source of each release is the tagged source in this
+    repository together with the published FFmpegKit sources for the versions
+    pinned in pubspec.lock, Podfile.lock and windows/CMakeLists.txt.
 
 whisper_cpp_flutter_plus
     MIT License, Copyright (c) 2026 Gurwinder Singh

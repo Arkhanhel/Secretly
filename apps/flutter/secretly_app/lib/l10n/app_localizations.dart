@@ -4954,6 +4954,12 @@ abstract class AppLocalizations {
   /// **'The call is end-to-end encrypted'**
   String get desktopCallEncrypted;
 
+  /// No description provided for @desktopRoomCallTransportEncrypted.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted in transit to our media server — not end-to-end yet'**
+  String get desktopRoomCallTransportEncrypted;
+
   /// No description provided for @desktopCallDurationOnAir.
   ///
   /// In en, this message translates to:
@@ -6181,7 +6187,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopPrivacyEncryptionHint.
   ///
   /// In en, this message translates to:
-  /// **'Every message and call is end-to-end encrypted. The keys live only on your devices.'**
+  /// **'Messages, files and one-to-one calls are end-to-end encrypted; the keys live only on your devices. Group calls are encrypted only in transit for now.'**
   String get desktopPrivacyEncryptionHint;
 
   /// No description provided for @desktopPrivacyE2eeActive.
@@ -6199,7 +6205,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopPrivacyWhoSeesHint.
   ///
   /// In en, this message translates to:
-  /// **'The same visibility settings as in the mobile application.'**
+  /// **'The same visibility settings as on your phone. “Contacts” is applied by the app; the server enforces only “Nobody”.'**
   String get desktopPrivacyWhoSeesHint;
 
   /// No description provided for @desktopPrivacyVisibility.
@@ -6247,7 +6253,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopPrivacyAutoDeleteHint.
   ///
   /// In en, this message translates to:
-  /// **'If you do not sign in for longer than the chosen period, the account and every message are deleted automatically. The countdown resets on each sign-in.'**
+  /// **'If you don\'t sign in for longer than the chosen period, your account, keys, server backup and message queues are deleted from our servers. The countdown resets on each sign-in.'**
   String get desktopPrivacyAutoDeleteHint;
 
   /// No description provided for @desktopPrivacyIfAbsent.
@@ -6853,7 +6859,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopAboutTagline.
   ///
   /// In en, this message translates to:
-  /// **'A secure messenger with end-to-end encryption. No cloud. No advertising. Open source.'**
+  /// **'An end-to-end encrypted messenger. No ads. Source code under AGPL-3.0.'**
   String get desktopAboutTagline;
 
   /// No description provided for @desktopAboutLicences.
@@ -6937,7 +6943,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopSecurityE2eeHint.
   ///
   /// In en, this message translates to:
-  /// **'Every message, call and file is encrypted on your device. The keys never leave your devices — the server sees only ciphertext.'**
+  /// **'Messages, files and one-to-one calls are encrypted on your device, and the keys never leave your devices. The server can\'t read the content but does see service data, such as who writes to whom and when. Group calls are encrypted only in transit for now.'**
   String get desktopSecurityE2eeHint;
 
   /// No description provided for @desktopSecurityVerifiedDevices.
@@ -8419,7 +8425,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopContactDisappearing.
   ///
   /// In en, this message translates to:
-  /// **'Disappearing messages'**
+  /// **'Auto-delete on my devices'**
   String get desktopContactDisappearing;
 
   /// No description provided for @desktopContactDeleteChat.
@@ -8521,7 +8527,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopThreadDisappearingOn.
   ///
   /// In en, this message translates to:
-  /// **'Disappearing messages are on'**
+  /// **'Auto-delete is on — on my devices only'**
   String get desktopThreadDisappearingOn;
 
   /// No description provided for @desktopThreadCallAction.

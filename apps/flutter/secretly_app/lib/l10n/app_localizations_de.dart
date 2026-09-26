@@ -2587,6 +2587,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get desktopCallEncrypted => 'Der Anruf ist Ende-zu-Ende-verschlüsselt';
 
   @override
+  String get desktopRoomCallTransportEncrypted => 'Auf dem Weg zu unserem Medienserver verschlüsselt – noch nicht Ende-zu-Ende';
+
+  @override
   String desktopCallDurationOnAir(Object duration, Object count) {
     return '$duration · $count live';
   }
@@ -3215,7 +3218,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get desktopPrivacyEncryption => 'Verschlüsselung';
 
   @override
-  String get desktopPrivacyEncryptionHint => 'Alle Nachrichten und Anrufe sind Ende-zu-Ende-verschlüsselt. Die Schlüssel liegen nur auf deinen Geräten.';
+  String get desktopPrivacyEncryptionHint => 'Nachrichten, Dateien und Einzelanrufe sind Ende-zu-Ende-verschlüsselt; die Schlüssel liegen nur auf deinen Geräten. Gruppenanrufe werden vorerst nur auf dem Transportweg verschlüsselt.';
 
   @override
   String get desktopPrivacyE2eeActive => 'Ende-zu-Ende-Verschlüsselung ist aktiv';
@@ -3224,7 +3227,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get desktopPrivacyWhoSees => 'Wer sieht was';
 
   @override
-  String get desktopPrivacyWhoSeesHint => 'Dieselben Sichtbarkeitseinstellungen wie in der mobilen App.';
+  String get desktopPrivacyWhoSeesHint => 'Dieselben Sichtbarkeitseinstellungen wie auf deinem Telefon. „Kontakte“ setzt die App um; der Server erzwingt nur „Niemand“.';
 
   @override
   String get desktopPrivacyVisibility => 'Sichtbarkeit';
@@ -3248,7 +3251,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get desktopPrivacyAutoDelete => 'Mein Konto löschen';
 
   @override
-  String get desktopPrivacyAutoDeleteHint => 'Wenn du dich länger als die gewählte Frist nicht anmeldest, werden Konto und alle Nachrichten automatisch gelöscht. Der Zähler beginnt bei jeder Anmeldung neu.';
+  String get desktopPrivacyAutoDeleteHint => 'Wenn du dich länger als die gewählte Frist nicht anmeldest, werden Konto, Schlüssel, Server-Backup und Nachrichtenwarteschlangen von unseren Servern gelöscht. Der Zähler beginnt bei jeder Anmeldung neu.';
 
   @override
   String get desktopPrivacyIfAbsent => 'Wenn ich mich nicht anmelde';
@@ -3593,7 +3596,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get desktopAboutTagline => 'Ein sicherer Messenger mit Ende-zu-Ende-Verschlüsselung. Keine Cloud. Keine Werbung. Offener Quellcode.';
+  String get desktopAboutTagline => 'Ein Ende-zu-Ende-verschlüsselter Messenger. Keine Werbung. Quellcode unter AGPL-3.0.';
 
   @override
   String get desktopAboutLicences => 'Lizenzen';
@@ -3639,7 +3642,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get desktopSecurityE2ee => 'Ende-zu-Ende-Verschlüsselung';
 
   @override
-  String get desktopSecurityE2eeHint => 'Alle Nachrichten, Anrufe und Dateien werden auf deinem Gerät verschlüsselt. Die Schlüssel verlassen deine Geräte nie – der Server sieht nur Chiffretext.';
+  String get desktopSecurityE2eeHint => 'Nachrichten, Dateien und Einzelanrufe werden auf deinem Gerät verschlüsselt, die Schlüssel verlassen deine Geräte nie. Der Server kann keine Inhalte lesen, sieht aber Verbindungsdaten – etwa, wer wem wann schreibt. Gruppenanrufe werden vorerst nur auf dem Transportweg verschlüsselt.';
 
   @override
   String get desktopSecurityVerifiedDevices => 'Verifizierte Geräte';
@@ -4480,7 +4483,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get desktopContactCopyIdShort => 'ID kopieren';
 
   @override
-  String get desktopContactDisappearing => 'Verschwindende Nachrichten';
+  String get desktopContactDisappearing => 'Automatisch löschen auf meinen Geräten';
 
   @override
   String get desktopContactDeleteChat => 'Chat löschen';
@@ -4545,7 +4548,7 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get desktopThreadDisappearingOn => 'Verschwindende Nachrichten sind an';
+  String get desktopThreadDisappearingOn => 'Automatisches Löschen ist an – nur auf meinen Geräten';
 
   @override
   String get desktopThreadCallAction => 'Anrufen';

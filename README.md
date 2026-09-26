@@ -32,25 +32,30 @@ can check yourself, which is most of the reason the code is here.
 
 ## What is in the repository
 
-About 478,000 lines of our own code, counted with `wc -l`:
+About 513,000 lines of our own code, counted with `wc -l` over tracked files on
+26 September 2026:
 
 | | lines |
 |---|---|
-| Client, Dart and Flutter — phone and desktop share one codebase | 332,931 |
-| Client tests | 86,739 |
-| `server/relay` — message transport, rooms, calls, blob storage | 34,772 |
-| `server/keys` — identities, prekey bundles, encrypted backups, entitlements | 13,560 |
-| Android, iOS, macOS and Windows platform code | 9,606 |
+| Client, Dart and Flutter — phone and desktop share one codebase | 354,091 |
+| Client tests | 97,138 |
+| `server/relay` — message transport, rooms, calls, blob storage | 35,946 |
+| `server/keys` — identities, prekey bundles, encrypted backups, entitlements | 15,885 |
+| Android, iOS, macOS and Windows platform code | 9,934 |
 | `core/rust/secretly_core` — crypto primitives shared over FFI | 201 |
 
-Generated localisations add another 22,000 lines and are not counted above.
-Neither is the vendored code under `third_party/`, which is about 484,000 lines
-on its own — mostly whisper.cpp and ggml for on-device speech recognition. The
-interface ships in eight languages.
+Generated localisations add another 59,000 lines and are not counted above.
+Neither is the vendored code under `third_party/` — about 425,000 lines of
+C, C++ and Objective-C source, mostly whisper.cpp and ggml for on-device speech
+recognition. The interface ships in eight localisations.
 
-Encryption is Double Ratchet with X3DH key agreement and Ed25519 identities.
-Media and archives use XChaCha20-Poly1305, the local database is SQLCipher,
-calls are DTLS-SRTP.
+Encryption is a Double Ratchet with an X3DH-like key agreement and Ed25519
+identities; since 1.8.58 the initiator signs the handshake. Messages and media
+use XChaCha20-Poly1305. Server backups and the recovery kit use AES-256-GCM
+with a key derived by PBKDF2-HMAC-SHA256. The local database is SQLCipher on
+phones and SQLite3 Multiple Ciphers on desktop. One-to-one calls are DTLS-SRTP,
+end to end. Group calls go through our own LiveKit media server and are, for
+now, encrypted only in transit — see the threat model.
 
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the place to start reading.
 
@@ -59,16 +64,19 @@ calls are DTLS-SRTP.
 Please read [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) before you conclude
 anything about what this protects. It lists what we defend against, and section
 5 lists what we do not: there is no certificate pinning, the relay sees metadata,
-key material is not zeroed because Dart is garbage-collected, and the Double
-Ratchet implementation is ours rather than a reviewed library. We would rather
-you found that in our own documentation than in a blog post.
+group calls are not yet end-to-end encrypted, key material is not zeroed because
+Dart is garbage-collected, and the Double Ratchet implementation is ours rather
+than a reviewed library. We would rather you found that in our own
+documentation than in a blog post.
 
-Two things we fixed after finding them ourselves, both described in the threat
-model: until September 2026 the initiator of a session was not authenticated by
-a signature, so a malicious server could impersonate a device (1.8.58 and later
-sign the handshake); and the app sent the first characters of each message to
-the server for notification previews (the relay discards them since 24 September
-2026, and 1.8.59 no longer sends them).
+Two problems we found ourselves, both described in the threat model. Until
+September 2026 the initiator of a session was not authenticated by a signature,
+so a malicious server could impersonate a device; since 1.8.58 the handshake is
+signed and a device that has signed once can no longer be impersonated, but
+unsigned handshakes from older app versions are still accepted — narrowed, not
+closed (section 5.10). And the app sent the first characters of each message to
+the server for notification previews; the relay discards them since 24 September
+2026, and 1.8.59 no longer sends them.
 
 No independent audit has been done. We will not say otherwise until one has.
 
@@ -115,6 +123,10 @@ addresses are passed at compile time, and without them the client talks to
 servers. [`docs/VERIFY.md`](docs/VERIFY.md) has the checksums of what we upload
 to the stores, and an honest account of why you cannot byte-compare them with
 what you installed.
+
+Every released build has a tag pointing at the exact source it was built from —
+for example `v1.8.61-630` for macOS, Windows and iOS 1.8.61 (630). The table in
+[`docs/VERIFY.md`](docs/VERIFY.md) maps each file to its tag.
 
 ## What is missing from this repository
 

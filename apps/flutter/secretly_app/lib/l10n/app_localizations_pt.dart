@@ -2587,6 +2587,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get desktopCallEncrypted => 'A chamada é cifrada de ponta a ponta';
 
   @override
+  String get desktopRoomCallTransportEncrypted => 'Cifrada em trânsito até ao nosso servidor de multimédia — ainda não de ponta a ponta';
+
+  @override
   String desktopCallDurationOnAir(Object duration, Object count) {
     return '$duration · $count no ar';
   }
@@ -3215,7 +3218,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get desktopPrivacyEncryption => 'Cifra';
 
   @override
-  String get desktopPrivacyEncryptionHint => 'Todas as mensagens e chamadas são cifradas de ponta a ponta. As chaves estão apenas nos seus dispositivos.';
+  String get desktopPrivacyEncryptionHint => 'As mensagens, os ficheiros e as chamadas individuais são cifrados de ponta a ponta; as chaves estão apenas nos seus dispositivos. Por agora, as chamadas de grupo são cifradas apenas em trânsito.';
 
   @override
   String get desktopPrivacyE2eeActive => 'A cifra de ponta a ponta está ativa';
@@ -3224,7 +3227,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get desktopPrivacyWhoSees => 'Quem vê';
 
   @override
-  String get desktopPrivacyWhoSeesHint => 'As mesmas definições de visibilidade da aplicação móvel.';
+  String get desktopPrivacyWhoSeesHint => 'As mesmas definições de visibilidade do seu telemóvel. «Contactos» é aplicado pela aplicação; o servidor só garante «Ninguém».';
 
   @override
   String get desktopPrivacyVisibility => 'Visibilidade';
@@ -3248,7 +3251,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get desktopPrivacyAutoDelete => 'Eliminar a minha conta';
 
   @override
-  String get desktopPrivacyAutoDeleteHint => 'Se não iniciar sessão durante mais tempo do que o prazo escolhido, a conta e todas as mensagens são eliminadas automaticamente. A contagem reinicia a cada início de sessão.';
+  String get desktopPrivacyAutoDeleteHint => 'Se não iniciar sessão durante mais tempo do que o prazo escolhido, a conta, as chaves, a cópia no servidor e as filas de mensagens são eliminadas dos nossos servidores. A contagem reinicia a cada início de sessão.';
 
   @override
   String get desktopPrivacyIfAbsent => 'Se não iniciar sessão';
@@ -3593,7 +3596,7 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get desktopAboutTagline => 'Um mensageiro seguro com cifra de ponta a ponta. Sem nuvem. Sem publicidade. Código aberto.';
+  String get desktopAboutTagline => 'Um mensageiro cifrado de ponta a ponta. Sem publicidade. Código-fonte sob AGPL-3.0.';
 
   @override
   String get desktopAboutLicences => 'Licenças';
@@ -3639,7 +3642,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get desktopSecurityE2ee => 'Cifra de ponta a ponta';
 
   @override
-  String get desktopSecurityE2eeHint => 'Todas as mensagens, chamadas e ficheiros são cifrados no seu dispositivo. As chaves nunca saem dos seus dispositivos — o servidor vê apenas texto cifrado.';
+  String get desktopSecurityE2eeHint => 'As mensagens, os ficheiros e as chamadas individuais são cifrados no seu dispositivo e as chaves nunca saem dos seus dispositivos. O servidor não consegue ler o conteúdo, mas vê dados de serviço, como quem escreve a quem e quando. Por agora, as chamadas de grupo são cifradas apenas em trânsito.';
 
   @override
   String get desktopSecurityVerifiedDevices => 'Dispositivos verificados';
@@ -4480,7 +4483,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get desktopContactCopyIdShort => 'Copiar ID';
 
   @override
-  String get desktopContactDisappearing => 'Mensagens que desaparecem';
+  String get desktopContactDisappearing => 'Eliminação automática nos meus dispositivos';
 
   @override
   String get desktopContactDeleteChat => 'Eliminar a conversa';
@@ -4545,7 +4548,7 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get desktopThreadDisappearingOn => 'As mensagens que desaparecem estão ligadas';
+  String get desktopThreadDisappearingOn => 'A eliminação automática está ligada — apenas nos meus dispositivos';
 
   @override
   String get desktopThreadCallAction => 'Ligar';
@@ -8561,6 +8564,9 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String get desktopCallEncrypted => 'A chamada é criptografada de ponta a ponta';
 
   @override
+  String get desktopRoomCallTransportEncrypted => 'Criptografada em trânsito até nosso servidor de mídia — ainda não de ponta a ponta';
+
+  @override
   String desktopCallDurationOnAir(Object duration, Object count) {
     return '$duration · $count no ar';
   }
@@ -9189,7 +9195,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String get desktopPrivacyEncryption => 'Criptografia';
 
   @override
-  String get desktopPrivacyEncryptionHint => 'Todas as mensagens e chamadas são criptografadas de ponta a ponta. As chaves ficam apenas nos seus dispositivos.';
+  String get desktopPrivacyEncryptionHint => 'Mensagens, arquivos e chamadas individuais são criptografados de ponta a ponta; as chaves ficam apenas nos seus dispositivos. Por enquanto, as chamadas em grupo são criptografadas apenas em trânsito.';
 
   @override
   String get desktopPrivacyE2eeActive => 'A criptografia de ponta a ponta está ativa';
@@ -9198,7 +9204,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String get desktopPrivacyWhoSees => 'Quem vê';
 
   @override
-  String get desktopPrivacyWhoSeesHint => 'As mesmas configurações de visibilidade do aplicativo móvel.';
+  String get desktopPrivacyWhoSeesHint => 'As mesmas configurações de visibilidade do seu celular. “Contatos” é aplicado pelo aplicativo; o servidor só garante “Ninguém”.';
 
   @override
   String get desktopPrivacyVisibility => 'Visibilidade';
@@ -9222,7 +9228,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String get desktopPrivacyAutoDelete => 'Excluir minha conta';
 
   @override
-  String get desktopPrivacyAutoDeleteHint => 'Se você não entrar por mais tempo que o prazo escolhido, a conta e todas as mensagens são excluídas automaticamente. A contagem reinicia a cada entrada.';
+  String get desktopPrivacyAutoDeleteHint => 'Se você não entrar por mais tempo que o prazo escolhido, a conta, as chaves, a cópia no servidor e as filas de mensagens são excluídas dos nossos servidores. A contagem reinicia a cada entrada.';
 
   @override
   String get desktopPrivacyIfAbsent => 'Se eu não entrar';
@@ -9567,7 +9573,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   }
 
   @override
-  String get desktopAboutTagline => 'Um mensageiro seguro com criptografia de ponta a ponta. Sem nuvem. Sem publicidade. Código aberto.';
+  String get desktopAboutTagline => 'Um mensageiro criptografado de ponta a ponta. Sem publicidade. Código-fonte sob AGPL-3.0.';
 
   @override
   String get desktopAboutLicences => 'Licenças';
@@ -9613,7 +9619,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String get desktopSecurityE2ee => 'Criptografia de ponta a ponta';
 
   @override
-  String get desktopSecurityE2eeHint => 'Todas as mensagens, chamadas e arquivos são criptografados no seu dispositivo. As chaves nunca saem dos seus dispositivos — o servidor vê apenas texto cifrado.';
+  String get desktopSecurityE2eeHint => 'Mensagens, arquivos e chamadas individuais são criptografados no seu dispositivo, e as chaves nunca saem dos seus dispositivos. O servidor não consegue ler o conteúdo, mas vê dados de serviço, como quem escreve para quem e quando. Por enquanto, as chamadas em grupo são criptografadas apenas em trânsito.';
 
   @override
   String get desktopSecurityVerifiedDevices => 'Dispositivos verificados';
@@ -10454,7 +10460,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   String get desktopContactCopyIdShort => 'Copiar ID';
 
   @override
-  String get desktopContactDisappearing => 'Mensagens que desaparecem';
+  String get desktopContactDisappearing => 'Exclusão automática nos meus dispositivos';
 
   @override
   String get desktopContactDeleteChat => 'Excluir a conversa';
@@ -10519,7 +10525,7 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
   }
 
   @override
-  String get desktopThreadDisappearingOn => 'As mensagens que desaparecem estão ligadas';
+  String get desktopThreadDisappearingOn => 'A exclusão automática está ligada — apenas nos meus dispositivos';
 
   @override
   String get desktopThreadCallAction => 'Ligar';

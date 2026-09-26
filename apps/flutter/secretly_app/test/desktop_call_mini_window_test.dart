@@ -335,4 +335,25 @@ void main() {
       );
     }
   });
+
+  // 26.09.2026: у чипа было умолчание `secure = true`, и мини-окно группового
+  // созвона (LiveKit без E2EE) рисовало зелёный замок. Умолчания больше нет,
+  // а групповой созвон передаёт `false`, пока нет E2EE созвонов (ТЗ, часть ЗВ).
+  test('🔴 групповой созвон в мини-окне без замка сквозного шифрования', () {
+    final chip = File('lib/ui/desktop/calls/call_mini_window.dart')
+        .readAsStringSync();
+    expect(chip.contains('required this.secure,'), isTrue);
+    expect(chip.contains('this.secure = true'), isFalse);
+    final host = File('lib/ui/desktop/calls/call_mini_host.dart')
+        .readAsStringSync();
+    expect(host.contains('DesktopCallMiniChip(label: status, secure: false)'), isTrue);
+  });
+
+  testWidgets('чип без secure не рисует замок', (tester) async {
+    await tester.pumpWidget(
+      _host(const DesktopCallMiniChip(label: '00:12', secure: false)),
+    );
+    expect(find.text('00:12'), findsOneWidget);
+    expect(find.byType(Icon), findsNothing);
+  });
 }

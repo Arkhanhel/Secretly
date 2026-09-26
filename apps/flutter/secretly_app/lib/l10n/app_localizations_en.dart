@@ -2587,6 +2587,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get desktopCallEncrypted => 'The call is end-to-end encrypted';
 
   @override
+  String get desktopRoomCallTransportEncrypted => 'Encrypted in transit to our media server — not end-to-end yet';
+
+  @override
   String desktopCallDurationOnAir(Object duration, Object count) {
     return '$duration · $count on air';
   }
@@ -3215,7 +3218,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get desktopPrivacyEncryption => 'Encryption';
 
   @override
-  String get desktopPrivacyEncryptionHint => 'Every message and call is end-to-end encrypted. The keys live only on your devices.';
+  String get desktopPrivacyEncryptionHint => 'Messages, files and one-to-one calls are end-to-end encrypted; the keys live only on your devices. Group calls are encrypted only in transit for now.';
 
   @override
   String get desktopPrivacyE2eeActive => 'End-to-end encryption is active';
@@ -3224,7 +3227,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get desktopPrivacyWhoSees => 'Who sees';
 
   @override
-  String get desktopPrivacyWhoSeesHint => 'The same visibility settings as in the mobile application.';
+  String get desktopPrivacyWhoSeesHint => 'The same visibility settings as on your phone. “Contacts” is applied by the app; the server enforces only “Nobody”.';
 
   @override
   String get desktopPrivacyVisibility => 'Visibility';
@@ -3248,7 +3251,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get desktopPrivacyAutoDelete => 'Delete my account';
 
   @override
-  String get desktopPrivacyAutoDeleteHint => 'If you do not sign in for longer than the chosen period, the account and every message are deleted automatically. The countdown resets on each sign-in.';
+  String get desktopPrivacyAutoDeleteHint => 'If you don\'t sign in for longer than the chosen period, your account, keys, server backup and message queues are deleted from our servers. The countdown resets on each sign-in.';
 
   @override
   String get desktopPrivacyIfAbsent => 'If I do not sign in';
@@ -3593,7 +3596,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get desktopAboutTagline => 'A secure messenger with end-to-end encryption. No cloud. No advertising. Open source.';
+  String get desktopAboutTagline => 'An end-to-end encrypted messenger. No ads. Source code under AGPL-3.0.';
 
   @override
   String get desktopAboutLicences => 'Licences';
@@ -3639,7 +3642,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get desktopSecurityE2ee => 'End-to-end encryption';
 
   @override
-  String get desktopSecurityE2eeHint => 'Every message, call and file is encrypted on your device. The keys never leave your devices — the server sees only ciphertext.';
+  String get desktopSecurityE2eeHint => 'Messages, files and one-to-one calls are encrypted on your device, and the keys never leave your devices. The server can\'t read the content but does see service data, such as who writes to whom and when. Group calls are encrypted only in transit for now.';
 
   @override
   String get desktopSecurityVerifiedDevices => 'Verified devices';
@@ -4480,7 +4483,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get desktopContactCopyIdShort => 'Copy ID';
 
   @override
-  String get desktopContactDisappearing => 'Disappearing messages';
+  String get desktopContactDisappearing => 'Auto-delete on my devices';
 
   @override
   String get desktopContactDeleteChat => 'Delete the chat';
@@ -4545,7 +4548,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get desktopThreadDisappearingOn => 'Disappearing messages are on';
+  String get desktopThreadDisappearingOn => 'Auto-delete is on — on my devices only';
 
   @override
   String get desktopThreadCallAction => 'Call';

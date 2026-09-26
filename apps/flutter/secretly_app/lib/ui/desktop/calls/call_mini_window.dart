@@ -433,13 +433,15 @@ class DesktopCallMiniChip extends StatelessWidget {
   const DesktopCallMiniChip({
     super.key,
     required this.label,
-    this.secure = true,
+    required this.secure,
   });
 
   final String label;
 
-  /// Замок — только когда разговор уже зашифрован и идёт. Пока звоним,
-  /// замка нет: шифровать ещё нечего.
+  /// Замок — только когда разговор уже зашифрован сквозным шифрованием и
+  /// идёт. Пока звоним, замка нет: шифровать ещё нечего. Умолчания нет
+  /// намеренно: до 26.09.2026 оно было `true`, и групповой созвон без E2EE
+  /// показывал зелёный замок. Каждый вызов решает сам.
   final bool secure;
 
   @override

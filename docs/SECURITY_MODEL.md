@@ -16,7 +16,14 @@
 >   there is no certificate pinning. SNI is bound to the real hostname even when
 >   DNS is bypassed, which is what "domain-pinned" was presumably describing.
 >
+>
 > Both are stated plainly in THREAT_MODEL §3.4 and §5.1.
+>
+> **Corrected again on 26 September 2026 against the code:** room calls are not
+> end-to-end encrypted; the database passphrase is random, not derived from the
+> identity key; the recovery kit uses 200 000 iterations; requests are signed in
+> `x-secretly-*` headers (there is no `Authorization: SKS1` header); the replay
+> window is ±5 minutes; push payloads are described as they are.
 
 ---
 
@@ -24,17 +31,17 @@
 
 | Threat | Mitigation |
 |--------|-----------|
-| Server reads messages | E2EE: server only stores opaque ciphertext envelopes per device_id |
+| Server reads messages | E2EE: the relay stores opaque ciphertext envelopes per device, plus routing metadata (THREAT_MODEL §5.2). Room calls are the exception — see *Call eavesdropping* |
 | MITM on key exchange | QR-based contact verification; identity fingerprint comparison. The session initiator signs the handshake with its identity key (C-2) |
 | Replay attacks | Double Ratchet: each message uses a fresh message key; nonce included in wire |
 | Key compromise (forward secrecy) | Double Ratchet provides forward secrecy (ratchet advances on each message) |
 | Key compromise (break-in recovery) | Double Ratchet provides break-in recovery via DH ratchet steps |
 | Unauthorized device registration | Ed25519 signatures: `publish_keys` requires proof-of-possession |
 | Server impersonation | TLS validated against the system root store. **No certificate pinning** — see THREAT_MODEL §5.1. SNI stays bound to the real hostname even when DNS is bypassed |
-| Local data theft | SQLCipher: all local DB encrypted at rest |
-| Backup leak | `SafeBackup`/`RecoveryKit` — archive encrypted with a **user-chosen password** (PBKDF2-HMAC-SHA256, 400 000 iterations), not with the identity key. Access-token remediation in progress — see THREAT_MODEL §3.4 |
-| Delivery tampering | ACK only after successful decrypt+apply; relay cannot forge `delivered` |
-| Call eavesdropping | SRTP via WebRTC (DTLS-SRTP); LiveKit for room calls (JWT-gated) |
+| Local data theft | The local database is encrypted at rest — SQLCipher on phones, SQLite3 Multiple Ciphers on desktop — with a random passphrase kept by the OS. Media files are regular files under the OS's storage encryption |
+| Backup leak | `SafeBackup`/`RecoveryKit` — archive encrypted with a **user-chosen password** (PBKDF2-HMAC-SHA256: 400 000 iterations for SafeBackup, 200 000 for RecoveryKit), not with the identity key. Access-token remediation in progress — see THREAT_MODEL §3.4 |
+| Delivery tampering | The `delivered` receipt is sent only after decrypt+apply, and the relay cannot forge it. The relay-level acknowledgement can come earlier: an undecryptable wire is acknowledged and quarantined so it does not block the mailbox |
+| Call eavesdropping | One-to-one: DTLS-SRTP end to end, signalling inside the E2EE channel. Room calls: LiveKit SFU, DTLS-SRTP to the server only — **not end-to-end**; the JWT controls who may join, not who can listen (THREAT_MODEL §3.5) |
 
 ---
 
@@ -44,31 +51,32 @@
 
 | Key | Algorithm | Purpose |
 |-----|-----------|---------|
-| Identity key | Ed25519 | Long-term signing identity |
-| Signed prekey | X25519 | Medium-term DH key, signed by identity key |
-| One-time prekeys | X25519 | Ephemeral DH (consumed per session init) |
-| Device key | Ed25519 | Per-device authentication to relay/keys |
+| Device identity key | Ed25519 | One key per device. Signs the signed prekey, handshakes (C-2) and requests to relay/keys; its fingerprint is what contact verification compares |
+| Signed prekey | X25519 | Medium-term DH key, signed by the device identity key. Not rotated yet (`spk_id` is always 1) |
+| One-time prekeys | X25519 | The server hands each out once; the private halves are not deleted after use yet |
+| Account key | Ed25519 | Certifies new devices of a profile. Certificates are recorded and counted, not yet required |
 
 ### Registration Flow
 
 ```
-AppSecurityManager.generateIdentity():
-  generate Ed25519 identity keypair
-  generate device Ed25519 keypair
-  generate signed X25519 prekey (signed with identity key)
-  generate N one-time prekeys
+DeviceKeys (apps/flutter/secretly_app/lib/security/device_keys.dart):
+  generate the device Ed25519 identity key (seed kept by the OS keychain/keystore)
+  generate the X25519 signed prekey, signed by the device identity key
+  generate one-time prekeys
 
-KeysClient.publishKeys(bundle):
-  POST /identity/publish
-  body: { identity_key_pub, device_key_pub, signed_prekey, prekeys[], sig }
-  → Keys server: verifies signature, stores bundle
-  → Keys server: keys_security_errors preflight (prod: requires REQUIRE_PROFILE_SECRET etc.)
+Keys server:
+  /v1/profile/create        → profile id and a profile secret; the server keeps
+                              only a hash of the secret
+  /v1/device/register_proof → a 2-minute challenge, answered with a signature
+                              over "SECRETLY-DEVICE-REGISTER-V1" and proof of the
+                              profile secret; the device's prekey bundle is then
+                              published under its device id
 ```
 
 ### Contact Discovery (QR)
 
 ```
-A shows QR:  { profile_id, identity_key_pub_b64, display_name?, qr_nonce }
+A shows QR:  { secretly_id, keys_base_url, device_id, identity_key_pub_b64, nickname? }
 B scans QR:
   addContact(profileId, identityKeyPub)
   → db.contactUpsert
@@ -84,7 +92,9 @@ A receives pairing introduction:
   → no UI notification (silent installation)
 ```
 
-Identity authenticity is NOT established by the ratchet handshake itself (see the corrected section below); it relies on the relay's sender stamp today and until Stage C-2 lands.
+Identity authenticity is NOT established by the key agreement itself (see the corrected section below). It rests on the relay's sender stamp (C-1) and, since 1.8.58, on handshake signatures (C-2).
+
+The safety number shown for a contact is the first 96 bits of SHA-256 over one device's identity key — a per-device fingerprint, not a two-party number.
 
 ---
 
@@ -144,7 +154,10 @@ Consequences and mitigations:
   requires changing its key in the open.
 - **Server-side switch.** A separately signed `handshake_auth` block in
   `/v1/config` can lift the rejections (not the checks) if a field problem
-  appears. A silent or stale server changes nothing.
+  appears. A silent or stale server changes nothing — but the block is signed
+  with the configuration key the keys server itself holds, so a malicious
+  server could lift the rejections. Builds released after unsigned handshakes
+  are refused for everyone will ignore the block.
 - **Earlier mitigations remain (2026-09-17):**
   - the relay stamps the authenticated sender (`from_device_id`) on every queued
     message, and the client drops a wire whose header names someone else (C-1);
@@ -153,6 +166,12 @@ Consequences and mitigations:
     is gone;
   - room messages are signed per sender generation (K-1).
 - **Still open:**
+  - the legacy `SKS1` wire still opens new sessions without any signature
+    check, so the server can present a message from any device id. Replies go
+    over the current format, so it cannot read them. New sessions from `SKS1`
+    are refused in the next phone release;
+  - a wire without the relay's sender stamp is still accepted; refusing it
+    (C-1, stage 1b) is planned no earlier than 30 days after 17 September 2026;
   - a device that has not yet shown it signs (an older build) can be
     impersonated by an unsigned handshake. This closes as devices update, and
     fully only once unsigned handshakes are refused for everyone;
@@ -187,7 +206,7 @@ decryptFromWire(wire):
   → throws on any failure (fail-closed: no ACK, message dropped)
 ```
 
-**Fail-closed invariant:** no ACK is sent to relay until `decryptFromWire` and `handleDecryptedInboundPayload` both succeed. This prevents relay from marking messages as delivered if the client cannot process them.
+**Delivery invariant:** the `delivered` receipt goes back to the sender only after `decryptFromWire` and `handleDecryptedInboundPayload` both succeed, so the relay cannot make an unprocessed message look delivered. The relay-level acknowledgement is separate: a wire that cannot be decrypted is acknowledged and quarantined, so it does not block the mailbox, and the sender is asked to resend.
 
 ---
 
@@ -195,20 +214,18 @@ decryptFromWire(wire):
 
 ### AuthSigner (`apps/flutter/secretly_app/lib/security/auth_signer.dart`)
 
-Every request to relay/keys is signed:
-```
-_buildKeysAuthEnvelope():
-  body_hash = SHA256(request_body)
-  timestamp_ms = now
-  nonce = random(16 bytes)
-  sig = Ed25519.sign(device_key_priv, body_hash || timestamp_ms || nonce)
-  header: Authorization: SKS1 device_id=<did> ts=<ms> nonce=<hex> sig=<b64>
-```
+Every request to relay/keys is signed with the device identity key (Ed25519).
+The signature covers a canonical text of the request with a domain tag, a
+timestamp and a random nonce, and travels in four headers:
+`x-secretly-device-id`, `x-secretly-ts-ms`, `x-secretly-nonce-b64` and
+`x-secretly-signature-b64`. (`SKS1` is the magic of the legacy message wire,
+not an authentication header; an earlier version of this document confused the
+two.) On the WebSocket, the signature is checked once, at `HelloAuth`.
 
-Replay protection, two layers: requests outside a ±30 s timestamp window are
-rejected, and the keys server additionally keeps a nonce cache (`used_nonces`,
-10-minute TTL) — presenting the same nonce twice returns `401 replayed nonce`
-even inside the window.
+Replay protection, two layers: requests outside a ±5-minute timestamp window are
+rejected, and both servers keep a nonce cache (`used_nonces`, 10-minute TTL, in
+memory, so it is empty after a restart) — presenting the same nonce twice
+returns `401 replayed nonce` inside the window.
 
 ### Server-side (Keys)
 
@@ -220,25 +237,30 @@ Production preflight (`keys_security_errors`):
 - `INTERNAL_KEY` must be set
 - `TRUST_XFF` + `PROXY_ONLY` checks
 
-Fails with explicit error log on startup if any are missing.
+With `SECRETLY_ENV=prod` (or `STRICT_PRODUCTION`) the server refuses to start
+if any are missing; without it, it only logs a warning.
 
 ---
 
 ## Local Data Security
 
-- **SQLCipher**: entire SQLite database encrypted with a key derived from device identity
-- **SecureSecrets** (`apps/flutter/secretly_app/lib/security/secure_secrets.dart`): secrets stored in platform keychain (Keystore on Android, Keychain on iOS)
-- **RecoveryKit** (`apps/flutter/secretly_app/lib/security/recovery_kit.dart`): backup encrypted with a passphrase-derived key; identity key is not stored plaintext in backup
-- **SafeBackup** (`apps/flutter/secretly_app/lib/security/safe_backup.dart`): backup format versioned, contains only encrypted blobs
+- **Database**: SQLCipher on phones, SQLite3 Multiple Ciphers on desktop. The passphrase is 32 random bytes kept by `SecureSecrets`; it is not derived from the identity key.
+- **SecureSecrets** (`apps/flutter/secretly_app/lib/security/secure_secrets.dart`): Keychain with `ThisDeviceOnly` on iOS and macOS, Keystore on Android (AES-CBC without an integrity check — SEC-03, planned), DPAPI on Windows. On iOS the notification extension reads a copy of the device identity seed from the app group's settings; it is moving into the keychain.
+- **Media files**: regular files in the app's folders, under the OS's storage encryption rather than the database key.
+- **SafeBackup** (`apps/flutter/secretly_app/lib/security/safe_backup.dart`) and **RecoveryKit** (`apps/flutter/secretly_app/lib/security/recovery_kit.dart`): AES-256-GCM under a password-derived key (PBKDF2-HMAC-SHA256; 400 000 and 200 000 iterations). The archive holds everything needed to restore — the database snapshot, media, the content key and the device identity material — so the password is the only barrier (THREAT_MODEL §5.5).
 
 ---
 
 ## Push Notifications
 
-FCM/APNs payloads contain **no plaintext message content**:
-- Push payload: `{ type: "wake", relay_seq_hint }` — signals app to fetch from relay
-- App wakes → opens WS → drains inbox → decrypts locally
-- Notification text derived from decrypted payload, shown after decrypt succeeds
+FCM/APNs payloads carry **no message text** since 24 September 2026, but they are
+not empty:
+- data: `type=relay_pending`, the recipient and sender device ids, a message id,
+  a timestamp, and for messages the conversation id and the message kind;
+- the notification title: the sender's display name, or the group title, unless
+  the recipient chose hidden previews; for calls, the caller's display name;
+- the app wakes, opens the WebSocket, drains the inbox and decrypts locally. The
+  iOS notification extension does not decrypt yet; it shows the relay's title.
 
 ---
 

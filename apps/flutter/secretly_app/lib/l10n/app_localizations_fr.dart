@@ -2587,6 +2587,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get desktopCallEncrypted => 'L’appel est chiffré de bout en bout';
 
   @override
+  String get desktopRoomCallTransportEncrypted => 'Chiffré en transit jusqu’à notre serveur média — pas encore de bout en bout';
+
+  @override
   String desktopCallDurationOnAir(Object duration, Object count) {
     return '$duration · $count en direct';
   }
@@ -3215,7 +3218,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get desktopPrivacyEncryption => 'Chiffrement';
 
   @override
-  String get desktopPrivacyEncryptionHint => 'Tous les messages et appels sont chiffrés de bout en bout. Les clés ne se trouvent que sur vos appareils.';
+  String get desktopPrivacyEncryptionHint => 'Les messages, les fichiers et les appels individuels sont chiffrés de bout en bout ; les clés ne se trouvent que sur vos appareils. Pour l’instant, les appels de groupe ne sont chiffrés qu’en transit.';
 
   @override
   String get desktopPrivacyE2eeActive => 'Le chiffrement de bout en bout est actif';
@@ -3224,7 +3227,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get desktopPrivacyWhoSees => 'Qui voit';
 
   @override
-  String get desktopPrivacyWhoSeesHint => 'Les mêmes réglages de visibilité que dans l’application mobile.';
+  String get desktopPrivacyWhoSeesHint => 'Les mêmes réglages de visibilité que sur votre téléphone. « Contacts » est appliqué par l’application ; le serveur ne garantit que « Personne ».';
 
   @override
   String get desktopPrivacyVisibility => 'Visibilité';
@@ -3248,7 +3251,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get desktopPrivacyAutoDelete => 'Supprimer mon compte';
 
   @override
-  String get desktopPrivacyAutoDeleteHint => 'Si vous ne vous connectez pas pendant plus longtemps que la durée choisie, le compte et tous les messages sont supprimés automatiquement. Le compte à rebours repart à chaque connexion.';
+  String get desktopPrivacyAutoDeleteHint => 'Si vous ne vous connectez pas pendant plus longtemps que la durée choisie, le compte, les clés, la sauvegarde serveur et les files de messages sont supprimés de nos serveurs. Le compte à rebours repart à chaque connexion.';
 
   @override
   String get desktopPrivacyIfAbsent => 'Si je ne me connecte pas';
@@ -3593,7 +3596,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get desktopAboutTagline => 'Une messagerie sécurisée avec chiffrement de bout en bout. Sans cloud. Sans publicité. Code ouvert.';
+  String get desktopAboutTagline => 'Une messagerie chiffrée de bout en bout. Sans publicité. Code source sous AGPL-3.0.';
 
   @override
   String get desktopAboutLicences => 'Licences';
@@ -3639,7 +3642,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get desktopSecurityE2ee => 'Chiffrement de bout en bout';
 
   @override
-  String get desktopSecurityE2eeHint => 'Tous les messages, appels et fichiers sont chiffrés sur votre appareil. Les clés ne quittent jamais vos appareils — le serveur ne voit que du texte chiffré.';
+  String get desktopSecurityE2eeHint => 'Les messages, les fichiers et les appels individuels sont chiffrés sur votre appareil, et les clés ne quittent jamais vos appareils. Le serveur ne peut pas lire le contenu, mais voit des données de service, par exemple qui écrit à qui et quand. Pour l’instant, les appels de groupe ne sont chiffrés qu’en transit.';
 
   @override
   String get desktopSecurityVerifiedDevices => 'Appareils vérifiés';
@@ -4480,7 +4483,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get desktopContactCopyIdShort => 'Copier l’ID';
 
   @override
-  String get desktopContactDisappearing => 'Messages éphémères';
+  String get desktopContactDisappearing => 'Suppression automatique sur mes appareils';
 
   @override
   String get desktopContactDeleteChat => 'Supprimer la conversation';
@@ -4545,7 +4548,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get desktopThreadDisappearingOn => 'Les messages éphémères sont activés';
+  String get desktopThreadDisappearingOn => 'La suppression automatique est activée — uniquement sur mes appareils';
 
   @override
   String get desktopThreadCallAction => 'Appeler';

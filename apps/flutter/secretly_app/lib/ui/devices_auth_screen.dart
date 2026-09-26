@@ -596,6 +596,19 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
           ru: 'Защищённая синхронизация была прервана. Создайте новый QR и повторите.',
           en: 'Secure sync was interrupted before completion. Generate a new QR and retry.',
         );
+      // A (26.09.2026): ключ ПК из QR сверяется с ключом на сервере.
+      case DesktopLinkFailureCode.desktopIdentityMismatch:
+        return _label(
+          context,
+          ru: 'Ключ этого компьютера не совпадает с ключом на сервере. Ничего не отправлено. Создайте новый QR на компьютере; если повторится — не привязывайте его.',
+          en: 'The key of this computer does not match the key on the server. Nothing was sent. Generate a new QR on the computer; if it repeats, do not link it.',
+        );
+      case DesktopLinkFailureCode.strictModeNeedsVerifiedDesktop:
+        return _label(
+          context,
+          ru: 'Включён строгий режим, а этот компьютер нельзя проверить по QR. Обновите Secretly на компьютере или выключите строгий режим на время привязки.',
+          en: 'Strict mode is on: this computer cannot be verified by its QR. Update Secretly on the computer, or turn strict mode off for the time of linking.',
+        );
     }
   }
 
@@ -722,10 +735,20 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
         DiagLog.event('qr_pair', 'reject_call_done');
       }
       if (!mounted) return;
+      // B (26.09.2026): медиа едут в пределах бюджета — сказать, если не все.
+      final skippedMedia = decision.isApproved
+          ? widget.controller.lastDesktopLinkMediaSkipped
+          : 0;
       ScaffoldMessenger.of(context).showSnackBar(
         SecretlySnackBar(
           content: Text(
-            decision.isApproved
+            decision.isApproved && skippedMedia > 0
+                ? _label(
+                    context,
+                    ru: 'Запрос подтверждён. Синхронизация отправлена на компьютер. Медиа перенесены не все (пропущено файлов: $skippedMedia) — сначала самые новые, остальные остаются на телефоне.',
+                    en: 'Request approved. Sync package sent to desktop. Not all media was copied ($skippedMedia files skipped) — newest first, the rest stays on the phone.',
+                  )
+                : decision.isApproved
                 ? _label(
                     context,
                     ru: 'Запрос подтверждён. Синхронизация отправлена на компьютер.',

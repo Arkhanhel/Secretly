@@ -1,6 +1,6 @@
 # Secretly — Threat Model
 
-**Version 1.1 — 2 September 2026** (1.0: 25 August 2026)
+**Version 1.2 — 26 September 2026** (1.1: 2 September 2026; 1.0: 25 August 2026)
 
 This document states what Secretly protects, against whom, and — equally
 important — **what it does not protect against**. Every claim here is meant to be
@@ -9,6 +9,13 @@ it is named as such rather than omitted.
 
 Written for independent auditors, corporate reviewers, and anyone deciding
 whether this tool fits their risk.
+
+**Changes in 1.2.** Group calls are named as not end-to-end encrypted (§3.5).
+The metadata the servers keep is listed in full (§5.2). Four things a malicious
+server can still do are added to A3, and two iOS storage exceptions to A5. The
+replay window is corrected to ±5 minutes (§7). SEC-15 is marked closed (§5.8).
+Auto-delete, voice dictation and third-party downloads are described
+(§5.11–§5.13).
 
 ---
 
@@ -21,6 +28,8 @@ whether this tool fits their risk.
 | Device identity key (Ed25519) | OS keychain / keystore | impersonation of the device |
 | Local database passphrase | OS keychain / keystore | **entire local history exposed** |
 | Server backup archive | keys server (encrypted blob) | full history exposed if password is broken |
+| Media files (sent and received) | device storage, as regular files | attachments exposed |
+| Group-call audio and video | our media server, in transit (§3.5) | call content exposed to the operator |
 | Social graph (who talks to whom) | relay (see §5.2) | relationships exposed |
 | Profile identifier | public by design | discoverability, not confidentiality |
 
@@ -54,19 +63,50 @@ signatures close this for every device that signs: to succeed, the server has
 to change that device's identity key in the open, which resets verification and
 shows a notice. What remains open is listed in §5.10.
 
+Four more things a malicious server can do today; each is being closed:
+
+- **Use a legacy handshake.** An old wire format still opens new sessions
+  without the handshake signature, so the server can show a message "from" any
+  device, including your own computer. It cannot read the replies, which travel
+  in the current format. The next phone release refuses new sessions in the
+  old format.
+- **Switch the signature check off.** The configuration switch that disables
+  refusals of unsigned handshakes (§5.10) is signed with the server's own
+  configuration key. It exists so that delivery survives the rollout. Builds
+  released after unsigned handshakes are refused for everyone will ignore it.
+- **Substitute a computer during linking.** Until the next phone release, the
+  phone trusts the computer's key as served by the key server when it hands the
+  account over to a newly linked computer. The fix — the computer's key
+  fingerprint in the linking QR code, checked by the phone — is in the code.
+- **Decide room membership.** Room membership lives on the relay and is not
+  signed. The server can add a member, or a device of a member, to a room; that
+  member then receives the room key. It appears in the member list.
+
 ### A4 — Attacker with physical access to an unlocked device
 
 Out of scope. An unlocked device with the app open is the user's own session.
 
 ### A5 — Attacker with physical access to a locked device
 
-Local database is encrypted with SQLCipher; the passphrase lives in the OS
-keychain (iOS) or keystore (Android), released only after first unlock. Defeating
-this requires defeating platform-level protection.
+Local database is encrypted with SQLCipher on phones and SQLite3 Multiple
+Ciphers on desktop; the passphrase lives in the OS keychain (iOS, macOS), the
+keystore (Android) or DPAPI (Windows), released only after first unlock.
+Defeating this requires defeating platform-level protection.
+
+Media files are not in that database: sent and received attachments, and voice
+transcripts, are regular files protected only by the operating system's storage
+encryption.
 
 Since 25 August 2026, keychain items are stored **`ThisDeviceOnly`**: they are no
 longer carried to a new device by an Apple backup. On Android, application
 backups are disabled in the manifest.
+
+Two exceptions on iOS, both moving in the next release: the notification
+extension reads a copy of the device identity key from the app group's settings
+rather than from the keychain; and media files sit in the app's Documents
+folder, which is visible in the Files app and included in device backups. On
+Windows, media files sit in the user's Documents folder, which OneDrive may
+sync.
 
 ### A6 — Attacker who obtains a device backup
 
@@ -87,7 +127,9 @@ It **can** be compelled to serve forged key material to a targeted user — see
 ### 3.1 Message confidentiality and integrity
 
 Double Ratchet v3 with an X3DH-like key agreement. Each message uses a fresh key
-derived from a ratcheting chain; keys are discarded after use.
+derived from a ratcheting chain; message keys are discarded after use. Prekeys
+are not yet: the private halves of one-time prekeys are kept after use, and the
+signed prekey is not rotated. Both are planned.
 
 - **Forward secrecy:** compromising current state does not decrypt past messages.
 - **Break-in recovery:** a compromise heals once a fresh DH ratchet step happens.
@@ -95,8 +137,9 @@ derived from a ratcheting chain; keys are discarded after use.
   authentication and — verified by test — **does not advance ratchet state**.
 - **Replay:** message numbers plus single-use skipped keys. A retired skipped key
   is deleted, so the same ciphertext cannot be opened twice.
-- **Denial of service via skipped keys:** bounded at 200 per step; a message
-  claiming a larger gap is rejected before any key is derived.
+- **Denial of service via skipped keys:** bounded at 200 per step on phones and
+  5,000 on desktop (a server flag can raise the desktop bound to 25,000); a
+  message claiming a larger gap is rejected before any key is derived.
 - **Initiator authentication:** the initiator's identity key is not part of the
   DH. Since 24 September 2026 the initiator signs the handshake with that key,
   and the receiver checks the signature against the key it has pinned for the
@@ -130,7 +173,7 @@ limitation we state rather than hide.
 An optional encrypted archive of local history, stored on the keys server.
 Encrypted client-side with AES-256-GCM; the key is derived from a user-chosen
 password with PBKDF2-HMAC-SHA256 (400 000 iterations for new archives; archives
-written earlier at 200 000 remain readable).
+written earlier at 200 000 remain readable). The recovery kit uses 200 000.
 
 **Being remediated (SEC-01).** Until 25 August 2026 the archive could be
 downloaded by **anyone who knew the profile identifier** — the signature check
@@ -146,12 +189,32 @@ Progress is measurable server-side.
 
 ### 3.5 Calls
 
-WebRTC with DTLS-SRTP. Call signalling travels over the same end-to-end encrypted
-channel as messages.
+**One-to-one calls** use WebRTC with DTLS-SRTP, directly between the two
+devices. Call signalling — offers, answers and ICE candidates — travels over the
+same end-to-end encrypted channel as messages, so the keys of the media stream
+are authenticated by that channel. It is only as strong as the device keys:
+until a contact is verified (§3.3), a server that serves a false device could
+answer the call.
 
-**Your IP address is visible to the person you are calling — by default.** Calls
-connect peer-to-peer, which is standard WebRTC behaviour and the reason call
-quality is good, but it means the other party sees your address. Since 28 August
+The relay still learns that a call happened. The call action, a call id and
+whether it is a video call travel beside the ciphertext; the invitation also
+carries the caller's display name and profile id; and the push that rings the
+phone carries the caller's display name through Apple or Google.
+
+**Group calls are not end-to-end encrypted.** They go through our own LiveKit
+media server (SFU), which runs on the same host as the relay. Audio, video and
+screen sharing are encrypted in transit between each device and the server, but
+the server decodes them, so the operator could listen. It also sees who is in a
+call, when, and each participant's IP address. End-to-end encryption for group
+calls — a key per participant, distributed over the existing end-to-end
+channel — is the next piece of work on calls. Even then, the server will see
+who takes part, when, and who is speaking.
+
+**Your IP address is visible to the person you are calling — by default.**
+One-to-one calls connect peer-to-peer, which is standard WebRTC behaviour and
+the reason call quality is good, but it means the other party sees your address.
+The production policy only puts our TURN server first in the list; it does not
+hide addresses. Since 28 August
 2026 (release 1.8.16) a per-user setting forces every call through our relay;
 its label states the cost in latency plainly. The default remains peer-to-peer.
 
@@ -166,8 +229,9 @@ already rewritten the policy and therefore never fired, now runs before it.
 
 No phone number, no email, no password recovery flow. An account is a key pair
 generated on the device. This removes an entire class of attacks (SIM swap,
-account recovery abuse, mailbox compromise) and removes our ability to identify
-users at all.
+account recovery abuse, mailbox compromise) and removes the link between an
+account and a phone number or email. It does not make users unknowable to us:
+IP addresses and push tokens still reach our servers (§5.2).
 
 ---
 
@@ -204,8 +268,28 @@ it does expose metadata and enables targeted delivery manipulation.
 ### 5.2 Metadata visible to the server
 
 The relay necessarily sees, for each envelope: source device identifier,
-destination device identifier, size, and timing. From this, the social graph and
-activity patterns are derivable by the operator.
+destination device identifier, size, and timing. Since 17 September 2026 it
+stores the source device with each queued message, until delivery or expiry
+(seven days at most), so that recipients can check who sent it. From this, the
+social graph and activity patterns are derivable by the operator.
+
+Beyond envelopes, the servers keep:
+
+- **rooms** — name, description, avatar, membership and roles, and an index of
+  who posted in a room and when (kept 30 days);
+- **your profile as you publish it** — nickname, photo, bio, emoji status — and
+  when you were last online;
+- **devices** — your devices, their build numbers and push tokens, with
+  notification preferences: muted chats, per-contact settings, quiet hours and
+  time zone;
+- **blocks** — who blocked whom;
+- **one-to-one calls** — which devices called which, and when (kept 6 hours, or
+  15 minutes after the call ends);
+- **in transit** — the sender's display name and a group's title, which the
+  relay uses for notification titles.
+
+Server database backups are kept on the same host and are not yet encrypted at
+rest; encryption and an off-site copy are being added.
 
 We do not implement sealed sender or any mixing. Profile identifiers are not tied
 to real-world identity, which limits — but does not remove — what this metadata
@@ -294,21 +378,25 @@ already queued have been removed. Two things remain:
   display name and the group title, which it uses for the notification title;
 - database snapshots taken before that date may still contain previews.
 
-The client will stop sending the preview in its next release. After that,
-message text will appear in a notification only when the device decrypts the
-message itself.
+Since version 1.8.59 the client no longer sends the preview; older versions
+still do, and the relay discards it on arrival. Message text now appears in a
+notification only when the device decrypts the message itself.
+
+Names are a different matter. The relay puts the sender's display name — and,
+for groups, the group title — into the notification title it sends through
+Apple or Google, unless the recipient chose hidden previews. The caller's
+display name reaches Apple or Google the same way when a call rings.
 
 ---
 
-### 5.8 Speech-recognition model: third-party host, no integrity check (SEC-15)
+### 5.8 Speech-recognition model: third-party host (SEC-15, closed)
 
 Optional voice transcription runs on-device with whisper.cpp. The model
-(`ggml-base.bin`, ~140 MB) is downloaded once, on first use, from
-`huggingface.co/ggerganov/whisper.cpp/resolve/main/` — a **mutable branch
-reference**, not a pinned revision — and we verify no hash before handing the
-file to native C++ for parsing. A compromised or substituted file would be
-parsed with native privileges. This is open; the fix is a pinned revision plus a
-compiled-in digest, and it is scheduled.
+(`ggml-base.bin`, ~140 MB) is downloaded once, on first use, from Hugging Face.
+Until September 2026 it came from a mutable branch reference with no integrity
+check. It now comes from a pinned revision and is checked against a
+compiled-in SHA-256 and size before native code parses it; a file that does not
+match is deleted. Hugging Face still sees the download and your IP address.
 
 ### 5.9 Translation models are delivered by Google ML Kit
 
@@ -339,6 +427,29 @@ shown it signs. Until then the check only counts. So:
 A changed identity key is never taken silently: it resets the contact's
 verification and shows a "safety number changed" notice.
 
+### 5.11 Auto-delete works on your own devices only
+
+Auto-delete removes messages older than the chosen period from your own
+devices. It does not reach the other person's devices; they can set their own
+timer. It does not yet remove downloaded files, the keys of received files or
+voice-message transcripts.
+
+### 5.12 Voice dictation may leave the device
+
+Dictating a message uses the operating system's speech recognition. Depending
+on the device and language, Apple or Google may process the audio on their
+servers. Transcription of received voice messages is different: it runs on the
+device (§5.8). Dictation is moving to on-device only.
+
+### 5.13 Other third parties contacted by optional features
+
+- Animated emoji are downloaded from Google Fonts (`fonts.gstatic.com`) the
+  first time they are shown; Google sees your IP address and which animation.
+- GIF search sends your search terms and IP address to GIPHY.
+- Link previews are built by the sender's device, which fetches the page; the
+  website sees the sender's IP address. Recipients do not contact it.
+- Message translation downloads language models through Google ML Kit (§5.9).
+
 ## 6. Out of scope
 
 - Compromised or rooted devices, and malicious keyboards or screen readers.
@@ -362,7 +473,7 @@ An auditor can check the following directly:
 | Strict mode is not enforced on group paths | `apps/flutter/secretly_app/lib/app/app_controller.dart`, `_sendGateBlockingDevices` callers |
 | TLS validation is not weakened | `apps/flutter/secretly_app/lib/transport/resilient_http_client_io.dart` |
 | Signed-prekey signature is verified before any session is created, fail-closed | `apps/flutter/secretly_app/lib/ratchet/session_manager_v3.dart` |
-| Replayed request nonces are rejected server-side (10-minute cache) in addition to the ±30 s timestamp window | `server/keys/src/main.rs`, `used_nonces` |
+| Replayed request nonces are rejected server-side (10-minute in-memory cache, lost on restart) in addition to a ±5-minute timestamp window | `server/keys/src/main.rs` and `server/relay/src/main.rs`, `used_nonces` |
 
 Guard tests accompany each of these and are written to fail if the property is
 removed.

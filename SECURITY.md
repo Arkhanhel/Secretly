@@ -26,10 +26,19 @@ your own testing.
 | Acknowledgement of your report | 3 working days |
 | Initial assessment: severity, whether we can reproduce | 10 working days |
 | Fix or mitigation for critical issues | as fast as we can; you will be told what is happening |
-| Public disclosure | coordinated with you |
+| Fix for other issues | within 90 days |
+| Public disclosure | coordinated with you — by default once a fix has shipped, and no later than 90 days after your report unless we agree otherwise |
 
 We are a very small team. If a deadline slips, you will hear from us before it
 does, not after.
+
+## Supported versions
+
+We fix security issues in the current release on each platform and do not
+backport. On 26 September 2026 that is Android 1.8.61, macOS 1.8.61 and
+Windows 1.8.61; the App Store still serves iOS 1.8.39, with 1.8.61 in
+TestFlight. [docs/VERIFY.md](docs/VERIFY.md) lists every released build with
+its checksum and the git tag of its source.
 
 ## Scope
 
@@ -66,6 +75,15 @@ fix and in this repository, unless you prefer to stay anonymous.
 
 We do not run a paid bug bounty — the project has no funding for one. We will not
 pretend otherwise.
+
+## Regulatory reporting (EU)
+
+We follow the reporting timelines of the EU Cyber Resilience Act. For an
+actively exploited vulnerability or a severe incident affecting Secretly, we
+notify through ENISA's Single Reporting Platform, with CERT.LV as the
+coordinating CSIRT: an early warning within 24 hours of becoming aware of it, a
+notification within 72 hours, and a final report within 14 days after a fix is
+available (within a month for an incident). We tell affected users as well.
 
 ## Our commitments
 

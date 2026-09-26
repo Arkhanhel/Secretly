@@ -445,7 +445,11 @@ class _RoomMiniState extends State<_RoomMini> {
             left: 8,
             top: 8,
             right: 8,
-            child: Row(children: [DesktopCallMiniChip(label: status)]),
+            // Без замка: групповой созвон пока не сквозной (см. подсказку в
+            // окне созвона). Замок вернётся вместе с E2EE созвонов.
+            child: Row(
+              children: [DesktopCallMiniChip(label: status, secure: false)],
+            ),
           ),
           if (caption.isNotEmpty)
             Positioned(

@@ -5,7 +5,7 @@ someone who does not trust us. It is also honest about what cannot be checked
 yet, because a verification page that overstates what it proves is worse than
 no page at all.
 
-Last updated: 18 September 2026.
+Last updated: 26 September 2026.
 
 ---
 
@@ -13,8 +13,9 @@ Last updated: 18 September 2026.
 
 ### Rebuild the client from source
 
-Everything needed to produce a build equivalent to the one in the stores is
-public: the source, the pinned toolchains and the exact compile-time values.
+Almost everything needed to produce a build equivalent to the one in the stores
+is public: the source, the pinned toolchains and the compile-time values below.
+The one exception is our GIPHY API key.
 
 | Input | Value |
 |---|---|
@@ -24,9 +25,9 @@ public: the source, the pinned toolchains and the exact compile-time values.
 | Java (Android) | 17, Temurin |
 | Dependency versions | frozen in `pubspec.lock` and `Cargo.lock` |
 
-Compile-time values used for the store builds — all four are public by nature,
-and the last one is the **public** half of the key that signs our configuration
-endpoint:
+Compile-time values that decide which servers the app trusts — all four are
+public by nature, and the last one is the **public** half of the key that signs
+our configuration endpoint:
 
 ```
 --dart-define=SECRETLY_KEYS_BASE_URL=https://keys.secretlyapp.com
@@ -35,15 +36,38 @@ endpoint:
 --dart-define=SECRETLY_CONFIG_PUBLIC_KEY_B64=hMHcn5pjtUYmlbZziWlPWNxJJKOE7WlNadebVxF+cdk=
 ```
 
+Store builds also set values that do not touch the security path: the version
+and build number (`SECRETLY_APP_VERSION`, `SECRETLY_APP_BUILD_NUMBER`), a build
+marker, fallback addresses of our own hosts for when DNS fails
+(`SECRETLY_HTTP_DNS_FALLBACKS`, with the WebSocket fallback switched on),
+`SECRETLY_ROOM_SENDER_KEY=true`, and, when a rollout needs it, a
+feature flag such as `SECRETLY_PREKEY_UNTIL_CONFIRMED`. One value is private:
+`GIPHY_API_KEY`. A rebuild therefore differs from ours at least in that string.
+
 Full instructions: [`docs/BUILD.md`](BUILD.md).
 
 ### Check what the application talks to
 
-Run the client you built against your own network capture. It should reach only
-the three hosts above. There is no analytics SDK, no crash reporter that leaves
-the device by default, and no third-party telemetry — and you do not have to
-take our word for it, because the network layer is in
-`apps/flutter/secretly_app/lib/transport/`.
+Run the client you built against your own network capture. In normal use it
+reaches:
+
+- `keys.secretlyapp.com` and `relay.secretlyapp.com` — the two servers above;
+  the relay host also runs our TURN/STUN server and, under `/livekit`, the media
+  server for group calls;
+- Apple (APNs) or Google (Firebase Cloud Messaging) for push notifications;
+- `updates.secretlyapp.com` — desktop updates only.
+
+Optional features reach third parties, and only when you use them:
+`fonts.gstatic.com` (animated emoji), `api.giphy.com` (GIF search),
+`huggingface.co` (the speech-recognition model, checked against a fixed
+SHA-256), Google's model manager (translation models), the operating system's
+speech recognition (dictation), websites whose links you send (link previews
+are built on the sender's device), and the App Store or Google Play for
+purchases.
+
+There is no analytics SDK, no crash reporter that leaves the device by default,
+and no third-party telemetry — and you do not have to take our word for it,
+because the network layer is in `apps/flutter/secretly_app/lib/transport/`.
 
 ### Check the claims in the threat model
 
@@ -53,18 +77,35 @@ code rather than search for it. §5 lists what we know is imperfect.
 
 ---
 
-## 2. Artefacts we uploaded to the stores
+## 2. Artefacts we published or uploaded
 
-These are SHA-256 sums of the exact files we handed to Apple and Google.
+SHA-256 sums of the exact files we published ourselves or handed to Apple and
+Google, with the git tag of the source each was built from.
 
-| Release | Platform | File | Uploaded | SHA-256 |
-|---|---|---|---|---|
-| 1.8.39 (588) | Android | `secretly-production-1.8.39-588-store588.aab` | 2026-09-05 | `0441577c7ee0161acfcba4d4c40d90b5eedbf96395a7f05c8de0eff8dd57e31a` |
-| 1.8.39 (588) | iOS | `secretly-production-1.8.39-588-store588.ipa` | 2026-09-05 | `049d83a97a81090d5b983f4e45a2884bfaf91b875e4eea8bd96de412de146f15` |
+| Release | Platform | File | Date | SHA-256 | Source |
+|---|---|---|---|---|---|
+| 1.8.61 (631) | Android | `secretly-production-1.8.61-631-store631.aab` | 2026-09-26 | `ad87f9c8e649d7c51b69505ab943b390ac1fb31b73cfe624f0ca45bcc466e7ec` | `v1.8.61-631-android` |
+| 1.8.61 (631) | Windows | `Secretly-1.8.61-631-windows-x64.zip` | 2026-09-26 | `5e29c8936dde8f04e4b3444407f0907a84b2baf6793f99f89c2c957c35fc4347` | `v1.8.61-631-windows` |
+| 1.8.61 (630) | macOS | `Secretly-1.8.61-630.dmg` | 2026-09-25 | `bc21172346b41af4d6ba4c199f47357dda297b711ce9fc0132504ca7fbaaf26d` | `v1.8.61-630` |
+| 1.8.61 (630) | Windows | `Secretly-1.8.61-630-windows-x64.zip` | 2026-09-25 | `7465e38bfbc7853750c3ace547adeaf8e0a82f0f4e84fbbd634ee9e73bf4a2e4` | `v1.8.61-630` |
+| 1.8.61 (630) | iOS | `secretly-production-1.8.61-630-store630.ipa` | 2026-09-26 | `50ad5814edc362c848bd907645719d40ebb7e9d45b823e7afc28ccbc039ffbea` | `v1.8.61-630` |
+| 1.8.39 (588) | Android | `secretly-production-1.8.39-588-store588.aab` | 2026-09-05 | `0441577c7ee0161acfcba4d4c40d90b5eedbf96395a7f05c8de0eff8dd57e31a` | — |
+| 1.8.39 (588) | iOS | `secretly-production-1.8.39-588-store588.ipa` | 2026-09-05 | `049d83a97a81090d5b983f4e45a2884bfaf91b875e4eea8bd96de412de146f15` | — |
 
-**Read this before you try to compare them with what you installed.**
+What is where on 26 September 2026: Google Play serves 1.8.61 (631); the App
+Store still serves 1.8.39 (588), with 1.8.61 (630) in TestFlight; the desktop
+apps update themselves to macOS 1.8.61 (630) and Windows 1.8.61 (631).
 
-You will not get a match, and that is not a sign of tampering:
+**Desktop files come straight from us**, from `updates.secretlyapp.com`, so the
+file you download is byte-for-byte the file listed above. Compute its SHA-256 —
+`shasum -a 256` on macOS, `certutil -hashfile <file> SHA256` on Windows — and
+compare. A match proves you received exactly what we published; it does not yet
+prove that file was built from the tagged source (see §3).
+
+**Read this before you compare a store build with what you installed.**
+
+For Android and iOS you will not get a match, and that is not a sign of
+tampering:
 
 - **Google Play** does not distribute our file. An Android App Bundle is split
   by Google into per-device APKs and **re-signed with Google's key** under Play
@@ -95,9 +136,10 @@ Planned, in this order:
 
 1. A signed APK on the download page, with its SHA-256 and the signing
    certificate fingerprint listed here.
-2. A git tag per release, so each row above points at the exact source it was
-   built from. Builds 588 and earlier predate the repository going public and
-   have no public tag — we are not going to invent one retroactively.
+2. ~~A git tag per release~~ — done from 1.8.61 (630) on: each row above points
+   at the exact source it was built from. Builds 588 and earlier predate the
+   repository going public and have no public tag — we are not going to invent
+   one retroactively.
 3. Reproducible builds, so that two people building the same tag with the same
    pinned toolchain get byte-identical output. This is hard on Flutter and we
    are not promising a date.

@@ -379,8 +379,17 @@ void main() {
     });
 
     test('🔴 замок не выброшен молча, а переехал в подсказку', () {
-      expect(call.contains('message: l10n.desktopCallEncrypted'), isTrue);
+      expect(
+        call.contains('message: l10n.desktopRoomCallTransportEncrypted'),
+        isTrue,
+      );
       expect(call.contains('lock_closed_16_filled'), isFalse);
+    });
+
+    // 26.09.2026: групповой созвон идёт через LiveKit без E2EE. Окно не
+    // должно обещать сквозное шифрование, пока его нет (ТЗ, часть ЗВ).
+    test('🔴 групповой созвон не обещает сквозного шифрования', () {
+      expect(call.contains('l10n.desktopCallEncrypted'), isFalse);
     });
 
     test('🔴 эквалайзер оживает ТОЛЬКО от настоящей речи', () {

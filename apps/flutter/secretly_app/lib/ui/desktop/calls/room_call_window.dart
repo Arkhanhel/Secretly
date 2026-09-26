@@ -1751,8 +1751,13 @@ class _Header extends StatelessWidget {
             // 🔴 ЗАМОК ИЗ ЧИПА НЕ ВЫБРОШЕН, А ПЕРЕЕХАЛ В ПОДСКАЗКУ. Признак
             // шифрования полезен, но в макете чип занят другим, и держать
             // замок рядом с таймером значило бы отдать ему место эквалайзера.
+            // 🔴 26.09.2026: групповой созвон идёт через LiveKit БЕЗ сквозного
+            // шифрования — сервер видит звук и видео. Поэтому здесь не
+            // `desktopCallEncrypted` (он для 1:1), а честное «шифруется при
+            // передаче». Вернуть «сквозное» — только вместе с E2EE созвонов
+            // (docs/TZ_GRANT_READINESS_V2_2026-09-26.md, часть ЗВ).
             DesktopTooltip(
-              message: l10n.desktopCallEncrypted,
+              message: l10n.desktopRoomCallTransportEncrypted,
               child: Container(
                 height: 26,
                 padding: const EdgeInsets.symmetric(horizontal: 9),

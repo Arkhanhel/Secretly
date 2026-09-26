@@ -47,11 +47,15 @@ import 'desktop_link_flow.dart'
     show
         AuthFlowState,
         DesktopLinkDecisionHandlingResult,
+        DesktopLinkIdentityCheck,
+        DesktopLinkMediaBudget,
         DesktopLinkQrPayload,
         DesktopLinkRequest,
         DesktopLinkSyncPayload,
         DesktopLinkStateMachine,
-        DesktopLinkSyncValidationResult;
+        DesktopLinkSyncValidationResult,
+        checkDesktopLinkIdentity,
+        desktopLinkJsonUtf8Length;
 import 'desktop_link_sync_apply.dart'
     show DesktopLinkSyncApplyPrefsKeys, DesktopLinkSyncBundleApplier;
 import 'desktop_link_flow.dart'
@@ -11079,8 +11083,19 @@ class AppController {
     if (pid.isEmpty || did.isEmpty || pid.startsWith('LOCAL-')) {
       throw StateError('state not ready');
     }
+    // A (26.09.2026): свой ключ личности — в QR, чтобы телефон сверил его с
+    // ключом на сервере. Не вышло — QR старого вида, как раньше.
+    var identityKeyB64 = '';
+    try {
+      identityKeyB64 = (await identityKeyPubB64()).trim();
+    } catch (e) {
+      DiagLog.event('qr_pair', 'identity_key_unavailable', {
+        'err': _shortErrorTag(e),
+      });
+    }
 
     final request = DesktopLinkRequest(
+      identityKeyB64: identityKeyB64,
       requestId: _uuid.v4().replaceAll('-', ''),
       targetProfileId: pid,
       targetDeviceId: did,
@@ -11142,6 +11157,9 @@ class AppController {
       'expires_at_ms=${request.expiresAtMs}',
       'keys_base_url=$keysBaseUrl',
       'server_binding=${_environmentServerBindingString()}',
+      // A (26.09.2026): старые телефоны неизвестное поле пропускают.
+      if (request.identityKeyB64.isNotEmpty)
+        'identity_key=${request.identityKeyB64}',
     ].join('\n');
   }
 
@@ -11304,6 +11322,64 @@ class AppController {
     );
   }
 
+  /// B (26.09.2026): сколько медиафайлов не поместилось в последнюю привязку
+  /// ПК (бюджет [DesktopLinkMediaBudget]) — для пометки «перенесено не всё».
+  int _lastDesktopLinkMediaSkipped = 0;
+  int get lastDesktopLinkMediaSkipped => _lastDesktopLinkMediaSkipped;
+
+  /// A (26.09.2026): ключ ПК из QR против ключа, что отдаёт сервер.
+  ///
+  /// Совпал — устройство помечается проверенным: QR показан на экране самого
+  /// ПК, и строгий режим такому компьютеру доверяет. Не совпал — отказ, пакет
+  /// не уходит. QR старого ПК без ключа — как раньше, но в строгом режиме
+  /// сразу понятный отказ, а не «Contact is unverified» после долгой сборки.
+  Future<void> _verifyDesktopLinkTargetIdentity(
+    DesktopLinkQrPayload payload,
+  ) async {
+    final targetProfileId = payload.targetProfileId.trim();
+    final targetDeviceId = payload.targetDeviceId.trim();
+    String? serverKey;
+    if (payload.identityKeyB64.trim().isNotEmpty) {
+      try {
+        await refreshContactDevices(targetProfileId);
+        final rows = await _db?.contactDevicesList(targetProfileId);
+        for (final r in rows ?? const <Map<String, Object?>>[]) {
+          if (((r['device_id'] as String?) ?? '').trim() == targetDeviceId) {
+            serverKey = (r['identity_key_pub_b64'] as String?)?.trim();
+            break;
+          }
+        }
+      } catch (e) {
+        DiagLog.event('qr_pair', 'identity_fetch_failed', {
+          'err': _shortErrorTag(e),
+        });
+      }
+    }
+    final check = checkDesktopLinkIdentity(
+      qrKeyB64: payload.identityKeyB64,
+      serverKeyB64: serverKey,
+    );
+    DiagLog.event('qr_pair', 'identity_check', {'result': check.name});
+    switch (check) {
+      case DesktopLinkIdentityCheck.verified:
+        await _db?.contactDeviceMarkVerified(
+          profileId: targetProfileId,
+          deviceId: targetDeviceId,
+        );
+      case DesktopLinkIdentityCheck.mismatch:
+        throw DesktopLinkFailure(
+          DesktopLinkFailureCode.desktopIdentityMismatch,
+        );
+      case DesktopLinkIdentityCheck.notProvided:
+      case DesktopLinkIdentityCheck.serverKeyMissing:
+        if (_blockUnverified) {
+          throw DesktopLinkFailure(
+            DesktopLinkFailureCode.strictModeNeedsVerifiedDesktop,
+          );
+        }
+    }
+  }
+
   Future<void> approveDesktopLinkFromQr({
     required String rawPayload,
     required bool syncChats,
@@ -11400,16 +11476,32 @@ class AppController {
       );
     }
 
+    // A (26.09.2026): ключ ПК — до сборки пакета, чтобы отказ был сразу.
+    await _verifyDesktopLinkTargetIdentity(payload);
+
+    // B (26.09.2026): медиа — в пределах бюджета, иначе телефон падал с
+    // «Out of memory» (вся медиатека в памяти трижды).
+    final mediaBudget = (syncChats && syncMedia)
+        ? DesktopLinkMediaBudget()
+        : null;
     DiagLog.event('qr_pair', 'collect_backup_start', {
       'with_media': syncChats && syncMedia,
     });
     final plain = await _collectSafeBackupPlain(
       includeBinaryFiles: syncChats && syncMedia,
+      mediaBudget: mediaBudget,
     );
+    _lastDesktopLinkMediaSkipped = mediaBudget?.skipped ?? 0;
     DiagLog.event('qr_pair', 'collect_backup_done', {
       'pid': DiagLog.pfx(plain.profileId),
       'has_db_snapshot': plain.dbSnapshot != null,
       'contacts': plain.contacts.length,
+      if (mediaBudget != null) ...{
+        'media_files': mediaBudget.included,
+        'media_bytes': mediaBudget.usedBytes,
+        'media_skipped': mediaBudget.skipped,
+        'media_skipped_bytes': mediaBudget.skippedBytes,
+      },
     });
     final cryptoKeyB64 = base64Encode(
       await SecureSecrets.create().requireExistingCryptoKey(),
@@ -16805,6 +16897,7 @@ class AppController {
     required String absolutePath,
     required Map<String, String> out,
     int? maxBytes,
+    DesktopLinkMediaBudget? budget,
   }) async {
     final rel = _safeBackupRelativePath(
       docsPath: docsPath,
@@ -16822,6 +16915,9 @@ class AppController {
         });
         return;
       }
+      // B: размер спрашивается ДО чтения — байты не попадают в память, если
+      // файл не проходит в бюджет привязки ПК.
+      if (budget != null && !budget.admit(await f.length())) return;
       out[rel] = base64Encode(await f.readAsBytes());
     } catch (_) {
       // Best-effort for individual files.
@@ -16864,19 +16960,62 @@ class AppController {
     required String docsPath,
     required String subDir,
     required Map<String, String> out,
+    DesktopLinkMediaBudget? budget,
   }) async {
     final docs = Directory(docsPath);
     final dir = Directory(p.join(docs.path, subDir));
     if (!await dir.exists()) return;
+    if (budget == null) {
+      await for (final entity in dir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
+        if (entity is! File) continue;
+        await _safeBackupAddFileIfExists(
+          docsPath: docsPath,
+          absolutePath: entity.path,
+          out: out,
+        );
+      }
+      return;
+    }
+    // B: с бюджетом — сначала новые: их откроют первыми, а старое остаётся
+    // на телефоне.
+    final files = <({String path, int modifiedMs})>[];
     await for (final entity in dir.list(recursive: true, followLinks: false)) {
       if (entity is! File) continue;
+      try {
+        final st = await entity.stat();
+        files.add((
+          path: entity.path,
+          modifiedMs: st.modified.millisecondsSinceEpoch,
+        ));
+      } catch (_) {
+        // Best-effort for individual files.
+      }
+    }
+    files.sort((a, b) => b.modifiedMs.compareTo(a.modifiedMs));
+    for (final f in files) {
       await _safeBackupAddFileIfExists(
         docsPath: docsPath,
-        absolutePath: entity.path,
+        absolutePath: f.path,
         out: out,
+        budget: budget,
       );
     }
   }
+
+  /// B: сборщик файлов копии — для проверки бюджета привязки ПК на диске.
+  @visibleForTesting
+  Future<Map<String, String>> collectSafeBackupBinaryFilesForTest({
+    DesktopLinkMediaBudget? budget,
+  }) => _collectSafeBackupBinaryFiles(
+    avatarPaths: const <String>[],
+    galleryPaths: const <String>[],
+    backgroundPaths: const <String>[],
+    musicPaths: const <String>[],
+    budget: budget,
+  );
 
   Future<Map<String, String>> _collectSafeBackupBinaryFiles({
     required List<String> avatarPaths,
@@ -16884,6 +17023,7 @@ class AppController {
     required List<String> backgroundPaths,
     required List<String> musicPaths,
     List<String> cosmeticMediaPaths = const <String>[],
+    DesktopLinkMediaBudget? budget,
   }) async {
     final docs = await getApplicationDocumentsDirectory();
     final docsPath = p.normalize(docs.path);
@@ -16893,6 +17033,7 @@ class AppController {
       docsPath: docsPath,
       absolutePath: p.join(docsPath, 'my_avatar.png'),
       out: out,
+      budget: budget,
     );
 
     for (final path in avatarPaths) {
@@ -16900,6 +17041,7 @@ class AppController {
         docsPath: docsPath,
         absolutePath: path,
         out: out,
+        budget: budget,
       );
     }
 
@@ -16916,11 +17058,15 @@ class AppController {
         docsPath: docsPath,
         absolutePath: path,
         out: out,
+        budget: budget,
       );
     }
 
     for (final sub in <String>[
-      'attachments',
+      // B: с бюджетом переписка идёт последней — лицо профиля, аватары и
+      // стикеры маленькие и незаменимые, а медиа переписки остаются на
+      // телефоне.
+      if (budget == null) 'attachments',
       'profile_media',
       'profile_avatars',
       'contact_avatars',
@@ -16930,11 +17076,13 @@ class AppController {
       // без них означала безвозвратную потерю. Восстановить набор из ничего
       // нельзя — картинки рисовал человек.
       'stickers',
+      if (budget != null) 'attachments',
     ]) {
       await _safeBackupAddDirectoryFiles(
         docsPath: docsPath,
         subDir: sub,
         out: out,
+        budget: budget,
       );
     }
 
@@ -16995,6 +17143,7 @@ class AppController {
 
   Future<SafeBackupPlainV1> _collectSafeBackupPlain({
     required bool includeBinaryFiles,
+    DesktopLinkMediaBudget? mediaBudget,
   }) async {
     _throwIfTransportBlocked();
     final identity = await _collectRestoreIdentityMaterial();
@@ -17029,6 +17178,18 @@ class AppController {
         _myAvatarOriginalPath!.trim(),
     }.toList(growable: false);
     final dbSnapshot = await _collectSafeBackupDbSnapshot(db);
+    if (mediaBudget != null) {
+      try {
+        mediaBudget.fitUnderAttachmentCeiling(
+          attachmentCeilingBytes: _effectiveAttachmentMaxBytes,
+          otherPayloadBytes: desktopLinkJsonUtf8Length(dbSnapshot),
+        );
+      } catch (e) {
+        DiagLog.event('qr_pair', 'media_budget_fit_failed', {
+          'err': _shortErrorTag(e),
+        });
+      }
+    }
     final cryptoKeyB64 = base64Encode(
       await SecureSecrets.create().requireExistingCryptoKey(),
     );
@@ -17054,6 +17215,7 @@ class AppController {
         backgroundPaths: backgroundPaths,
         musicPaths: musicPaths,
         cosmeticMediaPaths: cosmeticMediaPaths,
+        budget: mediaBudget,
       );
     } else {
       final docs = await getApplicationDocumentsDirectory();
