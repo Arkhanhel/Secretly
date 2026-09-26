@@ -88,6 +88,24 @@ Found something? [`SECURITY.md`](SECURITY.md) has the process. Please do not ope
 a public issue for it — people are using this in places where an unfixed
 disclosure is dangerous for them.
 
+## How this was built
+
+Written by one developer, with AI coding assistants used heavily and
+continuously from February 2026 onward. Most lines here were produced by a
+model — the client, both servers, the tests, the cryptographic code and most of
+this documentation. Every decision about what to build, what to refuse and what
+to ship was made by the developer, and every release was tested on real devices
+before it reached anyone.
+
+1,129 of 1,612 commits carry a `Co-Authored-By: Claude …` trailer naming the
+model. The rest are not human-only: the convention started late and was dropped
+in September, while the work behind those commits was assisted the same way.
+
+We mention it here rather than leaving it to be discovered. If you are about to
+review the cryptography, the fact that a model wrote it is a reason to look
+harder, not a reason to skip — which is what the threat model says about our own
+implementation regardless of who typed it.
+
 ## Licence
 
 Copyright (C) 2025-2026 Yurii Arkhanhelskyi.
