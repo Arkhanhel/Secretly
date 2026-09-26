@@ -1495,6 +1495,11 @@ class RelayClient {
   /// Контроллер сам спрашивает сервер ключей, снята ли регистрация.
   void Function()? onUnknownDevice;
 
+  /// 26.09.2026: реле не приняло подпись (`401 bad signature`) — ключ, которым
+  /// подписано, не тот, что зарегистрирован у этого устройства. Само не
+  /// проходит: без хука ПК молча копил сообщения на сервере.
+  void Function()? onBadSignature;
+
   /// Реле приняло подписанный запрос этого устройства: регистрация на месте.
   /// Снимает полосу «устройство отключено», поднятую по ошибке (например,
   /// пока свежий номер после восстановления ещё регистрировался).
@@ -4906,6 +4911,9 @@ class RelayClient {
         if (resp.statusCode == 429) _noteRateLimited('pump_inbox');
         if (resp.statusCode == 401 && resp.body.contains('unknown device')) {
           onUnknownDevice?.call();
+        }
+        if (resp.statusCode == 401 && resp.body.contains('bad signature')) {
+          onBadSignature?.call();
         }
         return;
       }

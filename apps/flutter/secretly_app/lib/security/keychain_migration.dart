@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'secure_storage_options.dart';
 
 import 'package:secretly_app/diagnostics/diag_log.dart';
+import 'serialized_secure_storage.dart';
 
 /// Штатный пропуск переноса на платформах, где его смысла нет.
 class SkipKeychainMigration implements Exception {
@@ -42,7 +43,7 @@ class KeychainAccessibilityMigration {
     FlutterSecureStorage? legacyStorage,
   }) : _storage =
            storage ??
-           const FlutterSecureStorage(
+           const SerializedSecureStorage(
              aOptions: kSecretlyAndroidStorageOptions,
              iOptions: IOSOptions(
                accessibility: KeychainAccessibility.first_unlock_this_device,
@@ -54,7 +55,7 @@ class KeychainAccessibilityMigration {
            ),
        _legacyStorage =
            legacyStorage ??
-           const FlutterSecureStorage(
+           const SerializedSecureStorage(
              aOptions: kSecretlyAndroidStorageOptions,
              iOptions: IOSOptions(
                accessibility: KeychainAccessibility.first_unlock,

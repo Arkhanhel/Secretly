@@ -8,13 +8,14 @@ import 'dart:math';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'serialized_secure_storage.dart';
 
 class DeviceKeys {
   DeviceKeys._(this._secureStorage);
 
   static DeviceKeys create() {
     return DeviceKeys._(
-      const FlutterSecureStorage(
+      const SerializedSecureStorage(
         aOptions: kSecretlyAndroidStorageOptions,
         // `first_unlock_this_device` (kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly)
         // — ключи устройства должны читаться после ПЕРВОЙ разблокировки с

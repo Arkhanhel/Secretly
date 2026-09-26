@@ -4445,6 +4445,7 @@ class AppController {
   }) {
     _relay = relay;
     relay.onUnknownDevice = _onRelaySaysUnknownDevice;
+    relay.onBadSignature = _onRelaySaysBadSignature;
     relay.onDeviceAccepted = _onRelayAcceptedOwnDevice;
     relay.onOnlineOnlyDropped = _noteTypingDroppedOffline;
     relay.deviceCheckDigestFor = _deviceCheckDigestForRow;
@@ -10623,6 +10624,7 @@ class AppController {
   /// Реле приняло запрос этого устройства — значит, оно зарегистрировано.
   void _onRelayAcceptedOwnDevice() {
     _noteServerContact();
+    _relayBadSignatureStreak = 0;
     if (!_ownDeviceRemoved) return;
     _ownDeviceRemoved = false;
     DiagLog.event('devices', 'own_device_back', const {});
@@ -10631,6 +10633,40 @@ class AppController {
 
   @visibleForTesting
   void noteRelayUnknownDeviceForTesting() => _onRelaySaysUnknownDevice();
+
+  /// 26.09.2026: «неверная подпись» от реле подряд. Ключ, которым подписано, —
+  /// не тот, что зарегистрирован у устройства (на Windows его теряла гонка
+  /// записей в хранилище). Само не проходит: ПК молча копил сообщения на
+  /// сервере. Примерно после минуты таких отказов (и ни одного принятого
+  /// запроса) ПК честно просит привязать себя заново. Телефонов не касается.
+  int _relayBadSignatureStreak = 0;
+  bool _relayBadSignatureRelinkStarted = false;
+  static const int relayBadSignatureRelinkAfter = 6;
+
+  @visibleForTesting
+  static bool relayBadSignatureShouldRelink(int streak) =>
+      streak >= relayBadSignatureRelinkAfter;
+
+  void _onRelaySaysBadSignature() {
+    if (!_isDesktopOrWebPlatform || _relayBadSignatureRelinkStarted) return;
+    _relayBadSignatureStreak += 1;
+    DiagLog.event('relay', 'bad_signature', {
+      'streak': _relayBadSignatureStreak,
+    });
+    if (!relayBadSignatureShouldRelink(_relayBadSignatureStreak)) return;
+    _relayBadSignatureRelinkStarted = true;
+    unawaited(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await _enterDesktopUnlinkedMode(prefs, null);
+      } catch (e) {
+        _relayBadSignatureRelinkStarted = false;
+        DiagLog.event('relay', 'bad_signature_relink_failed', {
+          'err': _shortErrorTag(e),
+        });
+      }
+    }());
+  }
 
   @visibleForTesting
   void noteRelayAcceptedOwnDeviceForTesting() => _onRelayAcceptedOwnDevice();
@@ -10941,6 +10977,7 @@ class AppController {
     relay.readyAtMsProvider = () => _startupReadyAtMs;
     _relay = relay;
     relay.onUnknownDevice = _onRelaySaysUnknownDevice;
+    relay.onBadSignature = _onRelaySaysBadSignature;
     relay.onDeviceAccepted = _onRelayAcceptedOwnDevice;
     relay.onOnlineOnlyDropped = _noteTypingDroppedOffline;
     relay.deviceCheckDigestFor = _deviceCheckDigestForRow;
@@ -15735,6 +15772,7 @@ class AppController {
         relay.readyAtMsProvider = () => _startupReadyAtMs;
         _relay = relay;
     relay.onUnknownDevice = _onRelaySaysUnknownDevice;
+    relay.onBadSignature = _onRelaySaysBadSignature;
     relay.onDeviceAccepted = _onRelayAcceptedOwnDevice;
     relay.onOnlineOnlyDropped = _noteTypingDroppedOffline;
     relay.deviceCheckDigestFor = _deviceCheckDigestForRow;

@@ -8,7 +8,8 @@ import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show visibleForTesting, defaultTargetPlatform, TargetPlatform, kIsWeb;
 import 'package:sqflite_common/sqlite_api.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as ffi;
 
@@ -1909,7 +1910,7 @@ CREATE TABLE IF NOT EXISTS contact_verification (
   static int get expectedSchemaVersion => _schemaVersion;
 
   static Future<AppDb> open({required String passphrase}) async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await databaseDirectory();
     final dbPath = p.join(dir.path, 'secretly.db');
 
     Future<void> baseConfigure(Database db) async {
@@ -2202,9 +2203,29 @@ CREATE TABLE IF NOT EXISTS contact_verification (
 
   /// Path of the main encrypted database (mobile + desktop use the same name).
   static Future<String> localDatabasePath() async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await databaseDirectory();
     return p.join(dir.path, 'secretly.db');
   }
+
+  /// Каталог базы (26.09.2026). На Windows и Linux — своя папка приложения
+  /// (`%APPDATA%\…\Secretly`, там же ключ базы и журнал), а не общие
+  /// «Документы»: их синхронизирует OneDrive, в них остаются файлы прежних
+  /// установок, и Windows-версия при первом же запуске находила там базу без
+  /// ключа и запиралась. Файл, оставшийся в «Документах», не трогается.
+  /// Телефоны и Mac — как было (у Mac «Документы» свои, в контейнере).
+  static Future<Directory> databaseDirectory() async {
+    if (databaseLivesInAppSupport(defaultTargetPlatform)) {
+      final dir = await getApplicationSupportDirectory();
+      await dir.create(recursive: true);
+      return dir;
+    }
+    return getApplicationDocumentsDirectory();
+  }
+
+  @visibleForTesting
+  static bool databaseLivesInAppSupport(TargetPlatform platform) =>
+      !kIsWeb &&
+      (platform == TargetPlatform.windows || platform == TargetPlatform.linux);
 
   /// Whether an encrypted database already exists on disk.
   ///
@@ -3067,7 +3088,7 @@ CREATE TABLE IF NOT EXISTS local_kv (
 
   /// Quarantined databases, newest first.
   static Future<List<File>> _quarantinedBackups() async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await databaseDirectory();
     final found = <File>[];
     try {
       await for (final entity in Directory(dir.path).list(followLinks: false)) {
@@ -3180,7 +3201,7 @@ CREATE TABLE IF NOT EXISTS local_kv (
   /// to catch.
   static Future<bool> localDatabaseFileExists() async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
+      final dir = await databaseDirectory();
       return File(p.join(dir.path, 'secretly.db')).exists();
     } catch (_) {
       return false;
@@ -3188,7 +3209,7 @@ CREATE TABLE IF NOT EXISTS local_kv (
   }
 
   static Future<void> deleteLocalDatabaseFiles() async {
-    final dir = await getApplicationDocumentsDirectory();
+    final dir = await databaseDirectory();
     final base = p.join(dir.path, 'secretly.db');
     final candidates = <String>[
       base,

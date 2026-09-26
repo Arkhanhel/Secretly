@@ -11,6 +11,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../diagnostics/diag_log.dart';
+import 'serialized_secure_storage.dart';
 
 /// The local DB passphrase cannot be read RIGHT NOW, but the failure is
 /// TRANSIENT — the device has not been unlocked since boot, or the keystore is
@@ -39,6 +40,13 @@ class DbPassphraseLost implements Exception {
   @override
   String toString() => 'DbPassphraseLost($reason)';
 }
+
+/// «База есть, ключа нет» — потеря навсегда, а не «устройство ещё не
+/// разблокировано»? Да — только на Windows: хранилище там файл, блокировки у
+/// него не бывает (26.09.2026). Везде ещё — прежнее «подождать и повторить».
+@visibleForTesting
+bool dbPassphraseAbsenceIsPermanent(TargetPlatform platform) =>
+    !kIsWeb && platform == TargetPlatform.windows;
 
 /// The local CONTENT key cannot be read RIGHT NOW, and the failure is
 /// TRANSIENT — the same locked-device / warming-keystore conditions as
@@ -80,7 +88,7 @@ class SecureSecrets {
 
   static SecureSecrets create() {
     return SecureSecrets._(
-      const FlutterSecureStorage(
+      const SerializedSecureStorage(
         aOptions: kSecretlyAndroidStorageOptions,
         // См. device_keys.dart: `first_unlock_this_device` — секреты читаются на
         // заблокированном устройстве после первой разблокировки (лечит -25308),
@@ -202,6 +210,15 @@ class SecureSecrets {
     // A database exists, so a key existed too. Anything we cannot read right
     // now is transient by definition: wait for the device to unlock and retry.
     // We never re-key on this path.
+    //
+    // 26.09.2026, Windows — исключение. Там хранилище — файл, «заблокированного
+    // устройства» не бывает: чтение прошло и ключа нет — значит, он потерян
+    // (гонка записей, см. SerializedSecureStorage). Ждать нечего, а
+    // «Unavailable» запирал вход навсегда. Lost ведёт на готовый путь: старый
+    // файл откладывается в сторону (не удаляется), запуск — с чистого листа.
+    if (dbPassphraseAbsenceIsPermanent(defaultTargetPlatform)) {
+      throw DbPassphraseLost('stored passphrase absent (Windows file store)');
+    }
     throw DbPassphraseUnavailable(
       'stored passphrase not readable yet (device may still be locked)',
     );

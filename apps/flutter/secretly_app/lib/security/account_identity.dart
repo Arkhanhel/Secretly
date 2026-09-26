@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'serialized_secure_storage.dart';
 
 /// Ключ личности АККАУНТА (AIK) — один на человека, а не на устройство.
 ///
@@ -49,7 +50,7 @@ class AccountIdentity {
 
   static AccountIdentity create() {
     return AccountIdentity._(
-      const FlutterSecureStorage(
+      const SerializedSecureStorage(
         aOptions: kSecretlyAndroidStorageOptions,
         // Те же условия доступности, что у ключей устройства: сертификат
         // подписывается при публикации связки, а она бывает и на запуске

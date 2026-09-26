@@ -12,13 +12,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../security/auth_signer.dart';
 import '../security/device_keys.dart';
 import 'entitlement_repository.dart';
+import '../security/serialized_secure_storage.dart';
 
 /// EntitlementCache backed by flutter_secure_storage (same keychain options the
 /// rest of the app uses on macOS).
 class SecureStorageEntitlementCache implements EntitlementCache {
   SecureStorageEntitlementCache([FlutterSecureStorage? storage])
       : _storage = storage ??
-            const FlutterSecureStorage(
+            const SerializedSecureStorage(
               aOptions: kSecretlyAndroidStorageOptions,
               // `first_unlock_this_device`: кэш прав читается на заблокированном
               // устройстве после первой разблокировки (лечит -25308, см.
