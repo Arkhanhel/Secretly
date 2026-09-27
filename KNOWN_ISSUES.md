@@ -3,7 +3,7 @@
 What is wrong with Secretly right now, in our own words, before anyone else
 finds it.
 
-The threat model ([`docs/THREAT_MODEL.md`](THREAT_MODEL.md)) says what the
+The threat model ([`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md)) says what the
 system does and does not protect. This file is narrower and more practical: it
 lists open defects and shortcuts, who is affected, and when we expect to fix
 them. It exists because an auditor's first question is not "what did you build"
@@ -150,7 +150,7 @@ quality per platform and testing it on real devices.
 Two people building the same source do not get identical binaries. Store builds
 additionally cannot be byte-compared with what you install, because Apple and
 Google re-sign and re-package them. What can be checked today, and how, is in
-[`docs/VERIFY.md`](VERIFY.md).
+[`docs/VERIFY.md`](docs/VERIFY.md).
 
 ### Android needs Google services
 

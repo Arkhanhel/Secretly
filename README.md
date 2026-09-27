@@ -32,16 +32,16 @@ can check yourself, which is most of the reason the code is here.
 
 ## What is in the repository
 
-About 513,000 lines of our own code, counted with `wc -l` over tracked files on
-26 September 2026:
+About 515,000 lines of our own code, counted with `wc -l` over tracked files on
+28 September 2026:
 
 | | lines |
 |---|---|
-| Client, Dart and Flutter — phone and desktop share one codebase | 354,091 |
-| Client tests | 97,138 |
+| Client, Dart and Flutter — phone and desktop share one codebase | 354,563 |
+| Client tests | 98,042 |
 | `server/relay` — message transport, rooms, calls, blob storage | 35,946 |
-| `server/keys` — identities, prekey bundles, encrypted backups, entitlements | 15,885 |
-| Android, iOS, macOS and Windows platform code | 9,934 |
+| `server/keys` — identities, prekey bundles, encrypted backups, entitlements | 15,891 |
+| Android, iOS, macOS and Windows platform code | 10,148 |
 | `core/rust/secretly_core` — crypto primitives shared over FFI | 201 |
 
 Generated localisations add another 59,000 lines and are not counted above.
@@ -71,12 +71,13 @@ documentation than in a blog post.
 
 Two problems we found ourselves, both described in the threat model. Until
 September 2026 the initiator of a session was not authenticated by a signature,
-so a malicious server could impersonate a device; since 1.8.58 the handshake is
-signed and a device that has signed once can no longer be impersonated, but
-unsigned handshakes from older app versions are still accepted — narrowed, not
-closed (section 5.10). And the app sent the first characters of each message to
-the server for notification previews; the relay discards them since 24 September
-2026, and 1.8.59 no longer sends them.
+so a malicious server could impersonate a device. Since 1.8.58 the handshake is
+signed, but an older wire format and unsigned handshakes from older app versions
+are still accepted, so impersonation is narrowed, not closed (section 5.10 and
+[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md)). And the relay received, stored and passed
+to Apple's and Google's push services up to 180 characters of each message for
+notification previews; it discards them since 24 September 2026, and 1.8.59 no
+longer sends them.
 
 [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) is the shorter, more practical list: what
 is broken right now, who it affects, and when we expect to fix it. It is the
@@ -90,16 +91,23 @@ disclosure is dangerous for them.
 
 ## How this was built
 
-Written by one developer, with AI coding assistants used heavily and
-continuously from February 2026 onward. Most lines here were produced by a
-model — the client, both servers, the tests, the cryptographic code and most of
-this documentation. Every decision about what to build, what to refuse and what
-to ship was made by the developer, and every release was tested on real devices
-before it reached anyone.
+Designed and built by one developer, with AI coding assistants used heavily and
+continuously from February 2026 onward. The developer designed the product and
+the architecture, weighed the options and made the decisions — what to build,
+what to refuse, what to ship — and tested every release on real devices before
+it reached anyone. The models did most of the writing: most lines here,
+including the client, both servers, the tests, the cryptographic code and most
+of this documentation, were produced by a model under his direction, and for
+some plans the models also worked out technical details that he then accepted
+or changed. For two people without outside funding, that made possible in
+months what would otherwise have taken years.
 
-1,129 of 1,612 commits carry a `Co-Authored-By: Claude …` trailer naming the
-model. The rest are not human-only: the convention started late and was dropped
-in September, while the work behind those commits was assisted the same way.
+In the private working repository, 1,129 of 1,618 commits (27 September 2026)
+carry a `Co-Authored-By: Claude …` trailer naming the model. This public
+repository is an export started on 18 September 2026 and does not carry that
+history. Commits without a trailer are not human-only either: the convention
+started late and was dropped in September, while the work behind them was
+assisted the same way.
 
 We mention it here rather than leaving it to be discovered. If you are about to
 review the cryptography, the fact that a model wrote it is a reason to look

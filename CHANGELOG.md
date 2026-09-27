@@ -11,15 +11,49 @@ what the app stores show.
 
 ## [Unreleased]
 
-Work in progress on the `main` branch.
+Work in progress on the `main` branch; nothing listed here has reached a
+published build yet.
 
-### Added
-- Desktop client for macOS: rooms, polls, events, media sending, link previews.
+---
+
+## [1.8.61] — 2026-09-26
+
+Builds 630 (iOS TestFlight, macOS, Windows) and 631 (Android, Windows). Source:
+tags `v1.8.61-630`, `v1.8.61-631-android` and `v1.8.61-631-windows`.
+
+### Fixed
+- Delivery receipts could get stuck and, once enough piled up, stop being sent.
+- Windows: two writes to the secrets store could race and lose the device key or
+  the database password. 631 queues the writes and moves the database into the
+  application folder; anyone affected needs to link the computer again.
+- Android: native libraries are aligned to 16 KB pages, as Google Play requires.
+
+## [1.8.59] — 2026-09-24
+
+Build 628.
+
+### Privacy
+- The app no longer sends the beginning of each message to the server for
+  notification previews. The relay discards it from older versions as well.
+
+## [1.8.58] — 2026-09-24
+
+Build 627.
 
 ### Security
+- The device that starts a conversation signs the handshake. An older wire
+  format and unsigned handshakes from older versions are still accepted for
+  now; see `KNOWN_ISSUES.md`.
+
+### Fixed
+- Incoming messages could appear twice on a second device.
+
+## Between 1.8.39 and 1.8.58 — September 2026
+
+- The desktop app for macOS and Windows, downloaded from our website and
+  updated automatically.
 - Sender authentication in rooms: the relay can no longer name a sender on
-  another device's behalf. The remaining handshake signature is tracked
-  internally as C-2.
+  another device's behalf.
 
 ---
 

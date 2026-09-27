@@ -40,8 +40,9 @@ SELECT COUNT(*) FROM device_activity
 
 `last_pump_at_ms` is written when a device fetches its mailbox. A phone that is
 switched off, or has no network, does not appear; a desktop left in the tray
-does. `ops/rollout_status.sh` runs this query by build number and is what we use
-to decide when a compatibility gate can close.
+does. We run this query grouped by build number to decide when a compatibility
+gate can close; the script that does it belongs to our server tooling and is
+not in this repository.
 
 **Read it as:** devices that talked to the relay in that window. One person with
 a phone and two computers counts three.
@@ -88,6 +89,23 @@ install that never opened the app is a download but never a profile).
    from.
 5. **If a figure is stale, it is replaced or removed** — not quietly carried
    forward. Applications are re-checked on the day they are sent.
+
+---
+
+## Figures we have quoted
+
+Every figure from the queries above that has appeared in a grant application or
+on the website, with the day it was taken:
+
+| Day | Figure | Query |
+|---|---|---|
+| 1 September 2026 | 595 devices | devices active in a window, 1 day |
+| 27 September 2026 | 842 devices | devices active in a window, 1 day |
+| 27 September 2026 | 2,982 devices | devices active in a window, 30 days |
+| 27 September 2026 | 7,732 profiles | profiles |
+
+The profile count includes everyone who reinstalled without a recovery kit and
+is never read as a number of people.
 
 ---
 
