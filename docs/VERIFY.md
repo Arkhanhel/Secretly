@@ -84,6 +84,11 @@ Google, with the git tag of the source each was built from.
 
 | Release | Platform | File | Date | SHA-256 | Source |
 |---|---|---|---|---|---|
+| 1.8.62 (635) | macOS | `Secretly-1.8.62-635.dmg` | 2026-09-28 | `9c40a3ec95bb92152808d52a135c3b43fe27b5a44f775b1c6cd92164288aa619` | `v1.8.62-635` |
+| 1.8.62 (635) | Windows installer | `Secretly-Setup-1.8.62-635-x64.exe` | 2026-09-28 | `aeb9d7d63be5dafd3ffd508227e72baab4a480182626043c297e6a0af8a6d467` | `v1.8.62-635` |
+| 1.8.62 (635) | Windows | `Secretly-1.8.62-635-windows-x64.zip` | 2026-09-28 | `c9dff9a784b59a9d2b6574dd538a98ee9cb0466372d74c0e14b4839cd04a01a0` | `v1.8.62-635` |
+| 1.8.62 (635) | Android | `secretly-production-1.8.62-635-store635.aab` | 2026-09-28 | `e6df02697f84205fac018162c217debca2600c01bbb2c1f1962143bed5df5fa7` | `v1.8.62-635` |
+| 1.8.62 (635) | iOS | `secretly-production-1.8.62-635-store635.ipa` | 2026-09-28 | `16dd0047c0d72d09683841c57d04d99fd2a76e3abfca1590b6cc60db524df9db` | `v1.8.62-635` |
 | 1.8.61 (631) | Android | `secretly-production-1.8.61-631-store631.aab` | 2026-09-26 | `ad87f9c8e649d7c51b69505ab943b390ac1fb31b73cfe624f0ca45bcc466e7ec` | `v1.8.61-631-android` |
 | 1.8.61 (631) | Windows | `Secretly-1.8.61-631-windows-x64.zip` | 2026-09-26 | `5e29c8936dde8f04e4b3444407f0907a84b2baf6793f99f89c2c957c35fc4347` | `v1.8.61-631-windows` |
 | 1.8.61 (630) | macOS | `Secretly-1.8.61-630.dmg` | 2026-09-25 | `bc21172346b41af4d6ba4c199f47357dda297b711ce9fc0132504ca7fbaaf26d` | `v1.8.61-630` |
@@ -92,9 +97,10 @@ Google, with the git tag of the source each was built from.
 | 1.8.39 (588) | Android | `secretly-production-1.8.39-588-store588.aab` | 2026-09-05 | `0441577c7ee0161acfcba4d4c40d90b5eedbf96395a7f05c8de0eff8dd57e31a` | — |
 | 1.8.39 (588) | iOS | `secretly-production-1.8.39-588-store588.ipa` | 2026-09-05 | `049d83a97a81090d5b983f4e45a2884bfaf91b875e4eea8bd96de412de146f15` | — |
 
-What is where on 26 September 2026: Google Play serves 1.8.61 (631); the App
-Store still serves 1.8.39 (588), with 1.8.61 (630) in TestFlight; the desktop
-apps update themselves to macOS 1.8.61 (630) and Windows 1.8.61 (631).
+What is where on 28 September 2026: the desktop apps update themselves to
+1.8.62 (635) — on Windows, from this release on, through the signed installer;
+Google Play serves 1.8.61 (631) until 1.8.62 (635) is through review; the App
+Store still serves 1.8.39 (588), with 1.8.62 (635) in TestFlight.
 
 **Desktop files come straight from us**, from `updates.secretlyapp.com`, so the
 file you download is byte-for-byte the file listed above. Compute its SHA-256 —

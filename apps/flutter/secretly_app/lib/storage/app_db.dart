@@ -7308,6 +7308,93 @@ WHERE peer_device_id = ?
     });
   }
 
+  /// Типы событий, которые человек видит в ленте личного чата.
+  static const List<String> visibleDirectEventTypes = <String>[
+    'msg',
+    'att',
+    'sticker',
+    'call',
+  ];
+
+  /// Личные чаты, где нечего показать и некого назвать (28.09.2026).
+  ///
+  /// Кандидаты на уборку: ни одного видимого события, у собеседника нет ни
+  /// своего имени в контактах, ни ника, чат не закреплён и заведён раньше
+  /// [createdBeforeMs]. Такие чаты список показывает как id — их оставляли
+  /// временные профили привязки ПК и невидимые события от незнакомцев.
+  /// Решение удалять принимает вызывающий: он сверяет, что у профиля на
+  /// сервере не осталось устройств.
+  Future<List<String>> emptyNamelessDirectChatIds({
+    required String ownProfileId,
+    required int createdBeforeMs,
+  }) async {
+    final visible = visibleDirectEventTypes.map((_) => '?').join(',');
+    final rows = await _db.rawQuery(
+      '''
+SELECT c.convo_id AS convo_id
+FROM conversations c
+LEFT JOIN contacts k ON k.contact_profile_id = c.convo_id
+LEFT JOIN profile_meta m ON m.profile_id = c.convo_id
+WHERE c.kind = '1to1'
+  AND c.convo_id <> ?
+  AND c.convo_id NOT LIKE 'req:%'
+  AND c.convo_id NOT LIKE 'group:%'
+  AND c.pinned_at_ms IS NULL
+  AND c.created_at_ms < ?
+  AND COALESCE(TRIM(k.display_name), '') = ''
+  AND COALESCE(k.display_name_is_custom, 0) = 0
+  AND COALESCE(TRIM(m.nickname), '') = ''
+  AND NOT EXISTS (
+    SELECT 1 FROM events e
+    WHERE e.convo_id = c.convo_id AND e.type IN ($visible)
+  )
+ORDER BY c.created_at_ms ASC
+''',
+      <Object?>[ownProfileId, createdBeforeMs, ...visibleDirectEventTypes],
+    );
+    return rows
+        .map((r) => (r['convo_id'] as String?)?.trim() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  /// Удаляет пустой личный чат вместе с записью контакта и запроса.
+  ///
+  /// Внутри транзакции ещё раз проверяет, что видимых событий нет: между
+  /// поиском и удалением мог прийти настоящий текст. Контакт с именем, которое
+  /// дал сам человек, не трогается. Возвращает true, если чат удалён.
+  Future<bool> removeEmptyDirectChat(String convoId) async {
+    final id = convoId.trim();
+    if (id.isEmpty) return false;
+    final visible = visibleDirectEventTypes.map((_) => '?').join(',');
+    return _db.transaction((txn) async {
+      final rows = await txn.rawQuery(
+        'SELECT COUNT(*) AS n FROM events WHERE convo_id = ? AND type IN ($visible)',
+        <Object?>[id, ...visibleDirectEventTypes],
+      );
+      final n = rows.isEmpty ? 0 : ((rows.first['n'] as num?)?.toInt() ?? 0);
+      if (n > 0) return false;
+      await txn.delete('events', where: 'convo_id = ?', whereArgs: [id]);
+      final deleted = await txn.delete(
+        'conversations',
+        where: "convo_id = ? AND kind = '1to1'",
+        whereArgs: [id],
+      );
+      await txn.delete(
+        'contacts',
+        where:
+            "contact_profile_id = ? AND COALESCE(display_name_is_custom, 0) = 0 AND COALESCE(TRIM(display_name), '') = ''",
+        whereArgs: [id],
+      );
+      await txn.delete(
+        'requests',
+        where: 'contact_profile_id = ?',
+        whereArgs: [id],
+      );
+      return deleted > 0;
+    });
+  }
+
   Future<List<Map<String, Object?>>> requestsListPending({
     int limit = 200,
   }) async {

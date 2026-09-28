@@ -37,7 +37,9 @@ wire format has no such check, so a malicious server can still present a first
 message "from" any device id — including one of your own computers. It cannot
 read the replies, which use the current format.
 
-**Fix:** the next phone release refuses new sessions in the old format.
+**Fix:** a coming phone release refuses new sessions in the old format. It is
+switched on from the server in stages, so that nobody still on an old version
+loses delivery overnight.
 
 ### Unsigned handshakes from older builds are still accepted
 
@@ -50,10 +52,11 @@ rollout numbers. Threat model §5.10.
 ### Linking a computer trusts the key the server hands out
 
 When you link a desktop app by QR code, the phone encrypts the account to the
-computer's key as served by our key server. The fix — the computer's key
-fingerprint inside the QR code, checked by the phone before anything is sent —
-is in the code and reaches people with the next phone release. Until then a
-malicious server could substitute a computer of its own during linking.
+computer's key as served by our key server. Since 1.8.62 (build 635) the QR
+code carries the computer's key fingerprint, and the phone checks it before
+anything is sent. A phone on an older version still trusts the key the server
+hands out, so a malicious server could substitute a computer of its own when
+linking from such a phone.
 
 ### Room membership is decided by the relay and is not signed
 
@@ -105,8 +108,9 @@ the relay stored them.
 ### iOS: the notification extension reads the device key outside the keychain
 
 A copy of the device identity seed lives in the app group's settings so the
-notification extension can use it. It moves into the keychain in the next
-release.
+notification extension can use it. Moving it into the keychain is planned; it
+needs testing on devices first, because a mistake there would stop
+notifications from being decrypted in the background.
 
 ### Media files are ordinary files
 

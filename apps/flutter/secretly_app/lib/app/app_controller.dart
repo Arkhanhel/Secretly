@@ -31999,6 +31999,82 @@ class AppController {
   // Background maintenance for the conversation list: retention sweep +
   // request auto-accept. Runs off the render path (see _loadConversationsFromDb)
   // and refreshes the list when finished so any deletions/accepts show up.
+  /// Флаг разовой уборки пустых чатов мёртвых профилей (28.09.2026).
+  static const String _prefsDeadEmptyDirectChatsCleanupKey =
+      'cleanup_dead_empty_direct_chats_v1_done';
+
+  /// Профилю моложе суток сервер ещё может не показать устройства.
+  static const int _deadEmptyDirectChatMinAgeMs = 24 * 60 * 60 * 1000;
+
+  bool _deadEmptyDirectChatsCleanupRunning = false;
+
+  /// Разовая уборка пустых чатов, которые список показывает как id (28.09.2026).
+  ///
+  /// Их оставили временные профили привязки ПК: телефон принимал такой
+  /// профиль в контакты, отправляя ему данные привязки, а следом чат уезжал и
+  /// на компьютер. Удаляется только чат, где одновременно нет видимых
+  /// сообщений, нет имени собеседника и у профиля на сервере не осталось ни
+  /// одного устройства. Самое свежее устройство сервер показывает у любого
+  /// живого профиля, как бы давно тот ни заходил (`list_device_statuses`),
+  /// поэтому пустой список значит, что профиль мёртв. Беседы `dev:` без
+  /// видимых сообщений удаляются без запроса — по ним сервер не спросить.
+  /// Любая ошибка сети откладывает уборку до следующего раза.
+  Future<void> _cleanupDeadEmptyDirectChatsOnce(AppDb db) async {
+    final prefs = _prefs;
+    final own = (_profileId ?? '').trim();
+    if (prefs == null || own.isEmpty || _transportBlocked) return;
+    if (prefs.getBool(_prefsDeadEmptyDirectChatsCleanupKey) == true) return;
+    if (_deadEmptyDirectChatsCleanupRunning) return;
+    _deadEmptyDirectChatsCleanupRunning = true;
+    try {
+      final candidates = await db.emptyNamelessDirectChatIds(
+        ownProfileId: own,
+        createdBeforeMs:
+            DateTime.now().millisecondsSinceEpoch - _deadEmptyDirectChatMinAgeMs,
+      );
+      var removed = 0;
+      var deferred = 0;
+      for (final convoId in candidates) {
+        var dead = convoId.startsWith('dev:');
+        if (!dead) {
+          try {
+            dead = (await loadRecipientDeviceStatuses(convoId)).isEmpty;
+          } on KeysPolicyFailure catch (e) {
+            if (e.code != KeysPolicyFailureCode.profileNotFound) {
+              deferred++;
+              continue;
+            }
+            dead = true;
+          } catch (_) {
+            deferred++;
+            continue;
+          }
+        }
+        if (dead && await db.removeEmptyDirectChat(convoId)) {
+          removed++;
+        }
+      }
+      DiagLog.event('cleanup', 'dead_empty_direct_chats', {
+        'candidates': candidates.length,
+        'removed': removed,
+        'deferred': deferred,
+      });
+      if (deferred == 0) {
+        await prefs.setBool(_prefsDeadEmptyDirectChatsCleanupKey, true);
+      }
+      if (removed > 0) {
+        _invalidateListConversationsCache();
+        if (!_changed.isClosed) _changed.add(null);
+      }
+    } catch (e) {
+      DiagLog.event('cleanup', 'dead_empty_direct_chats_failed', {
+        'err': _shortErrorTag(e),
+      });
+    } finally {
+      _deadEmptyDirectChatsCleanupRunning = false;
+    }
+  }
+
   Future<void> _runConversationMaintenance(AppDb db) async {
     try {
       // 🔴 БЕЗ ПОТОЛКА В ДВЕСТИ (02.09.2026, аудит масштабирования). Прежний
@@ -32013,6 +32089,7 @@ class AppController {
       final rows = await db.convoList(limit: _convoMaintenanceScanLimit);
       await _applyRetentionForConvoRows(rows);
       await _autoAcceptPendingRequestsFromDb(db);
+      unawaited(_cleanupDeadEmptyDirectChatsOnce(db));
       // Granular mute: flip any time-limited mutes whose deadline passed.
       final expiredMutes = await db.convoExpireMutes();
       if (expiredMutes.isNotEmpty) {
@@ -42613,13 +42690,19 @@ class AppController {
         fallbackCode: AttachmentFailureCode.transportBlocked,
       );
     }
-    final readyForDirectChat = await _ensureDirectConversationReadyForOutgoing(
-      resolvedPeerProfileId,
-    );
-    if (!readyForDirectChat) {
-      throw AttachmentFailure(AttachmentFailureCode.contactBlocked);
-    }
+    // 🔴 28.09.2026: передача без следа в истории — это данные привязки ПК, и
+    // адресат у них ВРЕМЕННЫЙ профиль, который компьютер завёл на экране QR.
+    // Приём запроса здесь записывал его в контакты и заводил пустой чат с
+    // id вместо имени — владелец принял это за взлом аккаунта. Блокировку
+    // адресата уже проверили выше; принимать его и заводить чат незачем.
     if (includeInLocalHistory) {
+      final readyForDirectChat =
+          await _ensureDirectConversationReadyForOutgoing(
+            resolvedPeerProfileId,
+          );
+      if (!readyForDirectChat) {
+        throw AttachmentFailure(AttachmentFailureCode.contactBlocked);
+      }
       await db.convoEnsure1to1(peerProfileId: resolvedPeerProfileId);
     }
 
@@ -48951,6 +49034,27 @@ class AppController {
     return true;
   }
 
+  /// Видно ли событие в личном чате: обычный текст, вложение, наклейка,
+  /// звонок. Всё прочее — системное, неизвестного типа от более новой сборки,
+  /// скрытая служебная строка — в ленте не показывается, непрочитанным не
+  /// считается и чата с незнакомцем не заводит.
+  @visibleForTesting
+  static bool inboundEventIsVisibleMessage(Object? event) =>
+      (event is MsgEventV1 &&
+          !isHiddenMessageControlText(event.text) &&
+          !isDeleteForAllCommandText(event.text)) ||
+      event is AttachmentEventV1 ||
+      event is StickerEventV1 ||
+      event is CallEventV1;
+
+  /// Пришло ли это с моего же устройства или от моего же профиля.
+  bool _inboundSenderIsOwn({String? senderProfileId, String? senderDeviceId}) {
+    final did = (senderDeviceId ?? '').trim();
+    final own = (_profileId ?? '').trim();
+    return (did.isNotEmpty && isOwnDeviceId(did)) ||
+        (own.isNotEmpty && (senderProfileId ?? '').trim() == own);
+  }
+
   Future<bool> _handleDecryptedInboundPayload({
     required AppDb db,
     required String msgId,
@@ -50766,6 +50870,36 @@ class AppController {
 
     // Unknown unblocked senders are promoted immediately into the direct chat.
     final spid = senderProfileId;
+
+    // 🔴 28.09.2026: невидимое событие — системное, неизвестного типа от более
+    // новой сборки, скрытая служебная строка — от того, кого нет ни в
+    // контактах, ни в чатах, ниже принимало отправителя и заводило пустой чат
+    // с id вместо имени. Показать в таком чате нечего, а человеку он выглядит
+    // как чужой в аккаунте. Подтверждаем получение и больше ничего не делаем.
+    // Свои устройства и уже существующие чаты идут прежним путём.
+    if (!inboundEventIsVisibleMessage(firstEvent) &&
+        !_inboundSenderIsOwn(
+          senderProfileId: spid,
+          senderDeviceId: senderDeviceId,
+        )) {
+      final unknownSenderConvoId = (spid != null && spid.isNotEmpty)
+          ? spid
+          : ((senderDeviceId ?? '').trim().isNotEmpty
+                ? 'dev:${senderDeviceId!.trim()}'
+                : '');
+      final senderIsContact =
+          spid != null && spid.isNotEmpty && await db.contactGet(spid) != null;
+      if (unknownSenderConvoId.isNotEmpty &&
+          !senderIsContact &&
+          await db.convoGet(unknownSenderConvoId) == null) {
+        DiagLog.event('inbox', 'drop_invisible_from_unknown', {
+          'peer': DiagLog.pfx(unknownSenderConvoId),
+          'event': firstEvent?.runtimeType.toString() ?? 'none',
+        });
+        return true;
+      }
+    }
+
     if (spid != null && spid.isNotEmpty) {
       if (await db.blockedProfileIsBlocked(spid)) {
         return true;
@@ -50850,23 +50984,17 @@ class AppController {
     // device sync edge-cases land in the events table as `received`, and
     // the desktop chat panel shows "only my contact's messages" for own
     // sends that bypassed the self-mirror cmd path.
-    final inboundDirectSenderDid = (senderDeviceId ?? '').trim();
-    final inboundDirectIsOwnSend =
-        (inboundDirectSenderDid.isNotEmpty &&
-            isOwnDeviceId(inboundDirectSenderDid)) ||
-        ((spid ?? '').trim() == (_profileId ?? '').trim() &&
-            (_profileId ?? '').trim().isNotEmpty);
+    final inboundDirectIsOwnSend = _inboundSenderIsOwn(
+      senderProfileId: spid,
+      senderDeviceId: senderDeviceId,
+    );
     // Only a real visible event (normal text / attachment / sticker / call) may
     // be stored as a message, counted unread, or notified. A non-visible or
     // future event type (the System/Unknown fall-through) or an unrecognized
     // hidden control text is classified 'sys' → never unread, never notified.
-    final firstEventIsVisibleMessage =
-        (firstEvent is MsgEventV1 &&
-            !isHiddenMessageControlText(firstEvent.text) &&
-            !isDeleteForAllCommandText(firstEvent.text)) ||
-        firstEvent is AttachmentEventV1 ||
-        firstEvent is StickerEventV1 ||
-        firstEvent is CallEventV1;
+    final firstEventIsVisibleMessage = inboundEventIsVisibleMessage(
+      firstEvent,
+    );
     // Payload-id idempotency (2026-07-23, undecryptable-recovery). Apply-dedup is
     // otherwise keyed on the RELAY msg_id, so a re-sent copy of a message we
     // already applied (NEW relay msg_id, SAME payload_event_id — exactly what the
