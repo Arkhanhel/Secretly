@@ -28,6 +28,10 @@ void main() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
     DesktopUiPrefs.resetForTest();
     DesktopChildWindows.instance.debugReset();
+    // Окошки — Windows: и сама служба окон, а не только окошки уведомлений.
+    // Без этого на CI (Linux) служба отвечала «окна не поддерживаются», а
+    // на Mac тест проходил лишь потому, что macOS тоже их поддерживает.
+    DesktopChildWindows.debugOperatingSystem = 'windows';
     windows.debugReset();
     DesktopNotificationWindows.debugForceWindows = true;
     calls.clear();
@@ -49,6 +53,7 @@ void main() {
 
   tearDown(() {
     DesktopNotificationWindows.debugForceWindows = false;
+    DesktopChildWindows.debugOperatingSystem = null;
     binding.defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
   });
 

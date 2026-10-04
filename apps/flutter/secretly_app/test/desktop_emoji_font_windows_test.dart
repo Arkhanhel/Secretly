@@ -21,6 +21,7 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
@@ -45,6 +46,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Файл, его размер и сумма — ровно то, что записано в
 /// `assets/fonts/LICENSES.md`. Обновили шрифт — поправить и там, и здесь.
 const String _fontPath = 'windows/fonts/NotoColorEmoji_WindowsCompatible.ttf';
+
+/// Ширина строки «как у Noto» с допуском движка (04.10.2026).
+///
+/// 🔴 Движки текста округляют ширины по-разному: CoreText на Mac даёт
+/// 24,902, FreeType на Linux (CI открытой выкладки) — 24,953, то есть до
+/// 0,065 точки на знак, и расхождение копится по длине строки. Различать
+/// проверки должны Noto и чужой шрифт — они расходятся больше чем на 0,5
+/// точки (`greaterThan(0.5)` ниже), так что 0,1 на знак (или 0,3 % строки)
+/// ничего не размывает.
+Matcher _closeToWidth(double expected) =>
+    moreOrLessEquals(expected, epsilon: math.max(0.1, expected * 0.003));
 const int _fontBytes = 10739048;
 const String _fontSha256 =
     '2c7ede2f5438f9c1da098778bd681535933a345334008bb03fc51119f6b1cd72';
@@ -149,7 +161,7 @@ void _expectNoto(Finder finder, String emoji) {
   final widths = _emojiWidths(finder, emoji);
   expect(widths, isNotEmpty, reason: 'знак $emoji не найден');
   for (final (got, noto) in widths) {
-    expect(got, moreOrLessEquals(noto, epsilon: 0.05),
+    expect(got, _closeToWidth(noto),
         reason: '$emoji нарисован не Noto: ширина $got, у Noto $noto');
   }
 }
@@ -515,7 +527,7 @@ void main() {
         fontSize: size,
       );
       expect(_width(const TextSpan(text: '🧿', style: parent)),
-          moreOrLessEquals(noto, epsilon: 0.05));
+          _closeToWidth(noto));
       expect(
         _width(const TextSpan(
           style: parent,
@@ -523,7 +535,7 @@ void main() {
             TextSpan(text: '🧿', style: TextStyle(fontSize: size)),
           ],
         )),
-        moreOrLessEquals(noto, epsilon: 0.05),
+        _closeToWidth(noto),
         reason: 'кусок без семейства наследует список родителя',
       );
       expect(
@@ -704,7 +716,7 @@ void main() {
           if (row == EmojiSelftestRow.system) {
             expect((got - noto).abs(), greaterThan(0.5), reason: '$emoji ${row.label}');
           } else {
-            expect(got, moreOrLessEquals(noto, epsilon: 0.05), reason: '$emoji ${row.label}');
+            expect(got, _closeToWidth(noto), reason: '$emoji ${row.label}');
           }
         }
       }
