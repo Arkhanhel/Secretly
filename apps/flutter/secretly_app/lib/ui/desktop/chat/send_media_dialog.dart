@@ -77,6 +77,7 @@ Future<Object> showSendMediaDialog(
   String? destinationTitle,
   String? notice,
   Future<List<String>> Function()? onPickMore,
+  Listenable? closeWhen,
 }) async {
   final echo = ValueNotifier<String>(caption);
   try {
@@ -96,6 +97,7 @@ Future<Object> showSendMediaDialog(
         initialNotice: notice,
         onPickMore: onPickMore,
         captionEcho: echo,
+        closeWhen: closeWhen,
       ),
       transitionBuilder: (ctx, a, b, child) {
         final scale = Tween<double>(
@@ -127,6 +129,7 @@ class SendMediaDialog extends StatefulWidget {
     this.initialNotice,
     this.onPickMore,
     this.captionEcho,
+    this.closeWhen,
   });
 
   final Animation<double>? animation;
@@ -146,6 +149,10 @@ class SendMediaDialog extends StatefulWidget {
   final Future<List<String>> Function()? onPickMore;
 
   final ValueNotifier<String>? captionEcho;
+
+  /// Переписка, из которой окно открыли, закрылась — окно уходит само и
+  /// отдаёт подпись назад ([SendMediaDismissed]).
+  final Listenable? closeWhen;
 
   @override
   State<SendMediaDialog> createState() => _SendMediaDialogState();
@@ -183,10 +190,12 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
     );
     _caption.addListener(_echoCaption);
     _files.forEach(_startPrep);
+    widget.closeWhen?.addListener(_closeFromOutside);
   }
 
   @override
   void dispose() {
+    widget.closeWhen?.removeListener(_closeFromOutside);
     _caption.removeListener(_echoCaption);
     _caption.dispose();
     _captionFocus.dispose();
@@ -235,6 +244,25 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
     if (_closed) return;
     _closed = true;
     Navigator.of(context).pop(SendMediaDismissed(_caption.text));
+  }
+
+  /// 🔴 ПЕРЕПИСКА УШЛА ИЗ-ПОД ОКНА (30.09.2026). Окно — маршрут поверх
+  /// приложения, и смена чата (например, нажатием на уведомление) его не
+  /// закрывала: панель переписки под ним исчезала, и «Отправить» потом не
+  /// делало НИЧЕГО — файлы и подпись пропадали молча. Теперь окно закрывается
+  /// вместе со своей перепиской, а подпись возвращается в её черновик.
+  void _closeFromOutside() {
+    // Сигнал приходит, пока дерево разбирается: навигатор трогаем после кадра.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _closed) return;
+      final route = ModalRoute.of(context);
+      if (route == null) return;
+      _closed = true;
+      // Именно этот маршрут, даже если поверх открыта панель эмодзи.
+      Navigator.of(
+        context,
+      ).removeRoute(route, SendMediaDismissed(_caption.text));
+    });
   }
 
   Future<void> _send() async {

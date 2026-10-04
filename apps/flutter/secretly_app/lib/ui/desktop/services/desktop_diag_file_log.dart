@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-import '../../../diagnostics/diag_log.dart';
+import '../../../calls/call_log.dart' show callLogFileSink;
 
 /// 🔴 Журнал событий ПК в файл (25.09.2026).
 ///
@@ -16,11 +16,16 @@ import '../../../diagnostics/diag_log.dart';
 /// macOS канала `secretly/log` нет: всё уходило в никуда, и на вопрос
 /// «расшифровал ли ПК сообщение, пришедшее ночью» ответить было нечем.
 ///
-/// Пишется только то, что уже прошло очистку `DiagLog`: события и счётчики,
-/// идентификаторы обрезаны до восьми знаков, текста сообщений нет. Файл лежит
-/// в папке поддержки приложения (`logs/diag.log`), держит не больше
-/// [maxBytes], а прежнее содержимое — в `diag.1.log`, так что на диске никогда
-/// не больше двух таких файлов.
+/// Пишутся события и счётчики `DiagLog` и служебные события звонков, текста
+/// сообщений нет. Файл лежит в папке поддержки приложения (`logs/diag.log`),
+/// держит не больше [maxBytes], а прежнее содержимое — в `diag.1.log`, так что
+/// на диске никогда не больше двух таких файлов.
+///
+/// 🔴 ОДИН ПРИЁМНИК (30.09.2026). События `DiagLog` приходят сюда через
+/// `callLog` (`callOpLog` → [callLogFileSink]). Раньше их же принимал и
+/// `DiagLog.sink`, и каждое событие ложилось в файл дважды — причём вторая
+/// копия шла мимо очистки `…id=`. Теперь приёмник один, а очистка — здесь, на
+/// каждой строке ([redact]): в отладочной сборке `callLog` строк не чистит.
 class DesktopDiagFileLog {
   DesktopDiagFileLog._();
 
@@ -28,13 +33,43 @@ class DesktopDiagFileLog {
   static const String fileName = 'diag.log';
   static const String previousFileName = 'diag.1.log';
 
+  /// Те же ключи, что прячет `callLog` в выпускной сборке
+  /// (`lib/calls/call_log.dart`): всё, что кончается на `id`, и SDP, ICE,
+  /// nonce, подписи.
+  static final RegExp _sensitiveKv = RegExp(
+    r'\b(sdp|candidate|nonce|signature|[A-Za-z_]*(?:id|Id|ID))=([^\s,;]+)',
+    caseSensitive: false,
+  );
+
+  /// Строка, какой она ляжет в файл: значения чувствительных ключей скрыты,
+  /// переводы строк — пробелы (одна запись — одна строка).
+  @visibleForTesting
+  static String redact(String line) => line
+      .replaceAllMapped(_sensitiveKv, (m) => '${m.group(1)}=<redacted>')
+      .replaceAll('\n', ' ')
+      .replaceAll('\r', ' ');
+
   static File? _file;
   static IOSink? _sink;
   static int _written = 0;
   static Future<void>? _rotation;
 
+  /// 🔴 Строки до открытия файла (30.09.2026). Файл открывается не первой
+  /// строкой `main`, а ошибка запуска случается раньше — и пропадала. После
+  /// [captureEarly] строки копятся здесь (не больше [_earlyMax]) и ложатся в
+  /// файл первыми, когда [start] его откроет.
+  static List<String>? _early;
+  static const int _earlyMax = 200;
+
   /// Папка журнала — для «Показать журнал» и для проверки вживую.
   static String? get directoryPath => _file?.parent.path;
+
+  /// Принимать строки ещё до [start]. Зовётся первой строкой `main`.
+  static void captureEarly() {
+    if (_sink != null || _early != null) return;
+    _early = <String>[];
+    callLogFileSink = write;
+  }
 
   static Future<void> start({Directory? directoryForTest}) async {
     if (_sink != null) return;
@@ -45,8 +80,14 @@ class DesktopDiagFileLog {
       final file = File(p.join(dir.path, fileName));
       _written = await file.exists() ? await file.length() : 0;
       _file = file;
-      _sink = file.openWrite(mode: FileMode.append);
-      DiagLog.sink = write;
+      final sink = file.openWrite(mode: FileMode.append);
+      for (final out in _early ?? const <String>[]) {
+        sink.write(out);
+        _written += out.length;
+      }
+      _early = null;
+      _sink = sink;
+      callLogFileSink = write;
       write('event=diag.file_log_started');
     } catch (_) {
       // Нет журнала — приложение всё равно работает.
@@ -56,9 +97,13 @@ class DesktopDiagFileLog {
   }
 
   static void write(String line) {
+    final out = '${DateTime.now().toUtc().toIso8601String()} ${redact(line)}\n';
     final sink = _sink;
-    if (sink == null) return;
-    final out = '${DateTime.now().toUtc().toIso8601String()} $line\n';
+    if (sink == null) {
+      final early = _early;
+      if (early != null && early.length < _earlyMax) early.add(out);
+      return;
+    }
     sink.write(out);
     _written += out.length;
     if (_written > maxBytes && _rotation == null) {
@@ -88,7 +133,8 @@ class DesktopDiagFileLog {
   }
 
   static Future<void> stop() async {
-    if (identical(DiagLog.sink, write)) DiagLog.sink = null;
+    if (identical(callLogFileSink, write)) callLogFileSink = null;
+    _early = null;
     // Смена файла посреди остановки оставила бы его наполовину переименованным.
     final rotation = _rotation;
     if (rotation != null) {
@@ -105,6 +151,26 @@ class DesktopDiagFileLog {
         await sink.flush();
         await sink.close();
       } catch (_) {}
+    }
+  }
+
+  /// Последние [maxBytes] журнала — для письма в поддержку (прошлый файл,
+  /// затем текущий). `null`, если журнала нет.
+  static Future<Uint8List?> recentBytes({int maxBytes = 900 * 1024}) async {
+    final file = _file;
+    if (file == null) return null;
+    try {
+      await _sink?.flush();
+      final previous = File(p.join(file.parent.path, previousFileName));
+      final parts = <int>[
+        if (await previous.exists()) ...await previous.readAsBytes(),
+        if (await file.exists()) ...await file.readAsBytes(),
+      ];
+      if (parts.isEmpty) return null;
+      final start = parts.length > maxBytes ? parts.length - maxBytes : 0;
+      return Uint8List.fromList(parts.sublist(start));
+    } catch (_) {
+      return null;
     }
   }
 

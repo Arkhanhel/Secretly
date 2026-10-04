@@ -17,12 +17,15 @@ import '../../widgets/secretly_sticker_widgets.dart'
     show SecretlyStickerAssetView;
 import '../app/desktop_file_match.dart' show formatAttachmentSize;
 import '../design/tokens.dart';
+import 'bubble_look.dart';
 import 'desktop_event_tally.dart';
 import 'desktop_poll_tally.dart';
 import 'event_card.dart';
 import 'poll_card.dart';
+import 'room_invite_card.dart';
 import '../../widgets/avatar_initials.dart';
 import '../primitives/avatar.dart';
+import '../services/desktop_file_probe.dart';
 import '../services/desktop_ui_prefs.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../primitives/hover_listener.dart';
@@ -390,6 +393,7 @@ class MessageData {
     this.callEvent,
     this.poll,
     this.eventCard,
+    this.roomInvite,
     this.isSystemEvent = false,
     this.mentions = const <MsgMentionV1>[],
     this.timestampMs = 0,
@@ -479,6 +483,11 @@ class MessageData {
   /// в переписке отдельными сообщениями. Раньше компьютер показывал вместо
   /// карточки строку «📊 Опрос: …», и проголосовать было нечем.
   final DesktopPollView? poll;
+
+  /// Приглашение в комнату: весь текст сообщения — одна ссылка-приглашение
+  /// (то же правило, что у телефона). Рисуется карточкой с кнопкой
+  /// «Вступить», а не голым адресом — см. [DesktopRoomInviteView].
+  final DesktopRoomInviteView? roomInvite;
 
   /// Событие с ответами «иду / возможно / не иду».
   ///
@@ -591,6 +600,7 @@ class MessageData {
     CallEventV1? callEvent,
     DesktopPollView? poll,
     DesktopEventView? eventCard,
+    DesktopRoomInviteView? roomInvite,
     bool? isSystemEvent,
     int? timestampMs,
     bool? isRu,
@@ -625,6 +635,7 @@ class MessageData {
       callEvent: callEvent ?? this.callEvent,
       poll: poll ?? this.poll,
       eventCard: eventCard ?? this.eventCard,
+      roomInvite: roomInvite ?? this.roomInvite,
       isSystemEvent: isSystemEvent ?? this.isSystemEvent,
       timestampMs: timestampMs ?? this.timestampMs,
       isRu: isRu ?? this.isRu,
@@ -667,6 +678,7 @@ class MessageBubble extends StatefulWidget {
     this.onReply,
     this.onReplyTap,
     this.onReact,
+    this.hoverReactions = kDesktopQuickReactions,
     this.onMoreActions,
     this.onContinueInTopic,
     this.selfProfileId = '',
@@ -683,6 +695,7 @@ class MessageBubble extends StatefulWidget {
     this.onToggleVoice,
     this.onSeekVoice,
     this.onPollVote,
+    this.onOpenRoomInvite,
     this.onPollClose,
     this.onEventRsvp,
     this.sharedAudio,
@@ -758,6 +771,11 @@ class MessageBubble extends StatefulWidget {
   /// message's payload-event id (from [ReplyPreview.targetPayloadId]).
   final ValueChanged<String>? onReplyTap;
   final ValueChanged<String>? onReact;
+
+  /// Быстрые реакции в строке наведения — уже с правилом комнаты. Пустой
+  /// список и `onReact == null` (реакции в комнате выключены) убирают из
+  /// строки и их, и кнопку полного выбора.
+  final List<String> hoverReactions;
   final void Function(Offset globalPosition)? onMoreActions;
 
   /// Свой профиль — чтобы понять, что «@…» обращено ко мне, и подсветить
@@ -813,6 +831,9 @@ class MessageBubble extends StatefulWidget {
 
   /// Нажали вариант опроса.
   final void Function(MessageData message, int optionIndex)? onPollVote;
+
+  /// Кнопка карточки приглашения: «Вступить», «Открыть комнату» и т. п.
+  final ValueChanged<MessageData>? onOpenRoomInvite;
 
   /// Создатель опроса нажал «Завершить опрос».
   final ValueChanged<MessageData>? onPollClose;
@@ -1128,7 +1149,8 @@ class _MessageBubbleState extends State<MessageBubble> {
         // · Боковой отступ ленты — 24 (макет), а не 20. Пузырь стоял ближе
         // к краю окна, чем к соседнему столбцу, и лента читалась прижатой.
         DSpace.xl2,
-        m.continuation ? 2 : DSpace.m,
+        // Плотность ленты — выбор в «Внешнем виде» ([DesktopBubbleLook]).
+        DesktopBubbleLook.of(context).gapAbove(continuation: m.continuation),
         DSpace.xl2,
         0,
       ),
@@ -1199,7 +1221,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           DSpace.xl2,
-          m.continuation ? 2 : DSpace.m,
+          DesktopBubbleLook.of(context).gapAbove(continuation: m.continuation),
           DSpace.xl2,
           0,
         ),
@@ -1342,21 +1364,25 @@ class _MessageBubbleState extends State<MessageBubble> {
     // пузырями одного автора оставалась светлая щель, и группа из трёх
     // сообщений читалась как три отдельных. Сжатый угол склеивает их в
     // столбик, не добавляя ни линии, ни фона.
-    final tail = m.continuation
-        ? const Radius.circular(DRadii.sm)
-        : const Radius.circular(DRadii.r16);
+    //
+    // Форма — выбор в «Внешнем виде» (29.09.2026): средняя — ровно прежние
+    // 16 и 6, острая и круглая меняют оба числа ([DesktopBubbleLook.radiiFor]).
+    final radii = DesktopBubbleLook.of(context).radii;
+    final round = Radius.circular(radii.main);
+    final sharp = Radius.circular(radii.tail);
+    final tail = m.continuation ? sharp : round;
     final br = isSelf
         ? BorderRadius.only(
-            topLeft: const Radius.circular(DRadii.r16),
+            topLeft: round,
             topRight: tail,
-            bottomLeft: const Radius.circular(DRadii.r16),
-            bottomRight: const Radius.circular(DRadii.sm),
+            bottomLeft: round,
+            bottomRight: sharp,
           )
         : BorderRadius.only(
             topLeft: tail,
-            topRight: const Radius.circular(DRadii.r16),
-            bottomLeft: const Radius.circular(DRadii.sm),
-            bottomRight: const Radius.circular(DRadii.r16),
+            topRight: round,
+            bottomLeft: sharp,
+            bottomRight: round,
           );
 
     // Цвета перехода берём у темы как раньше; трёхточечный вариант нужен
@@ -1442,6 +1468,8 @@ class _MessageBubbleState extends State<MessageBubble> {
       body = _pollBubble(c, isSelf, fg, fgSoft, decoration, m.poll!);
     } else if (m.eventCard != null) {
       body = _eventBubble(c, isSelf, fg, fgSoft, decoration, m.eventCard!);
+    } else if (m.roomInvite != null) {
+      body = _roomInviteBubble(c, isSelf, fg, fgSoft, decoration, m.roomInvite!);
     } else {
       body = _textBubble(c, isSelf, fg, fgSoft, br, decoration);
     }
@@ -1570,6 +1598,53 @@ class _MessageBubbleState extends State<MessageBubble> {
           onClose: widget.onPollClose == null
               ? null
               : () => widget.onPollClose!(m),
+        ),
+      ),
+    );
+  }
+
+  /// Пузырь с приглашением в комнату — карточка телефона, ширина опроса.
+  Widget _roomInviteBubble(
+    DColorSet c,
+    bool isSelf,
+    Color fg,
+    Color fgSoft,
+    BoxDecoration decoration,
+    DesktopRoomInviteView invite,
+  ) {
+    final m = widget.message;
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 260, maxWidth: 340),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+        decoration: decoration,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!isSelf && !m.continuation && widget.showPeerIdentity) ...[
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: _authorLine(c),
+              ),
+              const SizedBox(height: 4),
+            ],
+            DesktopRoomInviteCard(
+              invite: invite,
+              isSelf: isSelf,
+              foreground: fg,
+              onOpen: widget.onOpenRoomInvite == null
+                  ? null
+                  : () => widget.onOpenRoomInvite!(m),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 4, right: 4),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: _metaRow(c, isSelf, fgSoft),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1773,7 +1848,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       // обещала бы действие. Над текстом курсор станет «палочкой» сам.
       cursor: MouseCursor.defer,
       builder: (ctx, hovered, pressed) => Container(
-        padding: const EdgeInsets.fromLTRB(13, 10, 13, 8),
+        padding: DesktopBubbleLook.of(context).textPadding,
         decoration: decoration,
         child: IntrinsicWidth(
           // 🔴 IntrinsicWidth — ради ВРЕМЕНИ У ПРАВОГО КРАЯ. Без него `Align` в
@@ -2912,16 +2987,18 @@ class _MessageBubbleState extends State<MessageBubble> {
           boxShadow: DShadows.popover,
         ),
         child: Row(mainAxisSize: MainAxisSize.min, children: [
-          for (final e in kDesktopQuickReactions)
-            _MiniEmojiBtn(
-              emoji: e,
-              onTap: () => widget.onReact?.call(e),
+          if (widget.onReact != null) ...[
+            for (final e in widget.hoverReactions)
+              _MiniEmojiBtn(
+                emoji: e,
+                onTap: () => widget.onReact?.call(e),
+              ),
+            _MiniIconBtn(
+              icon: FluentIcons.emoji_add_24_regular,
+              tooltip: l10n.desktopBubbleMoreReactions,
+              onTap: () => widget.onReact?.call(kReactionPickerSentinel),
             ),
-          _MiniIconBtn(
-            icon: FluentIcons.emoji_add_24_regular,
-            tooltip: l10n.desktopBubbleMoreReactions,
-            onTap: () => widget.onReact?.call(kReactionPickerSentinel),
-          ),
+          ],
           Container(
             width: 1,
             height: 18,
@@ -3030,6 +3107,9 @@ class _MessageBubbleState extends State<MessageBubble> {
   /// телефон.
   Color _authorColor(DColorSet c) {
     final m = widget.message;
+    // Один цвет на всех — если человек так выбрал в «Внешнем виде».
+    final single = DesktopBubbleLook.of(context).senderNameColor;
+    if (single != null) return single;
     final seed = (m.authorSeed ?? '').trim();
     return AvatarInitials.nicknameColor(
       seed: seed.isNotEmpty ? seed : m.authorName,
@@ -3413,7 +3493,8 @@ class _ReactionAvatar extends StatelessWidget {
           : DColors.of(context).bubblePeer,
       width: 1,
     );
-    final hasPhoto = path.isNotEmpty && File(path).existsSync();
+    // Без обращения к диску на каждую перерисовку — см. [DesktopFileProbe].
+    final hasPhoto = path.isNotEmpty && DesktopFileProbe.exists(path);
     if (hasPhoto) {
       return Container(
         width: 12,
@@ -3421,8 +3502,13 @@ class _ReactionAvatar extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: ring,
+          // Кружок в 12 точек — и декодируется под них, а не целиком.
           image: DecorationImage(
-            image: FileImage(File(path)),
+            image: desktopAvatarImage(
+              FileImage(File(path)),
+              12,
+              MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0,
+            ),
             fit: BoxFit.cover,
           ),
         ),

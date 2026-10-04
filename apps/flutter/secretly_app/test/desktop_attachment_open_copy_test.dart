@@ -88,7 +88,10 @@ void main() {
       blobId: 'blob-1',
       root: root,
     );
-    final stampBefore = first.statSync().modified;
+    // Метка той же длины: если бы файл копировался заново, она пропала бы.
+    // (Время изменения копии теперь нарочно обновляется при каждом открытии —
+    // по нему уборка считает возраст копии.)
+    first.writeAsStringSync('СОДЕРЖИМОЕ');
     final again = await attachmentOpenCopy(
       file: cached,
       suggestedName: 'отчёт.pdf',
@@ -96,7 +99,7 @@ void main() {
       root: root,
     );
     expect(again.path, first.path);
-    expect(again.statSync().modified, stampBefore);
+    expect(again.readAsStringSync(), 'СОДЕРЖИМОЕ');
   });
 
   test('🔴 копии прошлого сеанса стираются', () async {

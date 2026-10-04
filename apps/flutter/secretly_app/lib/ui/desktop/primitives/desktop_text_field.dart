@@ -107,11 +107,16 @@ class _DesktopTextFieldState extends State<DesktopTextField> {
                     ? c.accentPrimary.withValues(alpha: 0.75)
                     : Colors.transparent)
               : border,
-          width: _focused ? 1.5 : 1,
+          // 🔴 У стекла рамка ОДНОЙ толщины в фокусе и без (28.09.2026):
+          // утолщение 1 → 1.5 прибавлялось к полям, поле вырастало на точку,
+          // и весь список чатов под ним дёргался при каждом щелчке в поиск.
+          width: glass ? 1 : (_focused ? 1.5 : 1),
         ),
       ),
+      // Стекло — 34 точки (6 + 20 + 6 + рамка), как поиск у Telegram; текст
+      // и значок прежнего размера.
       padding: glass
-          ? const EdgeInsets.symmetric(horizontal: 14, vertical: 9)
+          ? const EdgeInsets.symmetric(horizontal: 12, vertical: 6)
           : const EdgeInsets.symmetric(
               horizontal: DSpace.m,
               vertical: DSpace.s,
@@ -160,5 +165,5 @@ class _DesktopTextFieldState extends State<DesktopTextField> {
   }
 }
 
-/// Скругление стеклянного поля — «таблетка» при высоте в 38 точек.
-const double _kGlassRadius = 19;
+/// Скругление стеклянного поля — «таблетка» при высоте в 34 точки.
+const double _kGlassRadius = 17;

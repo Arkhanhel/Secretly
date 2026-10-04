@@ -10,6 +10,7 @@ import '../../design/tokens.dart';
 import '../../primitives/desktop_button.dart';
 import '../../primitives/desktop_switch.dart';
 import '../../primitives/hover_listener.dart';
+import '../../primitives/desktop_snackbar.dart';
 
 /// A grouped info section — section title + a vertical stack of rows.
 /// Mirrors Telegram's "Info" block in the right-side panel.
@@ -123,13 +124,13 @@ class DetailsInfoRow extends StatelessWidget {
         (copyValue != null && copyValue!.isNotEmpty
             ? () {
                 Clipboard.setData(ClipboardData(text: copyValue!));
-                ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-                  SnackBar(
-                    content: Text(l10n.copied),
-                    duration: const Duration(seconds: 1),
-                    backgroundColor: c.elevated,
-                    behavior: SnackBarBehavior.floating,
-                  ),
+                // Своя всплывашка окна: у SnackBar Material текст выходил
+                // тёмным на тёмном (30.09.2026).
+                DesktopSnackbar.show(
+                  context,
+                  message: l10n.copied,
+                  kind: DSnackKind.success,
+                  duration: const Duration(seconds: 1),
                 );
               }
             : null);

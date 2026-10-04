@@ -8,9 +8,14 @@ import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../entitlements/cosmetic_catalog.dart'
+    show CosmeticKind, isCosmeticAllowed;
+import '../../../cosmetics/cosmetics_catalog_service.dart';
 import '../../../app/app_controller.dart';
 import '../../../app/pending_attachment_upload.dart';
 import '../../../attachments/attachment_failure.dart';
+import '../../chat_wallpapers.dart'
+    show kGlobalChatWallpaperSelectionId, loadBundledChatWallpaperAssets;
 import '../../attachment_error_text.dart';
 import '../../room_topic_marks.dart';
 import '../primitives/hover_listener.dart';
@@ -37,6 +42,7 @@ import '../../../calls/call_manager.dart';
 import '../../../calls/call_signal_codec.dart';
 import '../../../messages/message_delivery_state.dart';
 import '../../../links/link_preview_draft.dart';
+import '../../../links/link_preview_fetch.dart' show LinkPreviewFetcher;
 import '../../../links/link_preview_policy.dart'
     show acceptIncomingLinkPreview, linkPreviewTargetFor;
 import '../../../media/music_tags.dart';
@@ -49,11 +55,16 @@ import '../../new_group_screen.dart';
 import '../../verify_contact_screen.dart';
 import '../../direct_message_error_text.dart';
 import '../../room_policy_error_text.dart' show tryRoomPolicyErrorText;
+import '../../room_membership_error_text.dart' show tryRoomMembershipErrorText;
+import '../chat/details/room_manage_dialogs.dart'
+    show roomOwnershipCandidates, showRoomOwnerLeaveDialog;
 // Подписи шапки — те же, что на телефоне: «был(а) …» и «N участников».
 import '../../chat_screen_l10n.dart'
     show chatLastSeenText, chatLocaleIsRussian, chatRoomInviteMembersText;
 import '../../../l10n/app_localizations.dart';
 import '../calls/room_call_window.dart';
+import '../calls/room_call_window_host.dart';
+import '../chat/desktop_wallpaper_picker.dart';
 import '../chat/new_chat_picker.dart';
 import '../../../rooms/room_call_state.dart' show CachedRoomCall;
 import '../../../rooms/room_system_event_text.dart' show formatSystemEventText;
@@ -65,11 +76,15 @@ import '../chat/outgoing_media.dart';
 import '../chat/send_media_dialog.dart';
 import '../chat/media_albums.dart';
 import '../chat/attachment_save.dart';
+import '../chat/attachment_risk_dialog.dart' show mayOpenReceivedFile;
+import 'desktop_room_limit_dialog.dart'
+    show desktopMayCreateRoom, desktopMayJoinRoom;
 import '../chat/desktop_event_tally.dart';
 import '../chat/forward_blob_reuse.dart';
 import '../chat/event_composer_dialog.dart';
 import '../chat/poll_composer_dialog.dart';
 import '../chat/desktop_poll_tally.dart';
+import '../chat/room_invite_card.dart' show DesktopRoomInviteView;
 import '../chat/desktop_pdf_bridge.dart';
 import '../chat/document_viewer.dart';
 import '../chat/document_viewer_kind.dart';
@@ -111,6 +126,8 @@ import '../primitives/desktop_text_field.dart';
 import '../shell/desktop_shell.dart' show DesktopShellApi;
 import 'desktop_sync_status.dart';
 import '../services/desktop_window_activity.dart';
+import '../primitives/desktop_screen_window.dart';
+import '../chat/mute_choice.dart';
 
 /// Итог отправки копии сообщения при пересылке или сохранении.
 enum _CopyOutcome { sent, noFile, empty }
@@ -161,6 +178,33 @@ bool chatEmptinessStillUnknown({
   required bool relayOnline,
 }) => !firstDrainDone && relayOnline;
 
+/// 🔴 ЛИЧНАЯ ПЕРЕПИСКА — ТОЛЬКО ПОСЛЕ ПАРОЛЯ «ЛИЧНЫХ» (30.09.2026).
+///
+/// Одно правило на все входы в переписку: уведомление, ссылка
+/// `secretly://room/…`, плитка рейки, стрелки «назад» и «вперёд», ⌘K, «Новый
+/// чат». Раньше пароль спрашивала только полоса категорий, а всё остальное
+/// открывало личный чат без вопросов; телефон в том же месте спрашивает
+/// (`_openConvoById` в `main.dart`).
+bool desktopPersonalChatHidden(AppController controller, String convoId) =>
+    controller.isPersonalChat(convoId) &&
+    controller.security.isLocked(SecurityLockScope.personal);
+
+/// Спросить пароль «Личных», если [convoId] — закрытая личная переписка.
+/// `true` — открывать можно.
+Future<bool> desktopUnlockPersonalChat(
+  BuildContext context,
+  AppController controller,
+  String convoId,
+) async {
+  if (!desktopPersonalChatHidden(controller, convoId)) return true;
+  return ensureSecurityScopeUnlocked(
+    context: context,
+    controller: controller,
+    scope: SecurityLockScope.personal,
+    forcePrompt: true,
+  );
+}
+
 class DesktopChatsSection extends StatefulWidget {
   const DesktopChatsSection({
     super.key,
@@ -172,7 +216,14 @@ class DesktopChatsSection extends StatefulWidget {
     this.emptyTitleNoItems,
     this.emptySubtitleNoItems,
     this.emptyTitleSelect,
+    this.onOpenConversation,
   });
+
+  /// Открыть переписку ТЕМ ЖЕ путём, что нажатие на уведомление и ссылку
+  /// (корень, `_openConvoOrReport`): с переключением раздела и словами, если
+  /// переписки нет. Нужен, когда открыть надо переписку ЧУЖОГО раздела —
+  /// комнату из личного чата. Не задан — переписка выбирается здесь.
+  final Future<void> Function(String convoId)? onOpenConversation;
 
   /// The controller seam. [controller] is derived from it, so every
   /// `widget.controller` use site below keeps working unchanged.
@@ -246,15 +297,27 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     )..addListener(_onConversations);
     // Alt+Arrow walks the list from anywhere in the window.
     widget.shellApi.chatCycle.addListener(_onChatCycle);
+    widget.shellApi.unreadCycle?.addListener(_onUnreadCycle);
+    widget.shellApi.folderCycle?.addListener(_onFolderCycle);
+    widget.shellApi.muteRequests?.addListener(_onMuteRequest);
+    widget.shellApi.closeChatRequests?.addListener(_onCloseChatRequest);
     DesktopDraftStore.revision.addListener(_onDraftsChanged);
     _lastCycle = widget.shellApi.chatCycle.value;
+    _lastUnreadCycle = widget.shellApi.unreadCycle?.value ?? 0;
+    _lastFolderCycle = widget.shellApi.folderCycle?.value ?? 0;
     // Relative timestamps ("вчера", "5 мин") go stale without any controller
     // change, so the list still needs a slow heartbeat of its own. It goes
     // through the selector, so a tick that changes nothing costs one query
     // and no rebuild.
+    //
+    // Спрятанное окно часов не догоняет: снятие паузы перечитает список само
+    // ([DesktopAppViewModel.isPaused]).
     _previewRefresh = Timer.periodic(
       const Duration(seconds: 30),
-      (_) => unawaited(_convos.refresh()),
+      (_) {
+        if (widget.vm.isPaused) return;
+        unawaited(_convos.refresh());
+      },
     );
     widget.selection?.addListener(_onExternalSelection);
     // If the store already has a pre-set selection (e.g. driven by the
@@ -262,7 +325,14 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     // so the chat thread opens on mount.
     final pre = widget.selection?.selected;
     if (pre != null && _matchesFilter(pre)) {
-      _selectedId = pre.convoId;
+      if (_personalNeedsEntry(pre)) {
+        // После кадра: пароль — это маршрут, а склад выбора будит соседей.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_openPersonal(pre));
+        });
+      } else {
+        _selectedId = pre.convoId;
+      }
     }
   }
 
@@ -292,7 +362,59 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       // have switched sections; we just ignore here.
       return;
     }
+    if (wanted != null && _personalNeedsEntry(wanted)) {
+      unawaited(_openPersonal(wanted));
+      return;
+    }
     setState(() => _selectedId = wantedId);
+  }
+
+  /// Личная переписка, которой в этом списке сейчас не видно.
+  bool _personalNeedsEntry(Conversation c) =>
+      !_personalVisible && widget.controller.isPersonalChat(c.convoId);
+
+  /// Пароль уже спрашивается — второе окно поверх первого не нужно.
+  bool _personalPromptOpen = false;
+
+  /// Открыть личную переписку [c]: при запертых «Личных» — после пароля,
+  /// иначе сразу; в «Чатах» — с переходом в категорию «Личные», чтобы уход
+  /// из неё снова их запер.
+  Future<void> _openPersonal(Conversation c) async {
+    if (desktopPersonalChatHidden(widget.controller, c.convoId)) {
+      // Пока пароль не введён, переписки не видно.
+      if (_selectedId != null) setState(() => _selectedId = null);
+      widget.selection?.clear();
+      if (_personalPromptOpen) return;
+      _personalPromptOpen = true;
+      final bool ok;
+      try {
+        ok = await desktopUnlockPersonalChat(
+          context,
+          widget.controller,
+          c.convoId,
+        );
+      } finally {
+        _personalPromptOpen = false;
+      }
+      if (!mounted || !ok) return;
+    }
+    setState(() {
+      _personalUnlocked = true;
+      if (widget.filter != ConversationFilter.groups) {
+        _category = ChatCategoryIds.personal;
+      }
+      _selectedId = c.convoId;
+    });
+    widget.selection?.select(c);
+  }
+
+  /// Открытая личная переписка не переживает закрытых «Личных».
+  void _dropHiddenSelection() {
+    final id = _selectedId;
+    if (id == null || _personalVisible) return;
+    if (!widget.controller.isPersonalChat(id)) return;
+    setState(() => _selectedId = null);
+    widget.selection?.clear();
   }
 
   void _onWindowFocusChanged() {
@@ -307,6 +429,8 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
         widget.controller.security.isLocked(SecurityLockScope.personal);
     if (!relocked) {
       setState(() {});
+      // «Комнаты» показывают личные, пока «Личные» не заперты.
+      _dropHiddenSelection();
       return;
     }
     setState(() {
@@ -315,6 +439,8 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
         _category = ChatCategoryIds.all;
       }
     });
+    // Открытая личная переписка закрывается вместе с «Личными».
+    _dropHiddenSelection();
   }
 
   @override
@@ -322,6 +448,10 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     DesktopWindowActivity.focused.removeListener(_onWindowFocusChanged);
     unawaited(_securitySub?.cancel());
     widget.shellApi.chatCycle.removeListener(_onChatCycle);
+    widget.shellApi.unreadCycle?.removeListener(_onUnreadCycle);
+    widget.shellApi.folderCycle?.removeListener(_onFolderCycle);
+    widget.shellApi.muteRequests?.removeListener(_onMuteRequest);
+    widget.shellApi.closeChatRequests?.removeListener(_onCloseChatRequest);
     DesktopDraftStore.revision.removeListener(_onDraftsChanged);
     _convos.removeListener(_onConversations);
     _convos.dispose();
@@ -366,9 +496,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     _lastCycle = now;
     if (delta == 0) return;
 
-    final visible = widget.filter == ConversationFilter.groups
-        ? _conversations
-        : _conversations.where(_matchesCategory).toList(growable: false);
+    final visible = _visibleConversations();
     if (visible.isEmpty) return;
 
     final current = visible.indexWhere((c) => c.convoId == _selectedId);
@@ -380,6 +508,102 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
 
     setState(() => _selectedId = picked.convoId);
     widget.selection?.select(picked);
+  }
+
+  /// Переписки в том порядке и составе, в каком их показывает список.
+  List<Conversation> _visibleConversations() =>
+      widget.filter == ConversationFilter.groups
+      ? _conversations.where(_personalAllowed).toList(growable: false)
+      : _conversations.where(_matchesCategory).toList(growable: false);
+
+  /// Можно ли показать [c] в этом списке: личная — только при открытых
+  /// «Личных».
+  bool _personalAllowed(Conversation c) =>
+      _personalVisible || !widget.controller.isPersonalChat(c.convoId);
+
+  void _openFromKeyboard(Conversation picked) {
+    if (picked.convoId == _selectedId) return;
+    setState(() => _selectedId = picked.convoId);
+    widget.selection?.select(picked);
+  }
+
+  int _lastUnreadCycle = 0;
+
+  /// ⌥⇧↓ / ⌥⇧↑ — к следующему непрочитанному чату, по кругу.
+  ///
+  /// В отличие от [_onChatCycle] здесь круг: «следующий непрочитанный» после
+  /// последнего — это первый непрочитанный сверху, а не «ничего». Открытый чат
+  /// в поиск не входит — он и так перед глазами.
+  void _onUnreadCycle() {
+    final source = widget.shellApi.unreadCycle;
+    if (!mounted || source == null) return;
+    final now = source.value;
+    final delta = now - _lastUnreadCycle;
+    _lastUnreadCycle = now;
+    if (delta == 0) return;
+    final visible = _visibleConversations();
+    if (visible.isEmpty) return;
+    final current = visible.indexWhere((c) => c.convoId == _selectedId);
+    final step = delta.sign;
+    final start = current < 0 ? (step > 0 ? -1 : visible.length) : current;
+    for (var n = 1; n <= visible.length; n++) {
+      final i = (start + step * n) % visible.length;
+      final c = visible[i < 0 ? i + visible.length : i];
+      if (c.convoId == _selectedId || c.unreadCount <= 0) continue;
+      _openFromKeyboard(c);
+      return;
+    }
+  }
+
+  int _lastFolderCycle = 0;
+
+  /// Ctrl⇧↓ / Ctrl⇧↑ — к соседней папке полосы.
+  ///
+  /// Запертые «Личные» перебор обходит: сочетание не должно вдруг
+  /// выбрасывать окно пароля. Туда входят щелчком — осознанно.
+  void _onFolderCycle() {
+    final source = widget.shellApi.folderCycle;
+    if (!mounted || source == null) return;
+    final now = source.value;
+    final delta = now - _lastFolderCycle;
+    _lastFolderCycle = now;
+    if (delta == 0 || widget.filter == ConversationFilter.groups) return;
+    final ids = <String>[
+      for (final c in _buildCategories())
+        if (!c.locked) c.id,
+    ];
+    if (ids.length < 2) return;
+    final current = ids.indexOf(_category);
+    final next = current < 0
+        ? 0
+        : (current + delta.sign).clamp(0, ids.length - 1);
+    if (ids[next] == _category) return;
+    unawaited(_selectCategory(ids[next]));
+  }
+
+  /// ⌘⇧M / Ctrl⇧M — звук открытого чата: выключить или включить.
+  Future<void> _onMuteRequest() async {
+    final id = _selectedId;
+    if (!mounted || id == null) return;
+    final c = _findById(id);
+    if (c == null) return;
+    final willMute = !c.muted;
+    if (!await _toggleMuted(id) || !mounted) return;
+    // Знак «без звука» в списке мелкий — без подтверждения нажатие выглядит
+    // как ничего не сделавшее.
+    DesktopSnackbar.show(
+      context,
+      message: willMute ? l10n.desktopChatMutedToast : l10n.desktopChatUnmutedToast,
+      kind: DSnackKind.info,
+      duration: const Duration(seconds: 2),
+    );
+  }
+
+  /// Escape, которому в окне больше нечего закрывать: закрыть переписку.
+  void _onCloseChatRequest() {
+    if (!mounted || _selectedId == null) return;
+    setState(() => _selectedId = null);
+    widget.selection?.clear();
   }
 
   /// Файлы, брошенные на строку списка, — в ту переписку, НЕ открывая её.
@@ -445,7 +669,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopChatsSendFailed('$e'),
+        message: l10n.desktopChatsSendFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
       return;
@@ -507,7 +731,18 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       widget.controller.security.isEnabled(SecurityLockScope.personal);
 
   /// True while personal chats may be shown.
-  bool get _personalVisible => !_personalLockEnabled || _personalUnlocked;
+  ///
+  /// Запертые «Личные» не видны нигде. В «Чатах» открытые — только после
+  /// входа в категорию «Личные»; в «Комнатах» категорий нет, и личные комнаты
+  /// видны, пока «Личные» не заперты (30.09.2026: раньше «Комнаты» показывали
+  /// их всегда).
+  bool get _personalVisible {
+    if (!_personalLockEnabled) return true;
+    if (widget.controller.security.isLocked(SecurityLockScope.personal)) {
+      return false;
+    }
+    return _personalUnlocked || widget.filter == ConversationFilter.groups;
+  }
 
   Future<void> _syncFolders() async {
     final folders = widget.controller.customChatFolders;
@@ -541,10 +776,12 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
   /// Applies the active category. Archive and personal are EXCLUSIVE views:
   /// an archived or personal chat must not leak into "Все", which is the
   /// whole point of putting it away.
-  bool _matchesCategory(Conversation c) {
+  bool _matchesCategory(Conversation c) => _matchesCategoryId(c, _category);
+
+  bool _matchesCategoryId(Conversation c, String category) {
     final archived = c.archivedAtMs != null;
     final personal = widget.controller.isPersonalChat(c.convoId);
-    switch (_category) {
+    switch (category) {
       case ChatCategoryIds.archive:
         return archived;
       case ChatCategoryIds.personal:
@@ -558,7 +795,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       case ChatCategoryIds.all:
         return !archived && !personal;
       default:
-        final members = _folderMembers[_category];
+        final members = _folderMembers[category];
         if (members == null) return !archived && !personal;
         return !archived && !personal && members.contains(c.convoId);
     }
@@ -720,31 +957,74 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     }
     if (!mounted) return;
     setState(() => _category = id);
+    // Уходя из «Личных», личный чат открытым не оставляем.
+    _dropHiddenSelection();
   }
 
-  /// Right-click on a folder chip: rename or delete. Built-in categories have
-  /// nothing to manage, so they get no menu at all (P-5).
+  /// Правый щелчок по папке: «Прочитать все» — у любой, где есть что
+  /// читать; «Переименовать» и «Удалить» — только у папок человека
+  /// (встроенными управлять нечем, P-5). Как в Telegram Desktop (ТЗ §8).
+  ///
+  /// Запертым «Личным» меню не положено: действие над тем, чего не видно,
+  /// — не то, что человек может осознанно выбрать.
   Future<void> _folderChipMenu(ChatCategory cat, Offset at) async {
-    if (ChatCategoryIds.isBuiltIn(cat.id)) return;
+    if (cat.locked) return;
+    final unread = _conversations
+        .where((c) => c.unreadCount > 0 && _matchesCategoryId(c, cat.id))
+        .toList(growable: false);
+    final custom = !ChatCategoryIds.isBuiltIn(cat.id);
+    if (!custom && unread.isEmpty) return;
     await ContextMenu.show(
       context,
       globalPosition: at,
       sections: [
         [
           CtxMenuItem(
-            label: l10n.desktopChatsRenameFolder,
-            icon: FluentIcons.edit_24_regular,
-            onTap: () => unawaited(_renameFolder(cat)),
-          ),
-          CtxMenuItem(
-            label: l10n.desktopChatsDeleteFolder,
-            icon: FluentIcons.delete_24_regular,
-            isDanger: true,
-            onTap: () => unawaited(_deleteFolder(cat)),
+            label: l10n.desktopChatsFolderReadAll,
+            icon: FluentIcons.checkmark_circle_24_regular,
+            enabled: unread.isNotEmpty,
+            onTap: () => unawaited(_readAll(unread)),
           ),
         ],
+        if (custom)
+          [
+            CtxMenuItem(
+              label: l10n.desktopChatsRenameFolder,
+              icon: FluentIcons.edit_24_regular,
+              onTap: () => unawaited(_renameFolder(cat)),
+            ),
+            CtxMenuItem(
+              label: l10n.desktopChatsDeleteFolder,
+              icon: FluentIcons.delete_24_regular,
+              isDanger: true,
+              onTap: () => unawaited(_deleteFolder(cat)),
+            ),
+          ],
       ],
     );
+  }
+
+  /// Отметить прочитанными все [convos] — тем же путём, что и одну
+  /// переписку ([_markRead]), но с одним обновлением списка в конце.
+  Future<void> _readAll(List<Conversation> convos) async {
+    var failed = false;
+    for (final c in convos) {
+      final target = resolveChatMarkReadPeerProfileId(
+        convoId: c.convoId,
+        peerProfileIdForSend: c.peerProfileId,
+      );
+      if (target == null || target.isEmpty) continue;
+      try {
+        await widget.controller.markChatRead(peerProfileId: target);
+      } catch (_) {
+        failed = true;
+      }
+    }
+    if (!mounted) return;
+    await _convos.refresh();
+    if (failed && mounted) {
+      _toast(l10n.desktopFailedWith(l10n.desktopChatsFolderReadAll), danger: true);
+    }
   }
 
   Future<void> _renameFolder(ChatCategory cat) async {
@@ -768,7 +1048,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopChatsRenameFailed('$e'),
+        message: l10n.desktopChatsRenameFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     }
@@ -807,7 +1087,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopChatsDeleteFailed('$e'),
+        message: l10n.desktopChatsDeleteFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     }
@@ -844,7 +1124,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopChatsFolderChangeFailed('$e'),
+        message: l10n.desktopChatsFolderChangeFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     }
@@ -870,7 +1150,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopChatsFolderCreateFailed('$e'),
+        message: l10n.desktopChatsFolderCreateFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     }
@@ -964,7 +1244,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopFailedWith('$e'),
+        message: l10n.desktopFailedWith(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     }
@@ -1138,7 +1418,15 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
 
   Future<void> _refreshPreview(String convoId) async {
     try {
-      final p = await widget.controller.lastMessagePreviewRich(convoId);
+      // Свип автоудаления здесь лишний (01.10.2026): `listConversations`,
+      // который только что построил этот список, уже прогнал его по всем чатам
+      // разом. С ним каждый тик запускал его ещё раз на КАЖДУЮ строку —
+      // сорок чтений настроек чата подряд. Телефон читает превью так же
+      // (`chat_list_subtitle_preview.dart`).
+      final p = await widget.controller.lastMessagePreviewRich(
+        convoId,
+        applyRetention: false,
+      );
       _previews[convoId] = p;
     } catch (_) {
       // ignore — preview falls back to ''
@@ -1167,7 +1455,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
           CtxMenuItem(
             label: l10n.desktopChatsNewRoom,
             icon: FluentIcons.people_add_24_regular,
-            onTap: _startNewRoom,
+            onTap: () => unawaited(_startNewRoom()),
           ),
           CtxMenuItem(
             label: AppLocalizations.of(context)!.desktopJoinRoomByLink,
@@ -1229,6 +1517,12 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
 
     await _convos.refresh();
     if (!mounted) return;
+    // Выбранный человек может оказаться в «Личных» — тогда через пароль.
+    final picked = _findById(convoId);
+    if (picked != null && _personalNeedsEntry(picked)) {
+      await _openPersonal(picked);
+      return;
+    }
     setState(() => _selectedId = convoId);
   }
 
@@ -1276,31 +1570,77 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     await openRoomInvite(target);
   }
 
+  /// Карточка приглашения в переписке: уже вступившего — сразу в комнату,
+  /// остальных — на экран входа.
+  Future<void> _openRoomInviteFromChat(
+    RoomInviteTarget target, {
+    String? memberGroupId,
+  }) async {
+    final id = (memberGroupId ?? '').trim();
+    if (id.isNotEmpty) {
+      if (!mounted) return;
+      await _openConversation(id);
+      return;
+    }
+    await openRoomInvite(target);
+  }
+
   /// Открывает экран входа в комнату (он же на телефоне) и, если вход удался,
   /// показывает комнату в панели. Зовётся и из меню, и по ссылке от системы.
   Future<void> openRoomInvite(RoomInviteTarget target) async {
     if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => RoomInviteJoinScreen(
-          controller: widget.controller,
-          target: target,
-          onJoined: (groupId) async {
-            await _convos.refresh();
-            if (!mounted) return;
-            setState(() => _selectedId = groupId);
-          },
-        ),
+    // 🔴 Предел комнат — окном ПК, а не телефонной страницей покупки внутри
+    // него (30.09.2026, см. `desktop_room_limit_dialog.dart`).
+    if (!await desktopMayJoinRoom(context, widget.controller, target)) return;
+    if (!mounted) return;
+    await showDesktopScreenWindow<void>(
+      context,
+      builder: (_) => RoomInviteJoinScreen(
+        controller: widget.controller,
+        target: target,
+        onJoined: (groupId) async {
+          await _convos.refresh();
+          if (!mounted) return;
+          await _openConversation(groupId);
+        },
       ),
     );
   }
 
-  void _startNewRoom() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => NewGroupScreen(controller: widget.controller),
-      ),
+  /// Открыть переписку, даже если она из другого раздела.
+  ///
+  /// 🔴 Комната, открытая из личного чата (карточка приглашения, вход по
+  /// ссылке), — переписка раздела «Комнаты» (29.09.2026, разбор Р1). Раньше
+  /// она ставилась выбранной ЗДЕСЬ, а «Чаты» показывают только личные:
+  /// вместо комнаты панель переписки становилась пустой заглушкой. Корень
+  /// открывает её своим путём — с переключением раздела.
+  Future<void> _openConversation(String convoId) async {
+    final open = widget.onOpenConversation;
+    if (open != null) {
+      await open(convoId);
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _selectedId = convoId);
+  }
+
+  /// Экран создания — окном посередине; созданную комнату сразу открываем:
+  /// экран закрывается с её id (`Navigator.pop(gid)`), а раньше этот ответ
+  /// выбрасывался, и новую комнату приходилось искать в списке.
+  Future<void> _startNewRoom() async {
+    // Предел — заранее и своим окном; `createGroup` остаётся последней
+    // преградой.
+    if (!await desktopMayCreateRoom(context, widget.controller)) return;
+    if (!mounted) return;
+    final gid = await showDesktopScreenWindow<String>(
+      context,
+      builder: (_) => NewGroupScreen(controller: widget.controller),
     );
+    final id = (gid ?? '').trim();
+    if (id.isEmpty || !mounted) return;
+    await _convos.refresh();
+    if (!mounted) return;
+    await _openConversation(id);
   }
 
   /// Меню кнопки «Папки».
@@ -1550,12 +1890,12 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
                 : FluentIcons.star_24_regular,
             onTap: () => unawaited(_togglePinned(convoId)),
           ),
-          CtxMenuItem(
-            label: muted ? l10n.desktopChatsSoundOn : l10n.desktopChatsSoundOff,
-            icon: muted
-                ? FluentIcons.alert_24_regular
-                : FluentIcons.alert_off_24_regular,
-            onTap: () => unawaited(_toggleMuted(convoId)),
+          desktopMuteMenuItem(
+            l10n: l10n,
+            muted: muted,
+            isRoom: _isRoomConvo(convoId),
+            onMute: (choice) => unawaited(_applyMute(convoId, choice)),
+            onUnmute: () => unawaited(_toggleMuted(convoId)),
           ),
           CtxMenuItem(
             label: l10n.desktopListMarkRead,
@@ -1570,6 +1910,12 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
                 : FluentIcons.archive_24_regular,
             onTap: () => unawaited(_toggleArchived(convoId)),
           ),
+          // 🔴 Обои только этого чата — как у телефона (28.09.2026).
+          CtxMenuItem(
+            label: l10n.desktopChatWallpaperMenu,
+            icon: FluentIcons.image_24_regular,
+            onTap: () => unawaited(_pickChatWallpaper(convoId)),
+          ),
         ],
         ..._chatFolderActions(convoId),
         [
@@ -1580,7 +1926,12 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
             onTap: () => unawaited(_clearHistory(convoId)),
           ),
           CtxMenuItem(
-            label: l10n.delete,
+            // У комнаты «Удалить» — это «Удалить и покинуть», как в Telegram:
+            // стереть переписку и остаться участником значит получать её
+            // сообщения дальше (см. [_deleteAndLeaveRoom]).
+            label: _isRoomConvo(convoId)
+                ? l10n.desktopRoomDeleteLeaveMenu
+                : l10n.delete,
             icon: FluentIcons.delete_24_regular,
             isDanger: true,
             onTap: () => unawaited(_deleteChat(convoId)),
@@ -1590,6 +1941,53 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     );
   }
 
+  /// Окно «Обои чата»: тот же набор, что в настройках, первым — «Как в
+  /// настройках». Выбор хранится ключом телефона (`chat_wallpaper_v1_<чат>`).
+  Future<void> _pickChatWallpaper(String convoId) async {
+    final ctrl = widget.controller;
+    final bundled = await loadBundledChatWallpaperAssets();
+    var server = const <({String id, String title})>[];
+    try {
+      CosmeticsCatalogService.instance.configure(ctrl.relayHttpBaseUrl);
+      final items = await CosmeticsCatalogService.instance.wallpapers();
+      server = items
+          .map((it) => (id: it.id, title: it.title))
+          .toList(growable: false);
+    } catch (_) {
+      // Без сети — только обои из приложения.
+    }
+    if (!mounted) return;
+    bool locked(String id) =>
+        id != kGlobalChatWallpaperSelectionId &&
+        !isCosmeticAllowed(
+          ctrl.entitlementStateNow,
+          CosmeticKind.wallpaper,
+          id,
+        );
+    final picked = await showDesktopChatWallpaperDialog(
+      context,
+      choices: buildDesktopWallpaperChoices(
+        l10n: l10n,
+        dark: DColors.of(context).isDark,
+        bundledAssets: bundled,
+        profileFiles: ctrl.profileBackgroundPaths,
+        server: server,
+        includeGlobal: true,
+      ),
+      selectedId: DesktopChatWallpapers.selectionFor(convoId),
+      globalPreviewId: ctrl.defaultChatWallpaperId,
+      isLocked: locked,
+    );
+    if (picked == null || !mounted) return;
+    if (locked(picked)) {
+      _toast(l10n.desktopWallpaperPremiumOnly);
+      return;
+    }
+    await DesktopChatWallpapers.set(convoId, picked);
+    if (!mounted) return;
+    _toast(l10n.desktopChatWallpaperSaved);
+  }
+
   Future<void> _togglePinned(String id) async {
     final c = _findById(id);
     if (c == null) return;
@@ -1597,18 +1995,45 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     try {
       await widget.controller.setChatPinned(convoId: id, pinned: next);
     } catch (e) {
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
-  Future<void> _toggleMuted(String id) async {
+  /// «Без звука» со сроком (ТЗ §2). «Навсегда» — прежним путём
+  /// `setChatMuted`: он доходит и до других устройств человека; сроки и
+  /// «только упоминания» — `setChatMute`, как у телефона.
+  Future<void> _applyMute(String id, DesktopMuteChoice choice) async {
+    try {
+      if (choice == DesktopMuteChoice.forever) {
+        await widget.controller.setChatMuted(convoId: id, muted: true);
+      } else {
+        await widget.controller.setChatMute(
+          convoId: id,
+          untilMs: desktopMuteUntilMs(
+            choice,
+            nowMs: DateTime.now().millisecondsSinceEpoch,
+          ),
+          mentionsOnly: choice == DesktopMuteChoice.mentionsOnly,
+        );
+      }
+      if (!mounted) return;
+      await _convos.refresh();
+    } catch (e) {
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
+    }
+  }
+
+  /// `true` — звук переключён; при сбое человек уже увидел ошибку.
+  Future<bool> _toggleMuted(String id) async {
     final c = _findById(id);
-    if (c == null) return;
+    if (c == null) return false;
     final next = !c.muted;
     try {
       await widget.controller.setChatMuted(convoId: id, muted: next);
+      return true;
     } catch (e) {
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
+      return false;
     }
   }
 
@@ -1640,7 +2065,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       }
       await _convos.refresh();
     } catch (e) {
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
@@ -1661,7 +2086,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       // Don't wait out the debounce for something the user just asked for.
       await _convos.refresh();
     } catch (e) {
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
@@ -1709,13 +2134,131 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       }
       await _convos.refresh();
     } catch (e) {
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
+  }
+
+  bool _isRoomConvo(String convoId) {
+    final c = _findById(convoId);
+    return convoId.startsWith('group:') && (c == null || c.peerProfileId == null);
+  }
+
+  /// 🔴 «УДАЛИТЬ» У КОМНАТЫ — «УДАЛИТЬ И ПОКИНУТЬ» (30.09.2026, ТЗ «ПК как
+  /// Telegram» §2, ошибка 2).
+  ///
+  /// Раньше стирались только записи на этом компьютере, а человек оставался
+  /// участником на реле: сообщения комнаты шли дальше, и первое же новое
+  /// возвращало «удалённую» комнату в список. Теперь сначала выход (владелец —
+  /// передать группу или удалить её для всех, как в подробностях), потом
+  /// снос у себя. Уже вышедшему — просто снос.
+  Future<void> _deleteAndLeaveRoom(Conversation c) async {
+    final groupId = c.convoId;
+    final title = c.title.trim().isEmpty ? l10n.desktopRoomUntitled : c.title.trim();
+    RoomPolicyState? policy;
+    try {
+      policy = await widget.controller.getRoomPolicyState(groupId);
+    } catch (_) {
+      policy = null;
+    }
+    if (!mounted) return;
+    if (policy != null && !policy.isMember) {
+      await _deleteChatLocally(c, alsoForPeer: false);
+      return;
+    }
+    final ok = await DesktopDialog.show<bool>(
+      context,
+      title: l10n.desktopRoomDeleteLeaveTitle(title),
+      size: DDialogSize.small,
+      body: Text(
+        l10n.desktopRoomDeleteLeaveBody,
+        style: DType.body.copyWith(color: DColors.of(context).textSecondary),
+      ),
+      primary: DDialogAction(
+        label: l10n.desktopRoomDeleteLeaveAction,
+        kind: DButtonKind.danger,
+        onPressed: () => Navigator.of(context).maybePop(true),
+      ),
+      secondary: DDialogAction(
+        label: l10n.cancel,
+        onPressed: () => Navigator.of(context).maybePop(false),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      if (policy?.isOwner ?? false) {
+        final left = await _leaveRoomAsOwner(groupId, title);
+        if (!left) return;
+      } else {
+        await widget.controller.leaveRoom(groupId);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _toast(
+        tryRoomPolicyErrorText(l10n, e) ??
+            tryRoomMembershipErrorText(context, e) ??
+            l10n.desktopFailedWith(desktopErrorText(e)),
+        danger: true,
+      );
+      return;
+    }
+    if (!mounted) return;
+    await _deleteChatLocally(c, alsoForPeer: false);
+  }
+
+  /// Владелец уходит: передать группу (админы первыми) или удалить её для
+  /// всех — то же окно, что в подробностях комнаты. `false` — передумал.
+  Future<bool> _leaveRoomAsOwner(String groupId, String title) async {
+    final members = await widget.controller.listRoomMembersDetailed(groupId);
+    if (!mounted) return false;
+    final choice = await showRoomOwnerLeaveDialog(
+      context,
+      candidates: roomOwnershipCandidates(
+        members,
+        selfProfileId: widget.controller.profileId,
+      ),
+      nameOf: (m) => m.displayName.trim().isEmpty ? m.profileId : m.displayName.trim(),
+    );
+    if (choice == null || !mounted) return false;
+    if (choice.delete) {
+      final sure = await DesktopDialog.show<bool>(
+        context,
+        title: l10n.desktopRoomDeleteTitle,
+        size: DDialogSize.small,
+        body: Text(
+          l10n.desktopRoomDeleteBody(title),
+          style: DType.body.copyWith(color: DColors.of(context).textSecondary),
+        ),
+        primary: DDialogAction(
+          label: l10n.desktopRoomDelete,
+          kind: DButtonKind.danger,
+          onPressed: () => Navigator.of(context).maybePop(true),
+        ),
+        secondary: DDialogAction(
+          label: l10n.cancel,
+          onPressed: () => Navigator.of(context).maybePop(false),
+        ),
+      );
+      if (sure != true) return false;
+      await widget.controller.deleteRoom(groupId);
+      return true;
+    }
+    final next = choice.nextOwner;
+    if (next == null) return false;
+    await widget.controller.transferRoomOwnership(
+      groupId: groupId,
+      nextOwnerProfileId: next.profileId,
+    );
+    await widget.controller.leaveRoom(groupId);
+    return true;
   }
 
   Future<void> _deleteChat(String id) async {
     final c = _findById(id);
     if (c == null) return;
+    if (_isRoomConvo(id)) {
+      await _deleteAndLeaveRoom(c);
+      return;
+    }
     final title = c.title.isEmpty ? '—' : c.title;
     final peer = _clearForPeerTarget(c);
     final result = await confirmClearWithPeer(
@@ -1726,11 +2269,21 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       peerTitle: peer == null ? null : title,
     );
     if (result == null) return;
+    await _deleteChatLocally(c, alsoForPeer: result.alsoForPeer);
+  }
+
+  /// Снос переписки на этом компьютере (и у собеседника — по выбору).
+  Future<void> _deleteChatLocally(
+    Conversation c, {
+    required bool alsoForPeer,
+  }) async {
+    final id = c.convoId;
+    final peer = _clearForPeerTarget(c);
     try {
       // Clear first, delete second: clearing sends the tombstone that the peer
       // and the user's other devices act on, and it needs the conversation to
       // still exist locally to compute its cutoff.
-      if (result.alsoForPeer && peer != null) {
+      if (alsoForPeer && peer != null) {
         await widget.controller.clearChatHistoryEverywhere(
           convoId: id,
           directPeerProfileId: peer,
@@ -1765,7 +2318,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
       }
       await _convos.refresh();
     } catch (e) {
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
@@ -1776,14 +2329,13 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
   /// device is a decision to make each time, not a preference to inherit.
   void _toast(String message, {bool danger = false}) {
     if (!mounted) return;
-    final c = DColors.of(context);
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: danger ? c.danger : c.elevated,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
+    // 🔴 Своя всплывашка окна, а не SnackBar Material: у того текст брался
+    // из темы Material и выходил тёмным на тёмной подложке (30.09.2026).
+    DesktopSnackbar.show(
+      context,
+      message: message,
+      kind: danger ? DSnackKind.error : DSnackKind.info,
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -1796,10 +2348,9 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    // The Rooms tab has no category strip, so it must not be filtered by one.
-    final scoped = widget.filter == ConversationFilter.groups
-        ? _conversations
-        : _conversations.where(_matchesCategory).toList(growable: false);
+    // The Rooms tab has no category strip, so it must not be filtered by one —
+    // only by the personal-chats password.
+    final scoped = _visibleConversations();
     final items = scoped.map(_toItem).toList(growable: false);
     Conversation? selected;
     if (_selectedId != null) {
@@ -1810,6 +2361,8 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
         }
       }
     }
+    // Личная переписка при закрытых «Личных» не рисуется, кто бы её ни выбрал.
+    if (selected != null && !_personalAllowed(selected)) selected = null;
 
     // 🔴 Смена тем перерисовывает ТОЛЬКО список, а не всю секцию.
     //
@@ -1903,6 +2456,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
         },
         onPin: _togglePinned,
         onMute: _toggleMuted,
+        onMuteChoice: (id, choice) => unawaited(_applyMute(id, choice)),
         onArchive: _toggleArchived,
         onMarkRead: _markRead,
         onClear: _clearHistory,
@@ -1940,6 +2494,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
               // архива, очистки и удаления — те же, что у правого щелчка
               // в списке. Копия этих действий разошлась бы с оригиналом.
               onHeaderMenu: (at) => _chatHeaderMenu(selected!.convoId, at),
+              onOpenRoomInvite: _openRoomInviteFromChat,
             ),
     );
 
@@ -1981,10 +2536,16 @@ class _ChatThreadHost extends StatefulWidget {
     required this.shellApi,
     this.selection,
     this.onHeaderMenu,
+    this.onOpenRoomInvite,
   });
 
   /// Меню чата из шапки переписки. Строит секция — см. `_chatHeaderMenu`.
   final void Function(Offset globalPosition)? onHeaderMenu;
+
+  /// Карточка приглашения в ленте. Открывает СЕКЦИЯ: у неё выбор чата и
+  /// экран входа (`openRoomInvite`). `memberGroupId` — я уже в комнате.
+  final Future<void> Function(RoomInviteTarget target, {String? memberGroupId})?
+  onOpenRoomInvite;
 
   /// The controller seam. [controller] is derived from it, so every
   /// `widget.controller` use site below keeps working unchanged.
@@ -2013,6 +2574,47 @@ class _ChatThreadHost extends StatefulWidget {
 /// missed `pending`, `retry` and `scheduled`, which all fell through to the
 /// `default` and rendered as a plain "sent" tick — a queued or still-retrying
 /// message looked delivered, and a scheduled one looked already sent.
+/// Превью ссылки для отправки — кроме НАШИХ адресов (29.09.2026).
+///
+/// По `links.secretlyapp.com` лежит заглушка «Join room in Secretly»: карточка
+/// с ней уезжала вместе с приглашением, и получатель видел серую плашку на
+/// английском. У приглашения и визитки свои карточки — страницу не грузим.
+Future<LinkPreviewV1?> desktopOutgoingLinkPreviewLoader(Uri uri) async {
+  if (kSecretlySupportedAppLinkHosts.contains(uri.host.toLowerCase())) {
+    return null;
+  }
+  return LinkPreviewFetcher.fetch(uri);
+}
+
+/// Приглашение в комнату, если ВЕСЬ текст — одна ссылка без пробелов.
+///
+/// Правило телефона (`_roomInviteTargetFromMessageText`): ссылка внутри фразы
+/// остаётся ссылкой, карточкой становится только сообщение-приглашение.
+RoomInviteTarget? desktopRoomInviteTargetFromText(String text) {
+  final trimmed = text.trim();
+  if (trimmed.isEmpty || RegExp(r'\s').hasMatch(trimmed)) return null;
+  final uri = Uri.tryParse(trimmed);
+  if (uri == null) return null;
+  return tryParseRoomInviteUri(uri);
+}
+
+/// Пауза после неудачного запроса данных приглашения.
+const Duration kDesktopRoomInviteRetryAfter = Duration(minutes: 10);
+
+/// Пора ли снова спрашивать данные приглашения, которые однажды не пришли
+/// (29.09.2026, разбор Р1).
+///
+/// 🔴 Неудача раньше не запоминалась: каждое обновление ленты — а на
+/// связанном устройстве их десятки в минуту — заново тянуло профиль
+/// пригласившего и спрашивало реле о КАЖДОМ отозванном или просроченном
+/// приглашении. Теперь после неудачи — пауза [kDesktopRoomInviteRetryAfter];
+/// нажатие на карточку спрашивает сразу.
+bool desktopRoomInviteLookupDue({
+  required DateTime? failedAt,
+  required DateTime now,
+}) =>
+    failedAt == null || now.difference(failedAt) >= kDesktopRoomInviteRetryAfter;
+
 DeliveryStatus deliveryStatusFor(String localState, {required bool isSelf}) {
   if (!isSelf) return DeliveryStatus.read;
   final state = MessageLocalState.normalize(localState);
@@ -2044,7 +2646,9 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   /// Превью ссылки в поле ввода — своё у каждой открытой переписки (хост
   /// создаётся заново при смене чата). Отключено в настройках — панель его
   /// не получает вовсе, и окно не открывает страниц.
-  final OutgoingLinkPreviewDraft _linkDraft = OutgoingLinkPreviewDraft();
+  final OutgoingLinkPreviewDraft _linkDraft = OutgoingLinkPreviewDraft(
+    loader: desktopOutgoingLinkPreviewLoader,
+  );
 
   void _onLinkPreviewsPref() {
     if (mounted) setState(() {});
@@ -2077,6 +2681,11 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   final Map<String, String> _topicOfEvent = <String, String>{};
 
   bool _canManageTopics = false;
+
+  /// Правило реакций открытой комнаты (`RoomPolicyState.isReactionAllowed`);
+  /// `null` — личный чат или правило ещё не пришло: тогда можно всё, как на
+  /// телефоне.
+  bool Function(String emoji)? _reactionAllowed;
 
   bool get _topicsVisible => !_isDirect && _roomTopics.isNotEmpty;
 
@@ -2237,7 +2846,10 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     try {
       final policy = await widget.controller.getRoomPolicyState(_convoId);
       if (!mounted) return;
-      setState(() => _canManageTopics = policy.canChangeGroupInfo);
+      setState(() {
+        _canManageTopics = policy.canChangeGroupInfo;
+        _reactionAllowed = policy.isReactionAllowed;
+      });
       // Право заводить темы — часть состояния тем: от него зависит, есть ли у
       // комнаты без тем вход, чтобы создать первую.
       _publishTopics();
@@ -2500,7 +3112,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       // a real error here rather than a silently-ignored tap.
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopChatsBranchFailed('$e'),
+        message: l10n.desktopChatsBranchFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     }
@@ -2773,6 +3385,10 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   /// переписки и у комнаты без описания.
   String _roomDescription = '';
 
+  void _onChatWallpaperChanged() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
@@ -2792,6 +3408,8 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     // works without the shell knowing which chat is open.
     widget.shellApi.findRequests.addListener(_onFindRequested);
     DesktopUiPrefs.linkPreviews.addListener(_onLinkPreviewsPref);
+    // Обои этого чата выбрали в меню шапки — переписка перерисовывается сразу.
+    DesktopChatWallpapers.revision.addListener(_onChatWallpaperChanged);
     _load();
     _markRead();
     // Новое при открытой переписке — прочитано, когда его видно; см.
@@ -2810,6 +3428,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
 
   @override
   void dispose() {
+    DesktopChatWallpapers.revision.removeListener(_onChatWallpaperChanged);
     // The notifier outlives this widget (it belongs to the shell), so failing
     // to detach would keep a disposed State reachable on every Cmd+F.
     widget.shellApi.findRequests.removeListener(_onFindRequested);
@@ -3010,7 +3629,39 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     unawaited(_loadPinnedMessage());
   }
 
+  /// Идёт ли сейчас перечитывание ленты — см. [_load].
+  bool _loadInFlight = false;
+
+  /// Пока лента перечитывалась, её попросили перечитать ещё раз.
+  bool _loadAgain = false;
+
+  /// Перечитывает ленту: не больше одного прохода за раз (01.10.2026).
+  ///
+  /// 🔴 Проходы шли внахлёст. Тик приходит раз в 150 мс, а полный проход —
+  /// это чтение окна ленты, реакции и расшифровка каждого сообщения; на
+  /// длинной переписке он дольше тика, и следующий начинался поверх
+  /// предыдущего. Два прохода делали одну и ту же работу, а победителем
+  /// выходил тот, что закончил последним, — не обязательно самый свежий.
+  ///
+  /// Теперь просьба посреди прохода только отмечается, и по его окончании
+  /// идёт ровно ОДИН догоняющий проход, сколько бы просьб ни накопилось.
   Future<void> _load() async {
+    if (_loadInFlight) {
+      _loadAgain = true;
+      return;
+    }
+    _loadInFlight = true;
+    try {
+      do {
+        _loadAgain = false;
+        await _loadOnce();
+      } while (_loadAgain && mounted);
+    } finally {
+      _loadInFlight = false;
+    }
+  }
+
+  Future<void> _loadOnce() async {
     unawaited(_loadAutoDelete());
     if (_isDirect) unawaited(_loadPeerVerified());
     // Состав комнаты нужен шапке («N участников») даже там, где все имена уже
@@ -3510,12 +4161,18 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         );
       }
       if (_isHiddenControlText(raw)) return null;
+      // Приглашение в комнату — карточкой, как на телефоне (29.09.2026).
+      final invite = _roomInviteFor(raw);
       // Register this message so later replies can quote it, then resolve our
       // own reply target (an earlier message already registered above).
       _registerReplyPreview(
         payloadId,
         author,
-        raw,
+        invite == null
+            ? raw
+            : (invite.loaded && invite.title.trim().isNotEmpty
+                  ? l10n.desktopRoomInviteReplyQuote(invite.title.trim())
+                  : l10n.desktopRoomInviteCardTitle),
         isImage: false,
         authorSeed: event.senderDeviceId,
       );
@@ -3542,10 +4199,13 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         // «@Игорь» рисовал обычным словом — фишки не было.
         mentions: payload.mentions,
         senderAvatarPath: senderAvatarPath,
-        linkPreview: carriedPreview,
+        roomInvite: invite,
+        // У приглашения своя карточка: карточка ссылки вела бы на заглушку
+        // «Join room in Secretly» в браузере.
+        linkPreview: invite == null ? carriedPreview : null,
         // Своё прежнее сообщение без карточки — её можно загрузить самим:
         // свою ссылку человек выбрал сам.
-        ownLinkPreviewTarget: (isSelf && carriedPreview == null)
+        ownLinkPreviewTarget: (invite == null && isSelf && carriedPreview == null)
             ? linkPreviewTargetFor(raw)
             : null,
       );
@@ -4056,6 +4716,101 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
 
   /// E6: records a message's quote preview so a later reply targeting it can
   /// render «author: snippet». Keyed by the logical [payloadId].
+  /// Приглашения в ленте: данные комнаты по ключу «пригласивший|slug».
+  ///
+  /// Одна и та же ссылка встречается в ленте много раз, а данные — запрос к
+  /// нашему реле; поэтому кэш и один запрос на ключ.
+  final Map<String, DesktopRoomInviteView> _roomInvites =
+      <String, DesktopRoomInviteView>{};
+  final Set<String> _roomInvitesInFlight = <String>{};
+
+  /// Когда данные приглашения по ключу не пришли в последний раз — см.
+  /// [desktopRoomInviteLookupDue].
+  final Map<String, DateTime> _roomInviteFailedAt = <String, DateTime>{};
+
+  /// Приглашение, если весь текст — одна ссылка-приглашение. Правило то же,
+  /// что у телефона (`_roomInviteTargetFromMessageText`): ссылка внутри
+  /// фразы остаётся ссылкой.
+  DesktopRoomInviteView? _roomInviteFor(String raw) {
+    final target = desktopRoomInviteTargetFromText(raw);
+    if (target == null) return null;
+    final base = DesktopRoomInviteView(
+      slug: target.slug,
+      inviterProfileId: target.inviterProfileId,
+      groupIdHint: target.groupIdHint,
+    );
+    final known = _roomInvites[base.cacheKey];
+    if (known != null) return known;
+    if (desktopRoomInviteLookupDue(
+      failedAt: _roomInviteFailedAt[base.cacheKey],
+      now: DateTime.now(),
+    )) {
+      unawaited(_resolveRoomInvite(target, base.cacheKey));
+    }
+    return base;
+  }
+
+  Future<void> _resolveRoomInvite(RoomInviteTarget target, String key) async {
+    if (!_roomInvitesInFlight.add(key)) return;
+    try {
+      final p = await widget.controller.resolveRoomInviteTarget(target);
+      final view = DesktopRoomInviteView(
+        slug: target.slug,
+        inviterProfileId: target.inviterProfileId,
+        groupIdHint: target.groupIdHint,
+        loaded: true,
+        groupId: p.groupId,
+        title: p.groupTitle,
+        memberCount: p.memberCount,
+        inviterName: p.inviterDisplayName,
+        alreadyMember: p.isAlreadyMember,
+        approvalRequired: p.joinApprovalRequired,
+        requestPending: p.isJoinRequestPending,
+        historyVisible: p.chatHistoryVisible,
+        avatarBytes: p.avatarBytes,
+        avatarPath: p.avatarPath,
+      );
+      _roomInvites[key] = view;
+      _roomInviteFailedAt.remove(key);
+      if (!mounted) return;
+      setState(() {
+        _messages = <MessageData>[
+          for (final m in _messages)
+            m.roomInvite?.cacheKey == key ? m.copyWith(roomInvite: view) : m,
+        ];
+      });
+    } catch (_) {
+      // Нет сети или ссылку отозвали — остаётся карточка с общей подписью.
+      // Её кнопка ведёт на экран входа, и там причина видна словами. Снова
+      // спросим не раньше, чем через паузу (см. [desktopRoomInviteLookupDue]).
+      _roomInviteFailedAt[key] = DateTime.now();
+    } finally {
+      _roomInvitesInFlight.remove(key);
+    }
+  }
+
+  /// Кнопка карточки: вступившего — в комнату, остальных — на экран входа.
+  /// После экрана входа данные карточки перечитываются: «Вступить» должно
+  /// смениться на «Открыть комнату».
+  Future<void> _openRoomInviteFromMessage(MessageData m) async {
+    final invite = m.roomInvite;
+    final open = widget.onOpenRoomInvite;
+    if (invite == null || open == null) return;
+    final target = RoomInviteTarget(
+      slug: invite.slug,
+      inviterProfileId: invite.inviterProfileId,
+      groupIdHint: invite.groupIdHint,
+    );
+    await open(
+      target,
+      memberGroupId: invite.alreadyMember ? invite.groupId : null,
+    );
+    if (!mounted || invite.alreadyMember) return;
+    _roomInvites.remove(invite.cacheKey);
+    _roomInviteFailedAt.remove(invite.cacheKey);
+    unawaited(_resolveRoomInvite(target, invite.cacheKey));
+  }
+
   void _registerReplyPreview(
     String payloadId,
     String author,
@@ -4140,7 +4895,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
           m.id,
           (cur) => cur.copyWith(reactions: originalReactions),
         );
-        setState(() => _sendError = l10n.desktopChatsReactionFailed('$e'));
+        setState(() => _sendError = l10n.desktopChatsReactionFailed(desktopErrorText(e)));
       }
       return;
     }
@@ -4158,7 +4913,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       if (!mounted) return;
       setState(
         () => _sendError =
-            l10n.desktopChatsReactionLocal('$e'),
+            l10n.desktopChatsReactionLocal(desktopErrorText(e)),
       );
     }
     // Full re-sync from storage to pick up authoritative counts (covers
@@ -4541,7 +5296,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       file = await widget.controller.ensureCachedAttachmentFile(payload);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sendError = l10n.desktopChatsVideoOpenFailed('$e'));
+      setState(() => _sendError = l10n.desktopChatsVideoOpenFailed(desktopErrorText(e)));
       return;
     }
     if (!mounted) return;
@@ -4576,7 +5331,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       file = await widget.controller.ensureCachedAttachmentFile(payload);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sendError = l10n.desktopChatsFileFetchFailed('$e'));
+      setState(() => _sendError = l10n.desktopChatsFileFetchFailed(desktopErrorText(e)));
       return;
     }
     if (!mounted) return;
@@ -4611,7 +5366,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       file = await widget.controller.ensureCachedAttachmentFile(payload);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sendError = l10n.desktopChatsOpenFailedWith('$e'));
+      setState(() => _sendError = l10n.desktopChatsOpenFailedWith(desktopErrorText(e)));
       return;
     }
     if (!mounted) return;
@@ -4631,7 +5386,9 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     final kind = desktopViewerKindFor(
       mime: att.mime,
       fileName: shownName,
-      sizeBytes: att.sizeBytes,
+      // Размер — настоящий, с диска: заявленный отправителем мог увести
+      // маленький сценарий «.js» мимо просмотра прямо во внешнюю программу.
+      sizeBytes: file.lengthSync(),
       canRenderPdf: DesktopPdfBridge.isAvailable,
     );
     if (kind != DesktopViewerKind.external_) {
@@ -4652,6 +5409,16 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   /// Отдать файл внешней программе — временной копией под настоящим именем.
   Future<void> _openFileExternally(MessageAttachment att, File file) async {
     try {
+      // 🔴 Программу, сценарий, ярлык одним нажатием не запускаем
+      // (30.09.2026): сперва предупреждение с настоящим расширением.
+      final allowed = await mayOpenReceivedFile(
+        context,
+        file: file,
+        fileName: att.fileName,
+        mime: att.mime,
+        blobId: att.blobId,
+      );
+      if (!allowed || !mounted) return;
       // Внешней программе отдаём временную копию под настоящим именем, а не
       // файл из кэша: у кэшированного имя вида `<идентификатор>.bin`, и
       // система не знала, чем его открыть (см. `attachmentOpenCopy`).
@@ -4674,7 +5441,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sendError = l10n.desktopChatsOpenFailedShort('$e'));
+      setState(() => _sendError = l10n.desktopChatsOpenFailedShort(desktopErrorText(e)));
     }
   }
 
@@ -4712,7 +5479,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _sendError = l10n.desktopChatsPlayFailed('$e'));
+      setState(() => _sendError = l10n.desktopChatsPlayFailed(desktopErrorText(e)));
     }
   }
 
@@ -4727,6 +5494,20 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   /// screen mobile uses) instead of a desktop mockup. Pushed as a route over
   /// the shell.
   void _startRoomCall() {
+    // Р1 (29.09.2026): созвон — своим окном ОС; нет слоя или настройки —
+    // маршрутом поверх главного окна, как раньше.
+    unawaited(() async {
+      final own = await DesktopRoomCallWindows.open(
+        vm: widget.vm,
+        groupId: _convoId,
+        title: widget.conversation.title,
+      );
+      if (own || !mounted) return;
+      _pushRoomCallRoute();
+    }());
+  }
+
+  void _pushRoomCallRoute() {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => DesktopRoomCallWindow(
@@ -4973,13 +5754,12 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     if (!mounted) return;
 
     if (choice == 'verify') {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => VerifyContactScreen(
-            controller: widget.controller,
-            peerProfileId: peer,
-            title: widget.conversation.title,
-          ),
+      await showDesktopScreenWindow<void>(
+        context,
+        builder: (_) => VerifyContactScreen(
+          controller: widget.controller,
+          peerProfileId: peer,
+          title: widget.conversation.title,
         ),
       );
       return;
@@ -5180,7 +5960,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopChatsSaveFailed('$e'),
+        message: l10n.desktopChatsSaveFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
       return;
@@ -5266,7 +6046,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopChatsForwardFailed('$e'),
+        message: l10n.desktopChatsForwardFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
       return;
@@ -5482,10 +6262,19 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     }
   }
 
-  /// E7: a voice note recorded in the composer (opus). 1:1 reads the bytes
-  /// (sendAttachment); groups hand the path to sendGroupAttachmentFile. The mime
-  /// `audio/opus` classifies it as a voice note on both desktop and mobile.
-  Future<void> _onSendVoice(String path, int durationMs) async {
+  /// E7: a voice note recorded in the composer. 1:1 reads the bytes
+  /// (sendAttachment); groups hand the path to sendGroupAttachmentFile.
+  ///
+  /// 🔴 Как у телефона (30.09.2026): AAC-LC `.m4a`, тип `audio/mp4` и волна.
+  /// Раньше здесь был Opus, который пакет записи ПК не пишет вовсе. По типу
+  /// `audio/mp4` голосовое неотличимо от песни — голосовым его делает волна,
+  /// у обеих сторон. Временный файл поле ввода удалит само, когда отправка
+  /// вернётся: здесь он нужен только до конца вызова.
+  Future<void> _onSendVoice(
+    String path,
+    int durationMs,
+    List<int> waveform,
+  ) async {
     try {
       if (_isDirect) {
         final pid = _peerProfileId;
@@ -5496,8 +6285,9 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         await widget.controller.sendAttachment(
           peerProfileId: pid,
           bytes: bytes,
-          mime: 'audio/opus',
+          mime: 'audio/mp4',
           durationMs: durationMs,
+          waveform: waveform,
         );
       } else {
         setState(() => _sendError = null);
@@ -5505,8 +6295,9 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
           groupId: _convoId,
           topicId: _currentTopicId,
           filePath: path,
-          mime: 'audio/opus',
+          mime: 'audio/mp4',
           durationMs: durationMs,
+          waveform: waveform,
         );
       }
     } catch (e) {
@@ -5602,26 +6393,65 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   // файлы больше не уходят сразу и без подписи — сперва окно, как в Telegram
   // (см. `send_media_dialog.dart`). Сюда приходит уже решение человека.
 
+  ///
+  /// 🔴 ЦЕЛЬ — ТА ПЕРЕПИСКА, ИЗ КОТОРОЙ ОТКРЫЛИ ОКНО (01.10.2026). Хост снят,
+  /// если чат сменили, пока окно было открыто, — а нажатое «Отправить» всё
+  /// равно приходит сюда. Раньше первый же `setState` на снятом хосте бросал
+  /// исключение, и файлы пропадали молча. Цель читается один раз, на входе;
+  /// состояние трогается, только пока хост на месте; подпись у снятого хоста
+  /// уходит прямым вызовом — в ту же переписку и ту же тему.
   Future<void> _sendMedia(
     SendMediaResult result, {
     String? replyToPayloadEventId,
   }) async {
+    final convoId = _convoId;
+    final isDirect = _isDirect;
+    final peer = isDirect ? _peerProfileId : null;
+    final topicId = isDirect ? null : _currentTopicId;
+    final mentionTargets = _mentionTargets;
     _stopTyping();
-    setState(() => _sendError = null);
+    if (mounted) setState(() => _sendError = null);
     try {
       await enqueueDesktopMediaSend(
         enqueue: widget.controller.enqueueAttachmentBatchUpload,
         result: result,
-        convoId: _convoId,
-        peerProfileId: _isDirect ? _peerProfileId : null,
+        convoId: convoId,
+        peerProfileId: peer,
         // В ту ветку, где человек стоит, — как и текст.
-        topicId: _isDirect ? null : _currentTopicId,
+        topicId: topicId,
         replyToPayloadEventId: replyToPayloadEventId,
         // Подпись отдельным сообщением идёт обычной отправкой: с темой,
         // упоминаниями и разбором отказов.
-        sendText: (text, reply) => _send(
-          DesktopComposerSubmission(text: text, replyToPayloadEventId: reply),
-        ),
+        sendText: (text, reply) async {
+          if (mounted) {
+            await _send(
+              DesktopComposerSubmission(
+                text: text,
+                replyToPayloadEventId: reply,
+              ),
+            );
+            return;
+          }
+          if (isDirect) {
+            if (peer == null || peer.isEmpty) return;
+            await widget.controller.sendMessage(
+              peerProfileId: peer,
+              text: text,
+              replyToPayloadEventId: reply,
+            );
+          } else {
+            await widget.controller.sendGroupMessage(
+              groupId: convoId,
+              text: text,
+              replyToPayloadEventId: reply,
+              mentions: desktopResolveMentions(
+                text: text,
+                targets: mentionTargets,
+              ),
+              topicId: topicId,
+            );
+          }
+        },
       );
     } catch (e) {
       if (mounted) setState(() => _sendError = _humanError(e));
@@ -6036,11 +6866,14 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       searchOpen: _searchOpen,
       onToggleSearch: () => setState(() => _searchOpen = !_searchOpen),
       onHeaderMenu: widget.onHeaderMenu,
-      // Global default wallpaper from the shared preset. Per-chat overrides
-      // are kept on mobile via SharedPreferences and will be plumbed
-      // through in Sprint 2 once the chat-context menu has a "Wallpaper…"
-      // entry on desktop.
-      wallpaperId: widget.controller.defaultChatWallpaperId,
+      // 🔴 Обои ЭТОГО чата, если выбраны (меню шапки → «Обои чата…»), иначе
+      // общие; ключ тот же, что у телефона (28.09.2026). Платные без
+      // подписки — общие, выбор чата вернётся с продлением.
+      wallpaperId: desktopEffectiveChatWallpaperId(
+        chatSelection: DesktopChatWallpapers.selectionFor(_convoId),
+        globalId: widget.controller.defaultChatWallpaperId,
+        usable: widget.controller.cosmeticWallpaperUsable,
+      ),
       // Both read from the shared controller, so the animation mode and
       // the «проводит сообщение» switch chosen on the phone apply here.
       wallpaperAnimMode: desktopWallpaperAnimModeFor(
@@ -6048,6 +6881,10 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
         windowFocused: DesktopWindowActivity.focused.value,
       ),
       wallpaperConduct: widget.controller.chatWallpaperConduct,
+      // Нужен, когда в «Внешнем виде» выбран один цвет для всех имён.
+      nicknameStylePresetId: widget.controller.nicknameStylePresetId,
+      reactionAllowed: _isDirect ? null : _reactionAllowed,
+      onOpenRoomInvite: (m) => unawaited(_openRoomInviteFromMessage(m)),
       onReactToMessage: (m, emoji) {
         unawaited(_applyReaction(m, emoji));
       },

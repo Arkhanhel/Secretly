@@ -404,6 +404,32 @@ abstract final class OutgoingMediaPrep {
   static Future<Map<Object?, Object?>?> Function(String path, String outPath)?
   transcodeOverride;
 
+  /// Байты снимка, которые прочтёт Flutter (29.09.2026, кадрирование
+  /// портрета). HEIC/HEIF/TIFF сначала перекодирует система — на macOS это
+  /// ImageIO; где перекодировщика нет, такой снимок не прочесть, `null`.
+  static Future<Uint8List?> decodableImageBytes(String path) async {
+    final ext = p.extension(path).toLowerCase().replaceFirst('.', '');
+    if (_alwaysTranscode.contains(ext)) {
+      final out = await _transcode(path);
+      if (out == null) return null;
+      final file = File(out.path);
+      try {
+        return await file.readAsBytes();
+      } catch (_) {
+        return null;
+      } finally {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
+    }
+    try {
+      return await File(path).readAsBytes();
+    } catch (_) {
+      return null;
+    }
+  }
+
   static Future<void> prepare(OutgoingFile f) async {
     if (f.prepared) return;
     try {

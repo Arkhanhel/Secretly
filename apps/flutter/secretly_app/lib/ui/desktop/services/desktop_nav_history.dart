@@ -95,6 +95,17 @@ class DesktopNavHistory extends ChangeNotifier {
     return _stack[_cursor];
   }
 
+  /// Забыть путь целиком: в окне сменился профиль (01.10.2026).
+  ///
+  /// Выход и новая привязка перезапускают контроллер, но не окно, и стрелки
+  /// «назад»/«вперёд» вели в переписки ПРЕЖНЕГО аккаунта.
+  void clear() {
+    if (_stack.isEmpty && _cursor == -1) return;
+    _stack.clear();
+    _cursor = -1;
+    notifyListeners();
+  }
+
   /// Переписку удалили или из неё вышли — выбрасываем её из пути целиком,
   /// иначе стрелка вела бы в пустоту.
   void forget(String convoId) {

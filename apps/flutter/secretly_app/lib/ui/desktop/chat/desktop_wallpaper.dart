@@ -12,7 +12,11 @@
 ///   • for `default` uses the dark-mode standard asset shipped with the app,
 ///   • for `midnight` falls back to the deep solid color baked into the
 ///     desktop palette (`bg`),
-///   • falls back to the standard asset for anything unknown.
+///   • falls back to the standard asset for anything unknown,
+///   • кладёт узор (картинки набора и живые обои) по ВЫСОТЕ панели,
+///     колонками от центра, как Telegram Desktop, — на широком окне дудлы
+///     добавляются, а не растут (О1, `desktop_wallpaper_tiling.dart`); фото и
+///     серверные обои остаются «по покрытию».
 ///
 /// This keeps the picker (`settings_workspace.dart`) wired to the shared
 /// preset ids while letting the chat panel paint a desktop-appropriate
@@ -23,10 +27,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../services/desktop_file_probe.dart';
+
 // chat_wallpapers re-exports the animated renderer, so one import covers the
 // id resolution, the anim mode enum and TelegramWallpaper itself.
 import '../../chat_wallpapers.dart';
 import '../design/colors.dart';
+import 'desktop_wallpaper_tiling.dart';
 
 /// Builds a widget that paints the chat-thread wallpaper for [wallpaperId].
 ///
@@ -44,8 +51,16 @@ Widget buildDesktopChatWallpaper(
   GlobalKey<TelegramWallpaperState>? animKey,
   ChatWallpaperAnimMode animMode = ChatWallpaperAnimMode.onEnter,
   bool conduct = false,
+  // Плитка выбора: живые обои — неподвижным кадром, картинки — мелким
+  // декодом (28.09.2026, сетка обоев ПК).
+  bool preview = false,
 }) {
   final normalized = normalizeChatWallpaperId(wallpaperId);
+  // server:<id> — платные обои с сервера: скачивание, кэш и заглушка на время
+  // загрузки — в общем коде, у ПК своего пути для них не было (28.09.2026).
+  if (decodeServerChatWallpaperId(normalized) != null) {
+    return buildChatWallpaperBackground(context, normalized, preview: preview);
+  }
 
   // anim:<style> — the shared animated renderer, shader pulse and all.
   //
@@ -54,25 +69,39 @@ Widget buildDesktopChatWallpaper(
   // the desktop pipeline publishes. TelegramWallpaper itself needs only a
   // style and a mask, so it drops in unchanged: same 5 styles, same animation
   // modes, same geodesic light wave, no new wire or asset of our own.
+  //
+  // 🔴 О1 (30.09.2026): узор и поле волны — по высоте панели, колонками от
+  // центра (`desktop_wallpaper_tiling.dart`), а не «по покрытию»: на широком
+  // окне дудлы больше не растут. Телефон раскладку не передаёт и рисует как
+  // раньше.
   final animStyle = decodeAnimatedChatWallpaperStyle(normalized);
   if (animStyle != null) {
     return TelegramWallpaper(
       key: animKey,
       style: animStyle,
-      mode: animMode,
-      conduct: conduct,
+      mode: preview ? ChatWallpaperAnimMode.off : animMode,
+      conduct: preview ? false : conduct,
+      patternLayout: const DesktopTiledPatternLayout(),
     );
   }
 
-  // asset:* id — paint the asset full-bleed.
+  // asset:* id — узор по высоте панели, колонками от центра (О1).
   final assetPath = decodeAssetChatWallpaperId(normalized);
   if (assetPath != null) {
-    return _assetWallpaper(context, assetPath);
+    // 🔴 Пара под тему, как на телефоне: тёмная картинка в светлой теме
+    // меняется на свою светлую пару и наоборот (28.09.2026).
+    return _assetWallpaper(
+      context,
+      themedChatWallpaperAssetPath(assetPath, darkMode: palette.isDark),
+      preview: preview,
+    );
   }
 
-  // file:* id — paint the local file full-bleed if it still exists.
+  // file:* id — paint the local file full-bleed if it still exists. Фото —
+  // не узор: его колонками не разложишь, остаётся «по покрытию» (О1).
   final filePath = decodeFileChatWallpaperId(normalized);
-  if (filePath != null && File(filePath).existsSync()) {
+  // Без обращения к диску на каждую перерисовку ленты — [DesktopFileProbe].
+  if (filePath != null && DesktopFileProbe.exists(filePath)) {
     // D-3: same decode cap as the bundled assets. A user-chosen wallpaper can
     // easily be a full-resolution camera photo, which is worse than anything
     // we ship.
@@ -81,7 +110,7 @@ Widget buildDesktopChatWallpaper(
         color: palette.bg,
         image: DecorationImage(
           image: ResizeImage.resizeIfNeeded(
-            chatWallpaperDecodeWidth(context, preview: false),
+            chatWallpaperDecodeWidth(context, preview: preview),
             null,
             FileImage(File(filePath)),
           ),
@@ -96,29 +125,58 @@ Widget buildDesktopChatWallpaper(
       // Solid deep background — no image.
       return ColoredBox(color: palette.bg);
     case 'default':
+      // 🔴 «Классика» — градиент по цветам темы, как у телефона
+      // (`themedLightSolidChatWallpaperColors`). Раньше `default` на ПК
+      // рисовал картинку «Ночной синий», и одно имя значило разное на двух
+      // устройствах. Тем, у кого на ПК был выбран `default`, при запуске один
+      // раз ставится именно картинка — их фон не меняется
+      // (`migrateDesktopDefaultWallpaper`).
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: themedLightSolidChatWallpaperColors(context),
+          ),
+        ),
+      );
     default:
-      return _assetWallpaper(context, kDarkThemeStandardChatWallpaperAssetPath);
+      return _assetWallpaper(
+        context,
+        palette.isDark
+            ? kDarkThemeStandardChatWallpaperAssetPath
+            : kLightThemeStandardChatWallpaperAssetPath,
+        preview: preview,
+      );
   }
 }
 
-/// Paints a full-bleed wallpaper asset.
+/// Идентификатор, которым ПК подменяет свой прежний `default` (картинка
+/// «Ночной синий»), чтобы у нынешних пользователей фон не поменялся.
+String desktopLegacyDefaultWallpaperId() =>
+    encodeAssetChatWallpaperId(kDarkThemeStandardChatWallpaperAssetPath);
+
+/// Paints a bundled wallpaper asset.
 ///
-/// D-3: decoded at the window's own width rather than the source's. The
-/// wallpaper assets are 1440×2560 — ~14.75 MB decoded — and `BoxFit.cover` can
-/// only ever crop, never show more than the window is wide, so the extra
-/// pixels are pure cache pressure held for the lifetime of the open chat.
-/// [chatWallpaperDecodeWidth] is the same helper the mobile chat uses.
-Widget _assetWallpaper(BuildContext context, String assetPath) {
-  return DecoratedBox(
-    decoration: BoxDecoration(
-      image: DecorationImage(
-        image: ResizeImage.resizeIfNeeded(
-          chatWallpaperDecodeWidth(context, preview: false),
-          null,
-          AssetImage(assetPath),
-        ),
-        fit: BoxFit.cover,
-      ),
-    ),
+/// 🔴 О1 (30.09.2026): не «по покрытию», а по высоте панели, колонками от
+/// центра — все картинки набора это узор дудлов поверх градиента, и на широком
+/// окне «покрытие» раздувало дудлы вдвое-вчетверо. Центральная колонка — сама
+/// картинка целиком, как задумана; боковые — её повтор, если края картинки
+/// совпадают по цвету, иначе отражение (замеры — в шапке
+/// `desktop_wallpaper_tiling.dart`).
+///
+/// D-3 сохранён в новом виде: картинка 1440×2560 (~14,75 МБ) декодируется не
+/// больше, чем бывает нужно, но теперь по ВЫСОТЕ и один раз на плотность
+/// пикселей — ширина окна на ключ кэша не влияет, и растягивание окна больше
+/// не декодирует её заново на каждом шаге.
+Widget _assetWallpaper(
+  BuildContext context,
+  String assetPath, {
+  bool preview = false,
+}) {
+  return DesktopTiledWallpaperImage(
+    image: AssetImage(assetPath),
+    tileMode: desktopWallpaperTileModeFor(assetPath),
+    preview: preview,
   );
 }

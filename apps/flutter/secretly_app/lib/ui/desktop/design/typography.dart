@@ -3,8 +3,60 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'package:flutter/material.dart';
 
+import 'emoji_font.dart';
+
 class DType {
   DType._();
+
+  // ── Эмодзи Windows (30.09.2026, Э1) ────────────────────────────────────
+  //
+  // Стили шкалы ниже — ГЕТТЕРЫ, а не константы: на Windows каждый несёт в
+  // `fontFamilyFallback` наш Noto (см. `emoji_font.dart` — почему одной темы
+  // мало). На остальных ОС геттер отдаёт ту же константу, что и раньше, —
+  // тот же объект, байт в байт.
+
+  /// Запасные шрифты текста ПК: на Windows — Manrope, затем наш Noto; на
+  /// остальных ОС — `null`, то есть как было.
+  ///
+  /// Manrope первым — чтобы Noto не стал ОСНОВНЫМ шрифтом у стиля, чьего
+  /// семейства на машине нет (тогда пробелы и цифры брались бы из Noto,
+  /// шириной с эмодзи). Этот список ставят тема и стиль по умолчанию над
+  /// навигатором; явный стиль с эмодзи во вложенном куске текста ставит его
+  /// сам: `fontFamilyFallback: DType.emojiFallback`.
+  static List<String>? get emojiFallback =>
+      DesktopEmojiFont.enabled ? _emojiFallback : null;
+  static const List<String> _emojiFallback = <String>[
+    family,
+    kDesktopEmojiFontFamily,
+  ];
+
+  /// [style] с запасными шрифтами эмодзи в конце своего списка — на Windows;
+  /// на остальных ОС — сам [style], тот же объект.
+  ///
+  /// В КОНЕЦ, а не в начало: у моноширинных подписей свой список
+  /// ([monoFallback]), и Consolas должна остаться раньше эмодзи. Семейства,
+  /// которые у стиля уже есть, второй раз не добавляются.
+  static TextStyle withEmojiFallback(TextStyle style) {
+    final extra = emojiFallback;
+    if (extra == null) return style;
+    final own = style.fontFamilyFallback ?? const <String>[];
+    final add = <String>[
+      for (final f in extra)
+        if (f != style.fontFamily && !own.contains(f)) f,
+    ];
+    if (add.isEmpty) return style;
+    return style.copyWith(fontFamilyFallback: <String>[...own, ...add]);
+  }
+
+  /// Стиль шкалы для текущей ОС. Вариант с эмодзи запоминается: геттеры
+  /// шкалы зовут в каждой сборке виджета, и новый объект на каждый вызов
+  /// был бы пустой работой.
+  static TextStyle _e(TextStyle style) {
+    if (!DesktopEmojiFont.enabled) return style;
+    return _withEmoji[style] ??= withEmojiFallback(style);
+  }
+
+  static final Expando<TextStyle> _withEmoji = Expando<TextStyle>();
 
   /// 🔴 ШРИФТ МАКЕТА — MANROPE, А НЕ INTER (14.09.2026).
   ///
@@ -19,7 +71,8 @@ class DType {
   /// осталась на Inter. Manrope читает только десктопное окно.
   static const String family = 'Manrope';
 
-  static const TextStyle display = TextStyle(
+  static TextStyle get display => _e(_display);
+  static const TextStyle _display = TextStyle(
     fontFamily: family,
     // Explicit: without it a style inherits `decoration` from the ambient
     // DefaultTextStyle, which outside a Material ancestor is Flutter's error
@@ -34,7 +87,8 @@ class DType {
     height: 28 / 22,
   );
 
-  static const TextStyle title = TextStyle(
+  static TextStyle get title => _e(_title);
+  static const TextStyle _title = TextStyle(
     fontFamily: family,
     // Explicit: without it a style inherits `decoration` from the ambient
     // DefaultTextStyle, which outside a Material ancestor is Flutter's error
@@ -47,7 +101,8 @@ class DType {
     height: 22 / 16,
   );
 
-  static const TextStyle body = TextStyle(
+  static TextStyle get body => _e(_body);
+  static const TextStyle _body = TextStyle(
     fontFamily: family,
     // Explicit: without it a style inherits `decoration` from the ambient
     // DefaultTextStyle, which outside a Material ancestor is Flutter's error
@@ -58,7 +113,8 @@ class DType {
     height: 20 / 14,
   );
 
-  static const TextStyle bodyStrong = TextStyle(
+  static TextStyle get bodyStrong => _e(_bodyStrong);
+  static const TextStyle _bodyStrong = TextStyle(
     fontFamily: family,
     // Explicit: without it a style inherits `decoration` from the ambient
     // DefaultTextStyle, which outside a Material ancestor is Flutter's error
@@ -69,7 +125,8 @@ class DType {
     height: 20 / 14,
   );
 
-  static const TextStyle label = TextStyle(
+  static TextStyle get label => _e(_label);
+  static const TextStyle _label = TextStyle(
     fontFamily: family,
     // Explicit: without it a style inherits `decoration` from the ambient
     // DefaultTextStyle, which outside a Material ancestor is Flutter's error
@@ -83,7 +140,8 @@ class DType {
     height: 18 / 13,
   );
 
-  static const TextStyle caption = TextStyle(
+  static TextStyle get caption => _e(_caption);
+  static const TextStyle _caption = TextStyle(
     fontFamily: family,
     // Explicit: without it a style inherits `decoration` from the ambient
     // DefaultTextStyle, which outside a Material ancestor is Flutter's error
@@ -94,7 +152,8 @@ class DType {
     height: 16 / 12,
   );
 
-  static const TextStyle tiny = TextStyle(
+  static TextStyle get tiny => _e(_tiny);
+  static const TextStyle _tiny = TextStyle(
     fontFamily: family,
     // Explicit: without it a style inherits `decoration` from the ambient
     // DefaultTextStyle, which outside a Material ancestor is Flutter's error
@@ -121,7 +180,8 @@ class DType {
   // как размер × em.
 
   /// Заголовок панели («Чаты», «Комнаты») — 17/800/-0.015em.
-  static const TextStyle panelTitle = TextStyle(
+  static TextStyle get panelTitle => _e(_panelTitle);
+  static const TextStyle _panelTitle = TextStyle(
     fontFamily: family,
     decoration: TextDecoration.none,
     fontSize: 17,
@@ -131,7 +191,8 @@ class DType {
   );
 
   /// Имя собеседника в шапке переписки — 19/800/-0.015em.
-  static const TextStyle threadTitle = TextStyle(
+  static TextStyle get threadTitle => _e(_threadTitle);
+  static const TextStyle _threadTitle = TextStyle(
     fontFamily: family,
     decoration: TextDecoration.none,
     fontSize: 19,
@@ -142,7 +203,8 @@ class DType {
 
   /// Имя в строке списка — 13,5/600. Между `label` и `bodyStrong`: в макете
   /// строка набрана мельче основного текста, и именно это держит плотность.
-  static const TextStyle rowName = TextStyle(
+  static TextStyle get rowName => _e(_rowName);
+  static const TextStyle _rowName = TextStyle(
     fontFamily: family,
     decoration: TextDecoration.none,
     fontSize: 13.5,
@@ -151,7 +213,8 @@ class DType {
   );
 
   /// Превью последнего сообщения в строке — 12/400.
-  static const TextStyle preview = TextStyle(
+  static TextStyle get preview => _e(_preview);
+  static const TextStyle _preview = TextStyle(
     fontFamily: family,
     decoration: TextDecoration.none,
     fontSize: 12,
@@ -160,7 +223,8 @@ class DType {
   );
 
   /// Время в строке списка и под пузырём — 11/400.
-  static const TextStyle timeSmall = TextStyle(
+  static TextStyle get timeSmall => _e(_timeSmall);
+  static const TextStyle _timeSmall = TextStyle(
     fontFamily: family,
     decoration: TextDecoration.none,
     fontSize: 11,
@@ -169,7 +233,8 @@ class DType {
   );
 
   /// Имя темы в полосе над лентой — 15/700/-0.01em.
-  static const TextStyle topicName = TextStyle(
+  static TextStyle get topicName => _e(_topicName);
+  static const TextStyle _topicName = TextStyle(
     fontFamily: family,
     decoration: TextDecoration.none,
     fontSize: 15,
@@ -214,7 +279,8 @@ class DType {
   /// Размер 9,5 и разрядка 0,07em — из макета. Прописные буквы задаёт РАЗМЕТКА
   /// (`toUpperCase()`), а не стиль: в стиле такого свойства нет, а подпись
   /// должна оставаться читаемой для программ чтения с экрана.
-  static const TextStyle meta = TextStyle(
+  static TextStyle get meta => _e(_meta);
+  static const TextStyle _meta = TextStyle(
     fontFamily: monoFamily,
     fontFamilyFallback: monoFallback,
     decoration: TextDecoration.none,
@@ -226,7 +292,8 @@ class DType {
 
   /// Технические значения: код безопасности, «1.2 МБ», «1080p · 30 fps»,
   /// секундомер созвона. Тот же шрифт, обычный регистр, без разрядки.
-  static const TextStyle mono = TextStyle(
+  static TextStyle get mono => _e(_mono);
+  static const TextStyle _mono = TextStyle(
     fontFamily: monoFamily,
     fontFamilyFallback: monoFallback,
     decoration: TextDecoration.none,

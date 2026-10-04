@@ -43,10 +43,13 @@ class DesktopSegmented<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = DColors.of(context);
     assert(values.length == labels.length);
+    // 🔴 Тон — от схемы (30.09.2026, ТЗ §8): белые полупрозрачные подложки на
+    // светлой схеме не видны, и выбранный сегмент ничем не отличался.
+    final ink = c.isDark ? Colors.white : Colors.black;
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: ink.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(9),
       ),
       child: Row(
@@ -65,9 +68,9 @@ class DesktopSegmented<T> extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: active
-                        ? Colors.white.withValues(alpha: 0.12)
+                        ? ink.withValues(alpha: c.isDark ? 0.12 : 0.10)
                         : (hovered
-                              ? Colors.white.withValues(alpha: 0.06)
+                              ? ink.withValues(alpha: 0.06)
                               : Colors.transparent),
                     borderRadius: BorderRadius.circular(7),
                   ),

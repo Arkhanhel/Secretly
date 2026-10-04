@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:async';
-import 'dart:convert' show base64Decode;
+import 'dart:convert' show base64Decode, jsonDecode, jsonEncode;
 import 'dart:io'
     show Directory, File, HttpException, Platform, Process, ProcessStartMode;
 import 'dart:isolate';
@@ -14,7 +14,9 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../../diagnostics/diag_log.dart';
 import '../../../version/app_package_info.dart';
+import 'pe_version.dart';
 
 /// Открытый ключ EdDSA, которым подписаны обновления, — тот же, что
 /// `SUPublicEDKey` у Sparkle на Mac (`macos/Runner/Info.plist`; тест сверяет,
@@ -94,6 +96,41 @@ class DesktopUpdateOffer {
 /// Этап обновления на Windows — для кнопки.
 enum DesktopUpdatePhase { downloading, verifying, launching, failed }
 
+/// Почему обновление на Windows не встало.
+enum DesktopUpdateFailure {
+  /// Скачать не вышло: нет связи, ошибка сервера, файл больше заявленного.
+  download,
+
+  /// Размер или подпись не сошлись — файл удалён и не запускался.
+  verification,
+
+  /// Установщик не запустился.
+  launch,
+
+  /// Установщик запускали, но после него работает прежняя версия.
+  notInstalled,
+}
+
+/// Итог последней попытки обновиться на Windows — для строки «Обновление не
+/// установилось: …» в настройках.
+@immutable
+class DesktopUpdateAttempt {
+  const DesktopUpdateAttempt({
+    required this.version,
+    this.build,
+    this.failure,
+  });
+
+  /// Какую версию ставили: «1.8.63».
+  final String version;
+  final int? build;
+
+  /// `null` — встала.
+  final DesktopUpdateFailure? failure;
+
+  bool get succeeded => failure == null;
+}
+
 @immutable
 class DesktopUpdateProgress {
   const DesktopUpdateProgress(this.phase, {this.fraction});
@@ -161,6 +198,14 @@ class DesktopUpdateService {
   /// молчаливое «не работает» не даёт ни починить, ни объяснить.
   String? lastError;
 
+  /// 🔴 Итог последней попытки обновиться на Windows (30.09.2026). Неудача
+  /// была видна только кнопкой «Скачать с сайта» до перезапуска, а установщик,
+  /// не сумевший встать, не оставлял следа вовсе. Отказ до запуска
+  /// установщика ложится сюда сразу; удачу или неудачу самого установщика
+  /// служба узнаёт при следующем запуске — по отметке, записанной перед ним.
+  final ValueNotifier<DesktopUpdateAttempt?> lastAttempt =
+      ValueNotifier<DesktopUpdateAttempt?>(null);
+
   /// Подмены для тестов: скачивание, запуск установщика, выход, ключ.
   @visibleForTesting
   Future<File> Function(
@@ -186,6 +231,15 @@ class DesktopUpdateService {
   @visibleForTesting
   bool debugWindowsPath = false;
 
+  /// Папка скачанных установщиков и номер работающей сборки — для тестов.
+  @visibleForTesting
+  static Directory? debugDownloadDir;
+
+  @visibleForTesting
+  int? debugCurrentBuild;
+
+  static const String _pendingFileName = 'pending-update.json';
+
   bool _loaded = false;
   Timer? _first;
   Timer? _periodic;
@@ -199,6 +253,7 @@ class DesktopUpdateService {
   Future<void> load() async {
     if (_loaded) return;
     _loaded = true;
+    if (windowsFeed) await settlePreviousAttempt();
     if (supported) {
       _channel.setMethodCallHandler(_onNative);
       try {
@@ -303,13 +358,61 @@ class DesktopUpdateService {
     await _open(Uri.parse(url));
   }
 
+  /// «Повторить» у строки «Обновление не установилось: …» в настройках
+  /// (01.10.2026).
+  ///
+  /// Неудача оставляет кнопку внизу в состоянии «Скачать с сайта», а после
+  /// перезапуска найденной версии может ещё не быть — поэтому здесь: снять
+  /// прежний итог, при нужде заново спросить перечень и поставить найденное
+  /// тем же путём, что кнопка «Обновить». Ставить нечего (перечень молчит) —
+  /// честно ведём на страницу загрузки, а не делаем вид, что повторили.
+  Future<void> retry() async {
+    final current = progress.value;
+    // Установка уже идёт — второй не начинаем.
+    if (current != null && current.phase != DesktopUpdatePhase.failed) return;
+    progress.value = null;
+    lastAttempt.value = null;
+    if (available.value?.downloadUrl == null) {
+      await (debugProbe ?? probe)();
+    }
+    final offer = available.value;
+    if (offer == null || offer.downloadUrl == null) {
+      await _open(Uri.parse(kDesktopDownloadPageUrl));
+      return;
+    }
+    await install();
+  }
+
+  /// Подмена опроса перечня для проверки «Повторить».
+  @visibleForTesting
+  Future<void> Function()? debugProbe;
+
+  /// Подмена чтения версии установщика — для проверок, где файл не PE.
+  @visibleForTesting
+  Future<PeFileVersion?> Function(String path)? debugInstallerVersionReader;
+
+  /// Номер работающей сборки — для защиты от отката. Берётся больший из
+  /// двух: dart-define релизного скрипта и ресурс версии собственного `.exe`
+  /// (`--build-number` сборки). Больший — строже: откат на сборку между ними
+  /// не пройдёт.
+  Future<int> _runningBuild() async {
+    final forced = debugCurrentBuild;
+    if (forced != null) return forced;
+    final fromEnv = int.tryParse(AppPackageInfo.buildNumberFromEnv) ?? 0;
+    final fromExe =
+        (await readPeFileVersion(Platform.resolvedExecutable))?.build ?? 0;
+    return fromEnv > fromExe ? fromEnv : fromExe;
+  }
+
   Future<void> _installWindowsSetup(DesktopUpdateOffer offer) async {
     File? file;
+    var failure = DesktopUpdateFailure.download;
     try {
       progress.value = const DesktopUpdateProgress(
         DesktopUpdatePhase.downloading,
         fraction: 0,
       );
+      await _purgeDownloads();
       file = await (debugDownloader ?? _download)(
         Uri.parse(offer.downloadUrl!),
         offer.length!,
@@ -318,6 +421,7 @@ class DesktopUpdateService {
           fraction: fraction.clamp(0.0, 1.0),
         ),
       );
+      failure = DesktopUpdateFailure.verification;
       progress.value =
           const DesktopUpdateProgress(DesktopUpdatePhase.verifying);
       final ok = await verifyUpdateFile(
@@ -329,25 +433,137 @@ class DesktopUpdateService {
       if (!ok) {
         throw const _UpdateRejected('signature or size mismatch');
       }
+      // 🔴 ЗАЩИТА ОТ ОТКАТА (01.10.2026). Подписью заверены только БАЙТЫ
+      // файла, а номер сборки брался из перечня, который не подписан. Значит,
+      // подменённый по дороге перечень мог подсунуть наш же, честно
+      // подписанный, но СТАРЫЙ установщик — с дырами, закрытыми с тех пор.
+      // Номер теперь читается из ресурса версии самого файла (его ставит
+      // `VersionInfoVersion` в `windows/installer/secretly.iss`), то есть из
+      // заверенных байтов, и установщик запускается, только если он строго
+      // новее работающей сборки. Нет ресурса версии — отказ, а не «наверное,
+      // можно».
+      final installed = await (debugInstallerVersionReader ??
+          readPeFileVersion)(file.path);
+      final running = await _runningBuild();
+      if (installed == null || installed.build <= running) {
+        DiagLog.event('update', 'installer_not_newer', {
+          'installer': installed?.build,
+          'running': running,
+          'feed': offer.build,
+        });
+        throw _UpdateRejected(
+          'installer build ${installed?.build} is not newer than $running',
+        );
+      }
+      failure = DesktopUpdateFailure.launch;
       progress.value =
           const DesktopUpdateProgress(DesktopUpdatePhase.launching);
+      // Итог установщика станет известен только после перезапуска.
+      await _downloadDir.create(recursive: true);
+      // Номер — заверенный, из самого файла, а не из перечня.
+      await _pendingFile.writeAsString(
+        jsonEncode({'version': offer.version, 'build': installed.build}),
+      );
       await (debugLauncher ?? _launchDetached)(
         file.path,
         kWindowsSilentInstallArgs,
       );
-      // Закрываемся сами: крестик окна у нас прячет в трей, и установщик
-      // иначе упёрся бы в занятые файлы.
-      await (debugQuit ?? _quitForUpdate)();
     } catch (e) {
       lastError = '$e';
+      _record(DesktopUpdateAttempt(
+        version: offer.version,
+        build: offer.build,
+        failure: failure,
+      ));
       progress.value = const DesktopUpdateProgress(DesktopUpdatePhase.failed);
+      try {
+        await _pendingFile.delete();
+      } catch (_) {}
       final f = file;
       if (f != null) {
         try {
           await f.delete();
         } catch (_) {}
       }
+      return;
     }
+    // Установщик уже идёт: прежние скачанные файлы больше не нужны.
+    await _purgeDownloads(keep: file.path);
+    try {
+      // Закрываемся сами: крестик окна у нас прячет в трей, и установщик
+      // иначе упёрся бы в занятые файлы.
+      await (debugQuit ?? _quitForUpdate)();
+    } catch (e) {
+      // Установщик закроет окно сам (/CLOSEAPPLICATIONS) — это не неудача.
+      lastError = '$e';
+    }
+  }
+
+  /// Windows, при запуске: итог прошлой попытки обновиться — по отметке,
+  /// записанной перед установщиком, — и уборка скачанных установщиков.
+  @visibleForTesting
+  Future<void> settlePreviousAttempt() async {
+    final marker = _pendingFile;
+    try {
+      if (await marker.exists()) {
+        final data = jsonDecode(await marker.readAsString());
+        final build = data is Map ? data['build'] : null;
+        final version = data is Map ? '${data['version'] ?? ''}' : '';
+        final current = debugCurrentBuild ??
+            int.tryParse(AppPackageInfo.buildNumberFromEnv) ??
+            0;
+        _record(DesktopUpdateAttempt(
+          version: version,
+          build: build is int ? build : null,
+          failure: build is int && current >= build
+              ? null
+              : DesktopUpdateFailure.notInstalled,
+        ));
+      }
+    } catch (_) {
+      // Испорченная отметка — просто без итога.
+    }
+    try {
+      await marker.delete();
+    } catch (_) {}
+    await _purgeDownloads();
+  }
+
+  void _record(DesktopUpdateAttempt attempt) {
+    lastAttempt.value = attempt;
+    DiagLog.event('update', 'attempt', {
+      'ok': attempt.succeeded,
+      'reason': attempt.failure?.name ?? '-',
+      'build': attempt.build,
+    });
+  }
+
+  static Directory get _downloadDir =>
+      debugDownloadDir ??
+      Directory(
+        '${Directory.systemTemp.path}${Platform.pathSeparator}secretly-update',
+      );
+
+  static File get _pendingFile => File(
+        '${_downloadDir.path}${Platform.pathSeparator}$_pendingFileName',
+      );
+
+  /// 🔴 Скачанные установщики копились во временной папке (30.09.2026): по
+  /// одному на каждое обновление, десятки мегабайт. Убираются все `.exe`,
+  /// кроме [keep]; запущенный сейчас установщик Windows удалить не даст — его
+  /// уберёт следующий запуск.
+  static Future<void> _purgeDownloads({String? keep}) async {
+    final dir = _downloadDir;
+    try {
+      if (!await dir.exists()) return;
+      await for (final entry in dir.list(followLinks: false)) {
+        if (entry is! File || entry.path == keep) continue;
+        if (!entry.path.toLowerCase().endsWith('.exe')) continue;
+        try {
+          await entry.delete();
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   Future<void> _open(Uri uri) async {
@@ -368,9 +584,7 @@ class DesktopUpdateService {
     int expectedLength,
     void Function(double fraction) onProgress,
   ) async {
-    final dir = Directory(
-      '${Directory.systemTemp.path}${Platform.pathSeparator}secretly-update',
-    );
+    final dir = _downloadDir;
     await dir.create(recursive: true);
     final file = File(
       '${dir.path}${Platform.pathSeparator}${windowsInstallerFileName(uri)}',
@@ -425,8 +639,13 @@ class DesktopUpdateService {
     debugLauncher = null;
     debugQuit = null;
     debugOpenUrl = null;
+    debugProbe = null;
+    debugInstallerVersionReader = null;
     debugPublicKeyB64 = null;
     debugWindowsPath = false;
+    debugDownloadDir = null;
+    debugCurrentBuild = null;
+    lastAttempt.value = null;
   }
 }
 

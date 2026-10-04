@@ -35,6 +35,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/app_controller.dart';
 import '../../../models/e2e_payload_v1.dart';
+import '../primitives/desktop_snackbar.dart';
 
 /// One image entry in the desktop photo viewer's gallery. Carries enough
 /// metadata to render the header (author + time) and resolve the blob on
@@ -291,7 +292,7 @@ class _DesktopPhotoViewerState extends State<DesktopPhotoViewer> {
         ]);
         _showToast(l10n.desktopRoomCopied);
       } catch (e) {
-        _showToast(l10n.desktopPhotoCopyFailed('$e'));
+        _showToast(l10n.desktopPhotoCopyFailed(desktopErrorText(e)));
       }
       return;
     }
@@ -341,7 +342,7 @@ class _DesktopPhotoViewerState extends State<DesktopPhotoViewer> {
         await launchUrl(Uri.file(file.parent.path));
       }
     } catch (e) {
-      _showToast(l10n.desktopPhotoRevealFailed('$e'));
+      _showToast(l10n.desktopPhotoRevealFailed(desktopErrorText(e)));
     }
   }
 

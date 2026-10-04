@@ -505,6 +505,8 @@ struct AppState {
     /// AUD-080: per-caller bucket keyed by authenticated device id.
     /// Limits how fast one device can try many different slugs.
     invite_redeem_caller_limiter: Arc<StringKeyRateLimiter>,
+    /// С2: предел сигналов звонка на пару устройств. См. [`CallSignalGate`].
+    call_signal_gate: Arc<CallSignalGate>,
     max_msg_ttl_seconds: u32,
     /// Срок служебных посылок между устройствами ОДНОГО аккаунта; 0 = выкл.
     /// См. [`own_device_control_ttl`].
@@ -776,6 +778,157 @@ impl StringKeyRateLimiter {
             true
         } else {
             false
+        }
+    }
+}
+
+/// С2 (29.09.2026): предел сигналов звонка на пару «отправитель → получатель».
+///
+/// 28.09 07:24–08:30 UTC одно устройство отправило другому 40 784 сигнала
+/// звонка (приглашений среди них — 4). Получатель был не на связи, и каждый
+/// сигнал будил его пушем: 39 331 пуш за час. В те же минуты кончились порты
+/// TURN (3 237 отказов 508), звонки остальных рвались «ошибкой связи».
+///
+/// Ведро щедрое: обычное соединение — десятки кандидатов ICE за секунды,
+/// повторный звонок сразу после первого — ещё столько же; 240 с пополнением
+/// 1 в секунду этого не замечают. Сплошной поток режется до 1 в секунду.
+///
+/// «Положить трубку» и «отклонить» — в СВОЁМ ведре, ещё щедрее (60 сразу,
+/// потом 1 в 5 с; разбор Р1, 29.09.2026). Конец звонка обязан доходить, и
+/// обычный поток его не тратит. Но совсем без предела каждый такой сигнал
+/// будил получателя пушем, и шторм «положить трубку» от сбойного или
+/// недоброго клиента повторял бы 28.09 в обход предела. Настоящий звонок
+/// кончается одним-двумя такими сигналами — десятки подряд бывают только у
+/// шторма.
+///
+/// Лишний сигнал не ставится в очередь и не будит, а отправителю уходит обычный
+/// успех с `delivery = dropped_rate_limited`. 429 включил бы у клиента общую
+/// паузу ВСЕХ запросов к реле (`relay_client.dart`, отступление при 429), а
+/// ошибка — повторы из очереди: шторм стал бы только дольше.
+///
+/// 🔴 НАМЕРЕННО В ПАМЯТИ: перезапуск реле обнуляет вёдра — сбой уводит в
+/// сторону «пропустить», а не «потерять».
+struct CallSignalGate {
+    buckets: DashMap<String, CallSignalGateEntry>,
+    capacity: f64,
+    refill_per_sec: f64,
+    /// Ведро конца звонка («положить трубку», «отклонить»); `0` — без предела.
+    end_capacity: f64,
+    end_refill_per_sec: f64,
+    checks: std::sync::atomic::AtomicU64,
+}
+
+struct CallSignalGateEntry {
+    tokens: f64,
+    last: Instant,
+    dropped: u64,
+    last_log: Option<Instant>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CallSignalGateVerdict {
+    Allow,
+    /// `log` — пора написать в журнал (не чаще раза в 10 с на пару).
+    Drop { dropped_total: u64, log: bool },
+}
+
+const CALL_SIGNAL_GATE_DEFAULT_CAP: u32 = 240;
+const CALL_SIGNAL_GATE_DEFAULT_REFILL_PER_SEC: f64 = 1.0;
+/// Ведро конца звонка: 60 сразу, потом один в 5 с.
+const CALL_SIGNAL_GATE_END_DEFAULT_CAP: u32 = 60;
+const CALL_SIGNAL_GATE_END_DEFAULT_REFILL_PER_SEC: f64 = 0.2;
+/// Пара без сигналов дольше этого забывается.
+const CALL_SIGNAL_GATE_IDLE: Duration = Duration::from_secs(600);
+const CALL_SIGNAL_GATE_LOG_EVERY: Duration = Duration::from_secs(10);
+/// Ответ отправителю за отброшенный сигнал. Выпущенные клиенты особо
+/// разбирают только `dropped_offline`, всё прочее для них — обычный успех.
+const CALL_SIGNAL_DROPPED_DELIVERY: &str = "dropped_rate_limited";
+
+/// Конец звонка: у этих сигналов своё, более щедрое ведро.
+fn call_signal_action_ends_call(action: &str) -> bool {
+    matches!(action, "hangup" | "decline")
+}
+
+impl CallSignalGate {
+    /// `capacity == 0` — предел выключен, всё как до С2. Конец звонка — с
+    /// пределом по умолчанию (см. [`Self::with_end_limits`]).
+    fn new(capacity: u32, refill_per_sec: f64) -> Self {
+        Self {
+            buckets: DashMap::new(),
+            capacity: capacity as f64,
+            refill_per_sec: refill_per_sec.max(0.0),
+            end_capacity: CALL_SIGNAL_GATE_END_DEFAULT_CAP as f64,
+            end_refill_per_sec: CALL_SIGNAL_GATE_END_DEFAULT_REFILL_PER_SEC,
+            checks: std::sync::atomic::AtomicU64::new(0),
+        }
+    }
+
+    /// Предел конца звонка; `capacity == 0` — «положить трубку» и
+    /// «отклонить» не режутся вовсе, как до разбора Р1.
+    fn with_end_limits(mut self, capacity: u32, refill_per_sec: f64) -> Self {
+        self.end_capacity = capacity as f64;
+        self.end_refill_per_sec = refill_per_sec.max(0.0);
+        self
+    }
+
+    fn check(&self, from_device_id: &str, to_device_id: &str, action: &str) -> CallSignalGateVerdict {
+        self.check_at(from_device_id, to_device_id, action, Instant::now())
+    }
+
+    fn check_at(
+        &self,
+        from_device_id: &str,
+        to_device_id: &str,
+        action: &str,
+        now: Instant,
+    ) -> CallSignalGateVerdict {
+        let ends_call = call_signal_action_ends_call(action);
+        let (capacity, refill_per_sec) = if ends_call {
+            (self.end_capacity, self.end_refill_per_sec)
+        } else {
+            (self.capacity, self.refill_per_sec)
+        };
+        if self.capacity <= 0.0 || capacity <= 0.0 {
+            return CallSignalGateVerdict::Allow;
+        }
+        // Уборка — до взятия записи: `retain` под удерживаемой записью DashMap
+        // встал бы намертво.
+        if self.checks.fetch_add(1, Ordering::Relaxed) % 1024 == 1023 {
+            self.buckets
+                .retain(|_, e| now.saturating_duration_since(e.last) < CALL_SIGNAL_GATE_IDLE);
+        }
+        // Конец звонка — своё ведро пары: обычный поток его не тратит.
+        let key = if ends_call {
+            format!("{from_device_id}\u{1f}{to_device_id}\u{1f}end")
+        } else {
+            format!("{from_device_id}\u{1f}{to_device_id}")
+        };
+        let mut entry = self.buckets.entry(key).or_insert(CallSignalGateEntry {
+            tokens: capacity,
+            last: now,
+            dropped: 0,
+            last_log: None,
+        });
+        let elapsed = now.saturating_duration_since(entry.last).as_secs_f64();
+        if elapsed > 0.0 {
+            entry.tokens = (entry.tokens + elapsed * refill_per_sec).min(capacity);
+            entry.last = now;
+        }
+        if entry.tokens >= 1.0 {
+            entry.tokens -= 1.0;
+            return CallSignalGateVerdict::Allow;
+        }
+        entry.dropped += 1;
+        let log = match entry.last_log {
+            None => true,
+            Some(t) => now.saturating_duration_since(t) >= CALL_SIGNAL_GATE_LOG_EVERY,
+        };
+        if log {
+            entry.last_log = Some(now);
+        }
+        CallSignalGateVerdict::Drop {
+            dropped_total: entry.dropped,
+            log,
         }
     }
 }
@@ -5960,6 +6113,27 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                         let _ = tx.send(Message::Text(serde_json::to_string(&err).unwrap().into()));
                         continue;
                     }
+                    // С2: сплошной поток сигналов звонка — не в очередь и не будить.
+                    if let Some(signal) = call_signal.as_ref() {
+                        if let CallSignalGateVerdict::Drop { dropped_total, log } =
+                            state.call_signal_gate.check(&did, &to_device_id, &signal.action)
+                        {
+                            if log {
+                                tracing::warn!(from_device_ref=%from_device_ref, to_device_ref=%to_device_ref, action=%signal.action, dropped_total, "call signal rate limited; dropped");
+                            }
+                            let _ = tx.send(Message::Text(
+                                serde_json::to_string(&ServerMsg::SentOk {
+                                    msg_id: msg_id.clone(),
+                                    delivery: Some(CALL_SIGNAL_DROPPED_DELIVERY.into()),
+                                    device_set_stale: None,
+                                    device_ids: None,
+                                })
+                                .unwrap()
+                                .into(),
+                            ));
+                            continue;
+                        }
+                    }
                     let store_ttl = own_device_control_ttl(
                         state.own_device_control_ttl_seconds,
                         capped_ttl,
@@ -6652,6 +6826,25 @@ async fn http_send(
             .unwrap_or(false)
         {
             return Err((StatusCode::FORBIDDEN, "blocked".into()));
+        }
+        // С2: см. путь WebSocket.
+        if let Some(signal) = call_signal.as_ref() {
+            if let CallSignalGateVerdict::Drop { dropped_total, log } =
+                state
+                    .call_signal_gate
+                    .check(from_device_id, &req.to_device_id, &signal.action)
+            {
+                if log {
+                    tracing::warn!(from_device_ref=%log_fingerprint(from_device_id), to_device_ref=%to_device_ref, action=%signal.action, dropped_total, "call signal rate limited; dropped");
+                }
+                return Ok(Json(HttpSendResp {
+                    ok: true,
+                    seq: 0,
+                    delivery: Some(CALL_SIGNAL_DROPPED_DELIVERY),
+                    device_set_stale: None,
+                    device_ids: None,
+                }));
+            }
         }
         store_ttl = own_device_control_ttl(
             state.own_device_control_ttl_seconds,
@@ -10198,6 +10391,15 @@ async fn http_blocks_list(
 /// liveness for any profile — this is the same shape used by
 /// `/v1/blocks/{device_id}` and other authenticated reads.
 ///
+/// 🔴 ТОЧНЫЕ ОТМЕТКИ — ТОЛЬКО СВОИМ (30.09.2026). `last_signal_ms` двигается,
+/// когда устройство забирает почту и когда ему доставлен пуш, то есть это
+/// присутствие «в сети» с точностью до миллисекунды. Любой, кто знает ID
+/// профиля, опрашивал его и видел, когда человек онлайн, в обход «последний
+/// визит: никто», а сличая двоих — с кем он переписывается. Своим устройствам
+/// (запрос от устройства того же профиля) отметки отдаются как есть, чужим —
+/// с точностью до суток, см. [coarse_last_signal_ms]. Клиенту этого хватает:
+/// отметку он сравнивает только с порогом в трое суток.
+///
 /// Behavior is fully gated by `RELAY_DEVICE_STALENESS_FILTER_ENABLED`:
 /// when disabled (default), the response advertises `filter_applied=false`
 /// and returns all activity-known device IDs without any staleness check.
@@ -10228,14 +10430,24 @@ async fn http_active_devices(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
     let filter_enabled = device_staleness_filter_enabled();
+    // Спрашивает ли устройство о СВОЁМ профиле. Подпись выше проверена для
+    // `device_id`, так что выдать себя за чужое устройство нельзя.
+    let requester_is_owner = activity_rows.iter().any(|row| row.device_id == device_id);
     // Факты о жизни — до фильтра: клиенту нужны ВСЕ известные устройства с их
     // отметками, а не только те, что пережили серверный порог в 30 дней.
     let devices: Vec<HttpDeviceLiveness> = activity_rows
         .iter()
-        .map(|row| HttpDeviceLiveness {
-            device_id: row.device_id.clone(),
-            last_signal_ms: row.last_pump_at_ms.max(row.last_push_delivered_at_ms),
-            superseded: row.superseded_at_ms > 0,
+        .map(|row| {
+            let exact = row.last_pump_at_ms.max(row.last_push_delivered_at_ms);
+            HttpDeviceLiveness {
+                device_id: row.device_id.clone(),
+                last_signal_ms: if requester_is_owner {
+                    exact
+                } else {
+                    coarse_last_signal_ms(exact, now)
+                },
+                superseded: row.superseded_at_ms > 0,
+            }
         })
         .collect();
     let (device_ids, filter_applied) = compute_active_device_ids(
@@ -10259,6 +10471,23 @@ async fn http_active_devices(
         threshold_ms: DEVICE_STALENESS_THRESHOLD_MS,
         devices,
     }))
+}
+
+/// Отметка жизни чужого устройства с точностью до суток (UTC).
+///
+/// Округляется ВВЕРХ, до конца суток, но не дальше «сейчас»: устройство,
+/// подававшее признаки сегодня, выглядит живым «сейчас», вчерашнее — живым
+/// на начало сегодняшних суток. Вверх, а не вниз — чтобы клиентский порог
+/// «молчит больше трёх суток» не срабатывал раньше, чем при точной отметке:
+/// ошибка в сутки допустима только в сторону «ещё живо». Ноль («признаков не
+/// было») остаётся нулём.
+fn coarse_last_signal_ms(exact_ms: i64, now_ms: i64) -> i64 {
+    const DAY_MS: i64 = 24 * 60 * 60 * 1000;
+    if exact_ms <= 0 {
+        return exact_ms;
+    }
+    let day_end = exact_ms.div_euclid(DAY_MS).saturating_add(1).saturating_mul(DAY_MS);
+    day_end.min(now_ms.max(exact_ms))
 }
 
 /// Pure fanout-narrowing decision for `GET /v1/active_devices` (extracted so it
@@ -14124,6 +14353,30 @@ async fn main() {
         invite_caller_cap,
         invite_caller_refill,
     ));
+    // С2: 0 в `..._CAP` выключает предел; 0 в `..._END_RL_CAP` — только для
+    // «положить трубку» и «отклонить».
+    let call_signal_gate = Arc::new(
+        CallSignalGate::new(
+            u32_from_env(
+                "SECRETLY_RELAY_CALL_SIGNAL_RL_CAP",
+                CALL_SIGNAL_GATE_DEFAULT_CAP,
+            ),
+            f64_from_env(
+                "SECRETLY_RELAY_CALL_SIGNAL_RL_REFILL_PER_SEC",
+                CALL_SIGNAL_GATE_DEFAULT_REFILL_PER_SEC,
+            ),
+        )
+        .with_end_limits(
+            u32_from_env(
+                "SECRETLY_RELAY_CALL_SIGNAL_END_RL_CAP",
+                CALL_SIGNAL_GATE_END_DEFAULT_CAP,
+            ),
+            f64_from_env(
+                "SECRETLY_RELAY_CALL_SIGNAL_END_RL_REFILL_PER_SEC",
+                CALL_SIGNAL_GATE_END_DEFAULT_REFILL_PER_SEC,
+            ),
+        ),
+    );
 
     // Cap message TTL to keep pending queue bounded.
     let max_msg_ttl_seconds = u32_from_env("SECRETLY_RELAY_MAX_TTL_SECONDS", 7 * 24 * 3600)
@@ -14155,6 +14408,7 @@ async fn main() {
         limiter,
         invite_redeem_slug_limiter,
         invite_redeem_caller_limiter,
+        call_signal_gate,
         max_msg_ttl_seconds,
         own_device_control_ttl_seconds,
         online_only_enabled: env::var("SECRETLY_RELAY_ONLINE_ONLY_ENABLED")
@@ -14434,6 +14688,27 @@ mod tests {
     }
 
     #[test]
+    fn coarse_last_signal_hides_time_of_day() {
+        const DAY: i64 = 24 * 60 * 60 * 1000;
+        let day_start = 20_000 * DAY;
+        let now = day_start + 15 * 60 * 60 * 1000; // 15:00 UTC
+        // Сегодня в 03:00 и в 14:59 — одно и то же: «сейчас».
+        assert_eq!(coarse_last_signal_ms(day_start + 3 * 3_600_000, now), now);
+        assert_eq!(coarse_last_signal_ms(now - 60_000, now), now);
+        // Вчера в любое время — начало сегодняшних суток.
+        assert_eq!(coarse_last_signal_ms(day_start - 1, now), day_start);
+        assert_eq!(coarse_last_signal_ms(day_start - DAY + 1, now), day_start);
+        // Четыре дня назад остаются старше трёх суток — порог клиента не сдвинут в
+        // сторону «мертво».
+        let four_days_ago = now - 4 * DAY;
+        let coarse = coarse_last_signal_ms(four_days_ago, now);
+        assert!(coarse >= four_days_ago && coarse - four_days_ago < DAY);
+        // «Признаков не было» — по-прежнему ноль; часы клиента впереди — не в будущее.
+        assert_eq!(coarse_last_signal_ms(0, now), 0);
+        assert_eq!(coarse_last_signal_ms(now + 5_000, now), now + 5_000);
+    }
+
+    #[test]
     fn compute_active_device_ids_drops_superseded_unconditionally() {
         // now must sit comfortably above the staleness threshold so a "stale"
         // timestamp stays positive.
@@ -14549,6 +14824,10 @@ mod tests {
             limiter: Arc::new(IpRateLimiter::new(10_000, 10_000.0)),
             invite_redeem_slug_limiter: Arc::new(StringKeyRateLimiter::new(10_000, 10_000.0)),
             invite_redeem_caller_limiter: Arc::new(StringKeyRateLimiter::new(10_000, 10_000.0)),
+            call_signal_gate: Arc::new(CallSignalGate::new(
+                CALL_SIGNAL_GATE_DEFAULT_CAP,
+                CALL_SIGNAL_GATE_DEFAULT_REFILL_PER_SEC,
+            )),
             max_msg_ttl_seconds: 7 * 24 * 3600,
             own_device_control_ttl_seconds: 0,
             online_only_enabled: false,
@@ -18468,6 +18747,202 @@ mod tests {
             .await
             .unwrap()
             .0
+    }
+
+    // С2 (29.09.2026): предел сигналов звонка на пару устройств.
+    #[test]
+    fn call_signal_gate_cuts_a_flood_but_never_the_end_of_a_call() {
+        let gate = CallSignalGate::new(3, 0.0);
+        let t0 = Instant::now();
+        for _ in 0..3 {
+            assert_eq!(gate.check_at("a", "b", "ice", t0), CallSignalGateVerdict::Allow);
+        }
+        assert_eq!(
+            gate.check_at("a", "b", "ice", t0),
+            CallSignalGateVerdict::Drop { dropped_total: 1, log: true }
+        );
+        assert_eq!(
+            gate.check_at("a", "b", "offer", t0),
+            CallSignalGateVerdict::Drop { dropped_total: 2, log: false },
+            "в журнал — не чаще раза в 10 с на пару"
+        );
+        assert_eq!(
+            gate.check_at("a", "b", "ice", t0 + Duration::from_secs(11)),
+            CallSignalGateVerdict::Drop { dropped_total: 3, log: true }
+        );
+        assert_eq!(gate.check_at("a", "b", "hangup", t0), CallSignalGateVerdict::Allow);
+        assert_eq!(gate.check_at("a", "b", "decline", t0), CallSignalGateVerdict::Allow);
+        assert_eq!(
+            gate.check_at("a", "c", "ice", t0),
+            CallSignalGateVerdict::Allow,
+            "ведро у каждой пары своё: второе устройство собеседника не страдает"
+        );
+        assert_eq!(gate.check_at("b", "a", "ice", t0), CallSignalGateVerdict::Allow);
+    }
+
+    // Разбор Р1 (29.09.2026): конец звонка — своё щедрое ведро, а не «без
+    // предела»: шторм «положить трубку» будил получателя пушем на каждый.
+    #[test]
+    fn call_signal_gate_cuts_a_hangup_storm_but_not_real_call_ends() {
+        let gate = CallSignalGate::new(
+            CALL_SIGNAL_GATE_DEFAULT_CAP,
+            CALL_SIGNAL_GATE_DEFAULT_REFILL_PER_SEC,
+        );
+        let t0 = Instant::now();
+        // Тридцать звонков за минуту, каждый кончается «отклонить» и
+        // повтором «положить трубку» — ничего не отрезается.
+        for i in 0..30u64 {
+            let at = t0 + Duration::from_secs(i * 2);
+            assert_eq!(gate.check_at("pc", "phone", "decline", at), CallSignalGateVerdict::Allow);
+            assert_eq!(gate.check_at("pc", "phone", "hangup", at), CallSignalGateVerdict::Allow);
+        }
+        // Шторм: тысяча «положить трубку» за миг — проходит остаток ведра.
+        let storm = t0 + Duration::from_secs(120);
+        let allowed = (0..1000)
+            .filter(|_| gate.check_at("pc", "phone", "hangup", storm) == CallSignalGateVerdict::Allow)
+            .count();
+        assert!(
+            allowed <= CALL_SIGNAL_GATE_END_DEFAULT_CAP as usize,
+            "из тысячи прошло {allowed}"
+        );
+        // Вёдра не делят друг друга: обычный поток идёт, конец у другой пары — тоже.
+        assert_eq!(gate.check_at("pc", "phone", "ice", storm), CallSignalGateVerdict::Allow);
+        assert_eq!(gate.check_at("pc", "laptop", "hangup", storm), CallSignalGateVerdict::Allow);
+        // Через 5 с — ещё один конец звонка.
+        assert_eq!(
+            gate.check_at("pc", "phone", "hangup", storm + Duration::from_secs(5)),
+            CallSignalGateVerdict::Allow
+        );
+
+        // 0 в пределе конца звонка — как до разбора Р1: не режется вовсе.
+        let unlimited = CallSignalGate::new(3, 0.0).with_end_limits(0, 0.0);
+        for _ in 0..10_000 {
+            assert_eq!(
+                unlimited.check_at("a", "b", "hangup", t0),
+                CallSignalGateVerdict::Allow
+            );
+        }
+    }
+
+    #[test]
+    fn call_signal_gate_refills_and_can_be_switched_off() {
+        let gate = CallSignalGate::new(2, 1.0);
+        let t0 = Instant::now();
+        assert_eq!(gate.check_at("a", "b", "ice", t0), CallSignalGateVerdict::Allow);
+        assert_eq!(gate.check_at("a", "b", "ice", t0), CallSignalGateVerdict::Allow);
+        assert!(matches!(
+            gate.check_at("a", "b", "ice", t0),
+            CallSignalGateVerdict::Drop { .. }
+        ));
+        let t1 = t0 + Duration::from_secs(1);
+        assert_eq!(gate.check_at("a", "b", "ice", t1), CallSignalGateVerdict::Allow);
+
+        let off = CallSignalGate::new(0, 0.0);
+        for _ in 0..10_000 {
+            assert_eq!(off.check_at("a", "b", "ice", t0), CallSignalGateVerdict::Allow);
+        }
+    }
+
+    #[test]
+    fn call_signal_gate_defaults_let_two_real_calls_through() {
+        // Звонок с ПК на шести сетевых картах: приглашение, предложение,
+        // ~60 кандидатов ICE и повтор ICE посреди разговора; сразу после —
+        // второй такой же звонок. Ничего не должно отрезаться.
+        let gate = CallSignalGate::new(
+            CALL_SIGNAL_GATE_DEFAULT_CAP,
+            CALL_SIGNAL_GATE_DEFAULT_REFILL_PER_SEC,
+        );
+        let t0 = Instant::now();
+        let mut at = t0;
+        for _call in 0..2 {
+            for action in std::iter::once("invite")
+                .chain(std::iter::once("offer"))
+                .chain(std::iter::repeat("ice").take(60))
+                .chain(std::iter::once("offer"))
+                .chain(std::iter::repeat("ice").take(40))
+            {
+                assert_eq!(gate.check_at("pc", "phone", action, at), CallSignalGateVerdict::Allow);
+            }
+            at += Duration::from_secs(5);
+        }
+        // А шторм 28.09 (18 сигналов в секунду) режется до одного в секунду.
+        let mut allowed = 0;
+        for i in 0..(18 * 60) {
+            let now = at + Duration::from_millis(i * 1000 / 18);
+            if gate.check_at("pc", "phone", "need_offer", now) == CallSignalGateVerdict::Allow {
+                allowed += 1;
+            }
+        }
+        // Проходит остаток ведра после двух звонков (~42) и по одному в секунду.
+        assert!(allowed <= 42 + 60 + 1, "за минуту шторма прошло {allowed} из 1080");
+    }
+
+    async fn call_signal_http_send(
+        state: &AppState,
+        key: &SigningKey,
+        from: &str,
+        to: &str,
+        n: u32,
+        action: &str,
+    ) -> HttpSendResp {
+        let msg_id = format!("00000000-0000-0000-0000-{:012}", 900_000 + n);
+        let req = HttpSendReq {
+            deliver_at_ms: None,
+            online_only: false,
+            rcpt_digest: None,
+            to_device_id: to.to_string(),
+            msg_id: msg_id.clone(),
+            ciphertext_b64: "QUJD".into(),
+            transport_meta_json: Some(format!(
+                r#"{{"kind":"call_signal_v1","call":{{"action":"{action}","call_id":"call_gate_1","call_attempt_id":"attempt_gate_1","signal_id":"signal_gate_{n}","created_at_ms":{n}}}}}"#
+            )),
+            ttl_seconds: 90,
+        };
+        let headers = signed_auth_headers(from, key, &msg_id, |ts_ms, nonce_b64| {
+            http_send_auth_message(
+                from,
+                to,
+                &req.msg_id,
+                &req.ciphertext_b64,
+                req.transport_meta_json.as_deref(),
+                req.ttl_seconds,
+                ts_ms,
+                nonce_b64,
+            )
+        });
+        http_send(State(state.clone()), headers, Json(req))
+            .await
+            .unwrap()
+            .0
+    }
+
+    // 🔴 Лишний сигнал: успех без строки в очереди и без пуша; конец звонка —
+    // всегда в очередь.
+    #[tokio::test]
+    async fn http_send_drops_call_signal_flood_without_queueing_it() {
+        let (base, _dir) = test_app_state().await;
+        let state = AppState {
+            call_signal_gate: Arc::new(CallSignalGate::new(2, 0.0)),
+            ..base
+        };
+        let a_key = SigningKey::from_bytes(&[71u8; 32]);
+        let b_key = SigningKey::from_bytes(&[72u8; 32]);
+        cache_authenticated_device(&state, "dev_gate_a", "profile_gate_a", &a_key);
+        cache_authenticated_device(&state, "dev_gate_b", "profile_gate_b", &b_key);
+
+        let r1 = call_signal_http_send(&state, &a_key, "dev_gate_a", "dev_gate_b", 1, "offer").await;
+        let r2 = call_signal_http_send(&state, &a_key, "dev_gate_a", "dev_gate_b", 2, "ice").await;
+        assert_eq!((r1.seq, r2.seq), (1, 2));
+        assert_eq!(r2.delivery, None);
+
+        let r3 = call_signal_http_send(&state, &a_key, "dev_gate_a", "dev_gate_b", 3, "ice").await;
+        assert!(r3.ok, "отправителю — успех: 429 включил бы общую паузу клиента");
+        assert_eq!((r3.seq, r3.delivery), (0, Some("dropped_rate_limited")));
+        let rows = state.store.list_pending_from("dev_gate_b", 1, now_ms(), 10).await.unwrap();
+        assert_eq!(rows.len(), 2, "лишний сигнал не лёг в очередь");
+
+        let r4 = call_signal_http_send(&state, &a_key, "dev_gate_a", "dev_gate_b", 4, "hangup").await;
+        assert_eq!((r4.seq, r4.delivery), (3, None), "«положить трубку» проходит всегда");
     }
 
     // 🔴 Не на связи — ни строки, ни seq; на связи — короткий срок и живая

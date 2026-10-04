@@ -147,7 +147,8 @@ class _DesktopRoomCallBannerState extends State<DesktopRoomCallBanner> {
     final people = formatParticipants(call.joinedParticipantCount, l10n);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(DSpace.l, DSpace.m, DSpace.l, 0),
+      // Край 12 и зазор 6 — как у шапки и закреплённого (28.09.2026).
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
       child: DecoratedBox(
         // Островок, а не полоса: ровно та же форма, что у закреплённого
         // сообщения выше, и разный цвет по смыслу — зелёный «говорят», синий

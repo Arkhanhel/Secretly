@@ -67,8 +67,10 @@ class IncomingCallToast extends StatelessWidget {
     required VoidCallback onDecline,
     VoidCallback? onReplyWithText,
   }) {
+    // Палитра места вызова едет в плашку — см. [DColors.carry].
+    final palette = DColors.maybeOf(context);
     final entry = OverlayEntry(
-      builder: (ctx) => Stack(
+      builder: (ctx) => DColors.carry(palette, Stack(
         children: [
           Positioned(
             top: 56,
@@ -88,7 +90,7 @@ class IncomingCallToast extends StatelessWidget {
             ),
           ),
         ],
-      ),
+      )),
     );
     Overlay.of(context, rootOverlay: true).insert(entry);
     return entry.remove;

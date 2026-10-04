@@ -8,6 +8,8 @@
 // так же, как проверялась бы история браузера: ветвление, повтор, потолок и
 // удалённая переписка.
 
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/app/app_controller.dart' show Conversation;
 import 'package:secretly_app/ui/desktop/services/desktop_nav_history.dart';
@@ -31,6 +33,43 @@ DesktopNavEntry entry(String id, [DesktopSection s = DesktopSection.chats]) =>
     DesktopNavEntry(section: s, convo: convo(id));
 
 void main() {
+  // 01.10.2026: смена профиля в окне — путь прежнего аккаунта забыт.
+  test('clear забывает путь прежнего профиля целиком', () {
+    var notified = 0;
+    final h = DesktopNavHistory()
+      ..visit(entry('a'))
+      ..visit(entry('b'))
+      ..addListener(() => notified++);
+    h.clear();
+    expect(h.current, isNull);
+    expect(h.canBack, isFalse);
+    expect(h.canForward, isFalse);
+    expect(h.entries, isEmpty);
+    expect(notified, 1);
+    h.clear();
+    expect(notified, 1, reason: 'пустой путь чистить нечего');
+  });
+
+  test('restart окна чистит путь, выбор, настройки и черновики', () {
+    final src = File(
+      'lib/ui/desktop/app/desktop_production_app.dart',
+    ).readAsStringSync();
+    final start = src.indexOf('Future<void> _restartTeardownSteps() async {');
+    expect(start, greaterThan(0));
+    final body = src.substring(start, src.indexOf('_controller = AppController();', start));
+    expect(body.contains('_modalOverlay = null;'), isTrue);
+    expect(body.contains('_navHistory.clear();'), isTrue);
+    expect(body.contains('_chatsSelection.clear();'), isTrue);
+    expect(body.contains('_roomsSelection.clear();'), isTrue);
+    final detach = body.indexOf('await DesktopDraftStore.detachStorage();');
+    expect(detach, greaterThan(0));
+    expect(
+      detach < body.indexOf('await _controller.dispose();'),
+      isTrue,
+      reason: 'черновики пишутся в базу уходящего профиля, пока та открыта',
+    );
+  });
+
   test('пустая история никуда не ведёт', () {
     final h = DesktopNavHistory();
     expect(h.canBack, isFalse);

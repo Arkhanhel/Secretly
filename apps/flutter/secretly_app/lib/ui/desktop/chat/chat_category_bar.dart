@@ -289,7 +289,9 @@ class _ChatCategoryBarState extends State<ChatCategoryBar> {
       ),
     );
 
-    if (widget.glass) return SizedBox(height: 40, child: strip);
+    // Стеклянная полоса — 32 точки под чип 26 (28.09.2026: папки
+    // компактнее, подпись 12.5 и счётчик 16 помещаются).
+    if (widget.glass) return SizedBox(height: 32, child: strip);
     return SizedBox(
       height: 40,
       child: ValueListenableBuilder<_Edges>(
@@ -401,7 +403,7 @@ class _CategoryChip extends StatelessWidget {
           // Стеклянная «таблетка»: выбранная подкрашена акцентом, наведённая —
           // чуть светлее. Подпись та же, что у обычного чипа.
           return DesktopGlass(
-            radius: 15,
+            radius: 13,
             grouped: true,
             tint: selected
                 ? c.accentPrimary.withValues(alpha: pressed ? 0.42 : 0.34)
@@ -411,9 +413,9 @@ class _CategoryChip extends StatelessWidget {
                             ? Colors.white.withValues(alpha: 0.05)
                             : null)),
             child: SizedBox(
-              height: 30,
+              height: 26,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 13),
+                padding: const EdgeInsets.symmetric(horizontal: 11),
                 child: _chipLabel(c, selected ? Colors.white : fg),
               ),
             ),

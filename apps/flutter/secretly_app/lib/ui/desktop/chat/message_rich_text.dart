@@ -9,6 +9,7 @@ import '../../../models/e2e_payload_v1.dart';
 import '../../chat_message_mentions.dart';
 import '../design/tokens.dart';
 import 'noto_emoji_lottie.dart';
+import '../services/desktop_window_activity.dart' show DesktopDecorationMotion;
 
 /// Текст сообщения так же, как его рисует телефон: разметка, упоминания,
 /// ссылки.
@@ -242,11 +243,19 @@ class SelectableAnimatedEmoji extends StatelessWidget {
         // Пока анимация не загрузилась (или без сети), на её месте рисуется
         // обычный знак — он тоже текст. Из выделения его исключаем, иначе
         // эмодзи попадало бы в копию дважды.
+        //
+        // 🔴 ЦИКЛ — КАК НА ТЕЛЕФОНЕ (решение владельца 16.09.2026), но только
+        // пока окно в фокусе (01.10.2026): [DesktopDecorationMotion] гасит
+        // тикер у окна без фокуса и под настройками, звонком и замком. Так
+        // смайлик в открытом чате больше не держит перерисовку, пока человек
+        // работает в другой программе, а вид остаётся телефонным.
         SelectionContainer.disabled(
-          child: NotoEmojiLottie(
-            emoji: emoji,
-            size: size,
-            mode: NotoLottieMode.looping,
+          child: DesktopDecorationMotion(
+            child: NotoEmojiLottie(
+              emoji: emoji,
+              size: size,
+              mode: NotoLottieMode.looping,
+            ),
           ),
         ),
       ],

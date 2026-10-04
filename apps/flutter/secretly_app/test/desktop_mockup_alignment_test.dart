@@ -471,11 +471,14 @@ void main() {
       // #6B7A8D · #4B5A6E. Трёх токенов не хватало, и всё, что тусклее
       // второго тона, сваливалось в «выключено»: время в строке списка
       // выглядело так же, как недоступный пункт меню.
-      expect(kDColorsDark.textPrimary, const Color(0xFFE9EFF7));
-      expect(kDColorsDark.textSecondary, const Color(0xFF93A1B3));
-      expect(kDColorsDark.textTertiary, const Color(0xFF7E8DA0));
-      expect(kDColorsDark.textDisabled, const Color(0xFF6B7A8D));
-      expect(kDColorsDark.textFaint, const Color(0xFF4B5A6E));
+      //
+      // 01.10.2026 владелец велел убрать синеву: те же пять ступеней, но
+      // нейтрально-серые (фон окна — #121212 / #151515).
+      expect(kDColorsDark.textPrimary, const Color(0xFFEDEDED));
+      expect(kDColorsDark.textSecondary, const Color(0xFFA3A3A3));
+      expect(kDColorsDark.textTertiary, const Color(0xFF8C8C8C));
+      expect(kDColorsDark.textDisabled, const Color(0xFF737373));
+      expect(kDColorsDark.textFaint, const Color(0xFF555555));
 
       for (final set in <DColorSet>[kDColorsDark, kDColorsLight]) {
         final tones = <Color>[
@@ -578,13 +581,14 @@ void main() {
             'поле слушалось настройки, а подпись под ним утверждала обратное '
             '— подпись, которая врёт про клавишу прямо над клавишей',
       );
-      // 19.09.2026: обе подписи уехали в переводы — смотрим на ключ в коде
-      // и на сам текст в ARB, а не на литерал, которого больше нет.
-      expect(composer.contains('l10n.desktopComposerEnterNewline'), isTrue);
+      // 28.09.2026: строка под полем ушла (островок компактнее), подсказка
+      // клавиш — в подсказке кнопки «Отправить», и она по-прежнему ЧИТАЕТ
+      // настройку: при «Enter — перенос» говорит про Shift+Enter.
+      expect(composer.contains('l10n.desktopComposerSendHintShift'), isTrue);
       expect(
         File('lib/l10n/app_ru.arb')
             .readAsStringSync()
-            .contains('Enter — перенос · Shift+Enter — отправить'),
+            .contains('"desktopComposerSendHintShift": "Отправить · Shift+Enter'),
         isTrue,
       );
     });
@@ -805,7 +809,8 @@ void main() {
     test('🔴 у шапки окна свой тон, а не тон всплывающих карточек', () {
       // Шапка идёт вдоль всего верха окна, и на этой длине «почти тот» тон
       // читается как чужая полоса, приклеенная сверху. В макете #121A24.
-      expect(kDColorsDark.titleBar, const Color(0xFF121A24));
+      // 01.10.2026: нейтральный серый вместо синевы (указание владельца).
+      expect(kDColorsDark.titleBar, const Color(0xFF181818));
       expect(kDColorsDark.titleBar, isNot(kDColorsDark.elevated));
       final chrome = File(
         'lib/ui/desktop/shell/window_chrome.dart',
@@ -846,15 +851,16 @@ void main() {
       final bubble = File(
         'lib/ui/desktop/chat/message_bubble.dart',
       ).readAsStringSync();
-      expect(bubble.contains('Radius.circular(DRadii.r16)'), isTrue);
       expect(bubble.contains('DRadii.xl'), isFalse);
-      // Сторона со срезом стояла верно и осталась как была. `const` у радиуса
-      // появился, когда верхний угол стал зависеть от `continuation`, — сам
-      // срез от этого не изменился.
-      expect(
-        bubble.contains('bottomRight: const Radius.circular(DRadii.sm)'),
-        isTrue,
-      );
+      // С 29.09.2026 форму выбирают в «Внешнем виде» ([DesktopBubbleLook]),
+      // но форма ПО УМОЛЧАНИЮ — прежняя: максимум макета 16 и срез 6.
+      final look = File(
+        'lib/ui/desktop/chat/bubble_look.dart',
+      ).readAsStringSync();
+      expect(look.contains('return (main: DRadii.r16, tail: DRadii.sm);'), isTrue);
+      expect(bubble.contains('DesktopBubbleLook.of(context).radii'), isTrue);
+      // Сторона со срезом у своего пузыря — нижняя правая, как и была.
+      expect(bubble.contains('bottomRight: sharp,'), isTrue);
     });
 
     test('тени взяты из макета, а не приглушены', () {

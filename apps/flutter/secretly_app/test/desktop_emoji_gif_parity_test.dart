@@ -36,6 +36,9 @@ void main() {
   final popover = File(
     'lib/ui/desktop/chat/emoji_popover.dart',
   ).readAsStringSync();
+  // 29.09.2026: сетка эмодзи вынесена в общий виджет ПК — её же берёт выбор
+  // эмодзи-статуса. Проверки каталога смотрят туда.
+  final grid = File('lib/ui/desktop/chat/emoji_grid.dart').readAsStringSync();
   final gifTab = File(
     'lib/ui/desktop/chat/gif_picker_tab.dart',
   ).readAsStringSync();
@@ -45,15 +48,20 @@ void main() {
 
   group('🔴 подборщик эмодзи', () {
     test('берёт ОБЩИЙ каталог, а не свой списочек', () {
-      expect(popover.contains('kNotoCodepoints'), isTrue);
-      expect(popover.contains('kNotoCategoryOrder'), isTrue);
-      expect(popover.contains('kNotoCategoryLabelsRu'), isTrue);
+      expect(popover.contains('DesktopEmojiGrid('), isTrue);
+      expect(grid.contains('kNotoCodepoints'), isTrue);
+      expect(grid.contains('kNotoCategoryOrder'), isTrue);
       expect(
         popover.contains('const _kEmojiBundle ='),
         isFalse,
         reason: 'зашитый список из тридцати семи символов вернулся',
       );
       expect(popover.contains('class _EmojiEntry'), isFalse);
+    });
+
+    test('🔴 заголовки категорий — на языке окна, а не русские', () {
+      expect(grid.contains('kNotoCategoryLabelsRu['), isFalse);
+      expect(grid.contains('desktopEmojiCategoryLabel(l10n'), isTrue);
     });
 
     test('в каталоге по-прежнему сотни символов, а не десятки', () {
@@ -63,21 +71,22 @@ void main() {
     });
 
     test('поиск — общий, тот самый, что умеет русский', () {
-      expect(popover.contains('filterEmojiByQuery'), isTrue);
+      expect(grid.contains('filterEmojiByQuery'), isTrue);
     });
 
     test('🔴 тона кожи спрятаны под базовый символ', () {
       // Без этого треть сетки — одна и та же рука в пяти оттенках.
-      expect(popover.contains('kNotoSkinToneHidden.contains(emoji)'), isTrue);
+      expect(grid.contains('kNotoSkinToneHidden.contains(emoji)'), isTrue);
       // И выбрать их всё-таки можно — правой кнопкой.
-      expect(popover.contains('kNotoSkinToneVariants'), isTrue);
-      expect(popover.contains('onSecondaryTapDown'), isTrue);
+      expect(grid.contains('kNotoSkinToneVariants'), isTrue);
+      expect(grid.contains('onSecondaryTapDown'), isTrue);
     });
 
     test('сетка рисует символы текстом, а не восемьюстами анимациями', () {
       // Восемьсот проигрывателей Lottie в одном окне — это восемьсот запросов
       // кадра. Телефон поступает так же; оживают эмодзи уже в переписке.
       expect(popover.contains('NotoEmojiLottie'), isFalse);
+      expect(grid.contains('NotoEmojiLottie'), isFalse);
     });
   });
 

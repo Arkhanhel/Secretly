@@ -123,4 +123,52 @@ void main() {
       reason: 'в памяти черновик остаётся — его сохранит подключение',
     );
   });
+
+  // 01.10.2026: профиль в окне сменился (выход, новая привязка) — черновики
+  // прежнего не уезжают в базу нового.
+  test('🔴 черновики прежнего профиля не переносятся в базу нового', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    DesktopDraftStore.detachStorageForTesting();
+    final oldDb = <String>[];
+    await DesktopDraftStore.attachStorage(
+      read: () async => null,
+      write: (json) async => oldDb.add(json),
+    );
+    DesktopDraftStore.set('old-friend', 'тайна прежнего аккаунта');
+
+    // Перезапуск: отложенная запись уходит в базу УХОДЯЩЕГО профиля.
+    await DesktopDraftStore.detachStorage();
+    expect(oldDb.last.contains('тайна прежнего аккаунта'), isTrue);
+    expect(DesktopDraftStore.has('old-friend'), isFalse);
+
+    final newDb = <String>[];
+    await DesktopDraftStore.attachStorage(
+      read: () async => null,
+      write: (json) async => newDb.add(json),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 800));
+    expect(newDb.where((j) => j.contains('тайна')), isEmpty);
+    expect(DesktopDraftStore.has('old-friend'), isFalse);
+  });
+
+  test('черновик, дописанный уже после отключения, новому не достаётся',
+      () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    DesktopDraftStore.detachStorageForTesting();
+    await DesktopDraftStore.attachStorage(
+      read: () async => null,
+      write: (json) async {},
+    );
+    await DesktopDraftStore.detachStorage();
+    // Поле ввода закрылось позже и сохранило свой текст.
+    DesktopDraftStore.set('old-friend', 'поздний текст');
+
+    final newDb = <String>[];
+    await DesktopDraftStore.attachStorage(
+      read: () async => null,
+      write: (json) async => newDb.add(json),
+    );
+    expect(newDb, isEmpty);
+    expect(DesktopDraftStore.has('old-friend'), isFalse);
+  });
 }

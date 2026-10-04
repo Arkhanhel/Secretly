@@ -734,6 +734,47 @@ void main() {
       expect(find.text('Ответ · Пётр'), findsNothing);
     });
 
+    testWidgets('🔴 чат сменили под открытым окном — окно закрыто, подпись в '
+        'черновике той переписки', (t) async {
+      // Панель переписки пересоздаётся на каждый чат (ключ по переписке), а
+      // окно — маршрут поверх приложения. Раньше оно оставалось открытым над
+      // чужим чатом, и «Отправить» молча теряло и файлы, и подпись.
+      _bigView(t);
+      final drafts = <String>[];
+      final sent = <SendMediaResult>[];
+      Widget panel(String convo) => ChatThreadPanel(
+        key: ValueKey('thread-$convo'),
+        header: ChatHeader(name: convo),
+        isDirect: true,
+        messages: const <MessageData>[],
+        attachmentMaxBytes: 1024 * 1024,
+        onDraftChanged: convo == 'a' ? drafts.add : null,
+        onSendMedia: (r, {replyToPayloadEventId}) async => sent.add(r),
+      );
+      await t.pumpWidget(_app(Scaffold(body: panel('a'))));
+      await t.pump(const Duration(milliseconds: 400));
+      await t.enterText(find.byType(TextField).first, 'Привет');
+      await _dropFiles(t, const Offset(600, 400), [pdf.path]);
+      await t.pumpAndSettle();
+      expect(_card, findsOneWidget);
+
+      // Нажали на уведомление из другого чата.
+      await t.pumpWidget(_app(Scaffold(body: panel('b'))));
+      await t.pumpAndSettle();
+      expect(_card, findsNothing, reason: 'окно ушло вместе со своим чатом');
+      expect(drafts.last, 'Привет', reason: 'подпись вернулась в черновик');
+      expect(sent, isEmpty);
+      // 01.10.2026: что файлы не ушли, сказано вслух, а не потеряно молча.
+      expect(
+        find.text('Файлы не отправлены — окно отправки закрылось при смене '
+            'чата.'),
+        findsOneWidget,
+      );
+      // Плашка живёт четыре секунды — дожидаемся, чтобы не оставить таймер.
+      await t.pump(const Duration(seconds: 5));
+      await t.pumpAndSettle();
+    });
+
     testWidgets('🔴 под открытым окном лента файлы не принимает', (t) async {
       late BuildContext host;
       await pumpPanel(t, onContext: (c) => host = c);

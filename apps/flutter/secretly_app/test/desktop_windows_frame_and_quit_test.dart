@@ -215,7 +215,14 @@ void main() {
       expect(body.contains('windowManager.isVisible()'), isTrue);
       expect(body.contains('quitDesktopApp()'), isTrue);
       final main = File('lib/main_desktop.dart').readAsStringSync();
-      expect(main.contains('DesktopWindowActivity.trayReady = true'), isTrue);
+      // 28.09.2026: «готов» — это ответ установки значка, а не факт, что
+      // вызов не бросил. Пустой значок из PNG тоже «не бросал».
+      expect(
+        RegExp(r'DesktopWindowActivity\.trayReady =\s+await '
+                r'DesktopTrayService\.instance\.install\(')
+            .hasMatch(main),
+        isTrue,
+      );
       expect(main.contains('DesktopWindowActivity.trayReady = false'), isTrue);
     });
   });

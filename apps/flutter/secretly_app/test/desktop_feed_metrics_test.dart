@@ -22,8 +22,14 @@ void main() {
       'lib/ui/desktop/chat/message_bubble.dart',
     ).readAsStringSync();
     expect(DSpace.xl2, 24);
-    expect(src.contains('        DSpace.xl2,\n        m.continuation'), isTrue);
-    expect(src.contains('          DSpace.xl2,\n          m.continuation'), isTrue);
+    // Зазор сверху с 29.09.2026 даёт плотность ленты ([DesktopBubbleLook]),
+    // боковые поля — по-прежнему 24 у обоих видов строки (пузырь и эмодзи).
+    expect(
+      RegExp(
+        r'DSpace\.xl2,\n\s+(// [^\n]*\n\s+)*DesktopBubbleLook\.of\(context\)\.gapAbove',
+      ).allMatches(src).length,
+      2,
+    );
   });
 
   test('· чужой пузырь шире своего: 660 против 600', () {

@@ -16,13 +16,15 @@ import '../../../calls/call_manager.dart';
 import '../../../calls/call_state.dart';
 import '../../../calls/webrtc_call_session.dart';
 import '../../../l10n/app_localizations.dart';
+import '../services/desktop_call_devices.dart';
+import '../services/desktop_call_prefs.dart';
 import '../design/tokens.dart';
 import '../primitives/avatar.dart';
-import '../primitives/context_menu.dart';
 import '../primitives/desktop_snackbar.dart';
 import '../primitives/hover_listener.dart';
 import '../shell/window_chrome.dart';
 import 'call_controls.dart';
+import 'call_device_menu.dart';
 import 'call_mini_window.dart';
 import 'call_peer_label.dart';
 
@@ -157,6 +159,24 @@ bool _isLetter(KeyEvent e, LogicalKeyboardKey logical, PhysicalKeyboardKey p) =>
 /// скрыть его было нечем: пока идёт разговор, приложением нельзя было
 /// пользоваться вовсе. Теперь «Свернуть» стоит в доке внизу (и в шапке, и
 /// на Esc): звонок уходит в мини-окно, приложение — снова в руках.
+/// Экран звонка в СВОЁМ окне ОС (29.09.2026, Р1).
+///
+/// Рамку, перетаскивание и кнопки окна даёт система. «Во весь экран»
+/// относится к окну звонка, а не к главному: `windowManager` знает только
+/// главное окно, и его кнопка развернула бы переписку вместо звонка.
+class DesktopCallOwnWindow {
+  const DesktopCallOwnWindow({
+    required this.pinned,
+    required this.onTogglePin,
+    required this.onSetFullScreen,
+  });
+
+  /// «Поверх всех окон» сейчас.
+  final ValueListenable<bool> pinned;
+  final VoidCallback onTogglePin;
+  final Future<void> Function(bool on) onSetFullScreen;
+}
+
 class OneToOneCallScreen extends StatefulWidget {
   const OneToOneCallScreen({
     super.key,
@@ -166,6 +186,7 @@ class OneToOneCallScreen extends StatefulWidget {
     this.onEnd,
     this.onMinimize,
     this.onOpenChat,
+    this.ownWindow,
   });
 
   final DesktopDirectCall call;
@@ -179,6 +200,9 @@ class OneToOneCallScreen extends StatefulWidget {
   /// Свернуть и открыть переписку с собеседником. `null` — кнопки нет
   /// (собеседник неизвестен — открывать нечего).
   final VoidCallback? onOpenChat;
+
+  /// Звонок живёт в своём окне ОС. `null` — внутри главного окна.
+  final DesktopCallOwnWindow? ownWindow;
 
   @override
   State<OneToOneCallScreen> createState() => _OneToOneCallScreenState();
@@ -210,6 +234,13 @@ class _OneToOneCallScreenState extends State<OneToOneCallScreen> {
   bool _fullScreen = false;
 
   Future<void> _toggleFullScreen() async {
+    final own = widget.ownWindow;
+    if (own != null) {
+      final next = !_fullScreen;
+      await own.onSetFullScreen(next);
+      if (mounted) setState(() => _fullScreen = next);
+      return;
+    }
     try {
       final next = !(await windowManager.isFullScreen());
       await windowManager.setFullScreen(next);
@@ -295,31 +326,25 @@ class _OneToOneCallScreenState extends State<OneToOneCallScreen> {
     );
   }
 
-  Future<void> _pickAudioRoute(BuildContext anchor) async {
-    final routeState = widget.call.audioRouteState.value;
-    final routes = routeState.availableRoutes;
-    if (routes.length < 2) return;
-    await ContextMenu.show(
-      anchor,
-      globalPosition: callMenuAnchorAbove(anchor, routes.length),
-      sections: <List<CtxMenuItem>>[
-        [
-          for (final r in routes)
-            CtxMenuItem(
-              label: r.label,
-              icon: r.deviceId == routeState.selectedRouteId
-                  ? FluentIcons.checkmark_24_regular
-                  : callAudioRouteIcon(r.kind),
-              onTap: () => unawaited(widget.call.selectAudioRoute(r.deviceId)),
-            ),
-        ],
-      ],
-    );
-  }
+  /// Микрофон и динамики — по стрелке у «Микрофона» (см. call_device_menu).
+  Future<void> _pickAudioRoute(BuildContext anchor) => showCallDeviceMenu(
+        anchor,
+        outputs: widget.call.audioRouteState.value,
+        applyOutput: widget.call.selectAudioRoute,
+        // Модуль звука звонка 1:1 переключает микрофон на лету.
+        applyMicrophone: prepareDesktopMicrophone,
+      );
 
   KeyEventResult _onKey(FocusNode node, KeyEvent e) {
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
     if (e.logicalKey == LogicalKeyboardKey.escape) {
+      // В своём окне Esc выходит из «во весь экран»; сворачивать некуда —
+      // у окна ОС своя кнопка.
+      if (widget.ownWindow != null) {
+        if (!_fullScreen) return KeyEventResult.ignored;
+        unawaited(_toggleFullScreen());
+        return KeyEventResult.handled;
+      }
       final minimize = widget.onMinimize;
       if (minimize == null) return KeyEventResult.ignored;
       minimize();
@@ -397,7 +422,15 @@ class _OneToOneCallScreenState extends State<OneToOneCallScreen> {
           );
 
     final Widget pipChild = (camOn && session != null)
-        ? _DesktopLocalVideo(session: session, mirror: s.isFrontCamera)
+        ? ValueListenableBuilder<bool>(
+            // «Зеркалить моё видео» из настроек звонков (30.09.2026): только
+            // у себя на экране — собеседник видит как есть.
+            valueListenable: DesktopCallPrefs.mirrorSelfView,
+            builder: (ctx, mirrorSelf, _) => _DesktopLocalVideo(
+              session: session,
+              mirror: s.isFrontCamera && mirrorSelf,
+            ),
+          )
         : const _CameraOffTile();
 
     return MouseRegion(
@@ -429,6 +462,7 @@ class _OneToOneCallScreenState extends State<OneToOneCallScreen> {
                       fullScreen: _fullScreen,
                       onToggleFullScreen: _toggleFullScreen,
                       onMinimize: widget.onMinimize,
+                      ownWindow: widget.ownWindow,
                     ),
                   ),
                 ),
@@ -506,11 +540,9 @@ class _OneToOneCallScreenState extends State<OneToOneCallScreen> {
             on: micOn,
             enabled: true,
             onTap: _toggleMic,
-            // Шеврона нет, когда выбирать не из чего: стрелка, за которой
-            // один пункт, обещает выбор, которого нет.
-            onExpand: routes.availableRoutes.length > 1
-                ? _pickAudioRoute
-                : null,
+            // На компьютере выбирать есть из чего всегда: «Как в системе» и
+            // хотя бы один микрофон.
+            onExpand: _pickAudioRoute,
           ),
           const SizedBox(width: 8),
           CallDockToggle(
@@ -599,6 +631,7 @@ class _Header extends StatelessWidget {
     required this.fullScreen,
     required this.onToggleFullScreen,
     required this.onMinimize,
+    this.ownWindow,
   });
 
   final String name;
@@ -607,6 +640,7 @@ class _Header extends StatelessWidget {
   final bool fullScreen;
   final VoidCallback onToggleFullScreen;
   final VoidCallback? onMinimize;
+  final DesktopCallOwnWindow? ownWindow;
 
   @override
   Widget build(BuildContext context) {
@@ -628,15 +662,19 @@ class _Header extends StatelessWidget {
       child: Stack(
         children: [
           // Окно звонка лежит поверх шапки приложения: без своей полосы окно
-          // во время разговора нельзя было даже сдвинуть.
-          const Positioned.fill(child: DesktopWindowDragRegion()),
+          // во время разговора нельзя было даже сдвинуть. В своём окне ОС
+          // таскает системная шапка.
+          if (ownWindow == null)
+            const Positioned.fill(child: DesktopWindowDragRegion()),
           Positioned.fill(
             child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // 🔴 Слева — место под «светофор» macOS: без него имя
               // собеседника ложилось под кнопки окна.
-              SizedBox(width: _isMacOS ? 80 : DSpace.l),
+              SizedBox(
+                width: _isMacOS && ownWindow == null ? 80 : DSpace.l,
+              ),
               // 🔴 Левая группа — ОДНА растягиваемая часть строки. С
               // `Flexible` у имени и распоркой после чипа свободное место
               // делилось пополам, и кнопки «свернуть» и «во весь экран»
@@ -669,6 +707,24 @@ class _Header extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
               ],
+              // «Поверх всех окон» — только у своего окна ОС: главное окно
+              // закреплять незачем (владелец, 28.09: «чтобы я мог его
+              // закрепить поверх приложений»).
+              if (ownWindow != null) ...[
+                ValueListenableBuilder<bool>(
+                  valueListenable: ownWindow!.pinned,
+                  builder: (ctx, pinned, _) => _CallChromeButton(
+                    icon: pinned
+                        ? FluentIcons.pin_24_filled
+                        : FluentIcons.pin_24_regular,
+                    tooltip: pinned
+                        ? l10n.desktopCallUnpinWindow
+                        : l10n.desktopCallPinWindow,
+                    onTap: ownWindow!.onTogglePin,
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
               _CallChromeButton(
                 icon: fullScreen
                     ? FluentIcons.full_screen_minimize_24_regular
@@ -678,7 +734,7 @@ class _Header extends StatelessWidget {
                     : l10n.desktopCallFullscreen,
                 onTap: onToggleFullScreen,
               ),
-              if (_isWindows)
+              if (_isWindows && ownWindow == null)
                 const Padding(
                   padding: EdgeInsets.only(left: DSpace.s),
                   child: DesktopWindowsCaptionButtons(),

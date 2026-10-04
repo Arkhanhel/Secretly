@@ -14,6 +14,7 @@ import '../../../media/video_thumbnail_cache.dart';
 import '../app/desktop_file_match.dart' show formatAttachmentSize;
 import '../design/tokens.dart';
 import '../primitives/desktop_tooltip.dart';
+import 'attachment_save.dart' show stripFileNameDisguise;
 import 'desktop_video_thumb.dart';
 import 'media_group_layout.dart';
 import 'message_bubble.dart' show MessageAttachment, MessageAttachmentKind;
@@ -756,7 +757,12 @@ class MiddleEllipsisText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dot = text.lastIndexOf('.');
-    final hasExt = dot > 0 && text.length - dot <= 8;
+    final ext = dot > 0 ? text.substring(dot) : '';
+    // Длинное настоящее расширение («.settingcontent-ms») тоже держим на
+    // виду (30.09.2026): по нему система решает, документ это или программа.
+    final hasExt =
+        ext.isNotEmpty &&
+        (ext.length <= 8 || (ext.length <= 19 && !ext.contains(' ')));
     if (!hasExt) {
       return Text(
         text,
@@ -779,7 +785,20 @@ class MiddleEllipsisText extends StatelessWidget {
               softWrap: false,
             ),
           ),
-          Text(text.substring(dot), style: style, maxLines: 1),
+          // Длинному расширению в узкой строке места может не хватить — оно
+          // делит ширину с именем и сжимается само, а не вылезает за край.
+          if (ext.length > 8)
+            Flexible(
+              child: Text(
+                ext,
+                style: style,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+              ),
+            )
+          else
+            Text(ext, style: style, maxLines: 1),
         ],
       ),
     );
@@ -838,7 +857,8 @@ class DesktopFileRow extends StatelessWidget {
           (_uploading && attachment.filePath != null));
 
   String _nameOf(AppLocalizations l10n) {
-    final n = (attachment.fileName ?? '').trim();
+    // Без маскирующих невидимок: «счёт\u202Efdp.exe» читалось как PDF.
+    final n = stripFileNameDisguise(attachment.fileName ?? '').trim();
     if (n.isNotEmpty) return n;
     return switch (attachment.kind) {
       MessageAttachmentKind.image => l10n.desktopMediaImage,

@@ -2,9 +2,13 @@
 
 #include <windowsx.h>
 
+#include <cwchar>
 #include <optional>
 
+#include <flutter/standard_method_codec.h>
+
 #include "flutter/generated_plugin_registrant.h"
+#include "single_instance.h"
 
 namespace {
 
@@ -111,9 +115,44 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+  child_windows_ = std::make_unique<ChildWindowHost>(
+      flutter_controller_->engine()->messenger(), GetHandle());
+  taskbar_badge_ = std::make_unique<TaskbarBadge>(
+      flutter_controller_->engine()->messenger(), GetHandle());
+  screen_privacy_ = std::make_unique<ScreenPrivacyChannel>(
+      flutter_controller_->engine()->messenger(), GetHandle());
+  // 🔴 Сторож буфера (01.10.2026): набор восстановления стирается из буфера,
+  // если он там ещё лежит. «Ещё лежит» — это «номер буфера не сменился с
+  // нашего копирования»; содержимое для этого читать не нужно.
+  clipboard_guard_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "secretly/clipboard_guard",
+          &flutter::StandardMethodCodec::GetInstance());
+  clipboard_guard_->SetMethodCallHandler(
+      [](const flutter::MethodCall<flutter::EncodableValue>& call,
+         std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+             result) {
+        if (call.method_name() == "changeCount") {
+          result->Success(flutter::EncodableValue(
+              static_cast<int64_t>(::GetClipboardSequenceNumber())));
+          return;
+        }
+        result->NotImplemented();
+      });
+  // Метка главного окна: по ней повторный запуск находит именно нас
+  // (single_instance.cpp).
+  ::SetPropW(GetHandle(), kSecretlyMainWindowProp,
+             reinterpret_cast<HANDLE>(static_cast<INT_PTR>(1)));
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
+  // 🔴 Автозапуск «свёрнутым» (28.09.2026): Windows запускает нас при входе
+  // с `--autostart --minimized`, и окно не должно мелькать — приложение ждёт
+  // в трее. Если значка в трее не окажется, окно покажет сама программа
+  // (main_desktop.dart), иначе до неё было бы не добраться.
+  const bool start_minimized =
+      std::wcsstr(::GetCommandLineW(), L"--minimized") != nullptr;
+  flutter_controller_->engine()->SetNextFrameCallback([&, start_minimized]() {
+    if (!start_minimized) this->Show();
   });
 
   // Flutter can complete the first frame before the "show window" callback is
@@ -125,6 +164,17 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  if (HWND handle = GetHandle()) {
+    ::RemovePropW(handle, kSecretlyMainWindowProp);
+  }
+  // 🔴 Отдельные окна — ДО движка: их виды принадлежат ему.
+  child_windows_ = nullptr;
+  taskbar_badge_ = nullptr;
+  if (clipboard_guard_) {
+    clipboard_guard_->SetMethodCallHandler(nullptr);
+    clipboard_guard_ = nullptr;
+  }
+  screen_privacy_ = nullptr;
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
@@ -135,6 +185,19 @@ void FlutterWindow::OnDestroy() {
 std::optional<LRESULT> FlutterWindow::HandleFrameMessage(
     HWND hwnd, UINT const message, WPARAM const wparam,
     LPARAM const lparam) noexcept {
+  // Повторный запуск Secretly.exe просит показаться (single_instance.cpp).
+  // Окно может быть спрятано в трей или свёрнуто. Фокус даёт событие
+  // WM_ACTIVATE — по нему приложение само отмечает окно видимым.
+  // Проводник пересоздал кнопку окна — вернуть значок непрочитанных.
+  if (message == TaskbarBadge::TaskbarButtonCreatedMessage()) {
+    if (taskbar_badge_) taskbar_badge_->OnTaskbarButtonCreated();
+    return std::nullopt;
+  }
+  if (message == SecretlyShowWindowMessage()) {
+    ::ShowWindow(hwnd, ::IsIconic(hwnd) ? SW_RESTORE : SW_SHOW);
+    ::SetForegroundWindow(hwnd);
+    return 0;
+  }
   switch (message) {
     case WM_NCCALCSIZE: {
       if (wparam != TRUE) return std::nullopt;

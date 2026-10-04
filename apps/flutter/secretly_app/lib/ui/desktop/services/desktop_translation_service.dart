@@ -23,8 +23,10 @@
 /// исключение в переписку.
 library;
 
+import 'dart:io' show Platform;
+
 import '../../../l10n/app_localizations.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/services.dart';
 
 import '../../../diagnostics/diag_log.dart';
@@ -80,8 +82,51 @@ class DesktopTranslationResult {
   }
 }
 
+/// Может ли системный перевод работать на этой площадке (01.10.2026).
+///
+/// Мост есть только в сборке macOS, а сама служба — с macOS 26: раньше сессию
+/// без SwiftUI не получить (`TranslationBridge.swift`). Версия ниже 16 —
+/// точно мимо. 16 пропускаем намеренно: macOS 26 называет себя «16.0»
+/// программам, собранным со старым SDK, и отрезать её здесь значило бы
+/// отнять работающий перевод. Не разобрали версию — решит сам мост, а его
+/// отказ `unsupported_os` спрячет пункт до конца сеанса.
+bool desktopTranslationSupportedOn({
+  required bool isMacOS,
+  required String osVersion,
+}) {
+  if (!isMacOS) return false;
+  final match = RegExp(r'(\d+)(?:\.\d+)+').firstMatch(osVersion);
+  final major = match == null ? null : int.tryParse(match.group(1)!);
+  if (major == null) return true;
+  return major >= 16;
+}
+
 class DesktopTranslationService {
   DesktopTranslationService._();
+
+  /// Площадка — подменяемая: проверка обязана идти и на Linux-CI, где
+  /// `Platform.isMacOS` ложно всегда.
+  @visibleForTesting
+  static bool Function() isMacOS = () => !kIsWeb && Platform.isMacOS;
+
+  @visibleForTesting
+  static String Function() osVersion = () => Platform.operatingSystemVersion;
+
+  bool? _availableHere;
+
+  /// 🔴 ПУНКТ «ПЕРЕВЕСТИ» — ТОЛЬКО ТАМ, ГДЕ ПЕРЕВОД ВОЗМОЖЕН (01.10.2026).
+  ///
+  /// На Windows и Linux моста нет вовсе, на macOS старше 26 нет системной
+  /// службы — и пункт отвечал отказом на каждое нажатие. Здесь — площадка и
+  /// версия; отказ самого моста («не та система», «нет канала») опускает
+  /// флаг до конца сеанса, так что обещание не повторяется.
+  bool get availableHere => _availableHere ??= desktopTranslationSupportedOn(
+        isMacOS: isMacOS(),
+        osVersion: osVersion(),
+      );
+
+  @visibleForTesting
+  void resetAvailabilityForTest() => _availableHere = null;
 
   static final DesktopTranslationService instance =
       DesktopTranslationService._();
@@ -241,10 +286,13 @@ class DesktopTranslationService {
       return DesktopTranslationResult(DesktopTranslationOutcome.ok, value);
     } on PlatformException catch (e) {
       _log(e.code, source: source, target: target);
+      // Система слишком стара для перевода — это не изменится до перезапуска.
+      if (e.code == 'unsupported_os') _availableHere = false;
       return DesktopTranslationResult(_outcomeFor(e.code));
     } on MissingPluginException {
       // Не десктопная сборка (или канал не подключён) — тихо «не умеем».
       _log('no_channel', source: source, target: target);
+      _availableHere = false;
       return const DesktopTranslationResult(
         DesktopTranslationOutcome.unsupported,
       );

@@ -38,13 +38,30 @@ class _DesktopDndButtonState extends State<DesktopDndButton> {
     // кнопки нет: серая кнопка, которая ничего не делает, хуже её отсутствия.
     if (svc == null) return const SizedBox.shrink();
 
-    final off = svc.doNotDisturb;
+    // 🔴 ПОДПИСКА, А НЕ ЧТЕНИЕ (01.10.2026). Кнопка читала состояние один
+    // раз при построении и узнавала о переменах только от собственного
+    // нажатия: «без звука на час» из трея её не трогал, а истёкший час
+    // оставлял значок перечёркнутым, хотя уведомления уже шли. Служба держит
+    // [DesktopNotificationService.doNotDisturbListenable] верным и в момент
+    // истечения срока — тот же источник, что у значка трея.
+    return ValueListenableBuilder<bool>(
+      valueListenable: svc.doNotDisturbListenable,
+      builder: (context, off, _) => _build(context, l10n, c, svc, off),
+    );
+  }
+
+  Widget _build(
+    BuildContext context,
+    AppLocalizations l10n,
+    DColorSet c,
+    DesktopNotificationService svc,
+    bool off,
+  ) {
     return DesktopTooltip(
       message: off ? l10n.desktopNotifOff : l10n.desktopNotifDnd,
       child: HoverListener(
         onTap: () async {
           await svc.setDoNotDisturb(!off);
-          if (mounted) setState(() {});
         },
         builder: (ctx, hovered, pressed) => AnimatedContainer(
           duration: DMotion.fast,

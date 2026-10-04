@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
+import 'package:secretly_app/ui/desktop/workspace/settings_style.dart';
 import 'package:secretly_app/ui/desktop/workspace/workspace_layout.dart';
 
 const double _kMaxContent = 760;
@@ -42,8 +43,9 @@ WorkspaceSection section(String id, String label, {Color? tint}) =>
       subtitle: 'подпись $id',
       group: 'Приложение',
       tint: tint,
+      // Поля — как у настоящих разделов (`_PaneScaffold`: 32 по бокам).
       builder: (_) => ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(32, 4, 32, 96),
         children: [
           Container(key: ValueKey('card-$id'), height: 80, color: Colors.blue),
         ],
@@ -64,9 +66,9 @@ void main() {
     await t.pumpAndSettle();
 
     final card = t.getSize(find.byKey(const ValueKey('card-general')));
-    // 760 колонка минус боковые поля списка по 20 = 720 полезной ширины.
+    // 760 колонка минус боковые поля по 32 (макет) = 696 полезной ширины.
     expect(card.width, lessThanOrEqualTo(_kMaxContent));
-    expect(card.width, closeTo(_kMaxContent - 40, 1));
+    expect(card.width, closeTo(_kMaxContent - 64, 1));
   });
 
   testWidgets('без предела колонка по-прежнему во всю ширину', (t) async {
@@ -101,11 +103,13 @@ void main() {
     await t.pumpAndSettle();
     final titleX = t.getTopLeft(find.text('Общие').last).dx;
     final cardX = t.getTopLeft(find.byKey(const ValueKey('card-general'))).dx;
-    // Заголовок отодвинут от края колонки на плитку значка (34) плюс зазор.
-    expect(titleX - cardX, closeTo(34 + 12, 1));
+    // Заголовок отодвинут от края колонки на плитку значка (36) плюс зазор.
+    expect(titleX - cardX, closeTo(36 + 12, 1));
   });
 
-  testWidgets('плитка значка рисуется и в колонке, и в шапке', (t) async {
+  testWidgets('в колонке — голый цветной знак, в шапке — плитка', (t) async {
+    // 🔴 Макет владельца (29.09.2026): строка раздела без плитки — знак 19 и
+    // подпись; плитка 36 осталась только в шапке открытого раздела.
     await t.pumpWidget(host(WorkspaceLayout(
       title: 'Настройки',
       contentMaxWidth: _kMaxContent,
@@ -117,9 +121,66 @@ void main() {
     ).toList();
     expect(plates.length, 2, reason: 'строка раздела и шапка содержимого');
     expect(plates.map((p) => p.tint).toSet(), {DIconTint.amber});
-    // Размеры разные намеренно: в списке плитка мельче строки, в шапке крупнее
-    // заголовка. Одинаковые смотрелись бы как повтор, а не как «ты здесь».
-    expect(plates.map((p) => p.size).toSet(), {28.0, 34.0});
+    expect(plates.map((p) => p.size).toSet(), {19.0, 36.0});
+    expect(plates.firstWhere((p) => p.size == 19).plain, isTrue);
+    expect(plates.firstWhere((p) => p.size == 36).plain, isFalse);
+  });
+
+  testWidgets('🔴 знаки колонки ЦВЕТНЫЕ — каждый своим цветом раздела',
+      (t) async {
+    // Владелец: «иконки должны быть сразу все цветные — это важно». В макете
+    // цветной только выбранный; здесь — все, и не серым тоном подписи.
+    await t.pumpWidget(host(WorkspaceLayout(
+      title: 'Настройки',
+      sections: [
+        section('general', 'Общие', tint: DIconTint.amber),
+        section('calls', 'Звонки', tint: DIconTint.cyan),
+        section('privacy', 'Приватность', tint: DIconTint.green),
+      ],
+    )));
+    await t.pumpAndSettle();
+    const p = SettingsPalette.darkPalette;
+    Color glyphOf(String label) {
+      final row = find.ancestor(
+        of: find.text(label).first,
+        matching: find.byType(Row),
+      ).first;
+      final icon = t.widget<Icon>(
+        find.descendant(of: row, matching: find.byType(Icon)).first,
+      );
+      return icon.color!;
+    }
+
+    // «Общие» — выбранный, остальные нет: цвет у всех свой, не серый.
+    expect(glyphOf('Звонки'), p.glyph(DIconTint.cyan));
+    expect(glyphOf('Приватность'), p.glyph(DIconTint.green));
+    for (final label in ['Звонки', 'Приватность']) {
+      expect(glyphOf(label), isNot(p.muted));
+      expect(glyphOf(label), isNot(p.faint));
+    }
+    expect(glyphOf('Звонки'), isNot(glyphOf('Приватность')));
+  });
+
+  testWidgets('поиск в колонке сужает список и очищается крестиком', (t) async {
+    await t.pumpWidget(host(WorkspaceLayout(
+      title: 'Настройки',
+      sections: [
+        section('general', 'Общие', tint: DIconTint.amber),
+        section('calls', 'Звонки', tint: DIconTint.cyan),
+      ],
+    )));
+    await t.pumpAndSettle();
+    await t.enterText(find.byType(TextField), 'звон');
+    await t.pumpAndSettle();
+    // «Общие» ушли из колонки, «Звонки» остались — и открыты справа.
+    expect(find.text('Общие'), findsNothing);
+    expect(find.text('Звонки'), findsNWidgets(2));
+    await t.enterText(find.byType(TextField), 'нет такого');
+    await t.pumpAndSettle();
+    expect(find.text('Ничего не найдено'), findsOneWidget);
+    await t.tap(find.bySemanticsLabel('Очистить'));
+    await t.pumpAndSettle();
+    expect(find.text('Общие'), findsOneWidget);
   });
 
   testWidgets('раздел без цвета рисует голый значок, а не пустую плитку',

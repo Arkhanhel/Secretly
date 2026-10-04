@@ -24,6 +24,15 @@ class DesktopGlobalHotKeyService {
   }) : _channel = channel ?? const MethodChannel('secretly/global_hotkey'),
        _onMacOS = onMacOS;
 
+  /// 🔴 ОДИН НА ПРИЛОЖЕНИЕ (01.10.2026). Раньше единственный экземпляр
+  /// создавал раздел «Горячие клавиши», и `load()` звучал только там: включённое
+  /// ⌥⌘S после перезапуска молчало, пока человек не откроет этот раздел, — то
+  /// есть переключатель показывал «вкл», а сочетание не работало. Теперь
+  /// экземпляр общий: `main_desktop.dart` загружает его при запуске, раздел
+  /// берёт тот же самый и не освобождает его, уходя.
+  static final DesktopGlobalHotKeyService instance =
+      DesktopGlobalHotKeyService();
+
   /// 🔴 Площадка подменяема ТОЛЬКО ради проверок — см. значок в Dock рядом.
   final bool? _onMacOS;
 
@@ -41,7 +50,14 @@ class DesktopGlobalHotKeyService {
 
   bool get supported => _onMacOS ?? (!kIsWeb && Platform.isMacOS);
 
-  Future<void> load() async {
+  Future<void>? _loading;
+
+  /// Прочитать сохранённый выбор и, если сочетание было включено, занять его
+  /// снова. Повторный вызов отдаёт ту же загрузку: запуск и раздел настроек
+  /// вызывают его оба, а регистрировать сочетание дважды незачем.
+  Future<void> load() => _loading ??= _load();
+
+  Future<void> _load() async {
     if (!supported) return;
     var want = false;
     try {

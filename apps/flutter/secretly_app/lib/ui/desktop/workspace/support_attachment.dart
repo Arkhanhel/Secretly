@@ -194,10 +194,20 @@ Future<DesktopSupportAttachmentResult> prepareDesktopSupportAttachment(
       DesktopSupportAttachmentProblem.tooLarge,
     );
   }
-  final shrunk = await compute(
-    _shrinkInIsolate,
-    (bytes: bytes, targetBytes: targetBytes),
-  );
+  // 🔴 Битая картинка роняет разбор ИСКЛЮЧЕНИЕМ (`ImageException` на
+  // испорченном заголовке PNG), и оно улетало мимо панели: кнопки вложений
+  // гасли до закрытия окна (30.09.2026). Не разобрать — значит «не прочитать».
+  final Uint8List? shrunk;
+  try {
+    shrunk = await compute(
+      _shrinkInIsolate,
+      (bytes: bytes, targetBytes: targetBytes),
+    );
+  } catch (_) {
+    return const DesktopSupportAttachmentResult.failed(
+      DesktopSupportAttachmentProblem.unreadable,
+    );
+  }
   if (shrunk == null || shrunk.length > maxBytes) {
     return const DesktopSupportAttachmentResult.failed(
       DesktopSupportAttachmentProblem.tooLarge,

@@ -3,16 +3,17 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import '../../../l10n/app_localizations.dart';
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'package:record/record.dart';
 
+import '../../../diagnostics/diag_log.dart';
 import '../../../links/link_preview_draft.dart';
 import '../design/tokens.dart';
+import '../primitives/desktop_snackbar.dart';
 import 'desktop_mentions.dart';
+import 'desktop_voice_recorder.dart';
 import 'link_preview_card.dart';
 import 'outgoing_media.dart' show DesktopClipboardMedia;
 import '../services/desktop_ui_prefs.dart';
@@ -45,6 +46,12 @@ class ComposerContext {
   /// Logical payload-event id of the message being replied to / edited.
   final String? payloadEventId;
 }
+
+/// Отправить записанное голосовое: путь к `.m4a`, длительность и волна (см.
+/// `desktop_voice_recorder.dart`). Когда отправка кончилась — удачно или
+/// нет, — поле ввода удаляет файл само.
+typedef DesktopSendVoice =
+    Future<void> Function(String path, int durationMs, List<int> waveform);
 
 class Composer extends StatefulWidget {
   const Composer({
@@ -93,9 +100,9 @@ class Composer extends StatefulWidget {
   final VoidCallback? onVoice;
 
   /// E7: a recorded voice note is ready to send — receives the temp file path
-  /// (opus) and its duration in ms. When wired, the mic button records instead
-  /// of invoking [onVoice].
-  final void Function(String path, int durationMs)? onSendVoice;
+  /// (AAC-LC `.m4a`, like the phone), its duration in ms and its waveform.
+  /// When wired, the mic button records instead of invoking [onVoice].
+  final DesktopSendVoice? onSendVoice;
   final ComposerContext? context;
   final VoidCallback? onClearContext;
   final GlobalKey? attachAnchorKey;
@@ -132,12 +139,18 @@ class _ComposerState extends State<Composer> {
   final _focus = FocusNode();
   bool _hasText = false;
 
-  // E7 voice recording (opus → renders as a voice note everywhere).
-  AudioRecorder? _recorder;
+  // E7 voice recording (AAC-LC `.m4a` + waveform → a voice note everywhere).
+  DesktopVoiceRecorder? _recorder;
   bool _recording = false;
+
+  /// Запись начинается: проверки и запуск ждут систему. Второе нажатие в это
+  /// время раньше заводило вторую запись — два таймера и два файла.
+  bool _recStarting = false;
   Timer? _recTimer;
   int _recMs = 0;
   String? _recPath;
+  StreamSubscription<double>? _recLevels;
+  final List<double> _recSamples = <double>[];
   static const int _recMinMs = 700;
 
   @override
@@ -157,6 +170,9 @@ class _ComposerState extends State<Composer> {
     // случайно перестраивало композер.
     _focus.addListener(_onFocus);
     widget.linkPreviewDraft?.addListener(_onLinkDraft);
+    // Записи, брошенные падением или выключением посреди записи, — прочь;
+    // один раз за запуск (30.09.2026).
+    unawaited(DesktopVoiceFiles.sweepOnce());
   }
 
   void _onFocus() {
@@ -169,6 +185,14 @@ class _ComposerState extends State<Composer> {
     if (!identical(old.linkPreviewDraft, widget.linkPreviewDraft)) {
       old.linkPreviewDraft?.removeListener(_onLinkDraft);
       widget.linkPreviewDraft?.addListener(_onLinkDraft);
+    }
+    // 🔴 Выбрали «Ответить» или «Изменить» — курсор в поле, как в Telegram
+    // (30.09.2026). Раньше карточка ответа появлялась, а печатать было некуда:
+    // фокус оставался на ленте, и первое нажатие клавиши уходило в никуда.
+    if (widget.context != null && !identical(old.context, widget.context)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focus.requestFocus();
+      });
     }
   }
 
@@ -265,31 +289,58 @@ class _ComposerState extends State<Composer> {
     _focus.removeListener(_onFocus);
     widget.linkPreviewDraft?.removeListener(_onLinkDraft);
     _recTimer?.cancel();
-    unawaited(_recorder?.dispose());
+    unawaited(_recLevels?.cancel());
+    // Ушли из переписки посреди записи (поле ввода живёт, пока открыта его
+    // переписка): запись выбрасываем, а не оставляем на диске. Запись, что
+    // ещё только начинается, уберёт сам [_startRecording].
+    final rec = _recorder;
+    final path = _recPath;
+    if (_recording) {
+      unawaited(() async {
+        try {
+          await rec?.cancel();
+        } catch (_) {}
+        await DesktopVoiceFiles.delete(path);
+        await rec?.dispose();
+      }());
+    } else if (!_recStarting) {
+      unawaited(rec?.dispose());
+    }
     _focus.dispose();
     super.dispose();
   }
 
   Future<void> _startRecording() async {
-    if (_recording) return;
-    final rec = _recorder ??= AudioRecorder();
+    if (_recording || _recStarting) return;
+    _recStarting = true;
+    final rec = _recorder ??= DesktopVoiceRecorder.create();
+    String? path;
     try {
-      if (!await rec.hasPermission()) return;
-      final path =
-          '${Directory.systemTemp.path}${Platform.pathSeparator}voice-${DateTime.now().millisecondsSinceEpoch}.opus';
-      await rec.start(
-        const RecordConfig(
-          encoder: AudioEncoder.opus,
-          bitRate: 32000,
-          sampleRate: 48000,
-          numChannels: 1,
-        ),
-        path: path,
-      );
-      if (!mounted) {
-        await rec.stop();
+      // 🔴 Раньше любая беда глоталась пустым `catch`, и кнопка микрофона
+      // просто не делала ничего. Теперь — проверки до записи и слова.
+      final failure = await desktopVoicePreflight(rec);
+      if (failure != null) {
+        _voiceFailed(failure);
         return;
       }
+      if (!mounted) return;
+      path = await DesktopVoiceFiles.newPath();
+      await rec.start(path);
+      if (!mounted) {
+        // Переписку закрыли, пока запись начиналась.
+        try {
+          await rec.cancel();
+        } catch (_) {}
+        await DesktopVoiceFiles.delete(path);
+        return;
+      }
+      _recSamples.clear();
+      _recLevels = rec
+          .amplitudeDb(const Duration(milliseconds: 90))
+          .listen(
+            (db) => _recSamples.add(desktopVoiceLevel(db)),
+            onError: (Object _) {},
+          );
       setState(() {
         _recording = true;
         _recPath = path;
@@ -298,34 +349,70 @@ class _ComposerState extends State<Composer> {
       _recTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
         if (mounted) setState(() => _recMs += 200);
       });
-    } catch (_) {
-      if (mounted) setState(() => _recording = false);
+    } catch (e) {
+      await DesktopVoiceFiles.delete(path);
+      _voiceFailed(DesktopVoiceFailure.startFailed, e);
+    } finally {
+      _recStarting = false;
+      // Поле ввода закрыли, пока запись начиналась: его `dispose` оставил
+      // микрофон нам.
+      if (!mounted) unawaited(rec.dispose());
     }
   }
 
+  void _voiceFailed(DesktopVoiceFailure why, [Object? error]) {
+    logDesktopVoiceFailure(why, error);
+    if (!mounted) return;
+    DesktopSnackbar.show(
+      context,
+      message: desktopVoiceFailureText(why, l10n),
+      kind: DSnackKind.error,
+    );
+  }
+
   Future<void> _stopRecording({required bool send}) async {
+    // Признак записи снимаем СРАЗУ: второе «отправить» (Enter и щелчок почти
+    // разом) раньше доходило сюда, пока шла остановка, и голосовое уходило
+    // дважды.
+    if (!_recording) return;
     _recTimer?.cancel();
     _recTimer = null;
+    unawaited(_recLevels?.cancel());
+    _recLevels = null;
     final durMs = _recMs;
+    final waveform = buildDesktopVoiceWaveform(_recSamples);
+    _recSamples.clear();
+    final recordedPath = _recPath;
+    _recPath = null;
+    if (mounted) {
+      setState(() => _recording = false);
+    } else {
+      _recording = false;
+    }
     String? path;
     try {
       path = await _recorder?.stop();
     } catch (_) {
       path = null;
     }
-    path ??= _recPath;
-    if (mounted) setState(() => _recording = false);
-    final tooShort = durMs < _recMinMs;
-    if (!send || tooShort || path == null) {
-      if (path != null) {
-        try {
-          final f = File(path);
-          if (await f.exists()) await f.delete();
-        } catch (_) {}
-      }
+    path ??= recordedPath;
+    final onSend = widget.onSendVoice;
+    if (!send || durMs < _recMinMs || path == null || onSend == null) {
+      await DesktopVoiceFiles.delete(path);
       return;
     }
-    widget.onSendVoice?.call(path, durMs);
+    try {
+      await onSend(path, durMs, waveform);
+    } catch (e) {
+      DiagLog.event('voice', 'send_failed', <String, Object?>{
+        'error': e.runtimeType.toString(),
+      });
+    } finally {
+      // Отправке файл больше не нужен: личная переписка прочитала байты,
+      // комната скопировала его в свой кэш вложений. Не удалась — запись
+      // тоже не остаётся на диске.
+      await DesktopVoiceFiles.delete(path);
+    }
   }
 
   static String _fmtRec(int ms) {
@@ -467,6 +554,25 @@ class _ComposerState extends State<Composer> {
   }
 
   Widget _recordingBar(DColorSet c) {
+    // 🔴 Escape во время записи — отменить запись, как в Telegram (30.09.2026).
+    // Поле ввода на время записи убрано, фокус с ним уходил, и Escape
+    // доставался окну: оно закрывало переписку, а запись обрывалась молча.
+    // Полоса записи сама берёт фокус; Enter — отправить.
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.escape): () =>
+            unawaited(_stopRecording(send: false)),
+        const SingleActivator(LogicalKeyboardKey.enter): () =>
+            unawaited(_stopRecording(send: true)),
+      },
+      child: Focus(
+        autofocus: true,
+        child: _recordingRow(c),
+      ),
+    );
+  }
+
+  Widget _recordingRow(DColorSet c) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       child: Row(
@@ -514,7 +620,11 @@ class _ComposerState extends State<Composer> {
       //
       // Размеры взяты из макета: 52 точки поля, 10 снизу. Кнопки внутри при
       // этом не уменьшены — по ним попадают мышью.
-      padding: const EdgeInsets.fromLTRB(DSpace.l, DSpace.s, DSpace.l, 10),
+      //
+      // 🔴 28.09.2026, владелец: «островки должны быть меньше и более
+      // закруглённые, а информация и кнопки внутри — не меньше». Край 12,
+      // как у шапки, а не 16: оба островка стоят на одной вертикали.
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
       // 🔴 ВОКРУГ ПОЛЯ ВВОДА НЕТ НИКАКОЙ ПАНЕЛИ (13.09.2026, макет владельца).
       //
       // Было: сплошная плашка цвета переписки с чертой сверху. Она отрезала
@@ -576,15 +686,19 @@ class _ComposerState extends State<Composer> {
             // (`_MeasuredComposer` → `_composerHeight`), и лента резервирует
             // под неё место. Менять её «на глаз» нельзя — проверено, что
             // затенение не прыгает.
-            constraints: const BoxConstraints(minHeight: 52, maxHeight: 240),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            //
+            // 🔴 28.09.2026: 46 точек при тех же кнопках 36 и том же тексте
+            // 14/20 — сжаты только поля (5 сверху и снизу). Радиус стекла —
+            // половина высоты: однострочное поле — таблетка.
+            constraints: const BoxConstraints(minHeight: 46, maxHeight: 240),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
             child: _recording
                 ? _recordingBar(c)
                 : Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
+                        padding: EdgeInsets.zero,
                         child: DesktopIconButton(
                           key: widget.attachAnchorKey,
                           // «+», а не скрепка: в макете слева от поля стоит
@@ -599,7 +713,7 @@ class _ComposerState extends State<Composer> {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 4,
-                            vertical: 4,
+                            vertical: 2,
                           ),
                           child: Focus(
                             onKeyEvent: _onKey,
@@ -629,7 +743,7 @@ class _ComposerState extends State<Composer> {
                         ),
                       ),
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
+                        padding: EdgeInsets.zero,
                         child: DesktopIconButton(
                           key: widget.emojiAnchorKey,
                           icon: FluentIcons.emoji_24_regular,
@@ -639,7 +753,7 @@ class _ComposerState extends State<Composer> {
                       ),
                       const SizedBox(width: 4),
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
+                        padding: EdgeInsets.zero,
                         // 🔴 МИКРОФОН И ОТПРАВКА БОЛЬШЕ НЕ ИСКЛЮЧАЮТ ДРУГ
                         // ДРУГА.
                         //
@@ -693,61 +807,25 @@ class _ComposerState extends State<Composer> {
               ],
             ),
           ),
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: DSpace.s),
-            child: Row(
-              children: [
-                // 🔴 Подсказка ЧИТАЕТ настройку, а не повторяет её значение по
-                // умолчанию.
-                //
-                // Строка была написана буквами: «Enter — отправить ·
-                // Shift+Enter — новая строка». Само поле при этом слушается
-                // [DesktopUiPrefs.enterToSend] и при выключенной настройке
-                // меняет клавиши местами — а подсказка продолжала утверждать
-                // обратное. Подпись, которая врёт про клавишу прямо над этой
-                // клавишей, хуже отсутствующей подписи.
-                if ((widget.topicTitle ?? '').trim().isNotEmpty) ...[
-                  _TopicChip(title: widget.topicTitle!.trim()),
-                  const SizedBox(width: 10),
-                ],
-                Flexible(
-                  child: ValueListenableBuilder<bool>(
-                    valueListenable: DesktopUiPrefs.enterToSend,
-                    builder: (ctx, enterToSend, _) => Text(
-                      enterToSend
-                          ? l10n.desktopComposerEnterSends
-                          : l10n.desktopComposerEnterNewline,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: DType.tiny.copyWith(color: c.textDisabled),
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                // 🔴 Замок без подписи — как в макете, но со словами по
-                // наведению.
-                //
-                // В макете здесь один приглушённый замок и ничего больше:
-                // строка под полем ввода — служебная, и зелёная надпись
-                // «сквозное шифрование» перетягивала на себя внимание каждый
-                // раз, когда человек смотрел на своё же сообщение.
-                //
-                // Слова при этом НЕ выброшены: шифрование — не украшение, и
-                // знать о нём человек должен уметь. Они переехали в подсказку
-                // замка, то есть ровно туда, куда потянется тот, кто хочет
-                // проверить.
-                DesktopTooltip(
-                  message: l10n.desktopSecurityE2ee,
-                  child: Icon(
-                    FluentIcons.lock_closed_16_filled,
-                    size: 13,
-                    color: c.textFaint,
-                  ),
-                ),
-              ],
+          // 🔴 СЛУЖЕБНАЯ СТРОКА ПОД ПОЛЕМ — ТОЛЬКО РАДИ ТЕМЫ (28.09.2026).
+          //
+          // Владелец: «островки меньше, компактнее и профессиональнее — в
+          // стиле Telegram/Discord». Под полем стояла строка «Enter —
+          // отправить» с замком — ещё 18 точек под каждым чатом. Ни Telegram,
+          // ни Discord такой строки не держат. Её слова не выброшены: подсказка
+          // клавиш (она по-прежнему ЧИТАЕТ настройку) и «сквозное шифрование»
+          // — в подсказке кнопки «Отправить», куда тянется тот, кто хочет
+          // проверить. Строка остаётся только у комнаты с темами: чип темы
+          // говорит, КУДА уйдёт сообщение, и прятать его нельзя.
+          if ((widget.topicTitle ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: DSpace.s),
+              child: Row(
+                children: [_TopicChip(title: widget.topicTitle!.trim())],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -870,10 +948,18 @@ class _SendButton extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
     final enabled = onTap != null;
-    return DesktopTooltip(
-      message: enabled
-          ? l10n.desktopComposerSendHint
-          : l10n.desktopComposerWriteFirst,
+    // Подсказка ЧИТАЕТ настройку: при «Enter — перенос строки» отправляет
+    // Shift+Enter, и подпись обязана говорить именно это. Слова о сквозном
+    // шифровании переехали сюда из строки под полем (28.09.2026).
+    return ValueListenableBuilder<bool>(
+      valueListenable: DesktopUiPrefs.enterToSend,
+      builder: (ctx, enterToSend, child) => DesktopTooltip(
+        message: enabled
+            ? '${enterToSend ? l10n.desktopComposerSendHint : l10n.desktopComposerSendHintShift}'
+                '\n${l10n.desktopSecurityE2ee}'
+            : l10n.desktopComposerWriteFirst,
+        child: child!,
+      ),
       child: HoverListener(
         onTap: onTap,
         onSecondaryTapDown: (enabled && onScheduleTap != null)
@@ -1141,7 +1227,7 @@ class _GlassFrame extends StatelessWidget {
   final bool focused;
   final Widget child;
 
-  static const double _radius = 18;
+  static const double _radius = 23;
 
   @override
   Widget build(BuildContext context) {

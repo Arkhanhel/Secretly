@@ -55,6 +55,9 @@ dependencies:
   local_auth: ^2.3.0
   path: ^1.9.1
   path_provider: ^2.1.5
+  # Windows: «Документы» приложения — в его папке, см.
+  # lib/desktop/windows_private_documents.dart (30.09.2026).
+  path_provider_platform_interface: ^2.1.2
   shared_preferences: ^2.3.3
   # DELIVERY RELIABILITY (2026-07-17): Android background task scheduler for the
   # outbox flush + inbound top-up when the app is asleep/backgrounded and FCM
@@ -121,6 +124,12 @@ dependencies:
   in_app_update: ^4.2.3
   app_links: ^7.0.0
   window_manager: ^0.5.0
+  # ПК, Windows: какое устройство звука система считает основным
+  # (IMMDeviceEnumerator). Уже был в сборке транзитивно.
+  win32: ^5.15.0
+  # ПК, Windows: автозапуск — ключ Run текущего пользователя. Уже был в сборке
+  # транзитивно.
+  win32_registry: ^2.1.0
   # Validate restored window position against attached displays (already a
   # transitive dep of window_manager; made explicit for direct use).
   screen_retriever: ^0.2.0
@@ -212,6 +221,9 @@ flutter:
     - assets/app_ui/icons/Interactive Mood Selector UI.json
     - assets/app_ui/icons/Messenger sync.json
     - assets/app_ui/icons/app_icon.png
+    # Значки трея ПК: .ico для Windows (tray_manager грузит только ICO) и
+    # шаблонный PNG для строки меню macOS. Несколько КБ.
+    - assets/desktop/tray/
     - assets/app_ui/icons/donation box.json
     # Каталогом, а не поимённо: файлы иконок не входят в публичную
     # выкладку (лицензия Icons8 разрешает использовать их в приложении,

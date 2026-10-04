@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
+// Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 // Пустые чаты с id после привязки ПК (28.09.2026).
 //
 // Жалоба владельца: после привязки телефона к компьютеру появлялись пустые

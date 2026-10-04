@@ -7,10 +7,13 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import '../../services/desktop_file_probe.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app/app_controller.dart';
+import '../../../../models/e2e_payload_v1.dart' show AttachmentEventV1;
 import '../../../widgets/conversation_media_gallery.dart'
     show
         ConversationAttachmentItem,
@@ -23,8 +26,13 @@ import '../../../widgets/conversation_media_gallery.dart'
         openConversationAttachmentImage;
 import '../../design/tokens.dart';
 import '../../primitives/context_menu.dart';
+import '../../primitives/desktop_button.dart';
 import '../../primitives/hover_listener.dart';
 import '../../../widgets/broken_media_box.dart';
+import '../../primitives/desktop_snackbar.dart';
+import '../attachment_risk_dialog.dart' show mayOpenReceivedFile;
+import '../attachment_save.dart'
+    show attachmentOpenCopy, suggestedAttachmentFileName;
 
 /// Desktop-native media gallery for the details (third-column) drawer.
 ///
@@ -134,6 +142,12 @@ class _DesktopMediaGalleryState extends State<DesktopMediaGallery> {
             child: FutureBuilder<ConversationMediaGalleryVm>(
               future: _future,
               builder: (ctx, snap) {
+                // 🔴 ОШИБКА — НЕ ВЕЧНЫЙ КРУЖОК (01.10.2026). Сорвавшаяся
+                // загрузка оставляла `data` пустым, и галерея крутила кружок
+                // бесконечно: ни причины, ни способа попробовать ещё раз.
+                if (snap.hasError) {
+                  return _GalleryLoadError(onRetry: () => setState(_load));
+                }
                 final vm = snap.data;
                 if (vm == null) {
                   return Center(
@@ -179,6 +193,47 @@ class _DesktopMediaGalleryState extends State<DesktopMediaGallery> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Галерея не загрузилась: сказать об этом и дать повторить.
+class _GalleryLoadError extends StatelessWidget {
+  const _GalleryLoadError({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final c = DColors.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(DSpace.l),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              FluentIcons.error_circle_24_regular,
+              size: 22,
+              color: c.textTertiary,
+            ),
+            const SizedBox(height: DSpace.s),
+            Text(
+              l10n.desktopGalleryLoadFailed,
+              textAlign: TextAlign.center,
+              style: DType.body.copyWith(color: c.textSecondary),
+            ),
+            const SizedBox(height: DSpace.m),
+            DesktopButton(
+              label: l10n.desktopGalleryRetry,
+              kind: DButtonKind.tonal,
+              size: DButtonSize.small,
+              onPressed: onRetry,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -483,7 +538,7 @@ class _MediaTileState extends State<_MediaTile> {
   /// «нажмите, чтобы повторить».
   Widget _face(DColorSet c) {
     final f = _file;
-    if (f != null && f.existsSync() && !_isVideo) {
+    if (f != null && DesktopFileProbe.exists(f.path) && !_isVideo) {
       return Image.file(
         f,
         fit: BoxFit.cover,
@@ -541,27 +596,8 @@ class _MediaTileState extends State<_MediaTile> {
     }
   }
 
-  Future<void> _openInDefaultApp(BuildContext context) async {
-    final l10n = AppLocalizations.of(context)!;
-    final f = await loadConversationAttachmentFile(controller, item.attachment);
-    if (!context.mounted) return;
-    if (f == null || !f.existsSync()) {
-      _toast(context, l10n.desktopChatsFileUnavailable, danger: true);
-      return;
-    }
-    try {
-      final ok = await launchUrl(
-        Uri.file(f.path),
-        mode: LaunchMode.externalApplication,
-      );
-      if (!ok && context.mounted) {
-        _toast(context, l10n.desktopChatsOpenFailed, danger: true);
-      }
-    } catch (e) {
-      if (!context.mounted) return;
-      _toast(context, l10n.desktopChatsOpenFailedShort('$e'), danger: true);
-    }
-  }
+  Future<void> _openInDefaultApp(BuildContext context) =>
+      _openAttachmentExternally(context, controller, item.attachment);
 
   Future<void> _revealInFinder(BuildContext context) async {
     final l10n = AppLocalizations.of(context)!;
@@ -582,7 +618,7 @@ class _MediaTileState extends State<_MediaTile> {
       }
     } catch (e) {
       if (!context.mounted) return;
-      _toast(context, l10n.desktopFailedWith('$e'), danger: true);
+      _toast(context, l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
@@ -773,27 +809,8 @@ class _FileTile extends StatelessWidget {
     );
   }
 
-  Future<void> _openInDefaultApp(BuildContext context) async {
-    final l10n = AppLocalizations.of(context)!;
-    final f = await loadConversationAttachmentFile(controller, item.attachment);
-    if (!context.mounted) return;
-    if (f == null || !f.existsSync()) {
-      _toast(context, l10n.desktopChatsFileUnavailable, danger: true);
-      return;
-    }
-    try {
-      final ok = await launchUrl(
-        Uri.file(f.path),
-        mode: LaunchMode.externalApplication,
-      );
-      if (!ok && context.mounted) {
-        _toast(context, l10n.desktopChatsOpenFailed, danger: true);
-      }
-    } catch (e) {
-      if (!context.mounted) return;
-      _toast(context, l10n.desktopChatsOpenFailedShort('$e'), danger: true);
-    }
-  }
+  Future<void> _openInDefaultApp(BuildContext context) =>
+      _openAttachmentExternally(context, controller, item.attachment);
 
   Future<void> _revealInFinder(BuildContext context) async {
     final l10n = AppLocalizations.of(context)!;
@@ -813,7 +830,7 @@ class _FileTile extends StatelessWidget {
       }
     } catch (e) {
       if (!context.mounted) return;
-      _toast(context, l10n.desktopFailedWith('$e'), danger: true);
+      _toast(context, l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
@@ -890,14 +907,63 @@ class _FileTile extends StatelessWidget {
   }
 }
 
+/// «Открыть в программе» из галереи — тем же путём, что и из ленты.
+///
+/// 🔴 Галерея отдавала системе САМ файл из расшифрованного кэша (30.09.2026):
+/// без проверки опасного файла, без метки «из интернета» и под именем
+/// `<идентификатор>.bin`. Теперь — предупреждение для программ и сценариев
+/// ([mayOpenReceivedFile]) и временная копия под настоящим именем
+/// ([attachmentOpenCopy]).
+Future<void> _openAttachmentExternally(
+  BuildContext context,
+  AppController controller,
+  AttachmentEventV1 attachment,
+) async {
+  final l10n = AppLocalizations.of(context)!;
+  final f = await loadConversationAttachmentFile(controller, attachment);
+  if (!context.mounted) return;
+  if (f == null || !f.existsSync()) {
+    _toast(context, l10n.desktopChatsFileUnavailable, danger: true);
+    return;
+  }
+  try {
+    final allowed = await mayOpenReceivedFile(
+      context,
+      file: f,
+      fileName: attachment.filename,
+      mime: attachment.mime,
+      blobId: attachment.blobId,
+    );
+    if (!allowed || !context.mounted) return;
+    final opening = await attachmentOpenCopy(
+      file: f,
+      suggestedName: suggestedAttachmentFileName(
+        fileName: attachment.filename,
+        mime: attachment.mime,
+        blobId: attachment.blobId,
+      ),
+      blobId: attachment.blobId,
+    );
+    final ok = await launchUrl(
+      Uri.file(opening.path),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!ok && context.mounted) {
+      _toast(context, l10n.desktopChatsOpenFailed, danger: true);
+    }
+  } catch (e) {
+    if (!context.mounted) return;
+    _toast(context, l10n.desktopChatsOpenFailedShort(desktopErrorText(e)), danger: true);
+  }
+}
+
 void _toast(BuildContext context, String message, {bool danger = false}) {
-  final c = DColors.of(context);
-  ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-    SnackBar(
-      content: Text(message),
-      backgroundColor: danger ? c.danger : c.elevated,
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 2),
-    ),
+    // 🔴 Своя всплывашка окна, а не SnackBar Material: у того текст брался
+  // из темы Material и выходил тёмным на тёмной подложке (30.09.2026).
+  DesktopSnackbar.show(
+    context,
+    message: message,
+    kind: danger ? DSnackKind.error : DSnackKind.info,
+    duration: const Duration(seconds: 2),
   );
 }

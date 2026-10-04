@@ -54,11 +54,20 @@ void main() {
     expect(body.contains('peer != myPid'), isTrue);
   });
 
-  test('в комнате галочки нет — чистить «у собеседника» некого', () {
+  test('в комнате галочки «у собеседника» нет; «у всех» — только админу', () {
     final room = File(
       'lib/ui/desktop/chat/details/room_details_view.dart',
     ).readAsStringSync();
-    expect(room.contains('clearChatHistoryEverywhere('), isFalse);
+    final i = room.indexOf('Future<void> _clearHistory()');
+    final body = room.substring(i, i + 2200);
+    // Чистить «у собеседника» в комнате некого — этой галочки нет.
+    expect(body.contains('peerTitle: null'), isTrue);
+    // 30.09.2026, ТЗ «ПК как Telegram» §2: «у всех участников» — право
+    // админа (`clearChatHistoryEverywhere` сам отказывает не-админу), галочка
+    // не отмечена по умолчанию — ответ диалога приходит `alsoForPeer: false`.
+    expect(body.contains('_policy?.canManageSettings ?? false'), isTrue);
+    expect(body.contains('forAll && result.alsoForPeer'), isTrue);
+    expect(body.contains('clearChatHistoryEverywhere(convoId: _groupId)'), isTrue);
   });
 
   test('предупреждение о необратимости на месте', () {

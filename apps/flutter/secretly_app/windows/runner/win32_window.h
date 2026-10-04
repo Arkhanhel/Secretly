@@ -71,6 +71,11 @@ class Win32Window {
   // Called when Destroy is called.
   virtual void OnDestroy();
 
+  // Стиль окна ОС при создании и отдавать ли фокус виду (SetChildContent).
+  // Зовётся ДО Create. Не звали — как у шаблона Flutter: обычное окно с
+  // рамкой, вид получает фокус (так живёт главное окно).
+  void SetCreationStyle(DWORD style, DWORD ex_style, bool focus_content);
+
  private:
   friend class WindowClassRegistrar;
 
@@ -91,6 +96,11 @@ class Win32Window {
   static void UpdateTheme(HWND const window);
 
   bool quit_on_close_ = false;
+
+  // См. SetCreationStyle.
+  DWORD creation_style_ = WS_OVERLAPPEDWINDOW;
+  DWORD creation_ex_style_ = 0;
+  bool focus_content_ = true;
 
   // window handle for top level window.
   HWND window_handle_ = nullptr;

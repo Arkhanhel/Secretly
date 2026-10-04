@@ -36,6 +36,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
+import '../../../rooms/room_models.dart' show roomSelectedReactionEmojis;
+import '../../emoji/emoji_search_index.dart' show filterEmojiByQuery;
+import '../../emoji/noto_emoji_catalog.dart'
+    show kNotoSkinToneHidden, kNotoSkinToneVariants;
 import '../design/tokens.dart';
 import 'noto_emoji_lottie.dart';
 import 'recent_reactions_store.dart';
@@ -45,16 +49,22 @@ import 'recent_reactions_store.dart';
 /// own copy here so this file doesn't depend on `desktop_popover.dart`.
 enum ReactionsAnchorSide { above, below }
 
-/// Quick-row emojis. Mirrors mobile + the inline bubble hover-bar.
-const List<String> kQuickReactionsRow = <String>[
-  '❤️',
-  '👍',
-  '😂',
-  '😮',
-  '😢',
-  '🔥',
-  '🎉',
-];
+/// Быстрый ряд — ТОТ ЖЕ, что у телефона (29.09.2026).
+///
+/// 🔴 Здесь стоял свой ряд `❤️👍😂😮😢🔥🎉` с подписью «Mirrors mobile», а у
+/// телефона `❤️🔥😁👍👎🥰👏` (`roomSelectedReactionEmojis`). Это не только вид:
+/// в комнатах с «выбранными реакциями» разрешён именно телефонный ряд, и
+/// 😂 😮 😢 🎉 с ПК сервер отклонял (`reactionNotAllowed`).
+const List<String> kQuickReactionsRow = roomSelectedReactionEmojis;
+
+/// Можно ли поставить эту реакцию здесь — правило комнаты
+/// (`RoomPolicyState.isReactionAllowed`). `null` — можно всё (личный чат).
+typedef ReactionAllowed = bool Function(String emoji);
+
+/// Быстрый ряд с учётом правила комнаты.
+List<String> quickReactionsFor(ReactionAllowed? allowed) => allowed == null
+    ? kQuickReactionsRow
+    : kQuickReactionsRow.where(allowed).toList(growable: false);
 
 /// Sentinel passed through `onPicked` when the user taps the chevron to
 /// expand. Hosts that mount [QuickReactionRow] directly inside a context
@@ -73,6 +83,7 @@ class ReactionsPopover {
     required GlobalKey anchorKey,
     ReactionsAnchorSide side = ReactionsAnchorSide.above,
     bool startExpanded = false,
+    ReactionAllowed? allowed,
   }) {
     final overlay = Overlay.of(context, rootOverlay: true)
         .context
@@ -84,6 +95,8 @@ class ReactionsPopover {
     final anchorTL = anchorBox.localToGlobal(Offset.zero, ancestor: overlay);
     final anchorSize = anchorBox.size;
     final screenSize = overlay.size;
+    // Палитра места вызова едет в окно — см. [DColors.carry].
+    final palette = DColors.maybeOf(context);
 
     return showGeneralDialog<String>(
       context: context,
@@ -92,13 +105,17 @@ class ReactionsPopover {
       barrierLabel: 'reactions',
       transitionDuration: DMotion.fast,
       pageBuilder: (ctx, anim, _) {
-        return _ReactionsScaffold(
-          anchorTL: anchorTL,
-          anchorSize: anchorSize,
-          screenSize: screenSize,
-          side: side,
-          startExpanded: startExpanded,
-          animation: anim,
+        return DColors.carry(
+          palette,
+          _ReactionsScaffold(
+            anchorTL: anchorTL,
+            anchorSize: anchorSize,
+            screenSize: screenSize,
+            side: side,
+            startExpanded: startExpanded,
+            animation: anim,
+            allowed: allowed,
+          ),
         );
       },
       transitionBuilder: (ctx, a, b, child) => child,
@@ -114,8 +131,10 @@ class _ReactionsScaffold extends StatefulWidget {
     required this.side,
     required this.startExpanded,
     required this.animation,
+    this.allowed,
   });
 
+  final ReactionAllowed? allowed;
   final Offset anchorTL;
   final Size anchorSize;
   final Size screenSize;
@@ -236,10 +255,12 @@ class _ReactionsScaffoldState extends State<_ReactionsScaffold> {
                       ? _ExpandedGrid(
                           onPicked: _onPicked,
                           onCollapse: _toggleExpanded,
+                          allowed: widget.allowed,
                         )
                       : _CompactRow(
                           onPicked: _onPicked,
                           onExpand: _toggleExpanded,
+                          emojis: quickReactionsFor(widget.allowed),
                         ),
                 ),
               ),
@@ -288,10 +309,14 @@ class QuickReactionRow extends StatelessWidget {
     super.key,
     required this.onPicked,
     this.padding = const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    this.allowed,
   });
 
   final ValueChanged<String> onPicked;
   final EdgeInsets padding;
+
+  /// Правило комнаты; `null` — можно всё.
+  final ReactionAllowed? allowed;
 
   @override
   Widget build(BuildContext context) {
@@ -309,7 +334,7 @@ class QuickReactionRow extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (final e in kQuickReactionsRow)
+            for (final e in quickReactionsFor(allowed))
               _QuickReactBtn(emoji: e, onTap: () => onPicked(e)),
             Container(
               width: 1,
@@ -328,9 +353,14 @@ class QuickReactionRow extends StatelessWidget {
 }
 
 class _CompactRow extends StatelessWidget {
-  const _CompactRow({required this.onPicked, required this.onExpand});
+  const _CompactRow({
+    required this.onPicked,
+    required this.onExpand,
+    required this.emojis,
+  });
   final ValueChanged<String> onPicked;
   final VoidCallback onExpand;
+  final List<String> emojis;
 
   @override
   Widget build(BuildContext context) {
@@ -341,7 +371,7 @@ class _CompactRow extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          for (final e in kQuickReactionsRow)
+          for (final e in emojis)
             _QuickReactBtn(emoji: e, onTap: () => onPicked(e)),
           Container(
             width: 1,
@@ -450,9 +480,14 @@ class _ExpandBtnState extends State<_ExpandBtn> {
 /// «Недавние» section is rendered when [DesktopRecentReactionsStore] has
 /// entries; the store is updated from `chat_thread_panel._applyReaction`.
 class _ExpandedGrid extends StatefulWidget {
-  const _ExpandedGrid({required this.onPicked, required this.onCollapse});
+  const _ExpandedGrid({
+    required this.onPicked,
+    required this.onCollapse,
+    this.allowed,
+  });
   final ValueChanged<String> onPicked;
   final VoidCallback onCollapse;
+  final ReactionAllowed? allowed;
 
   @override
   State<_ExpandedGrid> createState() => _ExpandedGridState();
@@ -496,11 +531,18 @@ class _ExpandedGridState extends State<_ExpandedGrid> {
     _bySlug = <String, List<String>>{
       for (final s in kDesktopNotoCategoryOrder) s: <String>[],
     };
+    // 🔴 Варианты тона — под базовым знаком, как у телефона (29.09.2026):
+    // иначе 270 из 881 плитки — одни и те же руки в пяти оттенках. Тон —
+    // правой кнопкой по знаку с точкой в углу.
+    bool shown(String e) =>
+        !kNotoSkinToneHidden.contains(e) && (widget.allowed?.call(e) ?? true);
     kDesktopNotoCategories.forEach((emoji, slug) {
-      (_bySlug[slug] ??= <String>[]).add(emoji);
+      if (shown(emoji)) (_bySlug[slug] ??= <String>[]).add(emoji);
     });
-    _allEmojis = kDesktopNotoCodepoints.keys.toList(growable: false);
-    _recents = DesktopRecentReactionsStore.instance.current;
+    _allEmojis = kDesktopNotoCodepoints.keys.where(shown).toList(
+      growable: false,
+    );
+    _recents = _allowedRecents(DesktopRecentReactionsStore.instance.current);
     _offsetBySlug = _computeOffsets();
     // PR3.10: subscribe to the store so the «Недавние» section refreshes
     // live within a single picker session. Keeps the SharedPreferences
@@ -514,7 +556,7 @@ class _ExpandedGridState extends State<_ExpandedGrid> {
 
   void _onRecentsChanged() {
     if (!mounted) return;
-    final next = DesktopRecentReactionsStore.instance.current;
+    final next = _allowedRecents(DesktopRecentReactionsStore.instance.current);
     // Only rebuild when the visible row really changed — every record()
     // notifies even when the new emoji is already in the set further back.
     final unchanged = next.length == _recents.length &&
@@ -565,14 +607,16 @@ class _ExpandedGridState extends State<_ExpandedGrid> {
     );
   }
 
-  List<String> _filterAll() {
-    final q = _q.toLowerCase();
-    return _allEmojis.where((e) {
-      if (e.contains(_q)) return true;
-      final cp = kDesktopNotoCodepoints[e] ?? '';
-      return cp.contains(q);
-    }).toList(growable: false);
+  List<String> _allowedRecents(List<String> recents) {
+    final allowed = widget.allowed;
+    return allowed == null
+        ? recents
+        : recents.where(allowed).toList(growable: false);
   }
+
+  /// 🔴 Поиск по СЛОВАМ, общий с телефоном (29.09.2026). Был по
+  /// шестнадцатеричному коду: «сердце» и «heart» не находили ничего.
+  List<String> _filterAll() => filterEmojiByQuery(_allEmojis, _q);
 
   @override
   Widget build(BuildContext context) {
@@ -755,6 +799,8 @@ class _ExpandedGridState extends State<_ExpandedGrid> {
             return _GridEmojiBtn(
               emoji: e,
               onTap: () => widget.onPicked(e),
+              onPicked: widget.onPicked,
+              allowed: widget.allowed,
             );
           },
           childCount: emojis.length,
@@ -883,24 +929,64 @@ class _RailBtnState extends State<_RailBtn> {
 }
 
 class _GridEmojiBtn extends StatefulWidget {
-  const _GridEmojiBtn({required this.emoji, required this.onTap});
+  const _GridEmojiBtn({
+    required this.emoji,
+    required this.onTap,
+    required this.onPicked,
+    this.allowed,
+  });
   final String emoji;
   final VoidCallback onTap;
+  final ValueChanged<String> onPicked;
+
+  /// Правило комнаты — и для вариантов тона (см. [desktopSkinTonesFor]).
+  final ReactionAllowed? allowed;
   @override
   State<_GridEmojiBtn> createState() => _GridEmojiBtnState();
 }
 
+/// Варианты тона знака [emoji], которые можно поставить здесь.
+///
+/// 🔴 Правило комнаты действовало на сетку, но не на меню тона (29.09.2026,
+/// разбор Р1): в комнате с «выбранными реакциями» 👍 разрешён, а 👍🏽 — нет, и
+/// выбранный из меню тон сервер отклонял (`reactionNotAllowed`).
+List<String> desktopSkinTonesFor(String emoji, ReactionAllowed? allowed) {
+  final tones = kNotoSkinToneVariants[emoji] ?? const <String>[];
+  return allowed == null ? tones : tones.where(allowed).toList(growable: false);
+}
+
 class _GridEmojiBtnState extends State<_GridEmojiBtn> {
   bool _h = false;
+
+  Future<void> _pickTone(Offset at) async {
+    final tones = desktopSkinTonesFor(widget.emoji, widget.allowed);
+    if (tones.isEmpty) return;
+    final picked = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
+      items: [
+        for (final v in <String>[widget.emoji, ...tones])
+          PopupMenuItem<String>(
+            value: v,
+            height: 40,
+            child: Text(v, style: const TextStyle(fontSize: 24)),
+          ),
+      ],
+    );
+    if (picked != null) widget.onPicked(picked);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
+    final hasTones = desktopSkinTonesFor(widget.emoji, widget.allowed).isNotEmpty;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _h = true),
       onExit: (_) => setState(() => _h = false),
       child: GestureDetector(
         onTap: widget.onTap,
+        onSecondaryTapDown: hasTones ? (d) => _pickTone(d.globalPosition) : null,
         child: AnimatedScale(
           duration: DMotion.fast,
           curve: Curves.easeOutBack,
@@ -911,15 +997,40 @@ class _GridEmojiBtnState extends State<_GridEmojiBtn> {
               borderRadius: BorderRadius.circular(DRadii.sm),
             ),
             alignment: Alignment.center,
-            // Preview-mode Lottie = first frame only, so the grid doesn't
-            // jitter with 800 concurrent animations.
+            // 🔴 ТЕКСТОМ, А ОЖИВАЕТ ПО НАВЕДЕНИЮ (29.09.2026). Каждая плитка
+            // была первым кадром Lottie: открыть сетку значило скачать с CDN
+            // 881 анимацию, до загрузки виден плоский Segoe. Телефон рисует
+            // сетку текстом; здесь так же, а наведённая плитка крутится.
             child: SizedBox(
               width: 30,
               height: 30,
-              child: NotoEmojiLottie(
-                emoji: widget.emoji,
-                size: 26,
-                mode: NotoLottieMode.preview,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  _h
+                      ? NotoEmojiLottie(
+                          emoji: widget.emoji,
+                          size: 26,
+                          mode: NotoLottieMode.looping,
+                        )
+                      : Text(
+                          widget.emoji,
+                          style: const TextStyle(fontSize: 22, height: 1.0),
+                        ),
+                  if (hasTones)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 4,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: c.textSecondary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),

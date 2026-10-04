@@ -282,7 +282,11 @@ void main() {
       expect(i, greaterThan(0));
       final body = win.substring(i, i + 200);
       expect(body.contains('roomWindowClosed(this)'), isTrue);
-      expect(body.contains('maybePop()'), isTrue);
+      // 29.09.2026 (Р1): окно уходит `_closeWindow` — маршрут `maybePop`, а
+      // своё окно ОС закрывает хозяин ([DesktopRoomCallWindows]).
+      expect(body.contains('_closeWindow();'), isTrue);
+      final close = win.substring(win.indexOf('void _closeWindow() {'));
+      expect(close.substring(0, 300).contains('maybePop()'), isTrue);
       expect(body.contains('_leave'), isFalse);
     });
 

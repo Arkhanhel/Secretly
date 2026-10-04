@@ -34,17 +34,25 @@ Map<String, List<_Shortcut>> _shortcutGroups(AppLocalizations l10n) {
   // lie that makes the whole panel feel unfinished.
   final mod = Platform.isMacOS ? '⌘' : 'Ctrl';
   final alt = Platform.isMacOS ? '⌥' : 'Alt';
+  // Control — именно Control и на macOS (⌃Tab, как «следующая вкладка»).
+  final ctrl = Platform.isMacOS ? '⌃' : 'Ctrl';
+  final shift = Platform.isMacOS ? '⇧' : 'Shift';
   return <String, List<_Shortcut>>{
     l10n.desktopShortcutsNavigation: [
       _Shortcut('$mod 1 … 4', l10n.desktopShortcutsTabs),
       _Shortcut('$mod K', l10n.desktopShortcutsSearchAll),
       _Shortcut('$alt ↑ / ↓', l10n.desktopShortcutsPrevNext),
+      _Shortcut('$ctrl $shift Tab / $ctrl Tab', l10n.desktopShortcutsPrevNext),
+      _Shortcut('$alt $shift ↑ / ↓', l10n.desktopShortcutsUnread),
+      _Shortcut('$ctrl $shift ↑ / ↓', l10n.desktopShortcutsFolders),
     ],
     l10n.desktopShortcutsInChat: [
       _Shortcut('$mod F', l10n.desktopShortcutsFindHere),
       _Shortcut('Enter', l10n.desktopShortcutsSend),
       _Shortcut('Shift Enter', l10n.desktopShortcutsNewline),
       _Shortcut('$mod V', l10n.desktopShortcutsPaste),
+      _Shortcut('$mod $shift M', l10n.desktopShortcutsMute),
+      _Shortcut('Esc', l10n.desktopShortcutsCloseChat),
     ],
     l10n.desktopShortcutsApp: [
       _Shortcut('$mod ,', l10n.desktopSettingsTitle),

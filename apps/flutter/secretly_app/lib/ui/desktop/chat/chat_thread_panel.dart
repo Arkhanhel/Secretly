@@ -36,10 +36,14 @@ import '../../../models/link_preview_v1.dart';
 import 'attachments_drop_zone.dart';
 import 'composer.dart';
 import 'desktop_wallpaper.dart';
+import 'bubble_look.dart';
+import '../services/desktop_ui_prefs.dart';
 import '../primitives/desktop_snackbar.dart';
 import '../services/desktop_translation_prefs.dart';
 import '../services/desktop_translation_service.dart';
 import 'emoji_popover.dart';
+import 'noto_emoji_lottie.dart' show DesktopStatusEmoji;
+import '../../emoji/noto_emoji_catalog.dart' show kNotoCodepoints;
 import 'schedule_send_dialog.dart';
 import 'message_bubble.dart';
 import 'desktop_mentions.dart';
@@ -178,7 +182,9 @@ class ChatThreadPanel extends StatefulWidget {
     this.composerTopicTitle,
     this.wallpaperAnimMode = ChatWallpaperAnimMode.onEnter,
     this.wallpaperConduct = false,
+    this.nicknameStylePresetId = 'accent',
     this.onReactToMessage,
+    this.reactionAllowed,
     this.onTapExistingReaction,
     this.onContinueInTopic,
     this.typingLabel,
@@ -193,6 +199,7 @@ class ChatThreadPanel extends StatefulWidget {
     this.onOpenFile,
     this.onOpenStickerPack,
     this.onPollVote,
+    this.onOpenRoomInvite,
     this.onPollClose,
     this.onEventRsvp,
     this.onComposePoll,
@@ -273,8 +280,9 @@ class ChatThreadPanel extends StatefulWidget {
   /// E9: fired while the user is typing, so the host can signal the peer.
   final VoidCallback? onTypingActivity;
 
-  /// E7: a recorded voice note (opus temp path + duration ms) is ready to send.
-  final void Function(String path, int durationMs)? onSendVoice;
+  /// E7: a recorded voice note (`.m4a` temp path, duration ms, waveform) is
+  /// ready to send.
+  final DesktopSendVoice? onSendVoice;
 
   /// P2b: shared controller for the in-composer sticker picker (loads packs +
   /// recents). When null, the sticker tab stays a «скоро» stub.
@@ -374,6 +382,10 @@ class ChatThreadPanel extends StatefulWidget {
   final ChatWallpaperAnimMode wallpaperAnimMode;
   final bool wallpaperConduct;
 
+  /// Общая настройка «Цвет имени» — нужна, когда в «Внешнем виде» выбран один
+  /// цвет для всех имён (`DesktopUiPrefs.senderNameColors == 'preset'`).
+  final String nicknameStylePresetId;
+
   /// Called when the user picks a reaction emoji for [message]. Emitted from
   /// either the bubble's hover quick-reaction bar OR the "+ more" emoji
   /// popover anchored to the bubble. The host is expected to call into the
@@ -381,6 +393,14 @@ class ChatThreadPanel extends StatefulWidget {
   /// the reaction lands on this device and fans out to peer + own other
   /// devices (TZ §21.1).
   final MessageReactionCallback? onReactToMessage;
+
+  /// Правило комнаты для реакций (`RoomPolicyState.isReactionAllowed`);
+  /// `null` — можно всё: личный чат или правило ещё не загружено (как на
+  /// телефоне — открыто, пока не знаем).
+  ///
+  /// 🔴 Без него ПК предлагал реакции, которые сервер отклоняет: в комнатах с
+  /// «выбранными реакциями» и с выключенными реакциями (29.09.2026).
+  final ReactionAllowed? reactionAllowed;
 
   /// Called when the user clicks an existing reaction chip on [message].
   /// Mirrors mobile behaviour: clicking the chip you already added removes
@@ -452,6 +472,9 @@ class ChatThreadPanel extends StatefulWidget {
   /// Нажали вариант опроса.
   final void Function(MessageData message, int optionIndex)? onPollVote;
 
+  /// Кнопка карточки приглашения в комнату (см. `DesktopRoomInviteCard`).
+  final ValueChanged<MessageData>? onOpenRoomInvite;
+
   /// Создатель опроса нажал «Завершить опрос».
   final ValueChanged<MessageData>? onPollClose;
 
@@ -492,6 +515,21 @@ class ChatThreadPanel extends StatefulWidget {
 }
 
 class _ChatThreadPanelState extends State<ChatThreadPanel> {
+  /// Реакции в этой комнате выключены: правило не пускает ни одну из
+  /// каталога. Считается раз на новое правило, а не на каждый пузырь.
+  bool get _reactionsOff {
+    final allowed = widget.reactionAllowed;
+    if (allowed == null) return false;
+    if (!identical(allowed, _reactionsOffFor)) {
+      _reactionsOffFor = allowed;
+      _reactionsOffCached = !kNotoCodepoints.keys.any(allowed);
+    }
+    return _reactionsOffCached;
+  }
+
+  ReactionAllowed? _reactionsOffFor;
+  bool _reactionsOffCached = false;
+
   /// Подписи ленты.
   AppLocalizations get l10n => AppLocalizations.of(context)!;
 
@@ -764,6 +802,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
 
   Widget _withRowDragSelect(Widget list) => Listener(
     onPointerDown: _onListPointerDown,
+    onPointerUp: _onListPointerUp,
     child: RawGestureDetector(
       key: _listKey,
       behavior: HitTestBehavior.translucent,
@@ -805,8 +844,98 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     _panelFocus.requestFocus();
   }
 
+  /// Ответ на [m]: карточка над полем ввода (поле само берёт курсор).
+  void _replyTo(MessageData m) {
+    setState(() {
+      // Ответ вместо правки: текст правимого не должен уйти ответом.
+      _restoreDraftAfterEdit();
+      _ctx = ComposerContext.reply(
+        authorName: m.authorName,
+        preview: m.text,
+        payloadEventId: m.payloadId ?? m.id,
+      );
+      _ctxWasEdit = false;
+    });
+  }
+
+  /// Прошлый щелчок по строке сообщения — чтобы узнать в следующем второй.
+  ({String id, Offset at, Duration time})? _lastRowClick;
+
+  /// 🔴 ДВОЙНОЙ ЩЕЛЧОК ПО СООБЩЕНИЮ — ОТВЕТ НА НЕГО, как в Telegram Desktop
+  /// (30.09.2026, ТЗ «ПК как Telegram» §8). Выключается в «Общих».
+  ///
+  /// По тексту — нет: там двойной щелчок выделяет слово (у Telegram так же).
+  /// По вложению — тоже нет: у снимка и файла своё открытие.
+  ///
+  /// Распознавателем двойного касания это не сделано НАРОЧНО: он держит
+  /// каждое нажатие ~300 мс в ожидании второго, и все кнопки в пузырях —
+  /// голос, опрос, «открыть» — откликались бы с задержкой. Здесь только
+  /// слушаем указатель, ни с кем не соревнуясь.
+  void _trackDoubleClick(
+    PointerUpEvent event,
+    ({Offset at, Duration time}) down,
+  ) {
+    final isClick =
+        (event.position - down.at).distance <= 6 &&
+        event.timeStamp - down.time <= const Duration(milliseconds: 450);
+    final zones = isClick ? _zonesAt(event.position) : null;
+    final id = zones?.rowId;
+    if (zones == null || id == null || zones.inText || zones.inMedia) {
+      _lastRowClick = null;
+      return;
+    }
+    final prev = _lastRowClick;
+    // Полсекунды — время двойного щелчка по умолчанию у Windows и macOS.
+    final isDouble =
+        prev != null &&
+        prev.id == id &&
+        (event.position - prev.at).distance <= 12 &&
+        event.timeStamp - prev.time <= const Duration(milliseconds: 500);
+    if (!isDouble) {
+      _lastRowClick = (id: id, at: event.position, time: event.timeStamp);
+      return;
+    }
+    _lastRowClick = null;
+    if (!DesktopUiPrefs.doubleClickReply.value || widget.onSend == null) {
+      return;
+    }
+    final i = _indexOf(id);
+    if (i < 0) return;
+    final m = widget.messages[i];
+    if (m.isSystemEvent || m.isUploading) return;
+    _replyTo(m);
+  }
+
+  /// Где и когда нажали мышь — чтобы отличить щелчок по фону от протягивания.
+  ({Offset at, Duration time})? _wallTapDown;
+
+  /// 🔴 «ПО КЛИКУ ПО ФОНУ» НА КОМПЬЮТЕРЕ НЕ РАБОТАЛ (29.09.2026).
+  ///
+  /// Режим анимации обоев выбирался и в настройках ПК, и на телефоне, но
+  /// лента ПК щелчок по фону никуда не передавала: обои лежат под лентой и
+  /// нажатий не получают. Выбор без последствий. Щелчок здесь — нажатие и
+  /// отпускание почти на месте и быстро; по тексту и по вложению не считается
+  /// (там свои действия — выделение, открытие).
+  void _onListPointerUp(PointerUpEvent event) {
+    final down = _wallTapDown;
+    _wallTapDown = null;
+    if (down == null || _selecting) return;
+    _trackDoubleClick(event, down);
+    if (widget.wallpaperAnimMode != ChatWallpaperAnimMode.tap) return;
+    if ((event.position - down.at).distance > 6) return;
+    if (event.timeStamp - down.time > const Duration(milliseconds: 450)) {
+      return;
+    }
+    final zones = _zonesAt(event.position);
+    if (zones.inText || zones.inMedia) return;
+    _wallpaperKey.currentState?.shimmer();
+  }
+
   void _onListPointerDown(PointerDownEvent event) {
     _longPressId = null;
+    _wallTapDown = event.buttons == kPrimaryButton
+        ? (at: event.position, time: event.timeStamp)
+        : null;
     if (event.buttons != kPrimaryButton || _textSelection == null) return;
     // Щелчок мимо текста снимает выделение — как в любом текстовом окне.
     if (!_zonesAt(event.position).inText) _dropTextSelection();
@@ -904,6 +1033,9 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
   /// from a rebuild. Without this the wave would fire on every repaint.
   int _lastMessageCount = 0;
 
+  /// Id последнего сообщения при прошлой сверке — см. волну в didUpdateWidget.
+  String? _lastNewestId;
+
   /// Unread count latched when this conversation opened. Latched rather than
   /// read live so the divider stays put while you read past it.
   int _openedUnread = 0;
@@ -925,6 +1057,16 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
   /// текст в поле подставлен приложением и без карточки превратился бы в новое
   /// сообщение, у ответа — набран человеком, и стирать его нельзя.
   bool _ctxWasEdit = false;
+
+  /// Что было набрано в поле ДО правки; `null` — правки нет.
+  ///
+  /// 🔴 ПРАВКА НЕ ЧЕРНОВИК (30.09.2026). Текст правимого сообщения уходил в
+  /// хранилище черновиков: ушёл в другой чат посреди правки — вернулся к
+  /// «черновику» без карточки правки, и Enter отправлял его ВТОРЫМ
+  /// сообщением. А набранное до правки пропадало. Теперь на время правки
+  /// хранилище держит прежний черновик, и он же возвращается в поле, когда
+  /// правка уйдёт или её отменят.
+  String? _draftBeforeEdit;
   bool _dropVisible = false;
   bool _scrolledUp = false;
 
@@ -964,6 +1106,10 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     // Latched here, not read live: a count that ticks down as you read would
     // slide the divider around under your eyes.
     _openedUnread = widget.unreadCount;
+    // Уже лежащие в ленте сообщения — не «пришедшие»: без этого первая же
+    // перерисовка после открытия чата пускала волну по обоям.
+    _lastMessageCount = widget.messages.length;
+    _lastNewestId = widget.messages.isEmpty ? null : widget.messages.last.id;
     _scroll.addListener(_onScroll);
     // E9 drafts: restore this conversation's saved draft, then report edits.
     final draft = widget.initialDraft;
@@ -984,7 +1130,23 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     });
   }
 
-  void _reportDraft() => widget.onDraftChanged?.call(_composer.text);
+  void _reportDraft() {
+    // Пока идёт правка, в поле текст правимого, а не черновик.
+    if (_draftBeforeEdit != null) return;
+    widget.onDraftChanged?.call(_composer.text);
+  }
+
+  /// Правка ушла или отменена — в поле возвращается набранное до неё.
+  /// Хранилище всё это время держало именно его: сообщать ему нечего.
+  void _restoreDraftAfterEdit() {
+    final back = _draftBeforeEdit;
+    if (back == null) return;
+    _draftBeforeEdit = null;
+    _composer.value = TextEditingValue(
+      text: back,
+      selection: TextSelection.collapsed(offset: back.length),
+    );
+  }
 
   /// Черновик превью следит за полем ввода. У правки своей карточки нет —
   /// остаётся карточка исходного сообщения, — поэтому на время правки
@@ -1013,15 +1175,28 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     // (typing, receipts, reactions) and each of those must not flash the
     // wallpaper. Direction comes from who wrote the newest message.
     final count = widget.messages.length;
-    if (count > _lastMessageCount && widget.messages.isNotEmpty) {
+    final newestId = widget.messages.isEmpty ? null : widget.messages.last.id;
+    // 🔴 Новым считается только сообщение, ставшее ПОСЛЕДНИМ. Подгрузка
+    // старых тоже удлиняет список — и волна шла по обоям на каждую страницу
+    // истории, хотя ничего не пришло.
+    if (count > _lastMessageCount &&
+        widget.messages.isNotEmpty &&
+        newestId != _lastNewestId) {
       // LAST, not first: `messages` is chronological (index 0 is the oldest),
       // and the reversed ListView maps index 0 on screen to the last element.
       // Reading `.first` here took the direction from the conversation's very
       // OLDEST message, so the wave ran the wrong way about half the time.
       final newest = widget.messages.last;
       _conductWallpaper(incoming: !newest.isSelf);
+      // Своё сообщение — один шаг узора, как на телефоне (`_sendInner`):
+      // обои откликаются на отправку в любом режиме, кроме «Выкл.».
+      if (newest.isSelf &&
+          widget.wallpaperAnimMode != ChatWallpaperAnimMode.off) {
+        _wallpaperKey.currentState?.shimmer();
+      }
     }
     _lastMessageCount = count;
+    _lastNewestId = newestId;
 
     // Удалённое (здесь или на другом устройстве) из выделения уходит само:
     // иначе счётчик в панели обещал бы действие над тем, чего уже нет.
@@ -1114,6 +1289,9 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     _panelFocus.dispose();
     _highlightTimer?.cancel();
     _stopAutoScroll();
+    // Окно отправки файлов из этой переписки закрывается вместе с ней.
+    _gone.value = true;
+    _gone.dispose();
     super.dispose();
   }
 
@@ -1261,9 +1439,10 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
       setState(() {
         _ctx = null;
         // Правка без карточки — это уже не правка, а новое сообщение: текст,
-        // подставленный из правимого, надо убрать вместе с ней. У ответа поле
-        // человек набирал сам, и стирать его нельзя.
-        if (_ctxWasEdit) _composer.clear();
+        // подставленный из правимого, уходит вместе с ней, а в поле
+        // возвращается набранное до правки. У ответа поле человек набирал
+        // сам, и стирать его нельзя.
+        if (_ctxWasEdit) _restoreDraftAfterEdit();
         _ctxWasEdit = false;
       });
       return KeyEventResult.handled;
@@ -1283,6 +1462,37 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
 
   @override
   Widget build(BuildContext context) {
+    // Форма пузырей, плотность и цвет имён — выбор «Внешнего вида»; лента
+    // перерисовывается сразу, как только его меняют (29.09.2026).
+    return ListenableBuilder(
+      listenable: _lookListenable,
+      builder: (ctx, _) {
+        final c = DColors.of(ctx);
+        final single = DesktopUiPrefs.senderNameColors.value == 'preset';
+        return DesktopBubbleLook(
+          shape: DesktopUiPrefs.bubbleShape.value,
+          compact: DesktopUiPrefs.messageDensity.value == 'compact',
+          senderNameColor: single
+              ? desktopSenderNameColor(
+                  presetId: widget.nicknameStylePresetId,
+                  accent: c.accentPrimary,
+                  dark: c.isDark,
+                )
+              : null,
+          child: _buildPanel(ctx),
+        );
+      },
+    );
+  }
+
+  static final Listenable _lookListenable = Listenable.merge(<Listenable>[
+    DesktopUiPrefs.bubbleShape,
+    DesktopUiPrefs.messageDensity,
+    DesktopUiPrefs.senderNameColors,
+    DesktopUiPrefs.wallpaperDim,
+  ]);
+
+  Widget _buildPanel(BuildContext context) {
     final c = DColors.of(context);
     final currentMatchMsgIdx = (widget.searchOpen && _matchIndices.isNotEmpty)
         ? _matchIndices[_matchCursor]
@@ -1350,6 +1560,20 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                             animKey: _wallpaperKey,
                             animMode: widget.wallpaperAnimMode,
                             conduct: widget.wallpaperConduct,
+                          ),
+                        ),
+                      ),
+                    // Затемнение обоев — выбор «Внешнего вида» (0…70 %).
+                    // Поверх обоев и ПОД лентой: темнеет фон, а не пузыри.
+                    if (widget.wallpaperId != null &&
+                        DesktopUiPrefs.wallpaperDim.value > 0)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: ColoredBox(
+                            key: const ValueKey('wallpaperDim'),
+                            color: Colors.black.withValues(
+                              alpha: DesktopUiPrefs.wallpaperDim.value / 100,
+                            ),
                           ),
                         ),
                       ),
@@ -1477,19 +1701,13 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                             onOpenFile: widget.onOpenFile,
                             onOpenStickerPack: widget.onOpenStickerPack,
                             onPollVote: widget.onPollVote,
+                            onOpenRoomInvite: widget.onOpenRoomInvite,
                             onPollClose: widget.onPollClose,
                             onEventRsvp: widget.onEventRsvp,
                             onToggleVoice: widget.onToggleVoice,
                             onSeekVoice: widget.onSeekVoice,
                             onSaveAttachment: widget.onSaveAttachment,
-                            onReply: () => setState(() {
-                              _ctx = ComposerContext.reply(
-                                authorName: m.authorName,
-                                preview: m.text,
-                                payloadEventId: m.payloadId ?? m.id,
-                              );
-                              _ctxWasEdit = false;
-                            }),
+                            onReply: () => _replyTo(m),
                             onReplyTap: _jumpToReply,
                             // Своё имя — чтобы фишка «@…» читалась как
                             // обращение КО МНЕ, а не как чужое имя в тексте.
@@ -1504,7 +1722,14 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                                 : (pos) => unawaited(
                                     _continueInTopic(m, pos),
                                   ),
-                            onReact: (e) => _onReactPicked(m, e, anchorKey),
+                            onReact: _reactionsOff
+                                ? null
+                                : (e) => _onReactPicked(m, e, anchorKey),
+                            hoverReactions: widget.reactionAllowed == null
+                                ? kDesktopQuickReactions
+                                : kDesktopQuickReactions
+                                      .where(widget.reactionAllowed!)
+                                      .toList(growable: false),
                             onReactionTap: (emoji) =>
                                 widget.onTapExistingReaction?.call(m, emoji),
                             onMoreActions: (globalPos) {
@@ -1526,8 +1751,11 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                               ContextMenu.show(
                                 context,
                                 globalPosition: globalPos,
-                                headerBuilder: (ctx, dismiss) {
+                                headerBuilder: _reactionsOff
+                                    ? null
+                                    : (ctx, dismiss) {
                                   return QuickReactionRow(
+                                    allowed: widget.reactionAllowed,
                                     onPicked: (e) {
                                       dismiss();
                                       if (e == kQuickReactionsExpandSentinel) {
@@ -1543,6 +1771,8 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                                                     context,
                                                     anchorKey: anchorKey,
                                                     startExpanded: true,
+                                                    allowed:
+                                                        widget.reactionAllowed,
                                                   );
                                               if (picked == null ||
                                                   picked.isEmpty) {
@@ -1576,15 +1806,11 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                                           (m.payloadId ?? m.id) !=
                                               widget.pinnedPayloadEventId,
                                         ),
-                                  onReply: () => setState(() {
-                                    _ctx = ComposerContext.reply(
-                                      authorName: m.authorName,
-                                      preview: m.text,
-                                      payloadEventId: m.payloadId ?? m.id,
-                                    );
-                                    _ctxWasEdit = false;
-                                  }),
+                                  onReply: () => _replyTo(m),
                                   onEdit: () => setState(() {
+                                    // До подстановки текста: слушатель поля
+                                    // уже должен знать, что это правка.
+                                    _draftBeforeEdit ??= _composer.text;
                                     _ctx = ComposerContext.edit(
                                       preview: m.text,
                                       payloadEventId: m.payloadId ?? m.id,
@@ -1592,20 +1818,22 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                                     _ctxWasEdit = true;
                                     _composer.text = m.text;
                                   }),
-                                  // PR3.9 (SPRINT2_AUDIT §14): wire Copy/Copy
-                                  // link so the menu items are no longer dead
-                                  // affordances. Copy puts the bubble's text on
-                                  // the system clipboard; Copy link emits a
-                                  // `secretly://msg/{id}` deeplink — the same
-                                  // scheme already handled by the macOS
-                                  // deep-link tray in Sprint 1.
+                                  // PR3.9 (SPRINT2_AUDIT §14): Copy puts the
+                                  // bubble's text on the system clipboard.
+                                  //
+                                  // 🔴 «Копировать ссылку» убран (01.10.2026):
+                                  // он клал в буфер `secretly://msg/{id}`, а
+                                  // такую ссылку не открывает ни компьютер,
+                                  // ни телефон — обработчик знает только
+                                  // комнаты, профили и приглашения. Пункт,
+                                  // который ведёт в никуда, хуже его
+                                  // отсутствия.
                                   onCopySelection: selectedText.isEmpty
                                       ? null
                                       : () => Clipboard.setData(
                                           ClipboardData(text: selectedText),
                                         ),
                                   onCopy: () => _copyMessageText(m),
-                                  onCopyLink: () => _copyMessageLink(m),
                                   // «Сохранить как…» — у одиночного вложения.
                                   onSaveAs:
                                       (m.attachment != null &&
@@ -1616,8 +1844,13 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                                   // 🔴 Перевод предлагаем только там, где он
                                   // осмыслен: чужое ТЕКСТОВОЕ сообщение. Своё
                                   // переводить незачем — человек сам его и
-                                  // написал.
-                                  onTranslate: (!m.isSelf && m.isTextMessage)
+                                  // написал. И только там, где перевод вообще
+                                  // возможен: на Windows, Linux и старой
+                                  // macOS пункт отвечал отказом на каждое
+                                  // нажатие (01.10.2026).
+                                  onTranslate: (!m.isSelf && m.isTextMessage) &&
+                                          DesktopTranslationService
+                                              .instance.availableHere
                                       ? () => unawaited(_toggleTranslate(m))
                                       : null,
                                   translationShown:
@@ -1815,7 +2048,9 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(DSpace.m, DSpace.s, DSpace.m, 0),
+                // 🔴 28.09.2026: островки компактнее — 6 сверху вместо 8, край
+                // 12 у шапки, поля ввода и полос под шапкой.
+                padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
                 child: _selecting
                 ? _SelectionBar(
                   count: _selected.length,
@@ -1844,7 +2079,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
               ),
               if (widget.topicsStrip != null)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(DSpace.l, 0, DSpace.l, 4),
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
                   child: widget.topicsStrip,
                 ),
               // Под разделителем, а не над: плашка относится к переписке, а не к
@@ -1909,12 +2144,12 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
   /// Меняется живьём: появилась карточка ответа, текст стал многострочным,
   /// пошла запись голосового. Начальное значение — обычное однострочное поле,
   /// чтобы первый кадр не прыгал.
-  double _composerHeight = 84;
+  double _composerHeight = 60;
 
   /// Высота плавающего верха — шапки и всего, что под ней. Меняется живьём:
   /// открылся поиск по переписке, появилось закреплённое, пошёл созвон.
   /// Начальное значение — одна шапка, чтобы первый кадр не прыгал.
-  double _topHeight = 64;
+  double _topHeight = 54;
 
   void _onTopSize(Size size) {
     if (!mounted || (size.height - _topHeight).abs() < 0.5) return;
@@ -1950,10 +2185,12 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                 onTypingActivity: widget.onTypingActivity,
                 onSendVoice: widget.onSendVoice,
                 context: _ctx,
+                // Крестик — как Escape: у ответа убирает только карточку, а
+                // набранное остаётся; у правки возвращает прежний черновик.
                 onClearContext: () => setState(() {
                   _ctx = null;
+                  if (_ctxWasEdit) _restoreDraftAfterEdit();
                   _ctxWasEdit = false;
-                  _composer.clear();
                 }),
                 onSend: (txt) => _submitComposer(txt),
                 onScheduleSend: widget.onSend == null
@@ -1991,6 +2228,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     final picked = await widget.onContinueInTopic!(globalPosition);
     if (!picked || !mounted) return;
     setState(() {
+      _restoreDraftAfterEdit();
       _ctx = ComposerContext.reply(
         authorName: m.authorName,
         preview: m.text,
@@ -2163,6 +2401,10 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
 
   bool _sendDialogOpen = false;
 
+  /// Панель ушла с экрана (сменили чат) — открытое окно отправки файлов
+  /// закрывается вместе с ней, см. [_openSendDialog].
+  final ValueNotifier<bool> _gone = ValueNotifier<bool>(false);
+
   /// Цель ответа из карточки над полем — её забирает первое, что уйдёт.
   String? get _replyTarget {
     final ctx = _ctx;
@@ -2250,6 +2492,24 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     final draft = editing ? '' : _composer.text;
     if (draft.isNotEmpty) _composer.clear();
     final reply = _replyTarget;
+    // Черновик ЭТОЙ переписки: пока окно открыто, панель может уйти.
+    final saveDraft = widget.onDraftChanged;
+    // И слой для объявления — тоже заранее: после ухода панели её контекст
+    // уже ничего не найдёт.
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    final palette = DColors.maybeOf(context);
+    final strings = l10n;
+    final title = widget.header.name;
+    void announce(String message, DSnackKind kind) {
+      if (overlay == null || !overlay.mounted) return;
+      DesktopSnackbar.showIn(
+        overlay,
+        message: message,
+        kind: kind,
+        palette: palette,
+      );
+    }
+
     try {
       final outcome = await showSendMediaDialog(
         context,
@@ -2261,8 +2521,27 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
         onPickMore: widget.onPickAttachments == null
             ? null
             : () => widget.onPickAttachments!(media: false),
+        closeWhen: _gone,
       );
-      if (!mounted) return;
+      if (!mounted) {
+        // 🔴 Чат сменили, пока окно было открыто (30.09.2026): окно ушло
+        // вместе с панелью, а подпись — в черновик той переписки, откуда
+        // её забрали. Раньше пропадали молча и файлы, и подпись.
+        //
+        // 01.10.2026: успел нажать «Отправить» — файлы уходят туда, откуда
+        // окно открыли (цель держит хост той переписки, см. `_sendMedia`),
+        // и это сказано вслух. Не успел — файлы не ушли, и об этом тоже
+        // сказано, а не потеряно молча.
+        if (outcome is SendMediaResult) {
+          await send(outcome, replyToPayloadEventId: reply);
+          announce(strings.desktopChatsSendingTo(title), DSnackKind.success);
+          return;
+        }
+        final back = outcome is SendMediaDismissed ? outcome.caption : '';
+        if (back.trim().isNotEmpty) saveDraft?.call(back);
+        announce(strings.desktopSendMediaDroppedOnSwitch, DSnackKind.warning);
+        return;
+      }
       if (outcome is SendMediaResult) {
         _consumeReply(reply);
         await send(outcome, replyToPayloadEventId: reply);
@@ -2355,7 +2634,10 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     final draft = widget.linkPreviewDraft;
     final linkPreview = isEdit ? null : draft?.takeFor(txt);
     draft?.reset();
-    setState(() => _ctx = null);
+    setState(() {
+      _ctx = null;
+      _ctxWasEdit = false;
+    });
     widget.onSend?.call(
       DesktopComposerSubmission(
         text: txt,
@@ -2366,6 +2648,13 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
         linkPreview: linkPreview,
       ),
     );
+    if (isEdit) {
+      // Поле очищает сам [Composer] СЛЕДОМ за этим вызовом — прежний черновик
+      // возвращаем уже после очистки.
+      scheduleMicrotask(() {
+        if (mounted) _restoreDraftAfterEdit();
+      });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) => _toBottom());
   }
 
@@ -2504,15 +2793,6 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
     Clipboard.setData(ClipboardData(text: body));
   }
 
-  /// PR3.9 (SPRINT2_AUDIT §14): writes a `secretly://msg/{id}` deeplink to
-  /// the clipboard. The scheme handler is registered as part of the macOS
-  /// tray / single-instance plumbing (Sprint 1) — pasting this URL into
-  /// another Secretly window or the OS launcher jumps to that message.
-  void _copyMessageLink(MessageData m) {
-    if (m.id.isEmpty) return;
-    Clipboard.setData(ClipboardData(text: 'secretly://msg/${m.id}'));
-  }
-
   /// Routes a reaction pick from the bubble's hover bar to either:
   ///   • a direct emoji (e.g. "❤️", "👍") → fan out via `onReactToMessage`
   ///   • the "+ more" sentinel → open the new [ReactionsPopover] in
@@ -2533,6 +2813,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
       anchorKey: bubbleAnchorKey,
       side: ReactionsAnchorSide.above,
       startExpanded: true,
+      allowed: widget.reactionAllowed,
     );
     if (picked == null || picked.isEmpty) return;
     if (!mounted) return;
@@ -2574,11 +2855,15 @@ class _SelectionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
+    // 🔴 28.09.2026, владелец: «островок-шапка меньше и более закруглённый,
+    // информация и кнопки — не меньше». 48 вместо 52, поля 6 вместо 12,
+    // радиус — половина высоты: портрет 36 и кнопки 36 встают в скругление
+    // концентрично (24 = 18 + 6). Шрифты и размеры внутри не тронуты.
     return DesktopGlass(
-      radius: 16,
+      radius: 24,
       child: Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: DSpace.m),
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Row(
         children: [
           DesktopIconButton(
@@ -2752,16 +3037,33 @@ class _Header extends StatelessWidget {
     final c = DColors.of(context);
     // Островок матового стекла, как шапка переписки на телефоне: лента
     // проезжает под ним и видна размытой. См. [DesktopGlass].
+    // 🔴 28.09.2026, владелец: «островок-шапка меньше и более закруглённый,
+    // информация и кнопки — не меньше». 48 вместо 52, поля 6 вместо 12,
+    // радиус — половина высоты: портрет 36 и кнопки 36 встают в скругление
+    // концентрично (24 = 18 + 6). Шрифты и размеры внутри не тронуты.
     return DesktopGlass(
-      radius: 16,
+      radius: 24,
       child: Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: DSpace.m),
+      // 🔴 НЕ МЕНЬШЕ 48, А НЕ РОВНО 48 (30.09.2026). При крупном тексте
+      // (130–150 % в «Внешнем виде») имя и строка статуса выше 48 точек, и
+      // шапка с жёсткой высотой обрезала их снизу. При обычном тексте она
+      // по-прежнему ровно 48.
+      constraints: const BoxConstraints(minHeight: 48),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Row(
         children: [
-          HoverListener(
+          // 🔴 ИМЯ УЖИМАЕТСЯ, А НЕ ВЫТАЛКИВАЕТ КНОПКИ (30.09.2026). Блок
+          // «портрет + имя + статус» стоял в ряду с натуральной шириной: у
+          // узкой переписки или длинного имени кнопки уезжали за край. Теперь
+          // он занимает оставшееся место и обрезает имя многоточием, а нажатие
+          // (открыть сведения) по-прежнему только по самому блоку.
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: HoverListener(
             onTap: onToggleDetails,
             builder: (ctx, hovered, pressed) => Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Avatar(
                   name: header.name,
@@ -2778,7 +3080,8 @@ class _Header extends StatelessWidget {
                   shape: isDirect ? AvatarShape.round : AvatarShape.room,
                 ),
                 const SizedBox(width: DSpace.m),
-                Column(
+                Flexible(
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -2788,6 +3091,7 @@ class _Header extends StatelessWidget {
                         Flexible(
                           child: Text(
                             header.name,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             // Имя собеседника в макете 19/800: это главная
                             // надпись окна, и весом 600 она читалась как
@@ -2800,9 +3104,9 @@ class _Header extends StatelessWidget {
                         if (header.emojiStatus != null &&
                             header.emojiStatus!.isNotEmpty) ...[
                           const SizedBox(width: 4),
-                          Text(
-                            header.emojiStatus!,
-                            style: const TextStyle(fontSize: 15),
+                          DesktopStatusEmoji(
+                            emoji: header.emojiStatus!,
+                            size: 18,
                           ),
                         ],
                         // Галочка = проверенный контакт (см. список чатов).
@@ -2816,13 +3120,17 @@ class _Header extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
+                          Flexible(
+                            child: Text(
                             header.status!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: DType.caption.copyWith(
                               color: header.online
                                   ? c.success
                                   : c.textSecondary,
                             ),
+                          ),
                           ),
                           // Описание комнаты за вертикальной чертой — как в
                           // макете. Ужимается ОНО, а не «3 участника»: счётчик
@@ -2850,11 +3158,14 @@ class _Header extends StatelessWidget {
                         ],
                       ),
                   ],
+                  ),
                 ),
               ],
             ),
           ),
-          const Spacer(),
+            ),
+          ),
+          const SizedBox(width: DSpace.s),
           if ((header.disappearingSeconds ?? 0) > 0) ...[
             Tooltip(
               message: l10n.desktopThreadDisappearingOn,
@@ -3074,7 +3385,7 @@ class _PinnedBar extends StatelessWidget {
     // смыслу (синий — закреплено, зелёный — говорят). Полосы во всю ширину
     // остались только у настоящей обвязки: шапки, полосы тем, поиска.
     return Padding(
-      padding: const EdgeInsets.fromLTRB(DSpace.l, DSpace.m, DSpace.l, 0),
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
       child: Container(
       decoration: BoxDecoration(
         color: c.accentPrimary.withValues(alpha: 0.08),
@@ -3453,17 +3764,25 @@ class DesktopDraftStore {
     } catch (_) {
       // Нечитаемое хранилище не должно стоить человеку черновиков.
     }
+    final firstAttach = !_attachedBefore;
+    _attachedBefore = true;
     if (fromStore.isNotEmpty) {
       _byConvo
         ..clear()
         ..addAll(fromStore);
       revision.value++;
-    } else if (_byConvo.isNotEmpty) {
+    } else if (_byConvo.isNotEmpty && firstAttach) {
       // Перенос: `load()` прочитал старую открытую копию — сохраняем её уже
       // в базу.
       try {
         await write(jsonEncode(_byConvo));
       } catch (_) {}
+    } else if (_byConvo.isNotEmpty) {
+      // 🔴 Повторное подключение — это ДРУГОЙ профиль (01.10.2026): в памяти
+      // остались черновики прежнего, и переносить их в эту базу нельзя —
+      // незаконченные сообщения одного аккаунта оказались бы в другом.
+      _byConvo.clear();
+      revision.value++;
     }
     // Открытая копия больше не нужна ни в каком случае.
     try {
@@ -3472,11 +3791,45 @@ class DesktopDraftStore {
     } catch (_) {}
   }
 
+  /// Хранилище уже подключалось в этом процессе: следующее подключение —
+  /// другой профиль, а не перенос открытой копии, см. [attachStorage].
+  static bool _attachedBefore = false;
+
+  /// Отключает хранилище УХОДЯЩЕГО профиля и забывает его черновики
+  /// (01.10.2026).
+  ///
+  /// 🔴 Черновики — статическая память на весь процесс, а профиль в окне
+  /// меняется без перезапуска: выход, новая привязка, восстановление. Раньше
+  /// [attachStorage] нового профиля находил в памяти черновики прежнего и,
+  /// раз своих у нового ещё не было, переносил их в ЕГО базу. Отложенная
+  /// запись уходит в базу уходящего профиля сразу — пока та ещё открыта:
+  /// зовут это до закрытия контроллера.
+  static Future<void> detachStorage() async {
+    final pending = _saveDebounce;
+    _saveDebounce = null;
+    final write = _writeStore;
+    _writeStore = null;
+    if (pending != null && pending.isActive) {
+      pending.cancel();
+      if (write != null) {
+        try {
+          await write(_byConvo.isEmpty ? '' : jsonEncode(_byConvo));
+        } catch (_) {}
+      }
+    }
+    _textChanged = false;
+    if (_byConvo.isNotEmpty) {
+      _byConvo.clear();
+      revision.value++;
+    }
+  }
+
   /// Только для тестов: отключить хранилище.
   @visibleForTesting
   static void detachStorageForTesting() {
     _writeStore = null;
     _byConvo.clear();
+    _attachedBefore = false;
   }
 
   static final Map<String, String> _byConvo = <String, String>{};

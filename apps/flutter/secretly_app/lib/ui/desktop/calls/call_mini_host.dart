@@ -17,11 +17,13 @@ import '../../../transport/relay_client.dart'
     show RelayRoomCallMediaBackendKind;
 import '../design/tokens.dart';
 import '../primitives/avatar.dart';
+import '../services/desktop_call_prefs.dart';
 import '../services/desktop_ui_prefs.dart';
 import 'call_mini_window.dart';
 import 'call_presence.dart';
 import 'call_stage_pick.dart';
 import 'one_to_one_call_screen.dart';
+import 'room_call_media_guard.dart';
 
 /// Мини-окна свёрнутых звонков — всё, что плавает поверх приложения.
 ///
@@ -76,12 +78,17 @@ class _DesktopCallMiniHostState extends State<DesktopCallMiniHost> {
     DesktopUiPrefs.callMiniCorner.addListener(_changed);
     RoomCallManager.instance?.state.addListener(_changed);
     widget.direct?.state.addListener(_changed);
+    // Хозяин мини-окон живёт в главном окне всегда — отсюда сторож медиа
+    // созвона видит каждый переход в «созвона нет» (30.09.2026).
+    DesktopRoomCallMediaGuard.attach();
     _syncTicker();
   }
 
   @override
   void didUpdateWidget(DesktopCallMiniHost old) {
     super.didUpdateWidget(old);
+    // Управляющего пересоздают при смене профиля — сторож идёт за новым.
+    DesktopRoomCallMediaGuard.attach();
     if (old.direct != widget.direct) {
       old.direct?.state.removeListener(_changed);
       widget.direct?.state.addListener(_changed);
@@ -299,6 +306,17 @@ class _RoomMiniState extends State<_RoomMini> {
     super.initState();
     unawaited(_loadMembers());
     unawaited(_loadCall());
+    DesktopCallPrefs.mirrorSelfView.addListener(_onMirrorPref);
+  }
+
+  void _onMirrorPref() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    DesktopCallPrefs.mirrorSelfView.removeListener(_onMirrorPref);
+    super.dispose();
   }
 
   @override
@@ -423,7 +441,10 @@ class _RoomMiniState extends State<_RoomMini> {
       if (onStage != null) {
         view = media.buildParticipantVideoView(
           deviceId: pick.deviceId,
-          mirror: onStage.isSelf && !pick.screenShare,
+          // «Зеркалить моё видео» из настроек звонков — только у себя.
+          mirror: onStage.isSelf &&
+              !pick.screenShare &&
+              DesktopCallPrefs.mirrorSelfView.value,
           kind: pick.screenShare
               ? RoomCallVideoKind.screenShare
               : RoomCallVideoKind.camera,

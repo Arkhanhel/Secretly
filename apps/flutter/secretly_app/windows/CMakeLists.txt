@@ -101,6 +101,19 @@ if(NOT EXISTS "${FFMPEGKIT_STAGE}/bin/libffmpegkit.dll")
       file(REMOVE "${FFMPEGKIT_ARCHIVE}")
     endif()
   endif()
+  # 🔴 СВЕРКА АРХИВА (01.10.2026). FFmpeg исполняется в процессе
+  # мессенджера и разбирает присланные видео, поэтому подменённый архив —
+  # это чужой код внутри приложения. Сумма взята из опубликованной на GitHub
+  # для релиза 8.0.0-full-gpl; меняется вместе с FFMPEGKIT_RELEASE/VARIANT.
+  # Несовпадение — остановка сборки, а не «оставляю плагину».
+  set(FFMPEGKIT_SHA256 "09b43a86c7aeb1d905e7c91744505c421c28bdf2ccba1afd0864e67fea6b2e5b")
+  if(EXISTS "${FFMPEGKIT_ARCHIVE}")
+    file(SHA256 "${FFMPEGKIT_ARCHIVE}" FFMPEGKIT_ACTUAL_SHA256)
+    if(NOT FFMPEGKIT_ACTUAL_SHA256 STREQUAL FFMPEGKIT_SHA256)
+      file(REMOVE "${FFMPEGKIT_ARCHIVE}")
+      message(FATAL_ERROR "FFmpegKit: сумма архива ${FFMPEGKIT_ACTUAL_SHA256} не совпала с ожидаемой ${FFMPEGKIT_SHA256}")
+    endif()
+  endif()
   if(EXISTS "${FFMPEGKIT_ARCHIVE}")
     file(MAKE_DIRECTORY "${FFMPEGKIT_STAGE}")
     execute_process(
@@ -197,6 +210,25 @@ install(CODE "
   " COMPONENT Runtime)
 install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
   DESTINATION "${INSTALL_BUNDLE_DATA_DIR}" COMPONENT Runtime)
+
+# 🔴 ЭМОДЗИ КАК НА ТЕЛЕФОНЕ (30.09.2026, Э1). Шрифт Noto Color Emoji едет
+# ТОЛЬКО в сборке Windows: в data\, рядом с flutter_assets. Ассетом pubspec его
+# делать нельзя — он уехал бы и в телефон, и в macOS, где эмодзи рисует система.
+# Грузит его lib/main_desktop.dart (DesktopEmojiFontLoader) под именем
+# SecretlyEmoji; нет файла — остаётся Segoe, запуск не падает. Откуда файл и
+# его сумма SHA-256 — в assets/fonts/LICENSES.md.
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/fonts/NotoColorEmoji_WindowsCompatible.ttf"
+  DESTINATION "${INSTALL_BUNDLE_DATA_DIR}" COMPONENT Runtime)
+
+# 🔴 FFMPEG — ПОД GPL-3.0 (30.09.2026). Сборка FFmpegKit «full-gpl» (x264,
+# Xvid, vid.stab), и GPL требует, чтобы текст лицензии и сведения об
+# исходниках ехали вместе с программой. Кладём их в licenses\ рядом с
+# Secretly.exe — так они попадают и в установщик, и в переносной архив. Те же
+# тексты показывает экран лицензий (lib/desktop/ffmpeg_license.dart).
+install(FILES
+  "${CMAKE_CURRENT_SOURCE_DIR}/../licenses/ffmpeg/FFmpeg-NOTICE.txt"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../licenses/ffmpeg/FFmpeg-COPYING.GPLv3.txt"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/licenses" COMPONENT Runtime)
 
 # Install the AOT library on non-Debug builds only.
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"

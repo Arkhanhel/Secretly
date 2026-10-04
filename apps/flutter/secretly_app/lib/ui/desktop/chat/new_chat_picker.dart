@@ -12,6 +12,7 @@ import '../primitives/avatar.dart';
 import '../primitives/desktop_dialog.dart';
 import '../primitives/desktop_text_field.dart';
 import '../primitives/hover_listener.dart';
+import '../services/desktop_file_probe.dart';
 
 /// Выбор человека для нового чата.
 ///
@@ -194,8 +195,7 @@ class _ContactRow extends StatelessWidget {
     final p = avatarPath;
     if (p == null || p.trim().isEmpty) return null;
     try {
-      final f = File(p);
-      return f.existsSync() ? FileImage(f) : null;
+      return DesktopFileProbe.exists(p) ? FileImage(File(p)) : null;
     } catch (_) {
       return null;
     }

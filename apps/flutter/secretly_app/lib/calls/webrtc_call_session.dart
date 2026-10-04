@@ -8,6 +8,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import '../diagnostics/diag_log.dart';
+import 'call_audio_route.dart' show DesktopCallDevices;
 import 'call_failure.dart';
 import 'call_ice_config.dart';
 import 'call_log.dart';
@@ -583,6 +584,8 @@ class WebRtcCallSession {
   static Map<String, dynamic> buildVideoCaptureConstraints({
     required bool withAudio,
     required CallVideoQualityPreset preset,
+    // ПК: камера из настроек. `null`/пусто — как было: фронтальная/системная.
+    String? cameraDeviceId,
   }) {
     late final int idealWidth;
     late final int minWidth;
@@ -618,10 +621,20 @@ class WebRtcCallSession {
         break;
     }
 
+    final camera = cameraDeviceId?.trim() ?? '';
     return <String, dynamic>{
       'audio': withAudio,
       'video': <String, dynamic>{
-        'facingMode': 'user',
+        // 🔴 ПК (28.09.2026): выбранная в настройках камера. Её читают по
+        // разным ключам — macOS `deviceId`, Windows `optional.sourceId`
+        // (flutter_media_stream.cc), — поэтому кладём оба. Без выбора — как
+        // раньше.
+        if (camera.isEmpty) 'facingMode': 'user',
+        if (camera.isNotEmpty) 'deviceId': camera,
+        if (camera.isNotEmpty)
+          'optional': <Map<String, dynamic>>[
+            <String, dynamic>{'sourceId': camera},
+          ],
         'width': <String, dynamic>{'ideal': idealWidth, 'min': minWidth},
         'height': <String, dynamic>{'ideal': idealHeight, 'min': minHeight},
         'frameRate': <String, dynamic>{
@@ -632,10 +645,23 @@ class WebRtcCallSession {
     };
   }
 
+  /// ПК: выбрать микрофон до захвата звука — выбранный в настройках или
+  /// системный (см. `DesktopCallDevices`). На телефоне ничего не делает.
+  Future<void> _prepareDesktopCapture() async {
+    final prepare = DesktopCallDevices.hooks?.prepareCapture;
+    if (prepare == null) return;
+    try {
+      await prepare();
+    } catch (e) {
+      callLog('WebRTC', 'desktop capture device prepare failed: $e');
+    }
+  }
+
   Map<String, dynamic> _videoCaptureConstraints({required bool withAudio}) {
     return buildVideoCaptureConstraints(
       withAudio: withAudio,
       preset: _videoPreset,
+      cameraDeviceId: DesktopCallDevices.hooks?.preferredCameraId?.call(),
     );
   }
 
@@ -1625,6 +1651,7 @@ class WebRtcCallSession {
 
     _videoPreset = preferredInitialVideoPreset(requestedVideo: video);
     callLog('WebRTC', 'getUserMedia video=$video preset=${_videoPreset.name}');
+    await _prepareDesktopCapture();
     MediaStream local;
     try {
       local = await navigator.mediaDevices.getUserMedia(

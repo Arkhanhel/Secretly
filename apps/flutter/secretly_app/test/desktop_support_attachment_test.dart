@@ -106,6 +106,36 @@ void main() {
       expect(res.file!.name, 'Снимок.jpg');
       expect(res.file!.mime, 'image/jpeg');
     });
+
+    test('🔴 битая картинка — «не прочитать», а не исключение', () async {
+      // Испорченный заголовок PNG: разбор бросает `ImageException`. Раньше
+      // оно улетало из панели, и кнопки вложений гасли до закрытия окна.
+      final png = _noisyPng(64, 64);
+      final broken = Uint8List.fromList([
+        ...png.sublist(0, 16),
+        ...List<int>.filled(8, 0xff),
+        ...png.sublist(24),
+      ]);
+      final f = File('${tmp.path}/битый.png')..writeAsBytesSync(broken);
+      final res = await prepareDesktopSupportAttachment(f.path, maxBytes: 1024);
+      expect(res.ok, isFalse);
+      expect(res.problem, DesktopSupportAttachmentProblem.unreadable);
+    });
+
+    test('🔴 панель снимает «прикрепляем» в finally, в любом исходе', () {
+      final src = File(
+        'lib/ui/desktop/workspace/settings_workspace.dart',
+      ).readAsStringSync();
+      final start = src.indexOf('Future<void> _pickAttachment()');
+      final body = src.substring(start, src.indexOf('Future<void> _attachLog()'));
+      final fin = body.indexOf('} finally {');
+      expect(fin, greaterThan(0), reason: 'нет finally');
+      expect(
+        body.substring(fin).contains('_attaching = false'),
+        isTrue,
+        reason: 'кнопки вложений должны оживать и после исключения',
+      );
+    });
   });
 
   group('сжатие', () {

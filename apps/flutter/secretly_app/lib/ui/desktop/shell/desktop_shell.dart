@@ -144,6 +144,10 @@ class DesktopShellApi {
     this.onListExpand,
     required this.findRequests,
     required this.chatCycle,
+    this.unreadCycle,
+    this.folderCycle,
+    this.muteRequests,
+    this.closeChatRequests,
   });
 
   final bool detailsOpen;
@@ -177,6 +181,22 @@ class DesktopShellApi {
 
   /// Ticks by +1 / -1 as the user walks the chat list from the keyboard.
   final ValueListenable<int> chatCycle;
+
+  /// Как [chatCycle], но к следующему НЕПРОЧИТАННОМУ чату (⌥⇧↓ / ⌥⇧↑ —
+  /// так же, как в Slack и Discord).
+  final ValueListenable<int>? unreadCycle;
+
+  /// Как [chatCycle], но по папкам списка (Ctrl⇧↓ / Ctrl⇧↑ — привязка
+  /// Telegram Desktop: его Ctrl+1…9 у нас заняты разделами рейки).
+  final ValueListenable<int>? folderCycle;
+
+  /// Тикает на каждое ⌘⇧M / Ctrl⇧M: звук открытого чата — выключить или
+  /// включить.
+  final ValueListenable<int>? muteRequests;
+
+  /// Тикает на Escape, которому в окне больше нечего закрывать, кроме самого
+  /// чата: панель подробностей оболочка закрывает сама.
+  final ValueListenable<int>? closeChatRequests;
 }
 
 class _DesktopShellState extends State<DesktopShell> {
@@ -229,6 +249,13 @@ class _DesktopShellState extends State<DesktopShell> {
   /// between ticks, so a single notifier carries both direction and count.
   final ValueNotifier<int> _chatCycle = ValueNotifier<int>(0);
 
+  /// Счётчики тех же правил, что [_chatCycle]: значение обязано МЕНЯТЬСЯ,
+  /// иначе слушатели не проснутся; направление — в знаке шага.
+  final ValueNotifier<int> _unreadCycle = ValueNotifier<int>(0);
+  final ValueNotifier<int> _folderCycle = ValueNotifier<int>(0);
+  final ValueNotifier<int> _muteRequests = ValueNotifier<int>(0);
+  final ValueNotifier<int> _closeChatRequests = ValueNotifier<int>(0);
+
   double? _listWidth;
 
   /// Список свёрнут в столбик портретов. [_listWidth] при этом хранит ширину,
@@ -261,6 +288,10 @@ class _DesktopShellState extends State<DesktopShell> {
     _saveDebounce?.cancel();
     _findRequests.dispose();
     _chatCycle.dispose();
+    _unreadCycle.dispose();
+    _folderCycle.dispose();
+    _muteRequests.dispose();
+    _closeChatRequests.dispose();
     super.dispose();
   }
 
@@ -521,6 +552,10 @@ class _DesktopShellState extends State<DesktopShell> {
       listWidth: detailsLayout.listWidth,
       findRequests: _findRequests,
       chatCycle: _chatCycle,
+      unreadCycle: _unreadCycle,
+      folderCycle: _folderCycle,
+      muteRequests: _muteRequests,
+      closeChatRequests: _closeChatRequests,
       onListResize: _dragList,
       onListReset: _resetList,
       onListResizeStart: _endListDrag,
@@ -565,6 +600,32 @@ class _DesktopShellState extends State<DesktopShell> {
             _CycleChatIntent(1),
         SingleActivator(LogicalKeyboardKey.arrowUp, alt: true):
             _CycleChatIntent(-1),
+        // 🔴 Сочетания Telegram Desktop и Slack (30.09.2026, ТЗ «ПК как
+        // Telegram» §8). Ctrl, а не ⌘, и на macOS: ⌘Tab — переключатель
+        // программ системы, а ⌃Tab — общепринятое «следующая вкладка».
+        SingleActivator(LogicalKeyboardKey.tab, control: true):
+            _CycleChatIntent(1),
+        SingleActivator(LogicalKeyboardKey.tab, control: true, shift: true):
+            _CycleChatIntent(-1),
+        SingleActivator(LogicalKeyboardKey.arrowDown, alt: true, shift: true):
+            _CycleUnreadIntent(1),
+        SingleActivator(LogicalKeyboardKey.arrowUp, alt: true, shift: true):
+            _CycleUnreadIntent(-1),
+        SingleActivator(
+          LogicalKeyboardKey.arrowDown,
+          control: true,
+          shift: true,
+        ): _CycleFolderIntent(1),
+        SingleActivator(LogicalKeyboardKey.arrowUp, control: true, shift: true):
+            _CycleFolderIntent(-1),
+        SingleActivator(LogicalKeyboardKey.keyM, meta: true, shift: true):
+            _MuteChatIntent(),
+        SingleActivator(LogicalKeyboardKey.keyM, control: true, shift: true):
+            _MuteChatIntent(),
+        // Escape доходит сюда, только если его не взяло то, что открыто в
+        // переписке: выделение, поиск, ответ, список упоминаний, окна и меню
+        // (у них свой обработчик ближе к фокусу).
+        SingleActivator(LogicalKeyboardKey.escape): _EscapeIntent(),
         // Cmd+/ is the near-universal "what are the shortcuts" key.
         SingleActivator(LogicalKeyboardKey.slash, meta: true):
             _ShortcutsHelpIntent(),
@@ -599,6 +660,36 @@ class _DesktopShellState extends State<DesktopShell> {
               // listeners to fire, so the direction rides in the sign and the
               // magnitude keeps growing.
               _chatCycle.value += intent.delta;
+              return null;
+            },
+          ),
+          _CycleUnreadIntent: CallbackAction<_CycleUnreadIntent>(
+            onInvoke: (intent) {
+              _unreadCycle.value += intent.delta;
+              return null;
+            },
+          ),
+          _CycleFolderIntent: CallbackAction<_CycleFolderIntent>(
+            onInvoke: (intent) {
+              _folderCycle.value += intent.delta;
+              return null;
+            },
+          ),
+          _MuteChatIntent: CallbackAction<_MuteChatIntent>(
+            onInvoke: (_) {
+              _muteRequests.value++;
+              return null;
+            },
+          ),
+          _EscapeIntent: CallbackAction<_EscapeIntent>(
+            onInvoke: (_) {
+              // Закрывается то, что открыли последним: сначала панель
+              // подробностей, потом сама переписка — как в Telegram.
+              if (_detailsOpen) {
+                _setDetails(false);
+              } else {
+                _closeChatRequests.value++;
+              }
               return null;
             },
           ),
@@ -738,6 +829,26 @@ class _CycleChatIntent extends Intent {
 
 class _ShortcutsHelpIntent extends Intent {
   const _ShortcutsHelpIntent();
+}
+
+/// К следующему (+1) или предыдущему (-1) непрочитанному чату.
+class _CycleUnreadIntent extends Intent {
+  const _CycleUnreadIntent(this.delta);
+  final int delta;
+}
+
+/// К следующей (+1) или предыдущей (-1) папке списка чатов.
+class _CycleFolderIntent extends Intent {
+  const _CycleFolderIntent(this.delta);
+  final int delta;
+}
+
+class _MuteChatIntent extends Intent {
+  const _MuteChatIntent();
+}
+
+class _EscapeIntent extends Intent {
+  const _EscapeIntent();
 }
 
 class _SectionIntent extends Intent {

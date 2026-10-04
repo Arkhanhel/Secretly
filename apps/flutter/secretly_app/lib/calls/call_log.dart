@@ -37,6 +37,16 @@ final RegExp _sensitiveKv = RegExp(
 ///     dev-only `--dart-define SECRETLY_ENABLE_CALL_LOGS_IN_RELEASE=true`
 ///     opt-in, because they can carry developer context (file paths,
 ///     raw error strings, etc.) unsafe for production logging.
+/// ПК: куда ещё писать строку журнала звонка (файл `logs/diag.log`).
+///
+/// 🔴 ЗАЧЕМ (28.09.2026). На ПК канала `secretly/log` нет: вызов падал в
+/// запасной `print`, то есть в никуда, и ни одно событие звонка на
+/// компьютере не сохранялось — обрывы «с ошибкой связи» разбирать было не по
+/// чему. Сюда попадает ровно то, что прошло все ворота выше: в выпускной
+/// сборке — только очищенные служебные события `[OP]`. Телефон приёмник не
+/// ставит.
+void Function(String line)? callLogFileSink;
+
 void callLog(String tag, String message) {
   final isOperational = message.startsWith(_releaseOperationalPrefix);
 
@@ -79,6 +89,15 @@ void callLog(String tag, String message) {
 
   if (!kReleaseMode) {
     debugPrint('[$tag] $safeMessage');
+  }
+
+  final fileSink = callLogFileSink;
+  if (fileSink != null) {
+    try {
+      fileSink('call [$tag] $safeMessage');
+    } catch (_) {
+      // Журнал — подспорье; звонок из-за него не падает.
+    }
   }
 
   // Fire-and-forget — don't await so we never block call logic.

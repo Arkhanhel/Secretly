@@ -169,6 +169,38 @@ void main() {
       expect(find.byType(Image), findsOneWidget);
     });
 
+    testWidgets('🔴 страница не нарисовалась — не вечный кружок, а «Повторить»', (
+      t,
+    ) async {
+      var renders = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(DesktopPdfBridge.channel, (call) async {
+            if (call.method == 'info') return 2;
+            // Первая попытка первой страницы не удаётся, повтор — удаётся.
+            if (call.method == 'render') return renders++ == 0 ? null : _png;
+            return null;
+          });
+      final file = File('${tmp.path}/doc.pdf')..writeAsBytesSync(<int>[1, 2]);
+      await t.pumpWidget(
+        _host(
+          DesktopDocumentViewer(
+            file: file,
+            title: 'doc.pdf',
+            kind: DesktopViewerKind.pdf,
+          ),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('Не удалось показать эту страницу'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(Image), findsNothing);
+
+      await t.tap(find.text('Повторить'));
+      await t.pumpAndSettle();
+      expect(find.text('Не удалось показать эту страницу'), findsNothing);
+      expect(find.byType(Image), findsOneWidget);
+    });
+
     testWidgets('нечитаемый PDF честно говорит об этом', (t) async {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(

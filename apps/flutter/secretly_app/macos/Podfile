@@ -1,4 +1,8 @@
-platform :osx, '11.0'
+# 13.0, not 11.0 (30.09.2026): objective_c (path_provider_foundation 2.6) and
+# sqlite3mc are built with a macOS 13 minimum, so the app never worked on
+# macOS 11-12 although it claimed to. The app's LSMinimumSystemVersion comes
+# from the project's MACOSX_DEPLOYMENT_TARGET, kept equal to this.
+platform :osx, '13.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'

@@ -5,6 +5,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/app/app_controller.dart';
+import 'package:secretly_app/ui/desktop/services/desktop_notification_service.dart';
 
 // 🔴 СКРЫТОЕ ОКНО КОМПЬЮТЕРА МОЛЧАЛО О СООБЩЕНИЯХ (17.09.2026).
 //
@@ -52,12 +53,43 @@ void main() {
       expect(d.systemNotification, isFalse);
     });
 
-    test('окно на экране — как раньше', () {
+    test('окно на экране — событие идёт службе, как раньше', () {
       expect(_decide(foreground: true, desktop: true).inAppBanner, isTrue);
+      // 01.10.2026: и об открытой переписке тоже — служба сама знает, какая
+      // открыта (у ПК она до контроллера не доходит), и вместо уведомления
+      // играет «звук в открытом чате».
       expect(
         _decide(foreground: true, activeConvo: true, desktop: true).inAppBanner,
-        isFalse,
+        isTrue,
       );
+    });
+
+    // 01.10.2026: звук сообщения на ПК играет служба компьютера — выбранный
+    // человеком и вместе со своим уведомлением. Звук контроллера давал второй
+    // звук на то же сообщение.
+    test('🔴 окно на экране: контроллер не звучит поверх уведомления', () {
+      expect(_decide(foreground: true, desktop: true).inAppCue, isFalse);
+    });
+
+    test('открытая переписка: контроллер молчит и тут', () {
+      final d = _decide(foreground: true, activeConvo: true, desktop: true);
+      expect(d.inAppCue, isFalse);
+      expect(d.systemNotification, isFalse);
+    });
+
+    test('🔴 открытая переписка в окне в фокусе — звук открытого чата, а не '
+        'уведомление', () {
+      expect(desktopIsOpenConvo(openConvoId: 'alice', convoId: 'alice'), isTrue);
+      expect(desktopIsOpenConvo(openConvoId: ' alice ', convoId: 'alice'), isTrue);
+      expect(desktopIsOpenConvo(openConvoId: 'alice', convoId: 'bob'), isFalse);
+      expect(desktopIsOpenConvo(openConvoId: '', convoId: ''), isFalse);
+      final src = File(
+        'lib/ui/desktop/services/desktop_notification_service.dart',
+      ).readAsStringSync();
+      final i = src.indexOf('Future<void> _onChatEvent(');
+      final block = src.substring(i, src.indexOf('final isRoom', i));
+      expect(block.contains('desktopIsOpenConvo('), isTrue);
+      expect(block.contains('await _playOpenChatSound(evt.convoId);'), isTrue);
     });
   });
 
@@ -72,6 +104,17 @@ void main() {
       final d = _decide(foreground: false, pushWake: true);
       expect(d.systemNotification, isFalse);
       expect(d.inAppBanner, isFalse);
+    });
+
+    test('окно на экране: звук контроллера, как раньше; открытый чат — тишина',
+        () {
+      final d = _decide(foreground: true);
+      expect(d.inAppCue, isTrue);
+      expect(d.inAppBanner, isTrue);
+      final open = _decide(foreground: true, activeConvo: true);
+      expect(open.inAppCue, isFalse);
+      expect(open.inAppBanner, isFalse);
+      expect(open.systemNotification, isFalse);
     });
 
     test('телефонная точка входа флаг не ставит', () {
@@ -110,12 +153,16 @@ void main() {
       expect(app.contains('DesktopWindowActivity.hideHandler = _hideToTray;'),
           isTrue);
       expect(app.contains('await _hideToTray();'), isTrue);
+      // 28.09.2026: меню трея — служба `DesktopTrayService`. До запуска
+      // дерева она прячет окно через `hideHandler`, после — приложение
+      // подставляет ей тот же `_hideToTray`.
       final tray = File('lib/main_desktop.dart').readAsStringSync();
-      final hideCase = tray.substring(
-        tray.indexOf("case 'hide':"),
-        tray.indexOf("case 'quit':"),
+      final hideAction = tray.substring(
+        tray.indexOf('hide: () async {'),
+        tray.indexOf('quit: quitDesktopApp,'),
       );
-      expect(hideCase.contains('DesktopWindowActivity.hideHandler'), isTrue);
+      expect(hideAction.contains('DesktopWindowActivity.hideHandler'), isTrue);
+      expect(app.contains('hide: _hideToTray,'), isTrue);
     });
   });
 }

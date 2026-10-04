@@ -363,11 +363,15 @@ class _IslandBody extends StatelessWidget {
     // 🔴 Шрифт — обычный, как в Telegram, а не моноширинный. Время держат
     // цифры ОДНОЙ ширины (tabular figures): отсчёт секунд не дёргает строку, а
     // надпись при этом читается текстом, а не распечаткой терминала.
+    //
+    // Эмодзи в названии и исполнителе — Noto на Windows (Э1): у вложенного
+    // куска со своим семейством запасной шрифт темы теряется, ставим свой.
     final titleText = Text.rich(
       TextSpan(
         text: title,
         style: TextStyle(
           fontFamily: DType.family,
+          fontFamilyFallback: DType.emojiFallback,
           fontSize: 13,
           fontWeight: FontWeight.w600,
           color: c.textPrimary,
@@ -379,6 +383,7 @@ class _IslandBody extends StatelessWidget {
               text: '  $artist',
               style: TextStyle(
                 fontFamily: DType.family,
+                fontFamilyFallback: DType.emojiFallback,
                 fontSize: 12.5,
                 fontWeight: FontWeight.w400,
                 color: c.textTertiary,

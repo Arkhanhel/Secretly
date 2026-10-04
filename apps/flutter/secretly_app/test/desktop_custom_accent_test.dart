@@ -326,33 +326,32 @@ void main() {
     });
   });
 
-  group('плитка в полосе', () {
+  group('кружок «Свой цвет» в «Внешнем виде»', () {
+    // С 29.09.2026 раздел нарисован по новому макету владельца: вместо полосы
+    // квадратных плиток — кружки, «Свой цвет» — радуга с пипеткой, а когда
+    // цвет выбран — сам этот цвет с кольцом.
     final src = File(
-      'lib/ui/desktop/workspace/settings_workspace.dart',
+      'lib/ui/desktop/workspace/appearance_pane.dart',
     ).readAsStringSync();
 
-    test('◆ пунктир и пипетка — по макету', () {
-      // 36×36, radius 12, border 1.5px dashed rgba(255,255,255,.18),
-      // значок 18px.
-      expect(src.contains('strokeWidth = 1.5'), isTrue);
-      expect(
-        src.contains('color: Colors.white.withValues(alpha: 0.18),\n'
-            '                    radius: 12,'),
-        isTrue,
-      );
-      expect(src.contains('FluentIcons.eyedropper_24_regular'), isTrue);
+    test('◆ радуга и пипетка — по макету', () {
+      final i = src.indexOf('class _CustomAccentDot');
+      expect(i, greaterThan(0));
+      final body = src.substring(i);
+      expect(body.contains('SweepGradient('), isTrue);
+      expect(body.contains('FluentIcons.eyedropper_24_regular'), isTrue);
     });
 
     test('🔴 нажатие по схеме снимает свой цвет', () {
-      // Иначе плитка схемы выглядела бы выбранной, а окно оставалось бы
+      // Иначе кружок схемы выглядел бы выбранным, а окно оставалось бы
       // прежнего цвета — выбор без последствий.
-      final i = src.indexOf('Future<void> _selectPreset(');
-      final body = src.substring(i, (i + 600).clamp(0, src.length));
+      final i = src.indexOf('Future<void> _selectTheme(');
+      final body = src.substring(i, (i + 700).clamp(0, src.length));
       expect(body.contains('DesktopUiPrefs.setCustomAccent(0)'), isTrue);
     });
 
     test('пока свой цвет выбран, ни одна схема не отмечена', () {
-      expect(src.contains('selected: custom == 0 && preset.id =='), isTrue);
+      expect(src.contains('selected: custom == 0 && t.id == themeId'), isTrue);
     });
   });
 

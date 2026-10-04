@@ -6,6 +6,7 @@ import 'dart:async';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 import '../../widgets/avatar_initials.dart';
@@ -18,11 +19,13 @@ import '../primitives/size_reporter.dart';
 import 'message_bubble.dart'
     show DeliveryStatus, deliveryStatusLabel, deliveryTickGlyph;
 import '../primitives/avatar.dart';
+import 'noto_emoji_lottie.dart' show DesktopStatusEmoji;
 import '../primitives/context_menu.dart';
 import '../primitives/desktop_text_field.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../primitives/hover_listener.dart';
 import 'chat_category_bar.dart';
+import 'mute_choice.dart';
 
 export 'chat_category_bar.dart' show ChatCategory, ChatCategoryIds;
 
@@ -201,6 +204,7 @@ class ChatListPanel extends StatefulWidget {
     required this.onSelect,
     this.onArchive,
     this.onMute,
+    this.onMuteChoice,
     this.onPin,
     this.onDelete,
     this.onMarkRead,
@@ -318,6 +322,9 @@ class ChatListPanel extends StatefulWidget {
   final ValueChanged<String> onSelect;
   final ValueChanged<String>? onArchive;
   final ValueChanged<String>? onMute;
+
+  /// «Без звука…» со сроком. Нет — пункт остаётся прежним «вкл/выкл».
+  final void Function(String id, DesktopMuteChoice choice)? onMuteChoice;
   final ValueChanged<String>? onPin;
   final ValueChanged<String>? onDelete;
   final ValueChanged<String>? onMarkRead;
@@ -551,38 +558,83 @@ class _ChatListPanelState extends State<ChatListPanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _PanelHeader(
-          title: widget.title ?? l10n.chatsTitle,
-          onCompose: widget.onCompose,
-          onFilters: widget.onFilters,
-        ),
+        // 🔴 ПОИСК И КНОПКИ — ОДНОЙ СТРОКОЙ (28.09.2026, владелец:
+        // «островок „поиск“ и папки — компактнее и профессиональнее»). Над
+        // поиском стояла строка «Чаты» с двумя кнопками — 50 точек заголовка
+        // раздела, который и так назван в рейке слева. Как у Telegram: поиск
+        // во всю строку, кнопки «Папки» и «Создать» справа от него.
         Padding(
-          padding: const EdgeInsets.fromLTRB(DSpace.m, 0, DSpace.m, DSpace.s),
-          child: DesktopTextField(
-            // Развернули лупой — курсор сразу в поле, как в телеграме.
-            focusNode: _searchFocus,
-            controller: _search,
-            hintText: l10n.search,
-            prefixIcon: FluentIcons.search_24_regular,
-            glass: true,
-            suffixIcon: _query.isEmpty
-                ? null
-                : Semantics(
-                    button: true,
-                    label: AppLocalizations.of(context)!.clear,
-                    child: GestureDetector(
-                      onTap: () {
-                        setState(() => _query = '');
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+          child: Row(
+            children: [
+              Expanded(
+                // 🔴 Escape в поиске — очистить запрос, потом отпустить поле
+                // (30.09.2026). Без этого он уходил в окно, а окно по Escape
+                // закрывает открытый чат: человек стирал поиск — и терял
+                // переписку.
+                child: CallbackShortcuts(
+                  bindings: <ShortcutActivator, VoidCallback>{
+                    const SingleActivator(LogicalKeyboardKey.escape): () {
+                      if (_search.text.isNotEmpty) {
                         _search.clear();
-                      },
-                      child: Icon(
-                        FluentIcons.dismiss_circle_24_regular,
-                        size: 16,
-                        color: c.textSecondary,
-                      ),
-                    ),
-                  ),
-            onChanged: (v) => setState(() => _query = v),
+                        setState(() => _query = '');
+                      } else {
+                        // Фокус — туда, где он был до поиска (поле ввода
+                        // переписки), а не на всю область: оттуда клавиши
+                        // окна (⌘K, ⌥↓…) до оболочки не дошли бы.
+                        _searchFocus.unfocus(
+                          disposition:
+                              UnfocusDisposition.previouslyFocusedChild,
+                        );
+                      }
+                    },
+                  },
+                  child: DesktopTextField(
+                  // Развернули лупой — курсор сразу в поле, как в телеграме.
+                  focusNode: _searchFocus,
+                  controller: _search,
+                  hintText: l10n.search,
+                  prefixIcon: FluentIcons.search_24_regular,
+                  glass: true,
+                  suffixIcon: _query.isEmpty
+                      ? null
+                      : Semantics(
+                          button: true,
+                          label: AppLocalizations.of(context)!.clear,
+                          child: GestureDetector(
+                            onTap: () {
+                              setState(() => _query = '');
+                              _search.clear();
+                            },
+                            child: Icon(
+                              FluentIcons.dismiss_circle_24_regular,
+                              size: 16,
+                              color: c.textSecondary,
+                            ),
+                          ),
+                        ),
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+                ),
+              ),
+              if (widget.onFilters != null) ...[
+                const SizedBox(width: 6),
+                _HeaderButton(
+                  icon: FluentIcons.filter_24_regular,
+                  tooltip: l10n.desktopListFolders,
+                  onTap: widget.onFilters!,
+                ),
+              ],
+              if (widget.onCompose != null) ...[
+                const SizedBox(width: 6),
+                _HeaderButton(
+                  icon: FluentIcons.compose_24_regular,
+                  tooltip: l10n.desktopListCreate,
+                  accent: true,
+                  onTap: widget.onCompose!,
+                ),
+              ],
+            ],
           ),
         ),
         // Categories sit directly under the search field: a filter belongs
@@ -595,7 +647,7 @@ class _ChatListPanelState extends State<ChatListPanel> {
             onContextMenu: widget.onCategoryContextMenu,
             glass: true,
           ),
-          const SizedBox(height: DSpace.xs),
+          const SizedBox(height: 2),
         ],
       ],
     );
@@ -840,11 +892,20 @@ class _ChatListPanelState extends State<ChatListPanel> {
               : FluentIcons.star_24_regular,
           onTap: () => widget.onPin?.call(item.id),
         ),
-        CtxMenuItem(
-          label: item.muted ? l10n.unmuteNotifications : l10n.desktopListMute,
-          icon: FluentIcons.alert_off_24_regular,
-          onTap: () => widget.onMute?.call(item.id),
-        ),
+        if (widget.onMuteChoice != null)
+          desktopMuteMenuItem(
+            l10n: l10n,
+            muted: item.muted,
+            isRoom: item.kind != ChatKind.direct,
+            onMute: (choice) => widget.onMuteChoice!(item.id, choice),
+            onUnmute: () => widget.onMute?.call(item.id),
+          )
+        else
+          CtxMenuItem(
+            label: item.muted ? l10n.unmuteNotifications : l10n.desktopListMute,
+            icon: FluentIcons.alert_off_24_regular,
+            onTap: () => widget.onMute?.call(item.id),
+          ),
         CtxMenuItem(
           label: l10n.desktopListMarkRead,
           icon: FluentIcons.checkmark_circle_24_regular,
@@ -868,7 +929,12 @@ class _ChatListPanelState extends State<ChatListPanel> {
           onTap: () => widget.onClear?.call(item.id),
         ),
         CtxMenuItem(
-          label: l10n.delete,
+          // У комнаты «Удалить» — «Удалить и покинуть», как в Telegram:
+          // стереть переписку и остаться участником значило бы получать её
+          // сообщения дальше.
+          label: item.kind == ChatKind.direct
+              ? l10n.delete
+              : l10n.desktopRoomDeleteLeaveMenu,
           icon: FluentIcons.delete_24_regular,
           isDanger: true,
           onTap: () => widget.onDelete?.call(item.id),
@@ -1159,9 +1225,9 @@ class _ChatRow extends StatelessWidget {
                                   if (item.emojiStatus != null &&
                                       item.emojiStatus!.isNotEmpty) ...[
                                     const SizedBox(width: 3),
-                                    Text(
-                                      item.emojiStatus!,
-                                      style: const TextStyle(fontSize: 13),
+                                    DesktopStatusEmoji(
+                                      emoji: item.emojiStatus!,
+                                      size: 16,
                                     ),
                                   ],
                                   // 🔴 ГАЛОЧКА ЗНАЧИТ «КОНТАКТ ПРОВЕРЕН», А НЕ
@@ -1570,87 +1636,6 @@ Widget _chatUnreadBadgeVisual(
   );
 }
 
-/// Тема открытой комнаты — подстрока под её строкой в списке.
-///
-/// 🔴 Отступ слева ровно под именем комнаты, а не произвольный. Подстрока
-/// должна читаться как продолжение строки выше, а не как отдельный чат с
-/// маленьким портретом: выравнивание по имени — это и есть заявление
-/// «я принадлежу ей».
-///
-/// Знак «#» закреплён за темами и больше нигде в окне не используется: у
-/// комнаты свой признак — форма портрета.
-/// Шапка панели: название раздела и две кнопки.
-///
-/// 🔴 Кнопок ровно две, и обе ведут туда, куда иначе не попасть.
-///
-/// «Создать» — единственный на десктопе вход в создание чата и комнаты: до
-/// 13.09 комнату можно было завести только с телефона, а новый чат — только
-/// найдя человека в отдельном разделе «Контакты».
-///
-/// «Фильтры» — видимый вход в папки. Папки работали и раньше, но попасть в них
-/// можно было лишь правым щелчком по строке чата, то есть никак, если не знать
-/// заранее. Кнопка не добавляет возможностей, она перестаёт их прятать.
-class _PanelHeader extends StatelessWidget {
-  const _PanelHeader({
-    required this.title,
-    required this.onCompose,
-    required this.onFilters,
-  });
-
-  final String title;
-  final void Function(Offset globalPosition)? onCompose;
-  final void Function(Offset globalPosition)? onFilters;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final c = DColors.of(context);
-    final compose = onCompose;
-    final filters = onFilters;
-    if (compose == null && filters == null) {
-      // Заголовок сам по себе занял бы строку и ничего не сообщил: раздел и
-      // так назван в рейке слева. Без кнопок шапки нет.
-      return const SizedBox(height: DSpace.m);
-    }
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        DSpace.m,
-        DSpace.m,
-        DSpace.s,
-        DSpace.s,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              // 17/800 с отрицательным трекингом — заголовок панели из
-              // макета; `title` (16/600) был на шаг легче и шире.
-              style: DType.panelTitle.copyWith(color: c.textPrimary),
-            ),
-          ),
-          if (filters != null)
-            _HeaderButton(
-              icon: FluentIcons.filter_24_regular,
-              tooltip: l10n.desktopListFolders,
-              onTap: filters,
-            ),
-          if (filters != null && compose != null) const SizedBox(width: 2),
-          if (compose != null)
-            _HeaderButton(
-              icon: FluentIcons.compose_24_regular,
-              tooltip: l10n.desktopListCreate,
-              accent: true,
-              onTap: compose,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Кнопка шапки. Сообщает положение нажатия: оба её меню открываются от самой
 /// кнопки, а не по центру экрана.
 class _HeaderButton extends StatelessWidget {
@@ -1684,8 +1669,9 @@ class _HeaderButton extends StatelessWidget {
           },
           builder: (ctx, hovered, pressed) => AnimatedContainer(
             duration: DMotion.fast,
-            width: 30,
-            height: 30,
+            // Круглые 34 — в размер поиска рядом (28.09.2026).
+            width: 34,
+            height: 34,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               gradient: accent
@@ -1702,7 +1688,7 @@ class _HeaderButton extends StatelessWidget {
                         : (hovered
                               ? c.hover
                               : c.elevated.withValues(alpha: 0.6))),
-              borderRadius: BorderRadius.circular(DRadii.sm),
+              borderRadius: BorderRadius.circular(17),
             ),
             child: Icon(
               icon,

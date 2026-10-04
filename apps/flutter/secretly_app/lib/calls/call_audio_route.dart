@@ -304,10 +304,230 @@ bool shouldAutoPromoteExternalAudioRoute({
   return currentRoute == null || !currentRoute.isExternalAccessory;
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 ПК: «КАК В СИСТЕМЕ» ВМЕСТО УГАДЫВАНИЯ ПО НАЗВАНИЮ (28.09.2026).
+//
+// Владелец: «во время звонка он выбирает не стандартные динамики, а какие-то
+// первые по списку, и пока не переключишь — не слышишь человека».
+//
+// Правило телефона — тип устройства по английскому слову в названии
+// («speaker», «bluetooth»…) и порядок BT → проводные → динамики — на
+// компьютере не работает. Названия приходят от Windows на языке системы:
+// «Динамики (Realtek)» не содержит «speaker», все устройства получали тип
+// «неизвестно», и выбиралось ПЕРВОЕ ПО АЛФАВИТУ — латинское имя монитора или
+// цифрового выхода. Звук уходил в тишину. На macOS «MacBook Pro Speakers»
+// перебивали AirPods, в названии которых нет «bluetooth».
+//
+// Теперь на ПК ничего не угадываем. По умолчанию звук идёт туда, куда
+// настроена система, и следует за ней (воткнули наушники — звонок перешёл в
+// них). Другое устройство — только если человек выбрал его сам: в звонке или
+// в настройках. Телефонов это не касается: там прежнее правило.
+// ─────────────────────────────────────────────────────────────────────────
+
+/// Пункт «Как в системе» в списке устройств вывода ПК.
+const String kSystemDefaultAudioRouteId = 'system-default';
+
+/// Пункт, которым модуль звука сам обозначает устройство системы по
+/// умолчанию.
+///
+/// На macOS модуль WebRTC ставит первым пунктом «default (Имя устройства)»:
+/// выбрать его и значит «как в системе» — модуль сам следует за системой.
+/// `default` — так же называют его другие сборки модуля.
+bool isSystemDefaultAudioDevice({
+  required String deviceId,
+  required String label,
+}) {
+  final id = deviceId.trim().toLowerCase();
+  final name = label.trim().toLowerCase();
+  return id == 'default' ||
+      name.startsWith('default (') ||
+      name.startsWith('default - ');
+}
+
+/// Что умеет компьютер и чего нет в общем коде: выбор человека из настроек и
+/// «какое устройство система считает основным». Ставится приложением ПК при
+/// запуске; на телефоне `null`.
+class DesktopCallDeviceHooks {
+  const DesktopCallDeviceHooks({
+    required this.preferredOutputId,
+    required this.systemDefaultOutputId,
+    this.prepareCapture,
+    this.preferredCameraId,
+    this.ringtoneVolume,
+    this.ringtoneAsset,
+  });
+
+  /// Динамики из настроек; пустая строка — «как в системе».
+  final String Function() preferredOutputId;
+
+  /// Идентификатор устройства вывода, которое ОС сейчас считает основным,
+  /// если его можно узнать (Windows), иначе `null`.
+  final Future<String?> Function() systemDefaultOutputId;
+
+  /// Выбрать микрофон перед захватом звука в звонке 1:1.
+  final Future<void> Function()? prepareCapture;
+
+  /// Камера из настроек; пустая строка — системная.
+  final String Function()? preferredCameraId;
+
+  /// Громкость мелодии входящего звонка из настроек ПК, 0…1 (30.09.2026).
+  final double Function()? ringtoneVolume;
+
+  /// Мелодия входящего по выбору в настройках ПК (01.10.2026): по значению
+  /// настройки мелодии — путь к звуку в сборке; `null` — мелодия по умолчанию.
+  final String? Function(String setting)? ringtoneAsset;
+}
+
+/// Точка подключения ПК. Общий код читает её, но сам не заполняет.
+abstract final class DesktopCallDevices {
+  static DesktopCallDeviceHooks? hooks;
+}
+
+/// Во сколько раз приглушить мелодию входящего звонка: 1 — как было.
+///
+/// 🔴 ТЕЛЕФОН НЕ ЗАТРОНУТ: точку [DesktopCallDevices.hooks] заполняет только
+/// ПК, на телефоне здесь всегда 1, и мелодия звучит ровно как раньше.
+double desktopRingtoneVolumeScale() {
+  final read = DesktopCallDevices.hooks?.ringtoneVolume;
+  if (read == null) return 1.0;
+  try {
+    final v = read();
+    return v.isFinite ? v.clamp(0.0, 1.0).toDouble() : 1.0;
+  } catch (_) {
+    return 1.0;
+  }
+}
+
+/// Какой файл играть входящему звонку: выбранный в настройках ПК или
+/// [fallback].
+///
+/// 🔴 ТЕЛЕФОН НЕ ЗАТРОНУТ: точку [DesktopCallDevices.hooks] заполняет только
+/// ПК, на телефоне здесь всегда [fallback] — та же мелодия, что и раньше.
+String desktopIncomingRingtoneAsset(
+  String setting, {
+  required String fallback,
+}) {
+  final pick = DesktopCallDevices.hooks?.ringtoneAsset;
+  if (pick == null) return fallback;
+  try {
+    final asset = pick(setting);
+    return (asset == null || asset.isEmpty) ? fallback : asset;
+  } catch (_) {
+    return fallback;
+  }
+}
+
+/// Решение для ПК: список для меню, что отмечено и что включить.
+@immutable
+class DesktopAudioRouteDecision {
+  const DesktopAudioRouteDecision({
+    required this.routes,
+    required this.selectedRouteId,
+    required this.applyDeviceId,
+  });
+
+  /// «Как в системе» первым, затем настоящие устройства.
+  final List<CallAudioRouteOption> routes;
+
+  /// [kSystemDefaultAudioRouteId] или идентификатор устройства.
+  final String selectedRouteId;
+
+  /// Что передать модулю звука; `null` — ничего не трогать.
+  final String? applyDeviceId;
+}
+
+/// Правило выбора устройства вывода на ПК. Чистая функция.
+///
+/// Порядок: выбор в этом звонке → выбор в настройках → «как в системе».
+/// «Как в системе» включает пункт модуля «default (…)», если он есть (macOS),
+/// иначе устройство, которое ОС назвала основным (Windows). Не удалось ни то,
+/// ни другое — ничего не трогаем: лучше звук там, где его оставила система,
+/// чем в угаданном устройстве.
+DesktopAudioRouteDecision resolveDesktopAudioRoute({
+  required Iterable<MediaDeviceInfo> devices,
+  required String inCallSelection,
+  required String preferredId,
+  required String? systemDefaultId,
+}) {
+  final real = <CallAudioRouteOption>[];
+  final seen = <String>{};
+  String? moduleDefaultId;
+  for (final device in devices) {
+    final id = device.deviceId.trim();
+    if (id.isEmpty || !seen.add(id)) continue;
+    final label = device.label.trim();
+    if (isSystemDefaultAudioDevice(deviceId: id, label: label)) {
+      moduleDefaultId ??= id;
+      continue;
+    }
+    real.add(
+      CallAudioRouteOption(
+        deviceId: id,
+        label: label,
+        kind: classifyCallAudioRouteKind(device),
+      ),
+    );
+  }
+  bool present(String id) => real.any((route) => route.deviceId == id);
+
+  final wanted = inCallSelection.trim();
+  final preferred = preferredId.trim();
+  final String selected;
+  if (wanted == kSystemDefaultAudioRouteId) {
+    selected = kSystemDefaultAudioRouteId;
+  } else if (wanted.isNotEmpty && present(wanted)) {
+    selected = wanted;
+  } else if (preferred.isNotEmpty && present(preferred)) {
+    selected = preferred;
+  } else {
+    selected = kSystemDefaultAudioRouteId;
+  }
+
+  String? apply;
+  if (selected != kSystemDefaultAudioRouteId) {
+    apply = selected;
+  } else if (moduleDefaultId != null) {
+    apply = moduleDefaultId;
+  } else if (systemDefaultId != null && present(systemDefaultId.trim())) {
+    apply = systemDefaultId.trim();
+  }
+
+  return DesktopAudioRouteDecision(
+    routes: <CallAudioRouteOption>[
+      const CallAudioRouteOption(
+        deviceId: kSystemDefaultAudioRouteId,
+        label: '',
+        kind: CallAudioRouteKind.unknown,
+      ),
+      ...real,
+    ],
+    selectedRouteId: selected,
+    applyDeviceId: apply,
+  );
+}
+
+bool _isDesktopAudioPlatform() {
+  if (kIsWeb) return false;
+  return defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
+}
+
 class CallAudioRouteController {
-  CallAudioRouteController({required this.logTag});
+  CallAudioRouteController({required this.logTag, bool? desktopMode})
+      : _desktopMode = desktopMode ?? _isDesktopAudioPlatform();
 
   final String logTag;
+
+  /// ПК: правило «как в системе» вместо телефонного (см. выше).
+  final bool _desktopMode;
+
+  /// ПК: что человек выбрал в ЭТОМ звонке ('' — не выбирал).
+  String _desktopInCallSelection = '';
+
+  /// ПК: что уже включено в модуле звука. Выбор модуля общий на процесс и
+  /// переживает звонок, поэтому при сбросе не забывается.
+  String _appliedDesktopDeviceId = '';
 
   final ValueNotifier<CallAudioRouteState> state = ValueNotifier(
     const CallAudioRouteState.idle(),
@@ -353,6 +573,9 @@ class CallAudioRouteController {
       return;
     }
     _selectedRouteId = routeId.trim();
+    if (_desktopMode) {
+      _desktopInCallSelection = routeId.trim();
+    }
     await _refreshRoutes(
       preferSpeakerByDefault: preferSpeakerByDefault,
       reason: reason,
@@ -364,6 +587,7 @@ class CallAudioRouteController {
   Future<void> reset({bool keepPreference = false}) async {
     _detachDeviceChangeHandler();
     _selectedRouteId = '';
+    _desktopInCallSelection = '';
     if (_disposed) {
       return;
     }
@@ -496,6 +720,15 @@ class CallAudioRouteController {
       );
     }
 
+    if (_desktopMode) {
+      return _refreshDesktopRoutes(
+        devices: devices,
+        preferSpeakerByDefault: preferSpeakerByDefault,
+        reason: reason,
+        forceApply: forceApplyCurrentRoute,
+      );
+    }
+
     final availableRoutes = ensureIosEarpieceRoute(
       normalizeCallAudioRouteOptions(devices),
     );
@@ -563,6 +796,50 @@ class CallAudioRouteController {
       selectedRouteKind: selectedRoute?.kind ?? CallAudioRouteKind.unknown,
       preferSpeakerByDefault: preferSpeakerByDefault,
       userSelectionActive: nextUserSelectionActive,
+    );
+  }
+
+  Future<CallAudioRouteState> _refreshDesktopRoutes({
+    required List<MediaDeviceInfo> devices,
+    required bool preferSpeakerByDefault,
+    required String reason,
+    required bool forceApply,
+  }) async {
+    final hooks = DesktopCallDevices.hooks;
+    String? systemDefault;
+    if (hooks != null) {
+      try {
+        systemDefault = await hooks.systemDefaultOutputId();
+      } catch (e) {
+        callLog(logTag, 'desktop default output lookup failed: $e');
+      }
+    }
+    final decision = resolveDesktopAudioRoute(
+      devices: devices,
+      inCallSelection: _desktopInCallSelection,
+      preferredId: hooks?.preferredOutputId() ?? '',
+      systemDefaultId: systemDefault,
+    );
+    final apply = decision.applyDeviceId;
+    if (apply != null && (forceApply || apply != _appliedDesktopDeviceId)) {
+      try {
+        await Helper.selectAudioOutput(apply);
+        _appliedDesktopDeviceId = apply;
+        callLog(
+          logTag,
+          'desktop audio output applied reason=$reason '
+          'selected=${decision.selectedRouteId} device=$apply',
+        );
+      } catch (e) {
+        callLog(logTag, 'desktop audio output apply failed reason=$reason: $e');
+      }
+    }
+    return CallAudioRouteState(
+      availableRoutes: decision.routes,
+      selectedRouteId: decision.selectedRouteId,
+      selectedRouteKind: CallAudioRouteKind.unknown,
+      preferSpeakerByDefault: preferSpeakerByDefault,
+      userSelectionActive: _desktopInCallSelection.isNotEmpty,
     );
   }
 

@@ -29,8 +29,16 @@ void main() {
   ).readAsStringSync();
 
   test('🔴 список берётся у СИСТЕМЫ, а не у движка созвона', () {
-    expect(pane.contains('roomCallSystemDevices(video: true)'), isTrue);
-    expect(pane.contains('roomCallSystemDevices(video: false)'), isTrue);
+    // 28.09.2026: список — `desktopDeviceList` (desktop_call_devices.dart):
+    // тоже у системы, плюс динамики и без служебного «default (…)».
+    expect(pane.contains('desktopDeviceList('), isTrue);
+    expect(pane.contains('DesktopDeviceKind.camera'), isTrue);
+    expect(pane.contains('DesktopDeviceKind.microphone'), isTrue);
+    expect(pane.contains('DesktopDeviceKind.speakers'), isTrue);
+    final devices = File(
+      'lib/ui/desktop/services/desktop_call_devices.dart',
+    ).readAsStringSync();
+    expect(devices.contains('navigator.mediaDevices.enumerateDevices()'), isTrue);
     // В коде фасада больше нет — упоминание осталось только в объяснении,
     // почему его тут быть не должно.
     final code = pane
@@ -92,7 +100,13 @@ void main() {
     // Иначе раздел был бы списком без последствий: выбрал гарнитуру, начал
     // звонок — и говоришь во встроенный микрофон.
     expect(win.contains('Future<void> _applyPreferredDevices() async {'), isTrue);
-    expect(win.contains('await media.selectVideoInput(cam);'), isTrue);
+    // Камера — через сторожа: выключенную не включает (30.09.2026).
+    expect(
+      win.contains(
+        'await DesktopRoomCallMediaGuard.applyPreferredCamera(media, cam);',
+      ),
+      isTrue,
+    );
     expect(win.contains('await media.selectAudioInput(mic);'), isTrue);
     // И применяется ОДИН раз: дальше человек может поменять камеру в доке, и
     // настройка не должна отматывать его выбор назад на каждом тике.
@@ -102,18 +116,21 @@ void main() {
     expect(win.contains('if (mic.isNotEmpty)'), isTrue);
   });
 
-  test('🔴 вывод звука здесь НЕ выбирается, и это объяснено', () {
-    // Им распоряжается `CallAudioRouteController` во время созвона: он сам
-    // переключается на наушники. Второй хозяин у той же настройки означал бы,
-    // что она меняется в двух местах и разъезжается.
-    expect(pane.contains('l10n.desktopDevicesOutputHint'), isTrue);
-    expect(
-      File('lib/l10n/app_ru.arb')
-          .readAsStringSync()
-          .contains('выбирается в самом созвоне'),
-      isTrue,
-    );
-    expect(pane.contains('selectAudioOutput'), isFalse);
+  test('🔴 вывод звука выбирается и здесь — одна настройка со звонком', () {
+    // 28.09.2026, владелец: «в настройках в разделе „Звонки“ нет настроек
+    // устройств». Раньше вывод звука угадывал звонок сам — по слову в
+    // названии — и на русской Windows уводил звук в монитор. Теперь по
+    // умолчанию «Как выбрано в системе», а выбор отсюда и из меню звонка —
+    // одна и та же `preferredSpeakerId`, так что двух хозяев нет.
+    expect(pane.contains('l10n.desktopDevicesSpeakers'), isTrue);
+    expect(pane.contains('DesktopUiPrefs.setPreferredSpeaker(id)'), isTrue);
+    final menu = File(
+      'lib/ui/desktop/calls/call_device_menu.dart',
+    ).readAsStringSync();
+    expect(menu.contains('DesktopUiPrefs.setPreferredSpeaker('), isTrue);
+    // Прямого вызова модуля звука здесь нет: применяет звонок, по своему
+    // правилу «как в системе» (call_audio_route.dart).
+    expect(pane.contains('Helper.selectAudioOutput'), isFalse);
   });
 
   test('микрофон переключается У ДОРОЖКИ, как и камера', () {

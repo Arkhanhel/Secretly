@@ -25,6 +25,8 @@ class DesktopSnackbar {
       duration: duration,
       actionLabel: actionLabel,
       onAction: onAction,
+      // Палитра места вызова едет в плашку — см. [DColors.carry].
+      palette: DColors.maybeOf(context),
     );
   }
 
@@ -47,15 +49,19 @@ class DesktopSnackbar {
     Duration duration = const Duration(seconds: 4),
     String? actionLabel,
     VoidCallback? onAction,
+    DColorSet? palette,
   }) {
     final entry = OverlayEntry(
       builder: (ctx) {
-        return _SnackbarLayer(
-          message: message,
-          kind: kind,
-          duration: duration,
-          actionLabel: actionLabel,
-          onAction: onAction,
+        return DColors.carry(
+          palette,
+          _SnackbarLayer(
+            message: message,
+            kind: kind,
+            duration: duration,
+            actionLabel: actionLabel,
+            onAction: onAction,
+          ),
         );
       },
     );
@@ -197,4 +203,29 @@ class _SnackbarLayerState extends State<_SnackbarLayer>
       ),
     );
   }
+}
+
+/// Текст ошибки для человека: без служебных приставок Dart.
+///
+/// 🔴 «Bad state: Профиль ещё не инициализирован…», «Exception: …» стояли
+/// прямо во всплывашках (30.09.2026, ТЗ «ПК как Telegram» §2, ошибка 7):
+/// `'$e'` у `StateError` и `Exception` начинается с имени класса, которое
+/// человеку ничего не говорит.
+String desktopErrorText(Object error) {
+  var s = error.toString().trim();
+  for (final prefix in const [
+    'Bad state: ',
+    'StateError: ',
+    'Exception: ',
+    'FormatException: ',
+    'TimeoutException: ',
+    'SocketException: ',
+    'HttpException: ',
+  ]) {
+    if (s.startsWith(prefix)) {
+      s = s.substring(prefix.length).trim();
+      break;
+    }
+  }
+  return s;
 }

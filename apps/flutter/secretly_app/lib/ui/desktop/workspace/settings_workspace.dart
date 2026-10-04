@@ -2,20 +2,19 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:async';
+import 'dart:convert' show LineSplitter, utf8;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/app_controller.dart';
 import '../../../security/backup_password_policy.dart';
 import '../../../version/app_package_info.dart';
 import '../../../calls/call_manager.dart';
-import '../../../entitlements/cosmetic_catalog.dart' show kFreeBubbleStyleIds;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../storage/cache_manager.dart';
@@ -23,17 +22,15 @@ import '../app/desktop_offline_lock.dart';
 import '../../../sync/peer_history_service.dart';
 import '../../../security/app_security_manager.dart'
     show AppSecurityManager, SecurityLockMethod, SecurityLockScope;
-import '../../chat_wallpapers.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../security_lock_flow.dart' show ensureSecurityScopeUnlocked;
-import '../../theme_presets.dart';
 import '../app/desktop_app_view_model.dart';
 import '../app/recovery_kit_export.dart';
 import '../app/desktop_selector.dart';
-import 'accent_color_picker.dart';
-import '../design/theme_bridge.dart';
 import '../design/tokens.dart';
 import 'media_devices_pane.dart';
+import 'ringtone_card.dart';
+import 'sound_picker.dart';
 import '../primitives/desktop_button.dart';
 import '../primitives/desktop_dialog.dart';
 import '../primitives/desktop_snackbar.dart';
@@ -43,15 +40,20 @@ import '../../widgets/support_badge.dart';
 import '../services/desktop_app_lock_service.dart';
 import '../services/desktop_login_item_service.dart';
 import '../services/desktop_notification_service.dart';
-import '../primitives/desktop_segmented.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../services/desktop_global_hotkey_service.dart';
+import '../services/desktop_diag_file_log.dart';
+import '../services/desktop_screen_privacy.dart';
 import '../services/desktop_ui_prefs.dart';
+import '../services/desktop_update_service.dart';
+import '../services/desktop_window_activity.dart';
 import '../app/desktop_media_send.dart' show pickDesktopAttachments;
 import '../shell/shortcuts_help.dart' show ShortcutsList;
 import 'support_attachment.dart';
 import 'support_sent.dart';
 import 'delivery_diagnostics.dart';
+import 'appearance_pane.dart';
+import 'settings_style.dart';
 import 'workspace_layout.dart';
 
 /// Settings workspace — INLINE in the content pane, NOT a modal.
@@ -87,38 +89,106 @@ Future<void> showSignOutDialog(
     );
     return;
   }
-  final c = DColors.of(context);
-  final ok = await DesktopDialog.show<bool>(
-    context,
-    title: l10n.desktopSettingsSignOutTitle,
-    size: DDialogSize.small,
-    body: Text(
-      l10n.desktopSettingsSignOutBody,
-      style: DType.body.copyWith(color: c.textSecondary),
-    ),
-    primary: DDialogAction(
-      label: l10n.desktopSettingsSignOut,
-      kind: DButtonKind.danger,
-      onPressed: () => Navigator.of(context).maybePop(true),
-    ),
-    secondary: DDialogAction(
-      label: l10n.cancel,
-      onPressed: () => Navigator.of(context).maybePop(false),
-    ),
-  );
-  if (ok != true) return;
-  if (!context.mounted) return;
+  // 🔴 Двойной щелчок открывал два окна, а два «Выйти» — два стирания разом
+  // (30.09.2026). Замок — на контроллер: после перезапуска он новый.
+  if (_signOutBusy[controller] == true) return;
+  _signOutBusy[controller] = true;
   try {
-    await controller.resetProfileAndLocalData();
-  } catch (e) {
-    if (!context.mounted) return;
-    DesktopSnackbar.show(
+    final ok = await DesktopDialog.show<bool>(
       context,
-      message: l10n.desktopSettingsSignOutFailed('$e'),
-      kind: DSnackKind.error,
+      title: l10n.desktopSettingsSignOutTitle,
+      size: DDialogSize.small,
+      body: _SignOutBody(controller: controller),
+      primary: DDialogAction(
+        label: l10n.desktopSettingsSignOut,
+        kind: DButtonKind.danger,
+        onPressed: () => Navigator.of(context).maybePop(true),
+      ),
+      secondary: DDialogAction(
+        label: l10n.cancel,
+        onPressed: () => Navigator.of(context).maybePop(false),
+      ),
+    );
+    if (ok != true) return;
+    if (!context.mounted) return;
+    try {
+      await controller.resetProfileAndLocalData();
+    } catch (e) {
+      if (!context.mounted) return;
+      DesktopSnackbar.show(
+        context,
+        message: l10n.desktopSettingsSignOutFailed(desktopErrorText(e)),
+        kind: DSnackKind.error,
+      );
+    }
+  } finally {
+    _signOutBusy[controller] = null;
+  }
+}
+
+/// Выход, который уже спрашивается или идёт.
+final Expando<bool> _signOutBusy = Expando<bool>('signOutBusy');
+
+/// Что останется после выхода — по тому, есть ли у аккаунта ДРУГИЕ устройства.
+///
+/// 🔴 ТЕКСТ ОБЕЩАЛ ТЕЛЕФОН ВСЕГДА (30.09.2026): «аккаунт и история на телефоне
+/// не пострадают». Аккаунт, заведённый на самом компьютере, телефона не имеет,
+/// и выход без набора восстановления теряет его насовсем. Устройства аккаунта
+/// знает сервер ключей; пока он не ответил (или не ответит вовсе) — осторожный
+/// текст про оба случая.
+class _SignOutBody extends StatefulWidget {
+  const _SignOutBody({required this.controller});
+
+  final AppController controller;
+
+  @override
+  State<_SignOutBody> createState() => _SignOutBodyState();
+}
+
+class _SignOutBodyState extends State<_SignOutBody> {
+  /// `null` — не знаем, `true` — есть другие устройства, `false` — только этот.
+  bool? _others;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    try {
+      final me = widget.controller.deviceId.trim();
+      final ids = (await widget.controller.listMyDeviceIds().timeout(
+        const Duration(seconds: 8),
+      )).map((id) => id.trim()).toList();
+      final others = ids.any((id) => id.isNotEmpty && id != me)
+          ? true
+          // Себя в списке нет — ответу верить нельзя.
+          : (ids.contains(me) ? false : null);
+      if (mounted) setState(() => _others = others);
+    } catch (_) {
+      // Не узнали — остаётся осторожный текст.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final c = DColors.of(context);
+    final others = _others;
+    return Text(
+      others == null
+          ? l10n.desktopSettingsSignOutBodyUnknown
+          : (others
+                ? l10n.desktopSettingsSignOutBody
+                : l10n.desktopSettingsSignOutBodyOnlyDevice),
+      style: DType.body.copyWith(
+        color: others == false ? c.danger : c.textSecondary,
+      ),
     );
   }
 }
+
 
 class SettingsWorkspace extends StatelessWidget {
   const SettingsWorkspace({
@@ -156,7 +226,11 @@ class SettingsWorkspace extends StatelessWidget {
     final initial = wanted.isEmpty
         ? 0
         : sections.indexWhere((s) => s.id == wanted).clamp(0, sections.length - 1);
-    return WorkspaceLayout(
+    // 🔴 СЕРАЯ ГАММА МАКЕТА — ДЛЯ ВСЕГО ОКНА НАСТРОЕК РАЗОМ (29.09.2026):
+    // подмена палитры одна на все семнадцать разделов, см. [SettingsScope].
+    return SettingsScope.wrap(
+      context,
+      child: WorkspaceLayout(
       title: AppLocalizations.of(context)!.desktopSettingsTitle,
       onClose: onClose,
       initialIndex: initial < 0 ? 0 : initial,
@@ -178,20 +252,19 @@ class SettingsWorkspace extends StatelessWidget {
       // Второе: строка настройки при такой ширине читается одним движением
       // глаз, подпись и переключатель остаются в одном поле зрения.
       contentMaxWidth: 760,
-      // 🔴 260, А НЕ 238 ПО УМОЛЧАНИЮ — ИЗ-ЗА ПЛИТОК И ИЗ-ЗА УКРАИНСКОГО.
-      //
-      // Плитка со значком шире прежнего голого значка на 12 точек, и на
-      // столько же сузилось место под подпись. Самая длинная подпись раздела
-      // среди восьми языков — украинское «Видалити обліковий запис», 24 знака;
-      // при 238 она обрывалась многоточием, а обрезанный «Удалить аккаунт» —
-      // ровно та строка, которую нельзя оставлять недочитанной.
-      sidebarWidth: 260,
+      // 🔴 248, А НЕ 232 ИЗ МАКЕТА — ИЗ-ЗА УКРАИНСКОГО. Самая длинная
+      // подпись раздела среди восьми языков — «Видалити обліковий запис»,
+      // 24 знака; при 232 она обрывалась бы многоточием, а обрезанный «Удалить
+      // аккаунт» — ровно та строка, которую нельзя оставлять недочитанной.
+      // Измеряет `desktop_settings_layout_test`.
+      sidebarWidth: 248,
       // 🔴 Единственный выход из аккаунта — здесь, внизу боковой колонки, как
       // в макете. Раньше он жил в двух разных панелях с разными текстами
       // подтверждения; см. [showSignOutDialog].
       footer: controller == null
           ? null
           : _SidebarFooter(controller: controller),
+      ),
     );
   }
 
@@ -225,7 +298,17 @@ class SettingsWorkspace extends StatelessWidget {
           subtitle: l10n.desktopSettingsAppearanceSubtitle,
           group: l10n.desktopSettingsGroupApp,
           keywords: _keywords(l10n.desktopSettingsAppearanceKeywords),
-          builder: (ctx) => _AppearancePane(vm: vm),
+          // ◆ Макет владельца (29.09.2026): вкладки, готовые наборы и живой
+          // предпросмотр справа — поэтому своя шапка и своя ширина.
+          ownHeader: true,
+          contentMaxWidth: kAppearancePaneMaxWidth,
+          builder: (ctx) => DesktopAppearancePane(
+            vm: vm,
+            title: l10n.desktopSettingsAppearanceLabel,
+            subtitle: l10n.desktopSettingsAppearanceSubtitle,
+            icon: FluentIcons.color_24_regular,
+            tint: DIconTint.orange,
+          ),
         ),
         // 🔴 Справка о клавишах была доступна ТОЛЬКО комбинацией Cmd+/ — то
         // есть её видел лишь тот, кто эту комбинацию уже знает. Справка,
@@ -266,7 +349,7 @@ class SettingsWorkspace extends StatelessWidget {
           // неладное. То есть узнаёт последним и случайно. Точка в строке
           // видна сразу, как только он вообще зашёл в настройки.
           trailing: const _NotificationsAlertDot(),
-          builder: (ctx) => const _NotificationsPane(),
+          builder: (ctx) => _NotificationsPane(vm: vm),
         ),
         WorkspaceSection(
           id: 'calls',
@@ -487,19 +570,17 @@ class _VersionLineState extends State<_VersionLine> {
           cursor: info == null
               ? SystemMouseCursors.basic
               : SystemMouseCursors.click,
+          // Макет: моноширинный 11, третьим тоном, поля 6 8 0 под строкой
+          // «Выйти» и 12 до низа колонки.
           builder: (ctx, hovered, pressed) => Padding(
-            padding: const EdgeInsets.fromLTRB(
-              DSpace.l,
-              0,
-              DSpace.l,
-              DSpace.m,
-            ),
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
             child: Text(
               text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: DType.meta.copyWith(
-                color: hovered ? c.textSecondary : c.textDisabled,
+              style: DType.mono.copyWith(
+                fontSize: 11,
+                color: hovered ? c.textSecondary : c.textTertiary,
               ),
             ),
           ),
@@ -522,30 +603,26 @@ class _SignOutRow extends StatelessWidget {
     return HoverListener(
       onTap: () => unawaited(showSignOutDialog(context, controller)),
       cursor: SystemMouseCursors.click,
+      // Макет: та же строка, что у разделов (поля 7 8, скругление 6, знак 19
+      // и подпись 14), только красная и отдельно внизу колонки.
       builder: (ctx, hovered, pressed) => AnimatedContainer(
         duration: DMotion.fast,
-        margin: const EdgeInsets.fromLTRB(DSpace.s, DSpace.s, DSpace.s, DSpace.p6),
-        padding: const EdgeInsets.symmetric(
-          horizontal: DSpace.s,
-          vertical: 9,
-        ),
+        margin: const EdgeInsets.fromLTRB(8, 10, 8, 0),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
         decoration: BoxDecoration(
-          color: hovered || pressed
-              ? c.danger.withValues(alpha: pressed ? 0.20 : 0.12)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(DRadii.sm),
+          color: pressed
+              ? c.danger.withValues(alpha: 0.16)
+              : (hovered ? c.hover : Colors.transparent),
+          borderRadius: BorderRadius.circular(6),
         ),
         child: Row(
           children: [
-            Icon(FluentIcons.sign_out_24_regular, size: 18, color: c.danger),
-            const SizedBox(width: DSpace.s),
+            Icon(FluentIcons.sign_out_24_regular, size: 19, color: c.danger),
+            const SizedBox(width: 10),
             Expanded(
               child: Text(
                 l10n.desktopSettingsSignOut,
-                style: DType.label.copyWith(
-                  color: c.danger,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: DType.body.copyWith(color: c.danger),
               ),
             ),
           ],
@@ -595,18 +672,17 @@ class _ActiveBadge extends StatelessWidget {
   }
 }
 
+/// Прокрутка раздела. Поля — из макета (`padding: 4px 32px 96px`): бока
+/// те же 32, что у шапки, — заголовок стоит ровно над карточками; сверху 4,
+/// потому что у каждого раздела страницы свои 20 сверху; снизу 96 — последняя
+/// карточка не прилипает к краю окна.
 class _PaneScaffold extends StatelessWidget {
   const _PaneScaffold({required this.children});
   final List<Widget> children;
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        DSpace.xl,
-        DSpace.l,
-        DSpace.xl,
-        DSpace.xl,
-      ),
+      padding: const EdgeInsets.fromLTRB(32, 4, 32, 96),
       children: children,
     );
   }
@@ -675,6 +751,7 @@ class _GeneralPaneState extends State<_GeneralPane> {
   /// молчаливый возврат переключателя выглядит как «он не нажимается».
   Future<void> _setLaunchAtLogin(bool value) async {
     final svc = DesktopLoginItemService.instance;
+    svc.startMinimized = DesktopUiPrefs.startMinimized.value;
     final ok = await svc.setEnabled(value);
     if (!mounted || ok) return;
     DesktopSnackbar.show(
@@ -782,25 +859,83 @@ class _GeneralPaneState extends State<_GeneralPane> {
                     builder: (ctx, on, _) => ValueListenableBuilder<bool>(
                       valueListenable:
                           DesktopLoginItemService.instance.needsApproval,
-                      builder: (ctx, needsApproval, _) => WorkspaceRow(
-                        label: l10n.desktopGeneralLaunchAtLogin,
-                        description: needsApproval
-                            ? l10n.desktopGeneralLaunchNeedsApproval
-                            : (on
-                                ? l10n.desktopGeneralLaunchAtLoginOn
-                                : l10n.desktopGeneralLaunchAtLoginOff),
-                        icon: FluentIcons.power_24_regular,
-                        trailing: WorkspaceSwitch(
-                          value: on,
-                          onChanged: (v) => unawaited(_setLaunchAtLogin(v)),
-                        ),
+                      builder: (ctx, needsApproval, _) => Column(
+                        children: [
+                          WorkspaceRow(
+                            label: l10n.desktopGeneralLaunchAtLogin,
+                            description: needsApproval
+                                ? (Platform.isWindows
+                                    ? l10n.desktopGeneralLaunchNeedsApprovalWindows
+                                    : l10n.desktopGeneralLaunchNeedsApproval)
+                                : (on
+                                    ? l10n.desktopGeneralLaunchAtLoginOn
+                                    : l10n.desktopGeneralLaunchAtLoginOff),
+                            icon: FluentIcons.power_24_regular,
+                            trailing: WorkspaceSwitch(
+                              value: on,
+                              onChanged: (v) =>
+                                  unawaited(_setLaunchAtLogin(v)),
+                            ),
+                          ),
+                          // Windows: при автозапуске — сразу в трей, без окна
+                          // (строка автозапуска с `--minimized`).
+                          if (Platform.isWindows && on)
+                            ValueListenableBuilder<bool>(
+                              valueListenable: DesktopUiPrefs.startMinimized,
+                              builder: (ctx, minimized, _) => WorkspaceRow(
+                                label: l10n.desktopGeneralStartMinimized,
+                                description:
+                                    l10n.desktopGeneralStartMinimizedHint,
+                                icon: FluentIcons.arrow_minimize_24_regular,
+                                trailing: WorkspaceSwitch(
+                                  value: minimized,
+                                  onChanged: (v) async {
+                                    await DesktopUiPrefs.setStartMinimized(v);
+                                    await _setLaunchAtLogin(true);
+                                  },
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   );
                 },
               ),
+              // 🔴 КРЕСТИК: СПРЯТАТЬ ИЛИ ЗАКРЫТЬ (28.09.2026). Как у Telegram —
+              // по умолчанию прячет в трей, чтобы сообщения и звонки
+              // продолжали приходить; выключенное — закрывает приложение.
+              // Строки нет, где значка в трее нет: прятать было бы некуда.
+              if (DesktopWindowActivity.trayReady)
+                ValueListenableBuilder<bool>(
+                  valueListenable: DesktopUiPrefs.closeToTray,
+                  builder: (ctx, closeToTray, _) => WorkspaceRow(
+                    label: l10n.desktopGeneralCloseToTray,
+                    description: closeToTray
+                        ? l10n.desktopGeneralCloseToTrayOn
+                        : l10n.desktopGeneralCloseToTrayOff,
+                    icon: FluentIcons.window_arrow_up_24_regular,
+                    trailing: WorkspaceSwitch(
+                      value: closeToTray,
+                      onChanged: (v) =>
+                          unawaited(DesktopUiPrefs.setCloseToTray(v)),
+                    ),
+                  ),
+                ),
               // Карточку ссылки готовит отправитель — значит, страницу
               // открывает это окно. Выключатель, как в Signal.
+              ValueListenableBuilder<bool>(
+                valueListenable: DesktopUiPrefs.doubleClickReply,
+                builder: (ctx, on, _) => WorkspaceRow(
+                  label: l10n.desktopGeneralDoubleClickReply,
+                  description: l10n.desktopGeneralDoubleClickReplyHint,
+                  trailing: WorkspaceSwitch(
+                    value: on,
+                    onChanged: (v) =>
+                        unawaited(DesktopUiPrefs.setDoubleClickReply(v)),
+                  ),
+                ),
+              ),
               ValueListenableBuilder<bool>(
                 valueListenable: DesktopUiPrefs.linkPreviews,
                 builder: (ctx, on, _) => WorkspaceRow(
@@ -937,1039 +1072,11 @@ class _PowerPaneState extends State<_PowerPane> {
   }
 }
 
-class _AppearancePane extends StatefulWidget {
-  const _AppearancePane({this.vm});
-
-  /// The controller seam. `controller` below is derived from it, so every
-  /// `widget.controller` use site in this pane keeps working unchanged.
-  final DesktopAppViewModel? vm;
-  AppController? get controller => vm?.controller;
-  @override
-  State<_AppearancePane> createState() => _AppearancePaneState();
-}
-
-class _AppearancePaneState extends State<_AppearancePane> {
-  static String _animModeLabel(ChatWallpaperAnimMode m, AppLocalizations l10n) {
-    switch (m) {
-      case ChatWallpaperAnimMode.continuous:
-        return l10n.desktopWallAnimContinuous;
-      case ChatWallpaperAnimMode.onEnter:
-        return l10n.desktopWallAnimOnEnter;
-      case ChatWallpaperAnimMode.tap:
-        return l10n.desktopWallAnimTap;
-      case ChatWallpaperAnimMode.off:
-        return l10n.desktopWallAnimOff;
-    }
-  }
-
-  /// Wallpaper choices, DERIVED from the shared catalogue.
-  ///
-  /// This used to be a hand-written list of six. The catalogue ships ten
-  /// (five dark, five light) and is the same list mobile offers, so a
-  /// hardcoded copy meant desktop silently lacked four wallpapers and would
-  /// have missed any future addition. Names come from the basename so a new
-  /// asset needs no desktop edit at all.
-  /// 🔴 НАЗВАНИЯ ОБОЕВ ПЕРЕВОДЯТСЯ — в отличие от названий языков. «Слива» и
-  /// «Бирюза» описывают ЦВЕТ, и человеку, который не читает по-русски, они не
-  /// говорят ничего; «Deutsch» же на любом языке остаётся «Deutsch».
-  static String _wallpaperTitle(String basename, AppLocalizations l10n) {
-    switch (basename) {
-      case 'wallpaper_dark_navy.jpg':
-        return l10n.desktopWallpaperNavy;
-      case 'wallpaper_dark_graphite.jpg':
-        return l10n.desktopWallpaperGraphite;
-      case 'wallpaper_dark_teal.jpg':
-        return l10n.desktopWallpaperTeal;
-      case 'wallpaper_dark_plum.jpg':
-        return l10n.desktopWallpaperPlum;
-      case 'wallpaper_dark_wine.jpg':
-        return l10n.desktopWallpaperWine;
-      case 'wallpaper_light_mint.jpg':
-        return l10n.desktopWallpaperMint;
-      case 'wallpaper_light_lavender.jpg':
-        return l10n.desktopWallpaperLavender;
-      case 'wallpaper_light_sunset.jpg':
-        return l10n.desktopWallpaperSunset;
-      case 'wallpaper_light_peach.jpg':
-        return l10n.desktopWallpaperPeach;
-      case 'wallpaper_light_sky.jpg':
-        return l10n.desktopWallpaperSky;
-      default:
-        return basename;
-    }
-  }
-
-  static List<_WallpaperChoice> _wallpaperChoicesFor(AppLocalizations l10n) {
-    final out = <_WallpaperChoice>[
-      // `default` resolves to the navy asset; keep it first and named, since
-      // it is what a fresh profile is already on.
-      _WallpaperChoice(
-        id: 'default',
-        title: l10n.desktopWallpaperNavy,
-        assetPath: '${kBundledChatWallpaperAssetRoot}wallpaper_dark_navy.jpg',
-      ),
-      _WallpaperChoice(
-        id: 'midnight',
-        title: l10n.desktopWallpaperMidnight,
-        assetPath: null,
-      ),
-    ];
-    for (final base in kFeaturedChatWallpaperBasenames) {
-      // Skip navy: it is already present above as `default`, and offering the
-      // same picture twice under two ids would let the selection highlight
-      // land on the row the user did not click.
-      if (base == 'wallpaper_dark_navy.jpg') continue;
-      final path = '$kBundledChatWallpaperAssetRoot$base';
-      out.add(
-        _WallpaperChoice(
-          id: encodeAssetChatWallpaperId(path),
-          title: _wallpaperTitle(base, l10n),
-          assetPath: path,
-        ),
-      );
-    }
-    return out;
-  }
-
-  Future<void> _selectPreset(String id) async {
-    final ctrl = widget.controller;
-    if (ctrl == null) return;
-    // ◆ Нажатие по схеме СНИМАЕТ свой цвет. Иначе плитка схемы выглядела бы
-    // выбранной, а окно оставалось бы прежнего цвета — выбор без последствий.
-    await DesktopUiPrefs.setCustomAccent(0);
-    await ctrl.setAppThemePresetId(id);
-    if (mounted) setState(() {});
-  }
-
-  /// ◆ Пятая плитка полосы: свой цвет.
-  Future<void> _pickCustomAccent(BuildContext context) async {
-    final ctrl = widget.controller;
-    final dark = ctrl?.darkMode ?? true;
-    final current = DesktopUiPrefs.customAccentArgb.value;
-    final argb = await showAccentColorPicker(
-      context,
-      // Открываем на том цвете, который окно носит сейчас: свой, если он
-      // выбран, иначе акцент текущей схемы — так первое движение мышью
-      // подправляет знакомое, а не начинает с чужого красного.
-      initial: current != 0
-          ? Color(current)
-          : (dark
-                ? resolveAppThemePreset(
-                    ctrl?.appThemePresetId ?? kAppThemePresets.first.id,
-                  ).darkPrimary
-                : resolveAppThemePreset(
-                    ctrl?.appThemePresetId ?? kAppThemePresets.first.id,
-                  ).lightPrimary),
-      dark: dark,
-    );
-    if (argb == null) return;
-    await DesktopUiPrefs.setCustomAccent(argb);
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _selectWallpaper(String id) async {
-    final ctrl = widget.controller;
-    if (ctrl == null) return;
-    await ctrl.setDefaultChatWallpaperId(id);
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _selectBubbleStyle(String id) async {
-    final ctrl = widget.controller;
-    if (ctrl == null) return;
-    // Premium bubble styles mirror mobile's free-set gate. Desktop never
-    // sells (free companion app) — a locked swatch just stays locked here;
-    // the account unlocks it by upgrading on the phone, which then syncs via
-    // refreshEntitlementsNow().
-    if (!kFreeBubbleStyleIds.contains(id) && !ctrl.myPremiumBadge) return;
-    await ctrl.setChatBubbleStylePresetId(id);
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _selectNicknameStyle(String id) async {
-    final ctrl = widget.controller;
-    if (ctrl == null) return;
-    await ctrl.setNicknameStylePresetId(id);
-    if (mounted) setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // One rebuild per settled burst of controller ticks, through the shared
-    // hub, instead of this pane owning a `changed` subscription and rebuilding
-    // on every tick — `changed` fires constantly on a paired client. See
-    // [DesktopSelectorHub.ticks].
-    return ValueListenableBuilder<int>(
-      valueListenable: widget.vm?.ticks ?? kDesktopNoTicks,
-      builder: (context, _, __) => _buildBody(context),
-    );
-  }
-
-  Widget _buildBody(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final ctrl = widget.controller;
-    final c = DColors.of(context);
-    final currentPresetId = ctrl?.appThemePresetId ?? kAppThemePresets.first.id;
-    final currentWallpaperId = ctrl?.defaultChatWallpaperId ?? 'default';
-    return _PaneScaffold(
-      children: [
-        WorkspaceCard(
-          title: l10n.desktopAppearanceTitle,
-          description:
-              l10n.desktopAppearanceHint,
-          child: WorkspaceRow(
-            label: l10n.desktopAppearanceScheme,
-            description: l10n.desktopAppearanceSchemeHint,
-            icon: FluentIcons.weather_moon_24_regular,
-            // 🔴 ТРИ ЗНАЧЕНИЯ, А НЕ ТУМБЛЕР.
-            //
-            // Тумблер отвечает «да/нет», а здесь значений три: «Авто» — это
-            // не «включено» и не «выключено», это «решай сам по системе».
-            // Прежний тумблер третьего значения не имел вовсе, и следовать
-            // системной теме окно не умело.
-            trailing: ValueListenableBuilder<String>(
-              valueListenable: DesktopUiPrefs.themeMode,
-              builder: (ctx, mode, _) => DesktopSegmented<String>(
-                values: const ['dark', 'light', 'auto'],
-                labels: [
-                  l10n.desktopAppearanceDark,
-                  l10n.desktopAppearanceLight,
-                  l10n.desktopAppearanceAuto,
-                ],
-                value: mode,
-                onChanged: (v) {
-                  unawaited(DesktopUiPrefs.setThemeMode(v));
-                  if (ctrl == null || v == 'auto') return;
-                  unawaited(ctrl.setDarkMode(v == 'dark'));
-                },
-              ),
-            ),
-          ),
-        ),
-        WorkspaceCard(
-          title: l10n.desktopAppearanceTextSize,
-          description: l10n.desktopAppearanceTextSizeHint,
-          child: WorkspaceRow(
-            label: l10n.desktopAppearanceTextSize,
-            icon: FluentIcons.text_font_size_24_regular,
-            // 🔴 СТУПЕНИ, А НЕ ПОЛЗУНОК. Ползунок даёт произвольное число, при
-            // котором раскладка ведёт себя непредсказуемо, а вернуться к «как
-            // было» становится нечем. Пять ступеней всегда можно обойти и
-            // вернуться ровно на 100 %.
-            trailing: ValueListenableBuilder<double>(
-              valueListenable: DesktopUiPrefs.textScale,
-              builder: (ctx, scale, _) => DesktopSegmented<double>(
-                values: DesktopUiPrefs.textScaleSteps,
-                // 🔴 ЗНАК ПРОЦЕНТА СТАВИТСЯ ПО-РАЗНОМУ. В английском это
-                // «90%» вплотную, в русском и французском — «90 %» через
-                // неразрывный пробел. Собранная руками строка была бы верна
-                // ровно в одном языке из восьми, поэтому её собирает `intl`.
-                labels: [
-                  for (final s in DesktopUiPrefs.textScaleSteps)
-                    NumberFormat.percentPattern(
-                      Localizations.localeOf(context).toString(),
-                    ).format(s),
-                ],
-                value: scale,
-                onChanged: (v) => unawaited(DesktopUiPrefs.setTextScale(v)),
-              ),
-            ),
-          ),
-        ),
-        WorkspaceCard(
-          title: l10n.desktopAppearanceAccent,
-          description: l10n.desktopAppearanceAccentHint,
-          // 🔴 ПОЛОСА ПЛИТОК, А НЕ СЕТКА КАРТОЧЕК.
-          //
-          // Одиннадцать пресетов лежали сеткой три в ряд, каждый — карточка с
-          // названием и обводкой: почти четыре сотни точек высоты на выбор
-          // цвета. В макете это ОДНА строка квадратных плиток: цвет выбирают
-          // глазами, а не по названию, и название рядом с пятном ничего не
-          // добавляет — «Аврора» не говорит, какая она.
-          //
-          // Имя остаётся в подсказке: тому, кто захочет назвать свой цвет
-          // другому человеку, оно понадобится.
-          child: ValueListenableBuilder<int>(
-            valueListenable: DesktopUiPrefs.customAccentArgb,
-            builder: (ctx, custom, _) => Wrap(
-              spacing: 9,
-              runSpacing: 9,
-              children: [
-                for (final preset in kAppThemePresets)
-                  _PresetTile(
-                    preset: preset,
-                    selected: custom == 0 && preset.id == currentPresetId,
-                    onTap: ctrl == null ? null : () => _selectPreset(preset.id),
-                  ),
-                // ◆ ПЯТАЯ ПЛИТКА МАКЕТА — СВОЙ ЦВЕТ (пунктир + пипетка).
-                //
-                // Одиннадцать схем закрывают вкусы, но не все: цвет компании
-                // или просто цвет, который человек узнаёт своим, в списке не
-                // предусмотрен.
-                _CustomAccentTile(
-                  color: custom == 0 ? null : Color(custom),
-                  onTap: ctrl == null
-                      ? null
-                      : () => unawaited(_pickCustomAccent(ctx)),
-                ),
-              ],
-            ),
-          ),
-        ),
-        WorkspaceCard(
-          title: l10n.desktopAppearanceWallpaper,
-          // D-4: this used to promise a per-chat override via the details
-          // drawer. No such override exists anywhere in the desktop tree — the
-          // background is always the profile default. Claim removed rather
-          // than left standing (P-5 extends to promises, not just controls).
-          description: l10n.desktopAppearanceWallpaperHint,
-          child: GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _wallpaperChoicesFor(l10n).length,
-            // 🔴 Плитки по МАКСИМАЛЬНОЙ ширине, а не «три в ряд».
-            //
-            // Три в ряд на широком окне настроек давали превью по 340 точек:
-            // двенадцать обоев занимали четыре экрана, и выбрать фон значило
-            // прокрутить их все. Обои узнают с первого взгляда, им хватает
-            // двух сотен точек. Ограничение по ширине, а не по числу колонок,
-            // — чтобы на узком окне плитки не сплющивались, а колонок стало
-            // меньше.
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 200,
-              mainAxisSpacing: DSpace.s,
-              crossAxisSpacing: DSpace.s,
-              childAspectRatio: 1.3,
-            ),
-            itemBuilder: (ctx, i) {
-              final choice = _wallpaperChoicesFor(l10n)[i];
-              // For the "midnight" option, paint the deep solid as a swatch.
-              final isMidnight = choice.id == 'midnight';
-              return _WallpaperCard(
-                title: choice.title,
-                selected: choice.id == currentWallpaperId,
-                onTap: ctrl == null ? null : () => _selectWallpaper(choice.id),
-                swatchColor: isMidnight ? kDarkSolidChatWallpaperColor : null,
-                assetPath: isMidnight ? null : choice.assetPath,
-              );
-            },
-          ),
-        ),
-        // Animated styles, generated from the SHARED catalogue rather than a
-        // desktop copy — a style added on mobile shows up here for free.
-        WorkspaceCard(
-          title: l10n.desktopAppearanceLiveWallpaper,
-          description:
-              l10n.desktopAppearanceLiveWallpaperHint,
-          child: GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: WallpaperStyles.all.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: DSpace.m,
-              crossAxisSpacing: DSpace.m,
-              childAspectRatio: 1.45,
-            ),
-            itemBuilder: (ctx, i) {
-              final style = WallpaperStyles.all[i];
-              final id = encodeAnimatedChatWallpaperId(style.key);
-              return _WallpaperCard(
-                title: style.name,
-                selected: id == currentWallpaperId,
-                onTap: ctrl == null ? null : () => _selectWallpaper(id),
-                // A live preview per tile would run one shader each; the
-                // style's own first colour reads the mood at a glance and
-                // costs nothing.
-                swatchColor: style.colors.first,
-                assetPath: null,
-              );
-            },
-          ),
-        ),
-        if (ctrl != null) ...[
-          WorkspaceCard(
-            title: l10n.desktopAppearanceAnimBehaviour,
-            description: l10n.desktopAppearanceAnimBehaviourHint,
-            child: Column(
-              children: [
-                for (final m in ChatWallpaperAnimMode.values)
-                  WorkspaceRow(
-                    label: _animModeLabel(m, l10n),
-                    trailing: WorkspaceSwitch(
-                      value: ctrl.chatWallpaperAnimMode == m,
-                      onChanged: (v) {
-                        if (!v) return; // a mode is chosen, never un-chosen
-                        unawaited(ctrl.setChatWallpaperAnimMode(m));
-                      },
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          WorkspaceCard(
-            title: l10n.desktopAppearanceWallPulse,
-            description: l10n.desktopAppearanceWallPulseHint,
-            child: WorkspaceRow(
-              label: l10n.desktopAppearanceEnable,
-              description: l10n.desktopAppearanceLiveOnly,
-              trailing: WorkspaceSwitch(
-                value: ctrl.chatWallpaperConduct,
-                onChanged: (v) => unawaited(ctrl.setChatWallpaperConduct(v)),
-              ),
-            ),
-          ),
-        ],
-        WorkspaceCard(
-          title: l10n.desktopAppearanceBubbleStyle,
-          description: l10n.desktopAppearanceBubbleStyleHint,
-          child: GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: kChatBubbleStylePresets.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: DSpace.m,
-              crossAxisSpacing: DSpace.m,
-              childAspectRatio: 2.6,
-            ),
-            itemBuilder: (ctx, i) {
-              final preset = kChatBubbleStylePresets[i];
-              final locked =
-                  ctrl != null &&
-                  !kFreeBubbleStyleIds.contains(preset.id) &&
-                  !ctrl.myPremiumBadge;
-              return _BubbleStyleCard(
-                preset: preset,
-                selected:
-                    preset.id ==
-                    (ctrl?.chatBubbleStylePresetId ?? 'flutter_dash'),
-                locked: locked,
-                onTap: ctrl == null
-                    ? null
-                    : () => _selectBubbleStyle(preset.id),
-              );
-            },
-          ),
-        ),
-        WorkspaceCard(
-          title: l10n.desktopAppearanceSenderColour,
-          description: l10n.desktopAppearanceSenderColourHint,
-          child: GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: kNicknameStylePresets.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: DSpace.m,
-              crossAxisSpacing: DSpace.m,
-              childAspectRatio: 2.6,
-            ),
-            itemBuilder: (ctx, i) {
-              final preset = kNicknameStylePresets[i];
-              return _NicknameStyleCard(
-                preset: preset,
-                selected:
-                    preset.id == (ctrl?.nicknameStylePresetId ?? 'accent'),
-                onTap: ctrl == null
-                    ? null
-                    : () => _selectNicknameStyle(preset.id),
-              );
-            },
-          ),
-        ),
-        WorkspaceCard(
-          title: l10n.desktopAppearanceIndicatorColour,
-          description: l10n.desktopAppearanceIndicatorColourHint,
-          child: GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: kIndicatorColorPresets.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              mainAxisSpacing: DSpace.m,
-              crossAxisSpacing: DSpace.m,
-              childAspectRatio: 2.6,
-            ),
-            itemBuilder: (ctx, i) {
-              final preset = kIndicatorColorPresets[i];
-              final dark = ctrl?.darkMode ?? true;
-              final c = DColors.of(ctx);
-              return _IndicatorSwatchCard(
-                label: preset.nameRu,
-                // `followsTheme` presets have no colour of their own — showing
-                // the live accent is what they will actually look like.
-                color: preset.followsTheme
-                    ? c.accentPrimary
-                    : (dark ? preset.darkPrimary : preset.lightPrimary),
-                selected:
-                    preset.id == (ctrl?.indicatorColorPresetId ?? 'theme'),
-                onTap: ctrl == null
-                    ? null
-                    : () =>
-                          unawaited(ctrl.setIndicatorColorPresetId(preset.id)),
-              );
-            },
-          ),
-        ),
-        if (ctrl == null)
-          WorkspaceCard(
-            title: l10n.desktopAppearanceDemoMode,
-            description:
-                l10n.desktopAppearanceDemoHint,
-            child: const SizedBox.shrink(),
-          ),
-        WorkspaceCard(
-          title: l10n.desktopAppearanceCurrentChoice,
-          child: Row(
-            children: [
-              Icon(
-                FluentIcons.color_24_regular,
-                size: 18,
-                color: c.textSecondary,
-              ),
-              const SizedBox(width: DSpace.s),
-              Text(
-                l10n.desktopAppearanceThemeIs(resolveAppThemePreset(currentPresetId).nameRu),
-                style: DType.body.copyWith(color: c.textPrimary),
-              ),
-              const Spacer(),
-              Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: c.accentPrimary,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: c.borderSubtle),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Lightweight value class for the small built-in wallpaper grid we render
-/// in the desktop settings. The mobile pickers load the full bundled list
-/// via `loadBundledChatWallpaperAssets`; on desktop we curate a short
-/// shortlist to keep the settings page focused.
-class _WallpaperChoice {
-  const _WallpaperChoice({
-    required this.id,
-    required this.title,
-    required this.assetPath,
-  });
-
-  final String id;
-  final String title;
-  final String? assetPath;
-}
-
-/// Плитка акцента: квадрат 36 с градиентом схемы, у выбранного — двойное
-/// кольцо (провал цветом фона, затем акцент), как в макете.
-class _PresetTile extends StatelessWidget {
-  const _PresetTile({
-    required this.preset,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final AppThemePreset preset;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = DColors.of(context);
-    return DesktopTooltip(
-      message: preset.nameRu,
-      child: HoverListener(
-        onTap: onTap,
-        cursor: onTap == null
-            ? SystemMouseCursors.basic
-            : SystemMouseCursors.click,
-        builder: (ctx, hovered, pressed) => AnimatedContainer(
-          duration: DMotion.fast,
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [preset.darkPrimary, preset.darkSecondary],
-            ),
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              if (selected) ...[
-                // Провал цветом карточки, затем кольцо акцента: так выбранная
-                // плитка читается кольцом, а не просто «чуть ярче».
-                BoxShadow(color: c.elevated, spreadRadius: 2),
-                BoxShadow(color: preset.darkPrimary, spreadRadius: 4),
-              ] else if (hovered)
-                BoxShadow(
-                  color: Colors.white.withValues(alpha: 0.18),
-                  spreadRadius: 2,
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// ◆ Плитка «свой цвет»: пунктирный квадрат с пипеткой, пока цвета нет, и
-/// сам цвет, когда он выбран.
-///
-/// Пунктир — это «здесь пока пусто, и заполнить должен ты»: сплошная рамка
-/// читалась бы как ещё одна готовая схема, только бесцветная.
-class _CustomAccentTile extends StatelessWidget {
-  const _CustomAccentTile({required this.color, required this.onTap});
-
-  /// Выбранный цвет или `null`, если окно живёт на схеме.
-  final Color? color;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final c = DColors.of(context);
-    final picked = color;
-    return DesktopTooltip(
-      message: picked == null ? l10n.desktopAccentCustom : l10n.desktopAccentCustomChange,
-      child: HoverListener(
-        onTap: onTap,
-        cursor: onTap == null
-            ? SystemMouseCursors.basic
-            : SystemMouseCursors.click,
-        builder: (ctx, hovered, pressed) {
-          final tile = AnimatedContainer(
-            duration: DMotion.fast,
-            width: 36,
-            height: 36,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              gradient: picked == null
-                  ? null
-                  : LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [picked, desktopAccentAlt(picked)],
-                    ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                if (picked != null) ...[
-                  BoxShadow(color: c.elevated, spreadRadius: 2),
-                  BoxShadow(color: picked, spreadRadius: 4),
-                ] else if (hovered)
-                  BoxShadow(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    spreadRadius: 2,
-                  ),
-              ],
-            ),
-            child: picked != null
-                ? null
-                : Icon(
-                    FluentIcons.eyedropper_24_regular,
-                    size: 18,
-                    color: c.textTertiary,
-                  ),
-          );
-          // Пунктир рисуем только пустой плитке: поверх выбранного цвета он
-          // спорил бы с кольцом выбора.
-          return picked == null
-              ? CustomPaint(
-                  painter: _DashedSquarePainter(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    radius: 12,
-                  ),
-                  child: tile,
-                )
-              : tile;
-        },
-      ),
-    );
-  }
-}
-
-/// Пунктирная рамка скруглённого квадрата: во Flutter такой границы нет.
-class _DashedSquarePainter extends CustomPainter {
-  const _DashedSquarePainter({required this.color, required this.radius});
-
-  final Color color;
-  final double radius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rrect = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      Radius.circular(radius),
-    );
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5;
-    // Штрих 3 через 3 — по макету: `1.5px dashed`.
-    for (final metric in (Path()..addRRect(rrect)).computeMetrics()) {
-      var d = 0.0;
-      while (d < metric.length) {
-        canvas.drawPath(
-          metric.extractPath(d, (d + 3).clamp(0.0, metric.length)),
-          paint,
-        );
-        d += 6;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DashedSquarePainter old) =>
-      old.color != color || old.radius != radius;
-}
-
-class _BubbleStyleCard extends StatelessWidget {
-  const _BubbleStyleCard({
-    required this.preset,
-    required this.selected,
-    required this.locked,
-    required this.onTap,
-  });
-
-  final ChatBubbleStylePreset preset;
-  final bool selected;
-  final bool locked;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = DColors.of(context);
-    return GestureDetector(
-      onTap: locked ? null : onTap,
-      child: AnimatedContainer(
-        duration: DMotion.fast,
-        padding: const EdgeInsets.symmetric(
-          horizontal: DSpace.m,
-          vertical: DSpace.s,
-        ),
-        decoration: BoxDecoration(
-          color: selected ? c.selected : c.thread,
-          borderRadius: BorderRadius.circular(DRadii.md),
-          border: Border.all(
-            color: selected ? c.accentPrimary : c.borderSubtle,
-            width: selected ? 1.6 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(DRadii.sm),
-                    gradient: LinearGradient(
-                      colors: [preset.darkTop, preset.darkBottom],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                ),
-                if (locked)
-                  Positioned(
-                    right: -3,
-                    bottom: -3,
-                    child: Container(
-                      width: 16,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: c.elevated,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: c.borderSubtle),
-                      ),
-                      child: Icon(
-                        FluentIcons.lock_closed_12_filled,
-                        size: 9,
-                        color: c.textSecondary,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(width: DSpace.m),
-            Expanded(
-              child: Text(
-                preset.nameRu,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: DType.bodyStrong.copyWith(
-                  color: locked ? c.textSecondary : c.textPrimary,
-                ),
-              ),
-            ),
-            if (selected)
-              Icon(
-                FluentIcons.checkmark_circle_24_filled,
-                size: 18,
-                color: c.accentPrimary,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NicknameStyleCard extends StatelessWidget {
-  const _NicknameStyleCard({
-    required this.preset,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final NicknameStylePreset preset;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = DColors.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: DMotion.fast,
-        padding: const EdgeInsets.symmetric(
-          horizontal: DSpace.m,
-          vertical: DSpace.s,
-        ),
-        decoration: BoxDecoration(
-          color: selected ? c.selected : c.thread,
-          borderRadius: BorderRadius.circular(DRadii.md),
-          border: Border.all(
-            color: selected ? c.accentPrimary : c.borderSubtle,
-            width: selected ? 1.6 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 36,
-              height: 36,
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: 0,
-                    top: 6,
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: preset.incoming,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    right: 0,
-                    bottom: 6,
-                    child: Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: preset.outgoing,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: c.thread, width: 2),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: DSpace.m),
-            Expanded(
-              child: Text(
-                preset.nameRu,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: DType.bodyStrong.copyWith(color: c.textPrimary),
-              ),
-            ),
-            if (selected)
-              Icon(
-                FluentIcons.checkmark_circle_24_filled,
-                size: 18,
-                color: c.accentPrimary,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One indicator-colour choice: a dot in the colour, its name, and a ring when
-/// selected. Deliberately not the theme swatch — that one carries a two-colour
-/// preset, and an indicator has exactly one.
-class _IndicatorSwatchCard extends StatelessWidget {
-  const _IndicatorSwatchCard({
-    required this.label,
-    required this.color,
-    required this.selected,
-    this.onTap,
-  });
-
-  final String label;
-  final Color color;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = DColors.of(context);
-    return HoverListener(
-      onTap: onTap,
-      builder: (ctx, hovered, pressed) => Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: DSpace.m,
-          vertical: DSpace.s,
-        ),
-        decoration: BoxDecoration(
-          color: selected
-              ? c.accentPrimary.withValues(alpha: 0.14)
-              : (hovered ? c.hover : c.elevated),
-          borderRadius: BorderRadius.circular(DRadii.md),
-          border: Border.all(
-            color: selected ? c.accentPrimary : c.borderSubtle,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: DSpace.s),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: DType.caption.copyWith(
-                  color: c.textPrimary,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-
-class _WallpaperCard extends StatelessWidget {
-  const _WallpaperCard({
-    required this.title,
-    required this.selected,
-    required this.onTap,
-    this.assetPath,
-    this.swatchColor,
-  });
-
-  final String title;
-  final bool selected;
-  final VoidCallback? onTap;
-  final String? assetPath;
-  final Color? swatchColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = DColors.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: DMotion.fast,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(DRadii.md),
-          border: Border.all(
-            color: selected ? c.accentPrimary : c.borderSubtle,
-            width: selected ? 1.6 : 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (assetPath != null)
-              // D-3: decode at thumbnail size, not source size. These assets
-              // are 1440×2560 ≈ 14.75 MB decoded each; six tiles built at once
-              // (shrinkWrap grid, no lazy viewport) came to ~74 MB against
-              // Flutter's 100 MB image cache, so opening Appearance evicted
-              // every avatar and media thumbnail in the app and forced them all
-              // to re-decode. Same helper mobile uses — "~0.4 MB instead of
-              // 14 MB".
-              Image.asset(
-                assetPath!,
-                fit: BoxFit.cover,
-                cacheWidth: chatWallpaperDecodeWidth(context, preview: true),
-                errorBuilder: (_, __, ___) =>
-                    Container(color: swatchColor ?? c.chatList),
-              )
-            else
-              Container(color: swatchColor ?? c.chatList),
-            // Bottom gradient + label.
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.55),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              left: DSpace.s,
-              right: DSpace.s,
-              bottom: DSpace.s,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: DType.label.copyWith(color: Colors.white),
-                    ),
-                  ),
-                  if (selected)
-                    const Icon(
-                      FluentIcons.checkmark_circle_24_filled,
-                      size: 16,
-                      color: Colors.white,
-                    ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _NotificationsPane extends StatefulWidget {
-  const _NotificationsPane();
+  const _NotificationsPane({this.vm});
+
+  /// Подписка — для замков на платных звуках; без профиля можно всё.
+  final DesktopAppViewModel? vm;
   @override
   State<_NotificationsPane> createState() => _NotificationsPaneState();
 }
@@ -2059,24 +1166,18 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
               WorkspaceRow(
                 label: l10n.desktopNotifShowPreview,
                 description: l10n.desktopNotifInSystem,
-                trailing: DropdownButton<int>(
+                trailing: WorkspaceSelect<int>(
                   value: previewLevel,
-                  underline: const SizedBox.shrink(),
+                  values: _previewLevels,
+                  labelOf: (level) => _previewLevelLabel(level, l10n),
                   onChanged: svc == null
                       ? null
                       : (v) {
                           final s = _svc;
-                          if (v == null || s == null) return;
+                          if (s == null) return;
                           unawaited(s.setPreviewLevel(v));
                           setState(() {});
                         },
-                  items: [
-                    for (final level in _previewLevels)
-                      DropdownMenuItem(
-                        value: level,
-                        child: Text(_previewLevelLabel(level, l10n)),
-                      ),
-                  ],
                 ),
               ),
               // Rooms and direct chats mute independently — the one control
@@ -2109,6 +1210,22 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
                   },
                 ),
               ),
+              // Р1, этап 5 (29.09.2026): свои окошки в углу экрана, как у
+              // Telegram. Только Windows — на macOS системные уведомления и
+              // есть привычный путь.
+              if (Platform.isWindows)
+                ValueListenableBuilder<bool>(
+                  valueListenable: DesktopUiPrefs.customNotifications,
+                  builder: (ctx, own, _) => WorkspaceRow(
+                    label: l10n.desktopNotifOwnWindows,
+                    description: l10n.desktopNotifOwnWindowsHint,
+                    trailing: WorkspaceSwitch(
+                      value: own,
+                      onChanged: (v) =>
+                          unawaited(DesktopUiPrefs.setCustomNotifications(v)),
+                    ),
+                  ),
+                ),
               WorkspaceRow(
                 label: l10n.desktopNotifSound,
                 trailing: WorkspaceSwitch(
@@ -2117,6 +1234,20 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
                     final s = _svc;
                     if (s == null) return;
                     unawaited(s.setSoundEnabled(v));
+                    setState(() {});
+                  },
+                ),
+              ),
+              // Как в Telegram: окно в фокусе молчит только об открытом чате.
+              WorkspaceRow(
+                label: l10n.desktopNotifWhileFocused,
+                description: l10n.desktopNotifWhileFocusedHint,
+                trailing: WorkspaceSwitch(
+                  value: svc?.notifyWhileFocused ?? true,
+                  onChanged: (v) {
+                    final s = _svc;
+                    if (s == null) return;
+                    unawaited(s.setNotifyWhileFocused(v));
                     setState(() {});
                   },
                 ),
@@ -2137,6 +1268,14 @@ class _NotificationsPaneState extends State<_NotificationsPane> {
             ],
           ),
         ),
+        // 🔴 ВЫБОР ЗВУКОВ (01.10.2026, владелец: «человек должен выбирать
+        // звуки и слышать их»). Сразу под «Звуком»: выключен он — карточки
+        // говорят, что выбранному не звучать.
+        DesktopMessageSoundCard(
+          soundOn: sound,
+          entitlement: () => widget.vm?.controller.entitlementStateNow,
+        ),
+        DesktopInChatSoundCard(soundOn: sound),
       ],
     );
   }
@@ -2277,6 +1416,24 @@ String _audienceTitle(String key, AppLocalizations l10n) => switch (key) {
 };
 
 class _PrivacyPaneState extends State<_PrivacyPane> {
+  /// Включить или выключить защиту от снимков экрана. Отказ системы — не
+  /// «включено»: контроллер тогда не сохраняет настройку, а человек видит
+  /// причину, почему переключатель вернулся.
+  Future<void> _setScreenPrivacy(AppController ctrl, bool on) async {
+    final l10n = AppLocalizations.of(context)!;
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final palette = DColors.maybeOf(context);
+    final ok = await ctrl.setScreenPrivacy(on);
+    if (mounted) setState(() {});
+    if (ok) return;
+    DesktopSnackbar.showIn(
+      overlay,
+      message: l10n.desktopPrivacyScreenCaptureFailed,
+      kind: DSnackKind.error,
+      palette: palette,
+    );
+  }
+
   String _audienceLabel(String value, AppLocalizations l10n) {
     switch (value) {
       case 'nobody':
@@ -2318,12 +1475,29 @@ class _PrivacyPaneState extends State<_PrivacyPane> {
         ),
         if (widget.lockService != null)
           _AppLockCard(service: widget.lockService!),
-        // «Отчёты о прочтении» / «Индикатор набора» / «Защита от скриншотов»
-        // toggles removed: none of them gated a real feature on either
-        // platform (sendTypingState and read receipts always fire
-        // unconditionally; window_manager has no content-protection API) —
-        // a switch with zero effect is a false sense of control, not a
-        // setting. Re-add only once a real on/off exists to back it.
+        // «Отчёты о прочтении» / «Индикатор набора» toggles removed: neither
+        // gated a real feature (sendTypingState and read receipts always fire
+        // unconditionally) — a switch with zero effect is a false sense of
+        // control, not a setting. Re-add only once a real on/off exists.
+        //
+        // «Защита от снимков экрана» вернулась 01.10.2026 — теперь за ней
+        // настоящий выключатель: раннер отвечает на `secretly/screen_privacy`
+        // (см. [DesktopScreenPrivacy]).
+        if (ctrl != null && DesktopScreenPrivacy.isSupported)
+          WorkspaceCard(
+            title: l10n.desktopPrivacyScreenCaptureTitle,
+            // Честно: это просьба к системе, а не замок, и наша собственная
+            // демонстрация экрана окна тоже не покажет.
+            description: l10n.desktopPrivacyScreenCaptureHint,
+            child: WorkspaceRow(
+              label: l10n.desktopPrivacyScreenCaptureSwitch,
+              icon: FluentIcons.camera_off_24_regular,
+              trailing: WorkspaceSwitch(
+                value: ctrl.screenPrivacy,
+                onChanged: (v) => unawaited(_setScreenPrivacy(ctrl, v)),
+              ),
+            ),
+          ),
         if (ctrl != null) ...[
           WorkspaceCard(
             title: l10n.desktopPrivacyWhoSees,
@@ -2331,32 +1505,19 @@ class _PrivacyPaneState extends State<_PrivacyPane> {
                 l10n.desktopPrivacyWhoSeesHint,
             child: Column(
               children: [
-                for (final key in _kAudienceCategories) ...[
-                  if (key != _kAudienceCategories.first)
-                    const Divider(height: 1),
+                // Черты между строками ставит сама карточка: свои
+                // `Divider` здесь давали двойные линии.
+                for (final key in _kAudienceCategories)
                   WorkspaceRow(
                     label: _audienceTitle(key, l10n),
-                    trailing: DropdownButton<String>(
+                    trailing: WorkspaceSelect<String>(
                       value: ctrl.privacyAudience[key] ?? 'contacts',
-                      underline: const SizedBox.shrink(),
-                      items: [
-                        for (final v in const [
-                          'nobody',
-                          'contacts',
-                          'everyone',
-                        ])
-                          DropdownMenuItem(
-                            value: v,
-                            child: Text(_audienceLabel(v, l10n)),
-                          ),
-                      ],
-                      onChanged: (v) {
-                        if (v == null) return;
-                        unawaited(ctrl.setPrivacyAudience(key, v));
-                      },
+                      values: const ['nobody', 'contacts', 'everyone'],
+                      labelOf: (v) => _audienceLabel(v, l10n),
+                      onChanged: (v) =>
+                          unawaited(ctrl.setPrivacyAudience(key, v)),
                     ),
                   ),
-                ],
               ],
             ),
           ),
@@ -2373,7 +1534,6 @@ class _PrivacyPaneState extends State<_PrivacyPane> {
                         unawaited(ctrl.setDiscoverableByNickname(v)),
                   ),
                 ),
-                const Divider(height: 1),
                 WorkspaceRow(
                   label: l10n.desktopPrivacySuggest,
                   trailing: WorkspaceSwitch(
@@ -2403,25 +1563,17 @@ class _PrivacyPaneState extends State<_PrivacyPane> {
               label: l10n.desktopPrivacyIfAbsent,
               description: _deleteMonthsLabel(ctrl.privacyDeleteAccountMonths, l10n),
               icon: FluentIcons.timer_24_regular,
-              trailing: DropdownButton<int>(
+              trailing: WorkspaceSelect<int>(
                 value:
                     _kDeleteMonthOptions.contains(
                       ctrl.privacyDeleteAccountMonths,
                     )
                     ? ctrl.privacyDeleteAccountMonths
                     : _kDeleteMonthOptions.last,
-                underline: const SizedBox.shrink(),
-                items: [
-                  for (final m in _kDeleteMonthOptions)
-                    DropdownMenuItem(
-                      value: m,
-                      child: Text(_deleteMonthsLabel(m, l10n)),
-                    ),
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  unawaited(ctrl.setPrivacyDeleteAccountMonths(v));
-                },
+                values: _kDeleteMonthOptions,
+                labelOf: (m) => _deleteMonthsLabel(m, l10n),
+                onChanged: (v) =>
+                    unawaited(ctrl.setPrivacyDeleteAccountMonths(v)),
               ),
             ),
           ),
@@ -2541,18 +1693,13 @@ class _AppLockCardState extends State<_AppLockCard> {
             WorkspaceRow(
               label: l10n.desktopLockAfter,
               description: _graceLabel(grace, l10n),
-              trailing: DropdownButton<int>(
+              trailing: WorkspaceSelect<int>(
                 value: _graceOptions.contains(grace)
                     ? grace
                     : _graceOptions.first,
-                underline: const SizedBox.shrink(),
-                items: [
-                  for (final s in _graceOptions)
-                    DropdownMenuItem(value: s, child: Text(_graceLabel(s, l10n))),
-                ],
-                onChanged: (v) {
-                  if (v != null) unawaited(svc.setGraceSeconds(v));
-                },
+                values: _graceOptions,
+                labelOf: (s) => _graceLabel(s, l10n),
+                onChanged: (v) => unawaited(svc.setGraceSeconds(v)),
               ),
             ),
           if (enabled)
@@ -2572,8 +1719,7 @@ class _DevicesPane extends StatefulWidget {
   const _DevicesPane({this.controller, this.vm});
   final AppController? controller;
 
-  /// Only needed to hand down to the pairing sheet, which binds to the shared
-  /// tick instead of opening its own subscription.
+  /// `null` — демонстрационная сборка без контроллера.
   final DesktopAppViewModel? vm;
 
   @override
@@ -2612,7 +1758,7 @@ class _DevicesPaneState extends State<_DevicesPane> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = desktopErrorText(e);
         _loading = false;
       });
     }
@@ -2633,9 +1779,6 @@ class _DevicesPaneState extends State<_DevicesPane> {
     final controller = widget.controller;
     if (controller == null) return;
     if (_endingDeviceId != null) return;
-    // Capture messenger BEFORE any await so the post-await snackbar isn't
-    // flagged by `use_build_context_synchronously`.
-    final messenger = ScaffoldMessenger.maybeOf(ctx);
     final confirmed = await showDialog<bool>(
       context: ctx,
       builder: (dialogCtx) {
@@ -2664,9 +1807,15 @@ class _DevicesPaneState extends State<_DevicesPane> {
     });
     String? errorMsg;
     try {
-      await controller.endDeviceSession(targetDeviceId: targetDeviceId);
+      // 🔴 `false` — это НЕ «завершён» (01.10.2026). Ответ отбрасывался, и
+      // окно говорило «Сеанс устройства завершён» про устройство, которое
+      // сервер так и не снял.
+      final ended = await controller.endDeviceSession(
+        targetDeviceId: targetDeviceId,
+      );
+      if (!ended) errorMsg = l10n.desktopDevicesEndNotConfirmed;
     } catch (e) {
-      errorMsg = e.toString();
+      errorMsg = desktopErrorText(e);
     } finally {
       if (mounted) {
         setState(() {
@@ -2675,15 +1824,16 @@ class _DevicesPaneState extends State<_DevicesPane> {
       }
     }
     if (!mounted) return;
-    if (errorMsg != null) {
-      messenger?.showSnackBar(
-        SnackBar(content: Text(l10n.desktopDevicesEndFailed(errorMsg))),
-      );
-    } else {
-      messenger?.showSnackBar(
-        SnackBar(content: Text(l10n.desktopDevicesEnded)),
-      );
-    }
+    // 🔴 Своя плашка окна, а не материальная (30.09.2026): материальная
+    // рисовалась ПОД слоем настроек, и ответ «сеанс завершён / не удалось»
+    // не видел никто.
+    DesktopSnackbar.show(
+      context,
+      message: errorMsg != null
+          ? l10n.desktopDevicesEndFailed(errorMsg)
+          : l10n.desktopDevicesEnded,
+      kind: errorMsg != null ? DSnackKind.error : DSnackKind.success,
+    );
     await _load();
   }
 
@@ -2828,11 +1978,19 @@ class _DevicesPaneState extends State<_DevicesPane> {
             onTap: _loading ? null : _load,
           ),
         ),
-        // PR8 hotfix: пользователь жаловался, что подключить второе устройство
-        // из Settings невозможно — QR показывается только в onboarding-экране.
-        // Эта карточка вызывает тот же createDesktopLinkRequest +
-        // buildDesktopLinkQrPayload пайплайн в bottom-sheet'е.
-        _PairNewDeviceCard(vm: vm, onPaired: _load),
+        // 🔴 «ПОДКЛЮЧИТЬ УСТРОЙСТВО» ОТСЮДА УБРАНО (30.09.2026). Карточка звала
+        // вход НЕпривязанного компьютера: он взводит запрет входа, и уже
+        // вошедший компьютер оказывался на экране выбора входа — и после
+        // перезапуска тоже, а вернуться можно было только новой привязкой со
+        // стиранием базы. QR при этом нёс личность ЭТОГО компьютера. Компьютер
+        // подключают с телефона — об этом и говорит строка.
+        WorkspaceCard(
+          child: WorkspaceRow(
+            label: l10n.desktopDevicesAddComputerTitle,
+            description: l10n.desktopDevicesAddComputerHint,
+            icon: FluentIcons.laptop_multiple_24_regular,
+          ),
+        ),
         // PR6: manual «Sync History» trigger. Asks one of the user's other
         // devices (typically the mobile that paired this desktop) to ship
         // a recent-history window over the existing e2ee ratchet. The
@@ -2850,298 +2008,6 @@ class _DevicesPaneState extends State<_DevicesPane> {
         // nowhere on desktop, leaving users with no way to leave the account
         // short of `rm -rf ~/Library/Application Support/Secretly`.
       ],
-    );
-  }
-}
-
-/// Settings → Devices → «Подключить устройство».
-///
-/// Reuses the same `createDesktopLinkRequest` + `buildDesktopLinkQrPayload`
-/// pipeline that `DesktopOnboardingScreen` uses for the first-pair flow.
-/// The difference: this is invoked from an already-authenticated desktop, so
-/// the resulting QR is meant to be scanned by **another** new desktop (or
-/// presented to a freshly-installed mobile). The mobile-side QR scanner
-/// (`devices_auth_screen.dart`) accepts the same payload format.
-class _PairNewDeviceCard extends StatelessWidget {
-  const _PairNewDeviceCard({required this.vm, this.onPaired});
-  final DesktopAppViewModel vm;
-  final VoidCallback? onPaired;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    return WorkspaceCard(
-      child: WorkspaceRow(
-        label: l10n.desktopPairTitle,
-        description:
-            l10n.desktopPairHint,
-        icon: FluentIcons.qr_code_24_regular,
-        trailing: const Icon(Icons.chevron_right_rounded),
-        onTap: () async {
-          // `showDialog` (вместо showModalBottomSheet) — это самый надёжный
-          // путь поверх _modalOverlay-стека в DesktopProductionApp. Использует
-          // root navigator, поэтому диалог всегда оказывается выше любого
-          // _modalOverlay в Stack'е.
-          await showDialog<void>(
-            context: context,
-            useRootNavigator: true,
-            barrierDismissible: true,
-            barrierColor: Colors.black.withValues(alpha: 0.55),
-            builder: (_) => _PairDeviceDialog(vm: vm),
-          );
-          // Re-load the device list on close — newly-paired device should now
-          // show up.
-          onPaired?.call();
-        },
-      ),
-    );
-  }
-}
-
-/// Wraps the QR sheet in a Dialog so it overlays cleanly on top of the
-/// DesktopProductionApp `_modalOverlay` Stack. Uses root navigator.
-class _PairDeviceDialog extends StatelessWidget {
-  const _PairDeviceDialog({required this.vm});
-  final DesktopAppViewModel vm;
-  @override
-  Widget build(BuildContext context) {
-    final c = DColors.of(context);
-    return Center(
-      child: Material(
-        color: c.elevated,
-        borderRadius: BorderRadius.circular(DRadii.lg),
-        elevation: 12,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 460, maxHeight: 720),
-          child: _PairDeviceSheet(vm: vm),
-        ),
-      ),
-    );
-  }
-}
-
-class _PairDeviceSheet extends StatefulWidget {
-  const _PairDeviceSheet({required this.vm});
-
-  /// The controller seam. `controller` below is derived from it, so every
-  /// `widget.controller` use site in this pane keeps working unchanged.
-  final DesktopAppViewModel vm;
-  AppController get controller => vm.controller;
-  @override
-  State<_PairDeviceSheet> createState() => _PairDeviceSheetState();
-}
-
-class _PairDeviceSheetState extends State<_PairDeviceSheet> {
-  DesktopLinkRequest? _request;
-  String? _qrPayload;
-  String? _errorMessage;
-  bool _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _start());
-  }
-
-  @override
-  void dispose() {
-    final req = _request;
-    if (req != null) {
-      // Best-effort cleanup so the request doesn't linger in storage.
-      // Ignore errors — request may already have transitioned.
-      unawaited(widget.controller.cancelDesktopLinkRequest(req.requestId));
-    }
-    super.dispose();
-  }
-
-  Future<void> _start() async {
-    final l10n = AppLocalizations.of(context)!;
-    if (_busy) return;
-    setState(() {
-      _busy = true;
-      _errorMessage = null;
-    });
-    try {
-      final request = await widget.controller.createDesktopLinkRequest(
-        deviceLabel: 'Secretly Desktop',
-      );
-      if (!mounted) return;
-      setState(() {
-        _request = request;
-        _qrPayload = widget.controller.buildDesktopLinkQrPayload(request);
-        _busy = false;
-      });
-    } on DesktopLinkFailure catch (failure) {
-      if (!mounted) return;
-      final msg = failure.message;
-      setState(() {
-        _busy = false;
-        _errorMessage = (msg.isNotEmpty)
-            ? msg
-            : l10n.desktopPairRequestFailed;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        // Не текст исключения: человеку показывали «Bad state: publishKeys
-        // returned ok=false». Известные причины приходят типизированными и
-        // печатаются своим текстом выше; остальное честнее назвать общим
-        // словом и оставить подробность журналу.
-        _errorMessage =
-            l10n.desktopPairingPrepareFailed;
-      });
-    }
-  }
-
-  Future<void> _retry() async {
-    final req = _request;
-    if (req != null) {
-      try {
-        await widget.controller.cancelDesktopLinkRequest(req.requestId);
-      } catch (_) {}
-    }
-    if (!mounted) return;
-    setState(() {
-      _request = null;
-      _qrPayload = null;
-    });
-    await _start();
-  }
-
-  Future<void> _copyPayload() async {
-    final l10n = AppLocalizations.of(context)!;
-    final payload = _qrPayload;
-    if (payload == null) return;
-    await Clipboard.setData(ClipboardData(text: payload));
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(l10n.desktopPairCodeCopied)));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // One rebuild per settled burst of controller ticks, through the shared
-    // hub, instead of this pane owning a `changed` subscription and rebuilding
-    // on every tick — `changed` fires constantly on a paired client. See
-    // [DesktopSelectorHub.ticks].
-    return ValueListenableBuilder<int>(
-      valueListenable: widget.vm.ticks,
-      builder: (context, _, __) => _buildBody(context),
-    );
-  }
-
-  Widget _buildBody(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final c = DColors.of(context);
-    final payload = _qrPayload;
-    return Padding(
-      padding: const EdgeInsets.all(DSpace.xl),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: c.bg,
-                shape: BoxShape.circle,
-                border: Border.all(color: c.borderSubtle),
-              ),
-              child: Icon(
-                FluentIcons.qr_code_24_regular,
-                size: 26,
-                color: c.accentPrimary,
-              ),
-            ),
-            const SizedBox(height: DSpace.l),
-            Text(
-              l10n.desktopPairNewTitle,
-              style: DType.title.copyWith(color: c.textPrimary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: DSpace.s),
-            Text(
-              l10n.desktopPairNewHint,
-              style: DType.body.copyWith(color: c.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: DSpace.xl),
-            Container(
-              width: 264,
-              height: 264,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(DRadii.lg),
-                border: Border.all(color: c.borderSubtle),
-              ),
-              alignment: Alignment.center,
-              padding: const EdgeInsets.all(DSpace.m),
-              child: payload == null
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (_busy)
-                          const SizedBox(
-                            width: 28,
-                            height: 28,
-                            child: CircularProgressIndicator(strokeWidth: 2.4),
-                          )
-                        else
-                          const Icon(
-                            FluentIcons.qr_code_24_regular,
-                            size: 48,
-                            color: Colors.black45,
-                          ),
-                        const SizedBox(height: DSpace.s),
-                        Text(
-                          _busy ? l10n.desktopPairingPreparingQr : l10n.desktopPairingQrUnavailable,
-                          style: DType.caption.copyWith(color: Colors.black54),
-                        ),
-                      ],
-                    )
-                  : QrImageView(
-                      data: payload,
-                      version: QrVersions.auto,
-                      size: 240,
-                      backgroundColor: Colors.white,
-                    ),
-            ),
-            if (_errorMessage != null) ...[
-              const SizedBox(height: DSpace.m),
-              Text(
-                _errorMessage!,
-                style: DType.caption.copyWith(color: c.danger),
-                textAlign: TextAlign.center,
-              ),
-            ],
-            const SizedBox(height: DSpace.xl),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                DesktopButton(
-                  label: l10n.desktopPairClose,
-                  kind: DButtonKind.tonal,
-                  onPressed: () => Navigator.of(context).maybePop(),
-                ),
-                DesktopButton(
-                  label: l10n.desktopPairCopyCode,
-                  kind: DButtonKind.tonal,
-                  onPressed: payload == null ? null : _copyPayload,
-                ),
-                DesktopButton(
-                  label: l10n.desktopPairRefreshQr,
-                  kind: DButtonKind.filled,
-                  onPressed: _busy ? null : _retry,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -3227,7 +2093,7 @@ class _HistorySyncCardState extends State<_HistorySyncCard> {
       if (!mounted) return;
       setState(() {
         _rehydrating = false;
-        _rehydrateFeedback = l10n.desktopFailedWith('$e');
+        _rehydrateFeedback = l10n.desktopFailedWith(desktopErrorText(e));
       });
     }
   }
@@ -3281,6 +2147,162 @@ class _HistorySyncCardState extends State<_HistorySyncCard> {
   }
 }
 
+/// Пароль копии — с повтором и проверкой по политике. Одно окно на весь
+/// раздел: ручная копия на сервер и автоматическая спрашивают одинаково
+/// (01.10.2026 — раньше автоматическая не спрашивала вовсе).
+Future<String?> promptDesktopBackupPassword(
+  BuildContext context, {
+  required String actionLabel,
+}) async {
+  final l10n = AppLocalizations.of(context)!;
+  final pw = TextEditingController();
+  final confirm = TextEditingController();
+  String? error;
+  final result = await showDialog<String>(
+    context: context,
+    // 🔴 Поля освобождает само окно, когда его маршрут УШЁЛ (01.10.2026).
+    // Раньше `dispose()` звучал сразу после `showDialog` — пока окно ещё
+    // уезжало с экрана и его поля читали уже освобождённые контроллеры.
+    builder: (dialogCtx) => _DisposeWithRoute(
+      controllers: [pw, confirm],
+      child: StatefulBuilder(
+        builder: (ctx, setLocal) {
+          void submit() {
+            final a = pw.text;
+            final b = confirm.text;
+            final validation = BackupPasswordPolicy.validate(a);
+            if (!validation.isValid) {
+              // Перевод по языку ОКНА, а не жёстко по-русски: раньше
+              // немец и испанец читали причину отказа кириллицей ровно в
+              // тот момент, когда пароль не приняли.
+              setLocal(
+                () => error = desktopPasswordProblems(l10n, validation),
+              );
+              return;
+            }
+            if (a != b) {
+              setLocal(() => error = l10n.desktopBackupPasswordsDiffer);
+              return;
+            }
+            Navigator.of(ctx).pop(a);
+          }
+
+          return AlertDialog(
+            title: Text(l10n.desktopServerBackupPassword),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.desktopServerBackupPasswordHint,
+                  style: Theme.of(ctx).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: pw,
+                  autofocus: true,
+                  obscureText: true,
+                  decoration: InputDecoration(labelText: l10n.password),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: confirm,
+                  obscureText: true,
+                  onSubmitted: (_) => submit(),
+                  decoration: InputDecoration(
+                    labelText: l10n.desktopServerBackupRepeat,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  error ?? desktopPasswordRequirements(l10n),
+                  style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                    color: error != null
+                        ? Theme.of(ctx).colorScheme.error
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                onPressed: submit,
+                child: Text(actionLabel),
+              ),
+            ],
+          );
+        },
+      ),
+    ),
+  );
+  return result;
+}
+
+/// «Заменить копию на сервере?» — перед всем, что кладёт копию на сервер с
+/// этого компьютера.
+///
+/// 🔴 Сервер держит ОДНУ копию на аккаунт, и у телефона с компьютером аккаунт
+/// общий. Копия отсюда молча затирала копию телефона — а в ней обычно больше
+/// истории, чем на компьютере (01.10.2026).
+Future<bool> confirmDesktopServerBackupReplace(BuildContext context) async {
+  final l10n = AppLocalizations.of(context)!;
+  final ok = await DesktopDialog.show<bool>(
+    context,
+    title: l10n.desktopServerBackupReplaceTitle,
+    size: DDialogSize.small,
+    body: Text(
+      l10n.desktopServerBackupReplaceBody,
+      style: DType.body.copyWith(
+        color: DColors.of(context).textSecondary,
+        height: 1.45,
+      ),
+    ),
+    primary: DDialogAction(
+      label: l10n.desktopServerBackupReplaceConfirm,
+      onPressed: () => Navigator.of(context).maybePop(true),
+    ),
+    secondary: DDialogAction(
+      label: l10n.cancel,
+      onPressed: () => Navigator.of(context).maybePop(false),
+    ),
+  );
+  return ok == true;
+}
+
+/// Освобождает контроллеры полей, когда окно, которому они принадлежат,
+/// действительно ушло: `State.dispose` маршрута звучит ПОСЛЕ анимации ухода.
+/// Освобождать их сразу за `await showDialog(...)` — значит отнять их у полей,
+/// которые ещё рисуются на уезжающем окне.
+class _DisposeWithRoute extends StatefulWidget {
+  const _DisposeWithRoute({
+    required this.controllers,
+    required this.child,
+  });
+
+  final List<ChangeNotifier> controllers;
+  final Widget child;
+
+  @override
+  State<_DisposeWithRoute> createState() => _DisposeWithRouteState();
+}
+
+class _DisposeWithRouteState extends State<_DisposeWithRoute> {
+  @override
+  void dispose() {
+    for (final c in widget.controllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 /// Settings → Devices → «Резервная копия на сервер».
 ///
 /// Creates a password-protected Safe Backup and uploads it to the keys server,
@@ -3305,7 +2327,15 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
     final controller = widget.controller;
     if (controller == null || _running) return;
 
-    final password = await _promptPassword(context);
+    // 🔴 Копия на сервере ОДНА на аккаунт (01.10.2026): созданная здесь молча
+    // затирала копию телефона. Сначала — сказать об этом и спросить.
+    if (!await confirmDesktopServerBackupReplace(context) || !context.mounted) {
+      return;
+    }
+    final password = await promptDesktopBackupPassword(
+      context,
+      actionLabel: l10n.desktopServerBackupCreate,
+    );
     if (password == null || !mounted) return;
 
     setState(() {
@@ -3345,99 +2375,7 @@ class _ServerBackupCardState extends State<_ServerBackupCard> {
     }
   }
 
-  String _short(Object e) {
-    var s = e.toString();
-    if (s.startsWith('Bad state: ')) s = s.substring('Bad state: '.length);
-    if (s.startsWith('StateError: ')) s = s.substring('StateError: '.length);
-    return s;
-  }
-
-  Future<String?> _promptPassword(BuildContext context) async {
-    final l10n = AppLocalizations.of(context)!;
-    final pw = TextEditingController();
-    final confirm = TextEditingController();
-    String? error;
-    final result = await showDialog<String>(
-      context: context,
-      builder: (dialogCtx) {
-        return StatefulBuilder(
-          builder: (ctx, setLocal) {
-            void submit() {
-              final a = pw.text;
-              final b = confirm.text;
-              final validation = BackupPasswordPolicy.validate(a);
-              if (!validation.isValid) {
-                // Перевод по языку ОКНА, а не жёстко по-русски: раньше
-                // немец и испанец читали причину отказа кириллицей ровно в
-                // тот момент, когда пароль не приняли.
-                setLocal(
-                  () => error = desktopPasswordProblems(l10n, validation),
-                );
-                return;
-              }
-              if (a != b) {
-                setLocal(() => error = l10n.desktopBackupPasswordsDiffer);
-                return;
-              }
-              Navigator.of(ctx).pop(a);
-            }
-
-            return AlertDialog(
-              title: Text(l10n.desktopServerBackupPassword),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.desktopServerBackupPasswordHint,
-                    style: Theme.of(ctx).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: pw,
-                    autofocus: true,
-                    obscureText: true,
-                    decoration: InputDecoration(labelText: l10n.password),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: confirm,
-                    obscureText: true,
-                    onSubmitted: (_) => submit(),
-                    decoration: InputDecoration(
-                      labelText: l10n.desktopServerBackupRepeat,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    error ?? desktopPasswordRequirements(l10n),
-                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                      color: error != null
-                          ? Theme.of(ctx).colorScheme.error
-                          : null,
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: Text(l10n.cancel),
-                ),
-                FilledButton(
-                  onPressed: submit,
-                  child: Text(l10n.desktopServerBackupCreate),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-    pw.dispose();
-    confirm.dispose();
-    return result;
-  }
+  String _short(Object e) => desktopErrorText(e);
 
   @override
   Widget build(BuildContext context) {
@@ -3567,7 +2505,7 @@ class _StoragePaneState extends State<_StoragePane> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopStorageDeleteFailed('$e'),
+        message: l10n.desktopStorageDeleteFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     }
@@ -3749,18 +2687,17 @@ class _ShortcutsPane extends StatefulWidget {
 }
 
 class _ShortcutsPaneState extends State<_ShortcutsPane> {
-  final DesktopGlobalHotKeyService _hotkey = DesktopGlobalHotKeyService();
+  // 🔴 Общий экземпляр, загруженный при запуске (`main_desktop.dart`). Свой
+  // экземпляр раздела означал, что ⌥⌘S оживало только после его открытия; и
+  // освобождать общий, уходя из раздела, нельзя — он живёт с приложением.
+  final DesktopGlobalHotKeyService _hotkey =
+      DesktopGlobalHotKeyService.instance;
 
   @override
   void initState() {
     super.initState();
+    // Повторный вызов ничего не повторяет — отдаёт загрузку запуска.
     unawaited(_hotkey.load());
-  }
-
-  @override
-  void dispose() {
-    _hotkey.dispose();
-    super.dispose();
   }
 
   @override
@@ -3773,6 +2710,8 @@ class _ShortcutsPaneState extends State<_ShortcutsPane> {
           WorkspaceCard(
             title: l10n.desktopHotkeyGlobalShow,
             description: l10n.desktopHotkeyGlobalHint,
+            // Внутри — строка со своими полями, карточка их не удваивает.
+            padding: EdgeInsets.zero,
             child: ValueListenableBuilder<bool>(
               valueListenable: _hotkey.enabled,
               builder: (ctx, on, _) => Column(
@@ -3841,6 +2780,21 @@ class _AboutPaneState extends State<_AboutPane> {
     } catch (_) {}
   }
 
+  /// 🔴 AGPL-3.0 ТРЕБУЕТ ПРЕДЛОЖИТЬ ИСХОДНЫЙ КОД тому, кто получил программу
+  /// (30.09.2026). Лицензия была названа в подписи, а куда идти за кодом —
+  /// нигде; адрес теперь и кнопкой, и текстом (его видно, даже если браузер
+  /// не открылся).
+  static const String _sourceUrl = 'https://github.com/Arkhanhel/Secretly';
+
+  Future<void> _openSource() async {
+    try {
+      await launchUrl(
+        Uri.parse(_sourceUrl),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -3848,6 +2802,9 @@ class _AboutPaneState extends State<_AboutPane> {
     return _PaneScaffold(
       children: [
         WorkspaceCard(
+          // Не строки настроек, а визитка: без черт между строчками текста.
+          rows: false,
+          padding: const EdgeInsets.all(18),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -3872,8 +2829,15 @@ class _AboutPaneState extends State<_AboutPane> {
                 l10n.desktopAboutTagline,
                 style: DType.body.copyWith(color: c.textSecondary, height: 1.5),
               ),
+              const SizedBox(height: DSpace.s),
+              SelectableText(
+                l10n.desktopAboutLicenseLine(_sourceUrl),
+                style: DType.label.copyWith(color: c.textSecondary, height: 1.4),
+              ),
               const SizedBox(height: DSpace.l),
-              Row(
+              Wrap(
+                spacing: DSpace.s,
+                runSpacing: DSpace.s,
                 children: [
                   DesktopButton(
                     label: l10n.desktopAboutLicences,
@@ -3883,7 +2847,12 @@ class _AboutPaneState extends State<_AboutPane> {
                       applicationName: 'Secretly',
                     ),
                   ),
-                  const SizedBox(width: DSpace.s),
+                  DesktopButton(
+                    label: l10n.desktopAboutSourceCode,
+                    kind: DButtonKind.ghost,
+                    icon: FluentIcons.code_24_regular,
+                    onPressed: () => unawaited(_openSource()),
+                  ),
                   DesktopButton(
                     label: l10n.desktopAboutWebsite,
                     kind: DButtonKind.ghost,
@@ -3895,10 +2864,62 @@ class _AboutPaneState extends State<_AboutPane> {
             ],
           ),
         ),
+        // 🔴 НЕУДАВШЕЕСЯ ОБНОВЛЕНИЕ ВИДНО ЗДЕСЬ (01.10.2026). Итог попытки
+        // служба знала с 30.09, но показывала его только кнопкой «Скачать с
+        // сайта» внизу — и то до перезапуска; установщик, не сумевший встать,
+        // и вовсе не оставлял следа на экране. Теперь — причина словами и
+        // «Повторить». Итог пишет только путь Windows; на Mac обновляет
+        // Sparkle со своими окнами, и строки здесь не бывает.
+        ValueListenableBuilder<DesktopUpdateAttempt?>(
+          valueListenable: DesktopUpdateService.instance.lastAttempt,
+          builder: (ctx, attempt, _) {
+            final failure = attempt?.failure;
+            if (failure == null) return const SizedBox.shrink();
+            return WorkspaceCard(
+              rows: false,
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.desktopUpdateAttemptFailed(
+                      desktopUpdateFailureText(l10n, failure),
+                    ),
+                    style: DType.body.copyWith(color: c.danger, height: 1.4),
+                  ),
+                  const SizedBox(height: DSpace.m),
+                  DesktopButton(
+                    label: l10n.desktopUpdateRetry,
+                    kind: DButtonKind.tonal,
+                    icon: FluentIcons.arrow_clockwise_24_regular,
+                    onPressed: () =>
+                        unawaited(DesktopUpdateService.instance.retry()),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ],
     );
   }
 }
+
+/// Причина неудавшегося обновления — словами, для строки «Обновление не
+/// установилось: …».
+@visibleForTesting
+String desktopUpdateFailureText(
+  AppLocalizations l10n,
+  DesktopUpdateFailure failure,
+) =>
+    switch (failure) {
+      DesktopUpdateFailure.download => l10n.desktopUpdateFailureDownload,
+      DesktopUpdateFailure.verification =>
+        l10n.desktopUpdateFailureVerification,
+      DesktopUpdateFailure.launch => l10n.desktopUpdateFailureLaunch,
+      DesktopUpdateFailure.notInstalled =>
+        l10n.desktopUpdateFailureNotInstalled,
+    };
 
 /// PR-F (bug 23): "Delete account" used to be a literal no-op
 /// (`onPressed: () {}`) — the pane was stateless, had no controller reference,
@@ -3961,18 +2982,23 @@ class _DangerPaneState extends State<_DangerPane> {
     final controller = widget.controller;
     if (controller == null) return;
 
-    // Capture messenger + root navigator before any await — avoids
+    // Capture the root overlay + root navigator before any await — avoids
     // `use_build_context_synchronously` lint and survives the spinner-dialog
     // tear-down (the spinner's BuildContext gets pop'd mid-flow).
-    final messenger = ScaffoldMessenger.maybeOf(context);
+    // 🔴 Плашка — своя, в корневом слое (30.09.2026): материальная
+    // рисовалась ПОД слоем настроек, и отказ удаления не видел никто.
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final palette = DColors.maybeOf(context);
     final navigator = Navigator.of(context, rootNavigator: true);
 
     // Refuse while a call is active — the call socket+CallKit/Telecom would
     // be torn down mid-flight and leave the OS-level call UI orphaned.
     final cm = CallManager.instance;
     if (cm != null && cm.state.value.isActive) {
-      messenger?.showSnackBar(
-        SnackBar(content: Text(l10n.desktopSettingsEndCallFirst)),
+      DesktopSnackbar.showIn(
+        overlay,
+        message: l10n.desktopSettingsEndCallFirst,
+        palette: palette,
       );
       return;
     }
@@ -4047,8 +3073,11 @@ class _DangerPaneState extends State<_DangerPane> {
     setState(() => _deleting = false);
 
     if (error != null) {
-      messenger?.showSnackBar(
-        SnackBar(content: Text(l10n.desktopDangerFailed(error))),
+      DesktopSnackbar.showIn(
+        overlay,
+        message: l10n.desktopDangerFailed(desktopErrorText(error)),
+        kind: DSnackKind.error,
+        palette: palette,
       );
     }
     // On success `deleteAccountEverywhere` fires `restartRequested`, which
@@ -4069,9 +3098,9 @@ class _DangerPaneState extends State<_DangerPane> {
             title: l10n.desktopDangerSection,
             description:
                 l10n.desktopDangerDemo,
+            rows: false,
             child: Column(
               children: [
-                const SizedBox(height: DSpace.s),
                 DesktopTextField(
                   hintText: l10n.desktopDangerEnterId,
                 ),
@@ -4103,9 +3132,9 @@ class _DangerPaneState extends State<_DangerPane> {
           title: l10n.desktopDangerSection,
           description:
               l10n.desktopDangerIrreversible,
+          rows: false,
           child: Column(
             children: [
-              const SizedBox(height: DSpace.s),
               DesktopTextField(controller: _confirm, hintText: hint),
               const SizedBox(height: DSpace.m),
               Align(
@@ -4219,7 +3248,8 @@ class _SecurityPaneState extends State<_SecurityPane> {
             description:
                 l10n.desktopSecurityAppEntryHint,
           ),
-          const WorkspaceCard(child: _OfflineLockRow()),
+          // Строка несёт свои поля сама — карточка кладёт её вплотную.
+          const WorkspaceCard(padding: EdgeInsets.zero, child: _OfflineLockRow()),
           _ScopeLockCard(
             controller: ctrl,
             scope: SecurityLockScope.personal,
@@ -4296,17 +3326,11 @@ class _OfflineLockRowState extends State<_OfflineLockRow> {
     return WorkspaceRow(
       label: l10n.desktopOfflineLockTitle,
       description: l10n.desktopOfflineLockDescription,
-      trailing: DropdownButton<int>(
+      trailing: WorkspaceSelect<int>(
         value: _days,
-        underline: const SizedBox.shrink(),
-        onChanged: (v) {
-          if (v == null) return;
-          unawaited(_save(v));
-        },
-        items: [
-          for (final days in DesktopOfflineLock.choices)
-            DropdownMenuItem(value: days, child: Text(_label(l10n, days))),
-        ],
+        values: DesktopOfflineLock.choices,
+        labelOf: (days) => _label(l10n, days),
+        onChanged: (v) => unawaited(_save(v)),
       ),
     );
   }
@@ -4343,6 +3367,17 @@ class _CallsPaneState extends State<_CallsPane> {
     if (ctrl == null) return const _PaneScaffold(children: []);
     return _PaneScaffold(
       children: [
+        // 🔴 УСТРОЙСТВА — ПРЯМО В «ЗВОНКАХ» (28.09.2026, владелец: «в
+        // настройках в разделе „Звонки“ нет настроек устройств»). Как у
+        // Telegram и Discord: микрофон, динамики и камера — первым делом там,
+        // где их ищут. Раздел «Звук и видео» показывает те же карточки: одна
+        // настройка, два входа.
+        MediaDevicesPane(
+          body: (cards) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: cards,
+          ),
+        ),
         WorkspaceCard(
           title: l10n.desktopPrivacyCalls,
           child: Column(
@@ -4382,9 +3417,28 @@ class _CallsPaneState extends State<_CallsPane> {
                   onChanged: (v) => unawaited(ctrl.setHideAddressInCalls(v)),
                 ),
               ),
+              // Р1 (29.09.2026): звонок — своим окном ОС, которое можно
+              // закрепить поверх всех. Выключено — как раньше, поверх
+              // главного окна.
+              if (Platform.isWindows || Platform.isMacOS)
+                ValueListenableBuilder<bool>(
+                  valueListenable: DesktopUiPrefs.callInOwnWindow,
+                  builder: (ctx, own, _) => WorkspaceRow(
+                    label: l10n.desktopCallsOwnWindow,
+                    description: l10n.desktopCallsOwnWindowHint,
+                    trailing: WorkspaceSwitch(
+                      value: own,
+                      onChanged: (v) =>
+                          unawaited(DesktopUiPrefs.setCallInOwnWindow(v)),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
+        // Громкость мелодии входящего (30.09.2026, ТЗ §1.4 «Входящие») — сразу
+        // под «Принимать входящие».
+        DesktopRingtoneCard(entitlement: () => ctrl.entitlementStateNow),
         WorkspaceCard(
           title: l10n.desktopCallsScreenShare,
           description:
@@ -4398,8 +3452,41 @@ class _CallsPaneState extends State<_CallsPane> {
             ),
           ),
         ),
+        WorkspaceCard(
+          title: l10n.desktopCallsSystemTitle,
+          child: WorkspaceRow(
+            label: l10n.desktopCallsSystemSound,
+            description: l10n.desktopCallsSystemSoundHint,
+            trailing: DesktopButton(
+              label: l10n.desktopCallsOpenSystem,
+              kind: DButtonKind.tonal,
+              size: DButtonSize.small,
+              onPressed: () => unawaited(openSystemSoundSettings()),
+            ),
+          ),
+        ),
       ],
     );
+  }
+}
+
+/// Системные настройки звука: громкость, устройство по умолчанию, доступ к
+/// микрофону. На macOS два адреса — раздел переехал в macOS 13.
+Future<void> openSystemSoundSettings() async {
+  final urls = Platform.isWindows
+      ? const <String>['ms-settings:sound']
+      : const <String>[
+          'x-apple.systempreferences:com.apple.Sound-Settings.extension',
+          'x-apple.systempreferences:com.apple.preference.sound',
+        ];
+  for (final u in urls) {
+    try {
+      if (await launchUrl(Uri.parse(u), mode: LaunchMode.externalApplication)) {
+        return;
+      }
+    } catch (_) {
+      // Следующий адрес.
+    }
   }
 }
 
@@ -4570,7 +3657,7 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopScopeOnFailed('$e'),
+        message: l10n.desktopScopeOnFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     }
@@ -4600,7 +3687,7 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopScopeOffFailed('$e'),
+        message: l10n.desktopScopeOffFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     }
@@ -4630,51 +3717,55 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
       context,
       title: title,
       size: DDialogSize.small,
-      body: StatefulBuilder(
-        builder: (ctx, setLocal) => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            DesktopTextField(
-              controller: first,
-              hintText: hint,
-              obscureText: true,
-              autofocus: true,
-            ),
-            if (confirm) ...[
-              const SizedBox(height: DSpace.s),
+      // Поля освобождает окно, когда его маршрут ушёл, — см. [_DisposeWithRoute].
+      body: _DisposeWithRoute(
+        controllers: [first, second],
+        child: StatefulBuilder(
+          builder: (ctx, setLocal) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               DesktopTextField(
-                controller: second,
-                hintText: l10n.desktopServerBackupRepeat,
+                controller: first,
+                hintText: hint,
                 obscureText: true,
+                autofocus: true,
+              ),
+              if (confirm) ...[
+                const SizedBox(height: DSpace.s),
+                DesktopTextField(
+                  controller: second,
+                  hintText: l10n.desktopServerBackupRepeat,
+                  obscureText: true,
+                ),
+              ],
+              if (error != null) ...[
+                const SizedBox(height: DSpace.s),
+                Text(
+                  error!,
+                  style: DType.caption.copyWith(color: DColors.of(ctx).danger),
+                ),
+              ],
+              const SizedBox(height: DSpace.m),
+              DesktopButton(
+                label: l10n.saveAction,
+                expand: true,
+                onPressed: () {
+                  final a = first.text;
+                  final b = second.text;
+                  if (a.length < 4) {
+                    setLocal(() => error = l10n.desktopScopeMin4);
+                    return;
+                  }
+                  if (confirm && a != b) {
+                    setLocal(() => error = l10n.desktopScopePasswordsDiffer);
+                    return;
+                  }
+                  Navigator.of(ctx).maybePop(a);
+                },
               ),
             ],
-            if (error != null) ...[
-              const SizedBox(height: DSpace.s),
-              Text(
-                error!,
-                style: DType.caption.copyWith(color: DColors.of(ctx).danger),
-              ),
-            ],
-            const SizedBox(height: DSpace.m),
-            DesktopButton(
-              label: l10n.saveAction,
-              expand: true,
-              onPressed: () {
-                final a = first.text;
-                final b = second.text;
-                if (a.length < 4) {
-                  setLocal(() => error = l10n.desktopScopeMin4);
-                  return;
-                }
-                if (confirm && a != b) {
-                  setLocal(() => error = l10n.desktopScopePasswordsDiffer);
-                  return;
-                }
-                Navigator.of(ctx).maybePop(a);
-              },
-            ),
-          ],
+          ),
         ),
       ),
       secondary: DDialogAction(
@@ -4682,8 +3773,6 @@ class _ScopeLockCardState extends State<_ScopeLockCard> {
         onPressed: () => Navigator.of(context).maybePop(),
       ),
     );
-    first.dispose();
-    second.dispose();
     return result;
   }
 
@@ -4840,7 +3929,7 @@ class _BlockedPaneState extends State<_BlockedPane> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopBlockedUnblockFailed('$e'),
+        message: l10n.desktopBlockedUnblockFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     }
@@ -4928,6 +4017,28 @@ class _BlockedPaneState extends State<_BlockedPane> {
 ///
 /// Health is therefore the FIRST thing in this pane, stated plainly, and it
 /// leads with the bad news when there is any.
+/// Причины сбоя автоматической копии, которые пишет общий контроллер. Он
+/// пишет их по-английски (телефон переводит их сам), поэтому здесь — те же
+/// строки дословно; `desktop_backup_honesty_test.dart` сверяет их с
+/// контроллером, чтобы перевод не отвалился молча.
+const String kDesktopBackupNoPasswordError = 'Auto-backup password is not set';
+const String kDesktopBackupWeakPasswordError =
+    'Auto-backup password does not meet the current policy';
+
+@visibleForTesting
+bool desktopBackupAutoErrorIsPassword(String raw) =>
+    raw == kDesktopBackupNoPasswordError ||
+    raw == kDesktopBackupWeakPasswordError;
+
+/// Причина сбоя — на языке окна, если она известна; иначе как есть.
+@visibleForTesting
+String desktopBackupAutoErrorText(AppLocalizations l10n, String raw) =>
+    switch (raw) {
+      kDesktopBackupNoPasswordError => l10n.desktopBackupAutoPasswordMissing,
+      kDesktopBackupWeakPasswordError => l10n.desktopBackupAutoPasswordWeak,
+      _ => raw,
+    };
+
 class _BackupPane extends StatefulWidget {
   const _BackupPane({required this.vm});
 
@@ -4973,10 +4084,11 @@ class _BackupPaneState extends State<_BackupPane> {
           icon: FluentIcons.clock_24_regular,
         );
       case SafeBackupHealth.failing:
+        final raw = widget.controller.safeBackupLastAutoError;
         return (
-          text: widget.controller.safeBackupLastAutoError.isNotEmpty
+          text: raw.isNotEmpty
               ? l10n.desktopBackupLastFailedWith(
-                  widget.controller.safeBackupLastAutoError,
+                  desktopBackupAutoErrorText(l10n, raw),
                 )
               : l10n.desktopBackupLastFailed,
           color: c.danger,
@@ -4994,6 +4106,72 @@ class _BackupPaneState extends State<_BackupPane> {
           color: c.success,
           icon: FluentIcons.checkmark_circle_24_filled,
         );
+    }
+  }
+
+  bool _autoBusy = false;
+
+  /// Включить или выключить автоматическую копию.
+  ///
+  /// 🔴 БЕЗ ПАРОЛЯ НЕ ВКЛЮЧАЕТСЯ (01.10.2026). Переключатель включался сразу,
+  /// а первая же копия падала с английским «Auto-backup password is not set»:
+  /// защита, которая выглядит включённой и не работает. Теперь пароль
+  /// спрашивается ДО включения тем же окном, что у ручной копии; отказался от
+  /// окна — переключатель остаётся выключенным. И раз копия уйдёт на сервер —
+  /// сначала сказать, что она заменит копию телефона.
+  Future<void> _setAuto(bool on) async {
+    final ctrl = widget.controller;
+    if (!on) {
+      await ctrl.setSafeBackupAutoEnabled(false);
+      return;
+    }
+    if (_autoBusy) return;
+    _autoBusy = true;
+    try {
+      if (ctrl.safeBackupAutoServerEnabled &&
+          !await confirmDesktopServerBackupReplace(context)) {
+        return;
+      }
+      if (!mounted) return;
+      if (!await ctrl.hasSafeBackupAutoPassword()) {
+        if (!mounted) return;
+        if (!await _askAutoPassword()) return;
+      }
+      await ctrl.setSafeBackupAutoEnabled(true);
+    } finally {
+      _autoBusy = false;
+    }
+  }
+
+  /// «Выгружать на сервер» при уже включённой автоматической копии — та же
+  /// замена копии телефона, значит, тот же вопрос.
+  Future<void> _setAutoServer(bool on) async {
+    if (on && !await confirmDesktopServerBackupReplace(context)) return;
+    await widget.controller.setSafeBackupAutoServerEnabled(on);
+  }
+
+  /// Спросить пароль автоматической копии и сохранить его. `false` — окно
+  /// закрыли или пароль не приняли (причина показана плашкой).
+  Future<bool> _askAutoPassword() async {
+    final l10n = AppLocalizations.of(context)!;
+    final overlay = Overlay.of(context, rootOverlay: true);
+    final palette = DColors.maybeOf(context);
+    final pw = await promptDesktopBackupPassword(
+      context,
+      actionLabel: l10n.saveAction,
+    );
+    if (pw == null) return false;
+    try {
+      await widget.controller.setSafeBackupAutoPassword(pw);
+      return true;
+    } catch (e) {
+      DesktopSnackbar.showIn(
+        overlay,
+        message: l10n.desktopFailedWith(desktopErrorText(e)),
+        kind: DSnackKind.error,
+        palette: palette,
+      );
+      return false;
     }
   }
 
@@ -5019,20 +4197,38 @@ class _BackupPaneState extends State<_BackupPane> {
       children: [
         WorkspaceCard(
           title: l10n.desktopBackupState,
-          child: Row(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(h.icon, size: 18, color: h.color),
-              const SizedBox(width: DSpace.m),
-              Expanded(
-                child: Text(
-                  h.text,
-                  style: DType.label.copyWith(
-                    color: c.textPrimary,
-                    height: 1.4,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(h.icon, size: 18, color: h.color),
+                  const SizedBox(width: DSpace.m),
+                  Expanded(
+                    child: Text(
+                      h.text,
+                      style: DType.label.copyWith(
+                        color: c.textPrimary,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              // Копия стоит из-за пароля (включали до 01.10.2026, когда пароль
+              // ещё не спрашивался) — выход прямо здесь, а не только причина.
+              if (auto &&
+                  desktopBackupAutoErrorIsPassword(ctrl.safeBackupLastAutoError))
+                Padding(
+                  padding: const EdgeInsets.only(top: DSpace.m),
+                  child: DesktopButton(
+                    label: l10n.desktopBackupSetPassword,
+                    kind: DButtonKind.tonal,
+                    icon: FluentIcons.key_24_regular,
+                    onPressed: () => unawaited(_askAutoPassword()),
                   ),
                 ),
-              ),
             ],
           ),
         ),
@@ -5046,7 +4242,7 @@ class _BackupPaneState extends State<_BackupPane> {
                 label: l10n.desktopBackupCreateAuto,
                 trailing: WorkspaceSwitch(
                   value: auto,
-                  onChanged: (v) => unawaited(ctrl.setSafeBackupAutoEnabled(v)),
+                  onChanged: (v) => unawaited(_setAuto(v)),
                 ),
               ),
               if (auto) ...[
@@ -5055,8 +4251,7 @@ class _BackupPaneState extends State<_BackupPane> {
                   description: l10n.desktopBackupUploadServerHint,
                   trailing: WorkspaceSwitch(
                     value: ctrl.safeBackupAutoServerEnabled,
-                    onChanged: (v) =>
-                        unawaited(ctrl.setSafeBackupAutoServerEnabled(v)),
+                    onChanged: (v) => unawaited(_setAutoServer(v)),
                   ),
                 ),
                 WorkspaceRow(
@@ -5081,22 +4276,14 @@ class _BackupPaneState extends State<_BackupPane> {
                   label: l10n.desktopBackupFrequency,
                   description: _intervalLabel(ctrl.safeBackupAutoIntervalMin, l10n),
                   icon: FluentIcons.timer_24_regular,
-                  trailing: DropdownButton<int>(
+                  trailing: WorkspaceSelect<int>(
                     value: _intervals.contains(ctrl.safeBackupAutoIntervalMin)
                         ? ctrl.safeBackupAutoIntervalMin
                         : _intervals[2],
-                    underline: const SizedBox.shrink(),
-                    items: [
-                      for (final m in _intervals)
-                        DropdownMenuItem(
-                          value: m,
-                          child: Text(_intervalLabel(m, l10n)),
-                        ),
-                    ],
-                    onChanged: (v) {
-                      if (v == null) return;
-                      unawaited(ctrl.setSafeBackupAutoIntervalMinutes(v));
-                    },
+                    values: _intervals,
+                    labelOf: (m) => _intervalLabel(m, l10n),
+                    onChanged: (v) =>
+                        unawaited(ctrl.setSafeBackupAutoIntervalMinutes(v)),
                   ),
                 ),
               ],
@@ -5171,6 +4358,105 @@ class _BackupPaneState extends State<_BackupPane> {
   /// чужом языке ровно в тот момент, когда пароль не приняли.
   Future<void> _exportRecoveryKit() =>
       runRecoveryKitExport(context: context, vm: widget.vm);
+}
+
+/// «Приложить журнал?» — размер словами, «Посмотреть» и явное согласие.
+/// `true` — человек согласился приложить.
+@visibleForTesting
+Future<bool> confirmDesktopSupportLog(
+  BuildContext context,
+  List<int> bytes, {
+  required String sizeText,
+}) async {
+  final l10n = AppLocalizations.of(context)!;
+  final ok = await DesktopDialog.show<bool>(
+    context,
+    title: l10n.desktopSupportLogConfirmTitle,
+    size: DDialogSize.small,
+    body: Builder(
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            l10n.desktopSupportLogConfirmBody(sizeText),
+            style: DType.body.copyWith(
+              color: DColors.of(ctx).textSecondary,
+              height: 1.45,
+            ),
+          ),
+          const SizedBox(height: DSpace.m),
+          DesktopButton(
+            label: l10n.desktopSupportLogView,
+            kind: DButtonKind.tonal,
+            icon: FluentIcons.document_search_24_regular,
+            onPressed: () => unawaited(
+              showDesktopSupportLogText(
+                ctx,
+                utf8.decode(bytes, allowMalformed: true),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+    primary: DDialogAction(
+      label: l10n.desktopSupportLogAttachConfirm,
+      onPressed: () => Navigator.of(context).maybePop(true),
+    ),
+    secondary: DDialogAction(
+      label: l10n.cancel,
+      onPressed: () => Navigator.of(context).maybePop(false),
+    ),
+  );
+  return ok == true;
+}
+
+/// Текст журнала — ровно то, что уйдёт. Построчно и лениво: сотни
+/// килобайт одним полем текста окно раскладывало бы секундами.
+@visibleForTesting
+Future<void> showDesktopSupportLogText(BuildContext context, String text) {
+  final l10n = AppLocalizations.of(context)!;
+  final lines = const LineSplitter().convert(text);
+  return DesktopDialog.show<void>(
+    context,
+    title: l10n.desktopSupportLogViewTitle,
+    size: DDialogSize.large,
+    body: Builder(
+      builder: (ctx) {
+        final c = DColors.of(ctx);
+        return SizedBox(
+          height: 440,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: c.chatList,
+              borderRadius: BorderRadius.circular(DRadii.md),
+              border: Border.all(color: c.borderSubtle),
+            ),
+            child: SelectionArea(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(DSpace.m),
+                itemCount: lines.length,
+                itemBuilder: (_, i) => Text(
+                  lines[i],
+                  style: DType.caption.copyWith(
+                    color: c.textPrimary,
+                    fontFamily: DType.monoFamily,
+                    fontFamilyFallback: DType.monoFallback,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+    primary: DDialogAction(
+      label: l10n.close,
+      onPressed: () => Navigator.of(context).maybePop(),
+    ),
+  );
 }
 
 /// End-to-end encrypted support chat.
@@ -5264,7 +4550,7 @@ class _SupportPaneState extends State<_SupportPane> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = e.toString();
+        _error = desktopErrorText(e);
       });
     }
   }
@@ -5291,24 +4577,62 @@ class _SupportPaneState extends State<_SupportPane> {
       _attaching = true;
       _error = null;
     });
-    final paths = await pickDesktopAttachments(media: false);
-    if (!mounted) return;
-    if (paths.isEmpty) {
-      setState(() => _attaching = false);
-      return;
+    // 🔴 `_attaching` снимается в ЛЮБОМ исходе (30.09.2026): исключение из
+    // разбора картинки оставляло кнопки вложений погашенными навсегда.
+    DesktopSupportAttachmentResult? res;
+    try {
+      final paths = await pickDesktopAttachments(media: false);
+      if (paths.isNotEmpty) {
+        res = await prepareDesktopSupportAttachment(paths.first);
+      }
+    } catch (_) {
+      res = const DesktopSupportAttachmentResult.failed(
+        DesktopSupportAttachmentProblem.unreadable,
+      );
+    } finally {
+      if (mounted) setState(() => _attaching = false);
     }
-    final res = await prepareDesktopSupportAttachment(paths.first);
-    if (!mounted) return;
+    final picked = res;
+    if (!mounted || picked == null) return;
     final l10n = AppLocalizations.of(context)!;
     setState(() {
-      _attaching = false;
-      if (res.ok) {
-        _attachment = res.file;
+      if (picked.ok) {
+        _attachment = picked.file;
         return;
       }
-      _error = res.problem == DesktopSupportAttachmentProblem.tooLarge
+      _error = picked.problem == DesktopSupportAttachmentProblem.tooLarge
           ? l10n.desktopSupportTooLarge(_sizeText(context, _limitBytes))
           : l10n.desktopSupportUnreadable;
+    });
+  }
+
+  Future<void> _attachLog() async {
+    final bytes = await DesktopDiagFileLog.recentBytes();
+    if (!mounted) return;
+    final l10n = AppLocalizations.of(context)!;
+    if (bytes == null || bytes.isEmpty) {
+      setState(() => _error = l10n.desktopSupportLogEmpty);
+      return;
+    }
+    // 🔴 Сначала — что и сколько уходит (01.10.2026). Кнопка прикладывала
+    // до 900 КБ журнала молча: ни размера, ни способа заглянуть внутрь, а
+    // журнал уходит чужим людям вместе с письмом.
+    final ok = await confirmDesktopSupportLog(
+      context,
+      bytes,
+      sizeText: _sizeText(context, bytes.length),
+    );
+    if (!ok || !mounted) return;
+    final stamp = DateTime.now().toUtc().toIso8601String().split('.').first;
+    setState(() {
+      _error = null;
+      _attachment = DesktopSupportAttachment(
+        name: 'secretly-desktop-log-${stamp.replaceAll(':', '-')}.txt',
+        mime: 'text/plain',
+        bytes: bytes,
+        originalBytes: bytes.length,
+        shrunk: false,
+      );
     });
   }
 
@@ -5418,6 +4742,7 @@ class _SupportPaneState extends State<_SupportPane> {
           title: l10n.desktopSupportThread,
           description:
               l10n.desktopSupportThreadHint,
+          rows: false,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -5460,6 +4785,7 @@ class _SupportPaneState extends State<_SupportPane> {
           title: l10n.desktopSupportWrite,
           description:
               l10n.desktopSupportWriteHint,
+          rows: false,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -5556,13 +4882,30 @@ class _SupportPaneState extends State<_SupportPane> {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          DesktopButton(
-            label: l10n.desktopSupportAttach,
-            icon: FluentIcons.attach_24_regular,
-            kind: DButtonKind.ghost,
-            onPressed: (_attaching || _sending)
-                ? null
-                : () => unawaited(_pickAttachment()),
+          Wrap(
+            spacing: DSpace.s,
+            children: [
+              DesktopButton(
+                label: l10n.desktopSupportAttach,
+                icon: FluentIcons.attach_24_regular,
+                kind: DButtonKind.ghost,
+                onPressed: (_attaching || _sending)
+                    ? null
+                    : () => unawaited(_pickAttachment()),
+              ),
+              // 🔴 ЖУРНАЛ — ОДНОЙ КНОПКОЙ (28.09.2026). Обрыв звонка «с
+              // ошибкой связи» по серверу не разобрать: нужен журнал самого
+              // компьютера. В нём события звонков и доставки, номера урезаны,
+              // текста сообщений нет.
+              DesktopButton(
+                label: l10n.desktopSupportAttachLog,
+                icon: FluentIcons.document_text_24_regular,
+                kind: DButtonKind.ghost,
+                onPressed: (_attaching || _sending)
+                    ? null
+                    : () => unawaited(_attachLog()),
+              ),
+            ],
           ),
           const SizedBox(height: DSpace.xs),
           Text(

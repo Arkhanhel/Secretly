@@ -49,7 +49,9 @@ Future<List<RoomCallVideoDevice>> roomCallSystemDevices({
   required bool video,
 }) async {
   final kind = video ? 'videoinput' : 'audioinput';
-  final fallback = video ? 'Камера' : 'Микрофон';
+  final fallback = video
+      ? RoomCallUnnamedDeviceLabels.camera
+      : RoomCallUnnamedDeviceLabels.microphone;
   try {
     final devices = await navigator.mediaDevices.enumerateDevices();
     return devices
@@ -66,6 +68,20 @@ Future<List<RoomCallVideoDevice>> roomCallSystemDevices({
   } catch (_) {
     return const <RoomCallVideoDevice>[];
   }
+}
+
+/// Как назвать устройство, у которого система не дала имени: пока не выдано
+/// разрешение, ярлыки приходят пустыми.
+///
+/// 🔴 СЛОВА ПРИХОДЯТ СНАРУЖИ (30.09.2026). Здесь были зашиты «Камера» и
+/// «Микрофон» по-русски, и безымянная камера в меню созвона ПК называлась
+/// по-русски на любом из восьми языков. Файл общий с телефоном, своих
+/// переводов у него здесь нет, поэтому слова ставит тот, у кого переводы
+/// есть: окно созвона ПК — до того, как спросить список. Телефон ничего не
+/// ставит, и у него всё как было, строка в строку.
+abstract final class RoomCallUnnamedDeviceLabels {
+  static String camera = 'Камера';
+  static String microphone = 'Микрофон';
 }
 
 /// Устройство видеозахвата — то, из чего человек выбирает камеру.
@@ -491,7 +507,7 @@ class _LocalPreviewRoomCallMediaController implements RoomCallMediaController {
 
   @override
   Future<List<RoomCallVideoDevice>> videoInputs() async =>
-      _enumerate('videoinput', 'Камера');
+      _enumerate('videoinput', RoomCallUnnamedDeviceLabels.camera);
 
   /// Список устройств системы. Безымянное всё равно надо как-то назвать:
   /// система отдаёт пустой ярлык до выдачи разрешения.
@@ -511,7 +527,7 @@ class _LocalPreviewRoomCallMediaController implements RoomCallMediaController {
 
   @override
   Future<List<RoomCallVideoDevice>> audioInputs() async =>
-      _enumerate('audioinput', 'Микрофон');
+      _enumerate('audioinput', RoomCallUnnamedDeviceLabels.microphone);
 
   /// Выбранный микрофон здесь не хранится: превью звук не публикует.
   @override
@@ -1006,7 +1022,9 @@ class _LiveKitRoomCallMediaController implements RoomCallMediaController {
               deviceId: d.deviceId,
               // Безымянную камеру всё равно надо как-то назвать: система
               // иногда отдаёт пустой ярлык до выдачи разрешения.
-              label: d.label.trim().isEmpty ? 'Камера' : d.label.trim(),
+              label: d.label.trim().isEmpty
+                  ? RoomCallUnnamedDeviceLabels.camera
+                  : d.label.trim(),
             ),
           )
           .toList(growable: false);
@@ -1025,7 +1043,9 @@ class _LiveKitRoomCallMediaController implements RoomCallMediaController {
           .map(
             (d) => RoomCallVideoDevice(
               deviceId: d.deviceId,
-              label: d.label.trim().isEmpty ? 'Микрофон' : d.label.trim(),
+              label: d.label.trim().isEmpty
+                  ? RoomCallUnnamedDeviceLabels.microphone
+                  : d.label.trim(),
             ),
           )
           .toList(growable: false);

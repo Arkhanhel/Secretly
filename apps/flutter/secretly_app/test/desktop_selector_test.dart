@@ -283,6 +283,84 @@ void main() {
     expect(loads, before);
     expect(hub.isDisposed, isTrue);
   });
+
+  // 01.10.2026: спрятанное окно не перечитывает базу на каждый тик.
+  test('a paused hub ignores ticks and catches up once on resume', () async {
+    var loads = 0;
+    hub.select<int>(
+      debugName: 'counter',
+      initial: 0,
+      load: () async => ++loads,
+    );
+    await settle();
+    final before = loads;
+    final ticksBefore = hub.ticks.value;
+
+    hub.setPaused(true);
+    expect(hub.isPaused, isTrue);
+    for (var i = 0; i < 5; i++) {
+      changed.add(null);
+      await settle();
+    }
+    expect(loads, before, reason: 'на паузе тики ничего не перечитывают');
+    expect(hub.ticks.value, ticksBefore);
+
+    hub.setPaused(false);
+    await settle();
+    expect(loads, before + 1, reason: 'снятие паузы — ровно один проход');
+    expect(hub.ticks.value, ticksBefore + 1);
+  });
+
+  test('resuming catches up even when no tick was missed', () async {
+    var loads = 0;
+    hub.select<int>(
+      debugName: 'counter',
+      initial: 0,
+      load: () async => ++loads,
+    );
+    await settle();
+    final before = loads;
+
+    hub
+      ..setPaused(true)
+      ..setPaused(false);
+    await settle();
+
+    expect(loads, before + 1);
+  });
+
+  test('pausing drops a debounce that was already pending', () async {
+    var loads = 0;
+    hub.select<int>(
+      debugName: 'counter',
+      initial: 0,
+      load: () async => ++loads,
+    );
+    await settle();
+    final before = loads;
+
+    changed.add(null);
+    hub.setPaused(true);
+    await settle();
+
+    expect(loads, before);
+  });
+
+  test('refreshNow still runs while paused', () async {
+    var loads = 0;
+    hub.select<int>(
+      debugName: 'counter',
+      initial: 0,
+      load: () async => ++loads,
+    );
+    await settle();
+    final before = loads;
+
+    hub.setPaused(true);
+    await hub.refreshNow();
+
+    expect(loads, before + 1);
+  });
 }
 
 /// Stands in for the plain model classes the app uses (`CallJournalEntry`,

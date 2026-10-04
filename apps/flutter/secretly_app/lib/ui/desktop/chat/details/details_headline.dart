@@ -14,6 +14,7 @@ import '../../primitives/desktop_tooltip.dart';
 import '../../primitives/hover_listener.dart';
 import '../../primitives/verified_badge.dart';
 import '../../design/tokens.dart';
+import '../noto_emoji_lottie.dart' show DesktopStatusEmoji;
 
 /// Верх панели подробностей: обложка, аватар, имя, значки, присутствие.
 ///
@@ -212,7 +213,7 @@ class DetailsHeadline extends StatelessWidget {
                 ),
                 if (status.isNotEmpty) ...[
                   const SizedBox(width: 6),
-                  Text(status, style: const TextStyle(fontSize: 20)),
+                  DesktopStatusEmoji(emoji: status, size: 24),
                 ],
                 // Галочка = ПРОВЕРЕННЫЙ КОНТАКТ. Платный тариф ниже, чипом
                 // PRO: знак «личность подтверждена» за подписку — ложное

@@ -6754,6 +6754,16 @@ class AppController {
     bool desktopHostedNotifications = false,
   }) {
     if (appInForeground) {
+      // 🔴 ПК, окно на экране (01.10.2026). Звук сообщения играет служба
+      // компьютера — выбранный человеком и вместе со своим уведомлением, а
+      // звук открытого чата — вместо уведомления. Здесь звука нет: иначе на
+      // одно сообщение два звука (этот и звук уведомления). Открытую
+      // переписку служба знает сама (у ПК она не доходит до контроллера), так
+      // что событие идёт ей всегда — решать ей. Телефон флаг не ставит, для
+      // него ниже всё как было.
+      if (desktopHostedNotifications && foregroundNotificationUxEnabled) {
+        return (inAppCue: false, inAppBanner: true, systemNotification: false);
+      }
       if (!foregroundNotificationUxEnabled || isActiveConvo) {
         return (inAppCue: false, inAppBanner: false, systemNotification: false);
       }
@@ -14623,6 +14633,188 @@ class AppController {
     _restartRequested.add(null);
   }
 
+  /// Новый аккаунт НА КОМПЬЮТЕРЕ — путь только для компьютера.
+  ///
+  /// 🔴 [createNewServerProfileForCurrentDevice] на компьютере аккаунт НЕ
+  /// создаёт (30.09.2026): его ветка для ПК с апреля — выход из аккаунта и
+  /// возврат к привязке по QR. Экран «Создать аккаунт» (23.09) звал именно его,
+  /// и человек после ввода имени возвращался к выбору входа ни с чем. Ветку
+  /// телефона трогать нельзя — мобильная версия выпущена, — поэтому здесь её
+  /// двойник для компьютера: стереть то, что осталось на экране входа,
+  /// завести серверный профиль, снять запрет входа, перезапуск.
+  ///
+  /// Запрет входа взводится ПЕРВЫМ: сорвись создание посередине — компьютер
+  /// остаётся на экране входа, а не открывает оболочку с полусозданным
+  /// аккаунтом и стёртой базой. Имя пишется в настройки ДО перезапуска: новый
+  /// контроллер читает его при запуске и сам публикует.
+  Future<void> createDesktopAccountOnThisComputer({required String nickname}) =>
+      _createDesktopAccountOnThisComputer(nickname: nickname);
+
+  @visibleForTesting
+  Future<void> createDesktopAccountOnThisComputerForTesting({
+    required String nickname,
+    required KeysClient keys,
+  }) => _createDesktopAccountOnThisComputer(nickname: nickname, keys: keys);
+
+  Future<void> _createDesktopAccountOnThisComputer({
+    required String nickname,
+    KeysClient? keys,
+  }) async {
+    if (!_isDesktopOrWebPlatform) {
+      throw StateError('createDesktopAccountOnThisComputer is desktop-only');
+    }
+    await IdentityJournal.record(
+      reason: IdentityJournal.reasonUserInitiated,
+      nowMs: DateTime.now().millisecondsSinceEpoch,
+      previousProfileId: _profileId,
+      previousDeviceId: _deviceId,
+      detail: const <String, Object?>{'action': 'new_profile_desktop'},
+    );
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
+    await _setDesktopAuthRequired(prefs, true);
+
+    final oldProfileId = (_profileId ?? '').trim();
+    final oldDeviceId = (_deviceId ?? '').trim();
+
+    _pumpTimer?.cancel();
+    _mainAliveHeartbeatTimer?.cancel();
+    _pumpTimer = null;
+    _serviceWatchdogTimer?.cancel();
+    _serviceWatchdogTimer = null;
+    _quarantineRecoverySweepTimer?.cancel();
+    _quarantineRecoverySweepTimer = null;
+
+    await _closeRuntimeNetworkClientsForDiscard();
+    _keys = keys;
+
+    try {
+      await _db?.close();
+    } catch (_) {
+      // ignore
+    }
+    _db = null;
+
+    await AppDb.deleteLocalDatabaseFiles();
+    await _clearLocalProfileMediaCaches();
+
+    // Временная личность экрана QR (или отвязанный прежний аккаунт) — снять с
+    // сервера, пока есть чем подписать, как это делает ветка телефона.
+    if (oldProfileId.isNotEmpty) {
+      try {
+        if (oldDeviceId.isNotEmpty) {
+          await _deleteDeviceRegistrationFromServer(
+            profileId: oldProfileId,
+            deviceId: oldDeviceId,
+          );
+          await _drainPendingDeviceDeletes(
+            currentProfileId: oldProfileId,
+            requesterDeviceId: oldDeviceId,
+          );
+        }
+      } catch (_) {
+        // ignore
+      }
+      try {
+        await SecureSecrets.create().deleteProfileSecret(oldProfileId);
+      } catch (_) {
+        // ignore
+      }
+      try {
+        if (oldDeviceId.isNotEmpty) {
+          await DeviceKeys.create().deleteMaterial(
+            profileId: oldProfileId,
+            deviceId: oldDeviceId,
+          );
+        }
+      } catch (_) {
+        // ignore
+      }
+    }
+
+    _profileId = null;
+    _deviceId = _uuid.v4();
+    // Кто стёр личность — записать ДО стирания: потом улики нет.
+    await IdentityJournal.recordProfileIdCleared(
+      by: 'create_desktop_account',
+      nowMs: DateTime.now().millisecondsSinceEpoch,
+      previousProfileId: prefs.getString(_prefsProfileIdKey),
+      previousDeviceId: prefs.getString(_prefsDeviceIdKey),
+      deviceIdClearedToo: false,
+    );
+    for (final key in const <String>[
+      _prefsProfileIdKey,
+      _prefsServerBindingKey,
+      _prefsRelayNextSeqKey,
+      _prefsAllowMissingCurrentDeviceRepairOnceKey,
+      _prefsMyAvatarPathKey,
+      _prefsMyAvatarOriginalPathKey,
+      _prefsPrivacyDeleteAccountMonthsKey,
+      _prefsSafeBackupLastEventCountKey,
+      // Сверх ветки телефона: на экране входа компьютера может остаться
+      // прежний аккаунт (отвязан, удалён с аккаунта) — его описание, медиа
+      // профиля, свои устройства и отложенный импорт новому не принадлежат.
+      _prefsMyBioKey,
+      _prefsProfileIconAssetPathKey,
+      _prefsProfileAvatarGradientIndexKey,
+      _prefsProfileAvatarIconScaleKey,
+      _prefsProfileGalleryPathsKey,
+      _prefsProfileBackgroundPathsKey,
+      _prefsProfileMusicPathsKey,
+      _prefsPersonalConvoIdsKey,
+      _prefsPendingSafeImportKey,
+      _prefsKnownOwnDeviceIdsKey,
+    ]) {
+      await prefs.remove(key);
+    }
+    await prefs.setString(_prefsDeviceIdKey, _deviceId!);
+    _privacyDeleteAccountMonths = 24;
+
+    final published = prefs
+        .getKeys()
+        .where((k) => k.startsWith(_prefsKeysPublishedKeyPrefix))
+        .toList(growable: false);
+    for (final k in published) {
+      await prefs.remove(k);
+    }
+
+    final keysClient = _keys ?? KeysClient(baseUrl: keysBaseUrl);
+    _keys = keysClient;
+    await _ensureKeysSetup(
+      prefs: prefs,
+      keys: keysClient,
+      allowServerProfileAutoCreate: true,
+    );
+    // Та же чистка, что в [setMyNickname]; сам он здесь не годится — он ещё и
+    // публикует профиль, а этот контроллер сейчас уйдёт на перезапуск.
+    final cleaned = nickname
+        .trim()
+        .replaceAll(RegExp(r'[\r\n\t]'), ' ')
+        .replaceAll(RegExp(r'\s{2,}'), ' ');
+    await prefs.setString(
+      _prefsMyNicknameKey,
+      cleaned.length > 32 ? cleaned.substring(0, 32) : cleaned,
+    );
+    await _setDesktopAuthRequired(prefs, false);
+    _setAuthFlowState(AuthFlowState.authenticated);
+    await _persistServerBindingIfMissing(prefs);
+    DiagLog.event('desktop_account', 'created', {
+      'pid': DiagLog.pfx(_profileId),
+    });
+    _applyRuntimeResetResult(
+      AppRuntimeLifecycleCoordinator.restartReset(
+        desktopLinkRequests: _desktopLinkRequests,
+        cancelAwaitingDesktopLinkRequests: true,
+        nextDeviceId: _deviceId,
+        knownOwnDeviceIds: <String>[(_deviceId ?? '').trim()],
+      ),
+    );
+    await _saveDesktopLinkRequestsToPrefs();
+
+    _changed.add(null);
+    _restartRequested.add(null);
+  }
+
   Future<void> restoreFromRecoveryKit(RecoveryKitPlainV1 kit) async {
     final restoredKit = (() {
       try {
@@ -18795,6 +18987,9 @@ class AppController {
     required String peerProfileId,
     required String callId,
     String? callAttemptId,
+    // ПК: сигнал — только устройству собеседника в этом звонке (см.
+    // `CallManager._peerTargets`). `null` — как было: всем устройствам.
+    Set<String>? toDeviceIds,
   }) async {
     final pid = peerProfileId.trim();
     final cid = callId.trim();
@@ -18806,7 +19001,11 @@ class AppController {
       'callAttemptId': (callAttemptId ?? cid).trim(),
       'createdAtMs': DateTime.now().millisecondsSinceEpoch,
     };
-    await _sendCallSignalCommand(peerProfileId: pid, payload: payload);
+    await _sendCallSignalCommand(
+      peerProfileId: pid,
+      payload: payload,
+      exactTargetDeviceIds: toDeviceIds,
+    );
   }
 
   /// Гасит звонок на ОСТАЛЬНЫХ устройствах собеседника после того, как на одном
@@ -18866,6 +19065,9 @@ class AppController {
     required String peerProfileId,
     required String callId,
     String? callAttemptId,
+    // ПК: сигнал — только устройству собеседника в этом звонке (см.
+    // `CallManager._peerTargets`). `null` — как было: всем устройствам.
+    Set<String>? toDeviceIds,
   }) async {
     final pid = peerProfileId.trim();
     final cid = callId.trim();
@@ -18877,7 +19079,11 @@ class AppController {
       'callAttemptId': (callAttemptId ?? cid).trim(),
       'createdAtMs': DateTime.now().millisecondsSinceEpoch,
     };
-    await _sendCallSignalCommand(peerProfileId: pid, payload: payload);
+    await _sendCallSignalCommand(
+      peerProfileId: pid,
+      payload: payload,
+      exactTargetDeviceIds: toDeviceIds,
+    );
   }
 
   Future<void> sendCallOffer({
@@ -18886,6 +19092,9 @@ class AppController {
     required String sdp,
     required bool video,
     String? callAttemptId,
+    // ПК: сигнал — только устройству собеседника в этом звонке (см.
+    // `CallManager._peerTargets`). `null` — как было: всем устройствам.
+    Set<String>? toDeviceIds,
   }) async {
     final pid = peerProfileId.trim();
     final cid = callId.trim();
@@ -18900,7 +19109,11 @@ class AppController {
       'sdp': cleanSdp,
       'createdAtMs': DateTime.now().millisecondsSinceEpoch,
     };
-    await _sendCallSignalCommand(peerProfileId: pid, payload: payload);
+    await _sendCallSignalCommand(
+      peerProfileId: pid,
+      payload: payload,
+      exactTargetDeviceIds: toDeviceIds,
+    );
   }
 
   Future<void> sendCallAnswer({
@@ -18908,6 +19121,9 @@ class AppController {
     required String callId,
     required String sdp,
     String? callAttemptId,
+    // ПК: сигнал — только устройству собеседника в этом звонке (см.
+    // `CallManager._peerTargets`). `null` — как было: всем устройствам.
+    Set<String>? toDeviceIds,
   }) async {
     final pid = peerProfileId.trim();
     final cid = callId.trim();
@@ -18921,7 +19137,11 @@ class AppController {
       'sdp': cleanSdp,
       'createdAtMs': DateTime.now().millisecondsSinceEpoch,
     };
-    await _sendCallSignalCommand(peerProfileId: pid, payload: payload);
+    await _sendCallSignalCommand(
+      peerProfileId: pid,
+      payload: payload,
+      exactTargetDeviceIds: toDeviceIds,
+    );
   }
 
   Future<void> sendCallIceCandidate({
@@ -18932,6 +19152,9 @@ class AppController {
     int? sdpMLineIndex,
     String? callAttemptId,
     bool recovery = false,
+    // ПК: сигнал — только устройству собеседника в этом звонке (см.
+    // `CallManager._peerTargets`). `null` — как было: всем устройствам.
+    Set<String>? toDeviceIds,
   }) async {
     final pid = peerProfileId.trim();
     final cid = callId.trim();
@@ -18953,6 +19176,7 @@ class AppController {
     await _sendCallSignalCommand(
       peerProfileId: pid,
       payload: payload,
+      exactTargetDeviceIds: toDeviceIds,
       deliveryPolicyOverride: CallSignalDeliveryPolicy.forAction(
         'ice',
         recovery: recovery,
@@ -18973,6 +19197,9 @@ class AppController {
     required String peerProfileId,
     required String callId,
     String? callAttemptId,
+    // ПК: сигнал — только устройству собеседника в этом звонке (см.
+    // `CallManager._peerTargets`). `null` — как было: всем устройствам.
+    Set<String>? toDeviceIds,
   }) async {
     final pid = peerProfileId.trim();
     final cid = callId.trim();
@@ -18984,7 +19211,11 @@ class AppController {
       'callAttemptId': (callAttemptId ?? cid).trim(),
       'createdAtMs': DateTime.now().millisecondsSinceEpoch,
     };
-    await _sendCallSignalCommand(peerProfileId: pid, payload: payload);
+    await _sendCallSignalCommand(
+      peerProfileId: pid,
+      payload: payload,
+      exactTargetDeviceIds: toDeviceIds,
+    );
   }
 
   Future<RelayCallSessionSnapshot?> fetchRelayCallSession({
@@ -19544,6 +19775,13 @@ class AppController {
     // на звонок ответили на одном устройстве, остальным надо послать отбой,
     // НЕ трогая то, где идёт разговор. Пусто — поведение прежнее, всем.
     Set<String>? restrictToDeviceIds,
+    // 🔴 ТОЧНЫЙ АДРЕСАТ (28.09.2026, ПК). Разговор уже идёт с одним
+    // устройством собеседника — сигналы идут ему, а не всем устройствам
+    // профиля: иначе у третьих устройств звонит «фантомный» звонок, а их
+    // «Отклонить» обрывает живой разговор. Устройство взято из конверта,
+    // который подтвердило реле, поэтому сверять его со списком ключей не
+    // нужно. Пусто/`null` — прежнее поведение.
+    Set<String>? exactTargetDeviceIds,
   }) async {
     final normalizedPayload = CallSignalCommandCodec.normalizeOutgoingPayload(
       payload,
@@ -19594,7 +19832,13 @@ class AppController {
     // union also refreshes the frozen list so offer/ice follow the corrected
     // set. Ringing a stale device is harmless (90s TTL mailbox); missing the
     // live one loses the call.
-    final resolvedTargets = action == 'invite'
+    final exact = exactTargetDeviceIds
+        ?.map((d) => d.trim())
+        .where((d) => d.isNotEmpty)
+        .toList(growable: false);
+    final resolvedTargets = (exact != null && exact.isNotEmpty)
+        ? exact
+        : action == 'invite'
         ? await _resolveCallTargetDevicesFreshForInvite(peerProfileId)
         : (_callTargetDevicesForCall(callId) ??
               await _resolveCallTargetDevices(peerProfileId));
@@ -19656,7 +19900,9 @@ class AppController {
     // 🔴 ЗАПОМИНАЕМ ТОЛЬКО ПОЛНЫЙ НАБОР. Адресная отправка (отбой на прочие
     // устройства после ответа) — это подмножество, и записать его сюда значит
     // сузить память звонка навсегда: следующий отбой ушёл бы уже не всем.
-    if (callId.isNotEmpty && restrictToDeviceIds == null) {
+    if (callId.isNotEmpty &&
+        restrictToDeviceIds == null &&
+        (exact == null || exact.isEmpty)) {
       _rememberCallTargetDevicesForCall(callId, targetDevices);
     }
 

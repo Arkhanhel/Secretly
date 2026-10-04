@@ -1,0 +1,45 @@
+FFmpeg in Secretly for desktop (macOS and Windows)
+==================================================
+
+Secretly uses FFmpeg (https://ffmpeg.org) to process video: trimming, video
+messages, compression and animated avatars. It comes from FFmpegKit, through
+the Flutter package ffmpeg_kit_flutter_new 4.2.1, in the "full-gpl" variant.
+
+Licence
+-------
+The FFmpeg shipped with this application was configured with --enable-gpl and
+--enable-version3 and includes GPL-licensed libraries, among them x264, Xvid
+and vid.stab. As shipped, FFmpeg and FFmpegKit are therefore licensed under
+the GNU General Public License, version 3 or (at your option) any later
+version. The full text of the GPL version 3 is in FFmpeg-COPYING.GPLv3.txt,
+next to this notice.
+
+The package ffmpeg_kit_flutter_new also carries the GNU Lesser General Public
+License version 3 as its default licence file, and the list of licences in the
+app shows that text under the package's name. It describes the LGPL variants
+of FFmpegKit, not the build shipped here.
+
+What exactly is shipped
+-----------------------
+FFmpeg 8.0 (n8.0), FFmpegKit 8.0.0, variant "full-gpl":
+
+  macOS    ffmpeg-kit-macos-full-gpl-8.0.0.zip
+           https://github.com/sk3llo/ffmpeg_kit_flutter/releases/tag/8.0.0-full-gpl
+  Windows  ffmpeg-kit-windows-x86_64-full-gpl-8.0.0.zip
+           https://github.com/sk3llo/ffmpeg_kit_flutter/releases/tag/8.0.0-full-gpl-windows
+
+Source code
+-----------
+  FFmpeg 8.0            https://ffmpeg.org/releases/ffmpeg-8.0.tar.xz
+  FFmpegKit (scripts    https://github.com/sk3llo/ffmpeg_kit_flutter
+  and native code)
+  Secretly              https://github.com/Arkhanhel/Secretly
+                        (the git tag of this release)
+
+Written offer
+-------------
+For at least three years from the date you received this copy of Secretly,
+and for as long as we distribute this version, we will give anyone who asks,
+free of charge, the complete corresponding source code of FFmpeg and of the
+GPL-licensed libraries shipped with it, in the exact versions shipped. Write
+to legal@secretlyapp.com and name the Secretly version and platform you have.

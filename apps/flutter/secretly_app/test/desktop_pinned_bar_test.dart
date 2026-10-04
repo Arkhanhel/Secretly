@@ -30,7 +30,8 @@ void main() {
     expect(body.contains('color: c.elevated,'), isFalse);
     expect(body.contains('BorderRadius.circular(DRadii.lg)'), isTrue);
     expect(
-      body.contains('EdgeInsets.fromLTRB(DSpace.l, DSpace.m, DSpace.l, 0)'),
+      // 28.09.2026: край 12 и зазор 6 — у всех островков под шапкой.
+      body.contains('EdgeInsets.fromLTRB(12, 6, 12, 0)'),
       isTrue,
       reason: 'те же поля, что у островка созвона над ним',
     );
@@ -64,7 +65,7 @@ void main() {
     expect(banner.contains('color: c.success.withValues(alpha: 0.12)'), isTrue);
     expect(banner.contains('gradient: LinearGradient'), isFalse);
     expect(
-      banner.contains('EdgeInsets.fromLTRB(DSpace.l, DSpace.m, DSpace.l, 0)'),
+      banner.contains('EdgeInsets.fromLTRB(12, 6, 12, 0)'),
       isTrue,
     );
   });

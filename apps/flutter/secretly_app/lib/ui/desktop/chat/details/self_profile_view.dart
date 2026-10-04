@@ -3,6 +3,7 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import '../../../../l10n/app_localizations.dart';
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -16,15 +17,20 @@ import '../../../premium/cosmetics_catalog.dart'
         coverWidgetFor,
         kAllAvatarFrames,
         kAllProfileCovers;
+import '../../../../entitlements/cosmetic_catalog.dart'
+    show CosmeticKind, isCosmeticAllowed;
 import '../../design/tokens.dart';
 import '../../primitives/avatar.dart';
-import '../../primitives/desktop_tooltip.dart';
 import '../../primitives/context_menu.dart';
 import '../../primitives/desktop_button.dart';
 import '../../primitives/desktop_dialog.dart';
 import '../../primitives/desktop_snackbar.dart';
 import '../../primitives/desktop_text_field.dart';
 import '../../primitives/hover_listener.dart';
+import '../emoji_grid.dart';
+import '../../primitives/editable_avatar.dart';
+import '../outgoing_media.dart' show OutgoingMediaPrep;
+import 'avatar_crop_dialog.dart';
 import 'avatar_preview_dialog.dart';
 import 'details_action_row.dart';
 import 'details_header.dart';
@@ -197,42 +203,35 @@ class _SelfProfileViewState extends State<SelfProfileView> {
     }
   }
 
-  /// Emoji-status picker. A short curated set beats a full emoji keyboard
-  /// here: a status is a mood marker, not free-form input, and the row must
-  /// also offer a way to REMOVE it — otherwise a status set once could never
-  /// be cleared.
+  /// Выбор эмодзи-статуса — ВЕСЬ каталог телефона (29.09.2026).
+  ///
+  /// 🔴 Здесь было 16 знаков, вписанных руками («короткий набор лучше полной
+  /// клавиатуры»), пять из них вне каталога Noto — не анимировались нигде и
+  /// на телефоне не выбирались. У телефона — 611 знаков с категориями и
+  /// поиском. Жалоба владельца: «эмодзи-статусы на ПК имеют не все эмодзи».
+  ///
+  /// Статус — украшение Premium, как на телефоне (`_ensureCosmeticAccess`):
+  /// геттер скрывает его у бесплатного тарифа, и без этой проверки ПК ставил
+  /// статус, которого никто не видел.
   Future<void> _pickEmojiStatus() async {
-    const options = <String>[
-      '😀', '😎', '🥳', '🤝', '💼', '📚', '🎧', '🎮', //
-      '✈️', '🏖️', '🌙', '☕', '🔥', '💡', '❤️', '🫡',
-    ];
+    final allowed = isCosmeticAllowed(
+      _c.entitlementStateNow,
+      CosmeticKind.avatarFrame,
+      'x',
+    );
+    if (!allowed) {
+      DesktopSnackbar.show(
+        context,
+        message: l10n.desktopProfileEmojiStatusPremiumOnly,
+      );
+      return;
+    }
     final current = _c.myEmojiStatus ?? '';
     final picked = await DesktopDialog.show<String>(
       context,
       title: l10n.desktopProfileEmojiStatus,
       size: DDialogSize.small,
-      body: Wrap(
-        spacing: DSpace.s,
-        runSpacing: DSpace.s,
-        children: [
-          for (final e in options)
-            HoverListener(
-              onTap: () => Navigator.of(context).maybePop(e),
-              builder: (ctx, hovered, pressed) => Container(
-                width: 44,
-                height: 44,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: e == current
-                      ? DColors.of(ctx).accentPrimary.withValues(alpha: 0.20)
-                      : (hovered ? DColors.of(ctx).hover : Colors.transparent),
-                  borderRadius: BorderRadius.circular(DRadii.md),
-                ),
-                child: Text(e, style: const TextStyle(fontSize: 22)),
-              ),
-            ),
-        ],
-      ),
+      body: _EmojiStatusPickerBody(current: current),
       primary: current.isEmpty
           ? null
           : DDialogAction(
@@ -375,7 +374,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopProfileApplyFailed('$e'),
+        message: l10n.desktopProfileApplyFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     }
@@ -388,13 +387,24 @@ class _SelfProfileViewState extends State<SelfProfileView> {
   /// verbatim.
   Future<void> _pickAvatar() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        withData: true,
-      );
+      final result = await FilePicker.platform.pickFiles(type: FileType.image);
       if (result == null || result.files.isEmpty) return;
-      final bytes = result.files.first.bytes;
-      if (bytes == null || bytes.isEmpty) {
+      final path = result.files.first.path;
+      // HEIC с iPhone Flutter не читает — сначала системная перекодировка.
+      final bytes = path == null
+          ? result.files.first.bytes
+          : await OutgoingMediaPrep.decodableImageBytes(path);
+      if (!mounted) return;
+      final Uint8List? cropped;
+      try {
+        cropped = (bytes == null || bytes.isEmpty)
+            ? throw const FormatException('empty')
+            : await showDesktopAvatarCropDialog(
+                context,
+                bytes: bytes,
+                round: true,
+              );
+      } on FormatException {
         if (!mounted) return;
         DesktopSnackbar.show(
           context,
@@ -403,7 +413,8 @@ class _SelfProfileViewState extends State<SelfProfileView> {
         );
         return;
       }
-      await _c.setMyAvatarFromImageBytes(bytes);
+      if (cropped == null || !mounted) return;
+      await _c.setMyAvatarFromImageBytes(cropped);
       if (!mounted) return;
       await _reloadAvatar();
       if (!mounted) return;
@@ -416,10 +427,34 @@ class _SelfProfileViewState extends State<SelfProfileView> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopProfilePhotoFailed('$e'),
+        message: l10n.desktopProfilePhotoFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     }
+  }
+
+  /// «Удалить фото» из меню портрета — с подтверждением, как в Telegram.
+  Future<void> _confirmRemoveAvatar() async {
+    final ok = await DesktopDialog.show<bool>(
+      context,
+      title: l10n.desktopAvatarRemoveConfirmTitle,
+      size: DDialogSize.small,
+      body: Text(
+        l10n.desktopAvatarRemoveConfirmBody,
+        style: DType.body.copyWith(color: DColors.of(context).textSecondary),
+      ),
+      primary: DDialogAction(
+        label: l10n.desktopRoomEditPhotoRemove,
+        kind: DButtonKind.danger,
+        onPressed: () => Navigator.of(context).maybePop(true),
+      ),
+      secondary: DDialogAction(
+        label: l10n.cancel,
+        kind: DButtonKind.ghost,
+        onPressed: () => Navigator.of(context).maybePop(false),
+      ),
+    );
+    if (ok == true && mounted) await _removeAvatar();
   }
 
   Future<void> _removeAvatar() async {
@@ -431,7 +466,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: l10n.desktopProfilePhotoRemoveFailed('$e'),
+        message: l10n.desktopProfilePhotoRemoveFailed(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     }
@@ -523,68 +558,39 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                   //
                   // Предпросмотр никуда не делся — он на самом портрете; в
                   // углу камера. Два действия, два места.
-                  avatar: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      HoverListener(
-                        onTap: () => showAvatarPreviewDialog(
-                          context,
-                          name: display,
-                          imagePath: hasAvatar ? avatarPath : null,
-                        ),
-                        cursor: SystemMouseCursors.click,
-                        builder: (ctx, hovered, pressed) => AnimatedScale(
-                          scale: pressed ? 0.97 : 1.0,
-                          duration: DMotion.fast,
-                          child: Avatar(
+                  // 🔴 ПОРТРЕТ — КАК В TELEGRAM (29.09.2026): наведение
+                  // затемняет его и показывает камеру, щелчок — меню «Выбрать
+                  // фото… / Открыть / Удалить фото». Камера в углу осталась:
+                  // без мыши наведения нет. Раньше щелчок открывал только
+                  // просмотр, а «Убрать фото» пряталось внизу.
+                  avatar: DesktopEditableAvatar(
+                    size: 88,
+                    framed: _c.myFrameId != null,
+                    cornerRing: colors.chatList,
+                    avatar: Avatar(
+                      name: display,
+                      image: hasAvatar ? Avatar.fileImage(avatarPath) : null,
+                      frameId: _c.myFrameId,
+                      allowAnimatedFrame: true,
+                      size: 88,
+                    ),
+                    onChoose: () => unawaited(_pickAvatar()),
+                    onOpen: hasAvatar
+                        ? () => showAvatarPreviewDialog(
+                            context,
                             name: display,
-                            image: hasAvatar
-                                ? Avatar.fileImage(avatarPath)
-                                : null,
-                            frameId: _c.myFrameId,
-                            allowAnimatedFrame: true,
-                            size: 88,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: -2,
-                        bottom: -2,
-                        child: DesktopTooltip(
-                          message: l10n.desktopProfileChangePhoto,
-                          child: HoverListener(
-                            onTap: () => unawaited(_pickAvatar()),
-                            cursor: SystemMouseCursors.click,
-                            builder: (ctx, hovered, pressed) =>
-                                AnimatedContainer(
-                                  duration: DMotion.fast,
-                                  width: 26,
-                                  height: 26,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: hovered || pressed
-                                        ? colors.accentPrimary
-                                        : colors.elevated,
-                                    shape: BoxShape.circle,
-                                    // Вырез цветом панели: без него кружок
-                                    // слипается с краем портрета.
-                                    border: Border.all(
-                                      color: colors.chatList,
-                                      width: 3,
-                                    ),
-                                  ),
-                                  child: Icon(
-                                    FluentIcons.camera_24_filled,
-                                    size: 13,
-                                    color: hovered || pressed
-                                        ? Colors.white
-                                        : colors.textSecondary,
-                                  ),
-                                ),
-                          ),
-                        ),
-                      ),
-                    ],
+                            imagePath: avatarPath,
+                          )
+                        : null,
+                    onRemove: hasLocalAvatar
+                        ? () => unawaited(_confirmRemoveAvatar())
+                        : null,
+                    // Фото с телефона файлом на этом ПК не является, и сервер
+                    // пустое значение читает как «мнения нет» — удалить его
+                    // отсюда нельзя. Говорим, где можно.
+                    removeUnavailableHint: (hasAvatar && !hasLocalAvatar)
+                        ? l10n.desktopAvatarRemoveOnPhone
+                        : null,
                   ),
                 ),
                 DetailsActionRow(
@@ -735,5 +741,50 @@ class _SelfProfileViewState extends State<SelfProfileView> {
   }
 }
 
+/// Тело окна эмодзи-статуса: поиск по словам и общая сетка ПК.
+class _EmojiStatusPickerBody extends StatefulWidget {
+  const _EmojiStatusPickerBody({required this.current});
+  final String current;
 
+  @override
+  State<_EmojiStatusPickerBody> createState() => _EmojiStatusPickerBodyState();
+}
 
+class _EmojiStatusPickerBodyState extends State<_EmojiStatusPickerBody> {
+  final _query = TextEditingController();
+  String _q = '';
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return SizedBox(
+      height: 400,
+      child: Column(
+        children: [
+          DesktopTextField(
+            controller: _query,
+            hintText: l10n.desktopEmojiSearchHint,
+            prefixIcon: FluentIcons.search_24_regular,
+            autofocus: true,
+            onChanged: (v) => setState(() => _q = v),
+          ),
+          const SizedBox(height: DSpace.xs),
+          Expanded(
+            child: DesktopEmojiGrid(
+              query: _q,
+              recentsKey: kDesktopStatusRecentsKey,
+              selected: widget.current.isEmpty ? null : widget.current,
+              onPicked: (e) => Navigator.of(context).maybePop(e),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

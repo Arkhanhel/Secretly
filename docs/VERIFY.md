@@ -5,7 +5,7 @@ someone who does not trust us. It is also honest about what cannot be checked
 yet, because a verification page that overstates what it proves is worse than
 no page at all.
 
-Last updated: 26 September 2026.
+Last updated: 30 September 2026.
 
 ---
 
@@ -98,7 +98,9 @@ Google, with the git tag of the source each was built from.
 | 1.8.39 (588) | iOS | `secretly-production-1.8.39-588-store588.ipa` | 2026-09-05 | `049d83a97a81090d5b983f4e45a2884bfaf91b875e4eea8bd96de412de146f15` | — |
 
 What is where on 28 September 2026: the desktop apps update themselves to
-1.8.62 (635) — on Windows, from this release on, through the signed installer;
+1.8.62 (635) — on Windows, from this release on, through the installer, which
+the app checks against our Ed25519 update signature before running it (the
+installer itself is not code-signed, see below);
 Google Play serves 1.8.61 (631) until 1.8.62 (635) is through review; the App
 Store still serves 1.8.39 (588), with 1.8.62 (635) in TestFlight.
 
@@ -107,6 +109,47 @@ file you download is byte-for-byte the file listed above. Compute its SHA-256 �
 `shasum -a 256` on macOS, `certutil -hashfile <file> SHA256` on Windows — and
 compare. A match proves you received exactly what we published; it does not yet
 prove that file was built from the tagged source (see §3).
+
+**Windows builds are not code-signed yet.** The installer and the zip carry no
+Authenticode signature, because we do not have a Windows code-signing
+certificate yet. Windows therefore names no publisher, SmartScreen may warn
+when you first run a copy downloaded from the site, and the file's Properties
+dialog has no "Digital Signatures" tab. Until that changes, a Windows download
+can be checked in two ways, and neither asks you to trust the download page:
+
+1. **SHA-256.** Compare the file's hash with the table above:
+   `certutil -hashfile Secretly-Setup-1.8.62-635-x64.exe SHA256`, or in
+   PowerShell `Get-FileHash Secretly-Setup-1.8.62-635-x64.exe`. Our build also
+   writes each sum to a `<file>.sha256` file in the standard `sha256sum` format;
+   where one is published next to a download, `sha256sum -c` or
+   `shasum -a 256 -c` checks it directly.
+2. **Our Ed25519 update signature.** Every installer and disk image in our
+   update feeds is signed with the key the app itself uses to check updates.
+   The signature of a file is the `sparkle:edSignature` attribute of its entry
+   in `https://updates.secretlyapp.com/appcast-windows.xml` (Windows) or
+   `https://updates.secretlyapp.com/appcast.xml` (macOS). The public key,
+   `D9ZGqnx7HEv5Qe6TYKXxd/Zf9dxkONCfy8J7rmuz3Ks=`, is the one compiled into the
+   app (`SUPublicEDKey` in `macos/Runner/Info.plist`,
+   `kDesktopUpdatePublicKeyB64` in
+   `lib/ui/desktop/services/desktop_update_service.dart`). With Python 3 and the
+   `cryptography` package:
+
+   ```sh
+   python3 - "<edSignature>" Secretly-Setup-1.8.62-635-x64.exe <<'EOF'
+   import base64, sys
+   from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+   key = Ed25519PublicKey.from_public_bytes(
+       base64.b64decode('D9ZGqnx7HEv5Qe6TYKXxd/Zf9dxkONCfy8J7rmuz3Ks='))
+   key.verify(base64.b64decode(sys.argv[1]), open(sys.argv[2], 'rb').read())
+   print('signature OK')
+   EOF
+   ```
+
+   It prints `signature OK`, or stops with `InvalidSignature`.
+
+The app makes the second check itself: an update whose signature does not match
+is deleted and never run. Neither check says which source the file was built
+from — that is the reproducible-build gap in §3.
 
 **Read this before you compare a store build with what you installed.**
 
@@ -149,6 +192,10 @@ Planned, in this order:
 3. Reproducible builds, so that two people building the same tag with the same
    pinned toolchain get byte-identical output. This is hard on Flutter and we
    are not promising a date.
+
+Also missing: an Authenticode signature on the Windows installer and zip. It
+needs a code-signing certificate we do not have yet; until then, use the two
+checks in §2.
 
 ---
 

@@ -296,6 +296,82 @@ void main() {
     });
   });
 
+  group('🔴 точка «в сети» поверх рамки (29.09.2026)', () {
+    // Жалоба владельца: «точка онлайна в каких-то моментах прячется за рамку».
+    // Значки крепились к портрету ДО рамки: портрет вместе с точкой сжимался в
+    // отступ рамки, и кольцо рисовалось поверх. Телефон ставит точку отдельным
+    // слоем после портрета с рамкой, по внешнему краю.
+    Finder dotIn(Finder avatar) => find.descendant(
+      of: avatar,
+      matching: find.byWidgetPredicate(
+        (w) =>
+            w is Container &&
+            w.decoration is BoxDecoration &&
+            (w.decoration! as BoxDecoration).color == kDColorsDark.voice,
+      ),
+    );
+
+    for (final shape in AvatarShape.values) {
+      testWidgets('${shape.name}: точка в углу ВНЕШНЕГО квадрата, не в отступе', (
+        t,
+      ) async {
+        await t.pumpWidget(
+          _host(
+            Avatar(
+              name: 'Ада',
+              size: 50,
+              shape: shape,
+              frameId: 'flame',
+              online: true,
+            ),
+          ),
+        );
+        await t.pump();
+        final avatar = find.byType(Avatar);
+        final dot = dotIn(avatar);
+        expect(dot, findsOneWidget);
+
+        final outer = t.getRect(avatar);
+        final r = t.getRect(dot);
+        expect(outer.size, const Size(50, 50));
+        expect(
+          (r.right - outer.right).abs(),
+          lessThanOrEqualTo(1.0),
+          reason: 'правый край точки — у края рамки, а не внутри отступа',
+        );
+        expect((r.bottom - outer.bottom).abs(), lessThanOrEqualTo(1.0));
+
+        Finder insideAvatar(Type type) =>
+            find.descendant(of: avatar, matching: find.byType(type));
+        expect(
+          find.ancestor(of: dot, matching: insideAvatar(Padding)),
+          findsNothing,
+          reason: 'в отступ рамки сжимается только портрет, значки — нет',
+        );
+        expect(
+          find.ancestor(of: dot, matching: insideAvatar(RepaintBoundary)),
+          findsNothing,
+          reason: 'точка не внутри слоя кольца',
+        );
+      });
+    }
+
+    testWidgets('проверенный контакт: портрет ровно своего размера', (t) async {
+      await t.pumpWidget(
+        _host(const Avatar(name: 'Ада', size: 36, verified: true)),
+      );
+      await t.pump();
+      final portrait = find
+          .descendant(of: find.byType(Avatar), matching: find.byType(Container))
+          .first;
+      expect(
+        t.getSize(portrait),
+        const Size(36, 36),
+        reason: 'было 40: коробка size + 4 растягивала портрет',
+      );
+    });
+  });
+
   group('список чатов раздаёт форму по типу', () {
     Widget list(ChatKind kind) => MaterialApp(
       locale: const Locale('ru'),

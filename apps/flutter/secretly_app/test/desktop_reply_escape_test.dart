@@ -39,10 +39,12 @@ void main() {
     expect(ctx, greaterThan(search));
   });
 
-  test('🔴 у ПРАВКИ текст в поле стирается, у ОТВЕТА — нет', () {
+  test('🔴 у ПРАВКИ текст правимого уходит, у ОТВЕТА — нет', () {
     // У правки текст подставлен приложением: без карточки он превратился бы в
-    // новое сообщение, которое человек не писал. У ответа поле он набирал сам.
-    expect(panel.contains('if (_ctxWasEdit) _composer.clear();'), isTrue);
+    // новое сообщение, которое человек не писал. Вместо него возвращается
+    // набранное до правки (30.09.2026, см. desktop_edit_draft_test.dart).
+    // У ответа поле человек набирал сам.
+    expect(panel.contains('if (_ctxWasEdit) _restoreDraftAfterEdit();'), isTrue);
     expect(panel.contains('bool _ctxWasEdit = false;'), isTrue);
   });
 

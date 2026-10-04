@@ -12,9 +12,12 @@
 // комбинацию у программы, которой человек пользуется, и он не понял бы, кто её
 // забрал.
 
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/desktop/services/desktop_global_hotkey_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -95,5 +98,53 @@ void main() {
     expect(await s.setEnabled(true, persist: false), isFalse);
     expect(calls, isEmpty, reason: 'на чужой площадке полезли к системе');
     expect(s.enabled.value, isFalse);
+  });
+
+  test('🔴 включённое сочетание занимается при загрузке — и только один раз',
+      () async {
+    // Запуск и раздел «Горячие клавиши» зовут `load()` оба. Регистрировать
+    // сочетание дважды незачем, а молчать до открытия раздела — нельзя.
+    SharedPreferences.setMockInitialValues(
+      <String, Object>{'desktop_global_hotkey_v1': true},
+    );
+    mock((_) => true);
+    final s = DesktopGlobalHotKeyService(channel: channel, onMacOS: true);
+    addTearDown(s.dispose);
+    await s.load();
+    await s.load();
+    expect(calls, hasLength(1));
+    expect(calls.single.arguments['enabled'], isTrue);
+    expect(s.enabled.value, isTrue);
+  });
+
+  test('выключенное по умолчанию при загрузке систему не трогает', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    mock((_) => true);
+    final s = DesktopGlobalHotKeyService(channel: channel, onMacOS: true);
+    addTearDown(s.dispose);
+    await s.load();
+    expect(calls, isEmpty);
+    expect(s.enabled.value, isFalse);
+  });
+
+  test('🔴 запуск загружает ОБЩИЙ экземпляр, раздел берёт его же', () {
+    // До 01.10.2026 экземпляр создавал раздел настроек, и ⌥⌘S после
+    // перезапуска оживало только когда его откроют.
+    final main = File('lib/main_desktop.dart').readAsStringSync();
+    expect(main, contains('DesktopGlobalHotKeyService.instance.load()'));
+    final pane = File(
+      'lib/ui/desktop/workspace/settings_workspace.dart',
+    ).readAsStringSync();
+    expect(pane, contains('DesktopGlobalHotKeyService.instance'));
+    expect(
+      pane,
+      isNot(contains('DesktopGlobalHotKeyService()')),
+      reason: 'свой экземпляр в разделе снова оживит сочетание не сразу',
+    );
+    expect(
+      pane,
+      isNot(contains('_hotkey.dispose()')),
+      reason: 'общий экземпляр живёт с приложением, раздел его не освобождает',
+    );
   });
 }

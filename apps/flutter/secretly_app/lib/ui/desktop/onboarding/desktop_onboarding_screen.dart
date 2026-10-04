@@ -28,7 +28,15 @@ import '../primitives/desktop_button.dart';
 ///    [DesktopProductionApp] swaps this screen out for the shell — no action
 ///    needed here beyond rebuilding.
 class DesktopOnboardingScreen extends StatefulWidget {
-  const DesktopOnboardingScreen({super.key, required this.vm, this.onBack});
+  const DesktopOnboardingScreen({
+    super.key,
+    required this.vm,
+    this.onBack,
+    @visibleForTesting this.clock,
+  });
+
+  /// Часы экрана — подменяются только в проверках паузы между попытками.
+  final DateTime Function()? clock;
 
   /// Вернуться к выбору способа входа. `null` — выбора нет и возвращаться
   /// некуда (так было до 23.09.2026, когда привязка была единственным входом).
@@ -72,6 +80,35 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
   final ValueNotifier<Duration> _timeLeft =
       ValueNotifier<Duration>(Duration.zero);
 
+  /// 🔴 ПОВТОР С ПАУЗОЙ, А НЕ КАЖДУЮ СЕКУНДУ (30.09.2026). Когда обновить
+  /// истёкший код не удавалось, мёртвый код оставался на месте, и раз в
+  /// секунду уходил новый запрос к серверу ключей — без конца, пока тот не
+  /// ответит. Теперь мёртвый код убирается, ошибка названа, «Повторить»
+  /// под рукой, а сами мы пробуем снова через 30 с, 1, 2, 4… минуты (не реже
+  /// раза в 10 минут). [_timeLeft] в это время отсчитывает паузу.
+  int _failedRequests = 0;
+
+  /// Когда пробовать снова самим. `null` — сами не пробуем.
+  DateTime? _retryAt;
+
+  DateTime _now() => (widget.clock ?? DateTime.now)();
+
+  void _scheduleRetry() {
+    _request = null;
+    _qrPayload = null;
+    // Компьютер удалён с аккаунта — код не появится, пока человек не
+    // выберет выход ниже; стучаться в сервер незачем.
+    if (widget.controller.desktopDeviceRemovedFromAccount) {
+      _retryAt = null;
+      return;
+    }
+    _failedRequests += 1;
+    final seconds = 30 * (1 << (_failedRequests - 1).clamp(0, 5));
+    final pause = Duration(seconds: seconds > 600 ? 600 : seconds);
+    _retryAt = _now().add(pause);
+    _timeLeft.value = pause;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -109,10 +146,18 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
     if (!mounted) return;
     final req = _request;
     if (req == null) {
-      _timeLeft.value = Duration.zero;
+      final retryAt = _retryAt;
+      if (retryAt == null) {
+        _timeLeft.value = Duration.zero;
+        return;
+      }
+      final left = retryAt.difference(_now());
+      _timeLeft.value = left.isNegative ? Duration.zero : left;
+      if (left > Duration.zero || _busy) return;
+      unawaited(_startRequest());
       return;
     }
-    final leftMs = req.expiresAtMs - DateTime.now().millisecondsSinceEpoch;
+    final leftMs = req.expiresAtMs - _now().millisecondsSinceEpoch;
     _timeLeft.value = Duration(milliseconds: leftMs > 0 ? leftMs : 0);
     if (leftMs > 0 || _busy) return;
 
@@ -142,22 +187,25 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
         _request = request;
         _qrPayload = widget.controller.buildDesktopLinkQrPayload(request);
         _busy = false;
+        _failedRequests = 0;
+        _retryAt = null;
       });
       // Seed the countdown immediately so the caption never shows a stale
       // value for the first second of a brand-new code.
-      final leftMs =
-          request.expiresAtMs - DateTime.now().millisecondsSinceEpoch;
+      final leftMs = request.expiresAtMs - _now().millisecondsSinceEpoch;
       _timeLeft.value = Duration(milliseconds: leftMs > 0 ? leftMs : 0);
     } on DesktopLinkFailure catch (failure) {
       if (!mounted) return;
       setState(() {
         _busy = false;
         _errorMessage = failure.message;
+        _scheduleRetry();
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _busy = false;
+        _scheduleRetry();
         // 🔴 НЕ `e.toString()`.
         //
         // Так на экран человеку попадал текст исключения Dart — например
@@ -226,7 +274,12 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
               ),
               const SizedBox(height: DSpace.s),
               Text(
-                _l10n.desktopPairingHowTo,
+                // 🔴 Подписи — ТЕЛЕФОННЫЕ, из тех же ключей, что рисует телефон
+                // (01.10.2026). Здесь стояло «Link a device», «Vincular
+                // dispositivo», «Associer un appareil», а на телефоне кнопка
+                // зовётся «Connect device» / «Conectar dispositivo» /
+                // «Connecter un appareil»: человек искал кнопку, которой нет.
+                desktopPairingHowToText(_l10n),
                 textAlign: TextAlign.center,
                 style: DType.body.copyWith(color: c.textSecondary),
               ),
@@ -334,7 +387,15 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
     return ValueListenableBuilder<Duration>(
       valueListenable: _timeLeft,
       builder: (ctx, left, _) {
-        if (_request == null) return const SizedBox.shrink();
+        if (_request == null) {
+          // Пауза перед следующей попыткой — видна, а не угадывается.
+          if (_retryAt == null || _busy) return const SizedBox.shrink();
+          return Text(
+            _l10n.desktopPairingRetryIn(left.inSeconds),
+            textAlign: TextAlign.center,
+            style: DType.caption.copyWith(color: c.textSecondary),
+          );
+        }
         if (left <= Duration.zero) {
           return Text(
             _l10n.desktopPairingCodeExpired,
@@ -454,7 +515,10 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
           ? _l10n.desktopPairingWaitingConfirm
           : (_busy
                 ? _l10n.desktopPairingPreparingQr
-                : _l10n.desktopPairingNewQr),
+                // Кода нет, потому что сорвалось, — кнопка так и называется.
+                : (_retryAt != null
+                      ? _l10n.desktopDevicesRetry
+                      : _l10n.desktopPairingNewQr)),
       kind: DButtonKind.tonal,
       onPressed: canRetry ? _cancelAndRetry : null,
     );
@@ -481,3 +545,16 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
   }
 
 }
+
+/// Как дойти на телефоне до кнопки привязки — подписями самого телефона:
+/// вкладка настроек (`settingsTitle`), плитка «Устройства» (`devicesSection`)
+/// и кнопка сканирования (`devicesConnectDevice`, та же строка, что у
+/// `devices_auth_screen.dart`). Свой перевод этих подписей здесь разошёлся бы
+/// с телефоном на первой же правке.
+@visibleForTesting
+String desktopPairingHowToText(AppLocalizations l10n) =>
+    l10n.desktopPairingHowTo(
+      l10n.settingsTitle,
+      l10n.devicesSection,
+      l10n.devicesConnectDevice,
+    );

@@ -28,7 +28,21 @@ class DesktopSwitch extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.semanticsLabel,
+    this.width = 36,
+    this.height = 20,
+    this.offTrackColor,
+    this.offKnobColor,
   });
+
+  /// Размер дорожки. По умолчанию — 36×20 окна; настройки по своему макету
+  /// рисуют 40×24 (29.09.2026). Кружок — на 2 точки от края дорожки, у
+  /// дорожки от 24 и выше — на 3, как в макете настроек.
+  final double width;
+  final double height;
+
+  /// Дорожка и кружок ВЫКЛЮЧЕННОГО переключателя; `null` — как у окна.
+  final Color? offTrackColor;
+  final Color? offKnobColor;
 
   /// Что именно переключает. Без этого экранный диктор объявляет «включено»,
   /// не сказав чего: сам переключатель нарисован, подпись живёт в соседней
@@ -44,9 +58,14 @@ class DesktopSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = DColors.of(context);
     final enabled = onChanged != null;
-    final track = value
-        ? c.accentPrimary
-        : Colors.white.withValues(alpha: 0.12);
+    // 🔴 На светлой схеме белая дорожка на белом не видна вовсе — выключенный
+    // переключатель выглядел пустым местом (30.09.2026, ТЗ §8). Тон дорожки —
+    // от схемы: светлый на тёмной, тёмный на светлой.
+    final ink = c.isDark ? Colors.white : Colors.black;
+    final offTrack = offTrackColor ?? ink.withValues(alpha: c.isDark ? 0.12 : 0.14);
+    final track = value ? c.accentPrimary : offTrack;
+    final pad = height >= 24 ? 3.0 : 2.0;
+    final knob = height - pad * 2;
     // 🔴 ОДИН УЗЕЛ, А НЕ ДВА. [MergeSemantics] сводит подпись, состояние и
     // нажатие в один предмет обхода. Без него диктор находил бы отдельно
     // «переключатель» без имени и отдельно подпись — и не связал бы их.
@@ -63,25 +82,36 @@ class DesktopSwitch extends StatelessWidget {
         builder: (ctx, hovered, pressed) => AnimatedContainer(
           duration: DMotion.base,
           curve: DMotion.easeOutCubic,
-          width: 36,
-          height: 20,
-          padding: const EdgeInsets.all(2),
+          width: width,
+          height: height,
+          padding: EdgeInsets.all(pad),
           decoration: BoxDecoration(
             color: hovered && enabled && !value
-                ? Colors.white.withValues(alpha: 0.18)
+                ? (offTrackColor == null
+                      ? ink.withValues(alpha: c.isDark ? 0.18 : 0.22)
+                      : Color.lerp(offTrack, c.textPrimary, 0.12)!)
                 : track,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(height / 2),
           ),
           child: AnimatedAlign(
             duration: DMotion.base,
             curve: DMotion.easeOutCubic,
             alignment: value ? Alignment.centerRight : Alignment.centerLeft,
             child: Container(
-              width: 16,
-              height: 16,
+              width: knob,
+              height: knob,
               decoration: BoxDecoration(
-                color: value ? Colors.white : c.textSecondary,
+                color: value ? Colors.white : (offKnobColor ?? c.textSecondary),
                 shape: BoxShape.circle,
+                boxShadow: offKnobColor == null
+                    ? null
+                    : const [
+                        BoxShadow(
+                          color: Color(0x4D000000),
+                          blurRadius: 2,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
               ),
             ),
           ),

@@ -97,10 +97,19 @@ void main() {
 
     test('🔴 звонок сбрасывается ТЕМ ЖЕ путём, что «Отклонить»', () {
       // Иначе у звонящего осталась бы висеть трубка.
-      final i = app.indexOf('onReplyWithText:');
-      final body = app.substring(i, (i + 600).clamp(0, app.length));
-      expect(body.contains('cm.declineIncoming()'), isTrue);
-      expect(body.contains('_openProfileChatByDeepLink'), isTrue);
+      // 29.09.2026: входящий бывает и во всплывашке главного окна, и в своём
+      // окне звонка (Р1) — правило одно для обоих.
+      final starts = 'onReplyWithText:'.allMatches(app).map((m) => m.start);
+      expect(starts.length, greaterThanOrEqualTo(2));
+      for (final i in starts) {
+        final body = app.substring(i, (i + 600).clamp(0, app.length));
+        expect(body.contains('cm.declineIncoming()'), isTrue);
+        expect(
+          body.contains('_openProfileChatByDeepLink') ||
+              body.contains('_openChatFromCallWindow'),
+          isTrue,
+        );
+      }
     });
 
     test('🔴 приложение НЕ пишет за человека', () {

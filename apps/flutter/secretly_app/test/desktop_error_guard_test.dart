@@ -62,7 +62,10 @@ void main() {
 
   test('ловушка ставится ДО запуска окна', () {
     final guard = src.indexOf('_installDesktopErrorGuard();');
-    final run = src.indexOf('runApp(const DesktopProductionApp());');
+    // 29.09.2026: приложение обёрнуто хозяином отдельных окон (Р1).
+    final run = src.indexOf(
+      'runApp(const DesktopChildWindowHost(child: DesktopProductionApp()));',
+    );
     expect(guard, greaterThan(0));
     expect(run, greaterThan(guard));
   });

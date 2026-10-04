@@ -12,6 +12,8 @@ import '../../widgets/avatar_initials.dart';
 import '../../widgets/shared_palette.dart';
 import '../design/tokens.dart';
 import '../services/desktop_ui_prefs.dart';
+import '../services/desktop_file_probe.dart';
+import '../services/desktop_window_activity.dart' show DesktopDecorationMotion;
 
 /// The single pixel size every animated avatar frame is rendered at on desktop.
 ///
@@ -42,6 +44,30 @@ enum AvatarShape {
 
   /// Комната, группа, канал. Скруглённый квадрат.
   room,
+}
+
+/// Портрет декодируется под свой размер на экране, а не целиком (01.10.2026).
+///
+/// Файл фото профиля — сотни и тысячи точек по стороне, а рисуется он
+/// кружком в 36. `FileImage` без подсказки декодирует его полностью:
+/// мегабайты на КАЖДЫЙ портрет в кэше картинок, и сорок строк списка
+/// вытесняли из кэша всё остальное. Ширина округляется вверх до 32
+/// точек, чтобы соседние размеры (36 и 40) делили один декод.
+///
+/// Задаётся только ширина, высота идёт по пропорциям. Квадратное фото (его и
+/// сохраняет обрезка) выходит ровно в размер, вертикальное — выше нужного,
+/// что для `BoxFit.cover` верно; горизонтальное чуть мягче по высоте — цена
+/// того, что пропорции до декода неизвестны. Остальные источники (картинки
+/// из ресурсов, уже ужатые) не трогаются.
+ImageProvider desktopAvatarImage(
+  ImageProvider image,
+  double logicalSize,
+  double devicePixelRatio,
+) {
+  if (image is! FileImage && image is! MemoryImage) return image;
+  final px = (logicalSize * devicePixelRatio).ceil();
+  if (px <= 0) return image;
+  return ResizeImage(image, width: ((px + 31) ~/ 32) * 32);
 }
 
 /// Single, canonical avatar widget. Replaces 15 in-tree implementations.
@@ -135,12 +161,14 @@ class Avatar extends StatelessWidget {
   /// Builds a file-backed [ImageProvider] for an avatar path, or null when the
   /// path is empty / missing on disk. Centralises the null/exists guard used by
   /// every desktop surface that renders a real profile photo.
+  ///
+  /// Наличие файла — через [DesktopFileProbe]: зовут это из `build` строк
+  /// списка и ленты, то есть на каждый тик контроллера (01.10.2026).
   static ImageProvider? fileImage(String? path) {
     if (path == null || path.trim().isEmpty) return null;
     try {
-      final f = File(path);
-      if (!f.existsSync()) return null;
-      return FileImage(f);
+      if (!DesktopFileProbe.exists(path)) return null;
+      return FileImage(File(path));
     } catch (_) {
       return null;
     }
@@ -192,7 +220,15 @@ class Avatar extends StatelessWidget {
   /// `a ≤ 0,754 × size`. Отсюда посадка с каждой стороны — `(1 − 0,754) / 2`.
   ///
   /// Круглому портрету столько не нужно: его край и есть та же окружность.
-  double get _frameInset => _isRoom ? 0.123 : 0.07;
+  double get _frameInset => portraitInset(shape: shape, framed: true);
+
+  /// Отступ портрета внутри рамки, долей размера (см. [_frameInset]).
+  /// Открыт наружу для наложений ПО ПОРТРЕТУ — затемнение «Сменить фото»
+  /// должно лечь на лицо, а не на кольцо (29.09.2026).
+  static double portraitInset({required AvatarShape shape, required bool framed}) {
+    if (!framed) return 0;
+    return shape == AvatarShape.round ? 0.07 : 0.123;
+  }
 
   /// Скругление угла у комнаты — ДОЛЯ размера, а не число точек.
   ///
@@ -296,7 +332,14 @@ class Avatar extends StatelessWidget {
         color: image == null ? fill : null,
         image: image == null
             ? null
-            : DecorationImage(image: image!, fit: BoxFit.cover),
+            : DecorationImage(
+                image: desktopAvatarImage(
+                  image!,
+                  size,
+                  MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0,
+                ),
+                fit: BoxFit.cover,
+              ),
         // 🔴 ВЫДЕЛЕНИЕ — КОЛЬЦО СНАРУЖИ, А НЕ ОБВОДКА ВНУТРЬ.
         //
         // `Border.all` уводил кольцо ВНУТРЬ портрета: две точки лица
@@ -336,86 +379,6 @@ class Avatar extends StatelessWidget {
             ))
           : null,
     );
-
-    // Overlays (status dot, mute, verified, unread).
-    final dot = (showStatus || online) && !muted;
-    final hasOverlays = dot || muted || verified || unreadCount > 0;
-    final ring = ringColor ?? c.chatList;
-    // Толщина выреза в макете растёт вместе с портретом: 2 у мелких (плашка
-    // созвона), 2,5 у строки списка, 3 у портрета 88 в правой панели.
-    // Постоянные две точки на портрете 88 выглядели волоском.
-    final double ringWidth = size >= 64 ? 3 : (size >= 32 ? 2.5 : 2);
-
-    if (hasOverlays) {
-      avatar = SizedBox(
-        width: size + (verified ? 4 : 0),
-        height: size + (verified ? 4 : 0),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned.fill(child: avatar),
-            if (dot)
-              Positioned(
-                right: _overlayInset,
-                bottom: _overlayInset,
-                child: Container(
-                  width: size * 0.30,
-                  height: size * 0.30,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: statusColor ?? c.voice,
-                    border: Border.all(color: ring, width: ringWidth),
-                  ),
-                ),
-              ),
-            if (muted)
-              Positioned(
-                right: -2,
-                bottom: -2,
-                child: Container(
-                  width: size * 0.36,
-                  height: size * 0.36,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: c.elevated,
-                    border: Border.all(color: ring, width: ringWidth),
-                  ),
-                  child: Icon(
-                    Icons.notifications_off_rounded,
-                    size: size * 0.18,
-                    color: c.textSecondary,
-                  ),
-                ),
-              ),
-            if (verified)
-              Positioned(
-                right: -2,
-                top: -2,
-                child: Container(
-                  width: size * 0.34,
-                  height: size * 0.34,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: c.accentPrimary,
-                    border: Border.all(color: ring, width: ringWidth),
-                  ),
-                  child: const Icon(
-                    Icons.check_rounded,
-                    size: 10,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            if (unreadCount > 0)
-              Positioned(
-                top: -4,
-                right: -4,
-                child: _UnreadBadge(count: unreadCount, color: c.unreadDot),
-              ),
-          ],
-        ),
-      );
-    }
 
     // Premium frame ring (peer / self cosmetic). Insets the avatar so the ring
     // sits around it; the frame fills the full box on top.
@@ -500,7 +463,11 @@ class Avatar extends StatelessWidget {
             // вот пересчёт содержимого под каждый размер вернул бы ровно ту
             // многоконтурную историю, ради которой ниже и введён канонический
             // размер.
+            //
+            // Окно без фокуса — рамка замирает (01.10.2026), см.
+            // [DesktopDecorationMotion].
             Positioned.fill(
+              child: DesktopDecorationMotion(
               child: IgnorePointer(
                 child: FittedBox(
                   fit: BoxFit.fill,
@@ -516,7 +483,100 @@ class Avatar extends StatelessWidget {
                   ),
                 ),
               ),
+              ),
             ),
+          ],
+        ),
+      );
+    }
+
+    // Overlays (status dot, mute, verified, unread).
+    //
+    // 🔴 ЗНАЧКИ — ПОСЛЕДНИМ СЛОЕМ, ПОВЕРХ РАМКИ (29.09.2026, «точка онлайна
+    // прячется за рамку»). Раньше они крепились к портрету ДО рамки: потом
+    // портрет вместе с точкой сжимался в отступ рамки, а кольцо рисовалось
+    // следующим слоем — поверх точки. Кольцо круга идёт по 0,43…0,48 стороны
+    // и перерезало внешнюю треть точки, живые рамки закрывали её целиком.
+    // Телефон рисует точку отдельным слоем после портрета с рамкой, по
+    // внешнему краю (`chats_screen.dart`) — так же теперь и здесь.
+    final dot = (showStatus || online) && !muted;
+    final hasOverlays = dot || muted || verified || unreadCount > 0;
+    final ring = ringColor ?? c.chatList;
+    // Толщина выреза в макете растёт вместе с портретом: 2 у мелких (плашка
+    // созвона), 2,5 у строки списка, 3 у портрета 88 в правой панели.
+    // Постоянные две точки на портрете 88 выглядели волоском.
+    final double ringWidth = size >= 64 ? 3 : (size >= 32 ? 2.5 : 2);
+
+    if (hasOverlays) {
+      // 🔴 КОРОБКА — РОВНО [size] (29.09.2026). Было `size + 4` у
+      // проверенного контакта, и `Positioned.fill` растягивал портрет: в шапке
+      // переписки он выходил 40 вместо 36. Значок «проверен» и так вылезает
+      // за угол (`Clip.none`), место под него коробке не нужно.
+      avatar = SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(child: avatar),
+            if (dot)
+              Positioned(
+                right: _overlayInset,
+                bottom: _overlayInset,
+                child: Container(
+                  width: size * 0.30,
+                  height: size * 0.30,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: statusColor ?? c.voice,
+                    border: Border.all(color: ring, width: ringWidth),
+                  ),
+                ),
+              ),
+            if (muted)
+              Positioned(
+                right: -2,
+                bottom: -2,
+                child: Container(
+                  width: size * 0.36,
+                  height: size * 0.36,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: c.elevated,
+                    border: Border.all(color: ring, width: ringWidth),
+                  ),
+                  child: Icon(
+                    Icons.notifications_off_rounded,
+                    size: size * 0.18,
+                    color: c.textSecondary,
+                  ),
+                ),
+              ),
+            if (verified)
+              Positioned(
+                right: -2,
+                top: -2,
+                child: Container(
+                  width: size * 0.34,
+                  height: size * 0.34,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: c.accentPrimary,
+                    border: Border.all(color: ring, width: ringWidth),
+                  ),
+                  child: const Icon(
+                    Icons.check_rounded,
+                    size: 10,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            if (unreadCount > 0)
+              Positioned(
+                top: -4,
+                right: -4,
+                child: _UnreadBadge(count: unreadCount, color: c.unreadDot),
+              ),
           ],
         ),
       );

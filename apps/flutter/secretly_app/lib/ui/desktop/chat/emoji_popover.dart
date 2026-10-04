@@ -7,21 +7,13 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 import '../../../app/app_controller.dart' show AppController;
 import '../../../stickers/sticker_catalog.dart' show SecretlyStickerDescriptor;
-import '../../emoji/emoji_search_index.dart' show filterEmojiByQuery;
-import '../../emoji/noto_emoji_catalog.dart'
-    show
-        kNotoCategories,
-        kNotoCategoryLabelsRu,
-        kNotoCategoryOrder,
-        kNotoCodepoints,
-        kNotoSkinToneHidden,
-        kNotoSkinToneVariants;
 import '../../widgets/secretly_sticker_widgets.dart'
     show SecretlyStickerPickerTab;
 import '../design/tokens.dart';
 import '../primitives/desktop_popover.dart';
 import '../primitives/desktop_text_field.dart';
 import '../primitives/hover_listener.dart';
+import 'emoji_grid.dart';
 import 'gif_picker_tab.dart';
 
 /// Emoji + stickers popover. Tabs along the top, sticky search, last-used row.
@@ -32,7 +24,6 @@ class EmojiPopover {
     BuildContext context, {
     required GlobalKey anchorKey,
     PopoverSide side = PopoverSide.above,
-    List<String> recents = const [],
     AppController? stickerController,
     ValueChanged<SecretlyStickerDescriptor>? onStickerSelected,
     ValueChanged<String>? onGifFilePicked,
@@ -45,7 +36,6 @@ class EmojiPopover {
       width: 360,
       maxHeight: 440,
       child: _EmojiPanel(
-        recents: recents,
         stickerController: stickerController,
         onStickerSelected: onStickerSelected,
         onGifFilePicked: onGifFilePicked,
@@ -59,14 +49,11 @@ enum _Tab { emoji, stickers, gifs }
 
 class _EmojiPanel extends StatefulWidget {
   const _EmojiPanel({
-    required this.recents,
     this.stickerController,
     this.onStickerSelected,
     this.onGifFilePicked,
     this.emojiOnly = false,
   });
-  final List<String> recents;
-
   /// Только эмодзи, без вкладок: в подписи к снимку стикер и гифку не
   /// вставишь, а пустые вкладки-заглушки только путают.
   final bool emojiOnly;
@@ -229,83 +216,17 @@ class _EmojiPanelState extends State<_EmojiPanel> {
   ///
   /// НАЙДЕНО 16.09.2026 ПО УКАЗАНИЮ ВЛАДЕЛЬЦА «сделай чтобы все эмодзи, гифки
   /// и т д работали правильно в пк версии — в мобильной всё идеально».
+  /// Здесь лежал `_kEmojiBundle` — тридцать семь символов, вбитых руками.
   ///
-  /// Здесь лежал `_kEmojiBundle`: тридцать семь символов, вбитых руками, со
-  /// своими словами для поиска. Рядом, в `lib/ui/emoji/noto_emoji_catalog.dart`,
-  /// всё это время лежали ВОСЕМЬСОТ ВОСЕМЬДЕСЯТ ОДИН — с категориями, с тонами
-  /// кожи и с двуязычным поиском по основам слов, и шапка того файла прямо
-  /// говорит: «Shared by the mobile + desktop emoji pickers». Общим он не был:
-  /// телефон брал его, компьютер — нет.
-  ///
-  /// Цена была не в числе символов, а в том, что человек, набравший на
-  /// телефоне 🥑, на компьютере не мог ответить тем же и даже найти его.
-  ///
-  /// Сетка рисует символы ТЕКСТОМ, а не анимацией: восемьсот проигрывателей
-  /// Lottie в одном окне — это восемьсот запросов кадра. Ровно так же
-  /// поступает телефон; оживают эмодзи уже в переписке.
+  /// С 29.09.2026 сама сетка живёт в [DesktopEmojiGrid]: её же берёт выбор
+  /// эмодзи-статуса, и у обоих — ленивая раскладка, полоса категорий,
+  /// «Недавние» и подписи на языке окна.
   Widget _emojiBody(DColorSet c) {
-    final l10n = AppLocalizations.of(context)!;
-    final groups = _catalogGroups(_q);
-    if (groups.isEmpty) {
-      return _stubBody(c, FluentIcons.emoji_24_regular,
-          l10n.desktopEmojiNothingFound);
-    }
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(DSpace.s),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (widget.recents.isNotEmpty && _q.isEmpty) ...[
-            _label(c, l10n.desktopEmojiRecents),
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: widget.recents.map((e) => _emojiBtn(c, e)).toList(),
-            ),
-            const SizedBox(height: DSpace.s),
-          ],
-          for (final group in groups) ...[
-            _label(c, group.label),
-            Wrap(
-              spacing: 4,
-              runSpacing: 4,
-              children: group.emoji.map((e) => _emojiBtn(c, e)).toList(),
-            ),
-            const SizedBox(height: DSpace.s),
-          ],
-        ],
-      ),
+    return DesktopEmojiGrid(
+      query: _q,
+      recentsKey: kDesktopEmojiRecentsKey,
+      onPicked: (e) => Navigator.of(context).maybePop(e),
     );
-  }
-
-  /// Каталог, разложенный по категориям в порядке производителя.
-  ///
-  /// Тона кожи спрятаны под свой базовый символ: 👍 лежит в каталоге шестью
-  /// записями, и без этого сетка на треть состояла бы из одной и той же руки.
-  /// Выбрать тон можно правой кнопкой по символу — см. [_emojiBtn].
-  List<({String label, List<String> emoji})> _catalogGroups(String query) {
-    final buckets = <String, List<String>>{
-      for (final slug in kNotoCategoryOrder) slug: <String>[],
-    };
-    for (final emoji in kNotoCodepoints.keys) {
-      if (kNotoSkinToneHidden.contains(emoji)) continue;
-      final slug = kNotoCategories[emoji] ?? 'symbols';
-      (buckets[slug] ??= <String>[]).add(emoji);
-    }
-    return [
-      for (final slug in kNotoCategoryOrder)
-        if (_filtered(buckets[slug], query).isNotEmpty)
-          (
-            label: kNotoCategoryLabelsRu[slug] ?? slug,
-            emoji: _filtered(buckets[slug], query),
-          ),
-    ];
-  }
-
-  List<String> _filtered(List<String>? source, String query) {
-    final items = source ?? const <String>[];
-    if (query.trim().isEmpty) return items;
-    return filterEmojiByQuery(items, query);
   }
 
   Widget _stubBody(DColorSet c, IconData ic, String label) {
@@ -322,75 +243,5 @@ class _EmojiPanelState extends State<_EmojiPanel> {
         ),
       ),
     );
-  }
-
-  Widget _label(DColorSet c, String text) => Padding(
-        padding: const EdgeInsets.only(left: 4, top: 6, bottom: 4),
-        child: Text(text.toUpperCase(),
-            style: DType.tiny.copyWith(color: c.textSecondary, letterSpacing: 1.2)),
-      );
-
-  Widget _emojiBtn(DColorSet c, String e) {
-    final tones = kNotoSkinToneVariants[e];
-    return HoverListener(
-      onTap: () => Navigator.of(context).maybePop(e),
-      // Тон кожи — правой кнопкой. На телефоне его выбирают долгим нажатием;
-      // здесь долгого нажатия нет, а правая кнопка — привычный способ
-      // спросить «а какие ещё бывают».
-      onSecondaryTapDown: tones == null
-          ? null
-          : (d) => _pickSkinTone(e, tones, d.globalPosition),
-      builder: (ctx, hovered, pressed) => Container(
-        width: 32,
-        height: 32,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: hovered ? c.hover : null,
-          borderRadius: BorderRadius.circular(DRadii.sm),
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Text(e, style: const TextStyle(fontSize: 20)),
-            // Точка в углу — единственный намёк, что у символа есть тона.
-            // Без неё правая кнопка была бы тайным знанием.
-            if (tones != null)
-              Positioned(
-                right: 2,
-                bottom: 2,
-                child: Container(
-                  width: 5,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: c.textSecondary,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _pickSkinTone(
-    String base,
-    List<String> tones,
-    Offset at,
-  ) async {
-    final picked = await showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
-      items: [
-        for (final variant in <String>[base, ...tones])
-          PopupMenuItem<String>(
-            value: variant,
-            height: 36,
-            child: Text(variant, style: const TextStyle(fontSize: 20)),
-          ),
-      ],
-    );
-    if (picked == null || !mounted) return;
-    Navigator.of(context).maybePop(picked);
   }
 }

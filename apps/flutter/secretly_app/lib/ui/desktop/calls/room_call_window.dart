@@ -14,7 +14,6 @@ import 'package:window_manager/window_manager.dart';
 import '../../../app/app_controller.dart';
 import '../app/desktop_app_view_model.dart';
 import '../app/desktop_selector.dart';
-import '../../../calls/call_audio_route.dart';
 import '../../../rooms/room_call_manager.dart';
 import '../../../transport/relay_client.dart'
     show RelayRoomCallMediaBackendKind;
@@ -24,15 +23,23 @@ import '../../../rooms/room_call_state.dart';
 import '../chat/details/room_invite_share.dart';
 import '../chat/details/details_tabs.dart';
 import '../primitives/context_menu.dart';
+import '../primitives/desktop_button.dart';
+import '../primitives/desktop_dialog.dart';
 import '../primitives/desktop_snackbar.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../chat/details/room_notes_pane.dart';
 import '../design/tokens.dart';
+import '../services/desktop_call_devices.dart';
+import '../services/desktop_call_prefs.dart';
 import '../services/desktop_ui_prefs.dart';
 import '../services/demo_rooms.dart';
 import 'call_controls.dart';
+import 'call_device_menu.dart';
+import 'call_main_window_reveal.dart';
+import 'one_to_one_call_screen.dart' show DesktopCallOwnWindow;
 import 'call_presence.dart';
 import 'call_stage_pick.dart';
+import 'room_call_media_guard.dart';
 import '../primitives/avatar.dart';
 import '../primitives/hover_listener.dart';
 import '../shell/window_chrome.dart';
@@ -63,6 +70,8 @@ class DesktopRoomCallWindow extends StatefulWidget {
     required this.vm,
     required this.groupId,
     required this.title,
+    this.onClose,
+    this.ownWindow,
   });
 
   /// Шов к приложению. Снимок созвона читается ЧЕРЕЗ НЕГО, а не своей
@@ -74,6 +83,13 @@ class DesktopRoomCallWindow extends StatefulWidget {
   final String groupId;
   final String title;
 
+  /// Закрыть окно созвона (свернуть или после выхода). `null` — окно открыто
+  /// маршрутом поверх главного окна и уходит `maybePop`.
+  final VoidCallback? onClose;
+
+  /// Созвон в своём окне ОС (29.09.2026, Р1) — см. `DesktopRoomCallWindows`.
+  final DesktopCallOwnWindow? ownWindow;
+
   @override
   State<DesktopRoomCallWindow> createState() => _DesktopRoomCallWindowState();
 }
@@ -82,6 +98,17 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
   /// Подписи окна. Метод `_nameFor` и сборка списков зовутся из многих мест,
   /// и `AppLocalizations.of(context)!` в каждом читался бы хуже подписи.
   AppLocalizations get _l10n => AppLocalizations.of(context)!;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 🔴 Безымянную камеру (система не дала имени) движок созвона называл
+    // по-русски на любом языке: слова были зашиты в общем с телефоном файле.
+    // Теперь их ставит окно из своих переводов — до того, как спросить список
+    // камер, и заново при смене языка. Телефон их не ставит и живёт как был.
+    RoomCallUnnamedDeviceLabels.camera = _l10n.desktopDevicesCamera;
+    RoomCallUnnamedDeviceLabels.microphone = _l10n.desktopDevicesMicrophone;
+  }
 
   late final DesktopSelector<CachedRoomCall?> _callSel;
   Timer? _ticker;
@@ -162,12 +189,23 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
       if (mounted) setState(() {});
     });
     RoomCallManager.instance?.state.addListener(_onRuntime);
+    DesktopRoomCallMediaGuard.attach();
     // Список устройств вывода приезжает отдельным состоянием и уже ПОСЛЕ
     // подключения. Без подписки шеврон у «Микрофона» не появился бы до
     // следующей перерисовки окна по другой причине.
     RoomCallManager.instance?.audioRouteState.addListener(_onRuntime);
+    // «Зеркалить моё видео» из настроек — сразу, а не со следующей секунды.
+    DesktopCallPrefs.mirrorSelfView.addListener(_onMirrorPref);
     unawaited(_loadChatTail());
   }
+
+  void _onMirrorPref() {
+    if (mounted) setState(() {});
+  }
+
+  /// Своё видео зеркалим, если так выбрано в настройках звонков (30.09.2026).
+  /// Только у себя на экране: собеседники видят как есть.
+  bool get _mirrorSelf => DesktopCallPrefs.mirrorSelfView.value;
 
   @override
   void dispose() {
@@ -180,6 +218,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
     RoomCallManager.instance?.audioRouteState.removeListener(_onRuntime);
     _callSel.removeListener(_onRuntime);
     _callSel.dispose();
+    DesktopCallPrefs.mirrorSelfView.removeListener(_onMirrorPref);
     _chatInput.dispose();
     _ticker?.cancel();
     _statsTimer?.cancel();
@@ -192,7 +231,22 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
   /// мини-окно проявляется, пока окно созвона уезжает, а не после.
   void _minimize() {
     DesktopCallPresence.instance.roomWindowClosed(this);
-    Navigator.of(context).maybePop();
+    _closeWindow();
+    // 🔴 Своё окно свернули, а главное спрятано в трей: мини-окно живёт в
+    // нём, и созвон с живым микрофоном остался бы невидимым (30.09.2026).
+    if (widget.ownWindow != null) {
+      unawaited(DesktopMainWindowReveal.revealIfHidden());
+    }
+  }
+
+  /// Своё окно ОС закрывает хозяин; маршрут — навигатор.
+  void _closeWindow() {
+    final close = widget.onClose;
+    if (close != null) {
+      close();
+    } else {
+      Navigator.of(context).maybePop();
+    }
   }
 
   /// Сочетания окна созвона: Esc — свернуть; ⌘D / Ctrl+D — микрофон;
@@ -218,7 +272,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
     final joined = self?.isJoined ?? false;
     if (letter(LogicalKeyboardKey.keyW, PhysicalKeyboardKey.keyW)) {
       if (!joined) return KeyEventResult.ignored;
-      unawaited(_leave());
+      unawaited(_leavePressed());
       return KeyEventResult.handled;
     }
     if (!joined || _busy != null) return KeyEventResult.ignored;
@@ -297,6 +351,162 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
       // Имена — украшение списка: без них участник показывается по
       // идентификатору, и созвон от этого не ломается.
     }
+    try {
+      final policy = await widget.controller.getRoomPolicyState(
+        widget.groupId,
+      );
+      if (mounted) setState(() => _canModerate = policy.canRemoveMembers);
+    } catch (_) {}
+  }
+
+  /// Можно ли убирать людей из созвона и завершать его для всех — то же
+  /// право, что у телефона (`canModerateCall` = `canRemoveMembers`).
+  bool _canModerate = false;
+
+  /// Правый щелчок по участнику: «Убрать из созвона» (ТЗ «ПК как Telegram»
+  /// §2 — у телефона было, на ПК входа не было).
+  void _participantMenu(CachedRoomCallParticipant p, Offset at) {
+    ContextMenu.show(
+      context,
+      globalPosition: at,
+      sections: [
+        [
+          CtxMenuItem(
+            label: _l10n.desktopCallRemoveParticipant,
+            icon: FluentIcons.person_delete_24_regular,
+            isDanger: true,
+            onTap: () => unawaited(_removeFromCall(p)),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _removeFromCall(CachedRoomCallParticipant p) async {
+    final call = _call;
+    if (call == null) return;
+    final name = _nameFor(p.profileId);
+    final ok = await DesktopDialog.show<bool>(
+      context,
+      title: _l10n.desktopCallRemoveParticipantTitle(name),
+      size: DDialogSize.small,
+      body: Text(
+        _l10n.desktopCallRemoveParticipantBody,
+        style: DType.body.copyWith(color: DColors.of(context).textSecondary),
+      ),
+      primary: DDialogAction(
+        label: _l10n.desktopCallRemoveParticipant,
+        kind: DButtonKind.danger,
+        onPressed: () => Navigator.of(context).maybePop(true),
+      ),
+      secondary: DDialogAction(
+        label: _l10n.cancel,
+        onPressed: () => Navigator.of(context).maybePop(false),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    await _run('remove:${p.deviceId}', () async {
+      final result = await widget.controller.removeRelayRoomCallParticipant(
+        roomId: widget.groupId,
+        callId: call.callId,
+        participantDeviceId: p.deviceId,
+      );
+      if (result == null) throw StateError(_l10n.desktopCallRemoveFailed);
+    });
+  }
+
+  /// «Выйти» с кнопки или ⌘W. Тому, кто вправе, — как в Telegram: окно с
+  /// галочкой «Завершить созвон для всех» (не отмечена). Остальным — выход
+  /// сразу, как раньше.
+  Future<void> _leavePressed() async {
+    final call = _call;
+    final others = call?.participants
+            .where((p) => p.isJoined && p.deviceId != widget.controller.deviceId)
+            .length ??
+        0;
+    if (!_canModerate || call == null || others == 0) {
+      await _leave();
+      return;
+    }
+    var endForAll = false;
+    final leaveLabel = _l10n.desktopCallLeave;
+    final ok = await DesktopDialog.show<bool>(
+      context,
+      title: _l10n.desktopCallLeaveTitle,
+      size: DDialogSize.small,
+      body: StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final c = DColors.of(ctx);
+          return InkWell(
+            borderRadius: BorderRadius.circular(DRadii.sm),
+            onTap: () => setLocal(() => endForAll = !endForAll),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Checkbox(
+                  value: endForAll,
+                  activeColor: c.danger,
+                  onChanged: (v) => setLocal(() => endForAll = v ?? false),
+                ),
+                const SizedBox(width: DSpace.xs),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _l10n.desktopCallEndForAll,
+                          style: DType.body.copyWith(color: c.textPrimary),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _l10n.desktopCallEndForAllHint,
+                          style: DType.caption.copyWith(
+                            color: c.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+      primary: DDialogAction(
+        // Та же подпись, что у кнопки дока, — одним словом для одного дела.
+        label: leaveLabel,
+        kind: DButtonKind.danger,
+        onPressed: () => Navigator.of(context).maybePop(true),
+      ),
+      secondary: DDialogAction(
+        label: _l10n.cancel,
+        onPressed: () => Navigator.of(context).maybePop(false),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    if (!endForAll) {
+      await _leave();
+      return;
+    }
+    await _run('end', force: true, timeout: const Duration(seconds: 20), () async {
+      final result = await widget.controller.endRelayRoomCall(
+        roomId: widget.groupId,
+        callId: call.callId,
+      );
+      if (result == null) throw StateError(_l10n.desktopCallEndForAllFailed);
+      await RoomCallManager.instance?.clearIfMatches(
+        roomId: widget.groupId,
+        callId: call.callId,
+      );
+      // См. [_leave]: движок отпускаем, даже если «созвона нет» наступило
+      // раньше и `clearIfMatches` комнаты уже не нашёл.
+      unawaited(RoomCallManager.instance?.releaseMediaIfIdle());
+      if (mounted) _closeWindow();
+    });
   }
 
   /// 🔴 ЗАВИСШЕЕ ДЕЙСТВИЕ ЗАПИРАЛО ЧЕЛОВЕКА В СОЗВОНЕ (14.09.2026, живая
@@ -483,7 +693,12 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
           roomId: widget.groupId,
           callId: call.callId,
         );
-        if (mounted) Navigator.of(context).maybePop();
+        // 🔴 МИКРОФОН ОСТАВАЛСЯ В ЭФИРЕ ПОСЛЕ «ВЫЙТИ» (30.09.2026). Выход
+        // рассылает подсказки участникам по одному; пока они шли, управляющий
+        // успевал сам перейти в «созвона нет», НЕ отпустив LiveKit, — и
+        // `clearIfMatches` выше уже не находил комнаты. Отпускаем явно.
+        unawaited(RoomCallManager.instance?.releaseMediaIfIdle());
+        if (mounted) _closeWindow();
       } else {
         // Выйти не вышло — сказать, а не оставить человека жать «Выйти» ещё
         // и ещё, не понимая, почему он всё ещё в созвоне.
@@ -493,6 +708,14 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
   }
 
   Future<void> _toggleFullScreen() async {
+    // В своём окне ОС — «во весь экран» у него, а не у главного окна.
+    final own = widget.ownWindow;
+    if (own != null) {
+      final next = !_fullScreen;
+      await own.onSetFullScreen(next);
+      if (mounted) setState(() => _fullScreen = next);
+      return;
+    }
     try {
       final next = !(await windowManager.isFullScreen());
       await windowManager.setFullScreen(next);
@@ -567,6 +790,20 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
 
   @override
   Widget build(BuildContext context) {
+    // 🔴 ОКНО СОЗВОНА ТЁМНОЕ В ЛЮБОЙ ТЕМЕ (28.09.2026) — как звонок 1:1 и
+    // мини-окна. Раньше оно брало палитру приложения, и при светлой теме
+    // (а до переноса палитры над навигатором — при светлой Windows) весь
+    // созвон был белым (#F6F7FA), а меню устройств в нём — тоже белыми.
+    // Тёмная палитра приложения со своим акцентом остаётся как есть; светлая
+    // заменяется базовой тёмной.
+    final app = DColors.of(context);
+    return DColors(
+      colors: app.isDark ? app : kDColorsDark,
+      child: Builder(builder: _buildWindow),
+    );
+  }
+
+  Widget _buildWindow(BuildContext context) {
     final c = DColors.of(context);
     final call = _call;
     final selfJoined = call?.selfParticipant?.isJoined ?? false;
@@ -586,6 +823,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
             anyoneSpeaking: _speakingDeviceIds().isNotEmpty,
             onBack: _minimize,
             onToggleFullScreen: _toggleFullScreen,
+            ownWindow: widget.ownWindow,
           ),
           Expanded(
             child: call == null
@@ -724,7 +962,9 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
                       media.hasParticipantCameraView(p.deviceId)
                   ? media.buildParticipantVideoView(
                       deviceId: p.deviceId,
-                      mirror: _runtimeFor(p.deviceId)?.isSelf ?? false,
+                      mirror:
+                          (_runtimeFor(p.deviceId)?.isSelf ?? false) &&
+                          _mirrorSelf,
                       kind: RoomCallVideoKind.camera,
                     )
                   : null,
@@ -752,7 +992,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
             deviceId: pick.deviceId,
             // Зеркалим только СВОЮ камеру, и только её: демонстрация экрана
             // зеркальной быть не должна ни у кого.
-            mirror: found.isSelf && !pick.screenShare,
+            mirror: found.isSelf && !pick.screenShare && _mirrorSelf,
             // Просим ИМЕННО то, что выбрали. Раньше вид был один на участника
             // и экран всегда побеждал камеру: сцена не могла показать лицо
             // того, кто параллельно показывает экран.
@@ -931,7 +1171,12 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
     if (media == null || !_mediaBackendReady) return;
     _preferredDevicesApplied = true;
     final cam = DesktopUiPrefs.preferredCameraId.value;
-    if (cam.isNotEmpty) await media.selectVideoInput(cam);
+    // Камеру — через сторожа (30.09.2026): выключенную не включает, и одну и
+    // ту же настройку второй раз не применяет — окно пересоздаётся при
+    // каждом возврате из мини-окна.
+    if (cam.isNotEmpty) {
+      await DesktopRoomCallMediaGuard.applyPreferredCamera(media, cam);
+    }
     final mic = DesktopUiPrefs.preferredMicId.value;
     if (mic.isNotEmpty) await media.selectAudioInput(mic);
   }
@@ -955,7 +1200,8 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
   Future<void> _pickCamera(BuildContext anchorContext) async {
     final media = _media;
     if (media == null || _cameras.length < 2) return;
-    final selected = media.selectedVideoInputId;
+    // Камера выключена — выбор только запоминается и отмечен галочкой.
+    final selected = DesktopRoomCallMediaGuard.chosenCamera(media);
     await ContextMenu.show(
       anchorContext,
       globalPosition: callMenuAnchorAbove(anchorContext, _cameras.length),
@@ -970,7 +1216,10 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
               onTap: () => unawaited(
                 _run(
                   'camera',
-                  () async => media.selectVideoInput(cam.deviceId),
+                  () async => DesktopRoomCallMediaGuard.chooseCamera(
+                    media,
+                    cam.deviceId,
+                  ),
                 ),
               ),
             ),
@@ -979,33 +1228,21 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
     );
   }
 
-  /// Доступные устройства вывода звука. Пусто — движок их ещё не собрал.
-  List<CallAudioRouteOption> _audioRoutes() =>
-      RoomCallManager.instance?.audioRouteState.value.availableRoutes ??
-      const <CallAudioRouteOption>[];
-
-  /// Список устройств вывода — по шеврону у «Микрофона».
+  /// Микрофон и динамики — по стрелке у «Микрофона» (см. call_device_menu).
   Future<void> _pickAudioRoute(BuildContext anchorContext) async {
     final manager = RoomCallManager.instance;
     if (manager == null) return;
-    final routes = _audioRoutes();
-    if (routes.length < 2) return;
-    final selected = manager.audioRouteState.value.selectedRouteId;
-    await ContextMenu.show(
+    await showCallDeviceMenu(
       anchorContext,
-      globalPosition: callMenuAnchorAbove(anchorContext, routes.length),
-      sections: <List<CtxMenuItem>>[
-        [
-          for (final r in routes)
-            CtxMenuItem(
-              label: r.label,
-              icon: r.deviceId == selected
-                  ? FluentIcons.checkmark_24_regular
-                  : callAudioRouteIcon(r.kind),
-              onTap: () => unawaited(manager.selectAudioRoute(r.deviceId)),
-            ),
-        ],
-      ],
+      outputs: manager.audioRouteState.value,
+      applyOutput: manager.selectAudioRoute,
+      // Микрофон созвона — у движка комнаты: ему нужен конкретный
+      // идентификатор, и «Как в системе» превращается в системный микрофон.
+      applyMicrophone: () async {
+        final target = await desktopMicrophoneTarget();
+        if (target == null) return;
+        await manager.mediaController?.selectAudioInput(target);
+      },
     );
   }
 
@@ -1037,7 +1274,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
       final view = (!faceOnStage && hasCamera && media != null)
           ? media.buildParticipantVideoView(
               deviceId: p.deviceId,
-              mirror: runtime.isSelf,
+              mirror: runtime.isSelf && _mirrorSelf,
               // Плитка — всегда ЛИЦО. Экран у неё показывать нечем: он на
               // сцене и во много раз больше.
               kind: RoomCallVideoKind.camera,
@@ -1365,6 +1602,10 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
               itemBuilder: (ctx, i) {
                 final p = participants[i];
                 return _ParticipantRow(
+                  onMenu:
+                      _canModerate && p.deviceId != widget.controller.deviceId
+                      ? (at) => _participantMenu(p, at)
+                      : null,
                   name: _nameFor(p.profileId),
                   avatarPath: _avatarFor(p.profileId),
                   muted: p.muted,
@@ -1433,7 +1674,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
       if (!mounted) return;
       DesktopSnackbar.show(
         context,
-        message: _l10n.desktopCallFailedWith('$e'),
+        message: _l10n.desktopCallFailedWith(desktopErrorText(e)),
         kind: DSnackKind.error,
       );
     } finally {
@@ -1488,7 +1729,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
             //
             // Шеврона НЕТ, когда выбирать не из чего: стрелка, за которой
             // один пункт, обещает выбор, которого нет.
-            onExpand: _audioRoutes().length > 1 ? _pickAudioRoute : null,
+            onExpand: _pickAudioRoute,
           ),
           const SizedBox(width: 8),
           CallDockToggle(
@@ -1575,7 +1816,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
             // запрос по камере гасил и эту кнопку — человек оставался в
             // созвоне, из которого нечем выйти. См. [_run].
             enabled: true,
-            onTap: () => unawaited(_leave()),
+            onTap: () => unawaited(_leavePressed()),
           ),
       ],
     );
@@ -1657,6 +1898,7 @@ class _Header extends StatelessWidget {
     required this.anyoneSpeaking,
     required this.onBack,
     required this.onToggleFullScreen,
+    this.ownWindow,
   });
 
   final String title;
@@ -1670,6 +1912,10 @@ class _Header extends StatelessWidget {
 
   final VoidCallback onBack;
   final VoidCallback onToggleFullScreen;
+
+  /// Созвон в своём окне ОС: рамку, перетаскивание и кнопки окна даёт
+  /// система, в шапке — «Поверх всех окон».
+  final DesktopCallOwnWindow? ownWindow;
 
   static String _duration(int startedAtMs) {
     var total = (DateTime.now().millisecondsSinceEpoch - startedAtMs) ~/ 1000;
@@ -1692,12 +1938,12 @@ class _Header extends StatelessWidget {
     // имеет: системные кнопки закрытия ложатся прямо на эту шапку. Без отступа
     // кнопка «свернуть созвон» оказывалась ПОД ними — то есть нажать на неё
     // было нельзя, а выглядело это как неработающая кнопка.
-    final isMacOS = !kIsWeb && Platform.isMacOS;
+    final isMacOS = !kIsWeb && Platform.isMacOS && ownWindow == null;
     // 🔴 КНОПКИ ОКНА WINDOWS — ЗДЕСЬ (24.09.2026). Окно созвона ложится
     // поверх шапки приложения целиком, а на Windows «свернуть, развернуть,
     // закрыть» рисуем мы сами, в той шапке: пока шёл созвон, окно нельзя было
     // ни свернуть, ни закрыть, ни даже сдвинуть.
-    final isWindows = !kIsWeb && Platform.isWindows;
+    final isWindows = !kIsWeb && Platform.isWindows && ownWindow == null;
     return Container(
       // 46 и поля 14 — из макета. Было 52: лишние шесть точек у окна, где
       // ценность имеет площадь сцены.
@@ -1708,7 +1954,8 @@ class _Header extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          const Positioned.fill(child: DesktopWindowDragRegion()),
+          if (ownWindow == null)
+            const Positioned.fill(child: DesktopWindowDragRegion()),
           Row(
             children: [
               Expanded(
@@ -1802,6 +2049,21 @@ class _Header extends StatelessWidget {
             ),
           ),
           const SizedBox(width: DSpace.m),
+          if (ownWindow != null) ...[
+            ValueListenableBuilder<bool>(
+              valueListenable: ownWindow!.pinned,
+              builder: (ctx, pinned, _) => _ChromeButton(
+                icon: pinned
+                    ? FluentIcons.pin_24_filled
+                    : FluentIcons.pin_24_regular,
+                tooltip: pinned
+                    ? l10n.desktopCallUnpinWindow
+                    : l10n.desktopCallPinWindow,
+                onTap: ownWindow!.onTogglePin,
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
           _ChromeButton(
             icon: fullScreen
                 ? FluentIcons.full_screen_minimize_24_regular
@@ -2672,7 +2934,11 @@ class _ParticipantRow extends StatelessWidget {
     required this.speaking,
     required this.deafened,
     this.level = 0,
+    this.onMenu,
   });
+
+  /// Правый щелчок — меню участника (только тому, кто вправе убирать).
+  final void Function(Offset at)? onMenu;
 
   final String name;
   final String? avatarPath;
@@ -2699,7 +2965,11 @@ class _ParticipantRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
-    return Container(
+    final menu = onMenu;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onSecondaryTapDown: menu == null ? null : (d) => menu(d.globalPosition),
+      child: Container(
       margin: const EdgeInsets.symmetric(vertical: 1),
       padding: const EdgeInsets.symmetric(
         horizontal: DSpace.s,
@@ -2799,6 +3069,7 @@ class _ParticipantRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
       ),
     );
   }

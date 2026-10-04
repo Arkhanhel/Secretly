@@ -432,6 +432,16 @@ void main() {
       );
     });
 
+    // 01.10.2026: на Windows, Linux и старой macOS пункт отвечал отказом на
+    // каждое нажатие.
+    test('🔴 пункт есть только там, где перевод возможен', () {
+      final i = panel.indexOf('onTranslate: (!m.isSelf && m.isTextMessage)');
+      expect(
+        panel.substring(i, i + 200).contains('.instance.availableHere'),
+        isTrue,
+      );
+    });
+
     test('подпись переключается: «Перевести» ↔ «Скрыть перевод»', () {
       final menu = File(
         'lib/ui/desktop/chat/message_context_menu.dart',
@@ -499,6 +509,57 @@ void main() {
       final i = bubble.indexOf('class MessageData {');
       final j = bubble.indexOf('\n}', i);
       expect(bubble.substring(i, j).contains('translatedText'), isFalse);
+    });
+  });
+
+  group('где перевод возможен', () {
+    tearDown(() {
+      DesktopTranslationService.isMacOS = () => Platform.isMacOS;
+      DesktopTranslationService.osVersion = () => Platform.operatingSystemVersion;
+      DesktopTranslationService.instance.resetAvailabilityForTest();
+    });
+
+    test('Windows и Linux — нет моста, нет и пункта', () {
+      expect(
+        desktopTranslationSupportedOn(isMacOS: false, osVersion: '10.0.22631'),
+        isFalse,
+      );
+    });
+
+    test('macOS 15 и старше — нет системной службы', () {
+      expect(
+        desktopTranslationSupportedOn(
+          isMacOS: true,
+          osVersion: 'Version 15.5 (Build 24F74)',
+        ),
+        isFalse,
+      );
+    });
+
+    test('macOS 26 — есть, и под старым SDK («16.0») тоже', () {
+      for (final v in <String>[
+        'Version 26.0 (Build 25A354)',
+        'Version 16.0 (Build 25A354)',
+      ]) {
+        expect(
+          desktopTranslationSupportedOn(isMacOS: true, osVersion: v),
+          isTrue,
+          reason: v,
+        );
+      }
+    });
+
+    test('версию не разобрать — решает мост', () {
+      expect(
+        desktopTranslationSupportedOn(isMacOS: true, osVersion: 'Darwin'),
+        isTrue,
+      );
+    });
+
+    test('площадка подменяется, ответ помнится', () {
+      DesktopTranslationService.isMacOS = () => false;
+      DesktopTranslationService.instance.resetAvailabilityForTest();
+      expect(DesktopTranslationService.instance.availableHere, isFalse);
     });
   });
 }

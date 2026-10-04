@@ -16,6 +16,65 @@ published build yet.
 
 ---
 
+## [1.8.63] — 2026-10-04
+
+Build 644 (macOS, Windows, iOS TestFlight, Android). Source: tag `v1.8.63-644`.
+
+### Security
+- Desktop: a received file whose real extension can run code (`.exe`, `.lnk`,
+  `.js`, `.hta`, macro-enabled documents and similar) never opens on a single
+  click; a warning names the real extension. Windows copies carry the
+  Mark-of-the-Web, and invisible bidi characters are stripped from file names.
+- Desktop: the app lock (Touch ID or PIN) now covers every open window and
+  dialog; an incoming call no longer lifts the PIN lock; notifications under
+  the lock show no sender, no text and no Reply.
+- Desktop: the "Personal" chats password can no longer be bypassed through
+  notifications, links or back/forward navigation.
+- Desktop: a `secretly://profile` link asks before opening a chat and never
+  accepts a message request by itself; links wait while the app is locked.
+- Windows: decrypted attachments and contact photos moved out of the user's
+  Documents folder (often synced to the cloud) into the application's folder.
+- Windows: the updater refuses an older signed installer (downgrade protection).
+- Desktop: optional protection of the window from screenshots and screen
+  recording.
+- Server: device activity times of someone else's profile are reported with
+  day precision only.
+
+### Fixed
+- macOS: closing the window quit the app, so messages and calls stopped
+  arriving in the background; it now stays in the menu bar.
+- macOS: the app did not start on Apple Silicon Macs below macOS 26; the
+  minimum is now macOS 13 Ventura.
+- Desktop: after "Leave" or "End for everyone" in a group call the microphone
+  stayed connected.
+- Desktop: "Create account" did not create an account, and "Connect device" in
+  Settings signed the computer out.
+- Desktop: voice messages could not be recorded.
+
+### Added
+- Desktop: message, open-chat and call sounds can be chosen and previewed.
+
+### Changed
+- Desktop: neutral gray dark theme; chat wallpapers keep the pattern size and
+  repeat it on larger windows instead of stretching.
+- Desktop builds ship the GPL license text and source information for FFmpeg.
+
+---
+
+## [1.8.62] — 2026-09-28
+
+Build 635 (macOS, Windows, iOS TestFlight, Android). Source: tag `v1.8.62-635`.
+
+### Fixed
+- Linking a computer no longer leaves an empty chat with a raw ID behind on
+  the phone.
+
+### Changed
+- Windows: a regular installer (`.exe`) with silent updates replaces the ZIP as
+  the main download; the portable ZIP stays available.
+
+---
+
 ## [1.8.61] — 2026-09-26
 
 Builds 630 (iOS TestFlight, macOS, Windows) and 631 (Android, Windows). Source:

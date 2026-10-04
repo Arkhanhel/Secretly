@@ -59,7 +59,7 @@ void main() {
     }
   });
 
-  testWidgets('🔴 у каждого раздела свой цвет плитки, серых нет', (t) async {
+  testWidgets('🔴 у каждого раздела свой цвет знака, серых нет', (t) async {
     t.view.physicalSize = const Size(3440, 1400);
     t.view.devicePixelRatio = 1.0;
     addTearDown(t.view.reset);
@@ -75,9 +75,10 @@ void main() {
     ));
     await t.pumpAndSettle();
 
+    // Знаки боковой колонки — голые (`plain`), плитка только в шапке.
     final plates = t
         .widgetList<WorkspaceIconPlate>(find.byType(WorkspaceIconPlate))
-        .where((p) => p.size == 28)
+        .where((p) => p.plain)
         .toList();
     expect(plates.length, _kSections);
     expect(

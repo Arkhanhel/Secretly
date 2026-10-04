@@ -163,6 +163,33 @@ class RoomCallManager {
     _setState(const RoomCallRuntimeState.idle());
   }
 
+  /// Отпустить медиа, если созвона уже нет (ПК, 30.09.2026).
+  ///
+  /// 🔴 Ветки в [refreshCurrent], [_syncCurrentFromController] и
+  /// [_bootstrapFromCachedCall] переводят состояние в «созвона нет», НЕ
+  /// освобождая движок: LiveKit остаётся подключён и микрофон опубликован, а
+  /// [clearIfMatches] потом уже не срабатывает — у пустого состояния нет
+  /// комнаты. Так бывает после «Выйти» (подсказки участникам идут дольше
+  /// выдержки синхронизации), «Завершить для всех» и когда убрали из созвона.
+  ///
+  /// Добавочное: телефон метод не зовёт и живёт как был. ПК зовёт его на
+  /// каждом переходе в «созвона нет» и сразу после выхода.
+  Future<void> releaseMediaIfIdle() async {
+    // Идущую сборку не рвём: [_ensureMediaController] держит движок между
+    // своими `await`. Дожидаемся (с пределом) и решаем по свежему состоянию.
+    for (final pending in [_syncInFlight, _mediaRefreshInFlight]) {
+      if (pending == null) continue;
+      try {
+        await pending.timeout(const Duration(seconds: 20));
+      } catch (_) {}
+    }
+    if (state.value.hasActiveSession || _mediaController == null) {
+      return;
+    }
+    callLog('RoomCallMgr', 'room media released: no active session');
+    await _disposeMediaController();
+  }
+
   Future<void> setSpeakerEnabled(bool enabled) async {
     final current = state.value;
     if (current.hasActiveSession) {

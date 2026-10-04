@@ -1,13 +1,28 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'dart:io' show Platform;
+
 import '../../../l10n/app_localizations.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 import '../primitives/context_menu.dart';
 
+/// Подсказка копирования выделенного так, как её пишет своя система:
+/// «⌘C» на Mac и «Ctrl+C» на Windows и Linux.
+String _copyShortcutLabel() =>
+    (!kIsWeb && Platform.isMacOS) ? '⌘C' : 'Ctrl+C';
+
 /// Builds the standard message right-click menu sections.
+///
+/// 🔴 ПОДСКАЗКИ КЛАВИШ — ТОЛЬКО НАСТОЯЩИЕ (01.10.2026). Меню обещало
+/// «Cmd R» у «Ответить», «Cmd E» у «Изменить» и «Cmd C» у «Копировать
+/// текст», а таких сочетаний в переписке нет: нажатие ничего не делало, а на
+/// Windows подсказка к тому же называла клавишу, которой нет на клавиатуре.
+/// Осталась одна — у «Скопировать выделенное»: выделенный мышью текст
+/// копирует системное сочетание, и оно действительно работает.
 class MessageContextMenu {
   MessageContextMenu._();
 
@@ -36,7 +51,6 @@ class MessageContextMenu {
     VoidCallback? onPin,
     VoidCallback? onSelect,
     VoidCallback? onReact,
-    VoidCallback? onCopyLink,
     VoidCallback? onDelete,
     VoidCallback? onTranslate,
     bool translationShown = false,
@@ -47,7 +61,6 @@ class MessageContextMenu {
           CtxMenuItem(
             label: l10n.chatMenuReply,
             icon: FluentIcons.arrow_reply_24_regular,
-            shortcut: 'Cmd R',
             onTap: onReply,
           ),
         if (onReact != null)
@@ -96,14 +109,13 @@ class MessageContextMenu {
           CtxMenuItem(
             label: l10n.desktopMenuCopySelection,
             icon: FluentIcons.copy_select_20_regular,
-            shortcut: 'Cmd C',
+            shortcut: _copyShortcutLabel(),
             onTap: onCopySelection,
           ),
         if (onCopy != null)
           CtxMenuItem(
             label: l10n.desktopMenuCopyText,
             icon: FluentIcons.copy_24_regular,
-            shortcut: onCopySelection == null ? 'Cmd C' : null,
             onTap: onCopy,
           ),
         if (onSaveAs != null)
@@ -111,12 +123,6 @@ class MessageContextMenu {
             label: l10n.desktopViewerSaveAs,
             icon: FluentIcons.arrow_download_24_regular,
             onTap: onSaveAs,
-          ),
-        if (onCopyLink != null)
-          CtxMenuItem(
-            label: l10n.desktopMenuCopyLink,
-            icon: FluentIcons.link_24_regular,
-            onTap: onCopyLink,
           ),
         // 🔴 Перевод считает САМ КОМПЬЮТЕР — системным переводчиком macOS.
         // Текст сообщения никуда не уходит; облачный переводчик исключён, см.
@@ -148,7 +154,6 @@ class MessageContextMenu {
           CtxMenuItem(
             label: l10n.edit,
             icon: FluentIcons.edit_24_regular,
-            shortcut: 'Cmd E',
             onTap: onEdit,
           ),
         ],

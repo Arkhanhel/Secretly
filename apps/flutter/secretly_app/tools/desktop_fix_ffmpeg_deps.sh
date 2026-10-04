@@ -97,7 +97,15 @@ STUBS=(
 echo "==> bundling ${#STUBS[@]} stub dylibs into Contents/Frameworks"
 for e in "${STUBS[@]}"; do
   lib="${e%%:*}"
-  clang -dynamiclib -arch arm64 -o "$FW/$lib" -install_name "@rpath/$lib" "$TMP/empty.c"
+  # 🔴 С ЯВНЫМ МИНИМУМОМ macOS И ПОД ОБЕ АРХИТЕКТУРЫ (30.09.2026). Без
+  # `-mmacosx-version-min` clang ставит минимум по SDK сборочной машины — у нас
+  # это был macOS 26.0. dyld отказывается грузить библиотеку новее системы, а
+  # `libavfilter` тянет эти заглушки при запуске: выпуски 1.8.5x–1.8.62 на Mac с
+  # Apple Silicon ниже macOS 26 падали до первого кадра. Проверку держит
+  # `tools/macos_build_desktop_release.sh` (минимум каждого файла ≤ минимума
+  # приложения).
+  clang -dynamiclib -arch arm64 -arch x86_64 -mmacosx-version-min=11.0 \
+    -o "$FW/$lib" -install_name "@rpath/$lib" "$TMP/empty.c"
   codesign --force --sign "${SIGN_ID:--}" "$FW/$lib"
 done
 

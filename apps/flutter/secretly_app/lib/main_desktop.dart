@@ -52,20 +52,33 @@ import 'dart:async';
 import 'ui/desktop/chat/attachment_save.dart' show clearAttachmentOpenCopies;
 import 'dart:io' show Platform, exit;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show PlatformDispatcher, kIsWeb;
 import 'package:flutter/scheduler.dart' show debugPrintScheduleFrameStacks;
 import 'package:flutter/material.dart';
-import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'diagnostics/diag_log.dart';
+import 'l10n/app_localizations.dart';
+import 'desktop/ffmpeg_license.dart';
 import 'desktop/single_instance.dart';
+import 'desktop/windows_private_documents.dart';
 import 'legal/third_party_licenses.dart';
 import 'ui/desktop/onboarding/desktop_account_setup.dart';
 import 'ui/desktop/services/desktop_update_service.dart';
 import 'ui/desktop/app/desktop_production_app.dart';
 import 'ui/desktop/chat/chat_thread_panel.dart' show DesktopDraftStore;
 import 'ui/desktop/chat/recent_reactions_store.dart';
+import 'ui/desktop/design/emoji_font.dart';
+import 'ui/desktop/services/desktop_login_item_windows.dart'
+    show kDesktopMinimizedArg;
+import 'ui/desktop/services/desktop_child_window_selftest.dart';
+import 'ui/desktop/services/desktop_child_windows.dart';
+import 'ui/desktop/services/desktop_crash_log.dart';
+import 'ui/desktop/services/desktop_diag_file_log.dart';
+import 'ui/desktop/services/desktop_emoji_font_loader.dart';
+import 'ui/desktop/services/desktop_emoji_font_selftest.dart';
+import 'ui/desktop/services/desktop_global_hotkey_service.dart';
+import 'ui/desktop/services/desktop_tray_service.dart';
 import 'ui/desktop/services/desktop_ui_prefs.dart';
 import 'ui/desktop/services/desktop_window_activity.dart';
 import 'ui/desktop/services/desktop_window_state.dart';
@@ -101,6 +114,7 @@ void _installDesktopErrorGuard() {
       'lib': details.library ?? '-',
       'ctx': details.context?.toDescription() ?? '-',
       'err': details.exceptionAsString().split('\n').first,
+      'at': DesktopCrashLog.stackTop(details.stack),
     });
     inner?.call(details);
   };
@@ -108,14 +122,44 @@ void _installDesktopErrorGuard() {
   ErrorWidget.builder = (details) => const SizedBox.shrink();
 }
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Потолок кэша декодированных картинок — явно (01.10.2026). По умолчанию
+  // 100 МБ, и пара полноразмерных фото из переписки вытесняла из него все
+  // портреты списка: при прокрутке они декодировались заново. Портреты теперь
+  // декодируются под размер на экране (`desktopAvatarImage`), так что запас
+  // уходит на фото и медиа. Телефону здесь ничего не меняется — это вход ПК.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 150 * 1024 * 1024;
+  // 🔴 Ошибки — в журнал с первой строки (30.09.2026): до открытия файла
+  // строки ждут в памяти, необработанные ошибки зон ловит
+  // PlatformDispatcher.onError (см. [DesktopCrashLog]).
+  DesktopDiagFileLog.captureEarly();
+  DesktopCrashLog.install();
   _installDesktopErrorGuard();
   // Лицензии вшитых шрифтов (OFL, Apache 2.0) обязаны ехать вместе с
   // дистрибутивом, а Flutter видит только пакеты из `pub`. На компьютере вызова
   // не было, и экран лицензий молчал о тринадцати семействах шрифтов
   // (17.09.2026). Один раз — повторный вызов задвоит записи.
   registerThirdPartyLicenses();
+  // FFmpeg у ПК — «full-gpl», то есть GPL-3.0; пакет заявляет LGPL (30.09.2026).
+  registerDesktopFfmpegLicense();
+
+  // 🔴 ЭМОДЗИ WINDOWS — NOTO, КАК НА ТЕЛЕФОНЕ (30.09.2026, Э1). Файл едет
+  // только в сборке Windows (`data\`), и лицензия заявляется только там.
+  // Загрузка начинается ЗДЕСЬ, первой, и идёт параллельно с подготовкой окна
+  // и трея; перед `runApp` её ждут не дольше
+  // [kDesktopEmojiFontStartupWait]. Нет файла или движок его не принял —
+  // остаётся Segoe, запуск не падает (см. `DesktopEmojiFontLoader`). На macOS
+  // и Linux вызов сразу возвращается, не трогая диск.
+  if (DesktopEmojiFont.enabled) registerWindowsEmojiFontLicense();
+  final emojiFont = DesktopEmojiFontLoader.load();
+  // Самотест шрифта (CI Windows): своё маленькое окно вместо приложения —
+  // без замка второго экземпляра, окна, трея и сети. См.
+  // `desktop_emoji_font_selftest.dart`.
+  if (args.contains(kEmojiFontSelftestArg)) {
+    await runDesktopEmojiFontSelftest(emojiFont);
+    return;
+  }
 
   // 🔎 Кто заказывает кадры.
   //
@@ -153,6 +197,24 @@ Future<void> main() async {
       await guard.sendFocus();
       exit(0);
     }
+    // Файл журнала — сразу за замком: второй экземпляр в тот же файл не
+    // пишет. Вызов из приложения потом ничего не делает.
+    await DesktopDiagFileLog.start();
+
+    // 🔴 WINDOWS: «ДОКУМЕНТЫ» ПРИЛОЖЕНИЯ — В ЕГО ПАПКЕ (30.09.2026). Иначе
+    // расшифрованные вложения и фото контактов лежат в общих «Документах»,
+    // которые синхронизирует OneDrive. Строго после замка единственного
+    // экземпляра (переносить файлы из-под работающей копии нельзя) и до
+    // `runApp` (контроллер ещё не открыл ни одного файла). См.
+    // `windows_private_documents.dart`.
+    final moved = await installWindowsPrivateDocuments();
+    if (moved != null && (moved.moved > 0 || moved.failed > 0)) {
+      DiagLog.event('storage', 'windows_documents_moved', {
+        'moved': moved.moved,
+        'skipped': moved.skipped,
+        'failed': moved.failed,
+      });
+    }
 
     // 2. Window: hidden-titlebar shell, intercepted close → hide.
     // Restore the last size/position if we have one; otherwise center at the
@@ -175,6 +237,10 @@ Future<void> main() async {
       titleBarStyle: TitleBarStyle.hidden,
       backgroundColor: const Color(0xFF1A1B1E),
     );
+    // Автозапуск «свёрнутым» (Windows, `--autostart --minimized`): окно не
+    // показываем — приложение ждёт в трее. Раннер тоже не показывает его на
+    // первом кадре (flutter_window.cpp).
+    final startHidden = args.contains(kDesktopMinimizedArg);
     await windowManager.waitUntilReadyToShow(opts, () async {
       if (restoreBounds != null) {
         try {
@@ -182,19 +248,40 @@ Future<void> main() async {
         } catch (_) {}
       }
       await windowManager.setPreventClose(true);
-      await windowManager.show();
-      await windowManager.focus();
+      if (!startHidden) {
+        await windowManager.show();
+        await windowManager.focus();
+      }
     });
 
-    // 3. System tray: icon + Show/Hide/Quit menu. Failures are non-fatal
-    // (running headless in CI etc.).
+    // 3. Значок в трее и его меню. «Трей готов» — только если значок
+    // настоящий: на Windows файл `.ico` обязан лежать в сборке (см.
+    // `DesktopTrayService.install`). Иначе крестик закрывает приложение, а не
+    // прячет его туда, откуда не достать. Пути приложения (спрятать через
+    // учёт видимости, «без звука») подставит само приложение после запуска.
     try {
-      await _setupTray();
-      DesktopWindowActivity.trayReady = true;
+      DesktopWindowActivity.trayReady =
+          await DesktopTrayService.instance.install(
+        actions: DesktopTrayActions(
+          show: _showMainWindow,
+          hide: () async {
+            final hide = DesktopWindowActivity.hideHandler;
+            await (hide != null ? hide() : windowManager.hide());
+          },
+          quit: quitDesktopApp,
+        ),
+        l10n: _startupL10n(),
+      );
     } catch (_) {
-      // Значка нет — крестик окна будет закрывать приложение целиком, а не
-      // прятать его туда, откуда не достать.
       DesktopWindowActivity.trayReady = false;
+    }
+    if (startHidden) {
+      if (DesktopWindowActivity.trayReady) {
+        DesktopWindowActivity.startedHidden = true;
+      } else {
+        // Значка нет — спрятанное окно было бы недоступно.
+        await _showMainWindow();
+      }
     }
 
     // 4. PR3.10 (SPRINT2_AUDIT §15): warm up the desktop reactions «Недавние»
@@ -211,6 +298,10 @@ Future<void> main() async {
     // решает только одно: показывать ли пункт меню. Поэтому не ждём — пункт
     // появится, когда ответ придёт (меню слушает `configured`).
     unawaited(DesktopUpdateService.instance.load());
+    // Общесистемное ⌥⌘S (macOS): если человек его включал, занимаем сочетание
+    // сразу при запуске, а не когда он откроет «Горячие клавиши» (01.10.2026).
+    // Не на маке вызов сразу возвращается.
+    unawaited(DesktopGlobalHotKeyService.instance.load());
     // Признак «аккаунт заведён здесь, ключа ещё нет» — до первого кадра:
     // иначе шаг «сохраните набор» мигнёт после того, как оболочка уже
     // показалась.
@@ -226,52 +317,37 @@ Future<void> main() async {
     unawaited(clearAttachmentOpenCopies());
   }
 
-  runApp(const DesktopProductionApp());
+  // Шрифт эмодзи (Э1) к этой строке обычно уже загружен; если диск медленный —
+  // ждём не дольше предела, опоздавший шрифт движок применит сам.
+  await DesktopEmojiFontLoader.waitAtMost(kDesktopEmojiFontStartupWait);
+
+  // 🔴 Хозяин отдельных окон — НАД приложением (29.09.2026, Р1): у окна
+  // звонка свой навигатор, чужого выше быть не должно. См.
+  // [DesktopChildWindowHost].
+  runApp(const DesktopChildWindowHost(child: DesktopProductionApp()));
+  if (args.contains(kChildWindowSelftestArg)) {
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => unawaited(runDesktopChildWindowSelftest()),
+    );
+  }
 }
 
-Future<void> _setupTray() async {
-  // Reuse the app icon for the tray. On macOS this won't be a template image
-  // (i.e. not auto-tinted to match menubar) — acceptable until we ship a
-  // proper monochrome trayTemplate.png.
-  await trayManager.setIcon('assets/app_ui/icons/app_icon.png');
-  await trayManager.setToolTip('Secretly');
-  await trayManager.setContextMenu(Menu(items: [
-    MenuItem(key: 'show', label: 'Показать окно'),
-    MenuItem(key: 'hide', label: 'Скрыть окно'),
-    MenuItem.separator(),
-    MenuItem(key: 'quit', label: 'Выйти'),
-  ]));
-  trayManager.addListener(_TrayBridge());
+Future<void> _showMainWindow() async {
+  try {
+    await windowManager.show();
+    await windowManager.focus();
+  } catch (_) {}
 }
 
-class _TrayBridge with TrayListener {
-  @override
-  void onTrayIconMouseDown() {
-    unawaited(windowManager.show());
-    unawaited(windowManager.focus());
-  }
-
-  @override
-  void onTrayIconRightMouseDown() {
-    unawaited(trayManager.popUpContextMenu());
-  }
-
-  @override
-  void onTrayMenuItemClick(MenuItem menuItem) {
-    switch (menuItem.key) {
-      case 'show':
-        unawaited(windowManager.show());
-        unawaited(windowManager.focus());
-        break;
-      case 'hide':
-        // Тем же путём, что и кнопка закрытия: иначе приложение считает себя
-        // на экране (присутствие «в сети»).
-        final hide = DesktopWindowActivity.hideHandler;
-        unawaited(hide != null ? hide() : windowManager.hide());
-        break;
-      case 'quit':
-        unawaited(quitDesktopApp());
-        break;
-    }
+/// Переводы до того, как приложение прочитало язык из настроек: берём язык
+/// системы, а если его нет среди восьми — английский. Позже меню трея
+/// перестраивает само приложение на выбранном языке.
+AppLocalizations _startupL10n() {
+  try {
+    return lookupAppLocalizations(
+      Locale(PlatformDispatcher.instance.locale.languageCode),
+    );
+  } catch (_) {
+    return lookupAppLocalizations(const Locale('en'));
   }
 }

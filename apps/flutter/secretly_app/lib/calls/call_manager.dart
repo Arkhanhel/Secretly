@@ -42,8 +42,84 @@ enum RemoteVideoRecoveryStep {
 /// It listens to [AppController.callSignals], drives [WebRtcCallSession],
 /// and exposes a [ValueNotifier<CallState>] that screens observe.
 class CallManager {
-  CallManager({required this.controller}) {
+  CallManager({required this.controller, bool? bindPeerDevice})
+      : _bindPeerDevice = bindPeerDevice ?? _isDesktopCallPlatform() {
     _audioRouteController.state.addListener(_handleAudioRouteStateChanged);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────
+  // 🔴 ПК: ЗВОНОК — ЭТО ДВА УСТРОЙСТВА, А НЕ ДВА ПРОФИЛЯ (28.09.2026).
+  //
+  // Жалоба владельца: «постоянно ошибки соединения, а во время звонка просто
+  // выключался звонок с „Ошибка связи“». В таблице звонков реле за 28.09
+  // остались незакрытые «ноги» на устройствах, которые в разговоре не
+  // участвовали: Android собеседника получил от ПК владельца `offer` по
+  // звонку, начатому с ПК собеседника, и звонил «входящим от того, с кем уже
+  // говоришь»; iPhone владельца продолжал получать ICE по звонкам, принятым
+  // на ПК. Причина — все сигналы уходили на ВСЕ устройства профиля, а
+  // «Отклонить»/«занят» с третьего устройства рвали живой разговор.
+  //
+  // На ПК (телефон пока по-прежнему — это его выпуск):
+  //   • устройство собеседника запоминается: у входящего — приславшее
+  //     приглашение, у исходящего — ответившее;
+  //   • после этого наши сигналы идут только ему;
+  //   • сигналы по ТЕКУЩЕМУ звонку с других устройств игнорируются;
+  //   • `offer` без приглашения не превращается в звонок.
+  // ─────────────────────────────────────────────────────────────────────
+
+  /// Включено ли правило «одна пара устройств».
+  final bool _bindPeerDevice;
+
+  /// Устройство собеседника в текущем звонке; пусто — ещё не известно.
+  String _boundPeerDeviceId = '';
+
+  /// `offer`, пришедший раньше приглашения: ждёт своего приглашения.
+  _EarlyOffer? _earlyOffer;
+
+  static bool _isDesktopCallPlatform() {
+    if (kIsWeb) return false;
+    return defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.macOS ||
+        defaultTargetPlatform == TargetPlatform.linux;
+  }
+
+  /// Кому слать сигналы этого звонка: одному устройству собеседника или, пока
+  /// оно не известно, как раньше — всем.
+  Set<String>? get _peerTargets =>
+      _bindPeerDevice && _boundPeerDeviceId.isNotEmpty
+      ? <String>{_boundPeerDeviceId}
+      : null;
+
+  /// «Занят» по ЧУЖОМУ звонку — устройству, которое этот звонок прислало, а
+  /// не собеседнику текущего разговора.
+  Set<String>? _busyDeclineTargets(CallSignalEvent sig) {
+    final from = (sig.fromDeviceId ?? '').trim();
+    return _bindPeerDevice && from.isNotEmpty ? <String>{from} : null;
+  }
+
+  /// Игнорировать ли сигнал по текущему звонку с устройства, которое в этом
+  /// разговоре не участвует. Чистая функция — её проверяют тесты.
+  ///
+  /// Не знаем устройства (ещё нет ответа, старый конверт без отправителя) —
+  /// не игнорируем: прежнее поведение. Приглашение не трогаем — у него свои
+  /// правила («занят», повторная доставка).
+  @visibleForTesting
+  static bool shouldIgnoreSignalFromForeignDevice({
+    required bool enabled,
+    required String boundPeerDeviceId,
+    required String currentCallId,
+    required String signalCallId,
+    required String? signalFromDeviceId,
+    required String action,
+  }) {
+    if (!enabled) return false;
+    final bound = boundPeerDeviceId.trim();
+    final from = (signalFromDeviceId ?? '').trim();
+    if (bound.isEmpty || from.isEmpty) return false;
+    final current = currentCallId.trim();
+    if (current.isEmpty || signalCallId.trim() != current) return false;
+    if (action == 'invite') return false;
+    return from != bound;
   }
 
   static const String _incomingRingtoneAsset =
@@ -2578,6 +2654,7 @@ class CallManager {
         try {
           await controller.sendCallOffer(
             peerProfileId: peerProfileId,
+            toDeviceIds: _peerTargets,
             callId: callId,
             callAttemptId: callAttemptId,
             video: video,
@@ -2610,6 +2687,10 @@ class CallManager {
   }) async {
     if (state.value.isActive) return; // already in a call
     controller.markCallPriorityWindow();
+    // Новый исходящий: собеседник станет известен, когда одно из его
+    // устройств ответит.
+    _boundPeerDeviceId = '';
+    _earlyOffer = null;
     try {
       _awaitingRecoveryOffer = false;
       // Generate the callId locally so we can run invite delivery in parallel
@@ -2752,6 +2833,7 @@ class CallManager {
             },
             onIceCandidate: (c, mid, idx) => controller.sendCallIceCandidate(
               peerProfileId: peerProfileId,
+              toDeviceIds: _peerTargets,
               callId: callId,
               callAttemptId: callAttemptId,
               candidate: c,
@@ -2904,6 +2986,7 @@ class CallManager {
       try {
         await controller.sendCallDecline(
           peerProfileId: s.peerProfileId,
+          toDeviceIds: _peerTargets,
           callId: s.callId,
           callAttemptId: s.callAttemptId,
         );
@@ -2937,6 +3020,7 @@ class CallManager {
         await controller
             .sendCallHangup(
               peerProfileId: s.peerProfileId,
+              toDeviceIds: _peerTargets,
               callId: s.callId,
               callAttemptId: s.callAttemptId,
             )
@@ -3054,6 +3138,7 @@ class CallManager {
     }
     await controller.sendCallIceCandidate(
       peerProfileId: snapshot.peerProfileId,
+      toDeviceIds: _peerTargets,
       callId: snapshot.callId,
       callAttemptId: snapshot.callAttemptId,
       candidate: candidate,
@@ -3298,6 +3383,26 @@ class CallManager {
       },
     );
 
+    if (shouldIgnoreSignalFromForeignDevice(
+      enabled: _bindPeerDevice,
+      boundPeerDeviceId: _boundPeerDeviceId,
+      currentCallId: s.callId,
+      signalCallId: sig.callId,
+      signalFromDeviceId: sig.fromDeviceId,
+      action: sig.action,
+    )) {
+      callOpLog(
+        'CallManager',
+        'signal_from_foreign_device_ignored',
+        fields: <String, Object?>{
+          'action': sig.action,
+          'callId': sig.callId,
+          'phase': s.phase,
+        },
+      );
+      return;
+    }
+
     switch (sig.action) {
       case 'invite':
         if (s.phase == CallPhase.ringingOutgoing &&
@@ -3329,6 +3434,7 @@ class CallManager {
           if (keepOutgoing) {
             await controller.sendCallDecline(
               peerProfileId: sig.fromProfileId,
+              toDeviceIds: _busyDeclineTargets(sig),
               callId: sig.callId,
               callAttemptId: sig.callAttemptId,
             );
@@ -3397,6 +3503,7 @@ class CallManager {
           // Busy — decline automatically.
           await controller.sendCallDecline(
             peerProfileId: sig.fromProfileId,
+            toDeviceIds: _busyDeclineTargets(sig),
             callId: sig.callId,
             callAttemptId: sig.callAttemptId,
           );
@@ -3482,6 +3589,17 @@ class CallManager {
           isCameraOff: sig.media == CallMedia.video,
           isUiMinimized: false,
         );
+        if (_bindPeerDevice) {
+          // Входящий: собеседник — устройство, приславшее приглашение.
+          _boundPeerDeviceId = (sig.fromDeviceId ?? '').trim();
+          final early = _earlyOffer;
+          _earlyOffer = null;
+          if (early != null &&
+              early.matches(sig.callId, sig.callAttemptId) &&
+              !early.expiredAt(DateTime.now().millisecondsSinceEpoch)) {
+            _pendingOfferSdp = early.sdp;
+          }
+        }
         if (_consumePendingNativeActionForCurrentRinging()) {
           break;
         }
@@ -3536,6 +3654,29 @@ class CallManager {
             callLog(
               'CallManager',
               'dropping stale offer-before-invite age=${offerAgeMs}ms callId=${sig.callId}',
+            );
+            return;
+          }
+          // 🔴 ПК: `offer` — не приглашение. Устройству, которому звонят,
+          // приглашение приходит всегда (звонящий повторяет его каждые 3 с),
+          // а `offer` без приглашения бывает и «чужим» — ответная сторона
+          // другого устройства разослала его всем устройствам профиля. Такой
+          // `offer` придерживаем и отдаём своему приглашению, но звонок им не
+          // рисуем.
+          if (_bindPeerDevice) {
+            _earlyOffer = _EarlyOffer(
+              callId: sig.callId,
+              callAttemptId: sig.callAttemptId,
+              sdp: sdp,
+              receivedAtMs: DateTime.now().millisecondsSinceEpoch,
+            );
+            callOpLog(
+              'CallManager',
+              'offer_before_invite_held',
+              fields: <String, Object?>{
+                'callId': sig.callId,
+                'callAttemptId': sig.callAttemptId,
+              },
             );
             return;
           }
@@ -3816,6 +3957,12 @@ class CallManager {
           // 🔴 Без устройства-ответчика НЕ шлём ничего: не зная, кого исключить,
           // мы оборвали бы сам разговор.
           final answeredDevice = (sig.fromDeviceId ?? '').trim();
+          if (_bindPeerDevice && answeredDevice.isNotEmpty) {
+            // Исходящий: собеседник — ответившее устройство. Дальше сигналы
+            // только ему, а «отклонить» с других его устройств разговор не
+            // рвёт.
+            _boundPeerDeviceId = answeredDevice;
+          }
           if (answeredDevice.isNotEmpty) {
             unawaited(
               controller
@@ -3984,6 +4131,7 @@ class CallManager {
     try {
       await controller.sendCallNeedOffer(
         peerProfileId: current.peerProfileId,
+        toDeviceIds: _peerTargets,
         callId: current.callId,
         callAttemptId: current.callAttemptId,
       );
@@ -4247,6 +4395,7 @@ class CallManager {
           try {
             await controller.sendCallAnswer(
               peerProfileId: state.value.peerProfileId,
+              toDeviceIds: _peerTargets,
               callId: state.value.callId,
               callAttemptId: state.value.callAttemptId,
               sdp: answerSdp,
@@ -4361,6 +4510,7 @@ class CallManager {
     try {
       await controller.sendCallOffer(
         peerProfileId: peerProfileId,
+        toDeviceIds: _peerTargets,
         callId: callId,
         callAttemptId: callAttemptId,
         video: video,
@@ -4668,6 +4818,7 @@ class CallManager {
       },
       onIceCandidate: (c, mid, idx) => controller.sendCallIceCandidate(
         peerProfileId: snapshot.peerProfileId,
+        toDeviceIds: _peerTargets,
         callId: snapshot.callId,
         callAttemptId: snapshot.callAttemptId,
         candidate: c,
@@ -5347,6 +5498,7 @@ class CallManager {
       try {
         await controller.sendCallHangup(
           peerProfileId: snapshot.peerProfileId,
+          toDeviceIds: _peerTargets,
           callId: snapshot.callId,
           callAttemptId: snapshot.callAttemptId,
         );
@@ -5638,6 +5790,7 @@ class CallManager {
           try {
             await controller.sendCallHangup(
               peerProfileId: s.peerProfileId,
+              toDeviceIds: _peerTargets,
               callId: s.callId,
               callAttemptId: s.callAttemptId,
             );
@@ -5682,8 +5835,17 @@ class CallManager {
       final bool loop;
       switch (mode) {
         case _RingtoneMode.incoming:
-          assetPath = _incomingRingtoneAsset;
-          volume = incomingRingtoneVolumeForSetting(_callRingtoneSetting);
+          // ПК: мелодия из своих настроек (01.10.2026). На телефоне точки нет
+          // — здесь всегда [_incomingRingtoneAsset], как было.
+          assetPath = desktopIncomingRingtoneAsset(
+            _callRingtoneSetting,
+            fallback: _incomingRingtoneAsset,
+          );
+          // ПК: громкость мелодии из своих настроек (30.09.2026). На
+          // телефоне множитель всегда 1 — там всё как было.
+          volume =
+              incomingRingtoneVolumeForSetting(_callRingtoneSetting) *
+              desktopRingtoneVolumeScale();
           speed = switch (_callRingtoneSetting) {
             'beacon' => 1.03,
             'chime' => 0.96,
@@ -5804,6 +5966,7 @@ class CallManager {
           try {
             await controller.sendCallHangup(
               peerProfileId: s.peerProfileId,
+              toDeviceIds: _peerTargets,
               callId: s.callId,
               callAttemptId: s.callAttemptId,
             );
@@ -5855,6 +6018,7 @@ class CallManager {
       try {
         await controller.sendCallAnswer(
           peerProfileId: s.peerProfileId,
+          toDeviceIds: _peerTargets,
           callId: s.callId,
           callAttemptId: s.callAttemptId,
           sdp: answerSdp,
@@ -6006,6 +6170,7 @@ class CallManager {
       try {
         await controller.sendCallNeedOffer(
           peerProfileId: current.peerProfileId,
+          toDeviceIds: _peerTargets,
           callId: current.callId,
           callAttemptId: current.callAttemptId,
         );
@@ -6824,4 +6989,31 @@ class CallManager {
       },
     );
   }
+}
+
+/// `offer`, пришедший раньше своего приглашения (ПК).
+@immutable
+class _EarlyOffer {
+  const _EarlyOffer({
+    required this.callId,
+    required this.callAttemptId,
+    required this.sdp,
+    required this.receivedAtMs,
+  });
+
+  final String callId;
+  final String callAttemptId;
+  final String sdp;
+  final int receivedAtMs;
+
+  /// Приглашение звонящий повторяет каждые 3 с; 30 с — с большим запасом.
+  static const int ttlMs = 30000;
+
+  bool matches(String callId, String callAttemptId) =>
+      this.callId == callId.trim() &&
+      (this.callAttemptId.isEmpty ||
+          callAttemptId.trim().isEmpty ||
+          this.callAttemptId == callAttemptId.trim());
+
+  bool expiredAt(int nowMs) => nowMs - receivedAtMs > ttlMs;
 }

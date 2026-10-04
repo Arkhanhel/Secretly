@@ -37,6 +37,8 @@ class DesktopDialog {
     bool barrierDismissible = true,
     bool useBlur = true,
   }) {
+    // Палитра места вызова едет в окно — см. [DColors.carry].
+    final palette = DColors.maybeOf(context);
     return showGeneralDialog<T>(
       context: context,
       barrierDismissible: barrierDismissible,
@@ -44,15 +46,18 @@ class DesktopDialog {
       barrierColor: Colors.transparent,
       transitionDuration: DMotion.medium,
       pageBuilder: (ctx, a, b) {
-        return _DialogScaffold(
-          animation: a,
-          title: title,
-          body: body,
-          size: size,
-          primary: primary,
-          secondary: secondary,
-          barrierDismissible: barrierDismissible,
-          useBlur: useBlur,
+        return DColors.carry(
+          palette,
+          _DialogScaffold(
+            animation: a,
+            title: title,
+            body: body,
+            size: size,
+            primary: primary,
+            secondary: secondary,
+            barrierDismissible: barrierDismissible,
+            useBlur: useBlur,
+          ),
         );
       },
       transitionBuilder: (ctx, a, b, child) {
@@ -273,26 +278,34 @@ class _DialogFooter extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: c.borderSubtle)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          if (secondary != null)
-            DesktopButton(
-              label: secondary!.label,
-              onPressed: secondary!.onPressed,
-              kind: secondary!.kind == DButtonKind.filled
-                  ? DButtonKind.ghost
-                  : secondary!.kind,
-            ),
-          if (secondary != null && primary != null)
-            const SizedBox(width: DSpace.s),
-          if (primary != null)
-            DesktopButton(
-              label: primary!.label,
-              onPressed: primary!.onPressed,
-              kind: primary!.kind,
-            ),
-        ],
+      // 🔴 Перенос, а не ряд (30.09.2026): «Отмена» и «Выйти и удалить» не
+      // помещались в малое окно — ряд вылезал за край на 20 точек, а по-
+      // немецки и того больше. Не влезли — главная кнопка уходит строкой
+      // ниже, прижатая вправо.
+      child: SizedBox(
+        width: double.infinity,
+        child: Wrap(
+          alignment: WrapAlignment.end,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: DSpace.s,
+          runSpacing: DSpace.s,
+          children: [
+            if (secondary != null)
+              DesktopButton(
+                label: secondary!.label,
+                onPressed: secondary!.onPressed,
+                kind: secondary!.kind == DButtonKind.filled
+                    ? DButtonKind.ghost
+                    : secondary!.kind,
+              ),
+            if (primary != null)
+              DesktopButton(
+                label: primary!.label,
+                onPressed: primary!.onPressed,
+                kind: primary!.kind,
+              ),
+          ],
+        ),
       ),
     );
   }

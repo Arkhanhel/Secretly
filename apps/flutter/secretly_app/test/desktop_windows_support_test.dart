@@ -91,7 +91,14 @@ void main() {
 
     test('🔴 беззвучный режим соблюдается и там', () {
       final at = service.indexOf('LocalNotification(');
-      expect(service.substring(at, at + 200).contains('silent: !_soundEnabled'), isTrue);
+      expect(service.substring(at, at + 200).contains('silent: !withSound'), isTrue);
+      // «Звук» уведомлений решает за любой показ; сообщение звучит, только
+      // если он включён (01.10.2026: звук сообщения — выбранный человеком).
+      expect(service.contains('final withSound = sound ?? _soundEnabled;'), isTrue);
+      expect(
+        service.contains('sound: _soundEnabled && _chatSoundOn(evt.convoId)'),
+        isTrue,
+      );
     });
   });
 

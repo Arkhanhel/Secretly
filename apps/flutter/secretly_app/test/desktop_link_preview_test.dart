@@ -354,7 +354,14 @@ void main() {
 
     Future<void> send(WidgetTester t) async {
       await t.tap(
-        find.byTooltip('Отправить · Enter\nПравая кнопка — отправить позже'),
+        // С 28.09.2026 в подсказке ещё строка о шифровании — ищем по началу.
+        find.byWidgetPredicate(
+          (w) =>
+              w is Tooltip &&
+              (w.message ?? '').startsWith(
+                'Отправить · Enter\nПравая кнопка — отправить позже',
+              ),
+        ),
       );
       await t.pump(const Duration(milliseconds: 50));
     }
@@ -455,9 +462,13 @@ void main() {
         isTrue,
       );
       expect(
-        section.contains('ownLinkPreviewTarget: (isSelf && carriedPreview == null)'),
+        section.contains(
+          'ownLinkPreviewTarget: (invite == null && isSelf && carriedPreview == null)',
+        ),
         isTrue,
-        reason: 'чужие ссылки окно открывать не должно',
+        reason:
+            'чужие ссылки окно открывать не должно; у приглашения в комнату '
+            'своя карточка (29.09.2026)',
       );
       expect(
         'linkPreview: submission.linkPreview'.allMatches(section).length,

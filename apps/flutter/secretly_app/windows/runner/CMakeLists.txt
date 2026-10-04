@@ -7,8 +7,12 @@ project(runner LANGUAGES CXX)
 #
 # Any new source files that you add to the application should be added here.
 add_executable(${BINARY_NAME} WIN32
+  "child_window.cpp"
   "flutter_window.cpp"
   "main.cpp"
+  "screen_privacy.cpp"
+  "single_instance.cpp"
+  "taskbar_badge.cpp"
   "utils.cpp"
   "win32_window.cpp"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"

@@ -33,7 +33,9 @@ String _methodBody(String src, String signature) {
   // и matcher падает `OutsideTestException` вместо внятного сообщения.
   final start = src.indexOf(signature);
   if (start < 0) throw StateError('не нашли $signature');
-  final end = src.indexOf('\n  }', start);
+  // Конец ищем ПОСЛЕ подписи: у многострочной подписи `  }) async {` сама
+  // похожа на закрывающую скобку метода.
+  final end = src.indexOf('\n  }', start + signature.length);
   if (end <= start) throw StateError('не нашли конец $signature');
   return src.substring(start, end);
 }
@@ -48,7 +50,12 @@ void main() {
   final controller = File('lib/app/app_controller.dart').readAsStringSync();
 
   group('🔴 удаление из списка чатов', () {
-    final body = _methodBody(section, 'Future<void> _deleteChat(String id) async {');
+    // 30.09.2026: сам снос переехал в `_deleteChatLocally` — им пользуются и
+    // «Удалить» переписки, и «Удалить и покинуть» комнаты.
+    final body = _methodBody(
+      section,
+      '    required bool alsoForPeer,\n  }) async {',
+    );
 
     test('ставит отсечку до сноса', () {
       expect(body.contains('clearChatHistory(convoId: id)'), isTrue);

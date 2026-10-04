@@ -703,8 +703,9 @@ void main() {
     _Scope(
       name: 'desktop entrypoint + platform layer',
       paths: ['lib/main_desktop.dart', 'lib/desktop'],
-      baseline: 3,
-      slack: 2,
+      // 28.09.2026: меню трея ушло в ARB (`desktopTray*`) — долга больше нет.
+      baseline: 0,
+      slack: 0,
     ),
   ];
 

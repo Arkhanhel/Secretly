@@ -47,7 +47,9 @@ class DesktopAppViewModel {
   DesktopAppViewModel({
     required AppController controller,
     Duration debounce = const Duration(milliseconds: 150),
+    ValueListenable<bool>? windowVisible,
   })  : _controller = controller,
+        _windowVisible = windowVisible,
         _hub = DesktopSelectorHub(changed: controller.changed, debounce: debounce) {
     _hub.start();
     _relayOnline = ValueNotifier<bool>(controller.relayOnline);
@@ -55,13 +57,29 @@ class DesktopAppViewModel {
       if (_disposed) return;
       _relayOnline.value = online;
     });
+    // Спрятанное окно не перечитывает базу на каждый тик — см.
+    // [DesktopSelectorHub.setPaused].
+    windowVisible?.addListener(_onWindowVisibility);
+    _onWindowVisibility();
   }
 
   final AppController _controller;
   final DesktopSelectorHub _hub;
+  final ValueListenable<bool>? _windowVisible;
   late final ValueNotifier<bool> _relayOnline;
   StreamSubscription<bool>? _relaySub;
   bool _disposed = false;
+
+  void _onWindowVisibility() {
+    if (_disposed) return;
+    _hub.setPaused(!(_windowVisible?.value ?? true));
+  }
+
+  /// Окно спрятано, и тики контроллера сейчас ничего не перечитывают.
+  ///
+  /// Для собственных таймеров экранов: пересчёт по часам на паузе так же
+  /// бесполезен, как и по тику, а снятие паузы и так перечитает всё разом.
+  bool get isPaused => _hub.isPaused;
 
   /// Direct access to the controller, for surfaces not migrated yet.
   ///
@@ -184,6 +202,7 @@ class DesktopAppViewModel {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _windowVisible?.removeListener(_onWindowVisibility);
     _relaySub?.cancel();
     _relaySub = null;
     _hub.dispose();

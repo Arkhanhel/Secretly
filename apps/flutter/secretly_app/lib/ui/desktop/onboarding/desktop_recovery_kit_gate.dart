@@ -34,9 +34,16 @@ import 'desktop_auth_scaffold.dart';
 /// создание снимает запрет входа в тот же кадр и уходит со сцены. Признак
 /// живёт в настройках устройства, поэтому шаг переживает и закрытие окна.
 class DesktopRecoveryKitGate extends StatefulWidget {
-  const DesktopRecoveryKitGate({super.key, required this.vm});
+  const DesktopRecoveryKitGate({
+    super.key,
+    required this.vm,
+    @visibleForTesting this.pickSavePath,
+  });
 
   final DesktopAppViewModel vm;
+
+  /// Системный выбор места для файла; подменяется только в проверках.
+  final RecoveryKitSavePathPicker? pickSavePath;
 
   @override
   State<DesktopRecoveryKitGate> createState() => _DesktopRecoveryKitGateState();
@@ -44,16 +51,24 @@ class DesktopRecoveryKitGate extends StatefulWidget {
 
 class _DesktopRecoveryKitGateState extends State<DesktopRecoveryKitGate> {
   bool _busy = false;
-  bool _done = false;
+
+  /// 🔴 Шаг пройден, только когда набор записан в файл или человек явно
+  /// подтвердил, что сохранил его иначе (30.09.2026). Раньше закрытие окна с
+  /// QR считалось успехом, и шаг писал «Набор сохранён», не сохранив ничего.
+  RecoveryKitOutcome _outcome = RecoveryKitOutcome.notSaved;
 
   Future<void> _makeKit() async {
     if (_busy) return;
     setState(() => _busy = true);
-    final ok = await runRecoveryKitExport(context: context, vm: widget.vm);
+    final outcome = await runRecoveryKitExport(
+      context: context,
+      vm: widget.vm,
+      pickSavePath: widget.pickSavePath,
+    );
     if (!mounted) return;
     setState(() {
       _busy = false;
-      _done = ok;
+      _outcome = outcome;
     });
   }
 
@@ -70,7 +85,7 @@ class _DesktopRecoveryKitGateState extends State<DesktopRecoveryKitGate> {
       title: l10n.desktopAuthKitTitle,
       subtitle: l10n.desktopAuthKitBody,
       children: [
-        if (_done) ...[
+        if (_outcome != RecoveryKitOutcome.notSaved) ...[
           Container(
             padding: const EdgeInsets.all(DSpace.l),
             decoration: BoxDecoration(
@@ -85,7 +100,9 @@ class _DesktopRecoveryKitGateState extends State<DesktopRecoveryKitGate> {
                 const SizedBox(width: DSpace.m),
                 Expanded(
                   child: Text(
-                    l10n.desktopAuthKitSaved,
+                    _outcome == RecoveryKitOutcome.savedToFile
+                        ? l10n.desktopAuthKitSaved
+                        : l10n.desktopAuthKitConfirmed,
                     style: DType.body.copyWith(color: c.textPrimary),
                   ),
                 ),

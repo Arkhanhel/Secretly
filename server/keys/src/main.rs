@@ -2388,10 +2388,17 @@ fn effective_client_ip(
         return socket_ip;
     }
 
+    // 🔴 ПОСЛЕДНЕЕ значение цепочки, а не первое (30.09.2026) — как у реле
+    // с 06.08.2026. Каждый прокси ДОПИСЫВАЕТ в X-Forwarded-For адрес того, от
+    // кого получил запрос; перед сервером ключей ровно один доверенный прокси
+    // (Caddy), поэтому последним стоит адрес, подставленный им. Первое
+    // значение пишет сам клиент: «X-Forwarded-For: 1.2.3.4» подменял бы адрес
+    // для ограничителя — своё ведро обходится одним заголовком, чужое
+    // исчерпывается за него. Прокси станет двое — брать N-й с конца.
     headers
         .get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
+        .and_then(|s| s.split(',').next_back())
         .map(|s| s.trim())
         .and_then(|s| s.parse::<std::net::IpAddr>().ok())
         .unwrap_or(socket_ip)
@@ -11654,14 +11661,22 @@ mod tests {
     }
 
     #[test]
-    fn effective_client_ip_uses_first_xff_hop_when_trusted() {
+    fn effective_client_ip_uses_last_xff_hop_when_trusted() {
+        // Первое значение прислал клиент (его можно выдумать), последнее
+        // дописал наш прокси.
         let mut headers = HeaderMap::new();
         headers.insert(
             "x-forwarded-for",
-            HeaderValue::from_static("198.51.100.10, 10.0.0.1"),
+            HeaderValue::from_static("198.51.100.10, 203.0.113.7"),
         );
 
         let ip = effective_client_ip(&headers, std::net::IpAddr::from([127, 0, 0, 1]), true);
+        assert_eq!(ip, std::net::IpAddr::from([203, 0, 113, 7]));
+
+        // Один адрес (обычный случай за Caddy) — он и берётся.
+        let mut single = HeaderMap::new();
+        single.insert("x-forwarded-for", HeaderValue::from_static("198.51.100.10"));
+        let ip = effective_client_ip(&single, std::net::IpAddr::from([127, 0, 0, 1]), true);
         assert_eq!(ip, std::net::IpAddr::from([198, 51, 100, 10]));
     }
 

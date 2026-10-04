@@ -108,7 +108,8 @@ void main() {
         matching: find.byType(DesktopGlass),
       ),
     );
-    expect(glass.radius, 18);
+    // 28.09.2026: островок 46 точек, радиус — половина высоты (таблетка).
+    expect(glass.radius, 23);
   });
 
   testWidgets('🔴 в фокусе рамка ОДНА — у всего островка, цвета акцента', (

@@ -57,6 +57,12 @@ void main() {
     final details = File(
       'lib/ui/desktop/chat/details/room_details_view.dart',
     ).readAsStringSync();
-    expect(details.contains('isDemoRoomId(_groupId) ? null : _invite'), isTrue);
+    // 28.09.2026: кнопка скрыта и у тех, кто не вправе приглашать; правило
+    // для демонстрационной комнаты стоит первым условием.
+    expect(
+      details.contains('onShare: isDemoRoomId(_groupId) ||'),
+      isTrue,
+    );
+    expect(details.contains('? null\n                    : _invite'), isTrue);
   });
 }

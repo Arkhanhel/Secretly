@@ -134,8 +134,8 @@ bool Win32Window::Create(const std::wstring& title,
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
 
-  HWND window = CreateWindow(
-      window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
+  HWND window = CreateWindowEx(
+      creation_ex_style_, window_class, title.c_str(), creation_style_,
       Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
       Scale(size.width, scale_factor), Scale(size.height, scale_factor),
       nullptr, nullptr, GetModuleHandle(nullptr), this);
@@ -246,7 +246,17 @@ void Win32Window::SetChildContent(HWND content) {
   MoveWindow(content, frame.left, frame.top, frame.right - frame.left,
              frame.bottom - frame.top, true);
 
-  SetFocus(child_content_);
+  // Окошко уведомления фокус не берёт (см. SetCreationStyle).
+  if (focus_content_) {
+    SetFocus(child_content_);
+  }
+}
+
+void Win32Window::SetCreationStyle(DWORD style, DWORD ex_style,
+                                   bool focus_content) {
+  creation_style_ = style;
+  creation_ex_style_ = ex_style;
+  focus_content_ = focus_content;
 }
 
 RECT Win32Window::GetClientArea() {

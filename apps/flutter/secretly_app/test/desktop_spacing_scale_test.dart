@@ -89,7 +89,13 @@ void main() {
     ).readAsStringSync();
 
     test('поля пузыря — 10 сверху, 13 по бокам, 8 снизу', () {
-      expect(src.contains('EdgeInsets.fromLTRB(13, 10, 13, 8)'), isTrue);
+      // С 29.09.2026 поля текстового пузыря зависят от плотности ленты
+      // («Внешний вид»), но при обычной плотности — прежние числа макета.
+      final look = File(
+        'lib/ui/desktop/chat/bubble_look.dart',
+      ).readAsStringSync();
+      expect(look.contains('const EdgeInsets.fromLTRB(13, 10, 13, 8)'), isTrue);
+      expect(src.contains('DesktopBubbleLook.of(context).textPadding'), isTrue);
     });
 
     test('🔴 боковое поле 13 у ВСЕХ видов пузыря, а не только у текстового', () {

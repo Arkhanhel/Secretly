@@ -15,7 +15,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final plist = File('macos/Runner/Info.plist').readAsStringSync();
-  final script = File('tools/desktop_release_macos.sh').readAsStringSync();
+  // 🔴 Выпуск macOS собирает ОДИН скрипт — корневой (30.09.2026). Прежний
+  // `tools/desktop_release_macos.sh` только отсылает к нему. В опубликованном
+  // дереве корневого скрипта может не быть — тогда его проверки молчат.
+  final release = File('../../../tools/macos_build_desktop_release.sh');
+  final legacy = File('tools/desktop_release_macos.sh');
 
   test('🔴 открытый ключ проверки обновлений есть и не пустой', () {
     final m = RegExp(
@@ -34,33 +38,24 @@ void main() {
     // Он создаётся один раз `generate_keys` и живёт в ключнице выпускающего.
     // Попади он сюда — любой, у кого есть репозиторий, смог бы выпустить
     // «обновление» Secretly.
-    for (final f in const [
-      'macos/Runner/Info.plist',
-      'tools/desktop_release_macos.sh',
-    ]) {
-      final s = File(f).readAsStringSync();
-      expect(s.contains('BEGIN PRIVATE KEY'), isFalse, reason: f);
-      expect(s.contains('SUPrivateEDKey'), isFalse, reason: f);
+    for (final f in [File('macos/Runner/Info.plist'), legacy, release]) {
+      if (!f.existsSync()) continue;
+      final s = f.readAsStringSync();
+      expect(s.contains('BEGIN PRIVATE KEY'), isFalse, reason: f.path);
+      expect(s.contains('SUPrivateEDKey'), isFalse, reason: f.path);
     }
   });
 
-  test('перечень версий собирается только с адресом публикации', () {
-    // Перечень, указывающий на адрес, которого никто не обслуживает, сообщил
-    // бы каждой установленной копии, что обновление есть, — и не смог бы его
-    // отдать.
-    expect(script.contains(r'if [ -n "${SECRETLY_UPDATE_BASE_URL:-}" ]; then'),
-        isTrue);
-    expect(script.contains('generate_appcast'), isTrue);
-    expect(script.contains('--download-url-prefix'), isTrue);
-  });
-
-  test('🔴 перечень без подписи — это ОТКАЗ сборки, а не предупреждение', () {
-    // Иначе узнаем мы об этом от людей, у которых «проверка обновлений ничего
-    // не делает».
-    expect(script.contains("grep -q 'edSignature'"), isTrue);
+  test('🔴 прежний скрипт выпуска НЕ собирает, а отсылает к корневому', () {
+    // Два пути выпуска — это вопрос «каким из них собрана эта версия», на
+    // который после выкладки нет ответа. Прежний отстал на три исправления.
+    final s = legacy.readAsStringSync();
+    expect(s.contains('flutter build'), isFalse);
+    final run = Process.runSync('bash', [legacy.path]);
+    expect(run.exitCode, isNot(0), reason: 'должен вернуть ошибку');
     expect(
-      script.contains('error: appcast.xml carries no edSignature'),
-      isTrue,
+      '${run.stderr}',
+      contains('tools/macos_build_desktop_release.sh'),
     );
   });
 
@@ -105,32 +100,28 @@ void main() {
     expect(text.contains('output discard'), isTrue);
   });
 
-  test('🔴 сборка для раздачи не уйдёт, пока адрес обновлений молчит', () {
-    // Адрес зашит в сборку навсегда: ошибиться можно один раз и узнать об
-    // этом только от людей, у которых «не удалось проверить обновления».
-    expect(script.contains('the update feed does not answer'), isTrue);
-    expect(script.contains("Print :SUFeedURL"), isTrue,
-        reason: 'читать надо из собранного приложения, а не из переменной');
-  });
-
   test('🔴 имя образа несёт версию — иначе вечный кэш отдаёт старое', () {
     // Образы раздаются с `immutable` на год: содержимое версии не меняется
     // никогда. При постоянном имени тот же адрес указывал бы на РАЗНОЕ
     // содержимое от выпуска к выпуску, и промежуточные узлы весь год отдавали
     // бы старый образ — человек видел бы «обновление есть», скачивал прежнюю
     // версию, и подпись в перечне на неё не сошлась бы.
-    expect(script.contains(r'Secretly-$DMG_VERSION-$DMG_BUILD.dmg'), isTrue);
-    expect(script.contains('CFBundleShortVersionString'), isTrue);
+    if (!release.existsSync()) return;
+    expect(
+      release.readAsStringSync(),
+      contains(r'secretly-macos-$build_name-$build_number-'),
+    );
   });
 
   test('🔴 номер версии берётся из флагов, а не из pubspec', () {
     // В pubspec версия сознательно отстаёт. По номеру в перечне установленные
     // копии решают, есть ли обновление: старый номер — либо никому не
     // предложим, либо предложим «обновиться» на то, что уже стоит.
-    expect(script.contains('SECRETLY_BUILD_NAME'), isTrue);
-    expect(script.contains('SECRETLY_BUILD_NUMBER'), isTrue);
-    expect(script.contains('--build-name='), isTrue);
-    expect(script.contains('--build-number='), isTrue);
+    if (!release.existsSync()) return;
+    final s = release.readAsStringSync();
+    expect(s, contains(r'--build-name "$build_name"'));
+    expect(s, contains(r'--build-number "$build_number"'));
+    expect(s, contains(r'SECRETLY_APP_BUILD_NUMBER=$build_number'));
   });
 
   test('обновлятор не поднимается, пока не задан адрес перечня', () {

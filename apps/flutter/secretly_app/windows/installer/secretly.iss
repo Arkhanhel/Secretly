@@ -16,8 +16,11 @@
 ; - Ставится на пользователя, в %LOCALAPPDATA%\Programs\Secretly, без окна
 ;   UAC — как Telegram, Signal, Slack. Администратор может поставить на всех
 ;   компьютер ключом /ALLUSERS в командной строке.
-; - Одна кнопка: ни выбора папки, ни выбора ярлыков, ни страницы «готово к
-;   установке». Установщик сразу ставит программу, в конце — «Запустить».
+; - Одна кнопка: ни выбора папки, ни страницы «готово к установке». На первой
+;   странице — одна галочка «ярлык на рабочем столе» (отмечена заранее) и
+;   кнопка «Установить», в конце — «Запустить».
+; - Удаление снимает и автозапуск, который программа пишет сама, — если он
+;   ведёт на эту установку.
 ; - AppId НЕ МЕНЯЕТСЯ НИКОГДА: по нему новая версия встаёт поверх старой, а
 ;   не рядом, и Windows показывает одну строку в «Приложениях».
 ; - Данные человека (база, ключи, настройки) лежат в %APPDATA%, а не в папке
@@ -62,9 +65,11 @@ AppPublisherURL={#AppUrl}
 AppSupportURL={#AppUrl}/support
 AppUpdatesURL={#AppUrl}/download
 AppCopyright=(C) 2025-2026 Yurii Arkhanhelskyi, AGPL-3.0
+; Номер сборки — четвёртой частью обеих версий файла: по нему видно, какая
+; сборка внутри, и его прочтёт проверка обновления (30.09.2026).
 VersionInfoVersion={#AppVersion}.{#AppBuild}
 VersionInfoProductName={#AppName}
-VersionInfoProductVersion={#AppVersion}
+VersionInfoProductVersion={#AppVersion}.{#AppBuild}
 VersionInfoCompany={#AppPublisher}
 VersionInfoDescription={#AppName} Setup
 DefaultDirName={autopf}\{#AppName}
@@ -81,6 +86,15 @@ WizardStyle=modern
 ShowLanguageDialog=auto
 LanguageDetectionMethod=uilanguage
 SetupIconFile=..\runner\resources\app_icon.ico
+; Картинка в шапке мастера — тот же знак, что у программы, вместо встроенной
+; картинки Inno Setup (делает tools/make_windows_icons.py). PNG с прозрачностью
+; Inno Setup читает с 6.5.2, в CI стоит 6.7.1. Площадь картинки квадратная и
+; растёт с масштабом экрана (58…159 px на 100…250 %) — Setup сам берёт файл
+; нужного размера. В публичной выкладке оформления нет: тогда остаётся
+; встроенная картинка, а сборка установщика не падает.
+#if FileExists(AddBackslash(SourcePath) + "wizard_small_58.png")
+WizardSmallImageFile=wizard_small_58.png,wizard_small_77.png,wizard_small_97.png,wizard_small_116.png,wizard_small_124.png,wizard_small_143.png,wizard_small_159.png
+#endif
 UninstallDisplayIcon={app}\{#AppExe}
 UninstallDisplayName={#AppName}
 CloseApplications=force
@@ -116,9 +130,14 @@ Type: files; Name: "{app}\secretly_app.exe"
 [Files]
 Source: "{#BuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[Tasks]
+; Ярлык на рабочем столе — по выбору, отмечен заранее (30.09.2026). Тихое
+; обновление повторяет прежний выбор человека (UsePreviousTasks).
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"; AppUserModelID: "Secretly"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Run]
 ; Обычная установка: галочка «Запустить Secretly» на последней странице.
@@ -130,4 +149,22 @@ Filename: "{app}\{#AppExe}"; Flags: nowait runasoriginaluser; Check: LaunchAfter
 function LaunchAfterSilentUpdate: Boolean;
 begin
   Result := WizardSilent and (ExpandConstant('{param:LAUNCH|0}') = '1');
+end;
+
+// Автозапуск программа пишет сама (desktop_login_item_windows.dart): значение
+// Secretly в HKCU\...\Run. Без этого шага оно переживало удаление и при входе
+// в Windows звало несуществующий файл. Снимаем его, только если оно ведёт на
+// ЭТУ установку: переносная копия из архива пишет то же имя со своим путём.
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Entry: String;
+begin
+  if CurUninstallStep <> usUninstall then
+    Exit;
+  if RegQueryStringValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Secretly', Entry) and
+     (Pos(Lowercase(ExpandConstant('{app}\{#AppExe}')), Lowercase(Entry)) > 0) then
+  begin
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Run', 'Secretly');
+    RegDeleteValue(HKEY_CURRENT_USER, 'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run', 'Secretly');
+  end;
 end;

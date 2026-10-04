@@ -47,6 +47,7 @@ class DesktopSelectorHub {
   StreamSubscription<void>? _sub;
   Timer? _debounceTimer;
   bool _disposed = false;
+  bool _paused = false;
 
   /// Ticks observed since [start], including those coalesced away. Test-only
   /// visibility into the coalescing; never drive UI from this.
@@ -59,6 +60,27 @@ class DesktopSelectorHub {
   int refreshesRun = 0;
 
   bool get isDisposed => _disposed;
+
+  /// Стоит ли пересчёт на паузе — окно спрятано в трей или свёрнуто.
+  bool get isPaused => _paused;
+
+  /// Ставит пересчёт на паузу и снимает с неё (01.10.2026).
+  ///
+  /// 🔴 Спрятанное окно продолжало перечитывать и расшифровывать список чатов
+  /// и открытую переписку на каждый тик контроллера — для экрана, которого
+  /// никто не видит. На паузе тики только считаются; снятие паузы — ровно
+  /// один догоняющий проход, даже если тиков не было: относительное время в
+  /// строках («5 мин») успевает устареть и без них.
+  ///
+  /// Явный [refreshNow] паузу не спрашивает: его зовут сразу после действия
+  /// человека, и ответ на это действие ждать не должен.
+  void setPaused(bool paused) {
+    if (_disposed || paused == _paused) return;
+    _paused = paused;
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
+    if (!paused) _refreshAll();
+  }
 
   /// Bumped once per settled burst of invalidation ticks.
   ///
@@ -77,6 +99,8 @@ class DesktopSelectorHub {
     assert(!_disposed, 'start() on a disposed DesktopSelectorHub');
     _sub ??= _changed.listen((_) {
       ticksObserved++;
+      // На паузе копить нечего: снятие паузы и так перечитает всё разом.
+      if (_paused) return;
       _debounceTimer?.cancel();
       _debounceTimer = Timer(debounce, _refreshAll);
     });
@@ -117,7 +141,7 @@ class DesktopSelectorHub {
   void _remove(DesktopSelector<dynamic> selector) => _selectors.remove(selector);
 
   void _refreshAll() {
-    if (_disposed) return;
+    if (_disposed || _paused) return;
     refreshesRun++;
     _ticks.value++;
     for (final selector in List<DesktopSelector<dynamic>>.of(_selectors)) {

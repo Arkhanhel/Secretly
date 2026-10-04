@@ -7,6 +7,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'desktop_login_item_windows.dart';
+
 /// Запуск при входе в систему.
 ///
 /// Тонкая сторона Flutter к `Runner/LoginItemBridge.swift`. Само состояние
@@ -36,9 +38,14 @@ class DesktopLoginItemService {
 
   String? lastError;
 
-  /// Только macOS: на Windows своего моста ещё нет, и показывать переключатель
-  /// там значило бы обещать то, чего нет.
-  static bool get supported => !kIsWeb && Platform.isMacOS;
+  /// Windows: «Запускать свёрнутым» — пишется в строку автозапуска
+  /// (`--minimized`). Значение задаёт приложение из своих настроек.
+  bool startMinimized = true;
+
+  /// macOS — `SMAppService`; Windows — ключ `Run` текущего пользователя
+  /// (28.09.2026, `desktop_login_item_windows.dart`).
+  static bool get supported =>
+      !kIsWeb && (Platform.isMacOS || Platform.isWindows);
 
   /// Подменяется в тестах: настоящий путь идёт в платформенный канал, которого
   /// в тесте нет, а на сборщике CI нет и самой macOS.
@@ -50,6 +57,14 @@ class DesktopLoginItemService {
     final probe = debugProbe;
     if (probe != null) return probe(method, on);
     if (!supported) return null;
+    if (Platform.isWindows) {
+      return method == 'setEnabled'
+          ? windowsLoginItemSetEnabled(
+              on ?? false,
+              minimized: startMinimized,
+            )
+          : windowsLoginItemStatus();
+    }
     return _channel.invokeMapMethod<String, dynamic>(
       method,
       on == null ? null : <String, dynamic>{'enabled': on},

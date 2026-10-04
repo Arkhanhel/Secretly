@@ -17,12 +17,18 @@ import '../design/tokens.dart';
 ///
 /// [peerTitle] `null` — галочки нет вовсе: в комнате чистить «у собеседника»
 /// некого, а свою переписку с собой незачем.
+///
+/// [forAllLabel] — галочка «и у всех участников» комнаты (30.09.2026, ТЗ «ПК
+/// как Telegram» §2): только админу, по его праву; ответ — в том же
+/// `alsoForPeer`.
 Future<({bool alsoForPeer})?> confirmClearWithPeer(
   BuildContext context, {
   required String title,
   required String body,
   required String okLabel,
   required String? peerTitle,
+  String? forAllLabel,
+  String? forAllHint,
 }) {
   var alsoForPeer = false;
     return showDialog<({bool alsoForPeer})>(
@@ -46,7 +52,7 @@ Future<({bool alsoForPeer})?> confirmClearWithPeer(
                     body,
                     style: DType.body.copyWith(color: cc.textSecondary),
                   ),
-                  if (peerTitle != null) ...[
+                  if (peerTitle != null || forAllLabel != null) ...[
                     const SizedBox(height: DSpace.m),
                     InkWell(
                       onTap: () =>
@@ -70,7 +76,8 @@ Future<({bool alsoForPeer})?> confirmClearWithPeer(
                               child: Padding(
                                 padding: const EdgeInsets.only(top: 10),
                                 child: Text(
-                                  l10n.desktopClearForPeer(peerTitle),
+                                  forAllLabel ??
+                                      l10n.desktopClearForPeer(peerTitle!),
                                   style: DType.body.copyWith(
                                     color: cc.textPrimary,
                                   ),
@@ -84,7 +91,7 @@ Future<({bool alsoForPeer})?> confirmClearWithPeer(
                     Padding(
                       padding: const EdgeInsets.only(left: DSpace.xs),
                       child: Text(
-                        l10n.desktopClearForPeerHint,
+                        forAllHint ?? l10n.desktopClearForPeerHint,
                         style: DType.caption.copyWith(color: cc.textSecondary),
                       ),
                     ),

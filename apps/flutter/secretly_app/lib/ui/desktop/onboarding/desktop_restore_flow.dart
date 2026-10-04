@@ -8,6 +8,7 @@ import '../../../l10n/app_localizations.dart';
 import '../app/desktop_app_view_model.dart';
 import '../design/tokens.dart';
 import '../primitives/desktop_button.dart';
+import '../primitives/desktop_dialog.dart';
 import '../primitives/desktop_text_field.dart';
 import '../primitives/hover_listener.dart';
 import 'desktop_auth_scaffold.dart';
@@ -119,6 +120,26 @@ class _DesktopRestoreFlowState extends State<DesktopRestoreFlow> {
         payload: payload,
         password: password,
       );
+      if (!mounted) return;
+      // 🔴 СНАЧАЛА — ПОСЛЕДСТВИЯ (01.10.2026). Восстановление ниже забирает
+      // у устройства, сделавшего копию (обычно телефона), его личность:
+      // компьютер становится ТЕМ ЖЕ устройством. Пока телефон жив, у одной
+      // личности два хозяина — сообщения достаются одному из двух, второй
+      // может перестать расшифровывать чаты. Раньше об этом не говорилось
+      // ни слова. Спрашиваем после проверки пароля: иначе человек прочёл бы
+      // предупреждение ради копии, которую всё равно не открыть.
+      //
+      // Путь «восстановить как новое устройство» у контроллера есть
+      // (`restoreAsNewDevice: true`), но для компьютера он не бесследен:
+      // рассылает контактам весть о новом устройстве, заводит в аккаунте
+      // устройство, которого телефон не привязывал, и с правилами
+      // мультиустройства на сервере не сверен. Поэтому личность по-прежнему
+      // переиспользуется, а человеку прямо сказано, чем это грозит, и
+      // предложена привязка по QR.
+      if (!await _confirmTakeOver()) {
+        if (mounted) setState(() => _busy = false);
+        return;
+      }
       await ctrl.restoreFromSafeBackup(
         plain,
         completeOnboarding: true,
@@ -133,6 +154,33 @@ class _DesktopRestoreFlowState extends State<DesktopRestoreFlow> {
         _error = l10n.desktopAuthRestoreFailed(_clean(e));
       });
     }
+  }
+
+  /// «Компьютер станет устройством, сделавшим копию» — да или нет.
+  Future<bool> _confirmTakeOver() async {
+    final l10n = AppLocalizations.of(context)!;
+    final ok = await DesktopDialog.show<bool>(
+      context,
+      title: l10n.desktopRestoreTakeOverTitle,
+      size: DDialogSize.small,
+      body: Text(
+        l10n.desktopRestoreTakeOverBody,
+        style: DType.body.copyWith(
+          color: DColors.of(context).textSecondary,
+          height: 1.45,
+        ),
+      ),
+      primary: DDialogAction(
+        label: l10n.desktopRestoreTakeOverConfirm,
+        kind: DButtonKind.danger,
+        onPressed: () => Navigator.of(context).maybePop(true),
+      ),
+      secondary: DDialogAction(
+        label: l10n.cancel,
+        onPressed: () => Navigator.of(context).maybePop(false),
+      ),
+    );
+    return ok == true;
   }
 
   @override

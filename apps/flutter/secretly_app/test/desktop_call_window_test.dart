@@ -146,17 +146,22 @@ void main() {
   // нового ради этого не заведено.
   group('выбор устройства вывода', () {
     test('список берётся из движка, а не придумывается', () {
-      expect(call.contains('audioRouteState.value.availableRoutes'), isTrue);
-      expect(call.contains('manager.selectAudioRoute(r.deviceId)'), isTrue);
+      // 28.09.2026: меню общее для обоих звонков (call_device_menu.dart), а
+      // список вывода по-прежнему из движка созвона.
+      expect(call.contains('outputs: manager.audioRouteState.value'), isTrue);
+      expect(call.contains('applyOutput: manager.selectAudioRoute'), isTrue);
     });
 
-    test('🔴 шеврона нет, когда выбирать не из чего', () {
-      // Стрелка, за которой один пункт, обещает выбор, которого нет.
-      expect(
-        call.contains('onExpand: _audioRoutes().length > 1 ? _pickAudioRoute : null'),
-        isTrue,
-      );
-      expect(call.contains('if (routes.length < 2) return;'), isTrue);
+    test('🔴 на ПК шеврон есть всегда — выбрать есть из чего', () {
+      // Было правило «нет шеврона, когда один пункт». На компьютере теперь
+      // всегда есть «Как выбрано в системе» и раздел «Микрофон», так что
+      // стрелка ничего не обещает впустую.
+      expect(call.contains('onExpand: _pickAudioRoute,'), isTrue);
+      final menu = File(
+        'lib/ui/desktop/calls/call_device_menu.dart',
+      ).readAsStringSync();
+      expect(menu.contains('l10n.desktopDevicesMicrophone'), isTrue);
+      expect(menu.contains('l10n.desktopDevicesSystemDefault'), isTrue);
     });
 
     test('🔴 шеврон — своя кнопка, а не часть нажатия по микрофону', () {
@@ -344,7 +349,12 @@ void main() {
     // Док стоит у нижнего края окна: список, раскрытый вниз, ложился поверх
     // самих кнопок — выбираешь динамик, а под пальцем «Выйти». Проверено
     // живьём.
-    expect(call.contains('callMenuAnchorAbove(anchorContext, routes.length)'), isTrue);
+    // 28.09.2026: расчёт — в общем меню устройств обоих звонков.
+    final menu = File(
+      'lib/ui/desktop/calls/call_device_menu.dart',
+    ).readAsStringSync();
+    expect(menu.contains('globalPosition: callMenuAnchorAbove(anchor, rows)'), isTrue);
+    expect(call.contains('showCallDeviceMenu('), isTrue);
     // Сам расчёт — общий для обоих звонков.
     final controls = File(
       'lib/ui/desktop/calls/call_controls.dart',

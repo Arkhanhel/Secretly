@@ -8,7 +8,7 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:tray_manager/tray_manager.dart';
+import 'package:intl/intl.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../../app/app_controller.dart';
@@ -19,6 +19,9 @@ import '../calls/active_call_bar.dart';
 import '../calls/call_mini_host.dart';
 import '../calls/call_mini_window.dart' show desktopCallMiniDuration;
 import '../calls/call_presence.dart';
+import '../calls/direct_call_window.dart';
+import '../calls/room_call_media_guard.dart';
+import '../calls/room_call_window_host.dart';
 import '../../call_error_text.dart';
 import '../calls/room_call_window.dart';
 import '../../../calls/call_state.dart';
@@ -26,16 +29,23 @@ import '../../../sync/peer_history_service.dart';
 import '../calls/incoming_call_toast.dart';
 import '../calls/call_peer_label.dart';
 import '../calls/one_to_one_call_screen.dart';
+import '../services/desktop_child_windows.dart';
+import '../services/desktop_notification_windows.dart';
+import '../services/desktop_taskbar.dart';
+import 'desktop_child_window_app.dart';
 import '../primitives/avatar.dart';
 import '../chat/forward_target_dialog.dart';
 import '../chat/details/details_drawer.dart';
 import '../chat/details/desktop_selection_store.dart';
+import '../design/material_theme.dart';
 import '../design/theme_bridge.dart';
 import '../design/tokens.dart';
 import '../shell/desktop_app_menu.dart';
 import '../shell/desktop_shell.dart';
 import '../shell/now_playing_island.dart';
 import '../primitives/desktop_snackbar.dart';
+import '../primitives/desktop_dialog.dart'
+    show DDialogAction, DDialogSize, DesktopDialog;
 import '../shell/rail_live.dart';
 import '../shell/window_chrome.dart';
 import '../shell/sidebar.dart'
@@ -55,6 +65,10 @@ import '../../../security/app_security_manager.dart' show SecurityLockScope;
 import '../../security_lock_flow.dart' show AppSecurityLockOverlay;
 import '../services/desktop_dock_badge_service.dart';
 import '../services/desktop_notification_service.dart';
+import '../chat/desktop_wallpaper.dart' show desktopLegacyDefaultWallpaperId;
+import '../chat/desktop_wallpaper_picker.dart' show DesktopChatWallpapers;
+import '../services/desktop_call_devices.dart';
+import '../services/desktop_tray_service.dart';
 import '../services/desktop_ui_prefs.dart';
 import '../services/desktop_window_activity.dart';
 import '../services/desktop_window_state.dart';
@@ -71,7 +85,9 @@ import '../chat/chat_thread_panel.dart' show DesktopDraftStore;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'desktop_offline_lock.dart';
+import 'desktop_room_limit_dialog.dart' show desktopMayJoinRoom;
 import '../chat/desktop_link_router.dart';
+import '../primitives/desktop_screen_window.dart';
 
 /// Top-level widget for the desktop production build.
 ///
@@ -114,8 +130,9 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   /// `MaterialApp` (его завели ровно за тем же: корню неоткуда взять слой,
   /// чтобы показать всплывашку). Пока его ещё нет — первые кадры до первой
   /// отрисовки — переводы ищутся напрямую по языку, который выбрал бы сам
-  /// `MaterialApp`. Это тот же запасной путь, которым пользуются уведомления
-  /// (`DesktopNotificationService`), и он не умеет не найтись:
+  /// `MaterialApp`. Это тот же путь, что у уведомлений
+  /// (`desktopNotificationStrings`; до 30.09.2026 они брали язык системы как
+  /// есть и на незнакомом языке падали), и он не умеет не найтись:
   /// `resolveAppUiLocale` в худшем случае отвечает английским.
   AppLocalizations get l10n {
     final ctx = _overlayHostKey.currentContext;
@@ -142,6 +159,10 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
 
   /// Тот же [CallManager], поданный окнам звонка через [DesktopDirectCall].
   DesktopDirectCall? _directCall;
+
+  /// Звонок один на один в своём окне ОС (29.09.2026, Р1) — см.
+  /// [DesktopDirectCallWindow]. `null` — менеджера звонков ещё нет.
+  DesktopDirectCallWindow? _callWindow;
 
   /// Фаза звонка один на один до последнего изменения — чтобы отличить
   /// «положили трубку в разговоре» от «не взяли входящий».
@@ -183,6 +204,22 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   Uri? _pendingDeepLink;
   bool _ready = false;
   String _error = '';
+
+  /// Запуск идёт дольше [_kBootSlowAfter] — заставка предлагает выход.
+  bool _bootSlow = false;
+  Timer? _bootSlowTimer;
+
+  /// Номер текущего запуска. Запуск, чей номер уже не текущий (его сменил
+  /// «Повторить»), по возвращении из ожидания ничего не трогает.
+  int _bootGeneration = 0;
+
+  /// Идёт разборка перед новым запуском — второй «Повторить» ждёт.
+  bool _restartTeardown = false;
+
+  /// Сколько ждать запуска, прежде чем честно сказать, что он затянулся.
+  /// С запасом: миграция большой базы или системный запрос доступа к связке
+  /// ключей законно занимают десятки секунд.
+  static const Duration _kBootSlowAfter = Duration(seconds: 60);
   Timer? _winSaveDebounce; // persists window geometry on resize/move
   ConnectionStatus _connection = ConnectionStatus.connecting;
   DesktopSection _section = DesktopSection.chats;
@@ -332,6 +369,11 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
         roomId: roomId,
         callId: callId,
       );
+      // Вышли с полосы главного окна, а созвон был в своём окне ОС — оно
+      // не должно остаться с пустой панелью «начать созвон».
+      if (DesktopRoomCallWindows.openRoomId == roomId) {
+        unawaited(DesktopRoomCallWindows.close());
+      }
     } catch (_) {
       _roomCallActionFailed(leave: true);
     }
@@ -369,8 +411,29 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     final vm = _vm;
     final nav = _navigatorKey.currentState;
     if (vm == null || nav == null) return;
+    // Созвон в своём окне ОС (Р1) — это окно вперёд.
+    if (DesktopRoomCallWindows.openRoomId == roomId) {
+      unawaited(DesktopRoomCallWindows.focus());
+      return;
+    }
     // Окно этого созвона уже открыто — второе поверх него было бы тем же
     // созвоном дважды.
+    if (DesktopCallPresence.instance.roomWindowOpen.value == roomId) return;
+    unawaited(() async {
+      final own = await DesktopRoomCallWindows.open(
+        vm: vm,
+        groupId: roomId,
+        title: title,
+      );
+      if (own || !mounted) return;
+      _pushRoomCallRoute(vm, roomId, title);
+    }());
+  }
+
+  /// Созвон поверх главного окна — как до Р1: своего окна нет.
+  void _pushRoomCallRoute(DesktopAppViewModel vm, String roomId, String title) {
+    final nav = _navigatorKey.currentState;
+    if (nav == null) return;
     if (DesktopCallPresence.instance.roomWindowOpen.value == roomId) return;
     nav.push(
       MaterialPageRoute<void>(
@@ -398,10 +461,30 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   /// никуда бы не уводило.
   bool _navigatingHistory = false;
 
-  void _onChatsSelectionChanged() =>
-      _recordVisit(DesktopSection.chats, _chatsSelection.selected);
-  void _onRoomsSelectionChanged() =>
-      _recordVisit(DesktopSection.rooms, _roomsSelection.selected);
+  void _onChatsSelectionChanged() {
+    _recordVisit(DesktopSection.chats, _chatsSelection.selected);
+    _dismissPopupsOnOpen(_chatsSelection.selectedConvoId);
+  }
+
+  void _onRoomsSelectionChanged() {
+    _recordVisit(DesktopSection.rooms, _roomsSelection.selected);
+    _dismissPopupsOnOpen(_roomsSelection.selectedConvoId);
+  }
+
+  /// Последняя открытая переписка, чьи окошки уведомлений уже погашены.
+  String _popupsDismissedFor = '';
+
+  /// Открыли переписку в главном окне — её окошко уведомления в углу больше
+  /// не нужно (Windows, как у Telegram; 29.09.2026).
+  ///
+  /// 🔴 Только при СМЕНЕ открытой переписки: склад оповещает и на каждом
+  /// обновлении списка, а окошко о новом сообщении в уже открытой, но не
+  /// видной переписке (окно за другими) гасить нельзя.
+  void _dismissPopupsOnOpen(String convoId) {
+    if (convoId.isEmpty || convoId == _popupsDismissedFor) return;
+    _popupsDismissedFor = convoId;
+    unawaited(DesktopNotificationWindows.instance.dismissFor(convoId));
+  }
 
   void _recordVisit(DesktopSection section, Conversation? convo) {
     if (_navigatingHistory || convo == null) return;
@@ -425,6 +508,21 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       if (next != null && next.convoId != entry.convoId) {
         _applyHistoryEntry(next);
       }
+      return;
+    }
+    // Личная переписка при закрытых «Личных» — сначала пароль, как у любого
+    // другого входа (см. [desktopUnlockPersonalChat]).
+    if (desktopPersonalChatHidden(_controller, entry.convoId)) {
+      final navContext = _navigatorKey.currentContext;
+      if (navContext == null) return;
+      unawaited(() async {
+        final ok = await desktopUnlockPersonalChat(
+          navContext,
+          _controller,
+          entry.convoId,
+        );
+        if (ok && mounted) _applyHistoryEntry(entry);
+      }());
       return;
     }
     final selectSection = _shellSelectSection;
@@ -474,10 +572,37 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       windowManager.addListener(this);
       _windowListenerAttached = true;
       DesktopWindowActivity.hideHandler = _hideToTray;
+      if (DesktopWindowActivity.startedHidden) {
+        // Автозапуск «свёрнутым»: окна нет на экране с самого начала.
+        _windowActivity.onHidden();
+        _lockService.setWindowFocused(false);
+      }
+      // Микрофон, динамики и камера звонков — «как в системе» или выбор
+      // человека, а не угадывание по названию (desktop_call_devices.dart).
+      installDesktopCallDevices();
+      // Трей ходит теми же путями, что и окно: спрятать — с учётом
+      // видимости, показать — с фокусом, «без звука» — через службу
+      // уведомлений, чтобы кнопка в шапке и значок видели одно и то же.
+      DesktopTrayService.instance.bind(
+        DesktopTrayActions(
+          show: _showFromTray,
+          hide: _hideToTray,
+          quit: quitDesktopApp,
+          isWindowInFront: () =>
+              _windowActivity.visible.value &&
+              DesktopWindowActivity.focused.value,
+          mute: (duration) async =>
+              _notifService?.setDoNotDisturbFor(duration),
+          unmute: () async => _notifService?.setDoNotDisturb(false),
+        ),
+      );
     }
     // D-2: single subscription so EVERY show/hide path updates presence,
     // including tray paths that raise the window without a focus event.
     _windowActivity.visible.addListener(_onWindowVisibilityChanged);
+    // Touch ID заперли или открыли — от этого зависят слой над навигатором и
+    // строка меню, а живут они в корне.
+    _lockService.locked.addListener(_onDeviceLockChanged);
     // Открыл переписку — правая панель снова про НЕЁ, а не про меня. Иначе
     // свой профиль висел бы поверх чужих чатов, пока его не закроют руками.
     _chatsSelection.addListener(_dropSelfProfileOnSelection);
@@ -494,6 +619,12 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     // живёт здесь.
     DesktopCallPresence.instance.directMinimized.addListener(
       _onCallPresenceChanged,
+    );
+    // «Звонок в отдельном окне» переключили посреди звонка, или на macOS
+    // включили экранный диктор — звонок переезжает сразу.
+    DesktopUiPrefs.callInOwnWindow.addListener(_onCallPresentationChanged);
+    DesktopChildWindows.instance.availability.addListener(
+      _onCallPresentationChanged,
     );
     _boot();
   }
@@ -540,7 +671,11 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     // списке. Спрятанное окно закрыть рукой нельзя, поэтому просьба закрыть
     // уже спрятанное окно — всегда системная, и она означает «выйти».
     final visible = await windowManager.isVisible();
-    if (!visible || !DesktopWindowActivity.trayReady) {
+    // «Закрывать в трей» выключено — крестик закрывает приложение
+    // (28.09.2026, настройки → Общие).
+    if (!visible ||
+        !DesktopWindowActivity.trayReady ||
+        !DesktopUiPrefs.closeToTray.value) {
       await quitDesktopApp();
       return;
     }
@@ -558,6 +693,19 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     // Now off screen entirely — stop animating, and (via the visibility
     // listener) stop claiming the user is present.
     _windowActivity.onHidden();
+    // 🔴 ОДИН РАЗ ГОВОРИМ, КУДА ДЕЛОСЬ ОКНО (28.09.2026). На Windows крестик —
+    // это «закрыть»: человек, не знающий про трей, решит, что приложение
+    // вышло и сообщения больше не придут. Windows 11 к тому же прячет новые
+    // значки под «^». Как у Telegram — одно уведомление при первом скрытии.
+    if (Platform.isWindows && !DesktopUiPrefs.trayHintShown.value) {
+      unawaited(DesktopUiPrefs.markTrayHintShown());
+      unawaited(
+        _notifService?.showAppNotice(
+          title: l10n.desktopTrayHintTitle,
+          body: l10n.desktopTrayHintBody,
+        ),
+      );
+    }
   }
 
   /// D-2: tells the controller whether a human can actually see this app.
@@ -607,6 +755,13 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     _lockService.setWindowFocused(true);
     _windowActivity.onShown();
     _windowActivity.onFocused();
+    // Вернулись в окно с открытой перепиской — её окошки в углу не нужны.
+    final open = _section == DesktopSection.rooms
+        ? _roomsSelection.selectedConvoId
+        : _chatsSelection.selectedConvoId;
+    if (open.isNotEmpty) {
+      unawaited(DesktopNotificationWindows.instance.dismissFor(open));
+    }
   }
 
   @override
@@ -651,7 +806,6 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   void _saveWindowGeometryDebounced() {
     if (!_isNativeDesktop) return;
     _winSaveDebounce?.cancel();
-    _trayDebounce?.cancel();
     _winSaveDebounce = Timer(const Duration(milliseconds: 600), () async {
       try {
         final bounds = await windowManager.getBounds();
@@ -661,11 +815,21 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   }
 
   Future<void> _boot() async {
+    // 🔴 Запуск, сменённый «Повторить», — выдохшийся: всё, что он сделает
+    // после своего ожидания, относилось бы уже к НОВОМУ контроллеру.
+    final gen = ++_bootGeneration;
+    bool stale() => !mounted || gen != _bootGeneration;
+    _bootSlowTimer?.cancel();
+    _bootSlowTimer = Timer(_kBootSlowAfter, () {
+      if (stale() || _ready || _error.isNotEmpty) return;
+      setState(() => _bootSlow = true);
+    });
     try {
       // Журнал событий — первым: разбирать потерю сообщения без него нечем.
       await DesktopDiagFileLog.start();
       await _lockService.init();
       await _controller.init();
+      if (stale()) return;
       // Громкость плеера помнится между запусками (см.
       // [DesktopUiPrefs.playerVolume]) — ставим её до первого звука.
       unawaited(
@@ -678,7 +842,10 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       _syncStatus?.dispose();
       _syncStatus = DesktopSyncStatusController(controller: _controller);
       _vm?.dispose();
-      _vm = DesktopAppViewModel(controller: _controller);
+      _vm = DesktopAppViewModel(
+        controller: _controller,
+        windowVisible: _windowActivity.visible,
+      );
       // DLV-3: notice, once, that this desktop was offline long enough to have
       // missed mail. Purely local bookkeeping — see [DesktopAbsence].
       unawaited(DesktopAbsence.start());
@@ -715,7 +882,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       await _initNotificationService();
       // Окно могли закрыть прямо во время запуска — тогда обновлять состояние
       // уже некому.
-      if (!mounted) return;
+      if (stale()) return;
       _wireDeepLinks();
       // 🔴 Потерянный компьютер: команду «отключить» он не получит, а срок
       // без связи получит. Давно не связывался — спрашиваем пароль входа.
@@ -729,10 +896,24 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
               _controller.localValueSet(DesktopDraftStore.storageKey, json),
         ),
       );
+      // Обои отдельных чатов (ключ телефона) и разовый перевод прежнего
+      // `default` ПК в картинку «Ночной синий» — см. desktop_wallpaper.dart.
+      unawaited(DesktopChatWallpapers.load());
+      unawaited(_migrateDesktopDefaultWallpaper());
+      _bootSlowTimer?.cancel();
       setState(() {
         _ready = true;
+        _bootSlow = false;
         _connection = _syncStatus?.connection ?? ConnectionStatus.connecting;
       });
+      // 🔴 Автозапуск «свёрнутым» (Windows): окно спрятали ещё до готовности,
+      // и слушатель видимости тогда промолчал — `_ready` не было. Контроллер
+      // так и считал себя на экране: «в сети» всю ночь, замки «в фоне» не
+      // взводились (30.09.2026). Сообщаем пропущенное состояние сейчас.
+      if (!_windowActivity.visible.value) _onWindowVisibilityChanged();
+      // Замок, запертый ещё до готовности (Touch ID при запуске), — теперь он
+      // виден и корню.
+      _afterLockChange();
       // If a deep-link was buffered while we were booting, dispatch it now.
       final pending = _pendingDeepLink;
       if (pending != null) {
@@ -742,13 +923,22 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
         });
       }
     } catch (e) {
-      if (!mounted) return;
+      if (stale()) return;
+      _bootSlowTimer?.cancel();
+      // Причину — в журнал: «Открыть папку журнала» ведёт именно туда.
+      DesktopDiagFileLog.write('boot.failed ${e.runtimeType}: $e');
+      final text = e.toString().trim();
       setState(() {
         _ready = false;
-        _error = e.toString();
+        _bootSlow = false;
+        _error = text.isEmpty ? '${e.runtimeType}' : text;
       });
     }
   }
+
+  /// «Повторить» на заставке: тот же путь, что у перезапуска после выхода, —
+  /// свежий контроллер и новый запуск.
+  void _retryBoot() => unawaited(_restart());
 
   /// Subscribes to `secretly://` URL events and resolves the cold-launch URL
   /// (if any) into the same handler used for runtime events. Safe to call
@@ -790,6 +980,14 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       _pendingDeepLink = uri;
       return;
     }
+    // 🔴 Запертое окно ссылок не исполняет (30.09.2026): ссылку может открыть
+    // любая веб-страница, а окно входа в комнату или переписка встали бы под
+    // замок. Последняя пришедшая ссылка ждёт разблокировки
+    // ([_afterLockChange]).
+    if (_anyLockEngaged) {
+      _pendingDeepLink = uri;
+      return;
+    }
     // 🔴 Приглашение в комнату: тот же экран входа, что на телефоне, с
     // проверкой и понятными отказами. Раньше ссылка на компьютере была
     // тупиком — её открывал браузер.
@@ -801,7 +999,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     // Profile-share URI ("secretly.app/profile/...") → resolve to a convo.
     final profileId = tryParseProfileShareUri(uri);
     if (profileId != null) {
-      unawaited(_openProfileChatByDeepLink(profileId));
+      unawaited(_openProfileFromLink(profileId));
       return;
     }
     if (uri.scheme != 'secretly') return;
@@ -849,13 +1047,20 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
         // Окно могло быть уже впереди — экран важнее.
       }
     }
-    await nav.push(
-      MaterialPageRoute<void>(
-        builder: (_) => RoomInviteJoinScreen(
-          controller: _controller,
-          target: target,
-          onJoined: _openConvoOrReport,
-        ),
+    // Окном посередине — как «Вступить» в Telegram Desktop. Контекст —
+    // навигатора окна: вызов приходит из ссылки, а не из раздела.
+    final navContext = nav.context;
+    if (!navContext.mounted) return;
+    // Предел комнат — окном ПК, а не телефонной страницей покупки
+    // (30.09.2026, см. `desktop_room_limit_dialog.dart`).
+    if (!await desktopMayJoinRoom(navContext, _controller, target)) return;
+    if (!navContext.mounted) return;
+    await showDesktopScreenWindow<void>(
+      navContext,
+      builder: (_) => RoomInviteJoinScreen(
+        controller: _controller,
+        target: target,
+        onJoined: _openConvoOrReport,
       ),
     );
   }
@@ -959,10 +1164,17 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     var directUnread = 0;
     var roomUnread = 0;
     final spaces = <RailSpace>[];
+    // «Личные» под паролем на рейку не попадают и в счёт не идут: рейка видна
+    // всегда, а плитка закреплённого личного чата открывала его без пароля
+    // (30.09.2026).
+    final hidePersonal = _controller.security.isEnabled(
+      SecurityLockScope.personal,
+    );
     for (final c in convos) {
       // Архив не считается: человек убрал переписку с глаз, и счётчик на рейке
       // возвращал бы её обратно.
       if (c.archivedAtMs != null) continue;
+      if (hidePersonal && _controller.isPersonalChat(c.convoId)) continue;
       if (c.unreadCount > 0) {
         if (c.peerProfileId == null) {
           roomUnread += 1;
@@ -1003,10 +1215,88 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     );
   }
 
+  /// 🔴 ССЫЛКА НА ПРОФИЛЬ ОТКРЫВАЕТ ПЕРЕПИСКУ ТОЛЬКО ПО СОГЛАСИЮ (30.09.2026).
+  ///
+  /// Ссылку `secretly://profile/…` может открыть любая веб-страница, а общий
+  /// путь ([AppController.prepareSharedProfileConversation]) молча принимает
+  /// запрос переписки от этого профиля и отправляет ему отметки «доставлено»
+  /// и «прочитано» — страница узнавала, что аккаунт жив и чей он. Теперь
+  /// сначала спрашиваем; ожидающий запрос открываем как запрос, не принимая.
+  Future<void> _openProfileFromLink(String profileId) async {
+    final pid = normalizeSharedProfileId(profileId);
+    if (pid.isEmpty) return;
+    Conversation? request;
+    var name = '';
+    try {
+      for (final c in await _controller.listConversations()) {
+        if (c.convoId == 'req:$pid') {
+          request = c;
+          break;
+        }
+      }
+      final resolved = (await _controller.resolveConvoTitle(pid)).trim();
+      if (resolved != pid) name = resolved;
+    } catch (_) {
+      // Без имени и запроса спросим по короткому номеру профиля.
+    }
+    if (!mounted) return;
+    if (_isNativeDesktop) {
+      try {
+        await windowManager.show();
+        await windowManager.focus();
+      } catch (_) {}
+    }
+    final ok = await _confirmProfileLink(name: name, profileId: pid);
+    if (!ok || !mounted) return;
+    if (request != null) {
+      await _openConvoOrReport(request.convoId);
+      return;
+    }
+    await _openProfileChatByDeepLink(pid);
+  }
+
+  /// «Открыть этот чат?» — с именем, если оно известно, и коротким номером.
+  Future<bool> _confirmProfileLink({
+    required String name,
+    required String profileId,
+  }) async {
+    final nav = _navigatorKey.currentState;
+    final navContext = _navigatorKey.currentContext;
+    if (nav == null || navContext == null || !navContext.mounted) return false;
+    final shortId = profileId.length <= 12
+        ? profileId
+        : '${profileId.substring(0, 6)}…'
+              '${profileId.substring(profileId.length - 4)}';
+    final strings = l10n;
+    final ok = await DesktopDialog.show<bool>(
+      navContext,
+      title: strings.desktopProfileLinkTitle,
+      size: DDialogSize.small,
+      body: Text(
+        name.isEmpty
+            ? strings.desktopProfileLinkBodyUnknown(shortId)
+            : strings.desktopProfileLinkBody(name, shortId),
+        style: DType.body.copyWith(
+          color: DColors.of(navContext).textSecondary,
+        ),
+      ),
+      primary: DDialogAction(
+        label: strings.desktopProfileLinkOpen,
+        onPressed: () => nav.maybePop(true),
+      ),
+      secondary: DDialogAction(
+        label: strings.cancel,
+        onPressed: () => nav.maybePop(false),
+      ),
+    );
+    return ok == true;
+  }
+
   /// Открыть (при необходимости — завести) личную переписку с профилем.
   ///
-  /// Сюда приходят кнопка «Написать сообщение» в разделе «Контакты» и ссылка
-  /// на профиль. Раньше оба отказа были молчаливыми.
+  /// Сюда приходят кнопка «Написать сообщение» в разделе «Контакты» и
+  /// подтверждённая ссылка на профиль ([_openProfileFromLink]). Раньше оба
+  /// отказа были молчаливыми.
   Future<void> _openProfileChatByDeepLink(String profileId) async {
     String? convoId;
     try {
@@ -1050,6 +1340,27 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
         }
       }
       if (match == null || !mounted) return false;
+      // 🔴 Личная переписка — только после пароля «Личных» (30.09.2026): сюда
+      // приходят уведомления, ссылки `secretly://room/…` и плитки рейки, и
+      // все они открывали личный чат без вопросов. Окно — вперёд до вопроса:
+      // спрашивать пароль в спрятанном окне некому.
+      if (desktopPersonalChatHidden(_controller, match.convoId)) {
+        if (_isNativeDesktop) {
+          try {
+            await windowManager.show();
+            await windowManager.focus();
+          } catch (_) {}
+        }
+        final navContext = _navigatorKey.currentContext;
+        if (navContext == null || !navContext.mounted) return true;
+        final ok = await desktopUnlockPersonalChat(
+          navContext,
+          _controller,
+          match.convoId,
+        );
+        // Отказ от пароля — не «переписка не найдена»: молчим.
+        if (!ok || !mounted) return true;
+      }
       final isGroup = match.peerProfileId == null;
       if (isGroup) {
         _roomsSelection.select(match);
@@ -1119,20 +1430,74 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       } catch (_) {
         return;
       }
-      if (total == _lastTrayUnread) return;
-      _lastTrayUnread = total;
-      // 🔴 Значок в Dock — ЕДИНСТВЕННЫЙ видимый след непрочитанного, когда окно
-      // спрятано: подсказку в трее надо ещё навести и подождать, а заголовка у
-      // спрятанного окна нет вовсе.
-      unawaited(_dockBadge.set(total));
-      try {
-        await trayManager.setToolTip(
-          total > 0 ? l10n.desktopUnreadTitle(total) : 'Secretly',
-        );
-      } catch (_) {
-        // Tray may be unavailable (headless, CI); never let it break the app.
+      if (total != _lastTrayUnread) {
+        _lastTrayUnread = total;
+        // 🔴 Значок в Dock — ЕДИНСТВЕННЫЙ видимый след непрочитанного, когда
+        // окно спрятано: подсказку в трее надо ещё навести и подождать, а
+        // заголовка у спрятанного окна нет вовсе.
+        unawaited(_dockBadge.set(total));
       }
+      // Значок, подсказка и меню трея. Служба сама пропускает то, что не
+      // изменилось, — звать её на каждое событие шины дёшево.
+      final notif = _notifService;
+      final until = notif?.doNotDisturbUntil;
+      // Windows: число поверх кнопки на панели задач — как у Telegram.
+      unawaited(
+        DesktopTaskbar.setUnread(
+          total,
+          muted: notif?.doNotDisturb ?? false,
+          description: l10n.desktopThreadUnreadCount(total),
+        ),
+      );
+      await DesktopTrayService.instance.update(
+        l10n: l10n,
+        unread: total,
+        muted: notif?.doNotDisturb ?? false,
+        mutedUntilLabel: until == null ? null : _trayTimeLabel(until),
+      );
     });
+  }
+
+  /// «до 14:30» — сегодня; «до 29 сент., 09:00» — если срок за полночью.
+  String _trayTimeLabel(DateTime until) {
+    final now = DateTime.now();
+    final sameDay = until.year == now.year &&
+        until.month == now.month &&
+        until.day == now.day;
+    final locale = l10n.localeName;
+    return sameDay
+        ? DateFormat.Hm(locale).format(until)
+        : DateFormat.MMMd(locale).add_Hm().format(until);
+  }
+
+  /// 🔴 ОДИН РАЗ: `default` ПК → картинка «Ночной синий» (28.09.2026).
+  ///
+  /// До 28.09 плитка «Ночной синий» на ПК носила id `default`, а телефон под
+  /// тем же id рисует «Классику» — градиент. Теперь ПК рисует `default` как
+  /// телефон, и тем, у кого он был выбран, ставим ту картинку, которую они
+  /// видели, — фон не меняется без спроса.
+  Future<void> _migrateDesktopDefaultWallpaper() async {
+    const flag = 'desktop_wallpaper_default_migrated_v1';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(flag) ?? false) return;
+      if (_controller.defaultChatWallpaperId == 'default') {
+        await _controller.setDefaultChatWallpaperId(
+          desktopLegacyDefaultWallpaperId(),
+        );
+      }
+      await prefs.setBool(flag, true);
+    } catch (_) {
+      // Не вышло сейчас — попробуем при следующем запуске.
+    }
+  }
+
+  Future<void> _showFromTray() async {
+    try {
+      await windowManager.show();
+      await windowManager.focus();
+    } catch (_) {}
+    _windowActivity.onShown();
   }
 
   /// Everything the ROOT widget reads out of the controller. Any change here
@@ -1204,7 +1569,9 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     // экран блокировки живёт здесь.
     _securitySub?.cancel();
     _securitySub = _controller.security.changed.listen((_) {
-      if (mounted) setState(() {});
+      if (!mounted) return;
+      setState(() {});
+      _afterLockChange();
     });
   }
 
@@ -1216,11 +1583,33 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     cm.state.addListener(_callStateListener!);
     _callManager = cm;
     _directCall = CallManagerDesktopCall(cm);
+    // Слой отдельных окон опрашиваем сразу: решение «где рисовать звонок»
+    // принимается при построении кадра и ждать ответа не может.
+    unawaited(DesktopChildWindows.instance.isSupported());
+    final callWindow = DesktopDirectCallWindow(
+      builder: _buildCallWindowApp,
+      onCloseRequested: _onCallWindowCloseRequested,
+      // Звонка уже нет — крестик закрывает окно сам (см. окно звонка).
+      callActive: () => cm.state.value.isActive,
+    );
+    callWindow.changes.addListener(_onCallWindowChanged);
+    _callWindow = callWindow;
+    // Входящий в своём окне — системное уведомление о нём не нужно.
+    DesktopNotificationService.callShownInOwnWindow = (s) =>
+        _callWindow?.handles(s) ?? false;
+    // Окошки уведомлений (Windows) говорят на языке приложения.
+    DesktopNotificationWindows.instance
+      ..locale = (() => _controller.appLocaleOverride)
+      ..resolveLocale = _controller.resolveAppUiLocale;
     _notifService?.attachCallManager(cm);
     // Комнатные созвоны — свой управляющий, ровно как на телефоне.
     final rcm = RoomCallManager(controller: _controller)..start();
     RoomCallManager.instance = rcm;
+    // Движок созвона отпускается при любом переходе в «нет созвона» — с
+    // первой минуты, а не с первого открытого окна созвона (30.09.2026).
+    DesktopRoomCallMediaGuard.attach(rcm);
     _roomCallManager = rcm;
+    rcm.state.addListener(_syncScreenShareGuard);
   }
 
   Future<void> _initNotificationService() async {
@@ -1238,10 +1627,33 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     }
     _notifService = svc;
     DesktopNotificationService.instance = svc;
+    // Окно в фокусе молчит только об открытой переписке — как Telegram.
+    svc.openConvoId = () => switch (_section) {
+      DesktopSection.chats => _chatsSelection.selectedConvoId,
+      DesktopSection.rooms => _roomsSelection.selectedConvoId,
+      _ => '',
+    };
+    // Замки знает корень: пока заперто, уведомления без имени, текста и
+    // кнопок (см. [desktopEffectivePreviewLevel]).
+    svc.lockEngaged = () => _anyLockEngaged;
+    svc.personalHidden = (convoId) =>
+        _controller.isPersonalChat(convoId) &&
+        _controller.security.isLocked(SecurityLockScope.personal);
+    _syncScreenShareGuard();
     _notifTapSub = svc.onTap.listen(_onNotificationTap);
+    // «Без звука» меняет значок и меню трея — в том числе когда срок «на
+    // час» истекает сам.
+    svc.doNotDisturbListenable.addListener(_refreshTrayBadgeSoon);
+    _refreshTrayBadgeSoon();
+    // Запущены свёрнутыми — окно не в фокусе, уведомления должны идти.
+    if (!_windowActivity.visible.value) svc.setWindowFocused(false);
   }
 
   Future<void> _disposeNotificationService() async {
+    _notifService?.doNotDisturbListenable.removeListener(_refreshTrayBadgeSoon);
+    // Окошки уведомлений (Windows) уходят вместе со службой: щелчок по ним
+    // вёл бы в её закрытый поток, а при смене профиля — в чужую переписку.
+    unawaited(DesktopNotificationWindows.instance.dismissAll());
     await _notifTapSub?.cancel();
     _notifTapSub = null;
     final svc = _notifService;
@@ -1257,7 +1669,11 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   void _onNotificationTap(String payload) {
     if (!_isNativeDesktop) return;
     final isCallPayload = payload.startsWith('call:');
-    if (isCallPayload) {
+    // Под замком нажатие только выводит окно с замком: переписку за замком
+    // не открываем (30.09.2026).
+    if (isCallPayload ||
+        payload == kDesktopNotificationShowAppPayload ||
+        _anyLockEngaged) {
       // The toast / full-screen call UI already reflects state via CallManager;
       // just surface the window so the user can react.
       unawaited(() async {
@@ -1291,20 +1707,82 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     }
     _callManager = null;
     _directCall = null;
+    final callWindow = _callWindow;
+    _callWindow = null;
+    DesktopNotificationService.callShownInOwnWindow = null;
+    if (callWindow != null) {
+      callWindow.changes.removeListener(_onCallWindowChanged);
+      unawaited(callWindow.dispose());
+    }
     DesktopCallPresence.instance.syncDirect(active: false, callId: '');
     final rcm = _roomCallManager;
     if (RoomCallManager.instance == rcm) {
       RoomCallManager.instance = null;
     }
     if (rcm != null) {
+      rcm.state.removeListener(_syncScreenShareGuard);
       unawaited(rcm.dispose());
     }
     _roomCallManager = null;
+    // Окно созвона комнаты уходит вместе с его управляющим: перезапуск (смена
+    // профиля) не должен оставить на экране окно созвона, которого уже нет.
+    // Закрытие отменяет и окно, которое ещё открывается.
+    unawaited(DesktopRoomCallWindows.close());
     _dismissIncomingToast();
   }
 
   void _onCallPresenceChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onDeviceLockChanged() {
+    if (!mounted) return;
+    setState(() {});
+    _afterLockChange();
+  }
+
+  /// Было ли заперто в прошлый раз — действуем на смене, а не на каждом
+  /// оповещении замка.
+  bool _lockWasEngaged = false;
+
+  /// Замок заперли или открыли.
+  ///
+  /// Заперли — гасим окошки уведомлений Windows: они висят поверх всех окон
+  /// с именем, текстом и кнопкой «Ответить», показанными ещё до замка.
+  /// Открыли — исполняем ссылку, пришедшую под замком ([_handleDeepLink]).
+  void _afterLockChange() {
+    final engaged = _anyLockEngaged;
+    if (engaged == _lockWasEngaged) return;
+    _lockWasEngaged = engaged;
+    if (engaged) {
+      unawaited(DesktopNotificationWindows.instance.dismissAll());
+      return;
+    }
+    final pending = _pendingDeepLink;
+    if (pending == null || !_ready) return;
+    _pendingDeepLink = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _handleDeepLink(pending);
+    });
+  }
+
+  /// Показ экрана был включён в прошлый раз.
+  bool _screenShareGuardOn = false;
+
+  /// 🔴 СВОЙ ПОКАЗ ЭКРАНА — УВЕДОМЛЕНИЯ МОЛЧАТ (30.09.2026). Защита в службе
+  /// была, но включать её было нечему: имена и текст сообщений попадали в
+  /// показ. Уже показанные окошки Windows (поверх всех окон, то есть в кадре)
+  /// гасим сразу.
+  void _syncScreenShareGuard() {
+    final on = desktopScreenShareActive(
+      direct: _callManager?.state.value,
+      room: _roomCallManager?.state.value,
+    );
+    _notifService?.setScreenShareActive(on);
+    if (on && !_screenShareGuardOn) {
+      unawaited(DesktopNotificationWindows.instance.dismissAll());
+    }
+    _screenShareGuardOn = on;
   }
 
   void _onCallStateChanged() {
@@ -1318,9 +1796,158 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       );
       _announceCallEnd(s);
       _prevDirectPhase = s.phase;
+      unawaited(_callWindow?.sync(s, title: _callWindowTitle(s)));
+    }
+    _syncScreenShareGuard();
+    setState(() {});
+    _syncIncomingToast();
+  }
+
+  /// Окно звонка открылось, закрылось или не смогло открыться.
+  ///
+  /// Не открылось — звонок возвращается в главное окно: слой поверх окна и
+  /// всплывашка входящего снова рисуются здесь.
+  void _onCallWindowChanged() {
+    if (!mounted) return;
+    setState(() {});
+    _syncIncomingToast();
+    // Окно не открылось — системное уведомление о входящем тоже прежним
+    // путём: пока звонок числился «в своём окне», его пропустили.
+    _notifService?.recheckIncomingCall();
+  }
+
+  /// «Звонок в отдельном окне» переключили посреди звонка — или на macOS
+  /// включили экранный диктор, и своих окон больше нет (29.09.2026).
+  ///
+  /// 🔴 Раньше настройка действовала только со следующего звонка: выключили —
+  /// окно идущего разговора оставалось, а главное окно его не рисовало, ведь
+  /// «звонок в своём окне» больше не считался; включили — наоборот.
+  void _onCallPresentationChanged() {
+    if (!mounted) return;
+    final cm = _callManager;
+    final window = _callWindow;
+    if (cm != null && window != null) {
+      final s = cm.state.value;
+      // Свёрнутый в главном окне разговор, уехавший в своё окно, не должен
+      // остаться ещё и мини-окном.
+      if (window.handles(s)) DesktopCallPresence.instance.expandDirect();
+      unawaited(window.sync(s, title: _callWindowTitle(s)));
+    }
+    // Созвон комнаты: своё окно больше нельзя — оно уходит, созвон идёт
+    // дальше мини-окном и полосой «Вернуться», как после крестика.
+    final ownAllowed = DesktopUiPrefs.callInOwnWindow.value &&
+        DesktopChildWindows.instance.supportedCached == true;
+    if (!ownAllowed && DesktopRoomCallWindows.openRoomId != null) {
+      unawaited(DesktopRoomCallWindows.close());
     }
     setState(() {});
     _syncIncomingToast();
+  }
+
+  /// Шапка окна звонка: имя собеседника, как в Telegram.
+  String _callWindowTitle(CallState s) {
+    final name = desktopCallPeerKnownName(s);
+    return name.isEmpty ? 'Secretly' : name;
+  }
+
+  /// Крестик окна звонка: входящий — отклонить, разговор — положить трубку.
+  void _onCallWindowCloseRequested() {
+    final cm = _callManager;
+    if (cm == null) return;
+    if (cm.state.value.phase == CallPhase.ringingIncoming) {
+      unawaited(cm.declineIncoming());
+    } else {
+      unawaited(cm.hangup());
+    }
+  }
+
+  /// «Написать» из окна звонка: главное окно выходит вперёд с перепиской,
+  /// окно звонка остаётся на месте.
+  Future<void> _openChatFromCallWindow(String peerProfileId) async {
+    if (_isNativeDesktop) {
+      try {
+        await windowManager.show();
+        await windowManager.focus();
+      } catch (_) {}
+    }
+    await _openProfileChatByDeepLink(peerProfileId);
+  }
+
+  /// Содержимое окна звонка — целиком: своё окно, свой навигатор и слой
+  /// всплывающих (меню устройств, подсказки открываются в НЁМ, а не в главном
+  /// окне). Язык и размер текста — те же, что у приложения; палитра всегда
+  /// тёмная, как у звонка.
+  Widget _buildCallWindowApp(BuildContext _) {
+    final cm = _callManager;
+    return DesktopChildWindowApp(
+      locale: _controller.appLocaleOverride,
+      resolveLocale: _controller.resolveAppUiLocale,
+      home: cm == null
+          ? const SizedBox.shrink()
+          : ValueListenableBuilder<CallState>(
+              valueListenable: cm.state,
+              builder: (ctx, s, _) => s.phase == CallPhase.ringingIncoming
+                  ? _buildIncomingCallWindow(ctx, cm, s)
+                  : _buildCallWindowScreen(cm, s),
+            ),
+    );
+  }
+
+  /// Входящий — в своём маленьком окне поверх всех.
+  Widget _buildIncomingCallWindow(
+    BuildContext ctx,
+    CallManager cm,
+    CallState s,
+  ) {
+    final l10n = AppLocalizations.of(ctx)!;
+    final knownName = desktopCallPeerKnownName(s);
+    final peer = s.peerProfileId.trim();
+    return ColoredBox(
+      color: kDColorsDark.bg,
+      child: Center(
+        child: IncomingCallToast(
+          callerName: desktopCallPeerTitle(s, l10n),
+          avatarName: knownName,
+          subtitle: knownName.isEmpty
+              ? l10n.appTitle
+              : l10n.callRecordIncomingCall,
+          callerSeed: s.peerProfileId,
+          callerImage: Avatar.fileImage(s.peerAvatarPath),
+          video: s.isVideo,
+          onAccept: () => unawaited(cm.acceptIncoming()),
+          onDecline: () => unawaited(cm.declineIncoming()),
+          onReplyWithText: peer.isEmpty
+              ? null
+              : () {
+                  unawaited(cm.declineIncoming());
+                  unawaited(_openChatFromCallWindow(peer));
+                },
+        ),
+      ),
+    );
+  }
+
+  /// Разговор — тот же экран, что внутри приложения, в режиме своего окна.
+  Widget _buildCallWindowScreen(CallManager cm, CallState s) {
+    final call = _directCall;
+    if (call == null || !s.isActive) {
+      return ColoredBox(color: kDColorsDark.bg);
+    }
+    final peer = s.peerProfileId.trim();
+    return OneToOneCallScreen(
+      call: call,
+      peerName: s.peerName.trim(),
+      peerImage: Avatar.fileImage(s.peerAvatarPath),
+      onEnd: () => unawaited(cm.hangup()),
+      onOpenChat: peer.isEmpty
+          ? null
+          : () => unawaited(_openChatFromCallWindow(peer)),
+      ownWindow: DesktopCallOwnWindow(
+        pinned: DesktopUiPrefs.callWindowPinned,
+        onTogglePin: () => unawaited(_callWindow?.togglePin()),
+        onSetFullScreen: (on) async => _callWindow?.setFullScreen(on),
+      ),
+    );
   }
 
   /// 🔴 ЗВОНОК КОНЧАЛСЯ МОЛЧА (24.09.2026). Окно звонка просто исчезало — а
@@ -1380,7 +2007,10 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       return;
     }
     final s = cm.state.value;
-    final shouldShow = s.phase == CallPhase.ringingIncoming;
+    // Входящий в своём окне поверх всех — всплывашка в главном окне не нужна,
+    // и главное окно вперёд не выводим (29.09.2026, Р1).
+    final shouldShow = s.phase == CallPhase.ringingIncoming &&
+        !(_callWindow?.handles(s) ?? false);
     if (!shouldShow) {
       _dismissIncomingToast();
       return;
@@ -1488,10 +2118,34 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   }
 
   Future<void> _restart() async {
+    if (_restartTeardown) return;
+    _restartTeardown = true;
+    try {
+      await _restartTeardownSteps();
+    } finally {
+      _restartTeardown = false;
+    }
+    await _boot();
+  }
+
+  /// Разборка перед новым запуском: всё прежнего контроллера — вон.
+  Future<void> _restartTeardownSteps() async {
+    // 🔴 СОСТОЯНИЕ ОКНА ПРЕЖНЕГО ПРОФИЛЯ НЕ ПЕРЕЖИВАЕТ ПЕРЕЗАПУСК (01.10.2026).
+    // Сюда приходят выход, новая привязка, новый аккаунт и восстановление —
+    // то есть профиль меняется, а окно остаётся. Раньше после новой привязки
+    // поверх окна снова вставали настройки со старой моделью, стрелки
+    // «назад»/«вперёд» вели в переписки прежнего аккаунта, а открытая
+    // переписка из склада выбора открывалась в новом.
     setState(() {
       _ready = false;
       _error = '';
+      _bootSlow = false;
+      _modalOverlay = null;
     });
+    _navHistory.clear();
+    _chatsSelection.clear();
+    _roomsSelection.clear();
+    _popupsDismissedFor = '';
     await _disposeNotificationService();
     _disposeCallManager();
     // Drop the peer-history binding so a stale controller can't be poked
@@ -1509,11 +2163,14 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     // профиля значок снимается сразу, не дожидаясь пересчёта.
     _lastTrayUnread = -1;
     unawaited(_dockBadge.clear());
+    // Черновики уходящего профиля — в его базу и из памяти вон, ДО закрытия
+    // контроллера: иначе новый профиль унаследовал бы их (см.
+    // [DesktopDraftStore.detachStorage]).
+    await DesktopDraftStore.detachStorage();
     try {
       await _controller.dispose();
     } catch (_) {}
     _controller = AppController();
-    await _boot();
   }
 
   @override
@@ -1527,6 +2184,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       _windowListenerAttached = false;
     }
     _winSaveDebounce?.cancel();
+    _bootSlowTimer?.cancel();
     unawaited(_disposeNotificationService());
     _disposeCallManager();
     _changedSub?.cancel();
@@ -1543,6 +2201,10 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     DesktopCallPresence.instance.directMinimized.removeListener(
       _onCallPresenceChanged,
     );
+    DesktopUiPrefs.callInOwnWindow.removeListener(_onCallPresentationChanged);
+    DesktopChildWindows.instance.availability.removeListener(
+      _onCallPresentationChanged,
+    );
     _navHistory.dispose();
     _chatsSelection.dispose();
     _roomsSelection.dispose();
@@ -1557,6 +2219,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     DesktopHistoryCatchUp.stop();
     PeerHistoryService.instance.detach();
     _controller.dispose();
+    _lockService.locked.removeListener(_onDeviceLockChanged);
     _lockService.dispose();
     DesktopAbsence.stop();
     if (DesktopWindowActivity.hideHandler == _hideToTray) {
@@ -1803,28 +2466,34 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
               : deviceLocales,
         );
       },
-      theme: ThemeData(
-        brightness: _controller.darkMode ? Brightness.dark : Brightness.light,
-        fontFamily: DType.family,
-        useMaterial3: true,
-        scaffoldBackgroundColor: colors.bg,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: colors.accentPrimary,
-          brightness: _controller.darkMode ? Brightness.dark : Brightness.light,
-        ),
-      ),
+      // Каждая поверхность Material (диалог, меню, подсказка, выбор даты)
+      // берёт цвет, рамку и радиус из той же палитры, что наши окна.
+      theme: desktopMaterialTheme(colors, dark: _controller.darkMode),
       // 🔴 РАЗМЕР ТЕКСТА — ОДНОЙ ТОЧКОЙ НА ВСЁ ОКНО, а не настройкой в каждом
       // стиле. `MediaQuery` здесь охватывает и окна поверх (настройки, просмотр,
       // диалоги): они строятся тем же навигатором и наследуют его. Иначе
       // крупный текст был бы только в переписке, а в настройках прежний — и
       // человек решил бы, что настройка не сработала.
-      builder: (ctx, child) => ValueListenableBuilder<double>(
-        valueListenable: DesktopUiPrefs.textScale,
-        builder: (ctx2, scale, _) => MediaQuery(
-          data: MediaQuery.of(ctx2).copyWith(
-            textScaler: TextScaler.linear(scale),
+      //
+      // 🔴 ПАЛИТРА — ЗДЕСЬ, НАД НАВИГАТОРОМ (28.09.2026). Ниже, в `home`, её
+      // видело только само окно, а диалоги, меню, всплывающие окна, плашки и
+      // входящий звонок строятся маршрутами и слоями корневого навигатора —
+      // выше `home`. Не найдя палитры, они брали яркость ОС: на светлой
+      // Windows при тёмной теме приложения все они были белыми.
+      builder: (ctx, child) => DColors(
+        colors: colors,
+        child: ValueListenableBuilder<double>(
+          valueListenable: DesktopUiPrefs.textScale,
+          builder: (ctx2, scale, _) => MediaQuery(
+            data: MediaQuery.of(ctx2).copyWith(
+              textScaler: TextScaler.linear(scale),
+            ),
+            // Эмодзи Windows — Noto (Э1): и для текста вне `Material`. Слой
+            // замков — под своим `Material`, чья тема несёт тот же запасной.
+            child: _buildLockGate(
+              desktopEmojiTextFallback(child ?? const SizedBox.shrink()),
+            ),
           ),
-          child: child ?? const SizedBox.shrink(),
         ),
       ),
       home: ValueListenableBuilder<bool>(
@@ -1903,13 +2572,21 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   ///
   /// Те же два условия, по которым `_buildRoot` решает, рисовать ли оболочку:
   /// до готовности внизу заставка, а при непривязанном профиле — экран
-  /// привязки, и настроек в обоих случаях ещё нет.
+  /// привязки, и настроек в обоих случаях ещё нет. Запертое окно меню тоже не
+  /// открывает: настройки встали бы под замок и выскочили после него.
   bool get _menuReady =>
-      _ready && !_controller.requiresDesktopProfileSelection;
+      _ready &&
+      !_controller.requiresDesktopProfileSelection &&
+      !_anyLockEngaged;
 
   Widget _buildRoot() {
     if (!_ready) {
-      return DesktopSplash(error: _error.isEmpty ? null : _error);
+      return DesktopSplash(
+        error: _error.isEmpty ? null : _error,
+        slow: _bootSlow,
+        onRetry: _retryBoot,
+        onOpenLogs: () => unawaited(openDesktopLogFolder()),
+      );
     }
     final rootVm = _vm;
     if (_controller.requiresDesktopProfileSelection) {
@@ -1958,7 +2635,15 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
         onToggleMic: _toggleRoomCallMic,
         onLeave: _leaveRoomCall,
         direct: _callManager?.state,
-        onDirectReturn: DesktopCallPresence.instance.expandDirect,
+        // «Вернуться»: звонок в своём окне — это окно вперёд.
+        onDirectReturn: () {
+          final w = _callWindow;
+          if (w != null && w.isOpen) {
+            unawaited(w.focus());
+          } else {
+            DesktopCallPresence.instance.expandDirect();
+          }
+        },
         onDirectToggleMic: () async => _callManager?.toggleMute(),
         onDirectEnd: () => unawaited(_callManager?.hangup()),
       ),
@@ -2019,6 +2704,8 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
               shellApi: api,
               selection: _chatsSelection,
               syncStatus: _syncStatus,
+              // Комната из личного чата (приглашение) — в раздел «Комнаты».
+              onOpenConversation: _openConvoOrReport,
             );
           case DesktopSection.rooms:
             if (vm == null) return const SizedBox.shrink();
@@ -2028,6 +2715,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
               selection: _roomsSelection,
               filter: ConversationFilter.groups,
               syncStatus: _syncStatus,
+              onOpenConversation: _openConvoOrReport,
               emptyTitleNoItems: l10n.desktopRoomsNone,
               emptySubtitleNoItems:
                   l10n.desktopRoomsNoneHintDot,
@@ -2075,40 +2763,130 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
 
     final modal = _modalOverlay;
     final callOverlay = _buildActiveCallOverlay();
-    final children = <Widget>[shell];
+    // 🔴 ПОД НАСТРОЙКАМИ И ЗВОНКОМ ОКНО НЕ ДВИЖЕТСЯ (01.10.2026). Оба слоя
+    // непрозрачны и закрывают окно целиком, а под ними продолжали крутиться
+    // обои, рамки и статусы, и каждый цикл перерисовывал экран, которого не
+    // видно. Здесь гасится всё, включая кружки: невидимый кружок ни о чём не
+    // сообщает. `TickerMode` стоит всегда, меняется только флаг — оболочка
+    // не пересоздаётся и ничего не теряет.
+    final covered = modal != null || callOverlay != null;
+    final children = <Widget>[TickerMode(enabled: !covered, child: shell)];
     if (modal != null) children.add(modal);
     if (callOverlay != null) children.add(callOverlay);
     // Мини-окна свёрнутых звонков — поверх всего окна, но ПОД замками: запертое
     // приложение не должно показывать, с кем идёт разговор.
     children.add(Positioned.fill(child: _buildCallMiniHost()));
-    return ValueListenableBuilder<bool>(
-      valueListenable: _lockService.locked,
-      builder: (ctx, locked, _) {
-        final stack = children.length == 1 ? shell : Stack(children: children);
-        final layers = <Widget>[
-          stack,
-          if (_appScopeLocked) AppSecurityLockOverlay(controller: _controller),
-          if (locked) DesktopLockOverlay(service: _lockService),
-        ];
-        if (layers.length == 1) return stack;
-        return Stack(children: layers);
-      },
-    );
+    // 🔴 Замков здесь больше нет — они над навигатором ([_buildLockGate]):
+    // отсюда их перекрывал любой маршрут поверх главного экрана, а обёртка
+    // запертого окна пересоздавала оболочку (30.09.2026).
+    return Stack(children: children);
   }
 
   /// 🔴 ПАРОЛЬ «ВХОД В ПРИЛОЖЕНИЕ» НА КОМПЬЮТЕРЕ (17.09.2026).
   ///
   /// Настройки компьютера включали этот замок, а проверял его только
   /// телефонный `main.dart`: пароль задавался — и ни разу не спрашивался.
-  /// Правило — как у телефона (`_shouldShowAppLockOverlay`): только когда
-  /// приложение готово и не идёт звонок, чтобы входящий можно было принять.
   /// Замок Touch ID этого компьютера — отдельный и рисуется поверх.
+  ///
+  /// 🔴 ЗВОНОК ЗАМОК БОЛЬШЕ НЕ СНИМАЕТ (30.09.2026). Правило было телефонное
+  /// (`_shouldShowAppLockOverlay`): «не идёт звонок, чтобы входящий можно было
+  /// принять». Но снимался замок целиком — позвони на запертый компьютер, и
+  /// открыта вся переписка. Звонком теперь управляют поверх замка (см.
+  /// [_lockCall]), а окна звонков ОС замок не накрывает вовсе.
   bool get _appScopeLocked {
     if (!_ready || _controller.requiresDesktopProfileSelection) return false;
-    if (!_controller.security.isLocked(SecurityLockScope.app)) return false;
-    final call = _callManager?.state.value;
-    if (call != null && (call.isActive || call.isRinging)) return false;
-    return true;
+    return _controller.security.isLocked(SecurityLockScope.app);
+  }
+
+  /// Замок Touch ID этого компьютера — свой, отдельный от общего.
+  bool get _deviceLocked {
+    if (!_ready || _controller.requiresDesktopProfileSelection) return false;
+    return _lockService.locked.value;
+  }
+
+  /// Заперто ли окно хоть одним замком.
+  bool get _anyLockEngaged => _appScopeLocked || _deviceLocked;
+
+  /// Замки окна над навигатором — см. [DesktopLockGate]. Touch ID рисуется
+  /// поверх общего замка, звонок — поверх обоих.
+  Widget _buildLockGate(Widget navigator) {
+    final appLocked = _appScopeLocked;
+    final deviceLocked = _deviceLocked;
+    return DesktopLockGate(
+      locked: appLocked || deviceLocked,
+      animate: _windowActivity.visible,
+      layers: <Widget>[
+        if (appLocked)
+          AppSecurityLockOverlay(
+            key: const ValueKey<String>('lock-app'),
+            controller: _controller,
+          ),
+        if (deviceLocked)
+          DesktopLockOverlay(
+            key: const ValueKey<String>('lock-device'),
+            service: _lockService,
+            windowVisible: _windowActivity.visible,
+          ),
+        ListenableBuilder(
+          key: const ValueKey<String>('lock-call'),
+          listenable: Listenable.merge(<Listenable?>[
+            _callManager?.state,
+            _roomCallManager?.state,
+            DesktopCallPresence.instance.roomWindowOpen,
+          ]),
+          builder: (ctx, _) => _buildLockCallStrip(),
+        ),
+      ],
+      child: navigator,
+    );
+  }
+
+  /// Звонок, которым дать управлять поверх замка. `null` — такого нет: звонка
+  /// нет или он в своём окне ОС, которое замок не накрывает.
+  DesktopLockCall? _lockCall() {
+    final s = _callManager?.state.value;
+    if (s != null && s.isActive && !(_callWindow?.handles(s) ?? false)) {
+      if (s.phase == CallPhase.ringingIncoming) {
+        return DesktopLockCall(
+          kind: DesktopLockCallKind.incoming,
+          video: s.isVideo,
+        );
+      }
+      return DesktopLockCall(
+        kind: DesktopLockCallKind.direct,
+        muted: s.isMuted,
+      );
+    }
+    final room = _roomCallManager?.state.value;
+    final self = room?.session?.selfParticipant;
+    if (room != null && room.hasActiveSession && self != null && self.isJoined) {
+      final roomId = room.roomId.trim();
+      if (roomId.isNotEmpty && DesktopRoomCallWindows.openRoomId != roomId) {
+        return DesktopLockCall(
+          kind: DesktopLockCallKind.room,
+          muted: self.muted,
+        );
+      }
+    }
+    return null;
+  }
+
+  Widget _buildLockCallStrip() {
+    final call = _lockCall();
+    final cm = _callManager;
+    if (call == null) return const SizedBox.shrink();
+    final room = call.kind == DesktopLockCallKind.room;
+    return DesktopLockCallStrip(
+      call: call,
+      onAccept: cm == null ? null : () => unawaited(cm.acceptIncoming()),
+      onDecline: cm == null ? null : () => unawaited(cm.declineIncoming()),
+      onToggleMic: room
+          ? () => unawaited(_toggleRoomCallMic())
+          : (cm == null ? null : () => unawaited(cm.toggleMute())),
+      onEnd: room
+          ? () => unawaited(_leaveRoomCall())
+          : (cm == null ? null : () => unawaited(cm.hangup())),
+    );
   }
 
   Widget? _buildActiveCallOverlay() {
@@ -2117,6 +2895,8 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     if (cm == null || call == null) return null;
     final s = cm.state.value;
     if (!s.isActive) return null;
+    // Звонок в своём окне ОС — здесь его не рисуем (29.09.2026, Р1).
+    if (_callWindow?.handles(s) ?? false) return null;
     // Ringing-incoming surfaces as a toast, not a full screen.
     if (s.phase == CallPhase.ringingIncoming) return null;
     // Свёрнут — живёт мини-окном (см. [_buildCallMiniHost]).

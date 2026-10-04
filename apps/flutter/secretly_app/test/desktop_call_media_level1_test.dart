@@ -72,7 +72,12 @@ void main() {
     test('местное превью камеры перечисляет, а мерить не берётся', () {
       final i = media.indexOf('class _LocalPreviewRoomCallMediaController');
       final body = media.substring(i, (i + 9000).clamp(0, media.length));
-      expect(body.contains("_enumerate('videoinput', 'Камера')"), isTrue);
+      // 30.09.2026: имя безымянной камеры — из переводов ПК, а не зашитое
+      // «Камера» (см. RoomCallUnnamedDeviceLabels).
+      expect(
+        body.contains("_enumerate('videoinput', RoomCallUnnamedDeviceLabels.camera)"),
+        isTrue,
+      );
       expect(body.contains('double participantAudioLevel(String deviceId) => 0;'), isTrue);
     });
   });

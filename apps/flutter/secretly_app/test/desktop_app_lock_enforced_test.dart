@@ -19,22 +19,23 @@ void main() {
     final app = _read('lib/ui/desktop/app/desktop_production_app.dart');
 
     test('🔴 экран блокировки рисуется по общему замку', () {
-      expect(
-        app.contains(
-          'if (_appScopeLocked) AppSecurityLockOverlay(controller: _controller),',
-        ),
-        isTrue,
+      final gate = app.substring(
+        app.indexOf('  Widget _buildLockGate(Widget navigator) {'),
+        app.indexOf('  DesktopLockCall? _lockCall() {'),
       );
+      expect(gate.contains('final appLocked = _appScopeLocked;'), isTrue);
+      expect(gate.contains('AppSecurityLockOverlay('), isTrue);
       final getter = app.substring(
         app.indexOf('  bool get _appScopeLocked {'),
-        app.indexOf('  Widget? _buildActiveCallOverlay() {'),
+        app.indexOf('  bool get _deviceLocked {'),
       );
       expect(
         getter.contains('security.isLocked(SecurityLockScope.app)'),
         isTrue,
       );
-      // Входящий звонок можно принять — как на телефоне.
-      expect(getter.contains('call.isActive || call.isRinging'), isTrue);
+      // 🔴 С 30.09.2026 звонок замок не снимает: им управляют поверх замка
+      // (см. desktop_lock_gate_test.dart).
+      expect(getter.contains('call.isActive || call.isRinging'), isFalse);
     });
 
     test('🔴 скрытое окно — это фон для замков', () {

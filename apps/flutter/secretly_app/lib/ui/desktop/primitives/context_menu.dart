@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -15,6 +17,7 @@ class CtxMenuItem {
     this.onTap,
     this.isDanger = false,
     this.enabled = true,
+    this.submenu,
   });
 
   final String label;
@@ -23,6 +26,10 @@ class CtxMenuItem {
   final VoidCallback? onTap;
   final bool isDanger;
   final bool enabled;
+
+  /// Пункт открывает второе меню — например, сроки «без звука» (30.09.2026).
+  /// Первое закрывается, второе встаёт справа от строки, в той же палитре.
+  final List<CtxMenuItem>? submenu;
 }
 
 class ContextMenu {
@@ -44,7 +51,13 @@ class ContextMenu {
     required List<List<CtxMenuItem>> sections,
     double width = 220,
     Widget Function(BuildContext ctx, VoidCallback dismiss)? headerBuilder,
+    DColorSet? palette,
   }) {
+    // Палитра места вызова едет в меню — см. [DColors.carry]. Меню устройств
+    // звонка обязано быть тёмным, как сам звонок, при любой теме приложения.
+    // Второе меню пункта-подменю получает палитру первого явно: к моменту
+    // его показа первого в дереве уже нет.
+    palette ??= DColors.maybeOf(context);
     return showGeneralDialog(
       context: context,
       barrierColor: Colors.transparent,
@@ -52,12 +65,15 @@ class ContextMenu {
       barrierLabel: 'ctx',
       transitionDuration: DMotion.fast,
       pageBuilder: (ctx, a, b) {
-        return _CtxScaffold(
-          position: globalPosition,
-          sections: sections,
-          width: width,
-          animation: a,
-          headerBuilder: headerBuilder,
+        return DColors.carry(
+          palette,
+          _CtxScaffold(
+            position: globalPosition,
+            sections: sections,
+            width: width,
+            animation: a,
+            headerBuilder: headerBuilder,
+          ),
         );
       },
       transitionBuilder: (ctx, a, b, child) => child,
@@ -255,6 +271,30 @@ class _CtxRow extends StatelessWidget {
               // за кадр: к моменту вызова меню уже не в дереве, и открывать
               // окна можно без оглядки.
               final navigator = Navigator.of(context);
+              final submenu = item.submenu;
+              if (submenu != null && submenu.isNotEmpty) {
+                // Второе меню — справа от строки, в палитре этого меню.
+                final box = context.findRenderObject() as RenderBox?;
+                final at = box == null || !box.hasSize
+                    ? null
+                    : box.localToGlobal(Offset(box.size.width + 4, -6));
+                final palette = DColors.maybeOf(context);
+                final host = navigator.context;
+                navigator.pop();
+                if (at == null) return;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!host.mounted) return;
+                  unawaited(
+                    ContextMenu.show(
+                      host,
+                      globalPosition: at,
+                      palette: palette,
+                      sections: [submenu],
+                    ),
+                  );
+                });
+                return;
+              }
               final action = item.onTap;
               navigator.pop();
               if (action == null) return;
@@ -291,6 +331,8 @@ class _CtxRow extends StatelessWidget {
                   item.shortcut!,
                   style: DType.caption.copyWith(color: c.textDisabled),
                 ),
+              if (item.submenu != null)
+                Icon(Icons.chevron_right_rounded, size: 16, color: c.textDisabled),
             ],
           ),
         );

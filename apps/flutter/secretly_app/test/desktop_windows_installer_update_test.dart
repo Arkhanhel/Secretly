@@ -16,7 +16,10 @@ import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:secretly_app/ui/desktop/services/desktop_login_item_windows.dart';
 import 'package:secretly_app/ui/desktop/services/desktop_update_service.dart';
+
+import 'support/synthetic_pe.dart';
 
 String _feed({
   required String url,
@@ -58,6 +61,8 @@ void main() {
 
   setUp(() {
     tmp = Directory.systemTemp.createTempSync('secretly-installer-test');
+    // Отметка попытки и уборка — во временной папке теста, не в системной.
+    DesktopUpdateService.debugDownloadDir = Directory('${tmp.path}/dl');
   });
 
   tearDown(() {
@@ -204,7 +209,15 @@ void main() {
   group('кнопка «Обновить» на Windows', () {
     Future<({File file, String publicKeyB64, String signatureB64, int length})>
         signedSetup() async {
-      final bytes = utf8.encode('MZ fake installer ${'x' * 4000}');
+      // Настоящий (маленький) PE с ресурсом версии: с 01.10.2026 установщик
+      // запускается, только если его собственный номер сборки новее.
+      final bytes = buildSyntheticPe(
+        major: 1,
+        minor: 8,
+        patch: 62,
+        build: 633,
+        padding: 4000,
+      );
       final keys = await _sign(bytes);
       final file = File('${tmp.path}/Secretly-Setup-1.8.62-633-x64.exe')
         ..writeAsBytesSync(bytes);
@@ -348,6 +361,48 @@ void main() {
     test('одна кнопка: без выбора папки и страницы «готово»', () {
       expect(iss, contains('DisableDirPage=yes'));
       expect(iss, contains('DisableReadyPage=yes'));
+    });
+
+    test('ярлык на рабочем столе — по выбору, отмечен заранее', () {
+      expect(
+        iss,
+        contains('Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"'),
+      );
+      expect(
+        iss,
+        contains(
+          r'Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon',
+        ),
+      );
+      // «unchecked» сделал бы ответом по умолчанию «без ярлыка».
+      expect(iss.contains('Flags: unchecked'), isFalse);
+    });
+
+    test('🔴 удаление снимает автозапуск — тот, что пишет программа, и только свой',
+        () {
+      final i = iss.indexOf('procedure CurUninstallStepChanged');
+      expect(i, greaterThan(0));
+      final body = iss.substring(i);
+      // Ключ и имя значения — те же, что у программы.
+      expect(body, contains("'$kWindowsRunKeyPath', '$kWindowsRunValueName'"));
+      expect(
+        body,
+        contains("RegDeleteValue(HKEY_CURRENT_USER, '$kWindowsRunKeyPath'"),
+      );
+      expect(
+        body,
+        contains("'$kWindowsStartupApprovedPath', '$kWindowsRunValueName'"),
+      );
+      // Переносная копия пишет то же имя со своим путём — её не трогаем.
+      expect(body, contains(r"ExpandConstant('{app}\{#AppExe}')"));
+    });
+
+    test('номер сборки — четвёртой частью обеих версий файла', () {
+      expect(iss, contains('VersionInfoVersion={#AppVersion}.{#AppBuild}'));
+      expect(
+        iss,
+        contains('VersionInfoProductVersion={#AppVersion}.{#AppBuild}'),
+      );
     });
 
     test('🔴 ярлык в «Пуске» с AppUserModelID "Secretly" — как у уведомлений', () {

@@ -4,10 +4,11 @@
 import 'dart:async';
 import 'dart:io' as io;
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../widgets/telegram_wallpaper.dart' show ChatWallpaperAnimMode;
+import '../chat/attachment_save.dart' show clearAttachmentOpenCopiesSync;
 
 /// Tracks whether the desktop window is actually on screen.
 ///
@@ -74,6 +75,11 @@ class DesktopWindowActivity {
   /// рабочего стола), и тогда крестик обязан закрывать приложение целиком.
   static bool trayReady = false;
 
+  /// Приложение запущено автозапуском «свёрнутым»: окна на экране нет с
+  /// самого начала. Приложение отметит себя невидимым при первом построении —
+  /// иначе считало бы себя на экране (присутствие «в сети», анимации).
+  static bool startedHidden = false;
+
   void dispose() => visible.dispose();
 }
 
@@ -92,10 +98,16 @@ class DesktopWindowActivity {
 Future<void> quitDesktopApp({
   Future<void> Function()? destroy,
   void Function()? exitProcess,
+  void Function()? cleanup,
   Duration backstop = const Duration(seconds: 3),
 }) async {
   if (_quitting) return;
   _quitting = true;
+  // Расшифрованные копии, отданные внешним программам, не переживают сеанс
+  // (30.09.2026): стираем на выходе, а не только при следующем запуске.
+  try {
+    (cleanup ?? clearAttachmentOpenCopiesSync)();
+  } catch (_) {}
   final leave = exitProcess ?? () => io.exit(0);
   final timer = Timer(backstop, leave);
   try {
@@ -140,4 +152,34 @@ ChatWallpaperAnimMode desktopWallpaperAnimModeFor({
     return ChatWallpaperAnimMode.onEnter;
   }
   return setting;
+}
+
+/// Украшения движутся, только пока окно в фокусе (01.10.2026).
+///
+/// Рамки у портретов, эмодзи-статусы у имён, живые эмодзи в тексте — это
+/// декорация. Пока человек работает в другом приложении, на неё никто не
+/// смотрит, а каждый цикл заказывает кадр на каждом вsync и держит окно в
+/// непрерывной перерисовке. Правило то же, что у обоев
+/// ([desktopWallpaperAnimModeFor]), и то же, что записано в `onWindowBlur`:
+/// индикаторы (кружки загрузки и отправки, пульс связи) не гасим НИКОГДА —
+/// замерший кружок рядом с чужим окном читается как зависание. Поэтому обёртка
+/// ставится точечно, вокруг самой декорации, а не вокруг экрана.
+///
+/// Вложенный `TickerMode` только сужает: спрятанное окно и экран под
+/// настройками, звонком или замком гасят движение и без неё. Возврат фокуса
+/// продолжает анимацию с того же места.
+class DesktopDecorationMotion extends StatelessWidget {
+  const DesktopDecorationMotion({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: DesktopWindowActivity.focused,
+      builder: (context, focused, child) =>
+          TickerMode(enabled: focused, child: child!),
+      child: child,
+    );
+  }
 }

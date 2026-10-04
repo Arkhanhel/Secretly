@@ -372,6 +372,13 @@ class DColorSet {
 /// палитры не трогает ни один экран — это и позволило обновить вид без
 /// переписывания. См. docs/ТЗ_ОБНОВЛЕНИЕ_ВИЗУАЛА_ДЕСКТОПА_2026-09-13.md.
 const DColorSet kDColorsDark = DColorSet(
+  // 🔴 НЕЙТРАЛЬНЫЙ СЕРЫЙ ВМЕСТО СИНЕВЫ (01.10.2026, указание владельца: «фон
+  // отдаёт синим, сделай такими оттенками» — снимок #121212 / #151515 с
+  // разделителем #2A2A2A). Фоны, текст и нейтральные заглушки переведены с
+  // тёмно-синих (#0B1016, #0E141C, #93A1B3…) на серые той же светлоты;
+  // акценты (синий → фиолетовый), непрочитанное, «голос» и опасность — те же.
+  // Разделитель `borderDivider` (10 % белого) на #121212 и даёт #2A2A2A.
+  //
   // 🔴 Цвета ниже сверены с ИСХОДНИКОМ макета (14.09.2026), а не с видом на
   // снимке. Раньше часть значений была взята с глаз и отличалась на один-два
   // шага тона — по отдельности незаметно, вместе давало «почти тот, но не тот»
@@ -379,19 +386,19 @@ const DColorSet kDColorsDark = DColorSet(
   //
   // #07090C — цвет СТРАНИЦЫ, на которой лежит артборд; само окно в макете
   // #0B1016.
-  bg: Color(0xFF0B1016),
-  sidebar: Color(0xFF080C12),
-  titleBar: Color(0xFF121A24),
-  hoverBar: Color(0xFF222C3A),
+  bg: Color(0xFF121212),
+  sidebar: Color(0xFF0E0E0E),
+  titleBar: Color(0xFF181818),
+  hoverBar: Color(0xFF262626),
   accentSoft: Color(0xFF9AC5FA),
-  chatList: Color(0xFF0E141C),
-  detailsPanel: Color(0xFF0E141C),
-  railIconIdle: Color(0xFF8697AB),
-  thread: Color(0xFF0D131B),
-  threadGlow: Color(0xFF16202C),
-  threadEdge: Color(0xFF0A0E14),
+  chatList: Color(0xFF121212),
+  detailsPanel: Color(0xFF121212),
+  railIconIdle: Color(0xFF8E8E8E),
+  thread: Color(0xFF151515),
+  threadGlow: Color(0xFF1B1B1B),
+  threadEdge: Color(0xFF0F0F0F),
   // Поле ввода, всплывашки и карточки в макете — #131C26.
-  elevated: Color(0xFF131C26),
+  elevated: Color(0xFF1C1C1C),
   // · НАВЕДЕНИЕ — .07 ИЗ МАКЕТА (49 вхождений, единая величина на всё окно).
   //
   // Было ≈5.1 % — тише макета, и при нажатии сразу 10.2 %: наведение едва
@@ -409,11 +416,11 @@ const DColorSet kDColorsDark = DColorSet(
   borderSubtle: Color(0x12FFFFFF),
   borderMenu: Color(0x1FFFFFFF),
   borderDivider: Color(0x1AFFFFFF),
-  textPrimary: Color(0xFFE9EFF7),
-  textSecondary: Color(0xFF93A1B3),
-  textTertiary: Color(0xFF7E8DA0),
-  textDisabled: Color(0xFF6B7A8D),
-  textFaint: Color(0xFF4B5A6E),
+  textPrimary: Color(0xFFEDEDED),
+  textSecondary: Color(0xFFA3A3A3),
+  textTertiary: Color(0xFF8C8C8C),
+  textDisabled: Color(0xFF737373),
+  textFaint: Color(0xFF555555),
   accentPrimary: Color(0xFF4C8DF6),
   accentPrimaryAlt: Color(0xFF7C5CE0),
   // Мята созвона: демонстрация экрана, рамка сцены, галочки.
@@ -426,7 +433,7 @@ const DColorSet kDColorsDark = DColorSet(
   // Свой пузырь в макете — тот же градиент, что у активной плитки рейки.
   bubbleSelfStart: Color(0xFF4C8DF6),
   bubbleSelfEnd: Color(0xFF7C5CE0),
-  bubblePeer: Color(0xFF1B2430),
+  bubblePeer: Color(0xFF242424),
   // 🔴 ТРИ ЦВЕТА НЕПРОЧИТАННОГО, И КАЖДЫЙ НАЗЫВАЕТ СВОЁ (указание владельца
   // от 15.09.2026).
   //
@@ -440,8 +447,8 @@ const DColorSet kDColorsDark = DColorSet(
   unreadRoom: Color(0xFF7C5CE0),
   unreadChannel: Color(0xFFA78BFA),
   unreadRail: Color(0xFFF43F5E),
-  avatarNeutral: Color(0xFF2B3646),
-  avatarNeutralInk: Color(0xFFC8D4E2),
+  avatarNeutral: Color(0xFF2E2E2E),
+  avatarNeutralInk: Color(0xFFCFCFCF),
   // #6FA8F7 — синий значок и синий текст макета (встречается 28 раз).
   deliveryIndicator: Color(0xFF6FA8F7),
   mentionBg: Color(0x2D7C5CE0),
@@ -541,6 +548,24 @@ class DColors extends InheritedWidget {
     final brightness = MediaQuery.platformBrightnessOf(context);
     return brightness == Brightness.dark ? kDColorsDark : kDColorsLight;
   }
+
+  /// Палитра, которой окружено место [context], — или `null`, если её нет.
+  ///
+  /// Без подписки: нужна в момент открытия окна, а не для перерисовки.
+  static DColorSet? maybeOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<DColors>()?.colors;
+
+  /// 🔴 ОКНО НЕСЁТ ПАЛИТРУ ТОГО МЕСТА, ИЗ КОТОРОГО ЕГО ОТКРЫЛИ (28.09.2026).
+  ///
+  /// Диалог, меню и всплывающее окно строятся маршрутом корневого навигатора,
+  /// то есть в другом месте дерева, чем кнопка, которая их открыла. Раньше
+  /// палитра стояла ниже навигатора, окно её не видело и брало яркость ОС: на
+  /// светлой Windows при тёмной теме приложения все окна были белыми. Палитра
+  /// теперь стоит и над навигатором, но окно звонка принудительно тёмное — его
+  /// меню должно быть тёмным при любой теме, поэтому палитру берём у места
+  /// вызова и вкладываем в само окно.
+  static Widget carry(DColorSet? colors, Widget child) =>
+      colors == null ? child : DColors(colors: colors, child: child);
 
   @override
   bool updateShouldNotify(covariant DColors oldWidget) =>

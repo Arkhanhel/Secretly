@@ -51,6 +51,8 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../emoji/noto_lottie_normalize.dart';
+import '../services/desktop_ui_prefs.dart';
+import '../services/desktop_window_activity.dart' show DesktopDecorationMotion;
 
 /// Noto Emoji Animation codepoints. Auto-imported from the upstream
 /// manifest; do not edit by hand — re-run `tools/regen_noto_codepoints.py`
@@ -2132,4 +2134,48 @@ class _NotoEmojiLottieState extends State<NotoEmojiLottie>
           ),
         ),
       );
+}
+
+/// Эмодзи-статус рядом с именем — анимацией Noto, как на телефоне
+/// (29.09.2026).
+///
+/// Телефон крутит статус везде: в шапке, профиле и строках списка
+/// (`NotoStatusEmoji`). ПК показывал неподвижный текст — а на Windows это ещё
+/// и плоский Segoe вместо Noto. Здесь та же анимация со сторожем видимости
+/// [NotoEmojiLottie]: зацикленный знак крутится, только пока его видно.
+/// Выключенная «Анимация рамок и статусов» оставляет первый кадр.
+class DesktopStatusEmoji extends StatelessWidget {
+  const DesktopStatusEmoji({super.key, required this.emoji, this.size = 16});
+
+  final String emoji;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      label: emoji,
+      child: ExcludeSemantics(
+        child: ValueListenableBuilder<bool>(
+          valueListenable: DesktopUiPrefs.animatePeerCosmetics,
+          // 🔴 Ключ — по настройке (29.09.2026, разбор Р1): контроллер
+          // анимации заводится один раз, в initState. Без ключа выключенная
+          // настройка оставляла крутиться уже запущенный цикл (кадр на каждый
+          // вsync), а включённая — крутила Lottie своим контроллером, мимо
+          // сторожа видимости.
+          //
+          // Окно без фокуса — статус замирает (01.10.2026), см.
+          // [DesktopDecorationMotion].
+          builder: (context, animate, _) => DesktopDecorationMotion(
+            child: NotoEmojiLottie(
+              key: ValueKey<bool>(animate),
+              emoji: emoji,
+              size: size,
+              mode: animate ? NotoLottieMode.looping : NotoLottieMode.preview,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

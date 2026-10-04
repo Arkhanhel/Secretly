@@ -2146,6 +2146,38 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopJoinRoomLinkInvalid => 'Это не ссылка-приглашение в комнату';
 
   @override
+  String get desktopRoomLimitTitle => 'Достигнут предел комнат';
+
+  @override
+  String desktopRoomLimitCreate(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Можно создать не больше $count комнаты.',
+      many: 'Можно создать не больше $count комнат.',
+      few: 'Можно создать не больше $count комнат.',
+      one: 'Можно создать не больше $count комнаты.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String desktopRoomLimitJoin(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Можно состоять не больше чем в $count комнатах. Чтобы вступить в новую, выйдите из одной из прежних.',
+      many: 'Можно состоять не больше чем в $count комнатах. Чтобы вступить в новую, выйдите из одной из прежних.',
+      few: 'Можно состоять не больше чем в $count комнатах. Чтобы вступить в новую, выйдите из одной из прежних.',
+      one: 'Можно состоять не больше чем в $count комнате. Чтобы вступить в новую, выйдите из одной из прежних.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get desktopRoomLimitPremium => 'В Premium этот предел выше — подписка оформляется в приложении на телефоне.';
+
+  @override
   String get desktopOfflineLockTitle => 'Пароль после долгого отсутствия связи';
 
   @override
@@ -2254,6 +2286,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopViewerFailed => 'Не удалось показать файл';
 
   @override
+  String get desktopViewerPageFailed => 'Не удалось показать эту страницу';
+
+  @override
   String get desktopViewerTooLarge => 'Файл слишком большой для просмотра здесь';
 
   @override
@@ -2339,7 +2374,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopPairingTitle => 'Подключите Secretly Desktop';
 
   @override
-  String get desktopPairingHowTo => 'На телефоне откройте Secretly → Настройки → Устройства → «Подключить устройство» и отсканируйте этот QR-код.';
+  String desktopPairingHowTo(String settings, String devices, String button) {
+    return 'На телефоне откройте Secretly → $settings → $devices → «$button» и отсканируйте этот QR-код.';
+  }
 
   @override
   String get desktopPairingPreparingQr => 'Готовим QR…';
@@ -2883,6 +2920,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopGeneralLinkPreviewsOff => 'Ссылки уходят без карточки, страницы не открываются';
 
   @override
+  String get desktopGeneralDoubleClickReply => 'Ответ двойным щелчком';
+
+  @override
+  String get desktopGeneralDoubleClickReplyHint => 'Двойной щелчок по сообщению — ответить на него. По тексту — выделить слово';
+
+  @override
   String get desktopPowerAnimations => 'Анимации';
 
   @override
@@ -2928,7 +2971,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopNotifShowPreview => 'Показывать превью сообщения';
 
   @override
-  String get desktopNotifInSystem => 'В системных уведомлениях';
+  String get desktopNotifInSystem => 'В уведомлениях и окошках';
 
   @override
   String get desktopNotifDirectChats => 'Личные чаты';
@@ -2946,22 +2989,22 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopNotifSound => 'Звук';
 
   @override
+  String get desktopNotifWhileFocused => 'Когда окно открыто';
+
+  @override
+  String get desktopNotifWhileFocusedHint => 'Сообщения из других чатов — тоже уведомлением. Об открытом чате — никогда';
+
+  @override
+  String get desktopNotifOwnWindows => 'Уведомления как в Telegram';
+
+  @override
+  String get desktopNotifOwnWindowsHint => 'Свои окошки в углу экрана: не забирают фокус и ждут, пока над ними мышь. Выключено — системные уведомления Windows.';
+
+  @override
   String get desktopNotifDnd => 'Не беспокоить';
 
   @override
   String get desktopNotifDndHint => 'Отключить все уведомления';
-
-  @override
-  String get desktopWallAnimContinuous => 'Постоянно';
-
-  @override
-  String get desktopWallAnimOnEnter => 'При открытии чата';
-
-  @override
-  String get desktopWallAnimTap => 'По клику по фону';
-
-  @override
-  String get desktopWallAnimOff => 'Не анимировать';
 
   @override
   String get desktopWallpaperNavy => 'Ночной синий';
@@ -2994,10 +3037,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopWallpaperSky => 'Небо';
 
   @override
-  String get desktopWallpaperMidnight => 'Полночь';
-
-  @override
-  String get desktopAppearanceTitle => 'Оформление';
+  String get desktopWallpaperMidnight => 'Ночной';
 
   @override
   String get desktopAppearanceHint => 'Схема этого окна. Телефон живёт со своей — эта настройка никуда не уезжает.';
@@ -3006,16 +3046,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopAppearanceScheme => 'Схема';
 
   @override
-  String get desktopAppearanceSchemeHint => 'Тёмная, светлая или по системной';
-
-  @override
   String get desktopAppearanceDark => 'Тёмная';
 
   @override
   String get desktopAppearanceLight => 'Светлая';
-
-  @override
-  String get desktopAppearanceAuto => 'Авто';
 
   @override
   String get desktopAppearanceAccent => 'Акцент интерфейса';
@@ -3027,31 +3061,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopAppearanceWallpaper => 'Обои чата';
 
   @override
-  String get desktopAppearanceWallpaperHint => 'Фон чата для всех бесед.';
-
-  @override
-  String get desktopAppearanceLiveWallpaper => 'Живые обои';
-
-  @override
-  String get desktopAppearanceLiveWallpaperHint => 'Узор с мягким переливом. Тот же набор, что и на телефоне.';
-
-  @override
-  String get desktopAppearanceAnimBehaviour => 'Поведение анимации';
-
-  @override
-  String get desktopAppearanceAnimBehaviourHint => 'Когда узор оживает.';
-
-  @override
   String get desktopAppearanceWallPulse => 'Обои проводят сообщение';
 
   @override
   String get desktopAppearanceWallPulseHint => 'Волна света идёт по узору: вверх — когда отправляете, вниз — когда получаете.';
-
-  @override
-  String get desktopAppearanceEnable => 'Включить';
-
-  @override
-  String get desktopAppearanceLiveOnly => 'Работает только на живых обоях';
 
   @override
   String get desktopAppearanceBubbleStyle => 'Стиль пузырей сообщений';
@@ -3069,21 +3082,210 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopAppearanceIndicatorColour => 'Цвет индикаторов';
 
   @override
-  String get desktopAppearanceIndicatorColourHint => 'Галочки доставки и точка непрочитанного.';
+  String get desktopAppearanceTabTheme => 'Тема и текст';
 
   @override
-  String get desktopAppearanceDemoMode => 'Демо-режим';
+  String get desktopAppearanceTabWallpaper => 'Фон чата';
 
   @override
-  String get desktopAppearanceDemoHint => 'Изменения внешнего вида сохранятся, когда профиль будет привязан.';
+  String get desktopAppearanceTabMessages => 'Сообщения';
 
   @override
-  String get desktopAppearanceCurrentChoice => 'Текущий выбор';
+  String get desktopAppearanceReset => 'По умолчанию';
 
   @override
-  String desktopAppearanceThemeIs(Object name) {
-    return 'Тема: $name';
+  String get desktopAppearanceResetDone => 'Оформление вернулось к исходному';
+
+  @override
+  String get desktopAppearanceResetUndo => 'Вернуть';
+
+  @override
+  String get desktopAppearanceAutosave => 'Сохраняется автоматически';
+
+  @override
+  String get desktopAppearancePremiumOnly => 'Это — в Premium; подписка оформляется в приложении на телефоне';
+
+  @override
+  String get desktopAppearancePresets => 'Готовые наборы';
+
+  @override
+  String get desktopAppearancePresetsHint => 'Акцент, обои, пузыри и индикаторы — одним нажатием';
+
+  @override
+  String get desktopAppearancePresetClassic => 'Классика';
+
+  @override
+  String get desktopAppearancePresetOcean => 'Океан';
+
+  @override
+  String get desktopAppearancePresetSunset => 'Закат';
+
+  @override
+  String get desktopAppearancePresetForest => 'Лес';
+
+  @override
+  String get desktopAppearancePresetNight => 'Ночь';
+
+  @override
+  String get desktopAppearanceSystem => 'Системная';
+
+  @override
+  String get desktopAppearanceDensity => 'Плотность сообщений';
+
+  @override
+  String get desktopAppearanceDensityCozy => 'Уютная';
+
+  @override
+  String get desktopAppearanceDensityCompact => 'Компактная';
+
+  @override
+  String get desktopAppearanceWallpaperAllChats => 'Фон для всех бесед. Живые — с мягким переливом';
+
+  @override
+  String get desktopAppearanceStatic => 'Статичные';
+
+  @override
+  String get desktopAppearanceLive => 'Живые';
+
+  @override
+  String get desktopAppearanceLiveBadge => 'LIVE';
+
+  @override
+  String get desktopAppearanceDim => 'Затемнение';
+
+  @override
+  String get desktopAppearanceAnimPattern => 'Анимация узора';
+
+  @override
+  String get desktopAppearanceLiveOnlyBadge => 'только для живых обоев';
+
+  @override
+  String get desktopWallAnimShortContinuous => 'Постоянно';
+
+  @override
+  String get desktopWallAnimShortOnEnter => 'При открытии';
+
+  @override
+  String get desktopWallAnimShortTap => 'По клику';
+
+  @override
+  String get desktopWallAnimShortOff => 'Выкл.';
+
+  @override
+  String desktopAppearanceGoLive(Object link) {
+    return 'Выберите $link, чтобы настроить анимацию.';
   }
+
+  @override
+  String get desktopAppearanceGoLiveLink => 'живые обои';
+
+  @override
+  String get desktopAppearanceShape => 'Форма';
+
+  @override
+  String get desktopAppearanceShapeSharp => 'Острые';
+
+  @override
+  String get desktopAppearanceShapeMedium => 'Средние';
+
+  @override
+  String get desktopAppearanceShapeRound => 'Круглые';
+
+  @override
+  String get desktopAppearanceNamesMulti => 'Разноцветные';
+
+  @override
+  String get desktopAppearanceIndicatorHint => 'Галочки прочтения в списке чатов, ссылки и выделение текста';
+
+  @override
+  String get desktopAppearanceSummaryPrefix => 'Сейчас:';
+
+  @override
+  String get desktopAppearanceSummaryDark => 'тёмная схема';
+
+  @override
+  String get desktopAppearanceSummaryLight => 'светлая схема';
+
+  @override
+  String get desktopAppearanceSummarySystem => 'системная схема';
+
+  @override
+  String desktopAppearanceSummaryBubbles(Object name) {
+    return 'пузыри «$name»';
+  }
+
+  @override
+  String desktopAppearanceSummaryText(Object size) {
+    return 'текст $size';
+  }
+
+  @override
+  String get desktopAppearancePreview => 'Предпросмотр';
+
+  @override
+  String get desktopAppearancePreviewReplay => 'Переоткрыть';
+
+  @override
+  String get desktopAppearancePreviewReplayHint => 'Переоткрыть чат, чтобы увидеть анимацию';
+
+  @override
+  String get desktopAppearancePreviewIncoming => 'Входящее';
+
+  @override
+  String get desktopAppearancePreviewIncomingHint => 'Получить сообщение';
+
+  @override
+  String get desktopAppearancePreviewChat => 'Дизайн-команда';
+
+  @override
+  String get desktopAppearancePreviewMembers => '5 участников, 3 в сети';
+
+  @override
+  String desktopAppearancePreviewTyping(Object name) {
+    return '$name печатает…';
+  }
+
+  @override
+  String get desktopAppearancePreviewAnna => 'Аня';
+
+  @override
+  String get desktopAppearancePreviewMax => 'Максим';
+
+  @override
+  String get desktopAppearancePreviewLiza => 'Лиза';
+
+  @override
+  String get desktopAppearancePreviewMsg1 => 'Обновила обои в нашем чате — оцените';
+
+  @override
+  String get desktopAppearancePreviewMsg2 => 'Живые прям огонь. Особенно волна, когда пишешь';
+
+  @override
+  String get desktopAppearancePreviewMsg3 => 'Сейчас попробую поставить такие же';
+
+  @override
+  String get desktopAppearancePreviewMsg4 => 'А размер текста тоже можно поменять?';
+
+  @override
+  String get desktopAppearancePreviewMsg5 => 'Да, во «Внешнем виде». Подробнее — на www.secretlyapp.com';
+
+  @override
+  String get desktopAppearancePreviewOwnDefault => 'Проверяю, как смотрятся новые настройки';
+
+  @override
+  String get desktopAppearancePreviewReply1 => 'Выглядит отлично!';
+
+  @override
+  String get desktopAppearancePreviewReply2 => 'О, так гораздо лучше';
+
+  @override
+  String get desktopAppearancePreviewReply3 => 'Скинь потом, какие обои выбрал';
+
+  @override
+  String get desktopAppearancePreviewReply4 => 'Этот цвет пузырей тебе идёт';
+
+  @override
+  String get desktopAppearancePreviewReply5 => 'Ставлю себе такие же';
 
   @override
   String get desktopBackupEvery6h => 'Каждые 6 часов';
@@ -3399,9 +3601,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get desktopAccentCustom => 'Свой цвет';
-
-  @override
-  String get desktopAccentCustomChange => 'Свой цвет — изменить';
 
   @override
   String get desktopPairTitle => 'Подключить устройство';
@@ -3992,6 +4191,24 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopChatsSoundOff => 'Без звука';
 
   @override
+  String get desktopMuteMenu => 'Без звука…';
+
+  @override
+  String get desktopMuteFor1h => 'На 1 час';
+
+  @override
+  String get desktopMuteFor8h => 'На 8 часов';
+
+  @override
+  String get desktopMuteFor2d => 'На 2 дня';
+
+  @override
+  String get desktopMuteForever => 'Пока не включу';
+
+  @override
+  String get desktopMuteMentionsOnly => 'Только упоминания';
+
+  @override
   String get desktopChatsClearHistoryTitle => 'Очистить историю?';
 
   @override
@@ -4015,6 +4232,20 @@ class AppLocalizationsRu extends AppLocalizations {
   String desktopChatsDeleteChatBody(Object title) {
     return 'Чат «$title» полностью удалится с этого устройства.';
   }
+
+  @override
+  String get desktopRoomDeleteLeaveMenu => 'Удалить и покинуть';
+
+  @override
+  String desktopRoomDeleteLeaveTitle(String title) {
+    return 'Удалить и покинуть «$title»?';
+  }
+
+  @override
+  String get desktopRoomDeleteLeaveBody => 'Вы выйдете из комнаты и перестанете получать её сообщения, а переписка удалится с этого компьютера. Вернуться можно только по новому приглашению.';
+
+  @override
+  String get desktopRoomDeleteLeaveAction => 'Выйти и удалить';
 
   @override
   String get desktopChatsRooms => 'Комнаты';
@@ -4111,6 +4342,28 @@ class AppLocalizationsRu extends AppLocalizations {
   String desktopChatsOpenFailedShort(Object error) {
     return 'Не удалось открыть: $error';
   }
+
+  @override
+  String get desktopFileRiskTitle => 'Открыть этот файл?';
+
+  @override
+  String desktopFileRiskExtension(Object ext) {
+    return 'У файла расширение $ext: такой файл может запустить программу и навредить компьютеру. Открывайте его, только если доверяете отправителю.';
+  }
+
+  @override
+  String get desktopFileRiskNoExtension => 'У файла нет расширения: компьютер может запустить его как программу. Открывайте его, только если доверяете отправителю.';
+
+  @override
+  String desktopFileRiskMismatch(Object ext) {
+    return 'Отправитель выдал этот файл за снимок, звук, видео или PDF, но на деле у него расширение $ext. Так маскируют опасные файлы — открывайте его, только если доверяете отправителю.';
+  }
+
+  @override
+  String get desktopFileRiskShowInFolder => 'Показать в папке';
+
+  @override
+  String get desktopFileRiskOpenAnyway => 'Всё равно открыть';
 
   @override
   String desktopChatsPlayFailed(Object error) {
@@ -4304,6 +4557,55 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopRoomCopyInvite => 'Скопировать приглашение';
 
   @override
+  String get desktopRoomInviteCardTitle => 'Приглашение в комнату';
+
+  @override
+  String get desktopRoomInviteCardHint => 'Откройте карточку, чтобы посмотреть комнату и вступить.';
+
+  @override
+  String get desktopRoomInviteAlreadyMember => 'Вы уже в комнате';
+
+  @override
+  String get desktopRoomInviteApprovalRequired => 'Вход по одобрению';
+
+  @override
+  String get desktopRoomInviteDirectJoin => 'Вход сразу';
+
+  @override
+  String get desktopRoomInviteWithHistory => 'с историей';
+
+  @override
+  String get desktopRoomInviteWithoutHistory => 'без истории';
+
+  @override
+  String desktopRoomInviteInvitedBy(String name) {
+    return 'Приглашает: $name';
+  }
+
+  @override
+  String get desktopRoomInviteHistoryOn => 'История для новых участников включена';
+
+  @override
+  String get desktopRoomInviteHistoryOff => 'История для новых участников отключена';
+
+  @override
+  String get desktopRoomInviteJoin => 'Вступить';
+
+  @override
+  String get desktopRoomInviteRequestAccess => 'Запросить доступ';
+
+  @override
+  String get desktopRoomInviteOpenRequest => 'Открыть заявку';
+
+  @override
+  String get desktopRoomInviteOpenRoom => 'Открыть комнату';
+
+  @override
+  String desktopRoomInviteReplyQuote(String title) {
+    return 'Приглашение в «$title»';
+  }
+
+  @override
   String get desktopRoomSound => 'Звук';
 
   @override
@@ -4374,6 +4676,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get desktopRoomOffline => 'НЕ В СЕТИ';
+
+  @override
+  String get desktopRoomShowAllMembers => 'Показать всех';
 
   @override
   String desktopRoomMoreHidden(Object count) {
@@ -4626,6 +4931,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopProfileClearStatus => 'Убрать статус';
 
   @override
+  String get desktopProfileEmojiStatusPremiumOnly => 'Эмодзи-статус — в Premium; подписка оформляется в приложении на телефоне';
+
+  @override
   String desktopProfileApplyFailed(Object error) {
     return 'Не удалось применить: $error';
   }
@@ -4713,6 +5021,35 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopProfileInitialsStay => 'Останутся инициалы';
 
   @override
+  String get desktopAvatarOpen => 'Открыть фото';
+
+  @override
+  String get desktopAvatarCropTitle => 'Кадрировать фото';
+
+  @override
+  String get desktopAvatarCropHint => 'Перетащите снимок; колёсико мыши — масштаб';
+
+  @override
+  String get desktopAvatarRemoveConfirmTitle => 'Удалить фото?';
+
+  @override
+  String get desktopAvatarRemoveConfirmBody => 'Вместо фото будут буквы имени.';
+
+  @override
+  String get desktopAvatarRemoveOnPhone => 'Удалить можно на телефоне';
+
+  @override
+  String get desktopRoomPhotoUpdated => 'Фото группы обновлено';
+
+  @override
+  String get desktopRoomPhotoRemoved => 'Фото группы удалено';
+
+  @override
+  String desktopRoomPhotoFailed(String error) {
+    return 'Не удалось изменить фото группы: $error';
+  }
+
+  @override
   String get desktopProfileAccount => 'Аккаунт';
 
   @override
@@ -4744,6 +5081,15 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get desktopGalleryNoAudio => 'Нет аудио';
+
+  @override
+  String get desktopGalleryLoadFailed => 'Не удалось загрузить вложения';
+
+  @override
+  String get desktopGalleryRetry => 'Повторить';
+
+  @override
+  String get desktopSendMediaDroppedOnSwitch => 'Файлы не отправлены — окно отправки закрылось при смене чата.';
 
   @override
   String get desktopGalleryNoLinks => 'Нет ссылок';
@@ -5040,6 +5386,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopComposerRecordVoice => 'Записать голосовое';
 
   @override
+  String get desktopComposerVoiceUnsupported => 'Записывать голосовые на этом компьютере не получится.';
+
+  @override
   String get desktopComposerEnterSends => 'Enter — отправить · Shift+Enter — перенос';
 
   @override
@@ -5108,6 +5457,27 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get desktopShortcutsTitle => 'Горячие клавиши';
+
+  @override
+  String get desktopShortcutsUnread => 'Предыдущий / следующий непрочитанный';
+
+  @override
+  String get desktopShortcutsFolders => 'Предыдущая / следующая папка';
+
+  @override
+  String get desktopShortcutsMute => 'Выключить / включить звук чата';
+
+  @override
+  String get desktopShortcutsCloseChat => 'Закрыть панель, затем чат';
+
+  @override
+  String get desktopChatMutedToast => 'Звук чата выключен';
+
+  @override
+  String get desktopChatUnmutedToast => 'Звук чата включён';
+
+  @override
+  String get desktopChatsFolderReadAll => 'Прочитать все';
 
   @override
   String get desktopMediaCancelSend => 'Отменить отправку';
@@ -5377,6 +5747,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopCallFullscreen => 'Во весь экран';
 
   @override
+  String get desktopCallPinWindow => 'Поверх всех окон';
+
+  @override
+  String get desktopCallUnpinWindow => 'Не держать поверх окон';
+
+  @override
+  String get desktopCallsOwnWindow => 'Звонок в отдельном окне';
+
+  @override
+  String get desktopCallsOwnWindowHint => 'Звонок открывается своим окном: его можно увести на другой экран или закрепить поверх других программ.';
+
+  @override
   String get desktopCallExitFullscreen => 'Выйти из полноэкранного';
 
   @override
@@ -5564,6 +5946,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopClearForPeerHint => 'Сообщения пропадут и на его устройстве, и на всех ваших. Отменить это нельзя.';
 
   @override
+  String get desktopRoomClearForAll => 'И у всех участников комнаты';
+
+  @override
+  String get desktopRoomClearForAllHint => 'Сообщения исчезнут и у остальных. Отменить нельзя.';
+
+  @override
   String get desktopGifNoKey => 'GIF недоступны: сборка без ключа GIPHY';
 
   @override
@@ -5625,6 +6013,24 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get desktopSplashLoading => 'Загрузка профиля…';
+
+  @override
+  String get desktopStartupFailedTitle => 'Не удалось запустить Secretly';
+
+  @override
+  String get desktopStartupFailedBody => 'Попробуйте ещё раз. Если ошибка повторится, причину подскажет журнал запуска.';
+
+  @override
+  String get desktopStartupSlowTitle => 'Запуск идёт дольше обычного';
+
+  @override
+  String get desktopStartupSlowBody => 'Можно подождать ещё или начать запуск заново.';
+
+  @override
+  String get desktopStartupRetry => 'Повторить';
+
+  @override
+  String get desktopStartupOpenLogs => 'Открыть папку журнала';
 
   @override
   String get desktopOutgoingOnePhoto => 'Фото';
@@ -5962,6 +6368,32 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopCallLeaveFailed => 'Не удалось выйти из созвона: сервер не ответил. Попробуйте ещё раз.';
 
   @override
+  String get desktopCallRemoveParticipant => 'Убрать из созвона';
+
+  @override
+  String desktopCallRemoveParticipantTitle(String name) {
+    return 'Убрать $name из созвона?';
+  }
+
+  @override
+  String get desktopCallRemoveParticipantBody => 'Человек выйдет из созвона. Вернуться он сможет, присоединившись снова.';
+
+  @override
+  String get desktopCallRemoveFailed => 'Не удалось убрать из созвона';
+
+  @override
+  String get desktopCallLeaveTitle => 'Выйти из созвона?';
+
+  @override
+  String get desktopCallEndForAll => 'Завершить созвон для всех';
+
+  @override
+  String get desktopCallEndForAllHint => 'Остальные участники тоже выйдут из созвона.';
+
+  @override
+  String get desktopCallEndForAllFailed => 'Не удалось завершить созвон для всех';
+
+  @override
   String get desktopCallToggleFailed => 'Не удалось переключить: сервер не ответил. Попробуйте ещё раз.';
 
   @override
@@ -6003,9 +6435,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get desktopAppearanceTextSize => 'Размер текста';
 
   @override
-  String get desktopAppearanceTextSizeHint => 'Действует на всё окно. Отступы и значки остаются как нарисованы';
-
-  @override
   String get desktopThreadGoToDate => 'Перейти к дате';
 
   @override
@@ -6016,4 +6445,601 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get desktopHotkeyGlobalTaken => 'Это сочетание уже занято другой программой';
+
+  @override
+  String get desktopTrayOpen => 'Открыть Secretly';
+
+  @override
+  String desktopTrayUnread(int count) {
+    return 'Непрочитанных: $count';
+  }
+
+  @override
+  String get desktopTrayMute => 'Без звука';
+
+  @override
+  String get desktopTrayMuteHour => 'На 1 час';
+
+  @override
+  String get desktopTrayMuteEightHours => 'На 8 часов';
+
+  @override
+  String get desktopTrayMuteForever => 'Пока не включу';
+
+  @override
+  String get desktopTrayUnmute => 'Включить уведомления';
+
+  @override
+  String desktopTrayMutedUntil(String time) {
+    return 'Без звука до $time';
+  }
+
+  @override
+  String get desktopTrayQuit => 'Выйти из Secretly';
+
+  @override
+  String get desktopTrayHintTitle => 'Secretly работает в фоне';
+
+  @override
+  String get desktopTrayHintBody => 'Сообщения и звонки будут приходить. Значок — у часов: закрепите его, чтобы он всегда был на виду.';
+
+  @override
+  String get desktopDevicesMicrophone => 'Микрофон';
+
+  @override
+  String get desktopDevicesSpeakers => 'Динамики и наушники';
+
+  @override
+  String get desktopDevicesNoSpeakers => 'Динамики и наушники не найдены';
+
+  @override
+  String get desktopDevicesCamera => 'Камера';
+
+  @override
+  String get desktopCallsSystemTitle => 'Система';
+
+  @override
+  String get desktopCallsSystemSound => 'Настройки звука системы';
+
+  @override
+  String get desktopCallsSystemSoundHint => 'Громкость, устройство по умолчанию и доступ к микрофону';
+
+  @override
+  String get desktopCallsOpenSystem => 'Открыть';
+
+  @override
+  String get desktopMicLevel => 'Уровень микрофона';
+
+  @override
+  String get desktopMicLevelHint => 'Скажите что-нибудь — полоска должна двигаться. Микрофон включён, только пока открыт этот раздел, и звук никуда не уходит.';
+
+  @override
+  String get desktopMicNeedsAccess => 'Приложению ещё не разрешили пользоваться микрофоном.';
+
+  @override
+  String get desktopMicAllow => 'Разрешить';
+
+  @override
+  String get desktopMicNoAccess => 'Нет доступа к микрофону. Разрешите его в настройках системы.';
+
+  @override
+  String get desktopMicOpenFailed => 'Не удалось открыть микрофон. Возможно, он занят другой программой или к нему закрыт доступ.';
+
+  @override
+  String get desktopMicSystemFallback => 'Выбранный микрофон не удалось открыть для проверки — показываем микрофон системы.';
+
+  @override
+  String get desktopMediaOpenPrivacy => 'Открыть настройки';
+
+  @override
+  String get desktopMicTest => 'Проверить микрофон';
+
+  @override
+  String get desktopMicTestHint => 'Запишем 5 секунд и сразу проиграем в выбранных динамиках.';
+
+  @override
+  String get desktopMediaCheck => 'Проверить';
+
+  @override
+  String get desktopMediaCheckStop => 'Остановить';
+
+  @override
+  String desktopMicTestRecording(int seconds) {
+    return 'Идёт запись — говорите… $seconds с';
+  }
+
+  @override
+  String get desktopMicTestPlaying => 'Проигрываем запись…';
+
+  @override
+  String get desktopMediaPlaybackFailed => 'Не удалось проиграть звук.';
+
+  @override
+  String get desktopMediaPlaybackSystemOnly => 'Прозвучало в устройстве системы по умолчанию: выбранное открыть для проверки не удалось.';
+
+  @override
+  String get desktopMediaBusyInCall => 'Идёт звонок — проверки выключены, чтобы не мешать разговору.';
+
+  @override
+  String get desktopSpeakerTest => 'Проверить динамики';
+
+  @override
+  String get desktopSpeakerTestHint => 'Короткий сигнал в выбранном устройстве.';
+
+  @override
+  String get desktopSpeakerTestPlaying => 'Звучит…';
+
+  @override
+  String get desktopCameraPreview => 'Проверить камеру';
+
+  @override
+  String get desktopCameraPreviewHint => 'Камера включается, только пока показано превью.';
+
+  @override
+  String get desktopCameraPreviewShow => 'Показать';
+
+  @override
+  String get desktopCameraPreviewHide => 'Скрыть';
+
+  @override
+  String get desktopCameraPreviewFailed => 'Не удалось включить камеру. Возможно, она занята другой программой или к ней закрыт доступ.';
+
+  @override
+  String get desktopCameraMirror => 'Зеркалить моё видео';
+
+  @override
+  String get desktopCameraMirrorHint => 'Только у вас на экране — как в зеркале. Собеседники видят вас как обычно.';
+
+  @override
+  String get desktopRingtoneTitle => 'Мелодия звонка';
+
+  @override
+  String get desktopRingtoneVolume => 'Громкость';
+
+  @override
+  String get desktopRingtoneVolumeHint => 'Насколько громко звучит входящий звонок на этом компьютере.';
+
+  @override
+  String get desktopRingtoneListen => 'Послушать';
+
+  @override
+  String get desktopRingtoneSilent => 'Без звука — о звонке скажет только окно.';
+
+  @override
+  String get desktopRoomEditTitle => 'Изменить группу';
+
+  @override
+  String get desktopRoomEditName => 'Название';
+
+  @override
+  String get desktopRoomEditNameHint => 'Название группы';
+
+  @override
+  String get desktopRoomEditNameEmpty => 'Введите название';
+
+  @override
+  String get desktopRoomEditDescription => 'Описание';
+
+  @override
+  String get desktopRoomEditDescriptionHint => 'О чём эта группа';
+
+  @override
+  String get desktopRoomEditPhotoChoose => 'Выбрать фото…';
+
+  @override
+  String get desktopRoomEditPhotoRemove => 'Удалить фото';
+
+  @override
+  String get desktopRoomEditSaved => 'Группа обновлена';
+
+  @override
+  String get desktopRoomPermissionsMenu => 'Разрешения';
+
+  @override
+  String get desktopRoomPermissionsTitle => 'Разрешения участников';
+
+  @override
+  String get desktopRoomPermissionsSaved => 'Разрешения сохранены';
+
+  @override
+  String get desktopRoomPermMembersSection => 'Что могут участники';
+
+  @override
+  String get desktopRoomPermSendText => 'Писать сообщения';
+
+  @override
+  String get desktopRoomPermSendMedia => 'Отправлять фото, видео и файлы';
+
+  @override
+  String get desktopRoomPermPin => 'Закреплять сообщения';
+
+  @override
+  String get desktopRoomPermAddMembers => 'Добавлять участников';
+
+  @override
+  String get desktopRoomAddMembers => 'Добавить участников';
+
+  @override
+  String get desktopRoomAddMembersSearch => 'Имя или Secretly ID';
+
+  @override
+  String get desktopRoomAddMembersAlready => 'Уже в комнате';
+
+  @override
+  String get desktopRoomAddMembersNone => 'Никого не нашлось';
+
+  @override
+  String get desktopRoomAddMembersNoContacts => 'Контактов пока нет. Пригласите людей ссылкой.';
+
+  @override
+  String desktopRoomAddMembersAction(int count) {
+    return 'Добавить: $count';
+  }
+
+  @override
+  String desktopRoomMembersAdded(int count) {
+    return 'Добавлено участников: $count';
+  }
+
+  @override
+  String get desktopRoomInviteLinksMenu => 'Ссылки-приглашения';
+
+  @override
+  String get desktopRoomAuditLog => 'Недавние действия';
+
+  @override
+  String get desktopRoomAuditLogEmpty => 'Пока ничего не происходило';
+
+  @override
+  String get desktopRoomAuditLogHint => 'Вступления, выходы, роли и настройки — как их видел этот компьютер.';
+
+  @override
+  String get desktopRoomPermChangeInfo => 'Менять название, фото и описание';
+
+  @override
+  String get desktopRoomPermChangeTag => 'Менять свою метку';
+
+  @override
+  String get desktopRoomPermJoinSection => 'Вступление';
+
+  @override
+  String get desktopRoomPermApproval => 'Вступление только после одобрения';
+
+  @override
+  String get desktopRoomPermHistory => 'История для новых участников';
+
+  @override
+  String get desktopRoomPermHistoryHint => 'Новые участники видят сообщения, отправленные до них';
+
+  @override
+  String get desktopRoomPermReactions => 'Реакции';
+
+  @override
+  String get desktopRoomReactionsAll => 'Все';
+
+  @override
+  String get desktopRoomReactionsSome => 'Избранные';
+
+  @override
+  String get desktopRoomReactionsNone => 'Никаких';
+
+  @override
+  String get desktopRoomPermSlowMode => 'Медленный режим';
+
+  @override
+  String get desktopRoomPermSlowModeHint => 'Как часто каждый участник может отправлять сообщение';
+
+  @override
+  String get desktopRoomSlowOff => 'Выкл.';
+
+  @override
+  String desktopRoomSlowSeconds(int count) {
+    return '$count с';
+  }
+
+  @override
+  String desktopRoomSlowMinutes(int count) {
+    return '$count мин';
+  }
+
+  @override
+  String desktopRoomSlowHours(int count) {
+    return '$count ч';
+  }
+
+  @override
+  String get desktopRoomDelete => 'Удалить группу';
+
+  @override
+  String get desktopRoomDeleteTitle => 'Удалить группу для всех?';
+
+  @override
+  String desktopRoomDeleteBody(String title) {
+    return '«$title» исчезнет у всех участников вместе с перепиской. Это нельзя отменить.';
+  }
+
+  @override
+  String get desktopRoomDeleted => 'Группа удалена';
+
+  @override
+  String get desktopRoomOwnerLeaveTitle => 'Вы владелец группы';
+
+  @override
+  String get desktopRoomOwnerLeaveBody => 'Перед выходом передайте группу другому участнику — или удалите её для всех.';
+
+  @override
+  String get desktopRoomOwnerLeaveNoMembers => 'В группе больше никого нет — её можно только удалить.';
+
+  @override
+  String get desktopRoomOwnerLeaveTransfer => 'Передать и выйти';
+
+  @override
+  String get desktopComposerSendHintShift => 'Отправить · Shift+Enter\nПравая кнопка — отправить позже';
+
+  @override
+  String get desktopWallpaperUseDefault => 'Как в настройках';
+
+  @override
+  String get desktopWallpaperClassic => 'Классика';
+
+  @override
+  String get desktopWallpaperStandard => 'Стандартные';
+
+  @override
+  String desktopWallpaperProfilePhoto(int n) {
+    return 'Фото $n';
+  }
+
+  @override
+  String get desktopChatWallpaperTitle => 'Обои чата';
+
+  @override
+  String get desktopChatWallpaperMenu => 'Обои чата…';
+
+  @override
+  String get desktopChatWallpaperSaved => 'Обои этого чата сохранены';
+
+  @override
+  String get desktopWallpaperPremiumOnly => 'Эти обои — в Premium; подписка оформляется в приложении на телефоне';
+
+  @override
+  String get desktopGeneralStartMinimized => 'Запускать свёрнутым';
+
+  @override
+  String get desktopGeneralStartMinimizedHint => 'При входе в систему окно не открывается — Secretly ждёт в трее';
+
+  @override
+  String get desktopGeneralCloseToTray => 'Закрывать в трей';
+
+  @override
+  String get desktopGeneralCloseToTrayOn => 'Крестик прячет окно — сообщения и звонки продолжают приходить';
+
+  @override
+  String get desktopGeneralCloseToTrayOff => 'Крестик закрывает Secretly — ничего не придёт, пока не откроете снова';
+
+  @override
+  String get desktopGeneralLaunchNeedsApprovalWindows => 'Автозапуск выключен в «Диспетчере задач» → «Автозагрузка» — включите Secretly там';
+
+  @override
+  String get desktopSupportAttachLog => 'Приложить журнал';
+
+  @override
+  String get desktopSupportLogEmpty => 'Журнал пока пуст';
+
+  @override
+  String get desktopDevicesAddComputerTitle => 'Ещё один компьютер';
+
+  @override
+  String get desktopDevicesAddComputerHint => 'Компьютер подключают с телефона. Установите Secretly на другой компьютер и выберите там «Войти через телефон», затем на телефоне откройте Настройки → Устройства → «Подключить устройство» и отсканируйте QR-код с экрана того компьютера.';
+
+  @override
+  String get desktopSettingsSignOutBodyOnlyDevice => 'Этот компьютер — единственное устройство с этим аккаунтом. После выхода аккаунт можно вернуть только набором восстановления — без него его не вернёт никто, включая нас. Сначала убедитесь, что набор сохранён.';
+
+  @override
+  String get desktopSettingsSignOutBodyUnknown => 'С этого компьютера будут удалены переписка, ключи и кэш. Если аккаунт есть и на другом устройстве, там он останется. Если этот компьютер — его единственное устройство, вернуть аккаунт можно будет только набором восстановления.';
+
+  @override
+  String desktopPairingRetryIn(Object seconds) {
+    return 'Следующая попытка через $seconds с';
+  }
+
+  @override
+  String get desktopKitReadyTitle => 'Набор восстановления готов';
+
+  @override
+  String get desktopKitReadyBody => 'Храните его вне этого компьютера — на флешке, в менеджере паролей или на бумаге. Набор вместе с паролем открывает аккаунт, поэтому держите их раздельно.';
+
+  @override
+  String get desktopKitSaveToFile => 'Сохранить в файл…';
+
+  @override
+  String get desktopKitSaveDialogTitle => 'Сохранить набор восстановления';
+
+  @override
+  String desktopKitSavedTo(Object path) {
+    return 'Сохранено в файл: $path';
+  }
+
+  @override
+  String desktopKitSaveFailed(Object error) {
+    return 'Не удалось сохранить файл: $error';
+  }
+
+  @override
+  String get desktopKitShowQr => 'Показать QR-код и текст';
+
+  @override
+  String get desktopKitSavedElsewhere => 'Сохранено другим способом';
+
+  @override
+  String get desktopKitConfirmTitle => 'Набор точно сохранён?';
+
+  @override
+  String get desktopKitConfirmBody => 'Подтверждайте, только если вы скопировали текст набора или сфотографировали его QR-код и убрали в надёжное место вне этого компьютера. Без набора аккаунт не восстановить.';
+
+  @override
+  String get desktopKitConfirmYes => 'Да, сохранён';
+
+  @override
+  String get desktopAuthKitConfirmed => 'Вы подтвердили, что набор хранится в надёжном месте. По нему аккаунт можно вернуть.';
+
+  @override
+  String get desktopAboutSourceCode => 'Исходный код';
+
+  @override
+  String desktopAboutLicenseLine(Object url) {
+    return 'Лицензия: GNU AGPL-3.0. Исходный код: $url';
+  }
+
+  @override
+  String get desktopProfileLinkTitle => 'Открыть этот чат?';
+
+  @override
+  String desktopProfileLinkBody(String name, String id) {
+    return 'Ссылка ведёт в переписку. Собеседник: $name ($id).';
+  }
+
+  @override
+  String desktopProfileLinkBodyUnknown(String id) {
+    return 'Ссылка ведёт в переписку с профилем $id.';
+  }
+
+  @override
+  String get desktopProfileLinkOpen => 'Открыть чат';
+
+  @override
+  String desktopUpdateAttemptFailed(String reason) {
+    return 'Обновление не установилось: $reason';
+  }
+
+  @override
+  String get desktopUpdateFailureDownload => 'файл не скачался';
+
+  @override
+  String get desktopUpdateFailureVerification => 'скачанный файл не прошёл проверку и удалён, не запускаясь';
+
+  @override
+  String get desktopUpdateFailureLaunch => 'установщик не запустился';
+
+  @override
+  String get desktopUpdateFailureNotInstalled => 'после установщика работает прежняя версия';
+
+  @override
+  String get desktopUpdateRetry => 'Повторить';
+
+  @override
+  String get desktopRestoreTakeOverTitle => 'Компьютер станет устройством, сделавшим копию';
+
+  @override
+  String get desktopRestoreTakeOverBody => 'Копию сделало другое устройство — например, ваш телефон. После восстановления компьютер займёт его место. Если то устройство ещё работает, сообщения будут приходить только на одно из двух, а второе может перестать расшифровывать чаты или потерять связь с сервером. Восстанавливайте так, только если того устройства больше нет. Чтобы пользоваться компьютером вместе с телефоном, вернитесь назад и привяжите компьютер по QR-коду.';
+
+  @override
+  String get desktopRestoreTakeOverConfirm => 'Всё равно восстановить';
+
+  @override
+  String get desktopServerBackupReplaceTitle => 'Заменить копию на сервере?';
+
+  @override
+  String get desktopServerBackupReplaceBody => 'На сервере хранится одна копия на аккаунт. Копия с этого компьютера заменит ту, что сделал телефон или другое ваше устройство, и прежнюю вернуть будет нельзя. В неё войдёт только история, которая есть на этом компьютере.';
+
+  @override
+  String get desktopServerBackupReplaceConfirm => 'Заменить';
+
+  @override
+  String get desktopBackupAutoPasswordMissing => 'не задан пароль копии';
+
+  @override
+  String get desktopBackupAutoPasswordWeak => 'пароль копии больше не отвечает требованиям';
+
+  @override
+  String get desktopBackupSetPassword => 'Задать пароль копии';
+
+  @override
+  String get desktopSupportLogConfirmTitle => 'Приложить журнал?';
+
+  @override
+  String desktopSupportLogConfirmBody(String size) {
+    return '$size служебных записей программы за последнее время. Посмотрите, что в них, прежде чем прикладывать: журнал уйдёт в поддержку вместе с письмом.';
+  }
+
+  @override
+  String get desktopSupportLogView => 'Посмотреть';
+
+  @override
+  String get desktopSupportLogAttachConfirm => 'Приложить';
+
+  @override
+  String get desktopSupportLogViewTitle => 'Что в журнале';
+
+  @override
+  String get desktopDevicesEndNotConfirmed => 'сервер этого не подтвердил. Попробуйте позже.';
+
+  @override
+  String get desktopPrivacyScreenCaptureTitle => 'Защита от снимков экрана';
+
+  @override
+  String get desktopPrivacyScreenCaptureSwitch => 'Скрывать окна Secretly от снимков и записи экрана';
+
+  @override
+  String get desktopPrivacyScreenCaptureHint => 'Снимки, запись и демонстрация экрана — в том числе ваша собственная демонстрация в звонке — не покажут содержимое окон Secretly. Сфотографировать экран это не мешает, а некоторые программы захвата и версии системы могут эту просьбу не соблюдать.';
+
+  @override
+  String get desktopPrivacyScreenCaptureFailed => 'Система не приняла защиту от снимков экрана.';
+
+  @override
+  String get desktopSoundMessagesTitle => 'Звук сообщений';
+
+  @override
+  String get desktopSoundMessagesHint => 'Звучит вместе с уведомлением о сообщении на этом компьютере.';
+
+  @override
+  String get desktopSoundMutedNote => 'Звук уведомлений выключен выше — выбранный звук не прозвучит.';
+
+  @override
+  String get desktopSoundInChatTitle => 'Звук в открытом чате';
+
+  @override
+  String get desktopSoundInChatSwitch => 'Новые сообщения в открытом чате';
+
+  @override
+  String get desktopSoundInChatHint => 'Тихий звук вместо уведомления, пока чат открыт в активном окне.';
+
+  @override
+  String get desktopSoundNameBubble => 'Пузырёк';
+
+  @override
+  String get desktopSoundNameBubbles => 'Пузыри';
+
+  @override
+  String get desktopSoundNameDrip => 'Капель';
+
+  @override
+  String get desktopSoundNamePing => 'Пинг';
+
+  @override
+  String get desktopSoundNameSplash => 'Всплеск';
+
+  @override
+  String get desktopSoundNameDrop => 'Капля';
+
+  @override
+  String get desktopSoundNameTone => 'Тон';
+
+  @override
+  String get desktopSoundNameKey => 'Клавиша';
+
+  @override
+  String get desktopSoundNameClick => 'Щелчок';
+
+  @override
+  String get desktopSoundNameSwitch => 'Тумблер';
+
+  @override
+  String get desktopSoundNameMelody => 'Мелодия';
+
+  @override
+  String get desktopSoundNamePulse => 'Пульс';
+
+  @override
+  String get desktopSoundNameDefault => 'По умолчанию';
 }

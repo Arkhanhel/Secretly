@@ -2,10 +2,12 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:async';
-import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import '../../services/desktop_file_probe.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 import '../../../../app/app_controller.dart';
@@ -27,11 +29,15 @@ import '../../primitives/context_menu.dart';
 import '../../primitives/desktop_button.dart';
 import '../../primitives/desktop_dialog.dart';
 import '../../primitives/desktop_popover.dart';
+import '../../primitives/editable_avatar.dart';
 import '../../primitives/hover_listener.dart';
+import '../outgoing_media.dart' show OutgoingMediaPrep;
+import 'avatar_crop_dialog.dart';
 import 'avatar_preview_dialog.dart';
 import 'desktop_media_gallery.dart';
 import 'details_action_row.dart';
 import 'details_headline.dart';
+import 'room_manage_dialogs.dart';
 import 'details_info_section.dart';
 import 'room_notes_pane.dart';
 import 'details_tabs.dart';
@@ -40,6 +46,11 @@ import 'room_invite_share.dart';
 import '../../../../app/message_command_utils.dart' show RoomTopicRef;
 import '../../../premium/cosmetics_catalog.dart'
     show coverBackWidgetFor, coverFrontWidgetFor;
+import '../../primitives/desktop_snackbar.dart';
+import '../../primitives/desktop_screen_window.dart';
+import '../mute_choice.dart';
+import '../clear_history_dialog.dart';
+import '../../../room_details_screen.dart' show RoomInviteLinksScreen;
 
 /// Панель подробностей комнаты.
 ///
@@ -578,8 +589,15 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
     if (policy == null) return const <List<CtxMenuItem>>[];
     final isSelf = member.profileId == widget.controller.profileId.trim();
     final roles = _assignableRoles(member);
-    final canRemove = policy.canRemoveMembers && !isSelf && !member.isOwner;
-    final canBan = policy.canBanMembers && !isSelf && !member.isOwner;
+    // 🔴 Тем же правилом старшинства, что у контроллера
+    // (`_canModerateRoomMember`): админ не трогает админа, модератор — только
+    // рядовых. Раньше пункты показывались всем, у кого есть право вообще, и
+    // нажатие кончалось отказом (ТЗ «ПК как Telegram» §2, ошибка 5).
+    final outranks = roomRoleOutranks(policy.role, member.role);
+    final canRemove =
+        policy.canRemoveMembers && !isSelf && !member.isOwner && outranks;
+    final canBan =
+        policy.canBanMembers && !isSelf && !member.isOwner && outranks;
     final canTransfer = policy.isOwner && !isSelf && member.isActive;
 
     final sections = <List<CtxMenuItem>>[];
@@ -748,6 +766,29 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
   /// (отозвана / просрочена / исчерпана) были описаны в одном месте.
   RoomInviteLink? _bestInviteLink() => bestRoomInviteLink(_inviteLinks);
 
+  /// «Без звука» со сроком — тем же правилом, что в списке чатов.
+  Future<void> _applyMute(DesktopMuteChoice choice) async {
+    setState(() => _muted = true);
+    try {
+      if (choice == DesktopMuteChoice.forever) {
+        await widget.controller.setChatMuted(convoId: _groupId, muted: true);
+      } else {
+        await widget.controller.setChatMute(
+          convoId: _groupId,
+          untilMs: desktopMuteUntilMs(
+            choice,
+            nowMs: DateTime.now().millisecondsSinceEpoch,
+          ),
+          mentionsOnly: choice == DesktopMuteChoice.mentionsOnly,
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _muted = false);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
+    }
+  }
+
   Future<void> _toggleMute() async {
     final next = !_muted;
     setState(() => _muted = next);
@@ -767,7 +808,7 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _pinned = !next);
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
@@ -784,29 +825,49 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _archived = !next);
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
   Future<void> _clearHistory() async {
-    final ok = await _confirm(
+    // Админу — галочка «и у всех участников» (ТЗ «ПК как Telegram» §2):
+    // контроллер умел давно (`clearChatHistoryEverywhere`), на ПК было
+    // только «у себя». Не отмечена по умолчанию и не запоминается.
+    final forAll =
+        !isDemoRoomId(_groupId) && (_policy?.canManageSettings ?? false);
+    final result = await confirmClearWithPeer(
+      context,
       title: l10n.desktopRoomClearTitle,
       body: l10n.desktopRoomClearBody,
       okLabel: l10n.desktopChatsClear,
-      danger: true,
+      peerTitle: null,
+      forAllLabel: forAll ? l10n.desktopRoomClearForAll : null,
+      forAllHint: forAll ? l10n.desktopRoomClearForAllHint : null,
     );
-    if (ok != true) return;
+    if (result == null) return;
     try {
-      await widget.controller.clearChatHistory(convoId: _groupId);
+      if (forAll && result.alsoForPeer) {
+        await widget.controller.clearChatHistoryEverywhere(convoId: _groupId);
+      } else {
+        await widget.controller.clearChatHistory(convoId: _groupId);
+      }
       if (!mounted) return;
       _toast(l10n.desktopChatsHistoryCleared);
     } catch (e) {
       if (!mounted) return;
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
   Future<void> _leaveRoom() async {
+    // 🔴 ВЛАДЕЛЕЦ НЕ МОЖЕТ ПРОСТО ВЫЙТИ (28.09.2026). Раньше контроллер
+    // отвечал английской строкой «Transfer room ownership before leaving this
+    // room.» на любом языке, и дальше человеку было некуда идти. Как у
+    // Telegram: выбрать, кому отдать группу, — или удалить её для всех.
+    if (_policy?.isOwner ?? false) {
+      await _leaveAsOwner();
+      return;
+    }
     final ok = await _confirm(
       title: l10n.desktopRoomLeaveTitle,
       body:
@@ -821,7 +882,282 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
       widget.onClose();
     } catch (e) {
       if (!mounted) return;
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
+    }
+  }
+
+  Future<void> _leaveAsOwner() async {
+    final choice = await showRoomOwnerLeaveDialog(
+      context,
+      candidates: roomOwnershipCandidates(
+        _members,
+        selfProfileId: widget.controller.profileId,
+      ),
+      nameOf: _memberName,
+    );
+    if (choice == null || !mounted) return;
+    if (choice.delete) {
+      await _deleteRoom();
+      return;
+    }
+    final next = choice.nextOwner;
+    if (next == null) return;
+    try {
+      await widget.controller.transferRoomOwnership(
+        groupId: _groupId,
+        nextOwnerProfileId: next.profileId,
+      );
+      await widget.controller.leaveRoom(_groupId);
+      if (!mounted) return;
+      widget.onClose();
+    } catch (e) {
+      if (!mounted) return;
+      _toast(_roomActionErrorText(e), danger: true);
+    }
+  }
+
+  /// «Добавить участников» — из контактов, с поиском (ТЗ «ПК как Telegram»
+  /// §2). Протокол умел это давно (`addGroupMembers`), на ПК входа не было:
+  /// позвать можно было только ссылкой.
+  Future<void> _addMembers() async {
+    final List<Contact> contacts;
+    try {
+      contacts = (await widget.controller.listContacts())
+          .where((c) => !widget.controller.isSavedMessagesConvo(c.profileId))
+          .toList(growable: false);
+    } catch (e) {
+      if (!mounted) return;
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
+      return;
+    }
+    // Кто в сети — из переписок: у самого контакта отметки присутствия нет
+    // (то же правило, что у телефона).
+    final online = <String, bool>{};
+    try {
+      for (final convo in await widget.controller.listConversations()) {
+        final pid = (convo.peerProfileId ?? '').trim();
+        if (pid.isNotEmpty) online[pid] = convo.isOnline;
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    final inRoom = {
+      for (final m in _members)
+        if (m.isActive) m.profileId,
+    };
+    final candidates = [
+      for (final c in contacts)
+        RoomAddCandidate(
+          profileId: c.profileId,
+          name: (c.displayName ?? '').trim().isNotEmpty
+              ? c.displayName!.trim()
+              : c.profileId,
+          avatarPath: c.avatarPath,
+          online: online[c.profileId] ?? false,
+          inRoom: inRoom.contains(c.profileId),
+        ),
+    ]..sort((a, b) {
+        if (a.inRoom != b.inRoom) return a.inRoom ? 1 : -1;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+    final picked = await showRoomAddMembersDialog(
+      context,
+      candidates: candidates,
+    );
+    if (picked == null || picked.isEmpty || !mounted) return;
+    try {
+      await widget.controller.addGroupMembers(
+        groupId: _groupId,
+        memberProfileIds: picked.toList(growable: false),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _toast(_roomActionErrorText(e), danger: true);
+      return;
+    }
+    if (!mounted) return;
+    _toast(l10n.desktopRoomMembersAdded(picked.length));
+    await _refresh();
+  }
+
+  /// «Ссылки-приглашения»: срок, лимит, одобрение, отзыв — мобильный экран
+  /// целиком, окном посередине (решение 13.09: вторая реализация разошлась бы
+  /// с телефонной). После него ссылки перечитываются: отозванная не должна
+  /// копироваться из панели (ТЗ §2, ошибка 4).
+  Future<void> _openInviteLinks() async {
+    await showDesktopScreenWindow<void>(
+      context,
+      builder: (_) => RoomInviteLinksScreen(
+        controller: widget.controller,
+        groupId: _groupId,
+      ),
+    );
+    if (!mounted) return;
+    await _loadInviteLinks();
+  }
+
+  /// «Недавние действия» — журнал комнаты, как «Журнал действий» телефона.
+  Future<void> _openAuditLog() async {
+    final List<({int createdAtMs, String text})> entries;
+    try {
+      entries = await widget.controller.loadRoomAuditLog(_groupId);
+    } catch (e) {
+      if (!mounted) return;
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
+      return;
+    }
+    if (!mounted) return;
+    await showRoomAuditLogDialog(
+      context,
+      entries: entries,
+      timeLabel: (ms) => desktopTimeLabel(ms, l10n),
+    );
+  }
+
+  /// «Изменить группу»: название, описание, фото.
+  Future<void> _editRoom() async {
+    final result = await showRoomEditDialog(
+      context,
+      groupId: _groupId,
+      title: widget.conversation.title,
+      description: _settings?.description ?? '',
+      avatarPath: widget.conversation.avatarPath,
+    );
+    if (result == null || !mounted) return;
+    try {
+      await widget.controller.updateRoomProfile(
+        groupId: _groupId,
+        title: result.title,
+        description: result.description.isEmpty ? null : result.description,
+        avatarBytes: result.avatarBytes,
+        clearAvatar: result.clearAvatar,
+      );
+      if (!mounted) return;
+      _toast(l10n.desktopRoomEditSaved);
+      unawaited(widget.vm.refreshNow());
+      unawaited(_refresh());
+    } catch (e) {
+      if (!mounted) return;
+      _toast(_roomActionErrorText(e), danger: true);
+    }
+  }
+
+  /// Менять фото группы можно тому, кто меняет её данные; в демо — нет.
+  bool get _canEditPhoto =>
+      !isDemoRoomId(_groupId) && (_policy?.canChangeGroupInfo ?? false);
+
+  /// «Выбрать фото…» у портрета группы: файл → кадрирование → загрузка.
+  Future<void> _pickRoomPhoto() async {
+    final picked = await FilePicker.platform.pickFiles(type: FileType.image);
+    final file = picked?.files.firstOrNull;
+    if (file == null || !mounted) return;
+    final path = file.path;
+    final bytes = path == null
+        ? file.bytes
+        : await OutgoingMediaPrep.decodableImageBytes(path);
+    if (!mounted) return;
+    final Uint8List? cropped;
+    try {
+      cropped = (bytes == null || bytes.isEmpty)
+          ? throw const FormatException('empty')
+          : await showDesktopAvatarCropDialog(
+              context,
+              bytes: bytes,
+              round: false,
+            );
+    } on FormatException {
+      if (mounted) _toast(l10n.desktopProfileReadFailed, danger: true);
+      return;
+    }
+    if (cropped == null || !mounted) return;
+    try {
+      await widget.controller.setRoomAvatarFromImageBytes(
+        groupId: _groupId,
+        bytes: cropped,
+      );
+      if (!mounted) return;
+      _toast(l10n.desktopRoomPhotoUpdated);
+      unawaited(widget.vm.refreshNow());
+      unawaited(_refresh());
+    } catch (e) {
+      if (!mounted) return;
+      _toast(l10n.desktopRoomPhotoFailed(_roomActionErrorText(e)), danger: true);
+    }
+  }
+
+  /// «Удалить фото» у портрета группы — с подтверждением.
+  Future<void> _confirmRemoveRoomPhoto() async {
+    final ok = await DesktopDialog.show<bool>(
+      context,
+      title: l10n.desktopAvatarRemoveConfirmTitle,
+      size: DDialogSize.small,
+      body: Text(
+        l10n.desktopAvatarRemoveConfirmBody,
+        style: DType.body.copyWith(color: DColors.of(context).textSecondary),
+      ),
+      primary: DDialogAction(
+        label: l10n.desktopRoomEditPhotoRemove,
+        kind: DButtonKind.danger,
+        onPressed: () => Navigator.of(context).maybePop(true),
+      ),
+      secondary: DDialogAction(
+        label: l10n.cancel,
+        kind: DButtonKind.ghost,
+        onPressed: () => Navigator.of(context).maybePop(false),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await widget.controller.removeRoomAvatar(groupId: _groupId);
+      if (!mounted) return;
+      _toast(l10n.desktopRoomPhotoRemoved);
+      unawaited(widget.vm.refreshNow());
+      unawaited(_refresh());
+    } catch (e) {
+      if (!mounted) return;
+      _toast(l10n.desktopRoomPhotoFailed(_roomActionErrorText(e)), danger: true);
+    }
+  }
+
+  /// «Разрешения участников».
+  Future<void> _editPermissions() async {
+    final current = _settings;
+    if (current == null) return;
+    final next = await showRoomPermissionsDialog(context, settings: current);
+    if (next == null || !mounted) return;
+    try {
+      await widget.controller.updateRoomSettings(
+        groupId: _groupId,
+        settings: next,
+      );
+      if (!mounted) return;
+      _toast(l10n.desktopRoomPermissionsSaved);
+      unawaited(_refresh());
+    } catch (e) {
+      if (!mounted) return;
+      _toast(_roomActionErrorText(e), danger: true);
+    }
+  }
+
+  /// Удалить группу для всех — только владелец, с подтверждением.
+  Future<void> _deleteRoom() async {
+    final title = widget.conversation.title.trim().isEmpty
+        ? l10n.desktopRoomUntitled
+        : widget.conversation.title.trim();
+    final ok = await _confirm(
+      title: l10n.desktopRoomDeleteTitle,
+      body: l10n.desktopRoomDeleteBody(title),
+      okLabel: l10n.desktopRoomDelete,
+      danger: true,
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await widget.controller.deleteRoom(_groupId);
+      if (!mounted) return;
+      _toast(l10n.desktopRoomDeleted);
+      widget.onClose();
+    } catch (e) {
+      if (!mounted) return;
+      _toast(_roomActionErrorText(e), danger: true);
     }
   }
 
@@ -870,14 +1206,13 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
   }
 
   void _toast(String message, {bool danger = false}) {
-    final c = DColors.of(context);
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: danger ? c.danger : c.elevated,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
+    // 🔴 Своя всплывашка окна, а не SnackBar Material: у того текст брался
+    // из темы Material и выходил тёмным на тёмной подложке (30.09.2026).
+    DesktopSnackbar.show(
+      context,
+      message: message,
+      kind: danger ? DSnackKind.error : DSnackKind.info,
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -906,8 +1241,39 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
   }
 
   List<List<CtxMenuItem>> _menuSections() {
+    final policy = _policy;
+    final demo = isDemoRoomId(_groupId);
     return <List<CtxMenuItem>>[
+      if (!demo &&
+          policy != null &&
+          (policy.canChangeGroupInfo || policy.canManageSettings))
+        [
+          if (policy.canChangeGroupInfo)
+            CtxMenuItem(
+              label: l10n.desktopRoomEditTitle,
+              icon: FluentIcons.edit_24_regular,
+              onTap: _editRoom,
+            ),
+          if (policy.canManageSettings)
+            CtxMenuItem(
+              label: l10n.desktopRoomPermissionsMenu,
+              icon: FluentIcons.shield_keyhole_24_regular,
+              onTap: _editPermissions,
+            ),
+          if (policy.canManageInviteLinks)
+            CtxMenuItem(
+              label: l10n.desktopRoomInviteLinksMenu,
+              icon: FluentIcons.link_24_regular,
+              onTap: () => unawaited(_openInviteLinks()),
+            ),
+        ],
       [
+        if (!demo && (policy?.canAddMembers ?? false))
+          CtxMenuItem(
+            label: l10n.desktopRoomAddMembers,
+            icon: FluentIcons.people_add_24_regular,
+            onTap: () => unawaited(_addMembers()),
+          ),
         if (_canManageInvites)
           CtxMenuItem(
             label: l10n.desktopRoomInvite,
@@ -922,12 +1288,12 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
             _toast(l10n.desktopRoomIdCopied);
           },
         ),
-        CtxMenuItem(
-          label: _muted ? l10n.unmuteNotifications : l10n.desktopRoomMuteOff,
-          icon: _muted
-              ? FluentIcons.alert_24_regular
-              : FluentIcons.alert_off_24_regular,
-          onTap: _toggleMute,
+        desktopMuteMenuItem(
+          l10n: l10n,
+          muted: _muted,
+          isRoom: true,
+          onMute: (choice) => unawaited(_applyMute(choice)),
+          onUnmute: () => unawaited(_toggleMute()),
         ),
         CtxMenuItem(
           label: _pinned ? l10n.desktopListRemoveFavourite : l10n.desktopListAddFavourite,
@@ -945,6 +1311,12 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
         ),
       ],
       [
+        if (!demo)
+          CtxMenuItem(
+            label: l10n.desktopRoomAuditLog,
+            icon: FluentIcons.history_24_regular,
+            onTap: () => unawaited(_openAuditLog()),
+          ),
         CtxMenuItem(
           // Подпись из общей локализации — те же слова, что на телефоне.
           label: reportAbuseMenuLabel(context),
@@ -963,6 +1335,13 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
           onTap: _leaveRoom,
           isDanger: true,
         ),
+        if (!demo && (policy?.isOwner ?? false))
+          CtxMenuItem(
+            label: l10n.desktopRoomDelete,
+            icon: FluentIcons.delete_24_regular,
+            onTap: _deleteRoom,
+            isDanger: true,
+          ),
       ],
     ];
   }
@@ -989,7 +1368,24 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
     final description = _settings?.description?.trim() ?? '';
     final avatarPath = convo.avatarPath?.trim() ?? '';
     final hasAvatarFile =
-        avatarPath.isNotEmpty && File(avatarPath).existsSync();
+        avatarPath.isNotEmpty && DesktopFileProbe.exists(avatarPath);
+    void openPreview() => showAvatarPreviewDialog(
+      context,
+      name: title,
+      imagePath: hasAvatarFile ? avatarPath : null,
+      shape: AvatarShape.room,
+    );
+    final roomAvatar = Avatar(
+      name: title,
+      seed: _groupId,
+      image: hasAvatarFile ? Avatar.fileImage(avatarPath) : null,
+      frameId: convo.frameId,
+      allowAnimatedFrame: true,
+      size: 88,
+      // Это портрет САМОЙ комнаты. Участники ниже остаются круглыми — они
+      // люди.
+      shape: AvatarShape.room,
+    );
     final invite = _bestInviteLink();
     final inviteUrl = invite == null
         ? null
@@ -1024,38 +1420,50 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
                 premiumBadge: widget.conversation.premiumBadge,
                 frameId: widget.conversation.frameId,
                 onClose: widget.onClose,
+                // 🔴 Карандаш у названия — как у Telegram (28.09.2026): раньше
+                // `onEdit` был только у своего профиля, и админ не мог даже
+                // переименовать группу.
+                onEdit: !isDemoRoomId(_groupId) &&
+                        (_policy?.canChangeGroupInfo ?? false)
+                    ? _editRoom
+                    : null,
                 // В демонстрационной комнате ссылки-приглашения не бывает:
                 // на сервере такой комнаты нет, и запрос вернёт 404. Кнопки
                 // там нет вовсе — см. [isDemoRoomId].
-                onShare: isDemoRoomId(_groupId) ? null : _invite,
+                //
+                // «Поделиться» — только тому, кто может приглашать, или когда
+                // готовая ссылка уже есть: иначе кнопка вела к отказу.
+                onShare: isDemoRoomId(_groupId) ||
+                        (!_canManageInvites && invite == null)
+                    ? null
+                    : _invite,
                 shareTooltip: l10n.desktopRoomCopyInvite,
                 menuSections: _menuSections(),
-                avatar: HoverListener(
-                  onTap: () => showAvatarPreviewDialog(
-                    context,
-                    name: title,
-                    imagePath: hasAvatarFile ? avatarPath : null,
-                    shape: AvatarShape.room,
-                  ),
-                  cursor: SystemMouseCursors.click,
-                  builder: (ctx, hovered, pressed) => AnimatedScale(
-                    scale: pressed ? 0.97 : 1.0,
-                    duration: DMotion.fast,
-                    child: Avatar(
-                      name: title,
-                      seed: _groupId,
-                      image: hasAvatarFile
-                          ? Avatar.fileImage(avatarPath)
-                          : null,
-                      frameId: widget.conversation.frameId,
-                      allowAnimatedFrame: true,
-                      size: 88,
-                      // Это портрет САМОЙ комнаты. Участники ниже остаются
-                      // круглыми — они люди.
-                      shape: AvatarShape.room,
-                    ),
-                  ),
-                ),
+                // 🔴 Портрет группы — как в Telegram (29.09.2026): у того, кто
+                // может менять данные группы, наведение показывает камеру, а
+                // щелчок — меню «Выбрать фото… / Открыть / Удалить фото».
+                // Раньше фото менялось только в окне «Изменить группу».
+                avatar: _canEditPhoto
+                    ? DesktopEditableAvatar(
+                        size: 88,
+                        shape: AvatarShape.room,
+                        framed: widget.conversation.frameId != null,
+                        avatar: roomAvatar,
+                        onChoose: () => unawaited(_pickRoomPhoto()),
+                        onOpen: hasAvatarFile ? openPreview : null,
+                        onRemove: hasAvatarFile
+                            ? () => unawaited(_confirmRemoveRoomPhoto())
+                            : null,
+                      )
+                    : HoverListener(
+                        onTap: openPreview,
+                        cursor: SystemMouseCursors.click,
+                        builder: (ctx, hovered, pressed) => AnimatedScale(
+                          scale: pressed ? 0.97 : 1.0,
+                          duration: DMotion.fast,
+                          child: roomAvatar,
+                        ),
+                      ),
               ),
               DetailsActionRow(
                 items: [
@@ -1323,7 +1731,7 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
       n == 0 ? l10n.desktopRoomNoMembers : l10n.desktopRoomMembersCount(n);
 }
 
-class _MembersSection extends StatelessWidget {
+class _MembersSection extends StatefulWidget {
   const _MembersSection({
     required this.onOpenMember,
     required this.members,
@@ -1359,9 +1767,33 @@ class _MembersSection extends StatelessWidget {
   static const int _kOfflinePreview = 8;
 
   @override
+  State<_MembersSection> createState() => _MembersSectionState();
+}
+
+class _MembersSectionState extends State<_MembersSection> {
+  /// «Показать всех» нажато (ТЗ «ПК как Telegram» §2, ошибка 6): раньше
+  /// участники «не в сети» сверх восьми были видны только поиском по имени,
+  /// которое ещё надо знать.
+  bool _showAll = false;
+
+  static const int _kOfflinePreview = _MembersSection._kOfflinePreview;
+
+  Map<String, CachedRoomCallParticipant> get inCall => widget.inCall;
+  List<List<CtxMenuItem>> Function(RoomMember member) get menuFor =>
+      widget.menuFor;
+  void Function(BuildContext rowContext, RoomMember member) get onOpenMember =>
+      widget.onOpenMember;
+  List<RoomMember> get members => widget.members;
+  int get totalCount => widget.totalCount;
+  bool get loading => widget.loading;
+  TextEditingController get searchController => widget.searchController;
+  bool get hasQuery => widget.hasQuery;
+
+  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
+    final showAll = hasQuery || _showAll;
 
     // 🔴 УЧАСТНИКИ РАЗЛОЖЕНЫ ПО ПРИСУТСТВИЮ, А НЕ СЛОЖЕНЫ В ОДНУ КУЧУ.
     //
@@ -1405,10 +1837,10 @@ class _MembersSection extends StatelessWidget {
     final grouped =
         !hasQuery &&
         (call.isNotEmpty || (online.isNotEmpty && offline.isNotEmpty));
-    final visibleOffline = hasQuery
+    final visibleOffline = showAll
         ? offline
         : offline.take(_kOfflinePreview).toList(growable: false);
-    final hiddenTail = hasQuery
+    final hiddenTail = showAll
         ? 0
         : (grouped
               ? offline.length - visibleOffline.length
@@ -1486,7 +1918,7 @@ class _MembersSection extends StatelessWidget {
     } else {
       // Все в одном состоянии (или идёт поиск) — заголовок группы был бы
       // подписью к единственной куче.
-      final flat = hasQuery
+      final flat = showAll
           ? members
           : members.take(_kOfflinePreview).toList(growable: false);
       children.addAll(
@@ -1522,6 +1954,12 @@ class _MembersSection extends StatelessWidget {
                   l10n.desktopRoomMoreHidden(hiddenTail),
                   style: DType.caption.copyWith(color: c.textSecondary),
                 ),
+              ),
+              const SizedBox(width: DSpace.s),
+              DesktopButton(
+                label: l10n.desktopRoomShowAllMembers,
+                kind: DButtonKind.ghost,
+                onPressed: () => setState(() => _showAll = true),
               ),
             ],
           ),

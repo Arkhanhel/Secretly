@@ -978,6 +978,24 @@
   "desktopJoinRoomByLink": "Join by link",
   "desktopJoinRoomLinkHint": "Paste the invite link",
   "desktopJoinRoomLinkInvalid": "This is not a room invite link",
+  "desktopRoomLimitTitle": "Room limit reached",
+  "desktopRoomLimitCreate": "{count, plural, one{You can create up to {count} room.} other{You can create up to {count} rooms.}}",
+  "@desktopRoomLimitCreate": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "desktopRoomLimitJoin": "{count, plural, one{You can be in at most {count} room. To join a new one, leave one of your rooms first.} other{You can be in at most {count} rooms. To join a new one, leave one of your rooms first.}}",
+  "@desktopRoomLimitJoin": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "desktopRoomLimitPremium": "Premium raises this limit — the subscription is managed in the phone app.",
   "desktopOfflineLockTitle": "Ask for the password after a long offline spell",
   "desktopOfflineLockDescription": "If this computer has not reached the server for longer than this, it asks for the app password on start. A lost computer never receives a remote sign-out, but it does reach this limit.",
   "desktopOfflineLockNever": "Never",
@@ -1022,6 +1040,7 @@
   "desktopViewerSaveAs": "Save as…",
   "desktopViewerPage": "Page {page} of {total}",
   "desktopViewerFailed": "Could not show this file",
+  "desktopViewerPageFailed": "Could not show this page",
   "desktopViewerTooLarge": "This file is too large to show here",
   "@desktopViewerPage": {
     "placeholders": {
@@ -1082,7 +1101,21 @@
     }
   },
   "desktopPairingTitle": "Connect Secretly Desktop",
-  "desktopPairingHowTo": "On your phone open Secretly → Settings → Devices → “Link a device” and scan this QR code.",
+  "desktopPairingHowTo": "On your phone open Secretly → {settings} → {devices} → “{button}” and scan this QR code.",
+  "@desktopPairingHowTo": {
+    "description": "Desktop QR sign-in instruction. The labels are the PHONE's own: settingsTitle, devicesSection, devicesConnectDevice.",
+    "placeholders": {
+      "settings": {
+        "type": "String"
+      },
+      "devices": {
+        "type": "String"
+      },
+      "button": {
+        "type": "String"
+      }
+    }
+  },
   "desktopPairingPreparingQr": "Preparing the QR…",
   "desktopPairingQrUnavailable": "QR unavailable",
   "desktopPairingCodeExpired": "The code expired — refreshing…",
@@ -1307,6 +1340,8 @@
   "desktopGeneralLinkPreviews": "Link previews",
   "desktopGeneralLinkPreviewsOn": "The link card is sent together with the message",
   "desktopGeneralLinkPreviewsOff": "Links are sent without a card and no page is opened",
+  "desktopGeneralDoubleClickReply": "Double-click to reply",
+  "desktopGeneralDoubleClickReplyHint": "Double-click a message to reply to it. On text, it selects a word",
   "desktopPowerAnimations": "Animations",
   "desktopPowerAnimationsHint": "Everything is on by default. Switch off from the top down if the laptop gets hot or the battery drains.",
   "desktopPowerFramesTitle": "Animated frames and statuses",
@@ -1322,18 +1357,18 @@
   "desktopNotifSenderAndText": "Sender and text",
   "desktopNotifUnavailableHere": "Not available on this platform.",
   "desktopNotifShowPreview": "Show a preview of the message",
-  "desktopNotifInSystem": "In system notifications",
+  "desktopNotifInSystem": "In notifications and pop-ups",
   "desktopNotifDirectChats": "One-to-one chats",
   "desktopNotifDirectChatsHint": "Notifications about one-to-one messages",
   "desktopNotifRooms": "Rooms",
   "desktopNotifRoomsHint": "Notifications about messages in rooms",
   "desktopNotifSound": "Sound",
+  "desktopNotifWhileFocused": "While the window is open",
+  "desktopNotifWhileFocusedHint": "Notify about messages in other chats too. Never about the open chat",
+  "desktopNotifOwnWindows": "Notifications like in Telegram",
+  "desktopNotifOwnWindowsHint": "Own pop-ups in the corner of the screen: they don't take focus and wait while the mouse is over them. Off — Windows system notifications.",
   "desktopNotifDnd": "Do not disturb",
   "desktopNotifDndHint": "Switch off every notification",
-  "desktopWallAnimContinuous": "Continuously",
-  "desktopWallAnimOnEnter": "When a chat opens",
-  "desktopWallAnimTap": "On a click on the background",
-  "desktopWallAnimOff": "Do not animate",
   "desktopWallpaperNavy": "Midnight blue",
   "desktopWallpaperGraphite": "Graphite",
   "desktopWallpaperTeal": "Teal",
@@ -1345,40 +1380,90 @@
   "desktopWallpaperPeach": "Peach",
   "desktopWallpaperSky": "Sky",
   "desktopWallpaperMidnight": "Midnight",
-  "desktopAppearanceTitle": "Appearance",
   "desktopAppearanceHint": "The scheme of this window. The phone has its own — this setting does not travel anywhere.",
   "desktopAppearanceScheme": "Scheme",
-  "desktopAppearanceSchemeHint": "Dark, light or follow the system",
   "desktopAppearanceDark": "Dark",
   "desktopAppearanceLight": "Light",
-  "desktopAppearanceAuto": "Auto",
   "desktopAppearanceAccent": "Interface accent",
   "desktopAppearanceAccentHint": "Buttons, your own bubbles and selections across the application.",
   "desktopAppearanceWallpaper": "Chat wallpaper",
-  "desktopAppearanceWallpaperHint": "The chat background for every conversation.",
-  "desktopAppearanceLiveWallpaper": "Live wallpaper",
-  "desktopAppearanceLiveWallpaperHint": "A pattern with a soft shimmer. The same set as on the phone.",
-  "desktopAppearanceAnimBehaviour": "Animation behaviour",
-  "desktopAppearanceAnimBehaviourHint": "When the pattern comes alive.",
   "desktopAppearanceWallPulse": "The wallpaper carries the message",
   "desktopAppearanceWallPulseHint": "A wave of light runs along the pattern: upwards when you send, downwards when you receive.",
-  "desktopAppearanceEnable": "Switch on",
-  "desktopAppearanceLiveOnly": "Works only on live wallpaper",
   "desktopAppearanceBubbleStyle": "Message bubble style",
   "desktopAppearanceBubbleStyleHint": "The colour of your outgoing messages in every chat.",
   "desktopAppearanceSenderColour": "Sender name colour",
   "desktopAppearanceSenderColourHint": "The colour of the other person’s nickname in group chats.",
   "desktopAppearanceIndicatorColour": "Indicator colour",
-  "desktopAppearanceIndicatorColourHint": "The delivery ticks and the unread dot.",
-  "desktopAppearanceDemoMode": "Demo mode",
-  "desktopAppearanceDemoHint": "Appearance changes will be kept once a profile is linked.",
-  "desktopAppearanceCurrentChoice": "Current choice",
-  "desktopAppearanceThemeIs": "Theme: {name}",
-  "@desktopAppearanceThemeIs": {
-    "placeholders": {
-      "name": {}
-    }
-  },
+  "desktopAppearanceTabTheme": "Theme & text",
+  "desktopAppearanceTabWallpaper": "Chat background",
+  "desktopAppearanceTabMessages": "Messages",
+  "desktopAppearanceReset": "Defaults",
+  "desktopAppearanceResetDone": "Appearance is back to defaults",
+  "desktopAppearanceResetUndo": "Undo",
+  "desktopAppearanceAutosave": "Saved automatically",
+  "desktopAppearancePremiumOnly": "This is part of Premium — the subscription is managed in the phone app",
+  "desktopAppearancePresets": "Ready-made sets",
+  "desktopAppearancePresetsHint": "Accent, wallpaper, bubbles and indicators in one click",
+  "desktopAppearancePresetClassic": "Classic",
+  "desktopAppearancePresetOcean": "Ocean",
+  "desktopAppearancePresetSunset": "Sunset",
+  "desktopAppearancePresetForest": "Forest",
+  "desktopAppearancePresetNight": "Night",
+  "desktopAppearanceSystem": "System",
+  "desktopAppearanceDensity": "Message density",
+  "desktopAppearanceDensityCozy": "Cozy",
+  "desktopAppearanceDensityCompact": "Compact",
+  "desktopAppearanceWallpaperAllChats": "Background for all chats. Live ones shimmer softly",
+  "desktopAppearanceStatic": "Static",
+  "desktopAppearanceLive": "Live",
+  "desktopAppearanceLiveBadge": "LIVE",
+  "desktopAppearanceDim": "Dimming",
+  "desktopAppearanceAnimPattern": "Pattern animation",
+  "desktopAppearanceLiveOnlyBadge": "live wallpaper only",
+  "desktopWallAnimShortContinuous": "Always",
+  "desktopWallAnimShortOnEnter": "On open",
+  "desktopWallAnimShortTap": "On click",
+  "desktopWallAnimShortOff": "Off",
+  "desktopAppearanceGoLive": "Choose {link} to set up the animation.",
+  "@desktopAppearanceGoLive": {"placeholders": {"link": {}}},
+  "desktopAppearanceGoLiveLink": "live wallpaper",
+  "desktopAppearanceShape": "Shape",
+  "desktopAppearanceShapeSharp": "Sharp",
+  "desktopAppearanceShapeMedium": "Medium",
+  "desktopAppearanceShapeRound": "Round",
+  "desktopAppearanceNamesMulti": "Multicolor",
+  "desktopAppearanceIndicatorHint": "Read ticks in the chat list, links and text selection",
+  "desktopAppearanceSummaryPrefix": "Now:",
+  "desktopAppearanceSummaryDark": "dark scheme",
+  "desktopAppearanceSummaryLight": "light scheme",
+  "desktopAppearanceSummarySystem": "system scheme",
+  "desktopAppearanceSummaryBubbles": "bubbles “{name}”",
+  "@desktopAppearanceSummaryBubbles": {"placeholders": {"name": {}}},
+  "desktopAppearanceSummaryText": "text {size}",
+  "@desktopAppearanceSummaryText": {"placeholders": {"size": {}}},
+  "desktopAppearancePreview": "Preview",
+  "desktopAppearancePreviewReplay": "Reopen",
+  "desktopAppearancePreviewReplayHint": "Reopen the chat to see the animation",
+  "desktopAppearancePreviewIncoming": "Incoming",
+  "desktopAppearancePreviewIncomingHint": "Receive a message",
+  "desktopAppearancePreviewChat": "Design team",
+  "desktopAppearancePreviewMembers": "5 members, 3 online",
+  "desktopAppearancePreviewTyping": "{name} is typing…",
+  "@desktopAppearancePreviewTyping": {"placeholders": {"name": {}}},
+  "desktopAppearancePreviewAnna": "Anna",
+  "desktopAppearancePreviewMax": "Max",
+  "desktopAppearancePreviewLiza": "Lisa",
+  "desktopAppearancePreviewMsg1": "Updated the wallpaper in our chat — take a look",
+  "desktopAppearancePreviewMsg2": "The live ones are great. Especially the wave when you write",
+  "desktopAppearancePreviewMsg3": "I’ll try setting the same ones",
+  "desktopAppearancePreviewMsg4": "Can the text size be changed too?",
+  "desktopAppearancePreviewMsg5": "Yes, in Appearance. More at www.secretlyapp.com",
+  "desktopAppearancePreviewOwnDefault": "Checking how the new settings look",
+  "desktopAppearancePreviewReply1": "Looks great!",
+  "desktopAppearancePreviewReply2": "Oh, that’s much better",
+  "desktopAppearancePreviewReply3": "Tell me later which wallpaper you picked",
+  "desktopAppearancePreviewReply4": "That bubble color suits you",
+  "desktopAppearancePreviewReply5": "I’m setting the same ones",
   "desktopBackupEvery6h": "Every 6 hours",
   "desktopBackupEvery12h": "Every 12 hours",
   "desktopBackupDaily": "Once a day",
@@ -1523,7 +1608,6 @@
     }
   },
   "desktopAccentCustom": "Custom colour",
-  "desktopAccentCustomChange": "Custom colour — change",
   "desktopPairTitle": "Link a device",
   "desktopPairHint": "Show the QR code on the new device or scan it from the phone",
   "desktopPairRequestFailed": "Could not create the link request",
@@ -1870,6 +1954,12 @@
   "desktopChatsMember": "Member",
   "desktopChatsSoundOn": "Switch the sound on",
   "desktopChatsSoundOff": "Muted",
+  "desktopMuteMenu": "Mute…",
+  "desktopMuteFor1h": "For 1 hour",
+  "desktopMuteFor8h": "For 8 hours",
+  "desktopMuteFor2d": "For 2 days",
+  "desktopMuteForever": "Until I turn it back on",
+  "desktopMuteMentionsOnly": "Mentions only",
   "desktopChatsClearHistoryTitle": "Clear the history?",
   "desktopChatsClearHistoryBody": "Every message of the chat “{title}” will be deleted on this device.",
   "desktopChatsClear": "Clear",
@@ -1877,6 +1967,17 @@
   "desktopChatsHistoryCleared": "The history was cleared",
   "desktopChatsDeleteChatTitle": "Delete the chat?",
   "desktopChatsDeleteChatBody": "The chat “{title}” will be removed from this device entirely.",
+  "desktopRoomDeleteLeaveMenu": "Delete and leave",
+  "desktopRoomDeleteLeaveTitle": "Delete and leave “{title}”?",
+  "desktopRoomDeleteLeaveBody": "You will leave the room and stop receiving its messages, and the chat will be deleted from this computer. You can only come back with a new invite.",
+  "desktopRoomDeleteLeaveAction": "Leave and delete",
+  "@desktopRoomDeleteLeaveTitle": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
   "desktopChatsRooms": "Rooms",
   "desktopChatsGeneralTopic": "General",
   "desktopChatsNewTopicEllipsis": "New topic…",
@@ -1933,6 +2034,12 @@
   "desktopChatsOpenFailedWith": "Could not open the file: {error}",
   "desktopChatsOpenFailed": "Could not open the file",
   "desktopChatsOpenFailedShort": "Could not open: {error}",
+  "desktopFileRiskTitle": "Open this file?",
+  "desktopFileRiskExtension": "This file has the {ext} extension and may run a program that harms your computer. Open it only if you trust the sender.",
+  "desktopFileRiskNoExtension": "This file has no extension, so your computer may run it as a program. Open it only if you trust the sender.",
+  "desktopFileRiskMismatch": "The sender labeled this file as a picture, sound, video or PDF, but its real extension is {ext}. Dangerous files are often disguised this way — open it only if you trust the sender.",
+  "desktopFileRiskShowInFolder": "Show in folder",
+  "desktopFileRiskOpenAnyway": "Open anyway",
   "desktopChatsPlayFailed": "Could not play: {error}",
   "desktopChatsNoCallPeer": "Could not work out who to call.",
   "desktopChatsCallsNotReady": "The call service is not ready.",
@@ -2060,6 +2167,23 @@
   "desktopRoomLeaveRoom": "Leave the room",
   "desktopRoomUntitled": "Untitled",
   "desktopRoomCopyInvite": "Copy the invitation",
+  "desktopRoomInviteCardTitle": "Room invite",
+  "desktopRoomInviteCardHint": "Open the card to review the room and join.",
+  "desktopRoomInviteAlreadyMember": "You are already in the room",
+  "desktopRoomInviteApprovalRequired": "Approval required",
+  "desktopRoomInviteDirectJoin": "Direct join",
+  "desktopRoomInviteWithHistory": "with history",
+  "desktopRoomInviteWithoutHistory": "without history",
+  "desktopRoomInviteInvitedBy": "Invited by {name}",
+  "@desktopRoomInviteInvitedBy": {"placeholders": {"name": {"type": "String"}}},
+  "desktopRoomInviteHistoryOn": "History for new members is enabled",
+  "desktopRoomInviteHistoryOff": "History for new members is disabled",
+  "desktopRoomInviteJoin": "Join room",
+  "desktopRoomInviteRequestAccess": "Request access",
+  "desktopRoomInviteOpenRequest": "Open request",
+  "desktopRoomInviteOpenRoom": "Open room",
+  "desktopRoomInviteReplyQuote": "Invite to «{title}»",
+  "@desktopRoomInviteReplyQuote": {"placeholders": {"title": {"type": "String"}}},
   "desktopRoomSound": "Sound",
   "desktopRoomTabInfo": "Info",
   "desktopRoomTabMembers": "Members",
@@ -2080,6 +2204,7 @@
   "desktopRoomInCall": "IN THE CALL",
   "desktopRoomOnline": "ONLINE",
   "desktopRoomOffline": "OFFLINE",
+  "desktopRoomShowAllMembers": "Show all",
   "desktopRoomMoreHidden": "{count} more — use the search above",
   "desktopRoomSearchMember": "Search for a member",
   "desktopRoomJoinRequests": "Join requests",
@@ -2246,6 +2371,7 @@
   },
   "desktopProfileEmojiStatus": "Emoji status",
   "desktopProfileClearStatus": "Clear the status",
+  "desktopProfileEmojiStatusPremiumOnly": "Emoji status is part of Premium; you can subscribe in the app on your phone",
   "desktopProfileApplyFailed": "Could not apply: {error}",
   "desktopProfileAvatarFrame": "Avatar frame",
   "desktopProfileCover": "Profile cover",
@@ -2273,6 +2399,16 @@
   "desktopProfileNotPicked": "Not chosen",
   "desktopProfileRemovePhoto": "Remove the photo",
   "desktopProfileInitialsStay": "The initials remain",
+  "desktopAvatarOpen": "Open photo",
+  "desktopAvatarCropTitle": "Crop photo",
+  "desktopAvatarCropHint": "Drag the photo; use the mouse wheel to zoom",
+  "desktopAvatarRemoveConfirmTitle": "Delete photo?",
+  "desktopAvatarRemoveConfirmBody": "The initials will be shown instead of the photo.",
+  "desktopAvatarRemoveOnPhone": "Delete on your phone",
+  "desktopRoomPhotoUpdated": "Group photo updated",
+  "desktopRoomPhotoRemoved": "Group photo removed",
+  "desktopRoomPhotoFailed": "Could not change the group photo: {error}",
+  "@desktopRoomPhotoFailed": {"placeholders": {"error": {"type": "String"}}},
   "desktopProfileAccount": "Account",
   "desktopProfileRecovery": "Recovery",
   "desktopProfileRecoveryHint": "This computer is linked to the phone and keeps no recovery phrase of its own: the backup and the recovery kit bring the account back.",
@@ -2299,6 +2435,9 @@
   "desktopGalleryNoMedia": "No media",
   "desktopGalleryNoFiles": "No files",
   "desktopGalleryNoAudio": "No audio",
+  "desktopGalleryLoadFailed": "Couldn't load attachments",
+  "desktopGalleryRetry": "Try again",
+  "desktopSendMediaDroppedOnSwitch": "Files weren't sent — the send window closed when the chat changed.",
   "desktopGalleryNoLinks": "No links",
   "desktopGalleryPathCopied": "The path was copied",
   "desktopGalleryOpen": "Open",
@@ -2465,6 +2604,7 @@
   "desktopComposerAttach": "Attach",
   "desktopComposerEmoji": "Emoji and stickers",
   "desktopComposerRecordVoice": "Record a voice message",
+  "desktopComposerVoiceUnsupported": "Voice messages can’t be recorded on this computer.",
   "desktopComposerEnterSends": "Enter sends · Shift+Enter makes a new line",
   "desktopComposerEnterNewline": "Enter makes a new line · Shift+Enter sends",
   "desktopComposerEditing": "Editing",
@@ -2487,6 +2627,13 @@
   "desktopShortcutsCloseWindow": "Close the window or the search",
   "desktopShortcutsTray": "Minimise to the tray",
   "desktopShortcutsTitle": "Keyboard shortcuts",
+  "desktopShortcutsUnread": "Previous / next unread chat",
+  "desktopShortcutsFolders": "Previous / next folder",
+  "desktopShortcutsMute": "Mute / unmute the chat",
+  "desktopShortcutsCloseChat": "Close the panel, then the chat",
+  "desktopChatMutedToast": "Chat muted",
+  "desktopChatUnmutedToast": "Chat unmuted",
+  "desktopChatsFolderReadAll": "Mark all as read",
   "@desktopComposerRecording": {
     "placeholders": {
       "time": {}
@@ -2639,6 +2786,10 @@
   "desktopGifUnavailable": "GIFs aren't available in this window",
   "desktopStickerPacksSoon": "Sticker packs coming soon",
   "desktopCallFullscreen": "Full screen",
+  "desktopCallPinWindow": "Keep on top of other windows",
+  "desktopCallUnpinWindow": "Stop keeping on top",
+  "desktopCallsOwnWindow": "Call in a separate window",
+  "desktopCallsOwnWindowHint": "The call opens in its own window: move it to another screen or keep it on top of other apps.",
   "desktopCallExitFullscreen": "Exit full screen",
   "desktopCallDialing": "Calling…",
   "desktopCallEnded": "Ended",
@@ -2723,6 +2874,8 @@
     }
   },
   "desktopClearForPeerHint": "Messages will vanish on their device and on all of yours. This cannot be undone.",
+  "desktopRoomClearForAll": "For all room members too",
+  "desktopRoomClearForAllHint": "Messages will disappear for everyone else too. This can’t be undone.",
   "desktopGifNoKey": "GIFs unavailable: this build has no GIPHY key",
   "desktopGifConnectionLost": "The connection dropped. Try again",
   "desktopNotesHint": "What to remember from this conversation…",
@@ -2744,6 +2897,12 @@
   "desktopEnableLockPrompt": "Confirm to turn on the Secretly lock",
   "desktopRoomsNoneHintDot": "Create a room on your phone — it will show up here by itself.",
   "desktopSplashLoading": "Loading your profile…",
+  "desktopStartupFailedTitle": "Secretly couldn't start",
+  "desktopStartupFailedBody": "Try again. If it happens again, the startup log will help find the cause.",
+  "desktopStartupSlowTitle": "Startup is taking longer than usual",
+  "desktopStartupSlowBody": "You can keep waiting or start over.",
+  "desktopStartupRetry": "Try again",
+  "desktopStartupOpenLogs": "Open log folder",
   "desktopOutgoingOnePhoto": "Photo",
   "desktopOutgoingOneVideo": "Video",
   "desktopOutgoingOneAudio": "Audio",
@@ -2915,6 +3074,21 @@
     }
   },
   "desktopCallLeaveFailed": "Couldn't leave the call: the server didn't answer. Try again.",
+  "desktopCallRemoveParticipant": "Remove from call",
+  "desktopCallRemoveParticipantTitle": "Remove {name} from the call?",
+  "@desktopCallRemoveParticipantTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopCallRemoveParticipantBody": "They will be taken out of the call. They can come back by joining again.",
+  "desktopCallRemoveFailed": "Couldn’t remove from the call",
+  "desktopCallLeaveTitle": "Leave the call?",
+  "desktopCallEndForAll": "End the call for everyone",
+  "desktopCallEndForAllHint": "Everyone else will be taken out of the call too.",
+  "desktopCallEndForAllFailed": "Couldn’t end the call for everyone",
   "desktopCallToggleFailed": "Couldn't switch it: the server didn't answer. Try again.",
   "desktopDiagTitle": "Delivery diagnostics",
   "desktopDiagHint": "What to look at when messages are not arriving, and what to send us",
@@ -2933,9 +3107,310 @@
   },
   "desktopDiagCopy": "Copy for support",
   "desktopAppearanceTextSize": "Text size",
-  "desktopAppearanceTextSizeHint": "Applies to the whole window. Spacing and icons stay as designed",
   "desktopThreadGoToDate": "Go to date",
   "desktopHotkeyGlobalShow": "Show Secretly from anywhere",
   "desktopHotkeyGlobalHint": "Off by default: the shortcut is system-wide and would be taken away from another app",
-  "desktopHotkeyGlobalTaken": "Another app already holds this shortcut"
+  "desktopHotkeyGlobalTaken": "Another app already holds this shortcut",
+  "desktopTrayOpen": "Open Secretly",
+  "desktopTrayUnread": "{count} unread",
+  "@desktopTrayUnread": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "desktopTrayMute": "Mute notifications",
+  "desktopTrayMuteHour": "For 1 hour",
+  "desktopTrayMuteEightHours": "For 8 hours",
+  "desktopTrayMuteForever": "Until I turn them back on",
+  "desktopTrayUnmute": "Turn notifications back on",
+  "desktopTrayMutedUntil": "Muted until {time}",
+  "@desktopTrayMutedUntil": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopTrayQuit": "Quit Secretly",
+  "desktopTrayHintTitle": "Secretly keeps running in the background",
+  "desktopTrayHintBody": "Messages and calls will keep arriving. The icon is next to the clock — pin it to keep it in sight.",
+  "desktopDevicesMicrophone": "Microphone",
+  "desktopDevicesSpeakers": "Speakers and headphones",
+  "desktopDevicesNoSpeakers": "No speakers or headphones found",
+  "desktopDevicesCamera": "Camera",
+  "desktopCallsSystemTitle": "System",
+  "desktopCallsSystemSound": "System sound settings",
+  "desktopCallsSystemSoundHint": "Volume, the default device and microphone access",
+  "desktopCallsOpenSystem": "Open",
+  "desktopMicLevel": "Microphone level",
+  "desktopMicLevelHint": "Say something — the bar should move. The microphone is on only while this section is open, and the sound goes nowhere.",
+  "desktopMicNeedsAccess": "The app hasn’t been allowed to use the microphone yet.",
+  "desktopMicAllow": "Allow",
+  "desktopMicNoAccess": "No access to the microphone. Allow it in the system settings.",
+  "desktopMicOpenFailed": "Couldn’t open the microphone. Another app may be using it, or access to it is blocked.",
+  "desktopMicSystemFallback": "The selected microphone couldn’t be opened for the check — showing the system microphone.",
+  "desktopMediaOpenPrivacy": "Open settings",
+  "desktopMicTest": "Test microphone",
+  "desktopMicTestHint": "Records 5 seconds and plays them back through the selected speakers.",
+  "desktopMediaCheck": "Test",
+  "desktopMediaCheckStop": "Stop",
+  "desktopMicTestRecording": "Recording — speak… {seconds} s",
+  "@desktopMicTestRecording": {"placeholders": {"seconds": {"type": "int"}}},
+  "desktopMicTestPlaying": "Playing the recording…",
+  "desktopMediaPlaybackFailed": "Couldn’t play the sound.",
+  "desktopMediaPlaybackSystemOnly": "The sound played on the system default device: the selected one couldn’t be opened for the check.",
+  "desktopMediaBusyInCall": "A call is in progress — checks are off so they don’t disturb it.",
+  "desktopSpeakerTest": "Test speakers",
+  "desktopSpeakerTestHint": "A short chime on the selected device.",
+  "desktopSpeakerTestPlaying": "Playing…",
+  "desktopCameraPreview": "Check the camera",
+  "desktopCameraPreviewHint": "The camera turns on only while the preview is shown.",
+  "desktopCameraPreviewShow": "Show",
+  "desktopCameraPreviewHide": "Hide",
+  "desktopCameraPreviewFailed": "Couldn’t turn on the camera. Another app may be using it, or access to it is blocked.",
+  "desktopCameraMirror": "Mirror my video",
+  "desktopCameraMirrorHint": "Only on your screen, like in a mirror. Others see you as usual.",
+  "desktopRingtoneTitle": "Ringtone",
+  "desktopRingtoneVolume": "Volume",
+  "desktopRingtoneVolumeHint": "How loud incoming calls ring on this computer.",
+  "desktopRingtoneListen": "Listen",
+  "desktopRingtoneSilent": "Silent — only the window will show the call.",
+  "desktopRoomEditTitle": "Edit group",
+  "desktopRoomEditName": "Name",
+  "desktopRoomEditNameHint": "Group name",
+  "desktopRoomEditNameEmpty": "Enter a name",
+  "desktopRoomEditDescription": "Description",
+  "desktopRoomEditDescriptionHint": "What this group is about",
+  "desktopRoomEditPhotoChoose": "Choose photo…",
+  "desktopRoomEditPhotoRemove": "Remove photo",
+  "desktopRoomEditSaved": "Group updated",
+  "desktopRoomPermissionsMenu": "Permissions",
+  "desktopRoomPermissionsTitle": "Member permissions",
+  "desktopRoomPermissionsSaved": "Permissions saved",
+  "desktopRoomPermMembersSection": "What members can do",
+  "desktopRoomPermSendText": "Send messages",
+  "desktopRoomPermSendMedia": "Send photos, videos and files",
+  "desktopRoomPermPin": "Pin messages",
+  "desktopRoomPermAddMembers": "Add members",
+  "desktopRoomAddMembers": "Add members",
+  "desktopRoomAddMembersSearch": "Name or Secretly ID",
+  "desktopRoomAddMembersAlready": "Already in the room",
+  "desktopRoomAddMembersNone": "Nobody found",
+  "desktopRoomAddMembersNoContacts": "No contacts yet. Invite people with a link.",
+  "desktopRoomAddMembersAction": "Add {count}",
+  "@desktopRoomAddMembersAction": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "desktopRoomMembersAdded": "Members added: {count}",
+  "@desktopRoomMembersAdded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "desktopRoomInviteLinksMenu": "Invite links",
+  "desktopRoomAuditLog": "Recent actions",
+  "desktopRoomAuditLogEmpty": "Nothing has happened yet",
+  "desktopRoomAuditLogHint": "Joins, leaves, roles and settings — as this computer has seen them.",
+  "desktopRoomPermChangeInfo": "Change name, photo and description",
+  "desktopRoomPermChangeTag": "Change their own tag",
+  "desktopRoomPermJoinSection": "Joining",
+  "desktopRoomPermApproval": "Join only after approval",
+  "desktopRoomPermHistory": "Chat history for new members",
+  "desktopRoomPermHistoryHint": "New members see messages sent before they joined",
+  "desktopRoomPermReactions": "Reactions",
+  "desktopRoomReactionsAll": "All",
+  "desktopRoomReactionsSome": "Selected",
+  "desktopRoomReactionsNone": "None",
+  "desktopRoomPermSlowMode": "Slow mode",
+  "desktopRoomPermSlowModeHint": "How often each member can send a message",
+  "desktopRoomSlowOff": "Off",
+  "desktopRoomSlowSeconds": "{count} s",
+  "@desktopRoomSlowSeconds": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "desktopRoomSlowMinutes": "{count} min",
+  "@desktopRoomSlowMinutes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "desktopRoomSlowHours": "{count} h",
+  "@desktopRoomSlowHours": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "desktopRoomDelete": "Delete group",
+  "desktopRoomDeleteTitle": "Delete the group for everyone?",
+  "desktopRoomDeleteBody": "“{title}” will disappear for all members together with its messages. This can't be undone.",
+  "@desktopRoomDeleteBody": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopRoomDeleted": "Group deleted",
+  "desktopRoomOwnerLeaveTitle": "You own this group",
+  "desktopRoomOwnerLeaveBody": "Before leaving, hand the group over to another member — or delete it for everyone.",
+  "desktopRoomOwnerLeaveNoMembers": "There is nobody else in the group — it can only be deleted.",
+  "desktopRoomOwnerLeaveTransfer": "Hand over and leave",
+  "desktopComposerSendHintShift": "Send · Shift+Enter\nRight click to send later",
+  "desktopWallpaperUseDefault": "As in settings",
+  "desktopWallpaperClassic": "Classic",
+  "desktopWallpaperStandard": "Standard",
+  "desktopWallpaperProfilePhoto": "Photo {n}",
+  "@desktopWallpaperProfilePhoto": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "desktopChatWallpaperTitle": "Chat wallpaper",
+  "desktopChatWallpaperMenu": "Chat wallpaper…",
+  "desktopChatWallpaperSaved": "Wallpaper set for this chat",
+  "desktopWallpaperPremiumOnly": "This wallpaper is part of Premium — the subscription is managed in the phone app",
+  "desktopGeneralStartMinimized": "Start minimized",
+  "desktopGeneralStartMinimizedHint": "At sign-in the window stays closed — Secretly waits in the tray",
+  "desktopGeneralCloseToTray": "Close to tray",
+  "desktopGeneralCloseToTrayOn": "The close button hides the window — messages and calls keep arriving",
+  "desktopGeneralCloseToTrayOff": "The close button quits Secretly — nothing arrives until you open it again",
+  "desktopGeneralLaunchNeedsApprovalWindows": "Startup is turned off in Task Manager → Startup apps — turn Secretly on there",
+  "desktopSupportAttachLog": "Attach log",
+  "desktopSupportLogEmpty": "The log is empty for now",
+  "desktopDevicesAddComputerTitle": "Another computer",
+  "desktopDevicesAddComputerHint": "Computers are linked from the phone. Install Secretly on the other computer and choose “Sign in with your phone” there, then on your phone open Settings → Devices → “Connect device” and scan the QR code that computer shows.",
+  "desktopSettingsSignOutBodyOnlyDevice": "This computer is the only device with this account. After signing out, the account can be brought back only with the recovery kit — without it nobody can restore it, including us. Make sure the kit is saved first.",
+  "desktopSettingsSignOutBodyUnknown": "The conversations, keys and cache will be removed from this computer. If the account is also on another device, it stays there. If this computer is its only device, the account can be brought back only with the recovery kit.",
+  "desktopPairingRetryIn": "Next attempt in {seconds} s",
+  "@desktopPairingRetryIn": {
+    "placeholders": {
+      "seconds": {}
+    }
+  },
+  "desktopKitReadyTitle": "Your recovery kit is ready",
+  "desktopKitReadyBody": "Keep it outside this computer — on a flash drive, in a password manager or on paper. The kit together with its password opens the account, so store them separately.",
+  "desktopKitSaveToFile": "Save to file…",
+  "desktopKitSaveDialogTitle": "Save the recovery kit",
+  "desktopKitSavedTo": "Saved to file: {path}",
+  "@desktopKitSavedTo": {
+    "placeholders": {
+      "path": {}
+    }
+  },
+  "desktopKitSaveFailed": "Could not save the file: {error}",
+  "@desktopKitSaveFailed": {
+    "placeholders": {
+      "error": {}
+    }
+  },
+  "desktopKitShowQr": "Show the QR code and text",
+  "desktopKitSavedElsewhere": "Saved another way",
+  "desktopKitConfirmTitle": "Is the kit really saved?",
+  "desktopKitConfirmBody": "Confirm only if you copied the kit’s text or photographed its QR code and put it somewhere safe outside this computer. Without the kit the account cannot be restored.",
+  "desktopKitConfirmYes": "Yes, it’s saved",
+  "desktopAuthKitConfirmed": "You confirmed that the kit is kept in a safe place. The account can be restored with it.",
+  "desktopAboutSourceCode": "Source code",
+  "desktopAboutLicenseLine": "Licence: GNU AGPL-3.0. Source code: {url}",
+  "@desktopAboutLicenseLine": {
+    "placeholders": {
+      "url": {}
+    }
+  },
+  "desktopProfileLinkTitle": "Open this chat?",
+  "desktopProfileLinkBody": "The link leads to a chat with {name} ({id}).",
+  "@desktopProfileLinkBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopProfileLinkBodyUnknown": "The link leads to a chat with the profile {id}.",
+  "@desktopProfileLinkBodyUnknown": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopProfileLinkOpen": "Open chat",
+  "desktopUpdateAttemptFailed": "The update wasn't installed: {reason}",
+  "@desktopUpdateAttemptFailed": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopUpdateFailureDownload": "the file couldn't be downloaded",
+  "desktopUpdateFailureVerification": "the downloaded file failed the check and was deleted without being run",
+  "desktopUpdateFailureLaunch": "the installer didn't start",
+  "desktopUpdateFailureNotInstalled": "the previous version is still running after the installer",
+  "desktopUpdateRetry": "Try again",
+  "desktopRestoreTakeOverTitle": "This computer will become the device that made the backup",
+  "desktopRestoreTakeOverBody": "The backup was made by another device — for example, your phone. After restoring, this computer takes that device's place. If that device is still in use, messages will reach only one of the two, and the other may stop decrypting chats or lose its connection to the server. Restore this way only if that device is gone. To use the computer alongside your phone, go back and link it with a QR code instead.",
+  "desktopRestoreTakeOverConfirm": "Restore anyway",
+  "desktopServerBackupReplaceTitle": "Replace the backup on the server?",
+  "desktopServerBackupReplaceBody": "The server keeps one backup per account. A backup from this computer replaces the one made by your phone or another device, and the previous one can't be brought back. It will contain only the history that is on this computer.",
+  "desktopServerBackupReplaceConfirm": "Replace",
+  "desktopBackupAutoPasswordMissing": "no backup password is set",
+  "desktopBackupAutoPasswordWeak": "the backup password no longer meets the requirements",
+  "desktopBackupSetPassword": "Set the backup password",
+  "desktopSupportLogConfirmTitle": "Attach the log?",
+  "desktopSupportLogConfirmBody": "{size} of the app's service records from recent days. Look at what is in it before attaching: the log goes to support together with your message.",
+  "@desktopSupportLogConfirmBody": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopSupportLogView": "View",
+  "desktopSupportLogAttachConfirm": "Attach",
+  "desktopSupportLogViewTitle": "What the log contains",
+  "desktopDevicesEndNotConfirmed": "the server did not confirm it. Try again later.",
+  "desktopPrivacyScreenCaptureTitle": "Screen capture protection",
+  "desktopPrivacyScreenCaptureSwitch": "Hide Secretly windows from screenshots and screen recording",
+  "desktopPrivacyScreenCaptureHint": "Screenshots, screen recording and screen sharing — including your own screen sharing in calls — won't show what is in Secretly windows. It doesn't stop anyone from photographing the screen, and some capture tools or system versions may not honour it.",
+  "desktopPrivacyScreenCaptureFailed": "The system didn't accept screen capture protection.",
+  "desktopSoundMessagesTitle": "Message sound",
+  "desktopSoundMessagesHint": "Plays with message notifications on this computer.",
+  "desktopSoundMutedNote": "Sound is turned off above — the chosen sound won’t play.",
+  "desktopSoundInChatTitle": "Sound in the open chat",
+  "desktopSoundInChatSwitch": "New messages in the open chat",
+  "desktopSoundInChatHint": "A quiet sound instead of a notification while the chat is open in the active window.",
+  "desktopSoundNameBubble": "Bubble",
+  "desktopSoundNameBubbles": "Bubbles",
+  "desktopSoundNameDrip": "Drip",
+  "desktopSoundNamePing": "Ping",
+  "desktopSoundNameSplash": "Splash",
+  "desktopSoundNameDrop": "Drop",
+  "desktopSoundNameTone": "Tone",
+  "desktopSoundNameKey": "Key",
+  "desktopSoundNameClick": "Click",
+  "desktopSoundNameSwitch": "Switch",
+  "desktopSoundNameMelody": "Melody",
+  "desktopSoundNamePulse": "Pulse",
+  "desktopSoundNameDefault": "Default"
 }

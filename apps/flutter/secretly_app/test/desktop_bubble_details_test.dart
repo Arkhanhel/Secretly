@@ -204,8 +204,9 @@ void main() {
       final colors = File(
         'lib/ui/desktop/design/colors.dart',
       ).readAsStringSync();
-      expect(colors.contains('hoverBar: Color(0xFF222C3A),'), isTrue);
-      expect(kDColorsDark.hoverBar, const Color(0xFF222C3A));
+      // 01.10.2026: нейтральный серый вместо синевы (указание владельца).
+      expect(colors.contains('hoverBar: Color(0xFF262626),'), isTrue);
+      expect(kDColorsDark.hoverBar, const Color(0xFF262626));
       expect(kDColorsDark.hoverBar == kDColorsDark.elevated, isFalse);
     });
   });

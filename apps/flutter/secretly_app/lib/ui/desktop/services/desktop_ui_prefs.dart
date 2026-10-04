@@ -49,12 +49,24 @@ class DesktopUiPrefs {
   static const String _kThemeMode = 'desktop_theme_mode_v1';
   static const String _kCamera = 'desktop_preferred_camera_v1';
   static const String _kMic = 'desktop_preferred_mic_v1';
+  static const String _kSpeaker = 'desktop_preferred_speaker_v1';
   static const String _kCustomAccent = 'desktop_custom_accent_v1';
   static const String _kTextScale = 'desktop_text_scale_v1';
   static const String _kHoverBar = 'desktop_message_hover_bar_v1';
   static const String _kLinkPreviews = 'desktop_link_previews_v1';
+  static const String _kDoubleClickReply = 'desktop_double_click_reply_v1';
   static const String _kPlayerVolume = 'desktop_player_volume_v1';
   static const String _kCallMiniCorner = 'desktop_call_mini_corner_v1';
+  static const String _kTrayHintShown = 'desktop_tray_hint_shown_v1';
+  static const String _kCloseToTray = 'desktop_close_to_tray_v1';
+  static const String _kStartMinimized = 'desktop_start_minimized_v1';
+  static const String _kCallInOwnWindow = 'desktop_call_in_own_window_v1';
+  static const String _kCallWindowPinned = 'desktop_call_window_pinned_v1';
+  static const String _kCustomNotifications = 'desktop_custom_notifications_v1';
+  static const String _kMessageDensity = 'desktop_message_density_v1';
+  static const String _kBubbleShape = 'desktop_bubble_shape_v1';
+  static const String _kWallpaperDim = 'desktop_wallpaper_dim_v1';
+  static const String _kSenderNameColors = 'desktop_sender_name_colors_v1';
 
   /// Enter sends the message; Shift+Enter inserts a newline. When false the
   /// roles swap, which is what people coming from IDE-style chats expect.
@@ -77,6 +89,12 @@ class DesktopUiPrefs {
   /// Карточки, которые пришли в сообщениях, видны всегда — за ними в сеть
   /// никто не ходит.
   static final ValueNotifier<bool> linkPreviews = ValueNotifier<bool>(true);
+
+  /// Двойной щелчок по сообщению (мимо текста) — ответ на него, как в
+  /// Telegram Desktop. Включено по умолчанию, как там.
+  static final ValueNotifier<bool> doubleClickReply = ValueNotifier<bool>(
+    true,
+  );
 
   /// Как выбирается светлая или тёмная схема: 'dark', 'light' или 'auto'.
   ///
@@ -105,6 +123,11 @@ class DesktopUiPrefs {
   static final ValueNotifier<String> preferredCameraId =
       ValueNotifier<String>('');
   static final ValueNotifier<String> preferredMicId = ValueNotifier<String>('');
+
+  /// Динамики или наушники для звонков. Пусто — «как в системе»: звук идёт
+  /// туда, куда настроена ОС, и следует за ней (см. `call_audio_route.dart`).
+  static final ValueNotifier<String> preferredSpeakerId =
+      ValueNotifier<String>('');
 
   /// ◆ «Свой цвет» акцента, ARGB. Ноль — цвет не выбран, акцент берётся из
   /// схемы оформления.
@@ -149,6 +172,143 @@ class DesktopUiPrefs {
   static final ValueNotifier<String> callMiniCorner =
       ValueNotifier<String>('topRight');
 
+  /// Показана ли разовая подсказка «Secretly работает в фоне» при первом
+  /// скрытии окна в трей. Без неё человек, закрывший окно крестиком, не знает,
+  /// что приложение живо и где его искать.
+  static final ValueNotifier<bool> trayHintShown = ValueNotifier<bool>(false);
+
+  /// Крестик окна прячет Secretly в трей (как у Telegram), а не закрывает.
+  /// Выключено — крестик закрывает приложение, и сообщения не придут, пока
+  /// его не откроют снова.
+  static final ValueNotifier<bool> closeToTray = ValueNotifier<bool>(true);
+
+  static Future<void> setCloseToTray(bool value) async {
+    closeToTray.value = value;
+    await _persist(_kCloseToTray, value);
+  }
+
+  /// Звонок — в СВОЁМ окне ОС (29.09.2026, Р1). Выключено — как раньше,
+  /// поверх главного окна. Работает там, где есть нативный слой окон.
+  static final ValueNotifier<bool> callInOwnWindow = ValueNotifier<bool>(true);
+
+  static Future<void> setCallInOwnWindow(bool value) async {
+    callInOwnWindow.value = value;
+    await _persist(_kCallInOwnWindow, value);
+  }
+
+  /// Окно звонка — «поверх всех окон». Запоминается между звонками.
+  static final ValueNotifier<bool> callWindowPinned = ValueNotifier<bool>(false);
+
+  static Future<void> setCallWindowPinned(bool value) async {
+    callWindowPinned.value = value;
+    await _persist(_kCallWindowPinned, value);
+  }
+
+  /// Уведомления своими окошками в углу экрана, как у Telegram (Windows).
+  /// Выключено — системные уведомления Windows.
+  static final ValueNotifier<bool> customNotifications = ValueNotifier<bool>(
+    true,
+  );
+
+  static Future<void> setCustomNotifications(bool value) async {
+    customNotifications.value = value;
+    await _persist(_kCustomNotifications, value);
+  }
+
+  /// Windows: при автозапуске окно не открывается — приложение ждёт в трее.
+  static final ValueNotifier<bool> startMinimized = ValueNotifier<bool>(true);
+
+  static Future<void> setStartMinimized(bool value) async {
+    startMinimized.value = value;
+    await _persist(_kStartMinimized, value);
+  }
+
+  // ── Оформление переписки (29.09.2026, страница «Внешний вид» по макету
+  // владельца) ─────────────────────────────────────────────────────────────
+  //
+  // 🔴 ТОЛЬКО ЭТОТ КОМПЬЮТЕР, А НЕ ОБЩИЙ КОНТРОЛЛЕР. Плотность ленты, форма
+  // пузырей и затемнение обоев — свойства ОКНА: у телефона другой экран и своя
+  // раскладка, и тянуть эти числа туда через общие настройки значило бы менять
+  // выпущенную мобильную версию. Поэтому ключи десктопные, как у размера
+  // текста.
+
+  /// Плотность ленты: `cozy` — как было, `compact` — теснее строки и поля
+  /// пузыря, в окно помещается больше сообщений.
+  static const List<String> messageDensityValues = <String>['cozy', 'compact'];
+  static final ValueNotifier<String> messageDensity =
+      ValueNotifier<String>('cozy');
+
+  static Future<void> setMessageDensity(String value) async {
+    final v = _oneOf(value, messageDensityValues, 'cozy');
+    messageDensity.value = v;
+    await _persistString(_kMessageDensity, v);
+  }
+
+  /// Форма пузыря: `sharp`, `medium` (как было до 29.09) и `round`.
+  static const List<String> bubbleShapeValues = <String>[
+    'sharp',
+    'medium',
+    'round',
+  ];
+  static final ValueNotifier<String> bubbleShape =
+      ValueNotifier<String>('medium');
+
+  static Future<void> setBubbleShape(String value) async {
+    final v = _oneOf(value, bubbleShapeValues, 'medium');
+    bubbleShape.value = v;
+    await _persistString(_kBubbleShape, v);
+  }
+
+  /// Затемнение обоев в процентах: 0…[wallpaperDimMax] шагом 5.
+  ///
+  /// Потолок 70, а не 100: при полном затемнении обоев не остаётся вовсе, и
+  /// для этого есть честный выбор «Без обоев», а не ползунок до чёрного.
+  static const int wallpaperDimMax = 70;
+  static final ValueNotifier<int> wallpaperDim = ValueNotifier<int>(0);
+
+  static int normalizeWallpaperDim(num? raw) {
+    if (raw == null || !raw.isFinite) return 0;
+    final stepped = (raw / 5).round() * 5;
+    return stepped.clamp(0, wallpaperDimMax).toInt();
+  }
+
+  static Future<void> setWallpaperDim(int value) async {
+    final v = normalizeWallpaperDim(value);
+    wallpaperDim.value = v;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_kWallpaperDim, v);
+    } catch (_) {
+      // В памяти уже применено; просто не переживёт перезапуск.
+    }
+  }
+
+  /// Цвет имён в групповых чатах: `person` — у каждого свой, как у Telegram и
+  /// телефона (было всегда); `preset` — один цвет для всех, из общей настройки
+  /// «Цвет имени» (`nicknameStylePresetId`).
+  static const List<String> senderNameColorsValues = <String>[
+    'person',
+    'preset',
+  ];
+  static final ValueNotifier<String> senderNameColors =
+      ValueNotifier<String>('person');
+
+  static Future<void> setSenderNameColors(String value) async {
+    final v = _oneOf(value, senderNameColorsValues, 'person');
+    senderNameColors.value = v;
+    await _persistString(_kSenderNameColors, v);
+  }
+
+  static String _oneOf(String? raw, List<String> allowed, String fallback) {
+    final v = (raw ?? '').trim();
+    return allowed.contains(v) ? v : fallback;
+  }
+
+  static Future<void> markTrayHintShown() async {
+    trayHintShown.value = true;
+    await _persist(_kTrayHintShown, true);
+  }
+
   /// Разрешённые ступени. Список закрытый: произвольное число из испорченной
   /// настройки не должно превращать окно в нечитаемое.
   static const List<double> textScaleSteps = <double>[0.9, 1.0, 1.15, 1.3, 1.5];
@@ -179,15 +339,39 @@ class DesktopUiPrefs {
       enterToSend.value = prefs.getBool(_kEnterToSend) ?? true;
       messageHoverBar.value = prefs.getBool(_kHoverBar) ?? true;
       linkPreviews.value = prefs.getBool(_kLinkPreviews) ?? true;
+      doubleClickReply.value = prefs.getBool(_kDoubleClickReply) ?? true;
       themeMode.value = _normalizeThemeMode(prefs.getString(_kThemeMode));
       preferredCameraId.value = prefs.getString(_kCamera) ?? '';
       preferredMicId.value = prefs.getString(_kMic) ?? '';
+      preferredSpeakerId.value = prefs.getString(_kSpeaker) ?? '';
       customAccentArgb.value = prefs.getInt(_kCustomAccent) ?? 0;
         textScale.value = normalizeTextScale(prefs.getDouble(_kTextScale));
       playerVolume.value = normalizePlayerVolume(
         prefs.getDouble(_kPlayerVolume),
       );
       callMiniCorner.value = prefs.getString(_kCallMiniCorner) ?? 'topRight';
+      trayHintShown.value = prefs.getBool(_kTrayHintShown) ?? false;
+      closeToTray.value = prefs.getBool(_kCloseToTray) ?? true;
+      startMinimized.value = prefs.getBool(_kStartMinimized) ?? true;
+      callInOwnWindow.value = prefs.getBool(_kCallInOwnWindow) ?? true;
+      callWindowPinned.value = prefs.getBool(_kCallWindowPinned) ?? false;
+      customNotifications.value = prefs.getBool(_kCustomNotifications) ?? true;
+      messageDensity.value = _oneOf(
+        prefs.getString(_kMessageDensity),
+        messageDensityValues,
+        'cozy',
+      );
+      bubbleShape.value = _oneOf(
+        prefs.getString(_kBubbleShape),
+        bubbleShapeValues,
+        'medium',
+      );
+      wallpaperDim.value = normalizeWallpaperDim(prefs.getInt(_kWallpaperDim));
+      senderNameColors.value = _oneOf(
+        prefs.getString(_kSenderNameColors),
+        senderNameColorsValues,
+        'person',
+      );
     } catch (_) {
       // Defaults already hold — a preferences failure must not block boot.
     }
@@ -247,6 +431,11 @@ class DesktopUiPrefs {
     await _persist(_kLinkPreviews, value);
   }
 
+  static Future<void> setDoubleClickReply(bool value) async {
+    doubleClickReply.value = value;
+    await _persist(_kDoubleClickReply, value);
+  }
+
   /// Неизвестное значение считаем «тёмной»: так окно выглядело всегда, и
   /// испорченная настройка не должна менять вид без спроса.
   static String _normalizeThemeMode(String? raw) {
@@ -272,6 +461,11 @@ class DesktopUiPrefs {
   static Future<void> setPreferredMic(String deviceId) async {
     preferredMicId.value = deviceId;
     await _persistString(_kMic, deviceId);
+  }
+
+  static Future<void> setPreferredSpeaker(String deviceId) async {
+    preferredSpeakerId.value = deviceId;
+    await _persistString(_kSpeaker, deviceId);
   }
 
   /// Ноль (и любое значение без непрозрачности) означает «цвета нет»:
@@ -312,11 +506,24 @@ class DesktopUiPrefs {
     enterToSend.value = true;
     messageHoverBar.value = true;
     linkPreviews.value = true;
+    doubleClickReply.value = true;
     animatePeerCosmetics.value = true;
     themeMode.value = 'dark';
     preferredCameraId.value = '';
     preferredMicId.value = '';
+    preferredSpeakerId.value = '';
     customAccentArgb.value = 0;
+    trayHintShown.value = false;
+    closeToTray.value = true;
+    startMinimized.value = true;
+    callInOwnWindow.value = true;
+    callWindowPinned.value = false;
+    customNotifications.value = true;
+    textScale.value = 1.0;
+    messageDensity.value = 'cozy';
+    bubbleShape.value = 'medium';
+    wallpaperDim.value = 0;
+    senderNameColors.value = 'person';
     _loaded = false;
   }
 

@@ -109,14 +109,11 @@ class _ScheduleBody extends StatelessWidget {
       context: context,
       initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
     );
-    if (!context.mounted) return;
-    final at = DateTime(
-      date.year,
-      date.month,
-      date.day,
-      time?.hour ?? now.hour,
-      time?.minute ?? now.minute,
-    );
+    // Закрыли выбор времени — передумали, а не «в это же время» (30.09.2026):
+    // раньше сообщение откладывалось на час и минуту, которых никто не
+    // выбирал.
+    if (time == null || !context.mounted) return;
+    final at = DateTime(date.year, date.month, date.day, time.hour, time.minute);
     // Выбранное в прошлом — это «отправить немедленно», а человек просил
     // обратного. Закрываем без результата, чтобы он выбрал заново.
     if (!at.isAfter(DateTime.now())) return;

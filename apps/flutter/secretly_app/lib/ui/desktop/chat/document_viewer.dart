@@ -77,6 +77,13 @@ class _DesktopDocumentViewerState extends State<DesktopDocumentViewer> {
   /// Отрисованные страницы: листание туда-обратно не должно рисовать заново.
   final Map<int, Uint8List> _rendered = <int, Uint8List>{};
 
+  /// Страницы, которые не удалось нарисовать.
+  ///
+  /// 🔴 Такая страница крутила кружок ВЕЧНО (30.09.2026): отказ системы
+  /// рисования молча пропускался, и окно ждало картинку, которой не будет.
+  /// Теперь на её месте — «не удалось» и «Повторить».
+  final Set<int> _failedPages = <int>{};
+
   @override
   void initState() {
     super.initState();
@@ -133,8 +140,20 @@ class _DesktopDocumentViewerState extends State<DesktopDocumentViewer> {
       page: index,
       maxWidth: 1400,
     );
-    if (!mounted || png == null) return;
-    setState(() => _rendered[index] = png);
+    if (!mounted) return;
+    setState(() {
+      if (png == null) {
+        _failedPages.add(index);
+      } else {
+        _failedPages.remove(index);
+        _rendered[index] = png;
+      }
+    });
+  }
+
+  void _retryPage(int index) {
+    setState(() => _failedPages.remove(index));
+    unawaited(_ensurePage(index));
   }
 
   void _goto(int index) {
@@ -220,6 +239,24 @@ class _DesktopDocumentViewerState extends State<DesktopDocumentViewer> {
       );
     }
     final png = _rendered[_page];
+    if (png == null && _failedPages.contains(_page)) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              l10n.desktopViewerPageFailed,
+              style: DType.body.copyWith(color: Colors.white70),
+            ),
+            const SizedBox(height: DSpace.s),
+            TextButton(
+              onPressed: () => _retryPage(_page),
+              child: Text(l10n.desktopDevicesRetry),
+            ),
+          ],
+        ),
+      );
+    }
     if (png == null) {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }

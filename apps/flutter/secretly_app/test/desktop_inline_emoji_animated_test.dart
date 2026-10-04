@@ -122,7 +122,11 @@ void main() {
       'lib/ui/desktop/chat/message_rich_text.dart',
     ).readAsStringSync();
     expect(src.contains('isAnimatableNotoEmoji(ch)'), isTrue);
+    // Цикл, как на телефоне (решение владельца 16.09.2026); перерисовку без
+    // фокуса гасит DesktopDecorationMotion (01.10.2026).
     expect(src.contains('NotoLottieMode.looping'), isTrue);
+    // Окно без фокуса откладывает показ до возврата.
+    expect(src.contains('DesktopDecorationMotion('), isTrue);
     // И зовётся из настоящей отрисовки сообщения, а не только в проверке.
     expect(src.contains('...animateEmojiInSpans('), isTrue);
   });

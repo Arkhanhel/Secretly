@@ -79,7 +79,7 @@ jobs:
       # published here: the artefact would be unsigned, and an unsigned build
       # of a messenger is not something to hand anyone.
       - name: Build
-        run: flutter build windows --release
+        run: flutter build windows --release --target=lib/main_desktop.dart
 
   macos:
     name: macOS — build
@@ -125,7 +125,7 @@ jobs:
       # copy of that, so publishing it would be worse than publishing nothing.
       # This job answers one question only — does it still compile.
       - name: Build
-        run: flutter build macos --release
+        run: flutter build macos --release --target=lib/main_desktop.dart
 
   rust:
     name: Rust — build and test

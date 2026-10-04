@@ -46,6 +46,21 @@ void registerThirdPartyLicenses() {
   });
 }
 
+/// Шрифт эмодзи Windows (30.09.2026, Э1): Noto Color Emoji, SIL OFL 1.1.
+///
+/// Отдельной функцией, а не строкой в [registerThirdPartyLicenses]: файл едет
+/// ТОЛЬКО в сборке Windows (`windows/fonts` → `data\`), а общий список
+/// читают и телефон, и macOS — там этого шрифта нет, и заявлять его нечего.
+/// Вызывается один раз, из `main_desktop.dart`, и только на Windows.
+/// Откуда файл и чем он проверен — в `assets/fonts/LICENSES.md`.
+void registerWindowsEmojiFontLicense() {
+  LicenseRegistry.addLicense(() async* {
+    yield const LicenseEntryWithLineBreaks(<String>[
+      'Noto Color Emoji',
+    ], _silOpenFontLicense11);
+  });
+}
+
 /// Дословный текст SIL Open Font License 1.1.
 const String _silOpenFontLicense11 = r'''
 -----------------------------------------------------------

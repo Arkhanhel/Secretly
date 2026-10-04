@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../links/link_preview_draft.dart';
 import '../../../models/link_preview_v1.dart';
 import '../design/tokens.dart';
+import 'desktop_link_router.dart';
 import '../primitives/desktop_button.dart';
 import '../primitives/desktop_tooltip.dart';
 
@@ -155,7 +156,11 @@ class DesktopLinkPreviewCard extends StatelessWidget {
             final open = onOpen;
             if (open != null) {
               open(uri);
-            } else {
+            } else if (!DesktopLinkRouter.handle(uri)) {
+              // 🔴 Наши адреса (приглашение, визитка) открывает приложение,
+              // а не браузер с заглушкой — как щелчок по той же ссылке в
+              // тексте (`message_rich_text.dart`). Раньше карточка и текст
+              // одного сообщения вели в разные места (29.09.2026).
               unawaited(_launch(uri));
             }
           },

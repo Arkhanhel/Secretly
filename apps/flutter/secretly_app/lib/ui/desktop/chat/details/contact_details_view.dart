@@ -2,10 +2,11 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+import '../../services/desktop_file_probe.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 import '../../../../app/app_controller.dart';
@@ -30,6 +31,8 @@ import 'details_action_row.dart';
 import 'details_headline.dart';
 import 'details_info_section.dart';
 import 'details_tabs.dart';
+import '../../primitives/desktop_snackbar.dart';
+import '../../primitives/desktop_screen_window.dart';
 
 /// Details view for a 1:1 conversation. Renders inside the third-column
 /// drawer. Lays out (top-down):
@@ -185,7 +188,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _pinned = !next);
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
@@ -206,7 +209,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _archived = !next);
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
@@ -233,7 +236,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
       setState(() => _blocked = next);
     } catch (e) {
       if (!mounted) return;
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
@@ -280,7 +283,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
         // Жалоба уже ушла — молчать о неудавшейся блокировке нельзя, но и
         // отменять из-за неё жалобу незачем. Текст тот же, что у блокировки
         // из меню: это и есть она.
-        if (mounted) _toast(l10n.desktopFailedWith('$e'), danger: true);
+        if (mounted) _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
       }
     }
     if (!mounted) return;
@@ -310,7 +313,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
       );
     } catch (e) {
       if (!mounted) return;
-      _toast(l10n.desktopContactCallFailed('$e'), danger: true);
+      _toast(l10n.desktopContactCallFailed(desktopErrorText(e)), danger: true);
     }
   }
 
@@ -324,7 +327,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
       setState(() => _autoDeleteSeconds = seconds);
     } catch (e) {
       if (!mounted) return;
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
@@ -401,7 +404,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
       }
     } catch (e) {
       if (!mounted) return;
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
@@ -427,7 +430,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
       widget.onClose();
     } catch (e) {
       if (!mounted) return;
-      _toast(l10n.desktopFailedWith('$e'), danger: true);
+      _toast(l10n.desktopFailedWith(desktopErrorText(e)), danger: true);
     }
   }
 
@@ -476,14 +479,13 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
   }
 
   void _toast(String message, {bool danger = false}) {
-    final c = DColors.of(context);
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: danger ? c.danger : c.elevated,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
+    // 🔴 Своя всплывашка окна, а не SnackBar Material: у того текст брался
+    // из темы Material и выходил тёмным на тёмной подложке (30.09.2026).
+    DesktopSnackbar.show(
+      context,
+      message: message,
+      kind: danger ? DSnackKind.error : DSnackKind.info,
+      duration: const Duration(seconds: 2),
     );
   }
 
@@ -496,13 +498,12 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
   void _openVerifyContact() {
     final pid = _peerProfileId;
     if (pid.isEmpty) return;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => VerifyContactScreen(
-          controller: widget.controller,
-          peerProfileId: pid,
-          title: widget.conversation.title,
-        ),
+    showDesktopScreenWindow<void>(
+      context,
+      builder: (_) => VerifyContactScreen(
+        controller: widget.controller,
+        peerProfileId: pid,
+        title: widget.conversation.title,
       ),
     );
   }
@@ -632,7 +633,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     final presence = _presenceText();
     final avatarPath = convo.avatarPath?.trim() ?? '';
     final hasAvatarFile =
-        avatarPath.isNotEmpty && File(avatarPath).existsSync();
+        avatarPath.isNotEmpty && DesktopFileProbe.exists(avatarPath);
     // Premium profile cover (обложка) banner behind the avatar, when the peer
     // has one. Rendered regardless of the local user's tier.
     // 🔴 Два слоя, как на телефоне: задний — сцена без ближнего края диска,

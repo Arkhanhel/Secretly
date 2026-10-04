@@ -167,6 +167,34 @@ const double kWallpaperPulseGain = 1.0;
 /// самую старую — ту, что и так почти догорела.
 const int kWallpaperMaxConcurrentPulses = 4;
 
+/// Как узор дудлов и поле волны «проводит сообщение» ложатся на область.
+///
+/// 🔴 ТЕЛЕФОН ЭТОГО НЕ ПЕРЕДАЁТ (30.09.2026, О1). Без раскладки маска и поле
+/// рисуются «по покрытию», ровно как было всегда, — ветка телефона не
+/// тронута ни на пиксель. Раскладку передаёт ПК: узор там масштабируется по
+/// ВЫСОТЕ области и повторяется колонками от центра, чтобы при расширении окна
+/// дудлы не росли, а добавлялись (`lib/ui/desktop/chat/desktop_wallpaper_tiling.dart`).
+///
+/// Одна раскладка отвечает и за маску, и за поле: волна обязана бежать по тем
+/// же линиям, что нарисованы, в каждой колонке, а не по соседним.
+abstract class WallpaperPatternLayout {
+  const WallpaperPatternLayout();
+
+  /// Во что декодировать маску при этих метриках экрана. Маска перечитывается,
+  /// только когда ответ изменился (сравнение по `==`), — поэтому ответ,
+  /// не зависящий от ширины окна, избавляет от повторного декодирования при
+  /// каждом изменении окна.
+  ImageProvider maskProvider(ImageProvider mask, MediaQueryData? media);
+
+  /// Рисует маску [mask] на всю [rect] кистью [paint]: режим наложения и
+  /// качество фильтра в ней уже заданы, раскладка добавляет только геометрию.
+  void paintMask(Canvas canvas, ui.Image mask, Rect rect, Paint paint);
+
+  /// Поле волны для шейдера: картинка, которую он читает, и её прямоугольник
+  /// в пикселях этой картинки, ложащийся на всю область [size]. Та же
+  /// семантика, что у «покрытия» для телефона, — поэтому шейдер общий.
+  (ui.Image, Rect) fieldSource(ui.Image field, Size size);
+}
 
 class TelegramWallpaper extends StatefulWidget {
   const TelegramWallpaper({
@@ -178,11 +206,16 @@ class TelegramWallpaper extends StatefulWidget {
     this.shimmerDuration = const Duration(milliseconds: 1100),
     this.loopDuration = const Duration(seconds: 20),
     this.blurController,
+    this.patternLayout,
   });
 
   final WallpaperStyle style;
   final ImageProvider mask;
   final ChatWallpaperAnimMode mode;
+
+  /// Раскладка узора; `null` — «по покрытию», как всегда на телефоне.
+  /// См. [WallpaperPatternLayout].
+  final WallpaperPatternLayout? patternLayout;
 
   /// «Обои проводят сообщение»: на отправку и на приход волна света идёт по
   /// сети дудлов — от вас вверх на исходящем, сверху к вам на входящем.
@@ -393,10 +426,27 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
   bool _maskResolvedForSize = false;
   Size? _lastMaskSize;
 
+  /// Запрос декодирования маски, выданный раскладкой ПК (О1); у телефона пуст.
+  ImageProvider? _layoutMaskProvider;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final media = MediaQuery.maybeOf(context);
+    // ПК (О1): маска перечитывается, только когда раскладка ответила иначе.
+    // Высота декодирования там от окна не зависит, поэтому растягивание окна
+    // больше не декодирует маску заново на каждом шаге — это и было мигание
+    // (ТЗ О1 §8.4). Ветка телефона ниже — прежняя.
+    final layout = widget.patternLayout;
+    if (layout != null) {
+      if (_maskResolvedForSize &&
+          layout.maskProvider(widget.mask, media) == _layoutMaskProvider) {
+        return;
+      }
+      _maskResolvedForSize = true;
+      _resolveMask();
+      return;
+    }
     final size = media?.size;
     if (_maskResolvedForSize && size == _lastMaskSize) return;
     _maskResolvedForSize = true;
@@ -437,9 +487,17 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
     final targetWidth = media == null
         ? null
         : (media.size.width * media.devicePixelRatio).round().clamp(360, 2160);
-    final provider = targetWidth == null
-        ? widget.mask
-        : ResizeImage(widget.mask, width: targetWidth, allowUpscaling: false);
+    final ImageProvider provider;
+    final layout = widget.patternLayout;
+    if (layout != null) {
+      // ПК (О1): во что декодировать, решает раскладка.
+      provider = layout.maskProvider(widget.mask, media);
+      _layoutMaskProvider = provider;
+    } else {
+      provider = targetWidth == null
+          ? widget.mask
+          : ResizeImage(widget.mask, width: targetWidth, allowUpscaling: false);
+    }
     // Re-resolving (rotation) must not leave the old stream listening, or the
     // widget accumulates a listener per orientation change for its lifetime.
     if (_stream != null && _listener != null) {
@@ -492,7 +550,8 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
   @override
   void didUpdateWidget(covariant TelegramWallpaper oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.mask != widget.mask) {
+    if (oldWidget.mask != widget.mask ||
+        oldWidget.patternLayout != widget.patternLayout) {
       if (_listener != null) _stream?.removeListener(_listener!);
       _resolveMask();
     }
@@ -573,6 +632,7 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
             pulses: pulses,
             pulseShader: _pulseShader,
             field: _fieldImage,
+            patternLayout: widget.patternLayout,
           ),
         );
       },
@@ -622,6 +682,7 @@ class _WallpaperPainter extends CustomPainter {
     this.pulses = const <_ConductPulse>[],
     this.pulseShader,
     this.field,
+    this.patternLayout,
   });
 
   final ui.Image? mask;
@@ -635,6 +696,9 @@ class _WallpaperPainter extends CustomPainter {
 
   final ui.FragmentShader? pulseShader;
   final ui.Image? field;
+
+  /// Раскладка узора ПК (О1); `null` — «по покрытию», как на телефоне.
+  final WallpaperPatternLayout? patternLayout;
 
   bool get _pulseActive =>
       pulses.isNotEmpty && pulseShader != null && field != null;
@@ -681,11 +745,14 @@ class _WallpaperPainter extends CustomPainter {
     // сама собой, без второго прохода. Нарисуй мы её после `restore`, свет
     // разлился бы по всему экрану сплошной полосой, и вся физика пропала бы.
     if (_pulseActive) {
-      final fieldImage = field!;
       final shader = pulseShader!;
       // Поле обязано читаться той же математикой «cover», что и маска, иначе
-      // волна поедет относительно линий, вдоль которых она идёт.
-      final src = _coverSrc(fieldImage, size);
+      // волна поедет относительно линий, вдоль которых она идёт. С раскладкой
+      // ПК (О1) — той же раскладкой, что и маска ниже, по той же причине.
+      final layout = patternLayout;
+      final (fieldImage, src) = layout == null
+          ? (field!, _coverSrc(field!, size))
+          : layout.fieldSource(field!, size);
       final fw = fieldImage.width.toDouble();
       final fh = fieldImage.height.toDouble();
       final count = pulses.length.clamp(0, kWallpaperMaxConcurrentPulses);
@@ -721,14 +788,28 @@ class _WallpaperPainter extends CustomPainter {
     }
 
     if (img != null) {
-      // Pattern mask over the blobs: only the lines remain (cover fill).
-      final src = _coverSrc(img, size);
-      canvas.drawImageRect(
-        img, src, rect,
-        Paint()
-          ..blendMode = BlendMode.dstIn
-          ..filterQuality = FilterQuality.medium,
-      );
+      final layout = patternLayout;
+      if (layout != null) {
+        // ПК (О1): та же маска, но по раскладке — по высоте области, колонками
+        // от центра. Кисть та же, раскладка задаёт только геометрию.
+        layout.paintMask(
+          canvas,
+          img,
+          rect,
+          Paint()
+            ..blendMode = BlendMode.dstIn
+            ..filterQuality = FilterQuality.medium,
+        );
+      } else {
+        // Pattern mask over the blobs: only the lines remain (cover fill).
+        final src = _coverSrc(img, size);
+        canvas.drawImageRect(
+          img, src, rect,
+          Paint()
+            ..blendMode = BlendMode.dstIn
+            ..filterQuality = FilterQuality.medium,
+        );
+      }
     }
     canvas.restore();
 
@@ -802,5 +883,6 @@ class _WallpaperPainter extends CustomPainter {
       old.style != style ||
       !identical(old.pulses, pulses) ||
       old.pulseShader != pulseShader ||
-      old.field != field;
+      old.field != field ||
+      old.patternLayout != patternLayout;
 }

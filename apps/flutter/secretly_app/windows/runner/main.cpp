@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include "flutter_window.h"
+#include "single_instance.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
@@ -31,6 +32,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
             shell32, "SetCurrentProcessExplicitAppUserModelID"))) {
       set_app_id(L"Secretly");
     }
+  }
+
+  // Secretly уже запущен (например, спрятан в трей) — просим его показаться
+  // и уходим, не поднимая второй движок. См. single_instance.h.
+  if (HandOffToRunningInstance()) {
+    ::CoUninitialize();
+    return EXIT_SUCCESS;
   }
 
   flutter::DartProject project(L"data");

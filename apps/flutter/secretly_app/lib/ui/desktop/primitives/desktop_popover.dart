@@ -76,6 +76,8 @@ class DesktopPopover {
       offset,
     );
 
+    // Палитра места вызова едет в окно — см. [DColors.carry].
+    final palette = DColors.maybeOf(context);
     return showGeneralDialog<T>(
       context: context,
       barrierDismissible: true,
@@ -83,13 +85,16 @@ class DesktopPopover {
       barrierColor: Colors.transparent,
       transitionDuration: DMotion.fast,
       pageBuilder: (ctx, a, b) {
-        return _PopoverScaffold(
-          position: pos,
-          width: width,
-          maxHeight: maxHeight,
-          animation: a,
-          side: side,
-          child: child,
+        return DColors.carry(
+          palette,
+          _PopoverScaffold(
+            position: pos,
+            width: width,
+            maxHeight: maxHeight,
+            animation: a,
+            side: side,
+            child: child,
+          ),
         );
       },
       transitionBuilder: (ctx, a, b, child) => child,
