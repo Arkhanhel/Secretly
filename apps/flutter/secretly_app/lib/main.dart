@@ -48,6 +48,7 @@ import 'ui/widgets/app_background.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'ui/liquid_glass_flags.dart';
 import 'ui/thermal_guard.dart';
+import 'legal/ffmpeg_mobile_license.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,6 +58,8 @@ Future<void> main() async {
   // добавляет замыкание в список, а сам текст читается лишь когда человек
   // откроет экран. См. `lib/legal/third_party_licenses.dart`.
   registerThirdPartyLicenses();
+  // FFmpeg на телефоне — LGPL-3.0: запись и текст лицензии (04.10.2026).
+  registerMobileFfmpegLicense();
   // PERF(cache): cap the in-memory decoded-image cache above the 100 MB
   // default. Full-resolution camera photos (~48 MB ARGB) would otherwise evict
   // the cache after a couple of images and force constant re-decodes while

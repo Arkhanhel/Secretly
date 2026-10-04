@@ -11380,8 +11380,16 @@ class AppController {
         throw DesktopLinkFailure(
           DesktopLinkFailureCode.desktopIdentityMismatch,
         );
-      case DesktopLinkIdentityCheck.notProvided:
+      // 🔴 КЛЮЧ В QR ЕСТЬ, А У СЕРВЕРА НЕТ — ОТКАЗ (04.10.2026, поручение
+      // владельца). Раньше здесь шли дальше: сервер, промолчавший о ключе
+      // (или сорвавшийся запрос), оставлял пакет со всей перепиской
+      // шифроваться на ключ, который отдаст тот же сервер. Сверить не с чем —
+      // значит не отправлять. QR без ключа (ПК старой версии) — как раньше.
       case DesktopLinkIdentityCheck.serverKeyMissing:
+        throw DesktopLinkFailure(
+          DesktopLinkFailureCode.desktopIdentityUnavailable,
+        );
+      case DesktopLinkIdentityCheck.notProvided:
         if (_blockUnverified) {
           throw DesktopLinkFailure(
             DesktopLinkFailureCode.strictModeNeedsVerifiedDesktop,

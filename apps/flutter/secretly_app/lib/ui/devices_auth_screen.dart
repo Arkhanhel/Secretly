@@ -609,6 +609,13 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
           ru: 'Включён строгий режим, а этот компьютер нельзя проверить по QR. Обновите Secretly на компьютере или выключите строгий режим на время привязки.',
           en: 'Strict mode is on: this computer cannot be verified by its QR. Update Secretly on the computer, or turn strict mode off for the time of linking.',
         );
+      // 04.10.2026: ключ в QR есть, а сервер его не отдал — не отправляем.
+      case DesktopLinkFailureCode.desktopIdentityUnavailable:
+        return _label(
+          context,
+          ru: 'Не удалось сверить ключ этого компьютера с сервером. Ничего не отправлено. Проверьте связь и повторите.',
+          en: 'Could not check the key of this computer with the server. Nothing was sent. Check the connection and try again.',
+        );
     }
   }
 

@@ -261,7 +261,10 @@ void main() {
   tearDown(DesktopRoomCallMediaGuard.debugReset);
 
   group('RoomCallManager.releaseMediaIfIdle', () {
-    test('🔴 дыра общего кода: «созвона нет», а движок жив', () async {
+    // 04.10.2026 владелец велел закрыть дыру и в общем коде (телефон):
+    // теперь переход в «созвона нет» отпускает движок сам, а этот метод
+    // остаётся безвредной страховкой ПК.
+    test('🔴 общий код сам отпускает движок вместе с «созвона нет»', () async {
       final s = await _joinedManager();
       try {
         expect(s.manager.state.value.hasActiveSession, isTrue);
@@ -273,17 +276,13 @@ void main() {
         await s.manager.refreshCurrent();
 
         expect(s.manager.state.value.hasActiveSession, isFalse);
-        // Ровно то, что видел человек: окно — «созвона нет», движок — жив.
-        expect(engine.disposed, isFalse);
-        expect(s.manager.mediaController, same(engine));
-        // И прежний путь выхода его уже не находит.
-        await s.manager.clearIfMatches(roomId: 'group:alpha', callId: 'call-1');
-        expect(engine.disposed, isFalse);
-
-        await s.manager.releaseMediaIfIdle();
-
+        // До 04.10.2026 здесь окно говорило «созвона нет», а движок жил.
         expect(engine.disposed, isTrue);
         expect(s.manager.mediaController, isNull);
+        // Прежние пути выхода и страховка ПК после этого безвредны.
+        await s.manager.clearIfMatches(roomId: 'group:alpha', callId: 'call-1');
+        await s.manager.releaseMediaIfIdle();
+        expect(engine.disposed, isTrue);
       } finally {
         await s.manager.dispose();
         await s.db.close();
@@ -349,7 +348,8 @@ void main() {
         await _seedCall(s.db, selfJoinState: 'left');
         await s.manager.refreshCurrent();
         final engine = s.media.created.single;
-        expect(engine.disposed, isFalse);
+        // Общий код отпустил движок сам (04.10.2026); сторож — безвреден.
+        expect(engine.disposed, isTrue);
 
         DesktopRoomCallMediaGuard.attach(s.manager);
         await pumpEventQueue();
@@ -377,11 +377,12 @@ void main() {
           same(second.manager),
         );
 
-        // Прежний управляющий больше не наш: его переходы сторож не трогает.
+        // Прежний управляющий больше не наш; его движок отпускает уже сам
+        // общий код (04.10.2026), а не сторож.
         await _seedCall(first.db, selfJoinState: 'left');
         await first.manager.refreshCurrent();
         await pumpEventQueue();
-        expect(first.media.created.single.disposed, isFalse);
+        expect(first.media.created.single.disposed, isTrue);
 
         await _seedCall(second.db, selfJoinState: 'left');
         await second.manager.refreshCurrent();

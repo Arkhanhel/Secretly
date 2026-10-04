@@ -39,6 +39,10 @@ enum DesktopLinkFailureCode {
   /// A (26.09.2026): на телефоне строгий режим, а QR от ПК старой версии —
   /// без ключа, проверить компьютер нечем.
   strictModeNeedsVerifiedDesktop,
+
+  /// 04.10.2026 (поручение владельца): QR несёт ключ ПК, а сервер ключ не
+  /// отдал или не ответил. Сверить не с чем — переписку не отправляем.
+  desktopIdentityUnavailable,
 }
 
 class DesktopLinkFailure implements Exception {
@@ -119,5 +123,7 @@ String _defaultDesktopLinkFailureMessage(DesktopLinkFailureCode code) {
       return 'The key of this computer does not match the key on the server. Nothing was sent. Generate a new QR on the computer; if it repeats, do not link it.';
     case DesktopLinkFailureCode.strictModeNeedsVerifiedDesktop:
       return 'Strict mode is on: this computer cannot be verified by its QR. Update Secretly on the computer, or turn strict mode off for the time of linking.';
+    case DesktopLinkFailureCode.desktopIdentityUnavailable:
+      return 'Could not check the key of this computer with the server. Nothing was sent. Check the connection and try again.';
   }
 }

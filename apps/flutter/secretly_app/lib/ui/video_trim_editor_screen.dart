@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
+import '../media/h264_encoder.dart';
 import 'widgets/broken_media_box.dart';
 
 /// Result returned by [VideoTrimEditorScreen]: the (possibly re-encoded) output
@@ -24,7 +25,7 @@ class VideoTrimEditorResult {
 /// Telegram-style post-capture video editor. Lets the user trim the clip by
 /// duration (filmstrip with draggable handles) and crop the frame (resizable
 /// rectangle) before sending. Exports through FFmpeg — trim-only uses a fast
-/// stream copy, crop re-encodes with libx264.
+/// stream copy, crop re-encodes (system H.264 on phones, libx264 on desktop).
 class VideoTrimEditorScreen extends StatefulWidget {
   const VideoTrimEditorScreen({
     super.key,
@@ -203,7 +204,10 @@ class _VideoTrimEditorScreenState extends State<VideoTrimEditorScreen> {
       final durSec = ((_endMs - _startMs) / 1000).clamp(0.1, 100000.0)
           .toStringAsFixed(3);
 
-      String cmd;
+      String cmd = '';
+      // Перекодирование — через кодер по лицензии сборки (04.10.2026):
+      // на телефоне системный H.264, на компьютере libx264.
+      String Function(String videoArgs)? encode;
       if (cropped) {
         // Map the fractional crop onto the oriented frame (FFmpeg auto-rotates
         // by default, matching what video_player displays). Even dimensions are
@@ -221,10 +225,10 @@ class _VideoTrimEditorScreenState extends State<VideoTrimEditorScreen> {
         final ch = even(_crop.height * vh);
         final cx = (_crop.left * vw).round().clamp(0, (vw - cw).round());
         final cy = (_crop.top * vh).round().clamp(0, (vh - ch).round());
-        cmd =
+        encode = (v) =>
             "-y -ss $startSec -i '${widget.sourcePath}' -t $durSec "
             "-vf \"crop=$cw:$ch:$cx:$cy\" "
-            "-c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p "
+            "$v "
             "-c:a aac -b:a 128k -movflags +faststart '$outPath'";
       } else {
         // Trim only → fast, lossless stream copy preserving rotation metadata.
@@ -233,7 +237,9 @@ class _VideoTrimEditorScreenState extends State<VideoTrimEditorScreen> {
             "-c copy -movflags +faststart '$outPath'";
       }
 
-      final session = await FFmpegKit.execute(cmd);
+      final session = encode != null
+          ? await H264Encoder.execute(encode, crf: 23, kbps: 6000)
+          : await FFmpegKit.execute(cmd);
       final rc = await session.getReturnCode();
       final outFile = File(outPath);
       if (ReturnCode.isSuccess(rc) && outFile.existsSync() &&
@@ -250,11 +256,14 @@ class _VideoTrimEditorScreenState extends State<VideoTrimEditorScreen> {
       // Fallback: if a trim-only stream copy failed (e.g. odd container), retry
       // by re-encoding before giving up.
       if (!cropped) {
-        final reenc =
-            "-y -ss $startSec -i '${widget.sourcePath}' -t $durSec "
-            "-c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p "
-            "-c:a aac -b:a 128k -movflags +faststart '$outPath'";
-        final s2 = await FFmpegKit.execute(reenc);
+        final s2 = await H264Encoder.execute(
+          (v) =>
+              "-y -ss $startSec -i '${widget.sourcePath}' -t $durSec "
+              "$v "
+              "-c:a aac -b:a 128k -movflags +faststart '$outPath'",
+          crf: 23,
+          kbps: 6000,
+        );
         final rc2 = await s2.getReturnCode();
         if (ReturnCode.isSuccess(rc2) && outFile.existsSync() &&
             outFile.lengthSync() > 0) {
@@ -902,11 +911,14 @@ Future<String?> exportTrimmedVideoFile(
         outFile.lengthSync() > 0) {
       return outPath;
     }
-    final reencCmd =
-        "-y -ss $startSec -i '$sourcePath' -t $durSec "
-        "-c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p "
-        "-c:a aac -b:a 128k -movflags +faststart '$outPath'";
-    session = await FFmpegKit.execute(reencCmd);
+    session = await H264Encoder.execute(
+      (v) =>
+          "-y -ss $startSec -i '$sourcePath' -t $durSec "
+          "$v "
+          "-c:a aac -b:a 128k -movflags +faststart '$outPath'",
+      crf: 23,
+      kbps: 6000,
+    );
     rc = await session.getReturnCode();
     if (ReturnCode.isSuccess(rc) &&
         outFile.existsSync() &&

@@ -6,7 +6,6 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
-import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -16,6 +15,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../wave1_l10n.dart';
 import '../widgets/frosted_header_island.dart';
+import '../../media/h264_encoder.dart';
 
 /// Result of a finished video-note recording (квадратик). Returned by
 /// [showVideoNoteRecorder] when the user releases / sends a valid take.
@@ -812,14 +812,15 @@ class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
       'video_note_${DateTime.now().microsecondsSinceEpoch}.mp4',
     );
     await _deleteIfAny(out);
-    final cmd =
+    // Кодер — по лицензии сборки FFmpeg (04.10.2026): на телефоне системный.
+    String cmd(String v) =>
         '-y -i "${seg.path}" '
         '-vf "${_squareVideoChain(seg)}" '
-        '-c:v libx264 -preset veryfast -pix_fmt yuv420p '
+        '$v '
         '-c:a aac -movflags +faststart '
         '"$out"';
     try {
-      final session = await FFmpegKit.execute(cmd);
+      final session = await H264Encoder.execute(cmd, crf: 23, kbps: 1200);
       final rc = await session.getReturnCode();
       if (ReturnCode.isSuccess(rc) && File(out).existsSync()) {
         return out;
@@ -876,16 +877,16 @@ class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
     }
     filter.write('${concatRefs}concat=n=$n:v=1:a=1[outv][outa]');
 
-    final cmd =
+    String cmd(String v) =>
         '-y ${inputs.toString().trim()} '
         '-filter_complex "${filter.toString()}" '
         '-map "[outv]" -map "[outa]" '
-        '-c:v libx264 -preset veryfast -pix_fmt yuv420p '
+        '$v '
         '-c:a aac -movflags +faststart '
         '"$out"';
 
     try {
-      final session = await FFmpegKit.execute(cmd);
+      final session = await H264Encoder.execute(cmd, crf: 23, kbps: 1200);
       final rc = await session.getReturnCode();
       if (ReturnCode.isSuccess(rc) && File(out).existsSync()) {
         return out;

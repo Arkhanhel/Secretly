@@ -9,6 +9,7 @@ import 'package:ffmpeg_kit_flutter_new/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'h264_encoder.dart';
 
 /// Telegram-style outgoing-video compression.
 ///
@@ -73,39 +74,58 @@ class VideoCompressor {
       final durationMs = await _probeDurationMs(sourcePath);
 
       // scale: fit inside 1920x1920 keeping aspect, downscale only (never
-      // upscale), and force even dimensions (libx264 requires them).
+      // upscale), and force even dimensions (H.264 encoders require them).
       const cmd =
           '-y -i {SRC} '
           "-vf \"scale='min(1920,iw)':'min(1920,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2\" "
-          '-c:v libx264 -preset veryfast -crf 25 -pix_fmt yuv420p '
+          '{VIDEO} '
           '-c:a aac -b:a 128k -movflags +faststart {OUT}';
-      final full = cmd
-          .replaceAll('{SRC}', "'$sourcePath'")
-          .replaceAll('{OUT}', "'$outPath'");
 
-      // Async execution so the statistics callback can stream progress; the
-      // complete callback resolves the completer with the return code.
-      final completer = Completer<ReturnCode?>();
-      await FFmpegKit.executeAsync(
-        full,
-        (session) async {
-          try {
-            if (!completer.isCompleted) {
-              completer.complete(await session.getReturnCode());
-            }
-          } catch (_) {
-            if (!completer.isCompleted) completer.complete(null);
-          }
-        },
-        null,
-        (stats) {
-          if (onProgress != null && durationMs > 0) {
-            final t = stats.getTime();
-            if (t > 0) onProgress((t / durationMs).clamp(0.0, 1.0));
-          }
-        },
+      // Кодер — по лицензии сборки FFmpeg (04.10.2026): на телефоне
+      // системный H.264, на компьютере libx264. Запасной MPEG-4 на Android
+      // здесь не нужен: картинку до 1920 iPhone в нём не покажет, а при
+      // сбое и так уходит оригинал.
+      final variants = H264Encoder.variants(
+        crf: 25,
+        kbps: 4000,
+        fallback: H264Encoder.platform != H264Platform.android,
       );
-      final rc = await completer.future;
+      ReturnCode? rc;
+      for (final videoArgs in variants) {
+        final full = cmd
+            .replaceAll('{VIDEO}', videoArgs)
+            .replaceAll('{SRC}', "'$sourcePath'")
+            .replaceAll('{OUT}', "'$outPath'");
+
+        // Async execution so the statistics callback can stream progress; the
+        // complete callback resolves the completer with the return code.
+        final completer = Completer<ReturnCode?>();
+        await FFmpegKit.executeAsync(
+          full,
+          (session) async {
+            try {
+              if (!completer.isCompleted) {
+                completer.complete(await session.getReturnCode());
+              }
+            } catch (_) {
+              if (!completer.isCompleted) completer.complete(null);
+            }
+          },
+          null,
+          (stats) {
+            if (onProgress != null && durationMs > 0) {
+              final t = stats.getTime();
+              if (t > 0) onProgress((t / durationMs).clamp(0.0, 1.0));
+            }
+          },
+        );
+        rc = await completer.future;
+        if (ReturnCode.isSuccess(rc) &&
+            await outFile.exists() &&
+            await outFile.length() > 0) {
+          break;
+        }
+      }
       if (!ReturnCode.isSuccess(rc) ||
           !await outFile.exists() ||
           await outFile.length() <= 0) {

@@ -16,6 +16,33 @@ published build yet.
 
 ---
 
+## [1.8.64] — 2026-10-05
+
+Build 645 (iOS TestFlight, Android). Mobile release; the desktop apps stay on
+1.8.63 (644). Source: tag `v1.8.64-645`.
+
+### Changed
+- iOS and Android now ship the LGPL build of FFmpeg (FFmpegKit "full" variant,
+  no x264 or other GPL components). Video is encoded by the system H.264
+  encoder (MediaCodec on Android, VideoToolbox on iOS, with OpenH264 as the iOS
+  fallback). The plugin is vendored in
+  `apps/flutter/secretly_app/third_party/ffmpeg_kit_flutter_new` with its
+  changes listed in `MODIFICATIONS.md`; the release scripts refuse a mobile
+  package that contains a GPL build. The licenses screen on the phone lists
+  FFmpeg under LGPL-3.0 with the license texts.
+
+### Fixed
+- Group calls: after "Leave", "End for everyone" or being removed, the call
+  engine is released on the phone too, so the microphone no longer stays on.
+
+### Security
+- Linking a computer: when the computer's QR code carries its key but the
+  server does not confirm it (or the request fails), the phone now refuses
+  and sends nothing. QR codes from older computers without a key work as
+  before.
+
+---
+
 ## [1.8.63] — 2026-10-04
 
 Build 644 (macOS, Windows, iOS TestFlight, Android). Source: tag `v1.8.63-644`.

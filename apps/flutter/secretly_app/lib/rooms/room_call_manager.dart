@@ -142,6 +142,10 @@ class RoomCallManager {
         !cached.isActive ||
         cached.callId != current.callId ||
         !(cached.selfParticipant?.isJoined ?? false)) {
+      // 🔴 Движок отпускается ВМЕСТЕ с переходом в «нет созвона» (04.10.2026,
+      // поручение владельца): раньше эти ветки забывали LiveKit, микрофон
+      // оставался в эфире, а `clearIfMatches` потом уже не находил созвон.
+      await _disposeMediaController();
       _setState(const RoomCallRuntimeState.idle());
       await _restorePrimaryJoinedRoomCall();
       return;
@@ -358,6 +362,10 @@ class RoomCallManager {
         !cached.isActive ||
         cached.callId != current.callId ||
         !(cached.selfParticipant?.isJoined ?? false)) {
+      // 🔴 Движок отпускается ВМЕСТЕ с переходом в «нет созвона» (04.10.2026,
+      // поручение владельца): раньше эти ветки забывали LiveKit, микрофон
+      // оставался в эфире, а `clearIfMatches` потом уже не находил созвон.
+      await _disposeMediaController();
       _setState(const RoomCallRuntimeState.idle());
       await _restorePrimaryJoinedRoomCall();
       return;
@@ -393,6 +401,10 @@ class RoomCallManager {
     }
     if (selfParticipant == null || !selfParticipant.isJoined) {
       if (state.value.matches(roomId: roomId, callId: callId)) {
+        // 🔴 Движок отпускается ВМЕСТЕ с переходом в «нет созвона» (04.10.2026,
+        // поручение владельца): раньше эти ветки забывали LiveKit, микрофон
+        // оставался в эфире, а `clearIfMatches` потом уже не находил созвон.
+        await _disposeMediaController();
         _setState(const RoomCallRuntimeState.idle());
       }
       return;

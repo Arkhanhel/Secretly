@@ -141,6 +141,7 @@ void main() {
       for (final code in [
         DesktopLinkFailureCode.desktopIdentityMismatch,
         DesktopLinkFailureCode.strictModeNeedsVerifiedDesktop,
+        DesktopLinkFailureCode.desktopIdentityUnavailable,
       ]) {
         expect(DesktopLinkFailure(code).message, isNotEmpty);
       }
@@ -182,12 +183,23 @@ void main() {
           ),
         ),
       );
-      // Нечем проверить — отказ только в строгом режиме.
+      // 🔴 Ключ в QR есть, а сервер его не отдал — отказ в ЛЮБОМ режиме
+      // (04.10.2026, поручение владельца): раньше здесь шли дальше.
       expect(
         verify,
         matches(
           RegExp(
-            r'DesktopLinkIdentityCheck\.serverKeyMissing:\s*if \(_blockUnverified\) \{\s*throw DesktopLinkFailure\(\s*DesktopLinkFailureCode\.strictModeNeedsVerifiedDesktop',
+            r'DesktopLinkIdentityCheck\.serverKeyMissing:\s*throw DesktopLinkFailure\(\s*DesktopLinkFailureCode\.desktopIdentityUnavailable',
+          ),
+        ),
+      );
+      // Ключа нет в самом QR (ПК старой версии) — отказ только в строгом
+      // режиме, как раньше.
+      expect(
+        verify,
+        matches(
+          RegExp(
+            r'DesktopLinkIdentityCheck\.notProvided:\s*if \(_blockUnverified\) \{\s*throw DesktopLinkFailure\(\s*DesktopLinkFailureCode\.strictModeNeedsVerifiedDesktop',
           ),
         ),
       );

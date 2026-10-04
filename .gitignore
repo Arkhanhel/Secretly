@@ -101,3 +101,8 @@ artifacts/otf-attachments/
 # Выгрузки сессий для журнала запросов к ИИ: содержат подробности незакрытых
 # уязвимостей и устройство боевого сервера. Лежат на диске, в историю не идут.
 docs/audit/prompt-log/*.zip
+
+# FFmpegKit (своя копия плагина): бинарные фреймворки скачиваются сборкой.
+apps/flutter/secretly_app/third_party/ffmpeg_kit_flutter_new/ios/Frameworks/
+apps/flutter/secretly_app/third_party/ffmpeg_kit_flutter_new/macos/Frameworks/
+apps/flutter/secretly_app/third_party/ffmpeg_kit_flutter_new/android/build/

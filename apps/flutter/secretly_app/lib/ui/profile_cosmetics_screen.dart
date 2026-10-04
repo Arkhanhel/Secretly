@@ -20,6 +20,7 @@ import 'wave1_l10n.dart';
 import 'widgets/framed_avatar.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'widgets/premium_glass.dart';
+import '../media/h264_encoder.dart';
 
 /// Premium picker for the animated avatar frame + animated profile cover.
 ///
@@ -210,10 +211,12 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
       final videoOut = '${dir.path}/cover_video_$stamp.mp4';
       final stillOut = '${dir.path}/cover_video_still_$stamp.png';
       // Trim to a short, downscaled, silent loop so the cover stays light.
-      final enc =
-          "-y -i '$src' -t 8 -an -vf scale=720:-2 -c:v libx264 -pix_fmt yuv420p "
-          "-crf 28 -preset veryfast '$videoOut'";
-      final encRc = await (await FFmpegKit.execute(enc)).getReturnCode();
+      // Кодер — по лицензии сборки FFmpeg (04.10.2026): на телефоне системный.
+      final encRc = await (await H264Encoder.execute(
+        (v) => "-y -i '$src' -t 8 -an -vf scale=720:-2 $v '$videoOut'",
+        crf: 28,
+        kbps: 1500,
+      )).getReturnCode();
       String playPath;
       if (ReturnCode.isSuccess(encRc) && File(videoOut).existsSync()) {
         playPath = videoOut;

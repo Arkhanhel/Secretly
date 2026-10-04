@@ -57,6 +57,7 @@ import 'widgets/secretly_glass_fab.dart';
 import 'widgets/secretly_glass_sheet.dart';
 import '../security/app_security_manager.dart';
 import 'widgets/broken_media_box.dart';
+import '../media/h264_encoder.dart';
 
 /// A profile top-island action button: jelly press on liquid glass (iOS),
 /// standard IconButton elsewhere. Icon colour follows the theme icon colour so
@@ -1002,11 +1003,12 @@ class _ProfileScreenState extends State<ProfileScreen>
       // + `crop` SIGSEGVs libswscale (buffer overrun) on some Android ffmpeg
       // builds. The avatar is center-cropped to a circle at render time
       // (BoxFit.cover), so a square encode isn't needed.
-      final enc =
-          "-y -i '${x.path}' -t 8 -an "
-          "-vf scale=480:-2 "
-          "-c:v libx264 -pix_fmt yuv420p -crf 28 -preset veryfast '$videoOut'";
-      final encRc = await (await FFmpegKit.execute(enc)).getReturnCode();
+      // Кодер — по лицензии сборки FFmpeg (04.10.2026): на телефоне системный.
+      final encRc = await (await H264Encoder.execute(
+        (v) => "-y -i '${x.path}' -t 8 -an -vf scale=480:-2 $v '$videoOut'",
+        crf: 28,
+        kbps: 900,
+      )).getReturnCode();
       String playPath;
       if (ReturnCode.isSuccess(encRc) && File(videoOut).existsSync()) {
         playPath = videoOut;
