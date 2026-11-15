@@ -281,6 +281,30 @@ abstract class FrameSim extends ChangeNotifier {
   double ringWidth = 7;
   bool get drawRing => ringColors.isNotEmpty;
 
+  /// «Кажущийся ветер» от перетаскивания портрета: −0.5 × скорость портрета,
+  /// px/с в координатах холста 200 × 200. Его читают огонь, дым, сакура, стая
+  /// и другие рамки переделки 13.11.2026. Источника нет — поля нулевые, и
+  /// рамка работает как без ветра.
+  double ivx = 0, ivy = 0;
+  double _pvx = 0, _pvy = 0;
+
+  /// Ускорение «ветра» за кадр (как `accel()` дизайн-референса), ±4000.
+  Offset accel(double dt) {
+    final d = math.max(dt, 0.008);
+    final ax = _clamp((ivx - _pvx) / d * 2, -4000, 4000);
+    final ay = _clamp((ivy - _pvy) / d * 2, -4000, 4000);
+    _pvx = ivx;
+    _pvy = ivy;
+    return Offset(ax, ay);
+  }
+
+  /// Не рисовать зазор цвета фона между кольцом и фото.
+  bool noGap = false;
+
+  /// Есть ли у рамки слой [mid] — поверх фото, внутри трансформации тела.
+  /// Без него [paintFront] обходится без лишних save/restore.
+  bool get hasMid => false;
+
   /// true один раз — в кадр, когда [active] переключился.
   bool edge() {
     final ch = _edgePrev != null && _edgePrev != active;
@@ -306,6 +330,10 @@ abstract class FrameSim extends ChangeNotifier {
   void update(double dt);
   void back(Canvas c, FramePalette p) {}
   void front(Canvas c, FramePalette p) {}
+
+  /// Слой поверх фото внутри трансформации тела (морозная виньетка «Инея»).
+  /// Работает, только если [hasMid] вернул true.
+  void mid(Canvas c, FramePalette p) {}
 
   /// «Дышащее» кольцо: деформация ±1.5 px.
   Path ringPath() =>
@@ -350,9 +378,12 @@ abstract class FrameSim extends ChangeNotifier {
     back(c, p);
     withBody(c, () {
       if (drawRing) paintRing(c);
-      c.drawCircle(Offset(cx, cy), av + 3, _fill(p.bg));
+      if (!noGap) c.drawCircle(Offset(cx, cy), av + 3, _fill(p.bg));
     });
   }
 
-  void paintFront(Canvas c, FramePalette p) => front(c, p);
+  void paintFront(Canvas c, FramePalette p) {
+    if (hasMid) withBody(c, () => mid(c, p));
+    front(c, p);
+  }
 }

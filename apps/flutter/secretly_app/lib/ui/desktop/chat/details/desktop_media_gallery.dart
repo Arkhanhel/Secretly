@@ -31,6 +31,7 @@ import '../../primitives/hover_listener.dart';
 import '../../../widgets/broken_media_box.dart';
 import '../../primitives/desktop_snackbar.dart';
 import '../attachment_risk_dialog.dart' show mayOpenReceivedFile;
+import '../message_media.dart' show VideoPoster;
 import '../attachment_save.dart'
     show attachmentOpenCopy, suggestedAttachmentFileName;
 
@@ -539,13 +540,46 @@ class _MediaTileState extends State<_MediaTile> {
   Widget _face(DColorSet c) {
     final f = _file;
     if (f != null && DesktopFileProbe.exists(f.path) && !_isVideo) {
-      return Image.file(
-        f,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => const BrokenMediaBox(),
+      // П10 (разбор медиа 15.11.2026): декодируем под размер плитки, а не
+      // весь снимок — сетка из сотни фото по 12 Мп держала сотни мегабайт.
+      // Задаётся КОРОТКАЯ сторона (по размерам от отправителя), иначе
+      // картинка сплющивается (тот же урок, что в галерее телефона).
+      final att = widget.item.attachment;
+      final landscape =
+          (att.width ?? 0) > 0 &&
+          (att.height ?? 0) > 0 &&
+          att.width! > att.height!;
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final edge = constraints.biggest.longestSide;
+          final px = edge.isFinite && edge > 0
+              ? (edge * MediaQuery.devicePixelRatioOf(context)).round()
+              : null;
+          return Image.file(
+            f,
+            fit: BoxFit.cover,
+            cacheWidth: landscape ? null : px,
+            cacheHeight: landscape ? px : null,
+            errorBuilder: (_, _, _) => const BrokenMediaBox(),
+          );
+        },
       );
     }
     if (_isVideo) {
+      // П10: кадр ролика вместо значка — тот же кадр, что в ленте.
+      if (f != null && DesktopFileProbe.exists(f.path)) {
+        return LayoutBuilder(
+          builder: (context, constraints) => VideoPoster(
+            key: ValueKey('gallery_poster_${widget.item.attachment.blobId}'),
+            blobId: widget.item.attachment.blobId,
+            path: f.path,
+            size: constraints.biggest.isFinite
+                ? constraints.biggest
+                : const Size(120, 120),
+            background: c.elevated,
+          ),
+        );
+      }
       return Center(
         child: Icon(
           FluentIcons.play_circle_24_regular,
@@ -880,12 +914,24 @@ class _FileTile extends StatelessWidget {
     );
   }
 
+  /// П10 (разбор медиа 15.11.2026): строка называлась типом файла —
+  /// «application/pdf». Теперь — имя файла, у музыки — «исполнитель — трек».
   String _title(String mime, bool isVoice, AppLocalizations l10n) {
+    final att = item.attachment;
     if (kind == _ListKind.audio) {
       if (isVoice) return l10n.desktopChatsVoiceMessage;
-      return mime.isEmpty ? l10n.desktopChatsAudio : mime;
+      final title = (att.musicTitle ?? '').trim();
+      final artist = (att.musicArtist ?? '').trim();
+      if (title.isNotEmpty) {
+        return artist.isEmpty ? title : '$artist — $title';
+      }
+      final name = (att.filename ?? '').trim();
+      if (name.isNotEmpty) return name;
+      return l10n.desktopChatsAudio;
     }
-    return mime.isEmpty ? l10n.file : mime;
+    final name = (att.filename ?? '').trim();
+    if (name.isNotEmpty) return name;
+    return l10n.file;
   }
 
   String _formatSize(int bytes, AppLocalizations l10n) {

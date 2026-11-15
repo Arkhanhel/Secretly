@@ -881,6 +881,29 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // П12 (разбор медиа 15.11.2026): подпись к снимку
+                          // или ролику видна в просмотрщике, как в чате.
+                          if ((_currentItem.attachment.caption ?? '')
+                              .trim()
+                              .isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
+                              child: Text(
+                                _currentItem.attachment.caption!.trim(),
+                                key: const ValueKey('viewer:caption'),
+                                maxLines: 4,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14.5,
+                                  height: 1.3,
+                                  shadows: [
+                                    Shadow(color: Colors.black87, blurRadius: 8),
+                                  ],
+                                ),
+                              ),
+                            ),
                           if (total > 1) _buildStripCarousel(context),
                           // FIXED TIMELINE SLOT (2026-07-17): the seek bar
                           // lives in a constant-height slot that exists for
@@ -1053,6 +1076,19 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
 /// Minimalist seek timeline for the active video: thin white track, small
 /// thumb, mm:ss labels on both sides. Dragging pauses playback and resumes it
 /// on release (if it was playing).
+/// Скорости ролика в просмотрщике, по кругу.
+const List<double> kVideoPlaybackSpeeds = <double>[1.0, 1.5, 2.0, 0.5];
+
+double nextVideoPlaybackSpeed(double current) {
+  final i = kVideoPlaybackSpeeds.indexWhere((s) => (s - current).abs() < 0.01);
+  return kVideoPlaybackSpeeds[(i + 1) % kVideoPlaybackSpeeds.length];
+}
+
+String videoPlaybackSpeedLabel(double speed) {
+  final whole = speed == speed.roundToDouble();
+  return '${whole ? speed.toInt() : speed}×';
+}
+
 class _VideoTimelineBar extends StatefulWidget {
   const _VideoTimelineBar({required this.controller});
 
@@ -1141,6 +1177,28 @@ class _VideoTimelineBarState extends State<_VideoTimelineBar> {
               ),
             ),
             Text(_fmt(value.duration), style: labelStyle),
+            // П12 (разбор медиа 15.11.2026): скорость ролика, как у
+            // голосовых на ПК: 1× → 1,5× → 2× → 0,5× → 1×.
+            const SizedBox(width: 6),
+            GestureDetector(
+              key: const ValueKey('viewer:speed'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                final next = nextVideoPlaybackSpeed(value.playbackSpeed);
+                unawaited(widget.controller.setPlaybackSpeed(next));
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.white.withValues(alpha: 0.16),
+                ),
+                child: Text(
+                  videoPlaybackSpeedLabel(value.playbackSpeed),
+                  style: labelStyle,
+                ),
+              ),
+            ),
           ],
         );
       },
@@ -1182,14 +1240,31 @@ class _MediaViewerVideoPage extends StatefulWidget {
   State<_MediaViewerVideoPage> createState() => _MediaViewerVideoPageState();
 }
 
-class _MediaViewerVideoPageState extends State<_MediaViewerVideoPage> {
+class _MediaViewerVideoPageState extends State<_MediaViewerVideoPage>
+    with WidgetsBindingObserver {
   VideoPlayerController? _controller;
   bool _loadFailed = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _openController();
+  }
+
+  // 🔴 Play Vitals п. 1/12 (15.11.2026): сбой `FlutterJNI.ensureAttachedToNative`
+  // — кадр видео/камеры приходит в движок, уже отсоединённый от окна (свернули
+  // и закрыли). Уходя в фон, перестаём подавать кадры.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      final c = _controller;
+      if (c != null && c.value.isInitialized && c.value.isPlaying) {
+        unawaited(c.pause());
+      }
+    }
   }
 
   @override
@@ -1246,6 +1321,7 @@ class _MediaViewerVideoPageState extends State<_MediaViewerVideoPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _disposeController();
     super.dispose();
   }

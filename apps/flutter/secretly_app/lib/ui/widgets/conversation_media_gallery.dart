@@ -19,6 +19,7 @@ import '../chat_screen_l10n.dart';
 import '../icons/app_icons.dart';
 import '../l10n.dart';
 import 'attachment_actions.dart';
+import 'attachment_open.dart';
 import 'media_viewer.dart';
 import '../secretly_snackbar.dart';
 import '../wave1_l10n.dart';
@@ -745,9 +746,21 @@ class _MediaGridCellState extends State<_MediaGridCell> {
   }
 
   /// Decodes to the grid-cell footprint (px = cell edge × DPR), not the full
-  /// source image. Cells are ~square, so the longer edge keeps cover crisp.
+  /// source image.
+  ///
+  /// П11 (разбор медиа 15.11.2026): ширину И высоту декодирования задавать
+  /// нельзя — картинка ужимается ровно в этот квадрат без учёта пропорций, и
+  /// `BoxFit.cover` уже ничего не исправит: миниатюры выходили сплющенными
+  /// (та же ошибка была в коллаже чата). Задаём одну сторону — КОРОТКУЮ, по
+  /// размерам от отправителя: тогда она равна клетке, а длинная выходит за неё
+  /// и обрезается, без искажений и без мыла. Размеров нет — по ширине.
   Widget _decoded(BuildContext context, File f) {
     final dpr = MediaQuery.devicePixelRatioOf(context);
+    final att = widget.item.attachment;
+    final landscape =
+        (att.width ?? 0) > 0 &&
+        (att.height ?? 0) > 0 &&
+        att.width! > att.height!;
     return LayoutBuilder(
       builder: (context, constraints) {
         final longestEdge = constraints.biggest.longestSide;
@@ -757,8 +770,8 @@ class _MediaGridCellState extends State<_MediaGridCell> {
         return Image.file(
           f,
           fit: BoxFit.cover,
-          cacheWidth: cacheDim,
-          cacheHeight: cacheDim,
+          cacheWidth: landscape ? null : cacheDim,
+          cacheHeight: landscape ? cacheDim : null,
           errorBuilder: (_, _, _) => const BrokenMediaBox(),
         );
       },
@@ -878,13 +891,18 @@ class ConversationFilesList extends StatelessWidget {
           subtitle: Text(
             '${formatAttachmentBytes(att.sizeBytes)} • ${_hhmm(item.createdAtMs)}',
           ),
+          // П9 (разбор медиа 15.11.2026): нажатие ОТКРЫВАЕТ файл — тем же
+          // путём, что в чате (PDF и текст внутри, остальное — «Открыть в…»).
+          // Раньше файл только скачивался и показывалась подпись «Сохранено в
+          // <личная папка приложения>», куда человеку не попасть.
           onTap: () async {
-            final messenger = ScaffoldMessenger.of(context);
-            final savedTo = l10n.savedTo;
             final file = await loadFile(att);
-            if (file == null) return;
-            messenger.showSnackBar(
-              SecretlySnackBar(content: Text(savedTo(file.path))),
+            if (file == null || !context.mounted) return;
+            await openAttachmentFileForUser(
+              context,
+              attachment: att,
+              file: file,
+              createdAtMs: item.createdAtMs,
             );
           },
         );
@@ -1197,6 +1215,13 @@ class _ConversationMediaGallerySectionState
   static const int _gridCap = 120;
   static const int _listCap = 80;
 
+  // П8 (разбор медиа 15.11.2026): раньше было видно только последние 120
+  // фото и 80 файлов — до старых не добраться. Теперь «Показать ещё»
+  // добавляет столько же; вкладка строится целиком (страница прокручивается
+  // одна), поэтому не всё сразу.
+  int _gridShown = _gridCap;
+  int _listShown = _listCap;
+
   late final TabController _tabs = TabController(length: 4, vsync: this);
   Future<ConversationMediaGalleryVm>? _vmFuture;
   String _vmConvoId = '';
@@ -1300,14 +1325,24 @@ class _ConversationMediaGallerySectionState
             // height (TabBarView needs a bounded box, i.e. a nested scroll).
             return AnimatedBuilder(
               animation: _tabs,
-              builder: (context, _) => switch (_tabs.index) {
+              builder: (context, _) {
+                final index = _tabs.index;
+                final isList = index == 2 || index == 3;
+                final total = switch (index) {
+                  1 => vm.videos.length,
+                  2 => vm.files.length,
+                  3 => vm.music.length,
+                  _ => vm.photos.length,
+                };
+                final shown = isList ? _listShown : _gridShown;
+                final content = switch (index) {
                 1 => ConversationMediaGrid(
                   items: vm.videos,
                   loadFile: loadFile,
                   fetchFile: fetchFile,
                   cachedFile: cachedFile,
                   onItemTap: (i) => openAt(vm.videos, i),
-                  maxItems: _gridCap,
+                  maxItems: _gridShown,
                   emptyLabel: wave1Text(
                     context,
                     ru: 'Нет видео',
@@ -1322,7 +1357,7 @@ class _ConversationMediaGallerySectionState
                 2 => ConversationFilesList(
                   items: vm.files,
                   loadFile: loadFile,
-                  maxItems: _listCap,
+                  maxItems: _listShown,
                   emptyLabel: l10n.contactDetailsNoFiles,
                 ),
                 3 => ConversationMusicList(
@@ -1335,7 +1370,7 @@ class _ConversationMediaGallerySectionState
                     convoId,
                     item.attachment,
                   ),
-                  maxItems: _listCap,
+                  maxItems: _listShown,
                   emptyLabel: wave1Text(
                     context,
                     ru: 'Нет музыки',
@@ -1353,7 +1388,7 @@ class _ConversationMediaGallerySectionState
                   fetchFile: fetchFile,
                   cachedFile: cachedFile,
                   onItemTap: (i) => openAt(vm.photos, i),
-                  maxItems: _gridCap,
+                  maxItems: _gridShown,
                   emptyLabel: wave1Text(
                     context,
                     ru: 'Нет фото',
@@ -1365,6 +1400,25 @@ class _ConversationMediaGallerySectionState
                     de: 'Keine Fotos',
                   ),
                 ),
+              };
+                if (total <= shown) return content;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    content,
+                    TextButton(
+                      key: const ValueKey('gallery:show-more'),
+                      onPressed: () => setState(() {
+                        if (isList) {
+                          _listShown += _listCap;
+                        } else {
+                          _gridShown += _gridCap;
+                        }
+                      }),
+                      child: Text(l10n.galleryShowMore(total - shown)),
+                    ),
+                  ],
+                );
               },
             );
           },

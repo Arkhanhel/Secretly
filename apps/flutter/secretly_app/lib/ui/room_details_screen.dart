@@ -46,6 +46,8 @@ import 'widgets/frosted_header_island.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'widgets/secretly_glass_sheet.dart';
 import 'widgets/broken_media_box.dart';
+import 'disappearing_messages_ui.dart';
+import '../messages/disappearing_flags.dart' show DisappearingPeerSupport;
 import 'haptics.dart';
 
 String _roomText(
@@ -717,8 +719,29 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     final activeCall = await widget.controller.getCachedRoomCall(
       widget.groupId,
     );
+    // Исчезающие (ТЗ 22.10.2026): видимость — по флагу сервера.
+    var disappearingVisible = false;
+    int? disappearSeconds;
+    var disappearInherited = false;
+    try {
+      disappearingVisible = await widget.controller.disappearingVisibleForRoom(
+        widget.groupId,
+      );
+      if (disappearingVisible) {
+        disappearSeconds = await widget.controller
+            .effectiveRoomDisappearSeconds(widget.groupId);
+        disappearInherited = await widget.controller.roomDisappearInherited(
+          widget.groupId,
+        );
+      }
+    } catch (_) {
+      disappearingVisible = false;
+    }
 
     return _RoomVm(
+      disappearingVisible: disappearingVisible,
+      disappearSeconds: disappearSeconds,
+      disappearInherited: disappearInherited,
       title: effectiveTitle.trim().isEmpty ? defaultRoomTitle : effectiveTitle,
       muted: convo?.muted ?? false,
       autoDeleteSeconds: convo?.autoDeleteSeconds,
@@ -744,6 +767,58 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
         ),
       ),
     );
+  }
+
+  /// Общий таймер комнаты (ТЗ 22.10.2026). Менять — владельцу и
+  /// администраторам; остальным — текущее значение.
+  Future<void> _openDisappearing(_RoomVm vm) async {
+    final l10n = context.l10n;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (!vm.policy.canManageSettings) {
+      final s = vm.disappearSeconds;
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            s == null
+                ? '${l10n.disappearingTitle}: ${l10n.contactAutoDeleteOff}'
+                : l10n.disappearingBannerOn(formatDisappearDuration(s, l10n)),
+          ),
+        ),
+      );
+      return;
+    }
+    DisappearingPeerSupport? support;
+    try {
+      support = await widget.controller.disappearingRoomSupport(
+        widget.groupId,
+      );
+    } catch (_) {
+      support = DisappearingPeerSupport.unknown;
+    }
+    if (!mounted) return;
+    final choice = await showDisappearingTimerPicker(
+      context,
+      // Тема с унаследованным таймером: «выбрано» ничего — своё ещё не задано.
+      current: vm.disappearInherited ? -1 : vm.disappearSeconds,
+      customMinSeconds: widget.controller.disappearCustomMinSeconds,
+      customMaxSeconds: widget.controller.disappearCustomMaxSeconds,
+      warning: disappearingSupportWarning(support, l10n, room: true),
+    );
+    if (choice == null) return;
+    if (!vm.disappearInherited && choice.seconds == vm.disappearSeconds) return;
+    try {
+      await widget.controller.setRoomDisappearSeconds(
+        groupId: widget.groupId,
+        seconds: choice.seconds,
+      );
+      messenger?.showSnackBar(SnackBar(content: Text(l10n.disappearingUpdated)));
+    } catch (_) {
+      messenger?.showSnackBar(
+        SnackBar(content: Text(l10n.disappearingSetFailed)),
+      );
+    }
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _openAutoDelete(_RoomVm vm) async {
@@ -823,12 +898,14 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
       _showRoomActionError(context, e);
       return;
     }
-    final contacts = (await widget.controller.listContacts())
-        .where(
-          (contact) =>
-              !widget.controller.isSavedMessagesConvo(contact.profileId),
-        )
-        .toList(growable: false);
+    // В закрытую ветку — только участники основной комнаты.
+    final contacts =
+        (await widget.controller.listRoomAddCandidates(widget.groupId))
+            .where(
+              (contact) =>
+                  !widget.controller.isSavedMessagesConvo(contact.profileId),
+            )
+            .toList(growable: false);
     // 🔴 КТО СЕЙЧАС В СЕТИ — берём из переписок: у самого контакта отметки
     // присутствия нет, а у беседы с ним есть `peerLastSeenAtMs`. Без этого
     // список отвечает «кто у меня записан», а спрашивают у него «кого
@@ -2092,6 +2169,15 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // Исчезающие у всех участников (ТЗ 22.10.2026) — только
+                        // при открытом флаге сервера; без него меню прежнее.
+                        if (vm.disappearingVisible)
+                          _roomMenuAction(
+                            icon: AppIcons.timer,
+                            title: context.l10n.disappearingTitle,
+                            onTap: () =>
+                                Navigator.of(context).pop('disappearing'),
+                          ),
                         _roomMenuAction(
                           icon: AppIcons.timer,
                           title: _roomText(
@@ -2204,6 +2290,9 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
 
     if (!mounted || action == null) return;
     switch (action) {
+      case 'disappearing':
+        await _openDisappearing(vm);
+        return;
       case 'autodelete':
         await _openAutoDelete(vm);
         return;
@@ -5610,6 +5699,16 @@ class _RoomPermissionsScreenState extends State<RoomPermissionsScreen> {
                       value: settings.allowPinMessages,
                       onChanged: (v) => settings.copyWith(allowPinMessages: v),
                     ),
+                    // Закрытые темы (Р-2): по умолчанию их создают владелец
+                    // и админы. У самой закрытой темы вложенных нет.
+                    if (!settings.isPrivateTopic)
+                      _permissionSwitch(
+                        titleRu: 'Создавать закрытые темы',
+                        titleEn: 'Create private topics',
+                        value: settings.allowMembersCreateTopics,
+                        onChanged: (v) =>
+                            settings.copyWith(allowMembersCreateTopics: v),
+                      ),
                     _buildSlowModeControls(
                       settings: settings,
                       maxSliderValue: maxSliderValue,
@@ -5801,11 +5900,20 @@ class _RoomVm {
     required this.policy,
     required this.myProfileId,
     required this.activeCall,
+    this.disappearingVisible = false,
+    this.disappearSeconds,
+    this.disappearInherited = false,
   });
 
   final String title;
   final bool muted;
   final int? autoDeleteSeconds;
+
+  /// Исчезающие у всех участников (ТЗ 22.10.2026): виден ли пункт, какой
+  /// таймер действует и унаследован ли он темой от комнаты.
+  final bool disappearingVisible;
+  final int? disappearSeconds;
+  final bool disappearInherited;
   final RoomSettings settings;
   final List<RoomMember> members;
   final List<RoomMember> pendingMembers;

@@ -6,12 +6,15 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/message_command_utils.dart' show RoomTopicRef;
+import '../../../rooms/room_models.dart' show RoomPrivateTopic;
 import '../../room_topic_marks.dart';
 import '../design/colors.dart';
 import '../design/radii.dart';
 import '../design/spacing.dart';
 import '../design/typography.dart';
 import '../primitives/hover_listener.dart';
+import '../design/motion.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Темы комнаты для десктопа.
 ///
@@ -52,9 +55,16 @@ class RoomTopicsStrip extends StatelessWidget {
     this.onManageBase,
     this.baseMark = '',
     this.trailing,
+    this.privateTopics = const <RoomPrivateTopic>[],
+    this.onOpenPrivate,
   });
 
   final List<RoomTopicRef> topics;
+
+  /// Закрытые ветки, в которых я состою (06.10.2026): отдельные комнаты с
+  /// замком; нажатие открывает их, а не фильтр ленты.
+  final List<RoomPrivateTopic> privateTopics;
+  final ValueChanged<RoomPrivateTopic>? onOpenPrivate;
 
   /// null = «Общий», поток комнаты по умолчанию. Там лежит всё, что написано
   /// без темы, включая историю до появления тем вообще.
@@ -96,14 +106,25 @@ class RoomTopicsStrip extends StatelessWidget {
           // фильтр СПРЯТАЛ БЫ тему, в которой человек писал раньше, чем
           // дотянулась подгрузка, и человек прочитал бы это как «я туда не
           // писал». Пустое место врёт меньше, чем спрятанная ветка.
+          // 🔴 Выбор темы ПЕРЕЕЗЖАЕТ к новой теме (05.10.2026): подложка
+          // одна на полосу и скользит, а не гаснет здесь и загорается там.
           Expanded(
-            child: ListView(
+            child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
+              child: DSelectionGroup(
+                selected: selectedTopicId ?? _kBaseSelectionId,
+                decoration: BoxDecoration(
+                  color: c.pressed,
+                  borderRadius: BorderRadius.circular(DRadii.md),
+                  border: Border.all(color: c.borderDivider),
+                ),
+                child: Row(
               children: [
                 // ◆ «ОСНОВА», А НЕ «ОБЩИЙ» (указание владельца). «Общий»
                 // звучит как «остальное, что никуда не подошло»; на деле это
                 // главный поток комнаты, от которого ветки и отходят.
                 _TopicChip(
+                  selectionId: _kBaseSelectionId,
                   label: kRoomBaseTopicTitleRu,
                   markIcon: roomTopicIconFor(baseMark),
                   markColor: roomTopicIconColorFor(baseMark),
@@ -117,6 +138,7 @@ class RoomTopicsStrip extends StatelessWidget {
                 ),
                 for (final t in topics)
                   _TopicChip(
+                    selectionId: t.id,
                     // Формат темы: ЗНАЧОК, потом название. По умолчанию значок
                     // — решётка; выбранный знак её ЗАМЕНЯЕТ.
                     markIcon: roomTopicIcon(t),
@@ -131,6 +153,22 @@ class RoomTopicsStrip extends StatelessWidget {
                         ? () => onManage!(t)
                         : null,
                   ),
+                for (final p in privateTopics)
+                  Semantics(
+                    container: true,
+                    label:
+                        '${AppLocalizations.of(context)!.roomPrivateTopicLabel}: '
+                        '${p.title}',
+                    child: _TopicChip(
+                      selectionId: 'private:${p.roomId}',
+                      markIcon: FluentIcons.lock_closed_16_filled,
+                      label: p.title,
+                      selected: false,
+                      unread: p.unreadCount,
+                      colors: c,
+                      onTap: () => onOpenPrivate?.call(p),
+                    ),
+                  ),
                 if (canManage && onCreate != null)
                   Padding(
                     padding: const EdgeInsets.only(left: 2),
@@ -139,7 +177,7 @@ class RoomTopicsStrip extends StatelessWidget {
                       label: AppLocalizations.of(context)!.desktopChatsNewTopic,
                       child: HoverListener(
                         onTap: onCreate,
-                        builder: (ctx, hovered, pressed) => Container(
+                        builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: Container(
                           width: 28,
                           height: 28,
                           alignment: Alignment.center,
@@ -157,11 +195,13 @@ class RoomTopicsStrip extends StatelessWidget {
                             size: 15,
                             color: c.textSecondary,
                           ),
-                        ),
+                        )),
                       ),
                     ),
                   ),
               ],
+            ),
+              ),
             ),
           ),
           if (trailing != null) ...[const SizedBox(width: DSpace.s), trailing!],
@@ -176,8 +216,12 @@ class RoomTopicsStrip extends StatelessWidget {
 /// Непрочитанное показывается числом, а не точкой: в теме «сколько именно»
 /// решает, идти туда сейчас или потом, и это ровно тот вопрос, ради которого
 /// человек и смотрит на полосу.
+/// Отметка «Основы» в группе выбора: у неё нет id темы.
+const String _kBaseSelectionId = '__base__';
+
 class _TopicChip extends StatelessWidget {
   const _TopicChip({
+    required this.selectionId,
     required this.label,
     required this.selected,
     required this.unread,
@@ -189,6 +233,8 @@ class _TopicChip extends StatelessWidget {
     this.onSecondaryTap,
   });
 
+  /// По нему полоса меряет, куда ставить подложку выбора.
+  final String selectionId;
   final String label;
   final bool selected;
   final int unread;
@@ -215,17 +261,28 @@ class _TopicChip extends StatelessWidget {
         onSecondaryTapDown: onSecondaryTap == null
             ? null
             : (_) => onSecondaryTap!(),
-        builder: (ctx, hovered, pressed) => Container(
+        // Поле по вертикали — СНАРУЖИ отметки: подложка выбора меряет
+        // саму плитку, без полей.
+        builder: (ctx, hovered, pressed) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: DSelectionTarget(
+            id: selectionId,
+            child: AnimatedContainer(
+          duration: DMotion.fast,
+          curve: DMotion.standard,
           height: 28,
-          margin: const EdgeInsets.symmetric(vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
+            // Выбранную подложку рисует полоса и ведёт её к новой теме;
+            // своя — только в первом кадре, пока полоса не измерила.
             color: selected
-                ? c.pressed
+                ? (DSelectionGroup.slides(ctx) ? Colors.transparent : c.pressed)
                 : (hovered ? c.hover : Colors.transparent),
             borderRadius: BorderRadius.circular(DRadii.md),
             border: Border.all(
-              color: selected ? c.borderDivider : Colors.transparent,
+              color: selected && !DSelectionGroup.slides(ctx)
+                  ? c.borderDivider
+                  : Colors.transparent,
             ),
           ),
           child: Row(
@@ -269,8 +326,9 @@ class _TopicChip extends StatelessWidget {
                     color: c.accentPrimary,
                     borderRadius: BorderRadius.circular(DRadii.pill),
                   ),
-                  child: Text(
+                  child: DMorphText(
                     unread > 99 ? '99+' : '$unread',
+                    alignment: Alignment.center,
                     style: DType.tiny.copyWith(
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
@@ -279,6 +337,8 @@ class _TopicChip extends StatelessWidget {
                 ),
               ],
             ],
+          ),
+        ),
           ),
         ),
       ),

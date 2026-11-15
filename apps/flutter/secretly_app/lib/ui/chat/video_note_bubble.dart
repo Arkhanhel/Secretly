@@ -6,8 +6,11 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:video_player/video_player.dart';
 
+import '../../build_variant.dart';
+import '../../media/video_thumbnail_cache.dart';
 import '../../models/e2e_payload_v1.dart';
 
 /// Guards that only ONE enlarged video-note exists at a time. When a note
@@ -72,7 +75,7 @@ class VideoNoteBubble extends StatefulWidget {
 }
 
 class _VideoNoteBubbleState extends State<VideoNoteBubble>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   /// Anchors the in-list square (used for [Scrollable.ensureVisible]).
   final GlobalKey _squareKey = GlobalKey();
 
@@ -83,6 +86,13 @@ class _VideoNoteBubbleState extends State<VideoNoteBubble>
   bool _initStarted = false;
   bool _initialized = false;
   bool _failed = false;
+
+  /// 🔴 П3 (разбор медиа 15.11.2026): в ленте кружок показывает кадр-превью
+  /// с диска, а не живой плеер — раньше каждый кружок держал свой плеер с
+  /// текстурой ради стоп-кадра. Плеер создаётся по нажатию и отпускается,
+  /// когда кружок свернулся. Без кадра (облегчённая сборка, кадр не вынулся)
+  /// — как раньше: плеер ради стоп-кадра.
+  File? _posterFile;
 
   /// Whether the note is currently enlarged (expanded in place).
   bool _enlarged = false;
@@ -120,12 +130,56 @@ class _VideoNoteBubbleState extends State<VideoNoteBubble>
       reverseCurve: Curves.easeOutCubic,
     );
     _anim.addStatusListener(_onAnimStatus);
-    // Kick off init for the static first frame (no autoplay).
-    unawaited(_ensureInitialized());
+    WidgetsBinding.instance.addObserver(this);
+    if (kVideoToolsAvailable) {
+      unawaited(_loadPosterOrPlayer());
+    } else {
+      // Kick off init for the static first frame (no autoplay).
+      unawaited(_ensureInitialized());
+    }
+  }
+
+  Future<void> _loadPosterOrPlayer() async {
+    try {
+      final file = await widget.resolveFile(widget.attachment);
+      if (!mounted) return;
+      final poster = await VideoThumbnailCache.forVideo(
+        key: p.basenameWithoutExtension(file.path),
+        videoPath: file.path,
+      );
+      if (!mounted) return;
+      if (poster != null) {
+        setState(() => _posterFile = poster.file);
+        return;
+      }
+    } catch (_) {
+      // Fall through to the player, which reports its own failure.
+    }
+    if (mounted) unawaited(_ensureInitialized());
+  }
+
+  // 🔴 Play Vitals п. 1/12 (15.11.2026): сбой `FlutterJNI.ensureAttachedToNative`
+  // — кадр видео/камеры приходит в движок, уже отсоединённый от окна (свернули
+  // и закрыли). Уходя в фон, перестаём подавать кадры.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      if (_enlarged) {
+        _collapse();
+      } else {
+        final c = _controller;
+        if (c != null && _initialized && c.value.isPlaying) {
+          unawaited(c.pause());
+        }
+      }
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _releaseGlobalGuard();
     _ticker?.cancel();
     _anim.removeStatusListener(_onAnimStatus);
@@ -198,8 +252,11 @@ class _VideoNoteBubbleState extends State<VideoNoteBubble>
       return;
     }
     if (!_isReady) {
-      // Tap landed before init finished — boot it; user can tap again.
-      unawaited(_ensureInitialized());
+      // Плеер ещё не создан (в ленте — только кадр): создаём и сразу
+      // раскрываем, второй раз нажимать не нужно.
+      unawaited(_ensureInitialized().then((_) {
+        if (mounted && _isReady && !_enlarged) _enlarge();
+      }));
       return;
     }
     _enlarge();
@@ -277,10 +334,14 @@ class _VideoNoteBubbleState extends State<VideoNoteBubble>
     if (c != null && _initialized) {
       // No sound on the way back; restore the static first-frame poster.
       unawaited(() async {
-        await c.pause();
-        await c.setVolume(0);
-        await c.setLooping(false);
-        await c.seekTo(Duration.zero);
+        try {
+          await c.pause();
+          await c.setVolume(0);
+          await c.setLooping(false);
+          await c.seekTo(Duration.zero);
+        } catch (_) {
+          // The player may already be released (see _onAnimStatus).
+        }
         if (mounted) setState(() {});
       }());
     }
@@ -293,6 +354,11 @@ class _VideoNoteBubbleState extends State<VideoNoteBubble>
       // Fully collapsed — stop the high-frequency repaint ticker.
       _ticker?.cancel();
       _ticker = null;
+      // П3: свернулся — плеер больше не нужен, в ленте снова кадр.
+      if (_posterFile != null && !_enlarged && _controller != null) {
+        _disposeController();
+        if (mounted) setState(() {});
+      }
     }
   }
 
@@ -450,7 +516,8 @@ class _VideoNoteBubbleState extends State<VideoNoteBubble>
     final bool enlargedEnough = t > 0.02;
     final bool playing =
         _isReady && (_controller?.value.isPlaying ?? false);
-    final bool showSmallPlayGlyph = _isReady && t < 0.5 && !playing;
+    final bool showSmallPlayGlyph =
+        (_isReady || _posterFile != null) && t < 0.5 && !playing;
     final bool showBigPlayGlyph = _isReady && t >= 0.5 && !playing;
 
     return SizedBox(
@@ -518,6 +585,14 @@ class _VideoNoteBubbleState extends State<VideoNoteBubble>
                               height: _controller!.value.size.height,
                               child: VideoPlayer(_controller!),
                             ),
+                          )
+                        : _posterFile != null && !_failed
+                        ? Image.file(
+                            _posterFile!,
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                            errorBuilder: (_, _, _) =>
+                                const ColoredBox(color: Colors.black),
                           )
                         : Center(
                             child: _failed

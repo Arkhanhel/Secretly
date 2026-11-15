@@ -27,6 +27,7 @@ import 'call_controls.dart';
 import 'call_device_menu.dart';
 import 'call_mini_window.dart';
 import 'call_peer_label.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Сцена созвона — чёрная в любой теме.
 const Color _kCallStage = Color(0xFF0A0B0E);
@@ -341,8 +342,15 @@ class _OneToOneCallScreenState extends State<OneToOneCallScreen> {
       // В своём окне Esc выходит из «во весь экран»; сворачивать некуда —
       // у окна ОС своя кнопка.
       if (widget.ownWindow != null) {
-        if (!_fullScreen) return KeyEventResult.ignored;
-        unawaited(_toggleFullScreen());
+        if (_fullScreen) {
+          unawaited(_toggleFullScreen());
+          return KeyEventResult.handled;
+        }
+        // Не во весь экран — Esc сворачивает в мини-окно, как внутри
+        // приложения (05.10.2026).
+        final minimize = widget.onMinimize;
+        if (minimize == null) return KeyEventResult.ignored;
+        minimize();
         return KeyEventResult.handled;
       }
       final minimize = widget.onMinimize;
@@ -817,7 +825,7 @@ class _CallChromeButton extends StatelessWidget {
         label: tooltip,
         child: HoverListener(
           onTap: onTap,
-          builder: (ctx, hovered, pressed) => AnimatedContainer(
+          builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: AnimatedContainer(
             duration: DMotion.fast,
             width: 32,
             height: 32,
@@ -829,7 +837,7 @@ class _CallChromeButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(DRadii.sm),
             ),
             child: Icon(icon, size: 16, color: Colors.white),
-          ),
+          )),
         ),
       ),
     );
@@ -850,7 +858,11 @@ class OneToOneCallMini extends StatefulWidget {
     this.peerImage,
     required this.onExpand,
     required this.onEnd,
+    this.windowed = false,
   });
+
+  /// Мини-окно — своё окно ОС (05.10.2026): без рамки и тени карточки.
+  final bool windowed;
 
   final DesktopDirectCall call;
   final String peerName;
@@ -1012,6 +1024,7 @@ class _OneToOneCallMiniState extends State<OneToOneCallMini> {
     }
 
     return DesktopCallMiniCard(
+      framed: !widget.windowed,
       video: s.isVideo,
       stage: stage,
       semanticLabel: '$name · $status',

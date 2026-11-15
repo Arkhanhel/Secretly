@@ -338,4 +338,27 @@ void main() {
       expect(app, contains('installDesktopCallDevices();'));
     });
   });
+
+  // Исполнить этот код можно только на Windows с настоящим звуком — на CI
+  // Linux и в песочнице macOS функция сразу возвращает null. Поэтому сторож
+  // смотрит на исходник.
+  test('🔴 COM на Windows: держатель, а не сам объект; Release один раз '
+      '(05.10, вылет в созвоне)', () {
+    // Только код: в комментарии старый вызов описан словами.
+    final src = File('lib/ui/desktop/services/desktop_call_devices.dart')
+        .readAsLinesSync()
+        .where((l) => !l.trimLeft().startsWith('//'))
+        .join('\n');
+    // Обёртка win32 ждёт адрес ячейки с указателем на интерфейс.
+    expect(src, contains('calloc<win.COMObject>()'));
+    expect(src, contains('win.IMMDevice(deviceHolder)..detach()'));
+    expect(
+      RegExp(r'IMMDevice\(\w+\.value\)').hasMatch(src),
+      isFalse,
+      reason: 'сам объект вместо держателя — 0xC0000005 в getId',
+    );
+    expect(src.contains('calloc<Pointer<win.COMObject>>'), isFalse);
+    // Finalizer снят до ручного Release — иначе двойной Release и free.
+    expect(src, contains('MMDeviceEnumerator.createInstance()..detach()'));
+  });
 }

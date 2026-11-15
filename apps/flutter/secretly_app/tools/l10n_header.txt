@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
+// Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+//
+// Файл создаётся `flutter gen-l10n` из lib/l10n/*.arb — не правьте руками.
+// Заголовок добавляется флагом `--header-file tools/l10n_header.txt`: без него
+// восемь сгенерированных файлов остаются без указания лицензии, и для
+// проверяющего это восемь файлов неизвестного происхождения.

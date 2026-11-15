@@ -134,7 +134,35 @@ public class FFmpegKitFlutterPlugin implements FlutterPlugin, ActivityAware, Met
         Log.d(LIBRARY_NAME, String.format("FFmpegKitFlutterPlugin created %s.", this));
     }
 
+    /**
+     * Secretly modification: whether the FFmpeg native libraries are present.
+     *
+     * Touching FFmpegKitConfig runs its static initialiser, which calls
+     * System.loadLibrary for the FFmpeg shared libraries. The lightweight
+     * Android build ships without them, so that first touch would throw
+     * UnsatisfiedLinkError while the plugin attaches to the activity — i.e.
+     * the app would die on startup instead of merely lacking video features.
+     * The answer is cached: a missing library will not appear later.
+     */
+    private static Boolean nativeAvailable = null;
+
+    public static synchronized boolean isNativeAvailable() {
+        if (nativeAvailable == null) {
+            try {
+                FFmpegKitConfig.getLogLevel();
+                nativeAvailable = Boolean.TRUE;
+            } catch (final Throwable t) {
+                Log.i(LIBRARY_NAME, "FFmpeg native libraries are not present in this build.");
+                nativeAvailable = Boolean.FALSE;
+            }
+        }
+        return nativeAvailable.booleanValue();
+    }
+
     protected void registerGlobalCallbacks() {
+        if (!isNativeAvailable()) {
+            return;
+        }
         FFmpegKitConfig.enableFFmpegSessionCompleteCallback(this::emitSession);
         FFmpegKitConfig.enableFFprobeSessionCompleteCallback(this::emitSession);
         FFmpegKitConfig.enableMediaInformationSessionCompleteCallback(this::emitSession);
@@ -253,6 +281,13 @@ public class FFmpegKitFlutterPlugin implements FlutterPlugin, ActivityAware, Met
 
     @Override
     public void onMethodCall(@NonNull MethodCall call, @NonNull Result result) {
+        // Secretly modification: in a build without the FFmpeg libraries every
+        // call answers with an error instead of killing the app.
+        if (!isNativeAvailable()) {
+            resultHandler.errorAsync(result, "NATIVE_UNAVAILABLE",
+                "FFmpeg is not included in this build.");
+            return;
+        }
         final Integer sessionId = call.argument(ARGUMENT_SESSION_ID);
         final Integer waitTimeout = call.argument(ARGUMENT_WAIT_TIMEOUT);
         final List<String> arguments = call.argument(ARGUMENT_ARGUMENTS);

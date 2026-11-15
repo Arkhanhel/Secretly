@@ -9,7 +9,8 @@ import 'dart:math' show cos, exp, pi, sin, Random;
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
-import 'package:flutter/foundation.dart' show SynchronousFuture, setEquals;
+import 'package:flutter/foundation.dart'
+    show SynchronousFuture, ValueListenable, setEquals;
 import 'package:flutter/physics.dart';
 import 'animations/animations.dart';
 import 'icons/app_icons.dart';
@@ -39,6 +40,7 @@ import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 import '../attachments/attachment_failure.dart';
+import '../build_variant.dart';
 import '../attachments/attachment_naming.dart';
 import '../diagnostics/diag_log.dart';
 import '../app/app_controller.dart';
@@ -50,8 +52,6 @@ import '../app/pending_attachment_upload.dart';
 import '../media/music_tags.dart';
 import '../media/video_thumbnail_cache.dart';
 import '../app/message_command_utils.dart';
-import '../app/pdf_document.dart';
-import '../app/platform_file_open.dart';
 import '../app/platform_clipboard_media.dart';
 import 'app_asset_paths.dart';
 import '../calls/call_event.dart';
@@ -112,17 +112,17 @@ import '../translation/translation_service.dart';
 import 'chat_screen_l10n.dart';
 import 'room_call_screen.dart';
 import 'room_details_screen.dart';
+import 'room_private_topic_ui.dart';
 import 'room_invite_join_screen.dart';
 import 'shared_audio_controls.dart';
 import 'theme_presets.dart';
 import 'cover_crop_screen.dart';
 import 'verify_contact_screen.dart';
-import 'document_reader_screen.dart';
-import 'text_file_reader_screen.dart';
 import 'widgets/attachment_actions.dart';
 import 'widgets/avatar_initials.dart';
 import 'widgets/call_return_banner.dart';
 import 'widgets/framed_avatar.dart';
+import 'widgets/attachment_open.dart';
 import 'widgets/conversation_media_gallery.dart';
 import 'widgets/dismiss_keyboard_on_tap.dart';
 import 'widgets/frosted_header_island.dart';
@@ -391,21 +391,26 @@ class _PickerResult {
     : emoji = e,
       gifUrl = null,
       sticker = null,
-      createSticker = false;
+      createSticker = false,
+      targetPackId = null;
   const _PickerResult.gif(String u)
     : emoji = null,
       gifUrl = u,
       sticker = null,
-      createSticker = false;
+      createSticker = false,
+      targetPackId = null;
 
   const _PickerResult.sticker(SecretlyStickerDescriptor value)
     : emoji = null,
       gifUrl = null,
       sticker = value,
-      createSticker = false;
+      createSticker = false,
+      targetPackId = null;
 
   /// "Создать стикер" was tapped — the caller runs the photo→sticker flow.
-  const _PickerResult.createSticker()
+  /// [targetPackId] — «+» в окне своего набора (15.11.2026): стикер сразу в
+  /// этот набор.
+  const _PickerResult.createSticker({this.targetPackId})
     : emoji = null,
       gifUrl = null,
       sticker = null,
@@ -415,6 +420,7 @@ class _PickerResult {
   final String? gifUrl;
   final SecretlyStickerDescriptor? sticker;
   final bool createSticker;
+  final String? targetPackId;
 }
 
 /// Одна страница результатов GIPHY.
@@ -1120,7 +1126,8 @@ class _ChatScreenState extends State<ChatScreen>
     }
     b.write('|');
     for (final p in _pendingPhotos) {
-      b..write(p.id)..write(',');
+      // О2: «не отправлено» меняет вид пузыря — нужна полная перерисовка.
+      b..write(p.id)..write(p.failed ? '!' : '')..write(',');
     }
     b.write('|');
     for (final a in _pendingAudio) {
@@ -1137,7 +1144,13 @@ class _ChatScreenState extends State<ChatScreen>
   int _eventsFutureVersion = -1;
   String _eventsFutureConvoId = '';
   final Set<String> _imagePreviewLoadingBlobIds = <String>{};
-  final Set<String> _imagePreviewFailedBlobIds = <String>{};
+  // П6 (разбор медиа 15.11.2026): сбой скачивания больше не «навсегда до
+  // переоткрытия чата». Время и число сбоев — для повтора с нарастающей
+  // паузой; «файла нет на сервере» (404, истёк срок) — отдельно и навсегда:
+  // повторять там нечего, и пузырь честно это показывает.
+  final Map<String, ({int atMs, int count})> _imagePreviewFailures =
+      <String, ({int atMs, int count})>{};
+  final Set<String> _imagePreviewGoneBlobIds = <String>{};
   final Set<String> _selectedEventIds = <String>{};
   final Set<String> _seenEventIds = <String>{};
   // payloadEventIds that were hidden last build because a pending-upload
@@ -1293,6 +1306,12 @@ class _ChatScreenState extends State<ChatScreen>
   // Room topics (forum-style sub-channels). Synced room-wide; the selected
   // topic is local UI state. `_currentTopicId == null` is the default "General".
   List<RoomTopicRef> _roomTopics = const <RoomTopicRef>[];
+  // Закрытые ветки комнаты, в которых я состою (06.10.2026). Это отдельные
+  // комнаты: в полосе тем они с замком и открываются своим экраном.
+  List<RoomPrivateTopic> _privateTopics = const <RoomPrivateTopic>[];
+  int _privateTopicsLoadSeq = 0;
+  // Этот чат — закрытая ветка: название основной комнаты для шапки.
+  String? _privateTopicParentTitle;
   String? _currentTopicId;
   int _appliedTopicSyncAtMs = 0;
 
@@ -1718,6 +1737,7 @@ class _ChatScreenState extends State<ChatScreen>
       // сообщения уезжали в «Общий». На устройстве, где комната не была
       // открыта в нужный момент, тем не появлялось вовсе.
       unawaited(_loadStoredRoomTopics());
+      unawaited(_loadPrivateTopics());
     }
     // 🔴 БЕЗ `..repeat()` — это ровно тот вечный цикл кадров, который убирал
     // фикс от 31.07.2026 (нагрев iOS), см. развёрнутый комментарий в
@@ -1763,6 +1783,11 @@ class _ChatScreenState extends State<ChatScreen>
     unawaited(_restoreDraft());
     unawaited(_restoreComposerCaptureMode());
     unawaited(_loadTranslationSettings());
+    // Настройки перевода меняются в «Настройки → Язык» — открытый чат
+    // подхватывает их сразу, без перезахода.
+    MessageTranslationService.settingsChanged.addListener(
+      _onTranslationSettingsChanged,
+    );
     if (Platform.isAndroid) {
       // Pre-fetch the on-device voice model in the background so the first
       // dictation isn't blocked by the ~140 MB download. Idempotent + best-effort.
@@ -1775,6 +1800,7 @@ class _ChatScreenState extends State<ChatScreen>
         unawaited(_refreshRoomPolicyState());
         unawaited(_refreshRoomPinnedMessageState());
         unawaited(_refreshActiveRoomCall());
+        unawaited(_loadPrivateTopics());
       }
     });
     // M1: repaint the in-flight upload bubbles (progress ring + list changes)
@@ -1841,6 +1867,9 @@ class _ChatScreenState extends State<ChatScreen>
   // ---------------------------------------------------------------------------
 
   Future<void> _loadTranslationSettings() async {
+    // Облегчённая сборка: переводить нечем — кнопка и авторежим остаются
+    // выключенными, как при недоступных настройках.
+    if (!kTranslationAvailable) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       final showBtn =
@@ -1875,9 +1904,39 @@ class _ChatScreenState extends State<ChatScreen>
     return (s.isEmpty || s == 'auto') ? null : _translateSourceLang.trim();
   }
 
+  void _onTranslationSettingsChanged() {
+    if (!mounted) return;
+    unawaited(_loadTranslationSettings());
+  }
+
+  /// Причина, которую видит человек, когда перевод не показан.
+  String? _translationFailureText(TranslationOutcome outcome) {
+    final l = context.l10n;
+    return switch (outcome) {
+      TranslationOutcome.ok => null,
+      TranslationOutcome.unavailable => null,
+      TranslationOutcome.sameLanguage => l.translateSameLanguage,
+      TranslationOutcome.undetected => l.translateUndetected,
+      TranslationOutcome.unsupported => l.translateUnsupported,
+      TranslationOutcome.downloadFailed => l.translateDownloadFailed,
+      TranslationOutcome.nothingToTranslate => l.translateNothing,
+      TranslationOutcome.failed => l.translateFailed,
+    };
+  }
+
+  void _translationSnack(String text) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.hideCurrentSnackBar();
+    messenger?.showSnackBar(SnackBar(content: Text(text)));
+  }
+
   /// Toggles the inline translation for an incoming text message. If a
   /// translation is already shown, hides it; if cached, shows it; otherwise
-  /// translates on-device into the current app locale and shows the result.
+  /// translates on-device and shows the result.
+  ///
+  /// 🔴 11.2026: раньше неудача запоминалась как null и выглядела как «ничего
+  /// не происходит» — и повторное нажатие уже не пробовало снова. Теперь
+  /// запоминается только удачный перевод, а о неудаче человек узнаёт причину.
   Future<void> _toggleTranslate(String eventId, String text) async {
     if (eventId.isEmpty) return;
     // Currently shown → hide.
@@ -1885,64 +1944,89 @@ class _ChatScreenState extends State<ChatScreen>
       setState(() => _translationShown.remove(eventId));
       return;
     }
-    // Already translated (or known-failed) → just reveal.
-    if (_translations.containsKey(eventId)) {
+    // Already translated → just reveal.
+    if (_translations[eventId] != null) {
       setState(() => _translationShown.add(eventId));
       return;
     }
     // Avoid double work.
     if (_translateInFlight.contains(eventId)) return;
     setState(() => _translateInFlight.add(eventId));
-    String? result;
+    // Первый перевод пары языков скачивает пакеты (~30 МБ) — если ответа нет
+    // дольше полутора секунд, говорим, что идёт загрузка.
+    final slow = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted && _translateInFlight.contains(eventId)) {
+        _translationSnack(context.l10n.translateDownloading);
+      }
+    });
+    TranslationResult result;
     try {
-      final target = _effectiveTranslateTarget();
-      result = await MessageTranslationService.instance.translate(
+      result = await MessageTranslationService.instance.translateDetailed(
         text: text,
-        targetBcp: target,
+        targetBcp: _effectiveTranslateTarget(),
         sourceBcp: _effectiveTranslateSource(),
         cacheKey: eventId,
       );
     } catch (_) {
-      result = null;
+      result = const TranslationResult(TranslationOutcome.failed);
     }
+    slow.cancel();
     if (!mounted) return;
     setState(() {
       _translateInFlight.remove(eventId);
-      _translations[eventId] = result; // null = failed / nothing to translate
-      _translationShown.add(eventId);
+      if (result.isOk) {
+        _translations[eventId] = result.text;
+        _translationShown.add(eventId);
+      } else {
+        _translations.remove(eventId);
+      }
     });
+    if (result.isOk) {
+      ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    } else {
+      final reason = _translationFailureText(result.outcome);
+      if (reason != null) _translationSnack(reason);
+    }
   }
+
+  /// Сообщения, которые авторежим уже пробовал и не смог перевести, — чтобы
+  /// не повторять попытку на каждой перерисовке. Ручное нажатие пробует снова.
+  final Set<String> _autoTranslateTried = <String>{};
 
   /// AUTO mode: translate an incoming text message exactly once (lazy, cached)
   /// and reveal it without a tap. Safe to call from build — guarded by the
   /// in-flight / seen sets and deferred to a post-frame callback so it never
-  /// causes jank or a setState-during-build.
+  /// causes jank or a setState-during-build. Silent on failure: the person did
+  /// not ask for this particular message.
   void _maybeAutoTranslate(String eventId, String text) {
     if (!_autoTranslate || eventId.isEmpty) return;
-    if (_translations.containsKey(eventId) ||
-        _translateInFlight.contains(eventId)) {
+    if (_translations[eventId] != null ||
+        _translateInFlight.contains(eventId) ||
+        _autoTranslateTried.contains(eventId)) {
       return;
     }
+    _autoTranslateTried.add(eventId);
     _translateInFlight.add(eventId);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      String? result;
+      TranslationResult result;
       try {
-        final target = _effectiveTranslateTarget();
-        result = await MessageTranslationService.instance.translate(
+        result = await MessageTranslationService.instance.translateDetailed(
           text: text,
-          targetBcp: target,
+          targetBcp: _effectiveTranslateTarget(),
           sourceBcp: _effectiveTranslateSource(),
           cacheKey: eventId,
         );
       } catch (_) {
-        result = null;
+        result = const TranslationResult(TranslationOutcome.failed);
       }
       if (!mounted) return;
       setState(() {
         _translateInFlight.remove(eventId);
-        _translations[eventId] = result;
-        if (result != null) _translationShown.add(eventId);
+        if (result.isOk) {
+          _translations[eventId] = result.text;
+          _translationShown.add(eventId);
+        }
       });
     });
   }
@@ -2107,7 +2191,9 @@ class _ChatScreenState extends State<ChatScreen>
       if (payload is! MsgEventV1) continue;
       final command = parseTopicsSyncCommand(payload.text);
       if (command == null) continue;
-      final atMs = item.event.createdAtMs;
+      // Ревизия списка, а без неё — время сообщения: повтор старого списка
+      // не перетирает новую правку.
+      final atMs = command.freshnessMs(item.event.createdAtMs);
       if (atMs >= newestAtMs) {
         newestAtMs = atMs;
         newest = command;
@@ -2177,7 +2263,66 @@ class _ChatScreenState extends State<ChatScreen>
   /// Whether to show the topic switcher. By default nothing sits under the top
   /// bar — the switcher only appears once the room actually has topics. The
   /// first topic is created via the «Тема» chip in the attachment sheet.
-  bool get _shouldShowTopicBar => _isGroupChat && _roomTopics.isNotEmpty;
+  bool get _shouldShowTopicBar =>
+      _isGroupChat && (_roomTopics.isNotEmpty || _privateTopics.isNotEmpty);
+
+  /// Мои закрытые ветки — из базы; непрочитанное обновляется вместе с
+  /// остальным экраном. Поздний ответ не затирает более свежий.
+  Future<void> _loadPrivateTopics() async {
+    if (!_isGroupChat) return;
+    final seq = ++_privateTopicsLoadSeq;
+    final topics = await widget.controller.listRoomPrivateTopics(
+      widget.convoId,
+    );
+    final settings = await widget.controller.getRoomSettings(widget.convoId);
+    String? parentTitle;
+    if (settings.isPrivateTopic) {
+      final parentId = settings.parentRoomId!.trim();
+      for (final c in await widget.controller.listConversations()) {
+        if (c.convoId == parentId) {
+          parentTitle = c.title;
+          break;
+        }
+      }
+    }
+    if (!mounted || seq != _privateTopicsLoadSeq) return;
+    if (_samePrivateTopics(topics, _privateTopics) &&
+        parentTitle == _privateTopicParentTitle) {
+      return;
+    }
+    setState(() {
+      _privateTopics = topics;
+      _privateTopicParentTitle = parentTitle;
+    });
+  }
+
+  static bool _samePrivateTopics(
+    List<RoomPrivateTopic> a,
+    List<RoomPrivateTopic> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].roomId != b[i].roomId ||
+          a[i].title != b[i].title ||
+          a[i].unreadCount != b[i].unreadCount) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  Future<void> _openPrivateTopic(RoomPrivateTopic topic) async {
+    await Navigator.of(context).push(
+      SecretlyPageRoute(
+        builder: (_) => ChatScreen(
+          controller: widget.controller,
+          convoId: topic.roomId,
+          title: topic.title,
+        ),
+      ),
+    );
+    if (mounted) unawaited(_loadPrivateTopics());
+  }
 
   Widget _buildTopicBar() {
     final canManage = _roomPolicyState?.canChangeGroupInfo ?? false;
@@ -2223,6 +2368,25 @@ class _ChatScreenState extends State<ChatScreen>
               onLongPress: canManage ? () => _manageTopic(topic) : null,
             ),
           ],
+          // Закрытые ветки — после открытых, с замком. Это отдельные
+          // комнаты: нажатие открывает их экран, а не фильтр ленты.
+          for (final topic in _privateTopics) ...<Widget>[
+            const SizedBox(width: 6),
+            Semantics(
+              container: true,
+              label:
+                  '${AppLocalizations.of(context)!.roomPrivateTopicLabel}: '
+                  '${topic.title}',
+              child: _buildTopicChip(
+                id: 'private:${topic.roomId}',
+                label: topic.title,
+                markIcon: Icons.lock_rounded,
+                selected: false,
+                unread: topic.unreadCount,
+                onTap: () => unawaited(_openPrivateTopic(topic)),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -2243,6 +2407,9 @@ class _ChatScreenState extends State<ChatScreen>
     required bool selected,
     int unread = 0,
     VoidCallback? onLongPress,
+    /// Своё нажатие (закрытая ветка открывает свой экран). `null` — выбрать
+    /// тему в этой ленте.
+    VoidCallback? onTap,
     /// Значок перед названием: решётка или заменивший её знак. `null` — у
     /// «Общего»: общий поток не ветка, значка у него нет.
     IconData? markIcon,
@@ -2292,11 +2459,13 @@ class _ChatScreenState extends State<ChatScreen>
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: () {
-                  if (_currentTopicId != id) {
-                    setState(() => _currentTopicId = id);
-                  }
-                },
+                onTap:
+                    onTap ??
+                    () {
+                      if (_currentTopicId != id) {
+                        setState(() => _currentTopicId = id);
+                      }
+                    },
                 onLongPress: onLongPress,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -2504,8 +2673,59 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _createTopic() async {
+    // ◆ Закрытые темы (06.10.2026): кто может их создавать (Р-2), выбирает
+    // вид темы в одном листе. Остальным — прежний вопрос о названии.
+    if (await widget.controller.canCreatePrivateTopic(widget.convoId)) {
+      final me = widget.controller.profileId;
+      final members = (await widget.controller.listRoomMembersDetailed(
+        widget.convoId,
+      )).where((m) => m.profileId != me).toList(growable: false);
+      if (!mounted) return;
+      final choice = await showNewRoomTopicSheet(context, members: members);
+      if (choice == null || !mounted) return;
+      if (choice.isPrivate) {
+        await _createPrivateTopic(choice);
+      } else {
+        await _addOpenTopic(choice.title);
+      }
+      return;
+    }
     final title = await _promptTopicTitle();
     if (title == null || !mounted) return;
+    await _addOpenTopic(title);
+  }
+
+  Future<void> _createPrivateTopic(NewRoomTopicChoice choice) async {
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final roomId = await widget.controller.createPrivateTopic(
+        parentRoomId: widget.convoId,
+        title: choice.title,
+        memberProfileIds: choice.memberProfileIds,
+      );
+      if (!mounted) return;
+      await _loadPrivateTopics();
+      if (!mounted) return;
+      final topic = _privateTopics.firstWhere(
+        (t) => t.roomId == roomId,
+        orElse: () => RoomPrivateTopic(roomId: roomId, title: choice.title),
+      );
+      await _openPrivateTopic(topic);
+    } catch (e) {
+      messenger.showSnackBar(
+        SecretlySnackBar(
+          content: Text(
+            e is RoomPrivateTopicLimitException
+                ? l10n.roomPrivateTopicLimit(kRoomPrivateTopicsMax)
+                : l10n.roomPrivateTopicFailed,
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _addOpenTopic(String title) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final id = 'topic-$nowMs-${Random().nextInt(0xFFFFFF)}';
     final next = <RoomTopicRef>[
@@ -3566,7 +3786,10 @@ class _ChatScreenState extends State<ChatScreen>
   /// Premium on-device dictation entry, shown as the composer field's suffix.
   /// Distinct from the round voice-message record button — this turns speech
   /// into editable text in both 1:1 chats and group rooms.
-  Widget _buildDictationSuffix(Color iconColor) {
+  Widget? _buildDictationSuffix(Color iconColor) {
+    // Облегчённая сборка: диктовку на Android ведёт whisper, которого нет, —
+    // кнопку не показываем вовсе, вместо немого нажатия.
+    if (!kVoiceTranscriptionAvailable) return null;
     return IconButton(
       padding: EdgeInsets.zero,
       visualDensity: VisualDensity.compact,
@@ -3920,16 +4143,20 @@ class _ChatScreenState extends State<ChatScreen>
     BuildContext context,
     CachedRoomCall? roomCall,
   ) {
-    final inactiveLabel = chatText(
-      context,
-      ru: 'Комната',
-      en: 'Room',
-      uk: 'Кімната',
-      es: 'Sala',
-      pt: 'Sala',
-      fr: 'Salon',
-      de: 'Raum',
-    );
+    final parentTitle = _privateTopicParentTitle;
+    // Закрытая ветка говорит, чья она: «Закрытая тема · Комната».
+    final inactiveLabel = parentTitle != null
+        ? AppLocalizations.of(context)!.roomPrivateTopicInRoom(parentTitle)
+        : chatText(
+            context,
+            ru: 'Комната',
+            en: 'Room',
+            uk: 'Кімната',
+            es: 'Sala',
+            pt: 'Sala',
+            fr: 'Salon',
+            de: 'Raum',
+          );
     return formatRoomCallPresenceText(
       context,
       roomCall,
@@ -6892,6 +7119,14 @@ class _ChatScreenState extends State<ChatScreen>
         continue;
       }
       final payload = await widget.controller.payloadEventForChatEvent(event);
+      // Чужой стикер из закрытого набора не пересылается (В-4 в ТЗ
+      // 14.11.2026): автор просил его не распространять. Свой — можно.
+      if (payload is StickerEventV1 &&
+          payload.packClosed &&
+          !widget.controller.isOwnDeviceId(event.senderDeviceId)) {
+        blockedCount += 1;
+        continue;
+      }
       if (payload is MsgEventV1) {
         if (_isDeleteForAllCommandText(payload.text) ||
             _isHiddenSystemCommandText(payload.text)) {
@@ -8848,6 +9083,9 @@ class _ChatScreenState extends State<ChatScreen>
 
   @override
   void dispose() {
+    MessageTranslationService.settingsChanged.removeListener(
+      _onTranslationSettingsChanged,
+    );
     // Persist any unsent composer text so it's restored next time.
     unawaited(_persistDraft());
     widget.controller.clearActiveConversation(widget.convoId);
@@ -10286,6 +10524,36 @@ class _ChatScreenState extends State<ChatScreen>
                                                   _pendingPhotos.length) {
                                                 final p =
                                                     _pendingPhotos[photoIndex];
+                                                // Кружок в очереди — свой вид:
+                                                // тот же скруглённый квадрат,
+                                                // что у готового кружка.
+                                                if (p.videoNote) {
+                                                  return _SlideUpEntrance(
+                                                    isOutgoing: true,
+                                                    child: _PendingVideoNoteBubble(
+                                                      filePath: p.filePath,
+                                                      mirrorPreview:
+                                                          p.mirrorPreview,
+                                                      sentBytes: p.sentBytes,
+                                                      totalBytes: p.totalBytes,
+                                                      onCancel: () {
+                                                        p.cancelToken.cancel();
+                                                        widget.controller
+                                                            .removePendingPhotoUpload(
+                                                              widget.convoId,
+                                                              p.id,
+                                                            );
+                                                      },
+                                                      onRetry: p.failed
+                                                          ? () => widget.controller
+                                                                .retryPhotoUpload(
+                                                                  widget.convoId,
+                                                                  p.id,
+                                                                )
+                                                          : null,
+                                                    ),
+                                                  );
+                                                }
                                                 return _SlideUpEntrance(
                                                   isOutgoing: true,
                                                   child: _PendingPhotoBubble(
@@ -10302,6 +10570,13 @@ class _ChatScreenState extends State<ChatScreen>
                                                     filename: p.filename,
                                                     asFile: p.asFile,
                                                     viewportListenable: _bubbleGradientRepaint,
+                                                    onRetry: p.failed
+                                                        ? () => widget.controller
+                                                              .retryPhotoUpload(
+                                                                widget.convoId,
+                                                                p.id,
+                                                              )
+                                                        : null,
                                                     onCancel: () {
                                                       p.cancelToken.cancel();
                                                       widget.controller
@@ -10710,6 +10985,9 @@ class _ChatScreenState extends State<ChatScreen>
                                                             _bubbleGradientRepaint,
                                                         loadCachedFile:
                                                             _ensureImagePreviewFile,
+                                                        downloadProgressFor: widget
+                                                            .controller
+                                                            .attachmentDownloadProgress,
                                                         onTap: (_) =>
                                                             _openTimelineImageGallery(
                                                               entry: entry,
@@ -11052,7 +11330,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                                 .startsWith(
                                                                   'image/',
                                                                 )
-                                                            ? _ensureImagePreviewFile
+                                                            ? _ensureImagePreviewFileOrNull
                                                             : null,
                                                         isAudioPlaying:
                                                             isAudioActive &&
@@ -13206,17 +13484,51 @@ class _ChatScreenState extends State<ChatScreen>
     )));
   }
 
+  /// Пауза перед повтором после [count] сбоев подряд: 15 с, 1 мин, 5 мин.
+  static Duration _imagePreviewRetryAfter(int count) => switch (count) {
+    <= 1 => const Duration(seconds: 15),
+    2 => const Duration(minutes: 1),
+    _ => const Duration(minutes: 5),
+  };
+
+  /// Картинка пузыря: из кэша, иначе скачать.
+  ///
+  /// Бросает [_ChatMediaGone], если файла нет на сервере — пузырь рисует
+  /// «недоступно» вместо вечного ожидания. Прочие сбои → `null`, и повтор
+  /// разрешён после паузы [_imagePreviewRetryAfter] (повторяет первая же
+  /// перерисовка ленты, как и прежде при первом показе).
   Future<File?> _ensureImagePreviewFile(AttachmentEventV1 attachment) async {
     final cached = await widget.controller.cachedAttachmentFile(attachment);
     if (cached != null) return cached;
-    if (_imagePreviewFailedBlobIds.contains(attachment.blobId)) return null;
-    if (_imagePreviewLoadingBlobIds.contains(attachment.blobId)) return null;
+    final blobId = attachment.blobId;
+    if (_imagePreviewGoneBlobIds.contains(blobId)) {
+      throw const _ChatMediaGone();
+    }
+    final failure = _imagePreviewFailures[blobId];
+    if (failure != null &&
+        DateTime.now().millisecondsSinceEpoch - failure.atMs <
+            _imagePreviewRetryAfter(failure.count).inMilliseconds) {
+      return null;
+    }
+    if (_imagePreviewLoadingBlobIds.contains(blobId)) return null;
 
-    _imagePreviewLoadingBlobIds.add(attachment.blobId);
+    _imagePreviewLoadingBlobIds.add(blobId);
     try {
-      return await widget.controller.ensureCachedAttachmentFile(attachment);
-    } catch (_) {
-      _imagePreviewFailedBlobIds.add(attachment.blobId);
+      final file = await widget.controller.ensureCachedAttachmentFile(
+        attachment,
+      );
+      _imagePreviewFailures.remove(blobId);
+      return file;
+    } catch (e) {
+      if (e.toString().contains('blob download failed: 404')) {
+        _imagePreviewGoneBlobIds.add(blobId);
+        _imagePreviewFailures.remove(blobId);
+        throw const _ChatMediaGone();
+      }
+      _imagePreviewFailures[blobId] = (
+        atMs: DateTime.now().millisecondsSinceEpoch,
+        count: (failure?.count ?? 0) + 1,
+      );
       return null;
     } finally {
       _imagePreviewLoadingBlobIds.remove(attachment.blobId);
@@ -13230,10 +13542,17 @@ class _ChatScreenState extends State<ChatScreen>
     List<AttachmentEventV1> attachments,
   ) async {
     return Future.wait(
-      attachments.map(_ensureImagePreviewFile),
+      attachments.map(_ensureImagePreviewFileOrNull),
       eagerError: false,
     );
   }
+
+  /// Для мест, которым «нет файла» и «истёк срок» рисовать одинаково
+  /// (коллаж, значок документа): `null` вместо [_ChatMediaGone].
+  Future<File?> _ensureImagePreviewFileOrNull(AttachmentEventV1 attachment) =>
+      _ensureImagePreviewFile(
+        attachment,
+      ).catchError((Object _) => null, test: (e) => e is _ChatMediaGone);
 
   Widget _wrapSelectableEventItem({
     required ChatEvent event,
@@ -15029,13 +15348,18 @@ class _ChatScreenState extends State<ChatScreen>
           );
           return;
         case ChatAttachmentPickerResultKind.file:
-          final path = selection.primaryPath;
-          if (path == null) return;
-          await _sendFileAttachmentPath(
-            targetId: targetId,
-            filePath: path,
-            fileName: selection.fileName,
-          );
+          // О9 (15.11.2026): документов может быть несколько — каждый своим
+          // сообщением, по очереди (загрузка всё равно последовательная).
+          for (var i = 0; i < selection.filePaths.length; i++) {
+            if (!mounted) return;
+            await _sendFileAttachmentPath(
+              targetId: targetId,
+              filePath: selection.filePaths[i],
+              fileName: i < selection.fileNames.length
+                  ? selection.fileNames[i]
+                  : (i == 0 ? selection.fileName : null),
+            );
+          }
           return;
         case ChatAttachmentPickerResultKind.audio:
           final path = selection.primaryPath;
@@ -15816,6 +16140,12 @@ class _ChatScreenState extends State<ChatScreen>
                                           Navigator.of(sheetCtx).pop(
                                             const _PickerResult.createSticker(),
                                           ),
+                                      onAddStickerToPack: (packId) =>
+                                          Navigator.of(sheetCtx).pop(
+                                            _PickerResult.createSticker(
+                                              targetPackId: packId,
+                                            ),
+                                          ),
                                     ),
                                   ),
                                   Padding(
@@ -15893,7 +16223,10 @@ class _ChatScreenState extends State<ChatScreen>
     } else if (result.gifUrl != null && targetId.isNotEmpty) {
       _sendGifUrl(targetId: targetId, gifUrl: result.gifUrl!);
     } else if (result.createSticker && targetId.isNotEmpty) {
-      await _createStickerFromPhoto(targetId);
+      await _createStickerFromPhoto(
+        targetId,
+        targetPackId: result.targetPackId,
+      );
     }
   }
 
@@ -15901,7 +16234,10 @@ class _ChatScreenState extends State<ChatScreen>
   /// CoverCropScreen), downscale to the 512px sticker canvas, and send it as a
   /// user sticker (E2EE blob) to [targetId]. The AI cutout + full editor land in
   /// later phases (F1+).
-  Future<void> _createStickerFromPhoto(String targetId) async {
+  Future<void> _createStickerFromPhoto(
+    String targetId, {
+    String? targetPackId,
+  }) async {
     // Choose: a sticker from a PHOTO, or a TEXT-only sticker (no photo).
     final mode = await showModalBottomSheet<String>(
       context: context,
@@ -15916,17 +16252,17 @@ class _ChatScreenState extends State<ChatScreen>
             const SizedBox(height: 8),
             ListTile(
               leading: const Icon(Icons.photo_rounded, color: Colors.white),
-              title: const Text(
-                'Из фото',
-                style: TextStyle(color: Colors.white),
+              title: Text(
+                context.l10n.stickerCreateFromPhoto,
+                style: const TextStyle(color: Colors.white),
               ),
               onTap: () => Navigator.of(sheetCtx).pop('photo'),
             ),
             ListTile(
               leading: const Icon(Icons.title_rounded, color: Colors.white),
-              title: const Text(
-                'Текстовый стикер',
-                style: TextStyle(color: Colors.white),
+              title: Text(
+                context.l10n.stickerCreateTextOnly,
+                style: const TextStyle(color: Colors.white),
               ),
               onTap: () => Navigator.of(sheetCtx).pop('text'),
             ),
@@ -15959,6 +16295,7 @@ class _ChatScreenState extends State<ChatScreen>
             sourcePath: sourcePath,
             controller: widget.controller,
             textOnly: textOnly,
+            targetPackId: targetPackId,
           ),
         ),
       );
@@ -15987,7 +16324,7 @@ class _ChatScreenState extends State<ChatScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SecretlySnackBar(
           content: Text(
-            '${chatText(context, ru: 'Не удалось создать стикер', en: 'Could not create sticker')}: $e',
+            context.l10n.stickerCreateFailed('$e'),
           ),
         ),
       );
@@ -16046,6 +16383,16 @@ class _ChatScreenState extends State<ChatScreen>
         ? stampedOrigin
         : (widget.convoId.startsWith('group:') ? '' : widget.convoId.trim());
     final isOwnPack = packId.startsWith('user:$myPid');
+    // Закрытый набор (ТЗ 14.11.2026): сразу просим у автора размытые превью.
+    // Сам набор автор не отдаст — проверка у него.
+    if (event.packClosed && !isOwnPack && originPid.isNotEmpty) {
+      unawaited(
+        widget.controller.requestPeerStickerPackPreviews(
+          packId: packId,
+          originPid: originPid,
+        ),
+      );
+    }
 
     await showModalBottomSheet<void>(
       context: context,
@@ -16818,6 +17165,8 @@ class _ChatScreenState extends State<ChatScreen>
 
   // ── Composer capture mode (voice ⇄ video note) ─────────────────────────
   Future<void> _restoreComposerCaptureMode() async {
+    // Режим мог быть сохранён полной сборкой — в облегчённой он не поднимается.
+    if (!kVideoToolsAvailable) return;
     try {
       final prefs = await SharedPreferences.getInstance();
       var video = prefs.getBool(_kComposerCaptureModePrefKey) ?? false;
@@ -16839,6 +17188,9 @@ class _ChatScreenState extends State<ChatScreen>
 
   void _toggleComposerCaptureMode() {
     if (_voiceRecording || _videoNoteRecording) return;
+    // Облегчённая сборка: кружки собирает FFmpeg — в видеорежим не уходим,
+    // кнопка остаётся микрофоном.
+    if (!kVideoToolsAvailable) return;
     if (!_composerVideoMode) {
       // Switching TO video: request camera + mic NOW (on this tap) so the
       // system permission dialog cannot interrupt the later press-and-hold
@@ -16899,6 +17251,7 @@ class _ChatScreenState extends State<ChatScreen>
   // ── Video-note recording (driven by the composer press gesture) ────────
   Future<void> _startVideoNoteRecording() async {
     if (_videoNoteBusy || _videoNoteRecording) return;
+    if (!kVideoToolsAvailable) return;
     // Dismiss the keyboard before the round-video recorder opens — otherwise it
     // covers the recorder UI and there's no way to hide it mid-recording.
     _messageInputFocusNode.unfocus();
@@ -16942,6 +17295,36 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _sendVideoNote(VideoNoteRecorderResult result) async {
     final replyToPayloadEventId = _replyTo?.payloadEventId;
+    // Скорость (15.11.2026, владелец: «после зелёной стрелки несколько секунд
+    // ничего не происходит»): кружок уходит через ту же очередь, что фото, —
+    // пузырь с кольцом виден сразу, склейка и загрузка идут в нём.
+    final prepare = result.prepare;
+    if (prepare != null) {
+      final targetId = _isGroupChat
+          ? widget.convoId
+          : (widget.peerProfileIdForSend ?? '');
+      if (targetId.isEmpty) return;
+      final pending = PendingPhotoUpload(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        filePath: result.filePath,
+        mime: 'video/mp4',
+        caption: '',
+        totalBytes: await File(result.filePath).length().catchError((_) => 0),
+        convoId: widget.convoId,
+        targetId: targetId,
+        isGroup: _isGroupChat,
+        topicId: _isGroupChat ? _currentTopicId : null,
+        replyToPayloadEventId: replyToPayloadEventId,
+        videoNote: true,
+        durationMs: result.durationMs,
+        prepare: prepare,
+        deleteFileAfterSend: true,
+        mirrorPreview: result.firstSegmentIsFront,
+      );
+      if (mounted) setState(() => _replyTo = null);
+      widget.controller.enqueuePhotoUpload(pending);
+      return;
+    }
     try {
       if (_isGroupChat) {
         await widget.controller.sendGroupAttachmentFile(
@@ -17812,207 +18195,17 @@ class _ChatScreenState extends State<ChatScreen>
     }
   }
 
+  /// П9 (15.11.2026): общий путь — тот же, что у вкладки «Файлы» галереи.
   Future<void> _openGenericAttachmentFile({
     required AttachmentEventV1 attachment,
     required File file,
     int? createdAtMs,
-  }) async {
-    final effectiveCreatedAtMs =
-        createdAtMs ?? DateTime.now().millisecondsSinceEpoch;
-    final suggestedName = _attachmentDownloadSuggestedName(
-      attachment,
-      effectiveCreatedAtMs,
-      file,
-    );
-    // IN-APP READER (2026-07-29): a PDF opens in OUR full-screen reader — same
-    // chrome as the photo gallery — instead of being handed to another app that
-    // may not exist ("Нет приложения для открытия"). Pages are rasterised by the
-    // platform's own PDF renderer; see PdfDocument for why we do not bundle an
-    // engine. If the file cannot be opened as a PDF (encrypted/corrupt) or the
-    // platform has no renderer yet, fall through to the external-app path below.
-    final mime = attachment.mime ?? _guessMime(file.path) ?? '';
-    final looksPdf =
-        mime.toLowerCase().contains('pdf') ||
-        file.path.toLowerCase().endsWith('.pdf');
-    if (looksPdf && PdfDocument.isSupported) {
-      final doc = await PdfDocument.open(file.path);
-      if (doc != null) {
-        if (!mounted) {
-          doc.dispose();
-          return;
-        }
-        await Navigator.of(context).push(
-          SecretlyPageRoute(
-            builder: (_) => DocumentReaderScreen(
-              document: doc,
-              title: suggestedName,
-              // Через общий путь: он даёт файлу правильное имя НА ДИСКЕ и тип
-              // по имени. Здесь стояло прямое обращение, и потому документ
-              // уходил под служебным именем кэша — `<blobId>.bin`.
-              onShare: () => shareAttachmentFile(
-                attachment: attachment,
-                createdAtMs: effectiveCreatedAtMs,
-                source: file,
-              ),
-            ),
-          ),
-        );
-        return;
-      }
-    }
-    // Plain text (.txt/.log/.json/.csv/…) opens in-app too. Unlike PDF this
-    // needs no rendering engine — we just decode the bytes — so it costs nothing
-    // in size or attack surface, and it saves the same dead end on a phone with
-    // no text viewer installed.
-    if (TextFileReaderScreen.canOpen(path: file.path, mime: mime)) {
-      if (!mounted) return;
-      await Navigator.of(context).push(
-        SecretlyPageRoute(
-          builder: (_) => TextFileReaderScreen(
-            file: file,
-            title: suggestedName,
-            onShare: () => shareAttachmentFile(
-              attachment: attachment,
-              createdAtMs: effectiveCreatedAtMs,
-              source: file,
-            ),
-          ),
-        ),
-      );
-      return;
-    }
-    final opened = await PlatformFileOpen.open(
-      // 🔴 Наружу отдаём файл с ПРАВИЛЬНЫМ ИМЕНЕМ НА ДИСКЕ и типом, выведенным
-      // из имени. Здесь уходил кэш `<blobId>.bin` с обезличенным типом — по
-      // такому описанию система не находит ни одного приложения, и человек
-      // видел «нет приложения для открытия» даже там, где приложение есть.
-      path: (await prepareAttachmentFileForExport(
-        source: file,
-        filename: suggestedName,
-        mime: attachment.mime,
-        createdAtMs: effectiveCreatedAtMs,
-      )).path,
-      mime: attachmentMimeFor(filename: suggestedName, mime: attachment.mime),
-      displayName: suggestedName,
-    );
-    if (opened || !mounted) return;
-    // NO-VIEWER FALLBACK (2026-07-29, field report "не открывается PDF — пишет
-    // «Нет приложения для открытия»"): a direct VIEW intent only succeeds when
-    // some installed app claims that exact mime, so on a phone without a PDF /
-    // document viewer the user hit a dead end — the file was decrypted and ready
-    // on disk, but there was no way to reach it. Offer the system share sheet
-    // instead: its chooser lists every app that can take the file (viewers,
-    // Drive, browser, mail), which is the standard Android way out of this, and
-    // it also lets the user move the file somewhere they can open it.
-    final decision = await showModalBottomSheet<String>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-              child: Text(
-                chatText(
-                  sheetContext,
-                  ru: 'На устройстве нет приложения для этого типа файла',
-                  en: 'No app on this device can open this file type',
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.ios_share_rounded),
-              title: Text(
-                chatText(
-                  sheetContext,
-                  ru: 'Открыть в другом приложении',
-                  en: 'Open with another app',
-                ),
-              ),
-              onTap: () => Navigator.of(sheetContext).pop('share'),
-            ),
-            // A file nothing can display should still be RETRIEVABLE: put it in
-            // the phone's public Downloads (visible in Files / any file manager)
-            // so an installer, archive or office document can be dealt with
-            // outside the app. Android only — iOS has no shared Downloads, and
-            // its share sheet already covers "save to Files".
-            if (Platform.isAndroid)
-              ListTile(
-                leading: const Icon(Icons.download_rounded),
-                title: Text(
-                  chatText(
-                    sheetContext,
-                    ru: 'Сохранить в Загрузки',
-                    en: 'Save to Downloads',
-                  ),
-                ),
-                onTap: () => Navigator.of(sheetContext).pop('save'),
-              ),
-            const SizedBox(height: 6),
-          ],
-        ),
-      ),
-    );
-    if (!mounted) return;
-    if (decision == 'save') {
-      try {
-        final saved = await const MethodChannel(
-          'secretly/media_store',
-        ).invokeMethod<String>('saveToDownloads', {
-          'fileName': suggestedName,
-          'sourcePath': file.path,
-          // 🔴 Тип обязателен. Без него запись шла типом
-          // `application/octet-stream`, и система считала файл двоичным мусором:
-          // установщик не предлагал поставить apk, проводник не открывал
-          // документ, и в «Недавних» файл не появлялся.
-          'mimeType': attachmentMimeFor(
-            filename: suggestedName,
-            mime: attachment.mime,
-          ),
-        });
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SecretlySnackBar(
-            content: Text(
-              saved != null && saved.trim().isNotEmpty
-                  ? chatText(
-                      context,
-                      ru: 'Сохранено в Загрузки',
-                      en: 'Saved to Downloads',
-                    )
-                  : chatText(
-                      context,
-                      ru: 'Не удалось сохранить',
-                      en: 'Could not save',
-                    ),
-            ),
-          ),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SecretlySnackBar(content: Text('$e')),
-        );
-      }
-      return;
-    }
-    if (decision != 'share') return;
-    try {
-      // Тот же довод, что в `_shareSingleAttachment`: наружу должен уходить файл
-      // с правильным именем НА ДИСКЕ, а не имя в параметрах.
-      await shareAttachmentFile(
-        attachment: attachment,
-        createdAtMs: effectiveCreatedAtMs,
-        source: file,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SecretlySnackBar(content: Text('$e')),
-      );
-    }
-  }
+  }) => openAttachmentFileForUser(
+    context,
+    attachment: attachment,
+    file: file,
+    createdAtMs: createdAtMs,
+  );
 
   Future<void> _startAudioPlaybackFromAttachment(
     AttachmentEventV1 attachment, {
@@ -22373,7 +22566,13 @@ class _PendingPhotoAlbumBubble extends StatelessWidget {
     final total = item.totalBytes;
     final sent = item.sentBytes;
     final done = total > 0 && sent >= total;
-    final progress = total > 0 ? (sent / total).clamp(0.0, 1.0) : null;
+    // О5 (разбор медиа 15.11.2026): пока не ушёл ни один байт, доли нет —
+    // кольцо крутится («идёт отправка»), а не стоит на 0 %. Фото и видео до
+    // 24 МБ уходят одним запросом без хода загрузки, и застывшее пустое
+    // кольцо выглядело как зависание.
+    final progress = total > 0 && sent > 0
+        ? (sent / total).clamp(0.0, 1.0)
+        : null;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -22520,7 +22719,12 @@ class _PendingPhotoBubble extends StatelessWidget {
     this.viewportListenable,
     this.filename,
     this.asFile = false,
+    this.onRetry,
   });
+
+  /// О2 (разбор медиа 15.11.2026): задан — отправка сорвалась по сети, и
+  /// пузырь «не отправлено»: нажатие повторяет, ✕ убирает.
+  final VoidCallback? onRetry;
 
   final String id;
   final String filePath;
@@ -22544,7 +22748,11 @@ class _PendingPhotoBubble extends StatelessWidget {
       sizeBytes: totalBytes,
       filename: filename,
     );
-    final progress = totalBytes > 0
+    // О5 (разбор медиа 15.11.2026): пока не ушёл ни один байт, доли нет —
+    // кольцо крутится («идёт отправка»), а не стоит на 0 %. Фото и видео до
+    // 24 МБ уходят одним запросом без хода загрузки, и застывшее пустое
+    // кольцо выглядело как зависание.
+    final progress = totalBytes > 0 && sentBytes > 0
         ? (sentBytes / totalBytes).clamp(0.0, 1.0)
         : null;
 
@@ -22607,10 +22815,12 @@ class _PendingPhotoBubble extends StatelessWidget {
                         ),
                         Positioned.fill(
                           child: Center(
-                            child: _UploadProgressRing(
-                              progress: progress,
-                              onCancel: onCancel,
-                            ),
+                            child: onRetry != null
+                                ? _UploadRetryButton(onRetry: onRetry!)
+                                : _UploadProgressRing(
+                                    progress: progress,
+                                    onCancel: onCancel,
+                                  ),
                           ),
                         ),
                         Positioned(
@@ -22618,14 +22828,23 @@ class _PendingPhotoBubble extends StatelessWidget {
                           top: 8,
                           child: IgnorePointer(
                             child: _UploadMbChip(
-                              label: _uploadMbLabel(
-                                context,
-                                sentBytes,
-                                totalBytes,
-                              ),
+                              label: onRetry != null
+                                  ? context.l10n.uploadNotSentTapToRetry
+                                  : _uploadMbLabel(
+                                      context,
+                                      sentBytes,
+                                      totalBytes,
+                                    ),
                             ),
                           ),
                         ),
+                        // О2: убрать несостоявшуюся отправку.
+                        if (onRetry != null)
+                          Positioned(
+                            right: 6,
+                            top: 6,
+                            child: _UploadDismissButton(onTap: onCancel),
+                          ),
                       ],
                     ),
                   ),
@@ -22641,7 +22860,7 @@ class _PendingPhotoBubble extends StatelessWidget {
                     timestampMs: createdAtMs,
                     status: _statusIcon(
                       context,
-                      'pending',
+                      onRetry != null ? 'failed' : 'pending',
                       _chatBubbleForegroundColor(context, true),
                       createdAtMs,
                     ),
@@ -22663,6 +22882,28 @@ class _PendingPhotoBubble extends StatelessWidget {
 
     // Document row: the file-type glyph IS the radial cancel ring; the MB
     // readout replaces the format/size subline while uploading.
+    final retry = onRetry;
+    if (retry != null) {
+      // О2: строка документа «не отправлено»; нажатие — повтор, долгое
+      // нажатие — убрать.
+      return GestureDetector(
+        onLongPress: onCancel,
+        child: _AttachmentBubble(
+          attachment: attachment,
+          timestampMs: createdAtMs,
+          isMe: true,
+          localState: 'failed',
+          statusText: context.l10n.uploadNotSentTapToRetry,
+          reactionEventId: id,
+          reactions: const <MessageReaction>[],
+          reactionPlayTokens: const <String, int>{},
+          onToggleOwnReaction: (_) {},
+          selfProfileId: '',
+          onTap: retry,
+          viewportListenable: viewportListenable,
+        ),
+      );
+    }
     return _AttachmentBubble(
       attachment: attachment,
       timestampMs: createdAtMs,
@@ -22726,7 +22967,11 @@ class _PendingAudioBubble extends StatelessWidget {
       sizeBytes: totalBytes,
       waveform: waveform,
     );
-    final progress = totalBytes > 0
+    // О5 (разбор медиа 15.11.2026): пока не ушёл ни один байт, доли нет —
+    // кольцо крутится («идёт отправка»), а не стоит на 0 %. Фото и видео до
+    // 24 МБ уходят одним запросом без хода загрузки, и застывшее пустое
+    // кольцо выглядело как зависание.
+    final progress = totalBytes > 0 && sentBytes > 0
         ? (sentBytes / totalBytes).clamp(0.0, 1.0)
         : null;
     final statusText = _pendingUploadStatusText(
@@ -24838,6 +25083,47 @@ class _UserStickerResolverState extends State<_UserStickerResolver> {
 /// sent us — pulls the rest of their pack over the e2ee WS and installs it.
 /// Rebuilds on `controller.changed` so the grid fills in + the button advances
 /// as chunks arrive.
+/// Клетка закрытого набора: размытое превью от автора (или пусто) под
+/// замком. Превью — около 24 px, стикер из него не собрать.
+class _LockedStickerSlot extends StatelessWidget {
+  const _LockedStickerSlot({this.preview});
+  final Uint8List? preview;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+            ),
+          ),
+          if (preview != null)
+            Opacity(
+              opacity: 0.7,
+              child: Image.memory(
+                preview!,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.low,
+                gaplessPlayback: true,
+              ),
+            ),
+          Center(
+            child: Icon(
+              Icons.lock_rounded,
+              size: 18,
+              color: Colors.white.withValues(alpha: 0.7),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StickerPackSheet extends StatelessWidget {
   const _StickerPackSheet({
     required this.controller,
@@ -24859,7 +25145,7 @@ class _StickerPackSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isRu = chatLocaleIsRussian(context);
+    final l10n = context.l10n;
     return StreamBuilder<void>(
       stream: controller.changed,
       builder: (context, _) {
@@ -24871,14 +25157,24 @@ class _StickerPackSheet extends StatelessWidget {
           else if (tappedSticker != null)
             tappedSticker!,
         ];
+        // 🔒 Закрытый набор: метка в самом стикере или отказ автора. Замок —
+        // ограничение интерфейса: присланный стикер у человека уже есть.
+        final lockedView = controller.stickerPackLockedView(packId);
+        final closed =
+            !isOwnPack && !installed && (event.packClosed || lockedView != null);
         final title = (localPack != null && localPack.title.isNotEmpty)
             ? localPack.title
             : ((event.packTitle != null && event.packTitle!.isNotEmpty)
                   ? event.packTitle!
-                  : (isRu ? 'Набор стикеров' : 'Sticker pack'));
+                  : ((lockedView?.title.isNotEmpty ?? false)
+                        ? lockedView!.title
+                        : l10n.desktopStickerPackTitle));
         final total = installed
             ? localPack.stickers.length
-            : (event.packStickerCount ?? stickers.length);
+            : (lockedView != null && lockedView.total > 0
+                  ? lockedView.total
+                  : (event.packStickerCount ?? stickers.length));
+        final lockedPreviews = lockedView?.previews ?? const <Uint8List>[];
         final inFlight = controller.stickerPackFetchInFlight(packId);
         final (received, expected) = controller.stickerPackInstallProgress(
           packId,
@@ -24919,14 +25215,31 @@ class _StickerPackSheet extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 2),
-                          Text(
-                            isRu
-                                ? '$total стикер${_stickerPluralRu(total)}'
-                                : '$total sticker${total == 1 ? '' : 's'}',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.55),
-                              fontSize: 13,
-                            ),
+                          Row(
+                            children: [
+                              if (closed) ...[
+                                Icon(
+                                  Icons.lock_rounded,
+                                  size: 13,
+                                  color: Colors.white.withValues(alpha: 0.55),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                              Flexible(
+                                child: Text(
+                                  closed
+                                      ? '${l10n.stickerPackClosedLabel} · '
+                                            '${l10n.desktopStickerPackCount(total)}'
+                                      : l10n.desktopStickerPackCount(total),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.55),
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -24948,10 +25261,21 @@ class _StickerPackSheet extends StatelessWidget {
                     itemBuilder: (context, i) {
                       if (i < stickers.length) {
                         final s = stickers[i];
+                        // Из закрытого набора отсюда не отправляется (В-4).
                         return GestureDetector(
                           behavior: HitTestBehavior.opaque,
-                          onTap: () => unawaited(onSendSticker(s)),
+                          onTap: closed
+                              ? null
+                              : () => unawaited(onSendSticker(s)),
                           child: SecretlyStickerAssetView(sticker: s, size: 68),
+                        );
+                      }
+                      if (closed) {
+                        final pi = i - stickers.length;
+                        return _LockedStickerSlot(
+                          preview: pi < lockedPreviews.length
+                              ? lockedPreviews[pi]
+                              : null,
                         );
                       }
                       // Greyed slot for a not-yet-fetched sticker.
@@ -24980,7 +25304,7 @@ class _StickerPackSheet extends StatelessWidget {
                 // сказать, что дошло не всё. Умолчание здесь хуже неполноты:
                 // неполноту можно объяснить, а тишину человек объясняет
                 // поломкой приложения.
-                if (installed && missing > 0) ...[
+                if (installed && missing > 0 && !closed) ...[
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -24992,13 +25316,7 @@ class _StickerPackSheet extends StatelessWidget {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          isRu
-                              ? 'Ещё $missing стикер${_stickerPluralRu(missing)} '
-                                    'не передалось — возможно, у автора старая '
-                                    'версия приложения'
-                              : '$missing more sticker${missing == 1 ? '' : 's'} '
-                                    "didn't transfer — the author may be on an "
-                                    'older app version',
+                          l10n.stickerPackMissingNote(missing),
                           style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.5),
                             fontSize: 12,
@@ -25010,18 +25328,44 @@ class _StickerPackSheet extends StatelessWidget {
                   ),
                 ],
                 const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: _buildInstallButton(
-                    isRu: isRu,
-                    installed: installed || isOwnPack,
-                    inFlight: inFlight,
-                    canFetch: canFetch,
-                    received: received,
-                    expected: expected,
-                    total: total,
+                if (closed)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.lock_rounded,
+                          size: 16,
+                          color: Colors.white.withValues(alpha: 0.55),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            l10n.stickerPackClosedNote,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  SizedBox(
+                    width: double.infinity,
+                    child: _buildInstallButton(
+                      l10n: l10n,
+                      installed: installed || isOwnPack,
+                      inFlight: inFlight,
+                      canFetch: canFetch,
+                      received: received,
+                      expected: expected,
+                      total: total,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -25031,7 +25375,7 @@ class _StickerPackSheet extends StatelessWidget {
   }
 
   Widget _buildInstallButton({
-    required bool isRu,
+    required AppLocalizations l10n,
     required bool installed,
     required bool inFlight,
     required bool canFetch,
@@ -25046,13 +25390,13 @@ class _StickerPackSheet extends StatelessWidget {
       return FilledButton(
         onPressed: null,
         style: FilledButton.styleFrom(shape: shape),
-        child: Text(isRu ? 'Установлено' : 'Installed'),
+        child: Text(l10n.desktopStickerPackInstalled),
       );
     }
     if (inFlight) {
       final label = expected > 0
-          ? '${isRu ? 'Установка' : 'Installing'}… $received/$expected'
-          : (isRu ? 'Установка…' : 'Installing…');
+          ? l10n.desktopStickerPackInstallingProgress(received, expected)
+          : l10n.desktopStickerPackInstalling;
       return FilledButton(
         onPressed: null,
         style: FilledButton.styleFrom(shape: shape),
@@ -25084,28 +25428,12 @@ class _StickerPackSheet extends StatelessWidget {
         // заставляет его сначала нажать, потом смотреть.
         child: Text(
           total > 0
-              ? (isRu
-                    ? 'Добавить $total стикер${_stickerPluralRu(total)}'
-                    : 'Add $total sticker${total == 1 ? '' : 's'}')
-              : (isRu ? 'Добавить набор' : 'Add pack'),
+              ? l10n.desktopStickerPackAdd(total)
+              : l10n.desktopStickerPackAddPlain,
         ),
       );
     }
     return const SizedBox.shrink();
-  }
-
-  /// Окончание для «стикер» по русским правилам.
-  ///
-  /// 🔴 Ради ощущения сделанного как следует. Без него получалось «1 стикеров» и
-  /// «22 стикеров» — именно такие мелочи и выдают наспех собранное приложение,
-  /// даже когда всё остальное работает. Форма та же, что у `_pluralRu` для
-  /// участников комнаты.
-  String _stickerPluralRu(int value) {
-    final mod10 = value % 10;
-    final mod100 = value % 100;
-    if (mod10 == 1 && mod100 != 11) return '';
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'а';
-    return 'ов';
   }
 }
 
@@ -25126,6 +25454,69 @@ class _StickerPackSheet extends StatelessWidget {
 /// «тормозит» в «часть фото пропала без следа» — а это хуже: человек не поймёт,
 /// потерялось у него что-то или нет. Видимый кадр говорит «файла нет», и это
 /// правда.
+/// П6 (15.11.2026): файла больше нет на сервере (срок хранения истёк, а
+/// на этом устройстве его не скачали). Повторять скачивание бесполезно.
+class _ChatMediaGone implements Exception {
+  const _ChatMediaGone();
+}
+
+/// П5: кольцо хода скачивания; пока доли нет — ничего (под ним и так
+/// размытая миниатюра).
+class _ChatDownloadProgressMark extends StatelessWidget {
+  const _ChatDownloadProgressMark({required this.progress});
+
+  final ValueListenable<double?> progress;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: ValueListenableBuilder<double?>(
+        valueListenable: progress,
+        builder: (context, value, _) {
+          if (value == null) return const SizedBox.shrink();
+          return Center(
+            child: Container(
+              width: 44,
+              height: 44,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black.withValues(alpha: 0.35),
+              ),
+              child: CircularProgressIndicator(
+                value: value,
+                strokeWidth: 2.4,
+                color: Colors.white,
+                backgroundColor: Colors.white.withValues(alpha: 0.25),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ChatMediaGoneMark extends StatelessWidget {
+  const _ChatMediaGoneMark();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.28)),
+        child: Center(
+          child: Icon(
+            Icons.image_not_supported_outlined,
+            size: 30,
+            color: Colors.white.withValues(alpha: 0.85),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BrokenMediaBox extends StatelessWidget {
   const _BrokenMediaBox({this.iconSize = 22, this.rounded = false});
 
@@ -26872,6 +27263,7 @@ class _ImageAttachmentBubble extends StatelessWidget {
     required this.selfProfileId,
     required this.loadCachedFile,
     required this.onTap,
+    this.downloadProgressFor,
     this.bubbleless = false,
     this.replySnippet,
     this.showGroupAuthorHeader = false,
@@ -26901,6 +27293,10 @@ class _ImageAttachmentBubble extends StatelessWidget {
   final void Function(String emoji) onToggleOwnReaction;
   final String selfProfileId;
   final Future<File?> Function(AttachmentEventV1 attachment) loadCachedFile;
+
+  /// П5 (разбор медиа 15.11.2026): ход скачивания по blobId — кольцо поверх
+  /// размытой миниатюры, пока снимок качается.
+  final ValueListenable<double?> Function(String blobId)? downloadProgressFor;
   final void Function(AttachmentEventV1 attachment) onTap;
   final _ReplySnippet? replySnippet;
   final bool showGroupAuthorHeader;
@@ -27038,7 +27434,7 @@ class _ImageAttachmentBubble extends StatelessWidget {
                           return f;
                         }),
                         builder: (context, snapshot) {
-                          return _ChatFilledVisualPreview(
+                          final preview = _ChatFilledVisualPreview(
                             file: snapshot.data,
                             mime: mime,
                             maxHeight: previewMaxHeight,
@@ -27046,6 +27442,32 @@ class _ImageAttachmentBubble extends StatelessWidget {
                             knownAspect: knownAspect,
                             blobId: attachment.blobId,
                             thumbBytes: thumbBytes,
+                          );
+                          final progressFor = downloadProgressFor;
+                          if (snapshot.connectionState !=
+                                  ConnectionState.done &&
+                              progressFor != null) {
+                            return Stack(
+                              fit: StackFit.passthrough,
+                              children: [
+                                preview,
+                                Positioned.fill(
+                                  child: _ChatDownloadProgressMark(
+                                    progress: progressFor(attachment.blobId),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }
+                          // П6: файла нет на сервере — поверх размытой
+                          // миниатюры знак «недоступно», а не вечная загрузка.
+                          if (snapshot.error is! _ChatMediaGone) return preview;
+                          return Stack(
+                            fit: StackFit.passthrough,
+                            children: [
+                              preview,
+                              const Positioned.fill(child: _ChatMediaGoneMark()),
+                            ],
                           );
                         },
                       );
@@ -27321,6 +27743,11 @@ Future<double> _resolveChatImageAspectRatio(File file) {
 
 Future<double> _resolveChatVideoAspectRatio(File file) {
   return _chatVideoAspectRatioCache.putIfAbsent(file.path, () async {
+    // П3 (15.11.2026): пропорции — по кадру-превью (он всё равно нужен
+    // пузырю), без отдельного видеоплеера на каждое видео. Плеер — только
+    // если кадра нет.
+    final fromPoster = await _chatVideoAspectFromPoster(file);
+    if (fromPoster != null) return fromPoster;
     VideoPlayerController? controller;
     try {
       controller = VideoPlayerController.file(file);
@@ -27338,6 +27765,28 @@ Future<double> _resolveChatVideoAspectRatio(File file) {
       }
     }
   });
+}
+
+Future<double?> _chatVideoAspectFromPoster(File file) async {
+  if (!kVideoToolsAvailable) return null;
+  try {
+    final poster = await VideoThumbnailCache.forVideo(
+      key: p.basenameWithoutExtension(file.path),
+      videoPath: file.path,
+    );
+    if (poster == null) return null;
+    final decoded = await decodeImageFromList(await poster.file.readAsBytes());
+    try {
+      final width = decoded.width.toDouble();
+      final height = decoded.height.toDouble();
+      if (width <= 0 || height <= 0) return null;
+      return (width / height).clamp(0.56, 1.78).toDouble();
+    } finally {
+      decoded.dispose();
+    }
+  } catch (_) {
+    return null;
+  }
 }
 
 class _ChatFilledVisualPreview extends StatelessWidget {
@@ -27697,10 +28146,20 @@ class _ChatVideoPreviewSurfaceState extends State<_ChatVideoPreviewSurface> {
   VideoPlayerController? _controller;
   bool _loadFailed = false;
 
+  /// 🔴 П3 (разбор медиа 15.11.2026). Раньше КАЖДОЕ видео в ленте держало
+  /// живой видеоплеер (ExoPlayer/AVPlayer + текстура) только ради стоп-кадра,
+  /// а лента строит около трёх экранов вперёд. В чате с роликами — десятки
+  /// плееров сразу: память, `OutOfMemoryError` и сбои текстур в Play.
+  /// Теперь картинку даёт кадр-превью с диска (тот же, что в галереях), а
+  /// плеер открывается, только если кадра нет: облегчённая сборка без
+  /// ffmpeg или кадр не вынулся. Воспроизведение — как и было, по нажатию,
+  /// в просмотрщике.
+  bool get _posterFirst => kVideoToolsAvailable;
+
   @override
   void initState() {
     super.initState();
-    _openController();
+    if (!_posterFirst) _openController();
   }
 
   @override
@@ -27708,8 +28167,19 @@ class _ChatVideoPreviewSurfaceState extends State<_ChatVideoPreviewSurface> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.file.path != widget.file.path) {
       _disposeController();
-      _openController();
+      // Новый файл — новая попытка: прежний сбой плеера к нему не относится.
+      _loadFailed = false;
+      if (!_posterFirst) _openController();
     }
+  }
+
+  /// Кадра нет — запасной путь прежний: плеер ради стоп-кадра.
+  void _fallBackToPlayer() {
+    if (_controller != null || _loadFailed) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _controller != null || _loadFailed) return;
+      setState(_openController);
+    });
   }
 
   void _openController() {
@@ -27810,6 +28280,10 @@ class _ChatVideoPreviewSurfaceState extends State<_ChatVideoPreviewSurface> {
                   ),
                 );
               }
+              // Облегчённая сборка: кадр из видео вынуть нечем, и ждать его
+              // нечего — остаётся тёмная плашка с кнопкой воспроизведения
+              // поверх (ровно как у ролика без файла).
+              if (!kVideoToolsAvailable) return const SizedBox.shrink();
               final posterKey = p.basenameWithoutExtension(widget.file.path);
               final known = VideoThumbnailCache.peek(posterKey);
               if (known != null) {
@@ -27832,6 +28306,9 @@ class _ChatVideoPreviewSurfaceState extends State<_ChatVideoPreviewSurface> {
                       fit: BoxFit.cover,
                       errorBuilder: (_, _, _) => const _BrokenMediaBox(),
                     );
+                  }
+                  if (snap.connectionState == ConnectionState.done) {
+                    _fallBackToPlayer();
                   }
                   return const Center(
                     child: SizedBox(
@@ -31592,13 +32069,17 @@ class _TranslateAffordance extends StatelessWidget {
           )
         : Icon(Icons.translate_rounded, size: 16, color: iconColor);
 
+    // 🔴 11.2026: зона нажатия была 20×20 — промах уходил в пузырь, и
+    // казалось, что кнопка не работает. Теперь 40×40, сам значок прежний.
     return Semantics(
       button: true,
+      label: context.l10n.translateButtonTooltip,
+      excludeSemantics: true,
       child: InkResponse(
         onTap: inFlight ? null : onTap,
-        radius: 16,
+        radius: 20,
         containedInkWell: false,
-        child: Padding(padding: const EdgeInsets.all(2), child: child),
+        child: SizedBox(width: 40, height: 40, child: Center(child: child)),
       ),
     );
   }
@@ -31692,6 +32173,155 @@ String _uploadMbLabel(BuildContext context, int sentBytes, int totalBytes) {
 /// determinate white progress arc (from the top, clockwise), and a centered ✕ —
 /// tapping anywhere on it cancels the upload. While progress is still unknown
 /// (encrypting / connecting) it spins as an indeterminate arc.
+/// Кружок в очереди отправки (15.11.2026): скруглённый квадрат того же
+/// размера и радиуса, что готовый [VideoNoteBubble], кадр-превью записи,
+/// кольцо хода (крутится, пока идёт склейка, потом — загрузка), ✕ отмена;
+/// сорвалось по сети — кнопка повтора.
+class _PendingVideoNoteBubble extends StatelessWidget {
+  const _PendingVideoNoteBubble({
+    required this.filePath,
+    required this.sentBytes,
+    required this.totalBytes,
+    required this.onCancel,
+    this.onRetry,
+    this.mirrorPreview = false,
+  });
+
+  /// Кадр сырой записи фронтальной камеры — зеркально, как в предпросмотре.
+  final bool mirrorPreview;
+
+  final String filePath;
+  final int sentBytes;
+  final int totalBytes;
+  final VoidCallback onCancel;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width * 0.58;
+    final side = width < 216.0 ? width : 216.0;
+    final progress = totalBytes > 0 && sentBytes > 0
+        ? (sentBytes / totalBytes).clamp(0.0, 1.0)
+        : null;
+    final posterKey = 'pending_note_${filePath.hashCode.toUnsigned(32)}';
+    return _ChatMessageFrame(
+      isMe: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: SizedBox(
+          width: side,
+          height: side,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(44),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                const ColoredBox(color: Colors.black),
+                if (kVideoToolsAvailable)
+                  FutureBuilder<VideoThumbnail?>(
+                    future: VideoThumbnailCache.forVideo(
+                      key: posterKey,
+                      videoPath: filePath,
+                    ),
+                    builder: (context, snap) {
+                      final poster = snap.data;
+                      if (poster == null) return const SizedBox.shrink();
+                      // Сырой кадр фронтальной камеры не отзеркален — как
+                      // в предпросмотре записи, показываем зеркально.
+                      return Transform.flip(
+                        flipX: mirrorPreview,
+                        child: Image.file(
+                          poster.file,
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true,
+                          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+                        ),
+                      );
+                    },
+                  ),
+                Center(
+                  child: onRetry != null
+                      ? _UploadRetryButton(onRetry: onRetry!)
+                      : _UploadProgressRing(
+                          progress: progress,
+                          onCancel: onCancel,
+                        ),
+                ),
+                if (onRetry != null)
+                  Positioned(
+                    right: 10,
+                    top: 10,
+                    child: _UploadDismissButton(onTap: onCancel),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// О2: кнопка повтора на месте кольца загрузки — тот же размер и место.
+class _UploadRetryButton extends StatelessWidget {
+  const _UploadRetryButton({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: context.l10n.uploadRetry,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onRetry,
+        child: Container(
+          width: 54,
+          height: 54,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.black.withValues(alpha: 0.42),
+            border: Border.all(color: Colors.white, width: 2),
+          ),
+          child: const Icon(
+            Icons.refresh_rounded,
+            color: Colors.white,
+            size: 26,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UploadDismissButton extends StatelessWidget {
+  const _UploadDismissButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: context.l10n.close,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.black.withValues(alpha: 0.42),
+          ),
+          child: const Icon(AppIcons.close, color: Colors.white, size: 15),
+        ),
+      ),
+    );
+  }
+}
+
 class _UploadProgressRing extends StatefulWidget {
   const _UploadProgressRing({
     required this.progress,

@@ -147,13 +147,23 @@ Future<bool> ensureSecurityScopeUnlocked({
   return unlocked ?? false;
 }
 
+/// [title] и [description] заменяют заголовок и пояснение экрана. Нужны коду
+/// принуждения: без них его задание выглядело ровно как смена настоящего
+/// пароля («Пароль для приложения»), и человек мог решить, что меняет основной
+/// код. Без них — прежний экран, слово в слово.
 Future<String?> openPasswordSetupFlow({
   required BuildContext context,
   required SecurityLockScope scope,
+  String? title,
+  String? description,
 }) {
   return Navigator.of(context).push<String>(
     SecretlyPageRoute<String>(
-      builder: (_) => _PasswordSetupScreen(scope: scope),
+      builder: (_) => _PasswordSetupScreen(
+        scope: scope,
+        title: title,
+        description: description,
+      ),
     ),
   );
 }
@@ -383,17 +393,43 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
       _submitting = true;
       _errorText = '';
     });
-    final success = await _manager.unlockWithPassword(
-      scope: widget.scope,
-      password: _passwordController.text,
-    );
+    // Замок приложения знает про код принуждения и счётчик попыток (Э2);
+    // для «Личных» — прежняя проверка.
+    final AppUnlockOutcome outcome;
+    Duration lockout = Duration.zero;
+    if (widget.scope == SecurityLockScope.app) {
+      final result = await _manager.unlockApp(
+        password: _passwordController.text,
+      );
+      outcome = result.outcome;
+      lockout = result.lockoutRemaining;
+    } else {
+      final ok = await _manager.unlockWithPassword(
+        scope: widget.scope,
+        password: _passwordController.text,
+      );
+      outcome = ok ? AppUnlockOutcome.unlocked : AppUnlockOutcome.failed;
+    }
     if (!mounted) {
       return;
     }
+    if (outcome == AppUnlockOutcome.duress) {
+      // Приложение сейчас перезапустится в обманку; экран молчит, как при
+      // верном пароле, и остаётся «занятым».
+      return;
+    }
+    final success = outcome == AppUnlockOutcome.unlocked;
+    final seconds =
+        lockout.inSeconds + (lockout.inMilliseconds % 1000 > 0 ? 1 : 0);
     setState(() {
       _submitting = false;
       _errorText = success
           ? ''
+          : outcome == AppUnlockOutcome.lockedOut || lockout > Duration.zero
+          ? _label(
+              ru: 'Слишком много попыток. Подождите $seconds с.',
+              en: 'Too many attempts. Wait $seconds s.',
+            )
           : _label(
               ru: 'Пароль не совпадает. Попробуйте еще раз.',
               en: 'That password did not match. Try again.',
@@ -904,9 +940,15 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
 }
 
 class _PasswordSetupScreen extends StatefulWidget {
-  const _PasswordSetupScreen({required this.scope});
+  const _PasswordSetupScreen({
+    required this.scope,
+    this.title,
+    this.description,
+  });
 
   final SecurityLockScope scope;
+  final String? title;
+  final String? description;
 
   @override
   State<_PasswordSetupScreen> createState() => _PasswordSetupScreenState();
@@ -965,7 +1007,8 @@ class _PasswordSetupScreenState extends State<_PasswordSetupScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          _label(ru: 'Пароль для $scopeName', en: 'Password for $scopeName'),
+          widget.title ??
+              _label(ru: 'Пароль для $scopeName', en: 'Password for $scopeName'),
         ),
       ),
       body: SafeArea(
@@ -973,10 +1016,11 @@ class _PasswordSetupScreenState extends State<_PasswordSetupScreen> {
           padding: const EdgeInsets.all(20),
           children: [
             Text(
-              _label(
-                ru: 'Пароль хранится только в защищенном хранилище устройства.',
-                en: 'The password is stored only in the secure device store.',
-              ),
+              widget.description ??
+                  _label(
+                    ru: 'Пароль хранится только в защищенном хранилище устройства.',
+                    en: 'The password is stored only in the secure device store.',
+                  ),
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 20),

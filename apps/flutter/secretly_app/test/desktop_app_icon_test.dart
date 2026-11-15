@@ -222,4 +222,22 @@ void main() {
       }
     });
   }, skip: skip);
+
+  // Без пропуска: установщик есть и в открытой выкладке.
+  test('🔴 установщик просит Explorer перечитать значки (05.10)', () {
+    // Знак сменили на чёрный в 29.09, а 635 ставил бирюзовый по тому же пути:
+    // без сброса кэша ярлыки и панель задач держат старый рисунок.
+    final iss = File('$_installer/secretly.iss').readAsStringSync();
+    expect(
+      RegExp(r'^ChangesAssociations=yes', multiLine: true).hasMatch(iss),
+      isTrue,
+    );
+    final run = iss.substring(iss.indexOf('[Run]'), iss.indexOf('[Code]'));
+    final refresh = run.indexOf(r'ie4uinit.exe"; Parameters: "-show"');
+    expect(refresh, greaterThanOrEqualTo(0));
+    // Строка без postinstall/skipifsilent — работает и при тихом обновлении.
+    final line = run.substring(refresh, run.indexOf('\n', refresh));
+    expect(line.contains('skipifsilent'), isFalse);
+    expect(line.contains('postinstall'), isFalse);
+  });
 }

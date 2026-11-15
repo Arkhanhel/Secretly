@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import '../primitives/hover_listener.dart';
+import '../primitives/motion_widgets.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../design/tokens.dart';
 import 'details_panel.dart';
@@ -774,13 +775,11 @@ class _DesktopShellState extends State<DesktopShell> {
                           connectionStatus: widget.connectionStatus,
                         ),
                       Expanded(
-                        child: AnimatedSwitcher(
-                          duration: DMotion.base,
-                          switchInCurve: DMotion.easeOutCubic,
-                          switchOutCurve: DMotion.easeInCubic,
-                          transitionBuilder: (child, anim) {
-                            return FadeTransition(opacity: anim, child: child);
-                          },
+                        // Раздел сменяется «через затухание» (05.10.2026):
+                        // прежний быстро гаснет, новый проявляется и чуть
+                        // дорастает до своего размера. Перекрёстный переход
+                        // показывал оба раздела сразу — полупрозрачную кашу.
+                        child: DPageSwitcher(
                           child: KeyedSubtree(
                             key: ValueKey(_section),
                             child: widget.contentBuilder(
@@ -919,7 +918,7 @@ class _DetailsToggleButton extends StatelessWidget {
     final btn = HoverListener(
       onTap: onPressed,
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-      builder: (ctx, hovered, pressed) => AnimatedContainer(
+      builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: AnimatedContainer(
         duration: DMotion.fast,
         width: 30,
         height: 30,
@@ -940,7 +939,7 @@ class _DetailsToggleButton extends StatelessWidget {
             color: open ? c.textPrimary : c.textSecondary,
           ),
         ),
-      ),
+      )),
     );
     if (!enabled) return btn;
     return DesktopTooltip(

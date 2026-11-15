@@ -718,6 +718,91 @@ class AppLocalizationsEn extends AppLocalizations {
   String get attachmentTransferUnavailable => 'Couldn\'t transfer the attachment right now. Check internet/server and try again.';
 
   @override
+  String get startupRetry => 'Retry';
+
+  @override
+  String get onboardingBackupLater => 'Backup isn\'t on yet — your profile is still being created. Turn it on later in Settings.';
+
+  @override
+  String get keepMediaTitle => 'Keep media on this device';
+
+  @override
+  String get keepMediaForever => 'Forever';
+
+  @override
+  String get keepMediaMonth => '1 month';
+
+  @override
+  String get keepMediaWeek => '1 week';
+
+  @override
+  String get keepMediaHint => 'Downloaded photos, videos and files older than this are removed from the phone. Messages stay; media no longer on the server (older than 7 days) and media you sent are removed for good.';
+
+  @override
+  String get chatMediaTitle => 'Media by chat';
+
+  @override
+  String get chatMediaShow => 'Count by chat';
+
+  @override
+  String chatMediaFilesCount(int count) {
+    return '$count files';
+  }
+
+  @override
+  String get chatMediaDeleteTitle => 'Delete this chat\'s media?';
+
+  @override
+  String get chatMediaDeleteBody => 'Downloaded photos, videos and files of this chat will be removed from the phone; messages stay. Anything still on the server (up to 7 days) can be downloaded again; the rest — what you sent and older media — is removed for good.';
+
+  @override
+  String get chatMediaDeleteConfirm => 'Delete';
+
+  @override
+  String get chatMediaEmpty => 'No downloaded media in chats';
+
+  @override
+  String galleryShowMore(int count) {
+    return 'Show more ($count left)';
+  }
+
+  @override
+  String get autoDownloadCellularTitle => 'Auto-download on mobile data';
+
+  @override
+  String get autoDownloadEverything => 'Everything';
+
+  @override
+  String get autoDownloadUpTo15Mb => 'Photos, videos and files up to 15 MB';
+
+  @override
+  String get autoDownloadPhotosOnly => 'Photos only';
+
+  @override
+  String get autoDownloadNothing => 'Nothing but voice messages';
+
+  @override
+  String get autoDownloadHint => 'Everything downloads on Wi-Fi. Anything postponed downloads once you\'re on Wi-Fi or when you open it. Files are kept on the server for 7 days.';
+
+  @override
+  String get uploadNotSentTapToRetry => 'Not sent — tap to retry';
+
+  @override
+  String get uploadRetry => 'Retry';
+
+  @override
+  String get attachmentExpiredOnServer => 'The file is no longer on the server: it is kept for 7 days.';
+
+  @override
+  String get attachmentServerRejectedSize => 'The file is too large for the server. Send a smaller one or split it.';
+
+  @override
+  String get attachmentServerStorageFull => 'The server is low on space right now. Try again later.';
+
+  @override
+  String get attachmentUploadQuotaExceeded => 'You\'ve reached the file storage limit. Files are kept for 7 days — try again later.';
+
+  @override
   String get attachmentSendUnavailable => 'Attachment sending is not ready yet. Try again.';
 
   @override
@@ -1066,7 +1151,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingWelcomeTitle => 'Welcome!';
 
   @override
-  String get onboardingWelcomeSubtitle => 'A next-generation messenger.\nComplete privacy. No compromises.';
+  String get onboardingWelcomeSubtitle => 'A next-generation messenger.\nPrivacy by design.';
 
   @override
   String get onboardingCreateAccount => 'Create new account';
@@ -1081,16 +1166,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingFeatureE2eBody => 'Messages are encrypted on your device. Only you have the keys.';
 
   @override
-  String get onboardingFeaturePrivacyTitle => 'Full anonymity';
+  String get onboardingFeaturePrivacyTitle => 'No personal data';
 
   @override
   String get onboardingFeaturePrivacyBody => 'No phone number. No link to personal data.';
 
   @override
-  String get onboardingFeatureRelayTitle => 'No middlemen';
+  String get onboardingFeatureRelayTitle => 'Server can\'t read';
 
   @override
-  String get onboardingFeatureRelayBody => 'The relay server does not store messages. It only passes them through.';
+  String get onboardingFeatureRelayBody => 'The server only passes on encrypted messages and deletes them after delivery.';
 
   @override
   String get onboardingProfileTitle => 'Your profile';
@@ -3416,7 +3501,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get desktopPrivacyEncryption => 'Encryption';
 
   @override
-  String get desktopPrivacyEncryptionHint => 'Messages, files and one-to-one calls are end-to-end encrypted; the keys live only on your devices. Group calls are encrypted only in transit for now.';
+  String get desktopPrivacyEncryptionHint => 'Messages, files and one-to-one calls are end-to-end encrypted; the keys live only on your devices. End-to-end encryption for group calls is rolling out gradually: a lock in the call shows it is on; without it, the call is encrypted only in transit.';
 
   @override
   String get desktopPrivacyE2eeActive => 'End-to-end encryption is active';
@@ -3837,7 +3922,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get desktopSecurityE2ee => 'End-to-end encryption';
 
   @override
-  String get desktopSecurityE2eeHint => 'Messages, files and one-to-one calls are encrypted on your device, and the keys never leave your devices. The server can\'t read the content but does see service data, such as who writes to whom and when. Group calls are encrypted only in transit for now.';
+  String get desktopSecurityE2eeHint => 'Messages, files and one-to-one calls are encrypted on your device, and the keys never leave your devices. The server can\'t read the content but does see service data, such as who writes to whom and when. End-to-end encryption for group calls is rolling out gradually: a lock in the call shows it is on; without it, the call is encrypted only in transit.';
 
   @override
   String get desktopSecurityVerifiedDevices => 'Verified devices';
@@ -4918,6 +5003,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get desktopProfileEmojiStatusPremiumOnly => 'Emoji status is part of Premium; you can subscribe in the app on your phone';
+
+  @override
+  String get desktopProfileCosmeticPremiumOnly => 'This frame or cover is part of Premium; you can subscribe in the app on your phone';
 
   @override
   String desktopProfileApplyFailed(Object error) {
@@ -7018,4 +7106,1176 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get desktopSoundNameDefault => 'Default';
+
+  @override
+  String get roomCallE2eeOn => 'End-to-end encrypted';
+
+  @override
+  String get roomCallE2eeOnHint => 'Only participants can hear and see this call — not our server.';
+
+  @override
+  String get roomCallE2eeConnecting => 'Setting up encryption…';
+
+  @override
+  String get roomCallE2eeFailed => 'Couldn\'t turn on encryption. This device can\'t join the call.';
+
+  @override
+  String get roomCallE2eeUnsupported => 'Encrypted group calls aren\'t available on this device yet.';
+
+  @override
+  String get roomCallE2eeWaitingKey => 'Waiting for key';
+
+  @override
+  String get roomCallE2eeFailing => 'Can\'t decrypt — they may have an older version';
+
+  @override
+  String roomCallE2eeUnknownParticipants(int count) {
+    return 'Unknown participants not heard: $count';
+  }
+
+  @override
+  String get roomCallOpenBanner => 'Not end-to-end encrypted — our server can see and hear this call';
+
+  @override
+  String get roomCallJoinOpenTitle => 'Join a call without encryption?';
+
+  @override
+  String get roomCallJoinOpenBody => 'This call isn\'t end-to-end encrypted: it was started in an older version of Secretly. Our server can see and hear it.';
+
+  @override
+  String get roomCallJoinOpenAction => 'Join anyway';
+
+  @override
+  String get roomCallStartChoiceTitle => 'Start an encrypted call?';
+
+  @override
+  String roomCallStartChoiceBody(String names) {
+    return 'Older version of Secretly — won\'t be able to join: $names.';
+  }
+
+  @override
+  String get roomCallStartChoiceNotify => 'Tell them in the chat to update';
+
+  @override
+  String get roomCallStartEncrypted => 'Start encrypted';
+
+  @override
+  String get roomCallStartOpen => 'Start without encryption';
+
+  @override
+  String get roomCallUpdateNotice => 'An encrypted call is in progress. Update Secretly to join.';
+
+  @override
+  String get roomCallE2eeScreenShareIos => 'Screen sharing from iPhone isn\'t available in encrypted calls yet';
+
+  @override
+  String get roomCallFull => 'The encrypted call is full';
+
+  @override
+  String get roomPrivateTopicNew => 'New topic';
+
+  @override
+  String get roomPrivateTopicOpen => 'Open';
+
+  @override
+  String get roomPrivateTopicOpenHint => 'Everyone in the room sees it';
+
+  @override
+  String get roomPrivateTopicClosed => 'Private';
+
+  @override
+  String get roomPrivateTopicClosedHint => 'Invited people only. Others won\'t know it exists';
+
+  @override
+  String get roomPrivateTopicTitleHint => 'Topic name';
+
+  @override
+  String get roomPrivateTopicMembers => 'Who to invite';
+
+  @override
+  String get roomPrivateTopicOnlyYou => 'Just you for now — you can add people later';
+
+  @override
+  String get roomPrivateTopicCreate => 'Create';
+
+  @override
+  String get roomPrivateTopicFailed => 'Couldn\'t create the private topic';
+
+  @override
+  String roomPrivateTopicLimit(int count) {
+    return 'Private topic limit reached: $count';
+  }
+
+  @override
+  String get roomPrivateTopicLabel => 'Private topic';
+
+  @override
+  String roomPrivateTopicInRoom(String room) {
+    return 'Private topic · $room';
+  }
+
+  @override
+  String get roomPrivateTopicAllowMembers => 'Create private topics';
+
+  @override
+  String get spaceGateEnterCode => 'Enter your code';
+
+  @override
+  String get spaceGateWrongCode => 'That code did not match. Try again.';
+
+  @override
+  String spaceGateWaitSeconds(int seconds) {
+    return 'Wait $seconds s';
+  }
+
+  @override
+  String get spaceGateUnlock => 'Unlock';
+
+  @override
+  String get spaceGateUseBiometrics => 'Use biometrics';
+
+  @override
+  String get spaceGateBiometricReason => 'Unlock Secretly';
+
+  @override
+  String get duressSetupTitle => 'Duress code';
+
+  @override
+  String get duressSetupDescription => 'This code opens a separate, empty profile instead of yours. It must differ from your real code. Whoever watches you type it sees a freshly installed messenger.';
+
+  @override
+  String get duressSectionTitle => 'Duress code';
+
+  @override
+  String get duressSectionSubtitleSet => 'Set. A second code opens a separate, empty profile.';
+
+  @override
+  String get duressSectionSubtitleUnset => 'A second code that opens a separate, empty profile instead of yours.';
+
+  @override
+  String get duressSectionChange => 'Change';
+
+  @override
+  String get duressSectionSetUp => 'Set up';
+
+  @override
+  String get duressWipeMainTitle => 'Erase the main profile when the code is entered';
+
+  @override
+  String get duressWipeMainSubtitle => 'Irreversible. Recovery only from a recovery kit or a backup.';
+
+  @override
+  String get duressRemoveCode => 'Remove the duress code';
+
+  @override
+  String duressWipeAfterAttemptsTitle(int attempts) {
+    return 'Erase everything after $attempts failed attempts';
+  }
+
+  @override
+  String get duressWipeAfterAttemptsSubtitle => 'Both profiles and the lock itself. A delay already applies after 3 failed attempts.';
+
+  @override
+  String get duressSectionFootnote => 'Protects against a \"show me your phone\" check, not against device forensics. Biometrics always open the main profile. To return to it from the decoy, close the app and enter your real code.';
+
+  @override
+  String get duressSaveFailed => 'Could not save.';
+
+  @override
+  String get netSettingsImportNoNewMessages => 'No new messages for this device.';
+
+  @override
+  String netSettingsImportReceived(int count) {
+    return 'Messages received: $count';
+  }
+
+  @override
+  String get netSettingsImportNotEnvelopeFile => 'This is not a Secretly message file, or it was altered.';
+
+  @override
+  String get netSettingsImportCouldNotOpen => 'Could not open the file.';
+
+  @override
+  String get netSettingsImportCouldNotRead => 'Could not read the file. Open it in Secretly: Settings → Without internet → \"Open a message file\".';
+
+  @override
+  String get netSettingsPathDirect => 'Direct';
+
+  @override
+  String get netSettingsPathFallback => 'Via fallback address';
+
+  @override
+  String get netSettingsPathMirror => 'Via mirror';
+
+  @override
+  String get netSettingsPathCdn => 'Via CDN';
+
+  @override
+  String get netSettingsPathProxy => 'Via proxy';
+
+  @override
+  String get netSettingsPathSocks => 'Via SOCKS';
+
+  @override
+  String get netSettingsPathTor => 'Via Tor';
+
+  @override
+  String get netSettingsProxyHostError => 'Enter a host name, for example proxy.example.org';
+
+  @override
+  String get netSettingsSocksAddressError => 'Enter an address like 127.0.0.1:9050';
+
+  @override
+  String get netSettingsNoContactsYet => 'No contacts yet.';
+
+  @override
+  String get netSettingsPickRecipientTitle => 'Who is the file for';
+
+  @override
+  String get netSettingsNothingToCarry => 'Nothing to carry to this contact from the last week.';
+
+  @override
+  String get netSettingsCouldNotCreateFile => 'Could not create the file.';
+
+  @override
+  String get netSettingsTitle => 'Network';
+
+  @override
+  String get netSettingsPathToServersTitle => 'Path to the servers';
+
+  @override
+  String get netSettingsPathDirectOff => 'Direct. Alternative paths are off or unavailable.';
+
+  @override
+  String get netSettingsTryAlternativeTitle => 'Try alternative paths';
+
+  @override
+  String get netSettingsTryAlternativeSubtitle => 'When the direct path is blocked, the app tries fallback addresses, mirrors and proxies on its own. Content stays end-to-end encrypted.';
+
+  @override
+  String get netSettingsVolunteerProxyTitle => 'Volunteer proxy';
+
+  @override
+  String get netSettingsVolunteerProxyDescription => 'A link like secretly://proxy#host. The proxy owner cannot read your traffic, but can see that you use Secretly.';
+
+  @override
+  String get netSettingsSocksTitle => 'SOCKS5 (for example Tor via Orbot)';
+
+  @override
+  String get netSettingsSendWithoutNetworkTitle => 'Send without network';
+
+  @override
+  String get netSettingsSendWithoutNetworkSubtitle => 'A file with your encrypted messages to a contact from the last week. Pass it on any way — USB stick, Bluetooth, another messenger.';
+
+  @override
+  String get netSettingsOpenMessageFileTitle => 'Open a message file';
+
+  @override
+  String get netSettingsOpenMessageFileSubtitle => 'A .secretly file from a contact. Messages for other devices and ones you already have are skipped.';
+
+  @override
+  String get netSettingsDeliveryReportsTitle => 'Anonymous delivery reports';
+
+  @override
+  String get netSettingsDeliveryReportsSubtitle => 'Once a day: platform, network type, which path worked and which failed, country from the system language. No identifiers, no addresses.';
+
+  @override
+  String get netSettingsOrbotTitle => 'Route through Orbot (Tor)';
+
+  @override
+  String get netSettingsOrbotSubtitle => 'Fills in the SOCKS address of Orbot, 127.0.0.1:9050. Install Orbot and start it; Secretly cannot check whether it is running.';
+
+  @override
+  String get netSettingsOrbotDone => 'SOCKS address set to Orbot. Start Orbot, then come back.';
+
+  @override
+  String get netSettingsTorTitle => 'Tor as the last resort';
+
+  @override
+  String get netSettingsTorSubtitle => 'Slower and uses more battery; used only when everything else is blocked.';
+
+  @override
+  String get socialRecoveryGuardiansTitle => 'Guardians';
+
+  @override
+  String get socialRecoveryEntryGuardiansSubtitle => 'Friends who together can bring your profile back if your phone is lost. Alone, none of them can do anything.';
+
+  @override
+  String get socialRecoveryHelpSomeoneTitle => 'Help someone recover';
+
+  @override
+  String get socialRecoveryHelpSomeoneSubtitle => 'If you are someone\'s guardian.';
+
+  @override
+  String get socialRecoveryRecoverMineTitle => 'Recover my profile';
+
+  @override
+  String get socialRecoveryRecoverMineSubtitle => 'On a new phone, with the help of your guardians.';
+
+  @override
+  String get socialRecoveryNeedTwoGuardians => 'Pick at least two guardians.';
+
+  @override
+  String get socialRecoverySendSharesFailed => 'Could not send the shares. Check your connection.';
+
+  @override
+  String get socialRecoveryOwnerIntro => 'Your profile is split into parts between guardians. To bring it back you need as many of them as you choose. Pick people whose voice you know, and whose safety number you have verified.';
+
+  @override
+  String get socialRecoveryIsSetUp => 'Recovery is set up';
+
+  @override
+  String get socialRecoveryWaitingConfirmations => 'Waiting for confirmations';
+
+  @override
+  String socialRecoveryConfirmedProgress(int accepted, int total, int threshold) {
+    return '$accepted of $total confirmed. $threshold needed to recover.';
+  }
+
+  @override
+  String get socialRecoveryGuardianHoldsPart => 'Holds a part';
+
+  @override
+  String get socialRecoveryGuardianNotSent => 'Not sent';
+
+  @override
+  String get socialRecoveryGuardianSentWaiting => 'Sent, waiting';
+
+  @override
+  String socialRecoveryPickContacts(int max) {
+    return 'Pick 2 to $max contacts';
+  }
+
+  @override
+  String get socialRecoveryNoContactsYet => 'No contacts yet.';
+
+  @override
+  String socialRecoveryThresholdLabel(int threshold, int total) {
+    return 'Guardians needed to recover: $threshold of $total';
+  }
+
+  @override
+  String get socialRecoveryThresholdWarning => 'This many guardians, acting together, could recover your profile without you. Avoid people who know each other too closely.';
+
+  @override
+  String get socialRecoverySendParts => 'Send the parts';
+
+  @override
+  String get socialRecoveryUpdateGuardians => 'Update guardians';
+
+  @override
+  String get socialRecoveryTurnOff => 'Turn recovery off';
+
+  @override
+  String get socialRecoveryCodeScanTitle => 'Recovery code';
+
+  @override
+  String get socialRecoveryNotRecoveryCode => 'This is not a recovery code.';
+
+  @override
+  String get socialRecoveryNoCodeInClipboard => 'No recovery code in the clipboard.';
+
+  @override
+  String get socialRecoverySendFailed => 'Could not send. Check your connection.';
+
+  @override
+  String get socialRecoveryHelpRecoverTitle => 'Help recover';
+
+  @override
+  String get socialRecoveryNotGuardianYet => 'You are not anyone\'s guardian yet. When someone picks you, their name appears here.';
+
+  @override
+  String get socialRecoveryWhoAreYouHelping => 'Who are you helping';
+
+  @override
+  String socialRecoveryThresholdOfGuardians(int threshold, int guardians) {
+    return '$threshold of $guardians guardians needed';
+  }
+
+  @override
+  String get socialRecoveryScanCode => 'Scan code';
+
+  @override
+  String get socialRecoveryPasteCode => 'Paste code';
+
+  @override
+  String get socialRecoveryCheckWordsByVoice => 'Check the words by voice';
+
+  @override
+  String get socialRecoveryCheckWordsExplanation => 'Call the person or meet them. Ask them to read the words from their screen. If any word differs, or you are not sure it is them, do not send. This is how an attacker would take over someone\'s profile.';
+
+  @override
+  String get socialRecoveryHeardWordsConfirm => 'I heard these words from this person';
+
+  @override
+  String get socialRecoverySent => 'Sent';
+
+  @override
+  String get socialRecoverySendMyPart => 'Send my part';
+
+  @override
+  String get socialRecoveryRecoverProfileTitle => 'Recover profile';
+
+  @override
+  String get socialRecoveryRecoverIntro => 'This phone will replace the profile now open on it with your previous profile. Your guardians send their parts, and once there are enough, the app restarts with your profile.';
+
+  @override
+  String get socialRecoveryShowCodeToGuardians => 'Show code to guardians';
+
+  @override
+  String get socialRecoveryShowCodeHint => 'Show the code to a guardian or send it as text, then read these words to them by voice.';
+
+  @override
+  String get socialRecoveryCopyCode => 'Copy code';
+
+  @override
+  String get socialRecoveryWaitingGuardians => 'Waiting for guardians';
+
+  @override
+  String socialRecoveryReceivedProgress(int received, int threshold) {
+    return '$received of $threshold received';
+  }
+
+  @override
+  String get socialRecoveryPartDidNotFit => 'One part did not fit. Ask another guardian.';
+
+  @override
+  String socialRecoveryAssembleFailed(String error) {
+    return 'Could not assemble the profile ($error).';
+  }
+
+  @override
+  String get socialRecoveryCancel => 'Cancel';
+
+  @override
+  String get disappearingTitle => 'Disappearing messages';
+
+  @override
+  String disappearingSubtitleOn(Object duration) {
+    return '$duration · for everyone in the chat';
+  }
+
+  @override
+  String get disappearingDialogHint => 'Messages are deleted from every participant\'s devices when the time runs out. This does not protect against screenshots or against devices with an old version of the app.';
+
+  @override
+  String get disappearingCustom => 'Custom…';
+
+  @override
+  String get disappearingCustomTitle => 'Custom time';
+
+  @override
+  String disappearingCustomHint(Object min, Object max) {
+    return 'From $min to $max';
+  }
+
+  @override
+  String get disappearingUnitSeconds => 'seconds';
+
+  @override
+  String get disappearingUnitMinutes => 'minutes';
+
+  @override
+  String get disappearingUnitHours => 'hours';
+
+  @override
+  String get disappearingUnitDays => 'days';
+
+  @override
+  String get disappearingCustomInvalid => 'Enter a number within the allowed range';
+
+  @override
+  String disappearingBannerOn(Object duration) {
+    return 'Disappearing messages: $duration';
+  }
+
+  @override
+  String get disappearingPeerOutdated => 'Your contact has an old version of the app — messages will not disappear on their side.';
+
+  @override
+  String get disappearingOwnOutdated => 'One of your devices has an old version of the app — messages will not disappear there.';
+
+  @override
+  String get disappearingSupportUnknown => 'Could not check your contact\'s app version.';
+
+  @override
+  String get disappearingChipTooltip => 'Disappearing messages — for everyone in the chat';
+
+  @override
+  String get disappearingUpdated => 'Disappearing messages timer changed';
+
+  @override
+  String get disappearingSetFailed => 'Could not change the timer';
+
+  @override
+  String get disappearingAdminOnly => 'Only the owner and admins can change the timer';
+
+  @override
+  String get disappearingRoomOutdated => 'Some members have an old version of the app — messages will not disappear for them.';
+
+  @override
+  String get disappearingQuoteGone => 'Message disappeared';
+
+  @override
+  String get serverAuthAlertTitle => 'Server response failed verification';
+
+  @override
+  String get serverAuthAlertBody => 'Someone between you and the Secretly server may be tampering with data. Your existing chats stay protected and keep working. New contacts and devices won’t be accepted until this clears. Try another network or a proxy.';
+
+  @override
+  String get serverAuthAlertDismiss => 'Got it';
+
+  @override
+  String get stickerPackAccessTitle => 'Who can add this pack';
+
+  @override
+  String get stickerPackAccessOpen => 'Open';
+
+  @override
+  String get stickerPackAccessOpenHint => 'People you send a sticker to can add the whole pack. It never goes to the server.';
+
+  @override
+  String get stickerPackAccessClosed => 'Closed';
+
+  @override
+  String get stickerPackAccessClosedHint => 'Only you have the pack. People will see the stickers you send them but can\'t add the pack. Stickers you send stay on their device anyway — this doesn\'t stop screenshots.';
+
+  @override
+  String get stickerPackClosedExistingNote => 'Anyone who already added this pack keeps it.';
+
+  @override
+  String get stickerPackClosedLabel => 'Closed pack';
+
+  @override
+  String get stickerPackClosedNote => 'The author doesn\'t allow adding this pack';
+
+  @override
+  String get stickerCreateFromPhoto => 'From photo';
+
+  @override
+  String get stickerCreateTextOnly => 'Text sticker';
+
+  @override
+  String stickerCreateFailed(String error) {
+    return 'Could not create sticker: $error';
+  }
+
+  @override
+  String stickerPackMissingNote(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count more stickers didn\'t transfer — the author may be on an older app version',
+      one: '$count more sticker didn\'t transfer — the author may be on an older app version',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get stickerAddedToPack => 'Sticker added to the pack';
+
+  @override
+  String stickerSaveFailed(String error) {
+    return 'Couldn\'t save: $error';
+  }
+
+  @override
+  String get stickerFavoritesPackTitle => 'Favorites';
+
+  @override
+  String get stickerAddedToFavorites => 'Sticker added to favorites';
+
+  @override
+  String get stickerAnimationUnavailable => 'Animation isn\'t available on this device';
+
+  @override
+  String get stickerMotionPickTitle => 'Choose a motion effect';
+
+  @override
+  String get stickerMotionSlow => 'Slow';
+
+  @override
+  String get stickerMotionNormal => 'Normal';
+
+  @override
+  String get stickerMotionFast => 'Fast';
+
+  @override
+  String get stickerMotionPulse => 'Pulse';
+
+  @override
+  String get stickerMotionBounce => 'Bounce';
+
+  @override
+  String get stickerMotionWobble => 'Wobble';
+
+  @override
+  String get stickerMotionTada => 'Ta-da';
+
+  @override
+  String get stickerReadyTitle => 'Your sticker';
+
+  @override
+  String get stickerPickEmojiHint => 'Pick emoji that match this sticker';
+
+  @override
+  String get stickerSend => 'Send sticker';
+
+  @override
+  String get stickerAnimating => 'Animating…';
+
+  @override
+  String get stickerChangeMotion => 'Change motion';
+
+  @override
+  String get stickerAnimatePremium => 'Animate · Premium';
+
+  @override
+  String get stickerMakeFavorite => 'Add to favorites';
+
+  @override
+  String get stickerAddToPack => 'Add to pack';
+
+  @override
+  String get stickerBack => 'Back';
+
+  @override
+  String get stickerNewPack => 'New pack';
+
+  @override
+  String get stickerNewPackHint => 'Give the pack a name.';
+
+  @override
+  String get stickerCreate => 'Create';
+
+  @override
+  String get stickerEditorObjectNotFound => 'No object found';
+
+  @override
+  String get stickerEditorPickObject => 'Select an object';
+
+  @override
+  String get stickerEditorText => 'Text';
+
+  @override
+  String get stickerEditorSelectObject => 'Select the object';
+
+  @override
+  String get stickerWord => 'Sticker';
+
+  @override
+  String get stickerEditorUndo => 'Undo';
+
+  @override
+  String get stickerEditorRedo => 'Redo';
+
+  @override
+  String get stickerEditorDelete => 'Delete';
+
+  @override
+  String get stickerEditorDone => 'Done';
+
+  @override
+  String get stickerEditorBgNone => 'No background';
+
+  @override
+  String get stickerEditorBgSolid => 'Fill';
+
+  @override
+  String get stickerEditorBgPill => 'Label';
+
+  @override
+  String get stickerEditorOutline => 'Outline';
+
+  @override
+  String get stickerEditorBackground => 'Background';
+
+  @override
+  String get stickerEditorRecut => 'Cut again';
+
+  @override
+  String get stickerEditorCut => 'Cut out object';
+
+  @override
+  String get stickerEditorDraw => 'Draw';
+
+  @override
+  String get stickerEditorAdjust => 'Adjust';
+
+  @override
+  String get stickerEditorEmoji => 'Emoji';
+
+  @override
+  String get stickerEditorExposure => 'Exposure';
+
+  @override
+  String get stickerEditorContrast => 'Contrast';
+
+  @override
+  String get stickerEditorSaturation => 'Saturation';
+
+  @override
+  String get stickerEditorTapObjects => 'Tap the objects to keep';
+
+  @override
+  String get stickerEditorObjectSelected => 'Object selected';
+
+  @override
+  String stickerPackInstallFailed(String error) {
+    return 'Failed to install sticker pack: $error';
+  }
+
+  @override
+  String stickerPackRemoveFailed(String error) {
+    return 'Failed to remove sticker pack: $error';
+  }
+
+  @override
+  String get stickerPackRemoveTitle => 'Remove sticker pack?';
+
+  @override
+  String stickerPackRemoveBody(String title) {
+    return 'Pack \"$title\" will stay in the catalog, but its local files will be removed.';
+  }
+
+  @override
+  String get stickerPackRemoveAction => 'Remove';
+
+  @override
+  String stickerPackRemovedSnack(String title) {
+    return 'Removed \"$title\" from this device.';
+  }
+
+  @override
+  String get stickerPackEdit => 'edit';
+
+  @override
+  String get stickerPackCoverUpdated => 'Pack cover updated';
+
+  @override
+  String stickerPackFull(int max) {
+    return 'This pack already has $max stickers — create a new one';
+  }
+
+  @override
+  String get settingsGroupProfile => 'Profile';
+
+  @override
+  String get settingsGroupRecovery => 'Recovery';
+
+  @override
+  String get settingsCaptionAccountRestore => 'Your ID and backup are what bring your account back on a new phone. Write the ID down and keep it apart from the phone.';
+
+  @override
+  String get settingsGroupLeave => 'Log out and delete';
+
+  @override
+  String get settingsCaptionLeave => 'Logging out erases data on this device only. Deleting erases the profile on the server too, and it cannot be brought back.';
+
+  @override
+  String get settingsGroupGeneral => 'General';
+
+  @override
+  String get settingsGroupMessages => 'Messages';
+
+  @override
+  String get settingsCaptionMessages => 'Anyone holding your phone can see the message text and name in a notification.';
+
+  @override
+  String get settingsGroupCalls => 'Calls';
+
+  @override
+  String get settingsGroupInApp => 'Inside the app';
+
+  @override
+  String get settingsCaptionInApp => 'Sounds and vibration while Secretly is open.';
+
+  @override
+  String get settingsGroupNotificationLook => 'How notifications look';
+
+  @override
+  String get settingsGroupBackground => 'In the background';
+
+  @override
+  String get settingsGroupQr => 'QR code';
+
+  @override
+  String get settingsGroupPersonal => 'Personal';
+
+  @override
+  String get settingsGroupWhoCan => 'Who can see and contact you';
+
+  @override
+  String get settingsGroupNewChats => 'New chats';
+
+  @override
+  String get settingsGroupSearchBlocking => 'Search and blocking';
+
+  @override
+  String get settingsGroupPhoneContacts => 'Phone contacts';
+
+  @override
+  String get settingsGroupInactive => 'If I’m away for a long time';
+
+  @override
+  String get settingsCaptionInactive => 'If you don’t open Secretly for this long, the account is deleted automatically.';
+
+  @override
+  String get settingsGroupAppLanguage => 'App language';
+
+  @override
+  String get settingsGroupTranslation => 'Translation';
+
+  @override
+  String get settingsGroupStatus => 'Status';
+
+  @override
+  String get settingsGroupBlocked => 'If Secretly is blocked';
+
+  @override
+  String get settingsCaptionBlocked => 'Usually nothing needs setting up. A proxy and Orbot are for when the alternative paths did not help.';
+
+  @override
+  String get settingsGroupOwnProxy => 'Your own proxy';
+
+  @override
+  String get settingsGroupOffline => 'Without internet';
+
+  @override
+  String get settingsCaptionOffline => 'This is a file, not a live connection: your contact reads the messages when they open the file.';
+
+  @override
+  String get settingsGroupHelpDelivery => 'Help improve delivery';
+
+  @override
+  String get netHowItWorksTitle => 'How it works';
+
+  @override
+  String get netHowItWorksSubtitle => 'Getting around blocks and sending without internet, in plain words';
+
+  @override
+  String get netHowStep1Title => 'How a message gets there';
+
+  @override
+  String get netHowStep1Body => 'Your phone encrypts the message before sending. The server keeps it encrypted while your contact is offline and hands it over when they come online. The server cannot read it.';
+
+  @override
+  String get netHowStep2Title => 'If Secretly is blocked';
+
+  @override
+  String get netHowStep2Body => '“Try alternative paths” is on by default. The app tries a spare address, a copy of the server (a “mirror”) and large delivery networks (“CDN”) that are hard to block entirely. The first connection may take longer than usual.';
+
+  @override
+  String get netHowStep3Title => 'If that did not help';
+
+  @override
+  String get netHowStep3Body => 'Ask someone you trust for a proxy link and paste it under “Volunteer proxy”. You can also install Orbot, the Tor network app. This is slower, and Orbot uses battery.';
+
+  @override
+  String get netHowStep4Title => 'No internet at all';
+
+  @override
+  String get netHowStep4Body => 'Tap “Send without network”, pick your contact and pass the file on any way you like: a USB stick, AirDrop, Bluetooth. They open it in Secretly. The file holds only messages you already wrote in the last week. There is no live connection over Bluetooth or through nearby phones yet.';
+
+  @override
+  String get netHowStep5Title => 'Calls';
+
+  @override
+  String get netHowStep5Body => 'In “Privacy” you can hide your address in calls: the call goes through our server and your contact does not see your IP address. The delay may grow a little.';
+
+  @override
+  String get netHowStep6Title => 'So messages are not late';
+
+  @override
+  String get netHowStep6Body => 'The phone’s system may put Secretly to sleep, and then messages arrive only when you open the app. “Reliability” shows what gets in the way of delivery.';
+
+  @override
+  String get settingsHelpGotIt => 'Got it';
+
+  @override
+  String get settingsHelpTip => 'Tip';
+
+  @override
+  String get settingsHelpButton => 'Explanation';
+
+  @override
+  String get settingsHubAccountGroup => 'Account & protection';
+
+  @override
+  String get settingsHubTalkGroup => 'Communication';
+
+  @override
+  String get settingsHubConnectionGroup => 'Connection';
+
+  @override
+  String get settingsHubPhoneGroup => 'Phone';
+
+  @override
+  String get settingsHubMoreGroup => 'More';
+
+  @override
+  String get settingsHubAccountSub => 'Name, Secretly ID, QR, backup';
+
+  @override
+  String get settingsHubPrivacySub => 'Who sees you and can message you';
+
+  @override
+  String get settingsHubSecuritySub => 'App lock, personal chats';
+
+  @override
+  String get settingsHubDevicesSub => 'Where your account is open';
+
+  @override
+  String get settingsHubNotificationsSub => 'Messages, rooms, calls';
+
+  @override
+  String get settingsHubChatsSub => 'Theme, wallpapers, bubbles, icon';
+
+  @override
+  String get settingsHubLanguageSub => 'App language and translation';
+
+  @override
+  String get settingsHubNetworkSub => 'How Secretly reaches its servers';
+
+  @override
+  String get settingsHubOfflineSub => 'Pass messages on as a file';
+
+  @override
+  String get settingsHubReliabilitySub => 'What can delay delivery';
+
+  @override
+  String get settingsHubSystemSub => 'Reset and service messages';
+
+  @override
+  String get settingsHubInviteSub => 'Share a link';
+
+  @override
+  String get settingsHubDonateSub => 'Help the project';
+
+  @override
+  String get settingsHubSupportSub => 'Write to us';
+
+  @override
+  String get settingsHubPolicySub => 'What is stored and where';
+
+  @override
+  String get settingsHubAboutSub => 'Version and licences';
+
+  @override
+  String get settingsIntroAccount => 'How others see you and how not to lose access to your chats.';
+
+  @override
+  String get settingsIntroPrivacy => 'Decide who sees your details and who can contact you.';
+
+  @override
+  String get settingsIntroSecurity => 'Protection in case your phone ends up in someone else’s hands.';
+
+  @override
+  String get settingsIntroNotifications => 'What to tell you and how. Start with the main switch.';
+
+  @override
+  String get settingsIntroLanguage => 'The language Secretly speaks to you in.';
+
+  @override
+  String get settingsIntroNetwork => 'How Secretly connects to its servers. Usually nothing here needs changing.';
+
+  @override
+  String get settingsIntroOffline => 'With no internet at all, you can pass messages on as a file — on a USB stick, over Bluetooth or through another messenger.';
+
+  @override
+  String get settingsIntroReliability => 'We check whether the system keeps messages and calls from arriving on time.';
+
+  @override
+  String get settingsIntroPower => 'Turn effects off if your phone gets warm or drains fast.';
+
+  @override
+  String get settingsIntroStorage => 'How much space Secretly takes on your phone.';
+
+  @override
+  String get settingsIntroSystem => 'Service actions. Use them only if something went wrong.';
+
+  @override
+  String get settingsGroupShare => 'Share';
+
+  @override
+  String get settingsGroupMedia => 'Media';
+
+  @override
+  String get settingsGroupData => 'Data';
+
+  @override
+  String get settingsGroupLock => 'Lock';
+
+  @override
+  String get settingsGroupManual => 'Manual setup';
+
+  @override
+  String get settingsHelpManual => 'Only needed if the alternative paths did not help. Pick one way: a proxy from a volunteer you know, SOCKS5, or Tor via Orbot.';
+
+  @override
+  String get settingsGroupConnection => 'Connection';
+
+  @override
+  String get settingsGroupSend => 'Send';
+
+  @override
+  String get settingsGroupReceive => 'Receive';
+
+  @override
+  String get settingsOpenPersonalChats => 'Open personal chats';
+
+  @override
+  String get settingsOpenPersonalChatsSub => 'Your hidden chat collection';
+
+  @override
+  String get offlineStep1Title => 'Create a file';
+
+  @override
+  String get offlineStep1Body => 'Pick a contact — the file holds your encrypted messages to them from the past week.';
+
+  @override
+  String get offlineStep2Title => 'Pass it on any way';
+
+  @override
+  String get offlineStep2Body => 'USB stick, Bluetooth, AirDrop, another messenger. Only the recipient can read the messages.';
+
+  @override
+  String get offlineStep3Title => 'Your contact opens the file';
+
+  @override
+  String get offlineStep3Body => 'In Secretly: “Without internet” → “Open a message file”. The messages appear in the chat.';
+
+  @override
+  String get translateSameLanguage => 'The message is already in this language';
+
+  @override
+  String get translateUndetected => 'Couldn’t tell the language. Pick the source language in Settings → Language.';
+
+  @override
+  String get translateUnsupported => 'The on-device translator doesn’t know this language yet';
+
+  @override
+  String get translateDownloadFailed => 'Couldn’t download the language pack. Check your connection and tap again.';
+
+  @override
+  String get translateFailed => 'Couldn’t translate. Tap again.';
+
+  @override
+  String get translateNothing => 'There’s nothing to translate here';
+
+  @override
+  String get translateDownloading => 'Downloading the language pack — only needed once';
+
+  @override
+  String get translateButtonTooltip => 'Translate';
+
+  @override
+  String get attachmentMetadataScrubFailed => 'Couldn’t remove the location and phone details from this file, so it wasn’t sent. Try another photo or send it as a file.';
+
+  @override
+  String get backupServerWrongPassword => 'Wrong password, or there’s no backup for this profile ID. Check the ID, keyboard layout and letter case.';
+
+  @override
+  String backupServerLocked(String time) {
+    return 'Too many wrong passwords from this network. Try again after $time or from another network.';
+  }
+
+  @override
+  String get backupServerSection => 'Backup on the server';
+
+  @override
+  String get backupServerDelete => 'Delete backup from server';
+
+  @override
+  String get backupServerDeleteFooter => 'The encrypted backup is removed from the server. Backups on this device and in files stay.';
+
+  @override
+  String get backupServerDeleteConfirmTitle => 'Delete the backup from the server?';
+
+  @override
+  String get backupServerDeleteConfirmBody => 'You won’t be able to restore your chats from the server on a new phone. Automatic backup to the server will be turned off. This can’t be undone.';
+
+  @override
+  String get backupServerDeleteConfirm => 'Delete';
+
+  @override
+  String get backupServerDeleteDone => 'Backup deleted from the server';
+
+  @override
+  String get backupServerDeleteNone => 'There was no backup on the server';
+
+  @override
+  String get backupServerDeleteFailed => 'Couldn’t delete the backup. Check your connection and try again.';
+
+  @override
+  String get backupAutoErrorNoPassword => 'Automatic backup isn’t running: the backup password isn’t set. Set it — without a password the backup can’t be encrypted.';
+
+  @override
+  String get backupAutoErrorWeakPassword => 'Automatic backup isn’t running: the backup password no longer meets the requirements. Set a new one.';
+
+  @override
+  String backupKeystoreUnreadable(String slot) {
+    return 'Couldn’t read the “$slot” key from the phone’s protected storage, so the backup wasn’t created. Your chats on this phone are intact. Contact support — this can be fixed without losing data.';
+  }
+
+  @override
+  String get stickerDeleteTitle => 'Delete sticker?';
+
+  @override
+  String stickerDeleteBody(String title) {
+    return 'The sticker will be removed from “$title”. Stickers already sent in chats stay there.';
+  }
+
+  @override
+  String get stickerDeleteLastTitle => 'Delete the whole pack?';
+
+  @override
+  String stickerDeleteLastBody(String title) {
+    return 'This is the last sticker in “$title”. Deleting it deletes the whole pack.';
+  }
+
+  @override
+  String get stickerDeleteAction => 'Delete';
+
+  @override
+  String get stickerPackSettings => 'Pack settings';
+
+  @override
+  String get stickerMore => 'More';
+
+  @override
+  String get stickerPackRemoveFromMine => 'Remove from my packs';
+
+  @override
+  String stickerPackRemoveFromMineBody(String title) {
+    return '“$title” will disappear from your panel. The author and others keep it; you can add it again by tapping a sticker from it in a chat.';
+  }
+
+  @override
+  String get stickerPackDeleteWhole => 'Delete pack';
+
+  @override
+  String get stickerPackDeleteWholeTitle => 'Delete pack?';
+
+  @override
+  String stickerPackDeleteWholeBody(String title) {
+    return 'The pack “$title” will be deleted from this device. Stickers already sent stay in chats.';
+  }
+
+  @override
+  String get stickerMakeCover => 'Make cover';
+
+  @override
+  String get stickerRemoveFromFavorites => 'Remove from favorites';
+
+  @override
+  String get stickerRemovedFromFavorites => 'Removed from favorites';
+
+  @override
+  String stickerAddToThisPack(String title) {
+    return 'Add to “$title”';
+  }
+
+  @override
+  String get stickerAddSticker => 'Add sticker';
 }

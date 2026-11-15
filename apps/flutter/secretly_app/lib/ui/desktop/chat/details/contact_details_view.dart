@@ -33,6 +33,9 @@ import 'details_info_section.dart';
 import 'details_tabs.dart';
 import '../../primitives/desktop_snackbar.dart';
 import '../../primitives/desktop_screen_window.dart';
+import '../../primitives/desktop_dialog.dart' show showDesktopDialog;
+import '../../../disappearing_messages_ui.dart';
+import '../../../../messages/disappearing_flags.dart' show DisappearingPeerSupport;
 
 /// Details view for a 1:1 conversation. Renders inside the third-column
 /// drawer. Lays out (top-down):
@@ -61,6 +64,14 @@ class ContactDetailsView extends StatefulWidget {
   State<ContactDetailsView> createState() => _ContactDetailsViewState();
 }
 
+/// Состояние строки контакта, перечитываемое по тикам контроллера.
+typedef _ContactStatus = ({
+  bool blocked,
+  int? autoDeleteSeconds,
+  bool disappearVisible,
+  int? disappearSeconds,
+});
+
 class _ContactDetailsViewState extends State<ContactDetailsView> {
   /// Подписи экрана контакта.
   AppLocalizations get l10n => AppLocalizations.of(context)!;
@@ -77,6 +88,10 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
   bool _archived = false;
   int? _autoDeleteSeconds;
 
+  /// Общий таймер чата (ТЗ 22.10.2026): виден ли пункт и какой срок.
+  bool _disappearVisible = false;
+  int? _disappearSeconds;
+
   /// Blocked flag + disappearing-message timer, reloaded once per settled
   /// burst of controller ticks and republished only when either moved.
   ///
@@ -84,7 +99,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
   /// every `changed` tick — two database reads, on a bus that fires on the
   /// outbox pump and presence heartbeats, for two values that change when the
   /// user acts on this chat.
-  late final DesktopSelector<({bool blocked, int? autoDeleteSeconds})> _status;
+  late final DesktopSelector<_ContactStatus> _status;
 
   String get _peerProfileId => widget.conversation.peerProfileId ?? '';
 
@@ -103,9 +118,14 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     _autoDeleteSeconds = widget.conversation.autoDeleteSeconds;
     _pinned = widget.conversation.pinnedAtMs != null;
     _archived = widget.conversation.archivedAtMs != null;
-    _status = widget.vm.select<({bool blocked, int? autoDeleteSeconds})>(
+    _status = widget.vm.select<_ContactStatus>(
       debugName: 'contactStatus',
-      initial: (blocked: false, autoDeleteSeconds: null),
+      initial: (
+        blocked: false,
+        autoDeleteSeconds: null,
+        disappearVisible: false,
+        disappearSeconds: null,
+      ),
       load: _loadStatus,
     )..addListener(_onStatus);
     unawaited(_loadVerified());
@@ -149,13 +169,30 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     }
   }
 
-  Future<({bool blocked, int? autoDeleteSeconds})> _loadStatus() async {
+  Future<_ContactStatus> _loadStatus() async {
     final pid = _peerProfileId;
     final blocked = pid.isEmpty
         ? false
         : await widget.controller.isProfileBlocked(pid);
     final secs = await widget.controller.getChatAutoDeleteSeconds(_convoId);
-    return (blocked: blocked, autoDeleteSeconds: secs);
+    // Исчезающие у всех участников (ТЗ 22.10.2026): только при открытом
+    // флаге сервера; без него строки и пункта меню нет.
+    var visible = false;
+    int? shared;
+    try {
+      visible = await widget.controller.disappearingVisibleForConvo(_convoId);
+      if (visible) {
+        shared = await widget.controller.getChatDisappearSeconds(_convoId);
+      }
+    } catch (_) {
+      visible = false;
+    }
+    return (
+      blocked: blocked,
+      autoDeleteSeconds: secs,
+      disappearVisible: visible,
+      disappearSeconds: shared,
+    );
   }
 
   void _onStatus() {
@@ -163,6 +200,8 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     setState(() {
       _blocked = _status.value.blocked;
       _autoDeleteSeconds = _status.value.autoDeleteSeconds;
+      _disappearVisible = _status.value.disappearVisible;
+      _disappearSeconds = _status.value.disappearSeconds;
     });
   }
 
@@ -332,7 +371,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
   }
 
   Future<void> _pickAutoDelete() async {
-    final picked = await showDialog<_AutoDeleteChoice>(
+    final picked = await showDesktopDialog<_AutoDeleteChoice>(
       context: context,
       builder: (ctx) {
         final cc = DColors.of(ctx);
@@ -367,6 +406,50 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     await _setAutoDelete(picked.seconds);
     if (!mounted) return;
     _toast(l10n.desktopContactAutoDeleteUpdated);
+  }
+
+  /// Общий таймер чата (ТЗ 22.10.2026, шаг 3): окно выбора с честным
+  /// пояснением и предупреждением о старой версии до включения.
+  Future<void> _pickSharedDisappear() async {
+    final cc = DColors.of(context);
+    DisappearingPeerSupport? support;
+    try {
+      support = await widget.controller.disappearingPeerSupport(_convoId);
+    } catch (_) {
+      support = DisappearingPeerSupport.unknown;
+    }
+    if (!mounted) return;
+    final choice = await showDisappearingTimerPicker(
+      context,
+      current: _disappearSeconds,
+      customMinSeconds: widget.controller.disappearCustomMinSeconds,
+      customMaxSeconds: widget.controller.disappearCustomMaxSeconds,
+      warning: disappearingSupportWarning(support, l10n),
+      backgroundColor: cc.elevated,
+      textColor: cc.textPrimary,
+      accentColor: cc.accentPrimary,
+      warningColor: cc.danger,
+      dialogShower:
+          <T>({required BuildContext context, required WidgetBuilder builder}) =>
+              showDesktopDialog<T>(context: context, builder: builder),
+    );
+    if (choice == null || choice.seconds == _disappearSeconds) return;
+    await _setSharedDisappear(choice.seconds);
+  }
+
+  Future<void> _setSharedDisappear(int? seconds) async {
+    try {
+      await widget.controller.setChatDisappearSeconds(
+        convoId: _convoId,
+        seconds: seconds,
+      );
+      if (!mounted) return;
+      setState(() => _disappearSeconds = seconds);
+      _toast(l10n.disappearingUpdated);
+    } catch (_) {
+      if (!mounted) return;
+      _toast(l10n.disappearingSetFailed, danger: true);
+    }
   }
 
   /// 🔴 ТА ЖЕ ГАЛОЧКА, ЧТО В МЕНЮ СПИСКА (16.09.2026).
@@ -440,7 +523,7 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     required String okLabel,
     bool danger = false,
   }) {
-    return showDialog<bool>(
+    return showDesktopDialog<bool>(
       context: context,
       builder: (ctx) {
         final cc = DColors.of(ctx);
@@ -572,6 +655,12 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
               : FluentIcons.alert_off_24_regular,
           onTap: _toggleMute,
         ),
+        if (_disappearVisible)
+          CtxMenuItem(
+            label: l10n.disappearingTitle,
+            icon: FluentIcons.timer_24_filled,
+            onTap: _pickSharedDisappear,
+          ),
         CtxMenuItem(
           // Одно название на оба входа: в панели строка называется так же.
           // Два имени у одной настройки человек читает как две разные.
@@ -807,6 +896,23 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
               // открывает выбор срока: возможность выбрать «1 час» или
               // «30 дней» у нас шире макета, и урезать её до двух положений
               // было бы потерей.
+              // · ИСЧЕЗАЮЩИЕ У ВСЕХ УЧАСТНИКОВ (ТЗ 22.10.2026) — над
+              // локальной уборкой и только при открытом флаге сервера.
+              if (_disappearVisible)
+                DetailsToggleRow(
+                  icon: FluentIcons.timer_24_filled,
+                  label: l10n.disappearingTitle,
+                  subtitle: (_disappearSeconds ?? 0) > 0
+                      ? l10n.disappearingSubtitleOn(
+                          formatDisappearDuration(_disappearSeconds!, l10n),
+                        )
+                      : l10n.desktopContactOff,
+                  value: (_disappearSeconds ?? 0) > 0,
+                  onChanged: (on) => unawaited(
+                    on ? _pickSharedDisappear() : _setSharedDisappear(null),
+                  ),
+                  onTap: _pickSharedDisappear,
+                ),
               DetailsToggleRow(
                 icon: FluentIcons.timer_24_regular,
                 label: l10n.desktopContactDisappearing,

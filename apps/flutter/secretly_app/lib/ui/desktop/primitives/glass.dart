@@ -72,12 +72,19 @@ class DesktopGlass extends StatelessWidget {
         ),
         borderRadius: br,
       ),
-      child: tint == null
-          ? Padding(padding: padding, child: child)
-          : DecoratedBox(
-              decoration: BoxDecoration(color: tint, borderRadius: br),
-              child: Padding(padding: padding, child: child),
-            ),
+      // 🔴 Оттенок ПЕРЕТЕКАЕТ и строение одно — с оттенком и без (05.10.2026).
+      // Раньше без оттенка слоя не было вовсе: выбор плашки (папки, темы)
+      // перекрашивался скачком и вдобавок пересоздавал всё внутри стекла.
+      child: TweenAnimationBuilder<Color?>(
+        tween: ColorTween(end: tint ?? const Color(0x00000000)),
+        duration: DMotion.of(context, DMotion.base),
+        curve: DMotion.standard,
+        child: Padding(padding: padding, child: child),
+        builder: (context, color, child) => DecoratedBox(
+          decoration: BoxDecoration(color: color, borderRadius: br),
+          child: child,
+        ),
+      ),
     );
     Widget glass = ClipRRect(
       borderRadius: br,

@@ -12,6 +12,7 @@ import Network
 import os
 import PushKit
 import QuickLook
+import Security
 import UIKit
 import UserNotifications
 import Vision
@@ -38,6 +39,26 @@ private func secretlyConversationId(from userInfo: [AnyHashable: Any]) -> String
     }
   }
   return nil
+}
+
+/// Отметка пути нажатия на уведомление (13.11.2026, проверка Т10): время,
+/// откуда пришло нажатие и что с ним стало. Без текста; от чата — первые 8
+/// символов. Читается снятием настроек приложения с устройства.
+/// Отметки картинки в картинке (13.11.2026, проверка Т10 на iOS 27: окно не
+/// появлялось). Время и событие, без имён и текста.
+func secretlyPipBreadcrumb(_ event: String) {
+  let line = "\(Int(Date().timeIntervalSince1970 * 1000))|\(event)"
+  var trail = UserDefaults.standard.stringArray(forKey: "secretly_diag_pip_v1") ?? []
+  trail.append(line)
+  UserDefaults.standard.set(Array(trail.suffix(16)), forKey: "secretly_diag_pip_v1")
+}
+
+private func secretlyNotifTapBreadcrumb(_ source: String, _ convoId: String?, _ outcome: String) {
+  let pfx = String((convoId ?? "").replacingOccurrences(of: "-", with: "").prefix(8))
+  let line = "\(Int(Date().timeIntervalSince1970 * 1000))|\(source)|\(pfx)|\(outcome)"
+  var trail = UserDefaults.standard.stringArray(forKey: "secretly_diag_notif_tap_v1") ?? []
+  trail.append(line)
+  UserDefaults.standard.set(Array(trail.suffix(12)), forKey: "secretly_diag_notif_tap_v1")
 }
 
 private func secretlyMessageNotificationCategories() -> Set<UNNotificationCategory> {
@@ -93,8 +114,28 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
     UNUserNotificationCenter.current().setNotificationCategories(
       secretlyMessageNotificationCategories()
     )
-    GeneratedPluginRegistrant.register(with: self)
-    attachNativeBridges()
+    // Т10 (26–29.10.2026): движок Flutter — ЯВНЫЙ и запускается здесь, при
+    // любом запуске. Со сценами окно и FlutterViewController создаёт только
+    // подключившаяся сцена, а при пробуждении VoIP-пушем или пушем в фоне сцены
+    // нет вовсе: неявный движок не появился бы, Dart не работал бы, и на
+    // звонок с заблокированного телефона нечем было бы ответить. До сцен
+    // движок поднимал сториборд при каждом запуске — так и остаётся.
+    // Сцена (`SceneDelegate`, ниже) получает этот же движок.
+    flutterEngine.run()
+    GeneratedPluginRegistrant.register(with: flutterEngine)
+    attachNativeBridges(flutterEngine)
+    let messenger = flutterEngine.binaryMessenger
+    attachAppIconChannel(messenger)
+    attachStickerAiChannel(messenger)
+    attachReliabilityChannel(messenger)
+    attachScreenPrivacyChannel(messenger)
+    attachNseConfigChannel(messenger)
+    attachThermalStateChannel(messenger)
+    attachBackgroundTaskChannel(messenger)
+    attachShareInboxChannel(messenger)
+    attachPdfChannel(messenger)
+    attachMusicTagsChannel(messenger)
+    observeSceneLifecycle()
 
     // CallKit ↔ WebRTC audio handoff (2026-07-08). WebRTC (flutter_webrtc) must
     // NOT auto-activate its audio unit — CallKit owns the call audio session.
@@ -119,16 +160,75 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
     registry.desiredPushTypes = [.voIP]
     voipRegistry = registry
 
-    attachAppIconChannel()
-    attachStickerAiChannel()
-    attachReliabilityChannel()
-    attachScreenPrivacyChannel()
-    attachNseConfigChannel()
-    attachThermalStateChannel()
-    attachPdfChannel()
-    attachMusicTagsChannel()
-
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  // MARK: - UIScene (Т10, 26–29.10.2026)
+  //
+  // Приложения, собранные с SDK iOS 27 без жизненного цикла сцен, на iOS 27
+  // не запускаются (Apple TN3187). Сцену ведёт `SceneDelegate` (в конце файла,
+  // Info.plist) на явном движке [flutterEngine].
+
+  /// Один движок на всё приложение: его запускает `didFinishLaunching`, к нему
+  /// подключается окно сцены. Без UI (пробуждение пушем) он работает сам —
+  /// `allowHeadlessExecution` у движка с именем включён.
+  let flutterEngine = FlutterEngine(name: "secretly")
+
+  /// Уведомление, с нажатия на которое подключилась сцена: со сценами оно
+  /// приходит в `connectionOptions`, а не в `launchOptions`.
+  func bufferSceneLaunchNotification(_ options: UIScene.ConnectionOptions) {
+    if let userInfo = options.notificationResponse?.notification.request.content.userInfo {
+      nativeNotificationBridge.bufferLaunchNotification(userInfo: userInfo)
+    }
+  }
+
+  /// Мост совместимости. Со сценами UIKit больше не зовёт у приложения
+  /// «активно / фон», а `UIApplication.shared.delegate.window` пуст. На этом
+  /// держатся заслонка экрана (SEC-11), картинка в картинке и плагины,
+  /// подписанные только на приложение — `local_auth` (повтор Face ID после
+  /// фона, окно ошибки). Поэтому по событиям сцены:
+  /// * `window` — окно сцены (старый код и плагины снова его видят);
+  /// * вызываются наши же `applicationWill…/Did…`: они ставят заслонку и через
+  ///   `super` раздают событие плагинам, подписанным только на приложение.
+  ///   Двойной доставки нет: `app_links` и `webview` (подписаны и на сцены)
+  ///   этих событий у приложения не берут.
+  private func observeSceneLifecycle() {
+    let center = NotificationCenter.default
+    let app = UIApplication.shared
+    center.addObserver(forName: UIScene.willConnectNotification, object: nil, queue: .main) {
+      [weak self] note in
+      self?.adoptSceneWindow(note.object)
+    }
+    center.addObserver(forName: UIScene.willDeactivateNotification, object: nil, queue: .main) {
+      [weak self] note in
+      self?.adoptSceneWindow(note.object)
+      self?.applicationWillResignActive(app)
+    }
+    center.addObserver(forName: UIScene.didActivateNotification, object: nil, queue: .main) {
+      [weak self] note in
+      self?.adoptSceneWindow(note.object)
+      self?.applicationDidBecomeActive(app)
+    }
+    center.addObserver(forName: UIScene.didEnterBackgroundNotification, object: nil, queue: .main) {
+      [weak self] _ in
+      (self as UIApplicationDelegate?)?.applicationDidEnterBackground?(app)
+    }
+    center.addObserver(forName: UIScene.willEnterForegroundNotification, object: nil, queue: .main) {
+      [weak self] note in
+      self?.adoptSceneWindow(note.object)
+      (self as UIApplicationDelegate?)?.applicationWillEnterForeground?(app)
+    }
+  }
+
+  /// Окно сцены в `window` приложения. Окно из сториборда сцена создаёт уже
+  /// после `willConnect`, поэтому берётся при каждом событии, пока не найдено.
+  private func adoptSceneWindow(_ object: Any?) {
+    guard let scene = object as? UIWindowScene else { return }
+    if let current = window, current.windowScene === scene { return }
+    let found = scene.windows.first(where: { $0.isKeyWindow })
+      ?? (scene.delegate as? UIWindowSceneDelegate)?.window ?? nil
+      ?? scene.windows.first
+    if let found { window = found }
   }
 
   // MARK: - Thermal state bridge (2026-07-19, liquid glass governor)
@@ -197,12 +297,10 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
   // а полученную песню нечем было подписать. Читает система (AVFoundation):
   // разбор чужого файла остаётся в системном компоненте, как у PDF. Dart:
   // `lib/media/music_tags.dart`.
-  private func attachMusicTagsChannel() {
-    guard let controller = window?.rootViewController as? FlutterViewController
-    else { return }
+  private func attachMusicTagsChannel(_ messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(
       name: "secretly/music_tags",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: messenger
     )
     channel.setMethodCallHandler { call, result in
       guard call.method == "read" else {
@@ -222,12 +320,10 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
     }
   }
 
-  private func attachPdfChannel() {
-    guard let controller = window?.rootViewController as? FlutterViewController
-    else { return }
+  private func attachPdfChannel(_ messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(
       name: "secretly/pdf",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: messenger
     )
     channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { return }
@@ -308,15 +404,80 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
     }
   }
 
-  private func attachThermalStateChannel() {
-    guard let controller = window?.rootViewController as? FlutterViewController else {
-      return
+  // MARK: - «Поделиться → Secretly» (media audit О8, 15.11.2026)
+  //
+  // Расширение `SecretlyShare` кладёт то, чем поделились, в общую папку
+  // группы приложений: `ShareInbox/<id>/manifest.json` + файлы. Здесь папку
+  // забираем — переносим файлы во временную папку приложения (общая группа
+  // не должна копить чужие файлы) — и отдаём в Dart тем же событием, что
+  // Android (`secretly/share_intents`: files[{path,name,mime}], text).
+  // Забираем при подписке Dart, при каждом выходе на передний план и по
+  // ссылке `secretly://share-inbox` от расширения.
+  let shareInbox = ShareInboxStreamHandler()
+
+  private func attachShareInboxChannel(_ messenger: FlutterBinaryMessenger) {
+    FlutterEventChannel(
+      name: "secretly/share_intents",
+      binaryMessenger: messenger
+    ).setStreamHandler(shareInbox)
+  }
+
+  // MARK: - Background task for uploads (media audit О7, 15.11.2026)
+  //
+  // An upload in progress used to die the moment the app went to the
+  // background: iOS suspends a backgrounded app within seconds. Dart asks for
+  // a standard background task around each upload job, and iOS lets it finish
+  // (usually up to ~30 s). On expiry the task is ended here, never leaked —
+  // a leaked task gets the app killed.
+  private var uploadBackgroundTasks: [Int: UIBackgroundTaskIdentifier] = [:]
+  private var nextUploadBackgroundTaskKey = 1
+
+  private func attachBackgroundTaskChannel(_ messenger: FlutterBinaryMessenger) {
+    let channel = FlutterMethodChannel(
+      name: "secretly/background_task",
+      binaryMessenger: messenger
+    )
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard let self = self else {
+        result(nil)
+        return
+      }
+      switch call.method {
+      case "begin":
+        let key = self.nextUploadBackgroundTaskKey
+        self.nextUploadBackgroundTaskKey += 1
+        let id = UIApplication.shared.beginBackgroundTask(withName: "secretly.upload") {
+          [weak self] in
+          guard let self = self,
+            let tid = self.uploadBackgroundTasks.removeValue(forKey: key)
+          else { return }
+          UIApplication.shared.endBackgroundTask(tid)
+        }
+        if id == .invalid {
+          result(nil)
+          return
+        }
+        self.uploadBackgroundTasks[key] = id
+        result(key)
+      case "end":
+        if let key = call.arguments as? Int,
+          let tid = self.uploadBackgroundTasks.removeValue(forKey: key)
+        {
+          UIApplication.shared.endBackgroundTask(tid)
+        }
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
     }
+  }
+
+  private func attachThermalStateChannel(_ messenger: FlutterBinaryMessenger) {
     let handler = ThermalStreamHandler()
     thermalStreamHandler = handler
     FlutterEventChannel(
       name: "secretly/thermal_state",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: messenger
     ).setStreamHandler(handler)
   }
 
@@ -327,16 +488,54 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
   // background. The extension reads these keys (see SecretlyNSE); it never
   // touches flutter_secure_storage's keychain layout directly.
   //
-  // The signing seed lives in the App-Group container (iOS sandbox scoped to
-  // this app + its extensions). It is the device IDENTITY/auth key, NOT a
-  // message-decryption key — a leak would allow auth impersonation, never
-  // plaintext, and the E2EE content stays sealed.
-  private func attachNseConfigChannel() {
-    guard let controller = window?.rootViewController as? FlutterViewController
-    else { return }
+  // 🔴 Б1 (23.10.2026): the signing seed moved from the App-Group
+  // UserDefaults (a plain plist on disk, included in device backups) into the
+  // keychain, shared with the NSE through the App Group access group, with
+  // `AfterFirstUnlockThisDeviceOnly` — never migrated by a backup. Since С-2
+  // this key also signs handshakes, so a leak would let someone impersonate
+  // this device; the keychain is where it belongs.
+  //
+  // Migration without a gap in background delivery: the defaults copy is
+  // removed ONLY after the keychain write succeeds, and the NSE reads the
+  // keychain first and the defaults second (the window between an update and
+  // the first launch of the new app). A failed keychain write falls back to
+  // the old behaviour instead of leaving the NSE blind.
+  private enum NseIdentityKeychain {
+    static let service = "com.secretly.messenger.nse.identity"
+    static let accessGroup = "group.com.secretly.messenger"
+
+    private static var base: [String: Any] {
+      [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecAttrAccessGroup as String: accessGroup,
+      ]
+    }
+
+    /// One item, bound to the current device id: stale seeds of earlier
+    /// device ids (re-link, reinstall) are removed on every write.
+    static func store(seedB64: String, deviceId: String) -> Bool {
+      guard !seedB64.isEmpty, !deviceId.isEmpty,
+        let data = seedB64.data(using: .utf8)
+      else { return false }
+      SecItemDelete(base as CFDictionary)
+      var add = base
+      add[kSecAttrAccount as String] = deviceId
+      add[kSecValueData as String] = data
+      add[kSecAttrAccessible as String] =
+        kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+      return SecItemAdd(add as CFDictionary, nil) == errSecSuccess
+    }
+
+    static func clear() {
+      SecItemDelete(base as CFDictionary)
+    }
+  }
+
+  private func attachNseConfigChannel(_ messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(
       name: "secretly/nse_config",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: messenger
     )
     channel.setMethodCallHandler { call, result in
       let defaults = UserDefaults(suiteName: "group.com.secretly.messenger")
@@ -349,9 +548,19 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
         defaults?.set(args["device_id"] as? String ?? "", forKey: "nse_device_id")
         defaults?.set(args["profile_id"] as? String ?? "", forKey: "nse_profile_id")
         defaults?.set(args["base_url"] as? String ?? "", forKey: "nse_base_url")
-        defaults?.set(
-          args["identity_seed_b64"] as? String ?? "",
-          forKey: "nse_identity_seed_b64")
+        let seedB64 = args["identity_seed_b64"] as? String ?? ""
+        let deviceId = args["device_id"] as? String ?? ""
+        if seedB64.isEmpty {
+          // Signed out / no identity: nothing may linger in either store.
+          NseIdentityKeychain.clear()
+          defaults?.removeObject(forKey: "nse_identity_seed_b64")
+        } else if NseIdentityKeychain.store(seedB64: seedB64, deviceId: deviceId) {
+          defaults?.removeObject(forKey: "nse_identity_seed_b64")
+        } else {
+          // Keychain unavailable (locked before first unlock, I/O error):
+          // keep the NSE working exactly as before; the next sync retries.
+          defaults?.set(seedB64, forKey: "nse_identity_seed_b64")
+        }
         if let seq = args["next_seq"] as? Int {
           defaults?.set(seq, forKey: "nse_next_seq")
         }
@@ -403,13 +612,10 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
   /// про скриншоты. Обещать здесь защиту от снимков значило бы соврать, а
   /// неверное обещание в мессенджере опаснее отсутствующей функции: человек
   /// станет вести себя смелее, чем позволяет действительность.
-  private func attachScreenPrivacyChannel() {
-    guard let controller = window?.rootViewController as? FlutterViewController else {
-      return
-    }
+  private func attachScreenPrivacyChannel(_ messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(
       name: "secretly/screen_privacy",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: messenger
     )
     channel.setMethodCallHandler { [weak self] call, result in
       guard call.method == "setEnabled" else {
@@ -459,6 +665,7 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
   }
 
   override func applicationWillResignActive(_ application: UIApplication) {
+    nativePictureInPictureBridge.noteWillResignActive()
     showScreenPrivacyCover()
     super.applicationWillResignActive(application)
   }
@@ -468,13 +675,10 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
     super.applicationDidBecomeActive(application)
   }
 
-  private func attachReliabilityChannel() {
-    guard let controller = window?.rootViewController as? FlutterViewController else {
-      return
-    }
+  private func attachReliabilityChannel(_ messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(
       name: "secretly/reliability",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: messenger
     )
     channel.setMethodCallHandler { call, result in
       switch call.method {
@@ -514,13 +718,10 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
 
   // MARK: - Sticker AI cutout (on-device Vision subject mask, iOS 17+)
 
-  private func attachStickerAiChannel() {
-    guard let controller = window?.rootViewController as? FlutterViewController else {
-      return
-    }
+  private func attachStickerAiChannel(_ messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(
       name: "secretly/sticker_ai",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: messenger
     )
     channel.setMethodCallHandler { [weak self] call, result in
       switch call.method {
@@ -602,14 +803,10 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
 
   // MARK: - Alternate app icons (premium feature #4)
 
-  private func attachAppIconChannel() {
-    guard let controller = window?.rootViewController as? FlutterViewController else {
-      os_log("alt-icon channel: no FlutterViewController", log: slyDiagLog, type: .error)
-      return
-    }
+  private func attachAppIconChannel(_ messenger: FlutterBinaryMessenger) {
     let channel = FlutterMethodChannel(
       name: "secretly/app_icon",
-      binaryMessenger: controller.binaryMessenger
+      binaryMessenger: messenger
     )
     channel.setMethodCallHandler { call, result in
       switch call.method {
@@ -838,38 +1035,38 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
     firebaseConfigured = true
   }
 
-  private func attachNativeBridges() {
-    if let messageNotificationRegistrar = registrar(forPlugin: "SecretlyNativeMessageNotificationBridge") {
+  private func attachNativeBridges(_ registry: FlutterPluginRegistry) {
+    if let messageNotificationRegistrar = registry.registrar(forPlugin: "SecretlyNativeMessageNotificationBridge") {
       nativeMessageNotificationBridge.attach(to: messageNotificationRegistrar.messenger())
     }
-    if let notificationRegistrar = registrar(forPlugin: "SecretlyNativeNotificationBridge") {
+    if let notificationRegistrar = registry.registrar(forPlugin: "SecretlyNativeNotificationBridge") {
       nativeNotificationBridge.attach(to: notificationRegistrar.messenger())
     }
-    if let messageActionsRegistrar = registrar(forPlugin: "SecretlyNativeMessageActionsBridge") {
+    if let messageActionsRegistrar = registry.registrar(forPlugin: "SecretlyNativeMessageActionsBridge") {
       nativeMessageActionsBridge.attach(to: messageActionsRegistrar.messenger())
     }
-    if let pushDiagnosticsRegistrar = registrar(forPlugin: "SecretlyNativePushDiagnosticsBridge") {
+    if let pushDiagnosticsRegistrar = registry.registrar(forPlugin: "SecretlyNativePushDiagnosticsBridge") {
       nativePushDiagnosticsBridge.attach(to: pushDiagnosticsRegistrar.messenger())
     }
-    if let callLogRegistrar = registrar(forPlugin: "SecretlyNativeCallLogBridge") {
+    if let callLogRegistrar = registry.registrar(forPlugin: "SecretlyNativeCallLogBridge") {
       nativeCallLogBridge.attach(to: callLogRegistrar.messenger())
     }
-    if let mediaRegistrar = registrar(forPlugin: "SecretlyNativeMediaBridge") {
+    if let mediaRegistrar = registry.registrar(forPlugin: "SecretlyNativeMediaBridge") {
       nativeMediaBridge.attach(to: mediaRegistrar.messenger())
     }
-    if let callRegistrar = registrar(forPlugin: "SecretlyNativeCallBridge") {
+    if let callRegistrar = registry.registrar(forPlugin: "SecretlyNativeCallBridge") {
       nativeCallBridge.attach(to: callRegistrar.messenger())
     }
-    if let networkPathRegistrar = registrar(forPlugin: "SecretlyNativeNetworkPathBridge") {
+    if let networkPathRegistrar = registry.registrar(forPlugin: "SecretlyNativeNetworkPathBridge") {
       nativeNetworkPathBridge.attach(to: networkPathRegistrar.messenger())
     }
-    if let clipboardRegistrar = registrar(forPlugin: "SecretlyNativeClipboardMediaBridge") {
+    if let clipboardRegistrar = registry.registrar(forPlugin: "SecretlyNativeClipboardMediaBridge") {
       nativeClipboardMediaBridge.attach(to: clipboardRegistrar.messenger())
     }
-    if let fileOpenRegistrar = registrar(forPlugin: "SecretlyNativeFileOpenBridge") {
+    if let fileOpenRegistrar = registry.registrar(forPlugin: "SecretlyNativeFileOpenBridge") {
       nativeFileOpenBridge.attach(to: fileOpenRegistrar.messenger())
     }
-    if let pipRegistrar = registrar(forPlugin: "SecretlyNativePictureInPictureBridge") {
+    if let pipRegistrar = registry.registrar(forPlugin: "SecretlyNativePictureInPictureBridge") {
       nativePictureInPictureBridge.attach(
         to: pipRegistrar.messenger(),
         hostViewControllerProvider: { [weak self] in
@@ -1024,6 +1221,9 @@ private final class NativePictureInPictureBridge: NSObject {
   // is erased and the bridge compiles on older minimum-deployment targets.
   private var pipController: Any?
   private var pipContentVC: UIViewController?
+  /// Невидимый вид-источник: от него система «вылетает» окном PiP. Отдельно
+  /// от содержимого — иначе его прозрачность становится прозрачностью окна.
+  private var pipSourceView: UIView?
   private var placeholderTitleLabel: UILabel?
   private var placeholderSubtitleLabel: UILabel?
 
@@ -1085,6 +1285,7 @@ private final class NativePictureInPictureBridge: NSObject {
     guard #available(iOS 15.0, *),
           AVPictureInPictureController.isPictureInPictureSupported(),
           let host = hostProvider?() else {
+      secretlyPipBreadcrumb("configure_no_host_or_unsupported")
       return false
     }
 
@@ -1163,24 +1364,32 @@ private final class NativePictureInPictureBridge: NSObject {
     placeholderTitleLabel = title
     placeholderSubtitleLabel = subtitle
 
-    // Mount the PiP content VC as an invisible child of the host so the system
-    // has a live UIView source to snapshot.
-    host.addChild(contentVC)
-    host.view.addSubview(contentVC.view)
-    contentVC.view.frame = CGRect(x: -2, y: -2, width: 1, height: 1)
-    contentVC.view.alpha = 0.0
-    contentVC.didMove(toParent: host)
+    // 13.11.2026 (Т10, iOS 27). Вид-источник и содержимое — РАЗНЫЕ виды.
+    // * Источник — внутри экрана и не полностью прозрачный: за краем экрана с
+    //   alpha 0 UIKit считает вид скрытым, и на iOS 27 окно при сворачивании
+    //   не появлялось. 2×2 точки при 1,1 % прозрачности глазу не видны.
+    // * Содержимое (`contentVC`) в иерархию приложения не ставится — его
+    //   показывает сама система в окне PiP. Сборка 663 использовала один вид
+    //   на обе роли, и окно выходило почти прозрачным — серым.
+    let sourceView = UIView(frame: CGRect(x: 0, y: 0, width: 2, height: 2))
+    sourceView.alpha = 0.011
+    sourceView.backgroundColor = .black
+    sourceView.isUserInteractionEnabled = false
+    host.view.addSubview(sourceView)
+    pipSourceView = sourceView
 
     let source = AVPictureInPictureController.ContentSource(
-      activeVideoCallSourceView: contentVC.view,
+      activeVideoCallSourceView: sourceView,
       contentViewController: contentVC
     )
     let controller = AVPictureInPictureController(contentSource: source)
     controller.canStartPictureInPictureAutomaticallyFromInline = true
+    controller.delegate = self
 
     pipContentVC = contentVC
     pipController = controller
     enabled = true
+    secretlyPipBreadcrumb("configured")
     os_log(
       "event=ios_pip.configured peerName=%{public}@",
       log: slyDiagLog, type: .info,
@@ -1198,16 +1407,26 @@ private final class NativePictureInPictureBridge: NSObject {
       controller.canStartPictureInPictureAutomaticallyFromInline = false
     }
     pipController = nil
-    if let vc = pipContentVC {
-      vc.willMove(toParent: nil)
-      vc.view.removeFromSuperview()
-      vc.removeFromParent()
-    }
+    pipSourceView?.removeFromSuperview()
+    pipSourceView = nil
     pipContentVC = nil
     placeholderTitleLabel = nil
     placeholderSubtitleLabel = nil
     configuredPeerName = ""
     os_log("event=ios_pip.tore_down", log: slyDiagLog, type: .info)
+  }
+
+  /// Отметка в момент ухода приложения: настроено ли окно и считает ли iOS
+  /// его возможным.
+  func noteWillResignActive() {
+    guard enabled else { return }
+    if #available(iOS 15.0, *), let controller = pipController as? AVPictureInPictureController {
+      secretlyPipBreadcrumb(
+        "resign possible=\(controller.isPictureInPicturePossible) active=\(controller.isPictureInPictureActive)"
+      )
+    } else {
+      secretlyPipBreadcrumb("resign no_controller")
+    }
   }
 
   private func enterPiP() -> Bool {
@@ -1219,6 +1438,29 @@ private final class NativePictureInPictureBridge: NSObject {
       return controller.isPictureInPictureActive
     }
     return false
+  }
+}
+
+@available(iOS 15.0, *)
+extension NativePictureInPictureBridge: AVPictureInPictureControllerDelegate {
+  func pictureInPictureControllerWillStartPictureInPicture(_ controller: AVPictureInPictureController) {
+    secretlyPipBreadcrumb("will_start")
+  }
+
+  func pictureInPictureControllerDidStartPictureInPicture(_ controller: AVPictureInPictureController) {
+    secretlyPipBreadcrumb("did_start")
+  }
+
+  func pictureInPictureController(
+    _ controller: AVPictureInPictureController,
+    failedToStartPictureInPictureWithError error: Error
+  ) {
+    let ns = error as NSError
+    secretlyPipBreadcrumb("failed \(ns.domain)#\(ns.code)")
+  }
+
+  func pictureInPictureControllerDidStopPictureInPicture(_ controller: AVPictureInPictureController) {
+    secretlyPipBreadcrumb("did_stop")
   }
 }
 
@@ -1677,11 +1919,15 @@ private final class NativeNotificationBridge: NSObject, FlutterStreamHandler {
     guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else {
       return
     }
-    emitOrBuffer(conversationId: extractConversationId(from: response.notification.request.content.userInfo))
+    let convoId = extractConversationId(from: response.notification.request.content.userInfo)
+    secretlyNotifTapBreadcrumb("didReceive", convoId, convoId == nil ? "no_convo" : "got")
+    emitOrBuffer(conversationId: convoId)
   }
 
   func bufferLaunchNotification(userInfo: [AnyHashable: Any]) {
-    emitOrBuffer(conversationId: extractConversationId(from: userInfo))
+    let convoId = extractConversationId(from: userInfo)
+    secretlyNotifTapBreadcrumb("launch", convoId, convoId == nil ? "no_convo" : "got")
+    emitOrBuffer(conversationId: convoId)
   }
 
   private func extractConversationId(from userInfo: [AnyHashable: Any]) -> String? {
@@ -1693,9 +1939,11 @@ private final class NativeNotificationBridge: NSObject, FlutterStreamHandler {
       return
     }
     if let eventSink {
+      secretlyNotifTapBreadcrumb("bridge", conversationId, "emitted")
       eventSink(conversationId)
       return
     }
+    secretlyNotifTapBreadcrumb("bridge", conversationId, "buffered")
     UserDefaults.standard.set(conversationId, forKey: Self.pendingConvoIdKey)
   }
 
@@ -1709,6 +1957,7 @@ private final class NativeNotificationBridge: NSObject, FlutterStreamHandler {
       return
     }
     UserDefaults.standard.removeObject(forKey: Self.pendingConvoIdKey)
+    secretlyNotifTapBreadcrumb("bridge", conversationId, "flushed")
     eventSink(conversationId)
   }
 }
@@ -2981,5 +3230,173 @@ enum SecretlyMusicTags {
       if !trimmed.isEmpty { return trimmed }
     }
     return nil
+  }
+}
+
+/// Т10 (29.10.2026): сцена приложения на явном движке.
+///
+/// Не `FlutterSceneDelegate`: тот создаёт окно из сториборда со своим
+/// (неявным) движком, а нам нужен движок, который уже работает с
+/// `didFinishLaunching` — иначе при пробуждении пушем Dart не запущен (см.
+/// `AppDelegate.flutterEngine`). События сцены раздаются плагинам через
+/// `FlutterPluginSceneLifeCycleDelegate` — так Flutter велит делать без
+/// наследования (`FlutterSceneLifeCycleProvider`). Мост «активно / фон» для
+/// заслонки и старых плагинов — в `AppDelegate.observeSceneLifecycle`.
+final class SceneDelegate: UIResponder, UIWindowSceneDelegate, FlutterSceneLifeCycleProvider {
+  var window: UIWindow?
+  let sceneLifeCycleDelegate = FlutterPluginSceneLifeCycleDelegate()
+
+  func scene(
+    _ scene: UIScene,
+    willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions
+  ) {
+    guard let windowScene = scene as? UIWindowScene,
+      let app = UIApplication.shared.delegate as? AppDelegate
+    else { return }
+    let window = UIWindow(windowScene: windowScene)
+    window.rootViewController = FlutterViewController(
+      engine: app.flutterEngine,
+      nibName: nil,
+      bundle: nil
+    )
+    self.window = window
+    // Старый код и плагины ищут окно через `UIApplication.shared.delegate.window`.
+    app.window = window
+    window.makeKeyAndVisible()
+    _ = sceneLifeCycleDelegate.registerSceneLifeCycle(with: app.flutterEngine)
+    sceneLifeCycleDelegate.scene(scene, willConnectTo: session, options: connectionOptions)
+    app.bufferSceneLaunchNotification(connectionOptions)
+  }
+
+  func sceneDidDisconnect(_ scene: UIScene) {
+    sceneLifeCycleDelegate.sceneDidDisconnect(scene)
+    if let app = UIApplication.shared.delegate as? AppDelegate {
+      _ = sceneLifeCycleDelegate.unregisterSceneLifeCycle(with: app.flutterEngine)
+    }
+  }
+
+  func sceneWillEnterForeground(_ scene: UIScene) {
+    sceneLifeCycleDelegate.sceneWillEnterForeground(scene)
+  }
+
+  func sceneDidBecomeActive(_ scene: UIScene) {
+    sceneLifeCycleDelegate.sceneDidBecomeActive(scene)
+    (UIApplication.shared.delegate as? AppDelegate)?.shareInbox.drain()
+  }
+
+  func sceneWillResignActive(_ scene: UIScene) {
+    sceneLifeCycleDelegate.sceneWillResignActive(scene)
+  }
+
+  func sceneDidEnterBackground(_ scene: UIScene) {
+    sceneLifeCycleDelegate.sceneDidEnterBackground(scene)
+  }
+
+  func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    let shareLinks = URLContexts.filter {
+      $0.url.scheme == "secretly" && $0.url.host == "share-inbox"
+    }
+    if !shareLinks.isEmpty {
+      (UIApplication.shared.delegate as? AppDelegate)?.shareInbox.drain()
+    }
+    let rest = URLContexts.subtracting(shareLinks)
+    if !rest.isEmpty {
+      sceneLifeCycleDelegate.scene(scene, openURLContexts: rest)
+    }
+  }
+
+  func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+    sceneLifeCycleDelegate.scene(scene, continue: userActivity)
+  }
+
+  func windowScene(
+    _ windowScene: UIWindowScene,
+    performActionFor shortcutItem: UIApplicationShortcutItem,
+    completionHandler: @escaping (Bool) -> Void
+  ) {
+    sceneLifeCycleDelegate.windowScene(
+      windowScene,
+      performActionFor: shortcutItem,
+      completionHandler: completionHandler
+    )
+  }
+}
+
+
+/// Забирает «Поделиться» из общей папки группы и отдаёт в Dart (см.
+/// `AppDelegate.attachShareInboxChannel`). Пока Dart не подписан — копит.
+final class ShareInboxStreamHandler: NSObject, FlutterStreamHandler {
+  private let groupId = "group.com.secretly.messenger"
+  private var sink: FlutterEventSink?
+  private var pending: [[String: Any]] = []
+
+  func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
+    sink = events
+    for payload in pending { events(payload) }
+    pending.removeAll()
+    drain()
+    return nil
+  }
+
+  func onCancel(withArguments arguments: Any?) -> FlutterError? {
+    sink = nil
+    return nil
+  }
+
+  func drain() {
+    let fm = FileManager.default
+    guard let root = fm.containerURL(forSecurityApplicationGroupIdentifier: groupId) else { return }
+    let inbox = root.appendingPathComponent("ShareInbox", isDirectory: true)
+    guard let entries = try? fm.contentsOfDirectory(
+      at: inbox,
+      includingPropertiesForKeys: [.creationDateKey],
+      options: [.skipsHiddenFiles]
+    ) else { return }
+    let ordered = entries.sorted { a, b in
+      let da = (try? a.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+      let db = (try? b.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+      return da < db
+    }
+    for dir in ordered {
+      let manifestURL = dir.appendingPathComponent("manifest.json")
+      guard let data = try? Data(contentsOf: manifestURL),
+        let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+      else {
+        // Расширение ещё пишет или запись испорчена: старше суток — убрать.
+        if let created = try? dir.resourceValues(forKeys: [.creationDateKey]).creationDate,
+          Date().timeIntervalSince(created) > 86_400
+        {
+          try? fm.removeItem(at: dir)
+        }
+        continue
+      }
+      let local = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        .appendingPathComponent("share_in", isDirectory: true)
+        .appendingPathComponent(dir.lastPathComponent, isDirectory: true)
+      try? fm.createDirectory(at: local, withIntermediateDirectories: true)
+      var files: [[String: String]] = []
+      for f in (manifest["files"] as? [[String: String]]) ?? [] {
+        guard let path = f["path"] else { continue }
+        let src = URL(fileURLWithPath: path)
+        let dst = local.appendingPathComponent(src.lastPathComponent)
+        try? fm.removeItem(at: dst)
+        guard (try? fm.moveItem(at: src, to: dst)) != nil else { continue }
+        files.append([
+          "path": dst.path,
+          "name": f["name"] ?? dst.lastPathComponent,
+          "mime": f["mime"] ?? "",
+        ])
+      }
+      try? fm.removeItem(at: dir)
+      let text = (manifest["text"] as? String) ?? ""
+      if files.isEmpty && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
+      let payload: [String: Any] = ["files": files, "text": text]
+      if let sink {
+        sink(payload)
+      } else {
+        pending.append(payload)
+      }
+    }
   }
 }

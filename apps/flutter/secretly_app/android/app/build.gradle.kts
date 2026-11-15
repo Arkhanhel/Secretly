@@ -51,6 +51,45 @@ android {
     val releaseTaskRequested = isReleaseTaskRequested(gradle.startParameter.taskNames)
     val arm64OnlyNativeBuild = releaseTaskRequested ||
         (project.findProperty("secretly.arm64Only")?.toString()?.equals("true", ignoreCase = true) == true)
+    // 🔴 НАБОР АРХИТЕКТУР — ИЗ ТОГО, ЧТО ЗАПРОСИЛ FLUTTER, А НЕ «ВСЕГДА arm64».
+    //
+    // Раньше любая сборка выпуска жёстко оставляла только `arm64-v8a`. Пока
+    // выпуск был один, это совпадало с замыслом; с появлением облегчённой
+    // сборки под дешёвые телефоны (`--target-platform android-arm`) совпадать
+    // перестало: Flutter кладёт в пакет библиотеки armeabi-v7a, а упаковка их
+    // тут же выбрасывала — получался APK БЕЗ нативных библиотек, который
+    // падает на первом же обращении к ним.
+    //
+    // Flutter передаёт выбор свойством `-Ptarget-platform` (`android-arm`,
+    // `android-arm64`, через запятую). Пустое значение (кто-то позвал Gradle
+    // напрямую) оставляет прежнее поведение — только arm64.
+    val abiByPlatform = mapOf(
+        "android-arm" to "armeabi-v7a",
+        "android-arm64" to "arm64-v8a",
+        "android-x86" to "x86",
+        "android-x64" to "x86_64",
+    )
+    val requestedAbis = (project.findProperty("target-platform")?.toString() ?: "")
+        .split(',')
+        .mapNotNull { abiByPlatform[it.trim()] }
+        .toSet()
+    val keptAbis = if (requestedAbis.isEmpty()) setOf("arm64-v8a") else requestedAbis
+    // 🔴 ЛЁГКАЯ СБОРКА — СВОЙСТВОМ GRADLE, А НЕ РАЗНОВИДНОСТЬЮ (flavor).
+    //
+    // ТЗ Э7 предлагало product flavors `full`/`lite`. С ними задачи Flutter
+    // становятся пофлаворными, и `flutter build apk|appbundle` БЕЗ `--flavor`
+    // перестаёт существовать — а именно так собирает выпуск
+    // tools/macos_build_android_release.sh. Ломать выпущенный конвейер ради
+    // облегчённой сборки нельзя, поэтому переключатель — свойство, как уже
+    // сделано рядом для набора архитектур.
+    //
+    // Пара к нему на стороне Dart — `--dart-define=SECRETLY_LITE=true`:
+    // Gradle выбрасывает библиотеки, Dart перестаёт предлагать то, что без
+    // них не работает. Сборочный скрипт выставляет оба флага вместе; если
+    // выставить только этот, приложение не упадёт (плагины проверяют наличие
+    // библиотеки сами), но будет показывать недоступные возможности.
+    val liteBuild =
+        project.findProperty("secretly.lite")?.toString()?.equals("true", ignoreCase = true) == true
     if (hasReleaseKeystore) {
         keystoreProperties.load(keystorePropertiesFile.inputStream())
     } else if (releaseTaskRequested) {
@@ -112,7 +151,7 @@ android {
         versionName = flutter.versionName
         if (arm64OnlyNativeBuild) {
             ndk {
-                abiFilters += listOf("arm64-v8a")
+                abiFilters += keptAbis
             }
         }
     }
@@ -121,11 +160,33 @@ android {
         jniLibs {
             excludes += setOf("**/libnoise.so")
             if (arm64OnlyNativeBuild) {
-                excludes += setOf(
-                    "**/armeabi-v7a/**",
-                    "**/x86/**",
-                    "**/x86_64/**",
-                )
+                excludes += abiByPlatform.values
+                    .filterNot { keptAbis.contains(it) }
+                    .map { "**/$it/**" }
+                    .toSet()
+            }
+            if (liteBuild) {
+                // Список — в <app>/tools/lite_excluded_libs.txt, ОДИН на сборку и
+                // на проверку готового APK: когда их было два, в сборке
+                // 12.10.2026 остались libwhisper.so и libparakeet.so.
+                // Распознавание штрих-кодов в списке отсутствует намеренно:
+                // без него не прочитать QR привязки устройства.
+                // Путь — внутри каталога приложения: выпуск собирается из
+                // «очищенного зеркала», и файл вне этого каталога там не
+                // существует.
+                val liteList = rootProject.file("../tools/lite_excluded_libs.txt")
+                if (!liteList.isFile) {
+                    throw GradleException(
+                        "Secretly: не найден список библиотек облегчённой сборки: $liteList",
+                    )
+                }
+                val patterns = liteList.readLines()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() && !it.startsWith("#") }
+                if (patterns.isEmpty()) {
+                    throw GradleException("Secretly: список библиотек облегчённой сборки пуст")
+                }
+                excludes += patterns.map { "**/$it" }.toSet()
             }
         }
     }
@@ -208,6 +269,11 @@ layout.buildDirectory.set(rootProject.rootDir.parentFile.resolve("build/app"))
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     implementation("androidx.core:core-ktx:1.13.1")
+    // Play Vitals п. 15 (15.11.2026): темы приложения — AppCompat (окно
+    // отпечатка local_auth на Android ≤ 9). Та же версия, что уже приходит
+    // через androidx.biometric, — объявлена явно, чтобы ресурсы приложения
+    // могли на неё ссылаться.
+    implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.media:media:1.7.0")
     // Required to extend FirebaseMessagingService for native background call delivery.
     // The firebase_messaging Flutter plugin uses 'implementation' (not 'api'), so the

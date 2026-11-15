@@ -87,7 +87,9 @@ Offset _besideBubble(WidgetTester t, String text) {
 String? _selectedCount(WidgetTester t) {
   final f = find.textContaining('Выбрано: ');
   if (f.evaluate().isEmpty) return null;
-  return (f.evaluate().single.widget as Text).data;
+  // 05.10.2026: число перекатывается (DMorphText) — пока старое уходит,
+  // в дереве оба; нынешнее — последнее.
+  return (f.evaluate().last.widget as Text).data;
 }
 
 Future<TestGesture> _mouseDown(WidgetTester t, Offset at) =>

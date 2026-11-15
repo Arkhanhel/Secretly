@@ -39,9 +39,11 @@ class DetailsPanel extends StatefulWidget {
 
 class _DetailsPanelState extends State<DetailsPanel>
     with SingleTickerProviderStateMixin {
+  // Открывается с мягким замедлением, закрывается быстрее (05.10.2026).
   late final AnimationController _c = AnimationController(
     vsync: this,
     duration: widget.duration,
+    reverseDuration: DMotion.base,
     value: widget.open ? 1.0 : 0.0,
   );
 
@@ -65,7 +67,7 @@ class _DetailsPanelState extends State<DetailsPanel>
     return AnimatedBuilder(
       animation: _c,
       builder: (context, _) {
-        final t = DMotion.easeOutCubic.transform(_c.value.clamp(0.0, 1.0));
+        final t = DMotion.eased(_c, inCurve: DMotion.standard);
         final currentWidth = widget.width * t;
         // Hide-to-LEFT: when closing, content shifts leftward (off-screen behind
         // the chat area). Opens by sliding rightward into place from the left.

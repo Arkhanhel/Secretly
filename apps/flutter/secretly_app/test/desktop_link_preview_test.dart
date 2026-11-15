@@ -390,7 +390,12 @@ void main() {
       await type(t, _url);
       loader.complete(_url, _card(_url));
       await t.pump();
+      // Карточка раскрывается и сворачивается плавно (05.10.2026): крестик
+      // нажимаем, когда она раскрылась, и проверяем, когда свернулась.
+      await t.pump(const Duration(milliseconds: 400));
       await t.tap(find.byTooltip('Без превью'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
       await t.pump();
       expect(find.text('Заголовок'), findsNothing);
       await send(t);

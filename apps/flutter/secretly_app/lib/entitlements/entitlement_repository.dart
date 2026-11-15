@@ -15,21 +15,30 @@
 // Billing FAILS OPEN: any error resolving entitlements yields full access
 // (TZ §0.4 / §6). Security features are never gated through this module.
 
+import '../attachments/media_flags.dart';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../diagnostics/diag_log.dart';
 import '../messages/identity_flags.dart';
 import '../messages/reliability_flags.dart';
 import '../messages/room_flags.dart';
 import '../messages/support_flags.dart';
+import '../messages/disappearing_flags.dart';
+import '../messages/privacy_flags.dart';
+import '../stickers/sticker_flags.dart';
+import '../messages/prekey_flags.dart';
+import '../messages/server_auth_flags.dart';
 import '../security/auth_signer.dart';
 import '../transport/keys_client.dart';
 import 'entitlement_models.dart';
 import 'entitlement_signature.dart';
 import '../version/app_update_info.dart';
 import '../messages/handshake_flags.dart';
+import '../messages/call_flags.dart';
 import '../messages/multidevice_flags.dart';
+import '../messages/transport_flags.dart';
 import '../transport/server_clock.dart';
 
 /// Supplies the requester device id and Ed25519 signatures for owner-only
@@ -80,13 +89,19 @@ class EntitlementRepository {
     required EntitlementCache cache,
     Future<bool> Function()? repairDeviceAuth,
     int Function()? nowMs,
+    @visibleForTesting
+    Future<bool> Function(Map<String, dynamic> config)? verifyConfigForFreshness,
   })  : _keys = keysClient,
+        _verifyConfigForFreshness =
+            verifyConfigForFreshness ?? verifyConfigSignature,
         _signer = signer,
         _cache = cache,
         _repairDeviceAuth = repairDeviceAuth,
         _nowMs = nowMs ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final KeysClient _keys;
+  final Future<bool> Function(Map<String, dynamic> config)
+      _verifyConfigForFreshness;
   final EntitlementSigner _signer;
   final EntitlementCache _cache;
 
@@ -157,10 +172,79 @@ class EntitlementRepository {
   bool _multideviceFlagsResolved = false;
   bool get multideviceFlagsResolved => _multideviceFlagsResolved;
 
+  /// Блок `calls` (ТЗ E2EE созвонов, ЗВ-С6). Непроверенный или отсутствующий
+  /// блок — [CallFlags.defaults], то есть всё как до этого блока.
+  CallFlags _callFlags = CallFlags.defaults;
+  CallFlags get callFlags => _callFlags;
+
+  /// Э1: пути под блокировками. Непроверенный блок — умолчания.
+  TransportFlags _transportFlags = TransportFlags.defaults;
+  TransportFlags get transportFlags => _transportFlags;
+  bool _transportFlagsResolved = false;
+  bool get transportFlagsResolved => _transportFlagsResolved;
+
+  bool _callFlagsResolved = false;
+  bool get callFlagsResolved => _callFlagsResolved;
+
+  /// Блок `disappearing` (ТЗ исчезающих сообщений, §2.5). Непроверенный или
+  /// отсутствующий блок — [DisappearingFlags.defaults]: отправка выключена,
+  /// удаление включено.
+  DisappearingFlags _disappearingFlags = DisappearingFlags.defaults;
+  DisappearingFlags get disappearingFlags => _disappearingFlags;
+  bool _disappearingFlagsResolved = false;
+  bool get disappearingFlagsResolved => _disappearingFlagsResolved;
+
+  /// Блок `privacy` (Б2): выравнивание длины. Непроверенный — доля 0.
+  MediaFlags _mediaFlags = MediaFlags.defaults;
+  MediaFlags get mediaFlags => _mediaFlags;
+  bool _mediaFlagsResolved = false;
+  bool get mediaFlagsResolved => _mediaFlagsResolved;
+  PrivacyFlags _privacyFlags = PrivacyFlags.defaults;
+  PrivacyFlags get privacyFlags => _privacyFlags;
+  bool _privacyFlagsResolved = false;
+  bool get privacyFlagsResolved => _privacyFlagsResolved;
+
+  /// Блок `stickers`: выбор режима набора и публикация. Непроверенный — всё
+  /// выключено.
+  StickerFlags _stickerFlags = StickerFlags.defaults;
+  StickerFlags get stickerFlags => _stickerFlags;
+  bool _stickerFlagsResolved = false;
+  bool get stickerFlagsResolved => _stickerFlagsResolved;
+
+  /// Блок `prekeys` (Б5): гигиена предключей. Непроверенный — всё выключено.
+  PrekeyFlags _prekeyFlags = PrekeyFlags.defaults;
+  PrekeyFlags get prekeyFlags => _prekeyFlags;
+  bool _prekeyFlagsResolved = false;
+  bool get prekeyFlagsResolved => _prekeyFlagsResolved;
+
+  /// Блок `server_auth` (Б3): подпись ответов сервера. Непроверенный — отказа
+  /// нет, ключа реле нет.
+  ServerAuthFlags _serverAuthFlags = ServerAuthFlags.defaults;
+  ServerAuthFlags get serverAuthFlags => _serverAuthFlags;
+  bool _serverAuthFlagsResolved = false;
+  bool get serverAuthFlagsResolved => _serverAuthFlagsResolved;
+
+  /// Б3 Э2: подпись самого блока `server_auth` сошлась. Только такой блок
+  /// может менять липкий отказ: вырезанный или подделанный блок не должен
+  /// его выключать.
+  bool _serverAuthBlockVerified = false;
+  bool get serverAuthBlockVerified => _serverAuthBlockVerified;
+
+  /// Б3 (25.10.2026): наибольший `issued_at_ms` проверенного конфига. Более
+  /// старый подписанный конфиг — повтор, которым посредник мог бы вернуть
+  /// выключенные флаги: он считается несостоявшимся запросом и ничего не
+  /// меняет. Запас — на сдвиг часов сервера.
+  static const String kConfigMaxIssuedAtKey = 'config_max_issued_at_ms_v1';
+  static const int kConfigStaleToleranceMs = 10 * 60 * 1000;
+
   /// С-2: выключатель отказов проверки подписи рукопожатия; `null` — блок не
   /// пришёл или не проверен, и тогда ничего не меняется.
   bool? _handshakeAuthEnforceDisabled;
   bool? get handshakeAuthEnforceDisabled => _handshakeAuthEnforceDisabled;
+
+  /// Флаг-день С-2 (Э4): см. [verifiedHandshakeAuthRequireAll].
+  bool? _handshakeAuthRequireAll;
+  bool? get handshakeAuthRequireAll => _handshakeAuthRequireAll;
 
   bool _roomFlagsResolved = false;
   bool get roomFlagsResolved => _roomFlagsResolved;
@@ -200,6 +284,36 @@ class EntitlementRepository {
     }
   }
 
+  /// Б3: бросает, если подписанный конфиг старше уже виденного больше чем на
+  /// [kConfigStaleToleranceMs]; запоминает новый наибольший. Неподписанный или
+  /// непроверенный конфиг не учитывается — им нельзя ни отравить, ни сдвинуть
+  /// отметку. Сбой хранилища отметки — без проверки, как раньше.
+  Future<void> _rejectStaleConfig(Map<String, dynamic> config) async {
+    final payload = config['payload'];
+    if (payload is! Map) return;
+    final issued = payload['issued_at_ms'];
+    if (issued is! num || issued <= 0) return;
+    if (!await _verifyConfigForFreshness(config)) return;
+    final issuedMs = issued.toInt();
+    int previous = 0;
+    try {
+      previous = int.tryParse(await _cache.read(kConfigMaxIssuedAtKey) ?? '') ?? 0;
+    } catch (_) {
+      return;
+    }
+    if (issuedMs + kConfigStaleToleranceMs < previous) {
+      DiagLog.event('server_auth', 'stale_config', <String, Object?>{
+        'behind_s': (previous - issuedMs) ~/ 1000,
+      });
+      throw StateError('stale signed config');
+    }
+    if (issuedMs > previous) {
+      try {
+        await _cache.write(kConfigMaxIssuedAtKey, '$issuedMs');
+      } catch (_) {}
+    }
+  }
+
   /// Refreshes from the server. Always resolves to a usable state (fail open).
   Future<EntitlementState> refresh({required String profileId}) async {
     if (_forcePremiumActive) {
@@ -219,6 +333,7 @@ class EntitlementRepository {
     bool monetizationEnabled;
     try {
       final config = await _keys.getConfig();
+      await _rejectStaleConfig(config);
       final payload = config['payload'];
       // Сведения об обновлении берутся ТОЛЬКО из подписанного блока `update`.
       // Основной `payload` их больше не даёт: там они были бы вне подписи.
@@ -262,6 +377,7 @@ class EntitlementRepository {
       _handshakeFlagsResolved = true;
       _handshakeAuthEnforceDisabled =
           await verifiedHandshakeAuthEnforceDisabled(config);
+      _handshakeAuthRequireAll = await verifiedHandshakeAuthRequireAll(config);
       // Мультиустройство: тот же ответ, отказ к нулям — непроверенный блок
       // ничего не включает и ничего не оставляет включённым.
       _multideviceFlags = MultideviceFlags.fromConfigResponse(
@@ -269,6 +385,56 @@ class EntitlementRepository {
         verified: await verifyMultideviceSignature(config),
       );
       _multideviceFlagsResolved = true;
+      // Групповые созвоны: тот же ответ, отказ к значениям «как было».
+      _callFlags = CallFlags.fromConfigResponse(
+        config,
+        verified: await verifyCallsSignature(config),
+      );
+      _callFlagsResolved = true;
+      // Исчезающие сообщения: тот же ответ, отказ к умолчаниям (отправка
+      // выключена, удаление включено).
+      _disappearingFlags = DisappearingFlags.fromConfigResponse(
+        config,
+        verified: await verifyDisappearingSignature(config),
+      );
+      _disappearingFlagsResolved = true;
+      // Выравнивание длины (Б2): тот же ответ, отказ к доле 0.
+      _privacyFlags = PrivacyFlags.fromConfigResponse(
+        config,
+        verified: await verifyPrivacySignature(config),
+      );
+      _privacyFlagsResolved = true;
+      // Загрузка частями (15.11.2026): тот же ответ, отказ к доле 0.
+      _mediaFlags = MediaFlags.fromConfigResponse(
+        config,
+        verified: await verifyMediaSignature(config),
+      );
+      _mediaFlagsResolved = true;
+      // Наборы стикеров: тот же ответ, отказ ко «всё выключено».
+      _stickerFlags = StickerFlags.fromConfigResponse(
+        config,
+        verified: await verifyStickersSignature(config),
+      );
+      _stickerFlagsResolved = true;
+      // Гигиена предключей (Б5): тот же ответ, отказ ко «всё выключено».
+      _prekeyFlags = PrekeyFlags.fromConfigResponse(
+        config,
+        verified: await verifyPrekeysSignature(config),
+      );
+      _prekeyFlagsResolved = true;
+      // Подпись ответов сервера (Б3): тот же ответ, отказ — «отказа нет».
+      _serverAuthBlockVerified = await verifyServerAuthSignature(config);
+      _serverAuthFlags = ServerAuthFlags.fromConfigResponse(
+        config,
+        verified: _serverAuthBlockVerified,
+      );
+      _serverAuthFlagsResolved = true;
+      // Э1: пути под блокировками — тот же ответ, отказ к умолчаниям.
+      _transportFlags = TransportFlags.fromConfigResponse(
+        config,
+        verified: await verifyTransportSignature(config),
+      );
+      _transportFlagsResolved = true;
       // In-app Support key + flag: same ride, OFF polarity like identity — only
       // a VERIFIED block enables the page and supplies the key used to seal
       // support tickets.

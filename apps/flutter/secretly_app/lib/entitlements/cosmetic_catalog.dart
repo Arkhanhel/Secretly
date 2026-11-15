@@ -61,6 +61,33 @@ const Set<String> kFreeIndicatorColorIds = {
 /// free (product decision). Future packs get their ids added here.
 const Set<String> kPremiumWallpaperIds = {};
 
+/// Бесплатные рамки портрета (решение владельца 13.11.2026: «10 бесплатных,
+/// остальные платные» — шесть рамок и четыре обложки).
+///
+/// Выбраны самые простые рамки старого набора: у них меньше всего частиц и
+/// нет персонажа. Живые персонажи, эксклюзивная коллекция и остальные рамки
+/// остаются в Premium.
+///
+/// 🔴 ПРАВИЛО ПРЕЖНЕЕ: набор только растёт. Убрать отсюда id значит отнять
+/// у человека рамку, которую он уже выбрал.
+const Set<String> kFreeAvatarFrameIds = {
+  'neon',
+  'pulse',
+  'stars',
+  'rainbow',
+  'smoke',
+  'orbit',
+};
+
+/// Бесплатные обложки профиля (то же решение 13.11.2026). Своя обложка из
+/// фото или видео остаётся в Premium.
+const Set<String> kFreeProfileCoverIds = {
+  'space',
+  'waves',
+  'marks',
+  'goldhaze',
+};
+
 /// The kind of cosmetic being checked (drives which free set is consulted).
 enum CosmeticKind {
   theme,
@@ -88,9 +115,9 @@ bool isCosmeticFree(CosmeticKind kind, String id) {
       if (id.startsWith('anim:')) return false;
       return !kPremiumWallpaperIds.contains(id);
     case CosmeticKind.avatarFrame:
+      return kFreeAvatarFrameIds.contains(id);
     case CosmeticKind.profileCover:
-      // Premium animated frames/covers are paid-only — no free ids.
-      return false;
+      return kFreeProfileCoverIds.contains(id);
   }
 }
 

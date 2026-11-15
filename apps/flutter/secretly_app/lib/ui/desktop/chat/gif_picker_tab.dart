@@ -33,6 +33,7 @@ import '../../../gifs/gif_recents.dart' show RecentGif;
 import '../../../l10n/app_localizations.dart';
 import '../design/tokens.dart';
 import '../primitives/hover_listener.dart';
+import '../primitives/motion_widgets.dart';
 
 class DesktopGifPickerTab extends StatefulWidget {
   const DesktopGifPickerTab({
@@ -346,7 +347,7 @@ class _DesktopGifPickerTabState extends State<DesktopGifPickerTab> {
             return HoverListener(
               onTap: () => _onCategoryTap(i),
               cursor: SystemMouseCursors.click,
-              builder: (ctx, hovered, pressed) => Container(
+              builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: Container(
                 width: 32,
                 height: 32,
                 alignment: Alignment.center,
@@ -361,7 +362,7 @@ class _DesktopGifPickerTabState extends State<DesktopGifPickerTab> {
                   kGifCategories[i].emoji,
                   style: const TextStyle(fontSize: 18, height: 1),
                 ),
-              ),
+              )),
             );
           },
         ),

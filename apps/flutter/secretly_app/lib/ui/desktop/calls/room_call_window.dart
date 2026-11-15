@@ -5,7 +5,7 @@ import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,7 +17,11 @@ import '../app/desktop_selector.dart';
 import '../../../rooms/room_call_manager.dart';
 import '../../../transport/relay_client.dart'
     show RelayRoomCallMediaBackendKind;
+import '../../../rooms/call_e2ee/call_e2ee_protocol.dart';
+import '../../../rooms/call_e2ee/room_call_e2ee_status.dart';
 import '../../../rooms/room_call_media_controller.dart';
+import '../../room_call_e2ee_ui.dart';
+import 'room_call_e2ee_desktop.dart';
 import '../../../rooms/room_call_media_state.dart';
 import '../../../rooms/room_call_state.dart';
 import '../chat/details/room_invite_share.dart';
@@ -43,6 +47,7 @@ import 'room_call_media_guard.dart';
 import '../primitives/avatar.dart';
 import '../primitives/hover_listener.dart';
 import '../shell/window_chrome.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Окно комнатного созвона для десктопа.
 ///
@@ -72,7 +77,13 @@ class DesktopRoomCallWindow extends StatefulWidget {
     required this.title,
     this.onClose,
     this.ownWindow,
+    this.onMinimize,
   });
+
+  /// «Свернуть» в своём окне ОС (05.10.2026): окно ужимается до мини-окна
+  /// ОС в углу экрана, а не прячется. `null` — прежний путь: окно прячется,
+  /// созвон идёт мини-окном внутри приложения.
+  final VoidCallback? onMinimize;
 
   /// Шов к приложению. Снимок созвона читается ЧЕРЕЗ НЕГО, а не своей
   /// подпиской на `changed`: общий склад уже гасит бурю тиков и отдаёт
@@ -216,6 +227,8 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
     );
     RoomCallManager.instance?.state.removeListener(_onRuntime);
     RoomCallManager.instance?.audioRouteState.removeListener(_onRuntime);
+    _boundE2ee?.removeListener(_onE2ee);
+    _boundE2ee = null;
     _callSel.removeListener(_onRuntime);
     _callSel.dispose();
     DesktopCallPrefs.mirrorSelfView.removeListener(_onMirrorPref);
@@ -230,6 +243,11 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
   /// Признак «окно закрыто» снимаем СРАЗУ, не дожидаясь конца анимации:
   /// мини-окно проявляется, пока окно созвона уезжает, а не после.
   void _minimize() {
+    final toMini = widget.onMinimize;
+    if (widget.ownWindow != null && toMini != null) {
+      toMini();
+      return;
+    }
     DesktopCallPresence.instance.roomWindowClosed(this);
     _closeWindow();
     // 🔴 Своё окно свернули, а главное спрятано в трей: мини-окно живёт в
@@ -294,7 +312,44 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
   /// было «говорит сейчас ИЛИ участник ровно один».
   String? _lastSpeaker;
 
+  // ── Шифрование созвона (ТЗ E2EE созвонов, §8.2) ───────────────────────
+  //
+  // Движок созвона создаётся позже окна и меняется от созвона к созвону —
+  // подписку на его состояние шифрования перевешиваем на каждом обновлении.
+  ValueListenable<RoomCallE2eeStatus?>? _boundE2ee;
+
+  RoomCallE2eeStatus? get _e2ee => _boundE2ee?.value;
+
+  void _bindE2eeStatus() {
+    final media = RoomCallManager.instance?.mediaController;
+    final next = media is RoomCallE2eeStatusSource
+        ? (media as RoomCallE2eeStatusSource).e2eeStatus
+        : null;
+    if (identical(next, _boundE2ee)) return;
+    _boundE2ee?.removeListener(_onE2ee);
+    _boundE2ee = next;
+    next?.addListener(_onE2ee);
+  }
+
+  void _onE2ee() {
+    if (mounted) setState(() {});
+  }
+
+  /// Плашка «без сквозного шифрования» — в любом открытом созвоне (с
+  /// 14.11.2026, как на телефоне): при доле 0 открыты все созвоны комнат.
+  bool get _showOpenCallWarning {
+    final call = _call;
+    if (call == null) return false;
+    return (widget.controller.roomCallMediaContract(
+              widget.groupId,
+              call.callId,
+            ) ??
+            kRoomMediaContractV1) ==
+        kRoomMediaContractV1;
+  }
+
   void _onRuntime() {
+    _bindE2eeStatus();
     // Медиа-канал появляется ПОЗЖЕ открытия окна: выбор из настроек
     // применяем, когда движку есть что переключать.
     unawaited(_applyPreferredDevices());
@@ -586,10 +641,43 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
 
   // ── Действия: те же вызовы и в том же порядке, что на телефоне ───────────
 
+  /// Идёт решение «с каким контрактом входить» — второй щелчок не
+  /// открывает второе окно.
+  bool _decidingJoin = false;
+
   Future<void> _startOrJoin({
     required String mediaType,
     required bool videoEnabled,
-  }) {
+  }) async {
+    if (_busy != null || _decidingJoin) return;
+    // ТЗ E2EE созвонов, §7.3/§8: решение — ДО `_run`. У `_run` предел 12 с,
+    // и окно выбора внутри него через 12 с стало бы «сервер молчит». Пока у
+    // устройства нет раскатки шифрования, окон нет и всё как раньше.
+    _decidingJoin = true;
+    RoomCallJoinDecision? decision;
+    try {
+      final l10n = _l10n;
+      decision = await decideRoomCallJoin(
+        loadPlan: () => widget.controller.planRoomCallJoin(widget.groupId),
+        displayName: widget.controller.cachedProfileDisplayName,
+        l10n: l10n,
+        askCreatorChoice: (names) async {
+          if (!mounted) return null;
+          return showDesktopRoomCallCreatorChoice(context, names);
+        },
+        askOpenJoin: () async {
+          if (!mounted) return false;
+          return showDesktopRoomCallOpenJoin(context);
+        },
+        notifyBlocked: (message) {
+          if (mounted) setState(() => _actionError = message);
+        },
+      );
+    } finally {
+      _decidingJoin = false;
+    }
+    final chosen = decision;
+    if (chosen == null || !mounted) return;
     return _run('join', () async {
       final effective = _call?.mediaType ?? mediaType;
       final result = await widget.controller.joinRelayRoomCall(
@@ -601,7 +689,16 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
         deafened: false,
         videoEnabled: videoEnabled,
         screenShareEnabled: false,
+        mediaContract: chosen.contract,
       );
+      if (result != null && chosen.notifyMembers) {
+        unawaited(
+          widget.controller.sendRoomCallUpdateNotice(
+            roomId: widget.groupId,
+            text: _l10n.roomCallUpdateNotice,
+          ),
+        );
+      }
       if (result == null) {
         // 🔴 `null` — это ОТКАЗ, а не успех: `joinRelayRoomCall` ловит ошибку
         // сети внутри и возвращает пустоту. Раньше эта пустота молча
@@ -824,7 +921,13 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
             onBack: _minimize,
             onToggleFullScreen: _toggleFullScreen,
             ownWindow: widget.ownWindow,
+            e2ee: _e2ee,
           ),
+          if (call != null)
+            DesktopRoomCallE2eeStrip(
+              status: _e2ee,
+              showOpenWarning: _showOpenCallWarning,
+            ),
           Expanded(
             child: call == null
                 ? _StartPanel(
@@ -1288,6 +1391,9 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
           speaking: media?.isParticipantSpeaking(p.deviceId) ?? false,
           onStage: onStage,
           video: view,
+          e2eeCaption: (runtime?.isSelf ?? false)
+              ? null
+              : roomCallE2eePeerCaption(_e2ee, p.deviceId, _l10n),
         ),
       );
     }
@@ -1524,7 +1630,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
                   cursor: _chatSending
                       ? SystemMouseCursors.basic
                       : SystemMouseCursors.click,
-                  builder: (ctx, hovered, pressed) => Container(
+                  builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: Container(
                     width: 34,
                     height: 34,
                     alignment: Alignment.center,
@@ -1539,7 +1645,7 @@ class _DesktopRoomCallWindowState extends State<DesktopRoomCallWindow> {
                       size: 16,
                       color: Colors.white,
                     ),
-                  ),
+                  )),
                 ),
               ),
             ],
@@ -1899,10 +2005,14 @@ class _Header extends StatelessWidget {
     required this.onBack,
     required this.onToggleFullScreen,
     this.ownWindow,
+    this.e2ee,
   });
 
   final String title;
   final CachedRoomCall? call;
+
+  /// Состояние шифрования созвона; `null` — созвон открытый.
+  final RoomCallE2eeStatus? e2ee;
   final int joinedCount;
   final bool fullScreen;
 
@@ -2004,7 +2114,9 @@ class _Header extends StatelessWidget {
             // передаче». Вернуть «сквозное» — только вместе с E2EE созвонов
             // (docs/TZ_GRANT_READINESS_V2_2026-09-26.md, часть ЗВ).
             DesktopTooltip(
-              message: l10n.desktopRoomCallTransportEncrypted,
+              // ТЗ E2EE созвонов: «сквозное» — только в зашифрованном
+              // созвоне; в открытом — прежнее честное «при передаче».
+              message: desktopRoomCallSecurityHint(e2ee, l10n),
               child: Container(
                 height: 26,
                 padding: const EdgeInsets.symmetric(horizontal: 9),
@@ -2016,6 +2128,15 @@ class _Header extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (e2ee?.secure ?? false) ...[
+                      Icon(
+                        FluentIcons.lock_closed_16_filled,
+                        size: 12,
+                        color: c.success,
+                        semanticLabel: l10n.roomCallE2eeOn,
+                      ),
+                      const SizedBox(width: 6),
+                    ],
                     _Equalizer(speaking: anyoneSpeaking),
                     const SizedBox(width: 7),
                     Text(
@@ -2146,7 +2267,7 @@ class _ChromeButton extends StatelessWidget {
       message: tooltip,
       child: HoverListener(
         onTap: onTap,
-        builder: (ctx, hovered, pressed) => AnimatedContainer(
+        builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: AnimatedContainer(
           duration: DMotion.fast,
           width: 30,
           height: 30,
@@ -2158,7 +2279,7 @@ class _ChromeButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(DRadii.sm),
           ),
           child: Icon(icon, size: 17, color: c.textSecondary),
-        ),
+        )),
       ),
     );
   }
@@ -2598,7 +2719,7 @@ class _StageFrame extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
+                      DMorphIcon(
                         expanded
                             ? FluentIcons.full_screen_minimize_24_regular
                             : FluentIcons.full_screen_maximize_24_regular,
@@ -2769,7 +2890,11 @@ class _ParticipantTile extends StatelessWidget {
     required this.speaking,
     required this.onStage,
     required this.video,
+    this.e2eeCaption,
   });
+
+  /// «Ждём ключ» / «Не удаётся расшифровать» в зашифрованном созвоне.
+  final String? e2eeCaption;
 
   final String name;
   final String? avatarPath;
@@ -2831,7 +2956,7 @@ class _ParticipantTile extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(
+                  DMorphIcon(
                     muted
                         ? FluentIcons.mic_off_24_filled
                         : FluentIcons.mic_24_filled,
@@ -2839,6 +2964,7 @@ class _ParticipantTile extends StatelessWidget {
                     color: muted
                         ? c.textDisabled
                         : (speaking ? c.voice : c.textSecondary),
+                    style: DMorphStyle.spin,
                   ),
                   const SizedBox(width: 5),
                   Expanded(
@@ -2849,6 +2975,19 @@ class _ParticipantTile extends StatelessWidget {
                       style: DType.tiny.copyWith(color: c.textPrimary),
                     ),
                   ),
+                  if (e2eeCaption != null)
+                    DesktopTooltip(
+                      message: e2eeCaption!,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Icon(
+                          FluentIcons.key_16_filled,
+                          size: 13,
+                          color: c.warning,
+                          semanticLabel: e2eeCaption,
+                        ),
+                      ),
+                    ),
                   if (onStage)
                     Icon(
                       FluentIcons.slide_layout_24_filled,
@@ -3056,7 +3195,7 @@ class _ParticipantRow extends StatelessWidget {
             // Наушники важнее микрофона: выключенный себе звук значит, что
             // человек не слышит НИЧЕГО, и состояние его микрофона в этот момент
             // ничего не решает.
-            Icon(
+            DMorphIcon(
               deafened
                   ? FluentIcons.speaker_off_24_filled
                   : (muted
@@ -3066,6 +3205,7 @@ class _ParticipantRow extends StatelessWidget {
               color: deafened
                   ? c.warning
                   : (muted ? c.textDisabled : c.voice),
+              style: DMorphStyle.spin,
             ),
           ],
         ),
@@ -3089,7 +3229,7 @@ class _InviteButton extends StatelessWidget {
     return HoverListener(
       onTap: busy ? null : onTap,
       cursor: busy ? SystemMouseCursors.basic : SystemMouseCursors.click,
-      builder: (ctx, hovered, pressed) => AnimatedContainer(
+      builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: AnimatedContainer(
         duration: DMotion.fast,
         height: 40,
         alignment: Alignment.center,
@@ -3128,7 +3268,7 @@ class _InviteButton extends StatelessWidget {
             ),
           ],
         ),
-      ),
+      )),
     );
   }
 }

@@ -11,6 +11,7 @@ import '../design/tokens.dart';
 import '../primitives/desktop_button.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../primitives/hover_listener.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Одна запись очереди — строка списка под островком.
 @immutable
@@ -432,7 +433,7 @@ class _IslandBody extends StatelessWidget {
                     children: [
                       Flexible(child: titleText),
                       const SizedBox(width: 3),
-                      Icon(
+                      DMorphIcon(
                         listOpen
                             ? FluentIcons.chevron_up_16_regular
                             : FluentIcons.chevron_down_16_regular,
@@ -958,7 +959,7 @@ class _PlaylistRow extends StatelessWidget {
       child: ExcludeSemantics(
         child: HoverListener(
           onTap: onTap,
-          builder: (ctx, hovered, pressed) => Container(
+          builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: Container(
             height: 42,
             padding: const EdgeInsets.symmetric(horizontal: DSpace.m),
             color: current
@@ -1009,7 +1010,7 @@ class _PlaylistRow extends StatelessWidget {
                 ),
               ],
             ),
-          ),
+          )),
         ),
       ),
     );
@@ -1036,7 +1037,7 @@ class _ActionRow extends StatelessWidget {
       child: ExcludeSemantics(
         child: HoverListener(
           onTap: onTap,
-          builder: (ctx, hovered, pressed) => Container(
+          builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: Container(
             height: 38,
             padding: const EdgeInsets.symmetric(horizontal: DSpace.m),
             color: hovered ? c.hover : Colors.transparent,
@@ -1057,7 +1058,7 @@ class _ActionRow extends StatelessWidget {
                 ),
               ],
             ),
-          ),
+          )),
         ),
       ),
     );
@@ -1088,7 +1089,7 @@ class _PlayPauseButton extends StatelessWidget {
         label: tip,
         child: HoverListener(
           onTap: onTap,
-          builder: (ctx, hovered, pressed) => Container(
+          builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: Container(
             width: 28,
             height: 28,
             margin: const EdgeInsets.symmetric(horizontal: 1),
@@ -1108,14 +1109,14 @@ class _PlayPauseButton extends StatelessWidget {
                       valueColor: AlwaysStoppedAnimation(Colors.white),
                     ),
                   )
-                : Icon(
+                : DMorphIcon(
                     playing
                         ? FluentIcons.pause_20_filled
                         : FluentIcons.play_20_filled,
                     size: 15,
                     color: Colors.white,
                   ),
-          ),
+          )),
         ),
       ),
     );

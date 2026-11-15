@@ -155,3 +155,64 @@ String _fmtInt(int v) {
   }
   return b.toString();
 }
+
+// ───────────── Добавлено 13.11.2026 для переделки старых рамок и обложек ─────────────
+
+/// Свечение — заранее испечённый радиальный спрайт 64 × 64 (стопы 1 / 0.55 / 0
+/// на 0 / 0.35 / 1), как в дизайн-референсе.
+///
+/// 🔴 ЗАЧЕМ ВТОРОЕ СВЕЧЕНИЕ РЯДОМ С [_glow]. `_glow` строит градиентный шейдер
+/// на каждый вызов. Для сцены с двумя-тремя пятнами это ничто, а у костра,
+/// дыма и чернил вызовов сотни в кадре. Спрайт печётся один раз на цвет, а
+/// дальше это одна текстура, растянутая под нужный радиус. Старые сцены
+/// остаются на `_glow` — их картинка не меняется.
+final Map<int, ui.Image> _glowSprites = <int, ui.Image>{};
+
+ui.Image _glowSprite(Color col) {
+  final key = col.toARGB32() | 0xFF000000;
+  final cached = _glowSprites[key];
+  if (cached != null) return cached;
+  if (_glowSprites.length > 64) {
+    for (final img in _glowSprites.values) {
+      img.dispose();
+    }
+    _glowSprites.clear();
+  }
+  final base = Color(key);
+  final rec = ui.PictureRecorder();
+  final c = Canvas(rec);
+  const o = Offset(32, 32);
+  c.drawRect(
+      const Rect.fromLTWH(0, 0, 64, 64),
+      Paint()
+        ..shader = ui.Gradient.radial(
+            o, 32, [_op(base, 1), _op(base, 0.55), _op(base, 0)], const [0.0, 0.35, 1.0]));
+  final img = rec.endRecording().toImageSync(64, 64);
+  _glowSprites[key] = img;
+  return img;
+}
+
+const Rect _kGlowSrc = Rect.fromLTWH(0, 0, 64, 64);
+
+/// То же, что [_glow], но спрайтом. [add] — сложение света (`'lighter'` в JS).
+void _glowS(Canvas c, Offset o, double r, Color col, double op, [bool add = false]) {
+  if (op <= 0.003 || r <= 0.5) return;
+  final p = Paint()
+    ..color = Color.fromRGBO(0, 0, 0, _clamp(op, 0, 1))
+    ..filterQuality = FilterQuality.low;
+  if (add) p.blendMode = BlendMode.plus;
+  c.drawImageRect(_glowSprite(col), _kGlowSrc, Rect.fromCircle(center: o, radius: r), p);
+}
+
+/// Четырёхлучевой блик: крест из двух линий 0.9 длиной 2·[s] и точка 0.22·[s].
+void _glint(Canvas c, Offset o, double s, double a) {
+  if (a <= 0.02) return;
+  final col = Color.fromRGBO(255, 255, 255, _clamp(a, 0, 1));
+  final p = _stroke(col, 0.9);
+  c.drawLine(Offset(o.dx - s, o.dy), Offset(o.dx + s, o.dy), p);
+  c.drawLine(Offset(o.dx, o.dy - s), Offset(o.dx, o.dy + s), p);
+  c.drawCircle(o, s * 0.22, _fill(col));
+}
+
+/// Цвет из `#RRGGBB` с прозрачностью — аналог `C(hex, a)` референса.
+Color _hex(int rgb, [double a = 1]) => Color((rgb & 0xFFFFFF) | 0xFF000000).withValues(alpha: _clamp(a, 0, 1));

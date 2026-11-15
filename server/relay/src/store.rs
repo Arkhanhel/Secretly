@@ -10,9 +10,9 @@ const ROOM_MEMBERSHIP_SELECT_BY_ID_SQL: &str = "SELECT room_id, profile_id, stat
 /// на то, чтобы не держать вечный журнал участия в группах.
 const ROOM_MESSAGE_SENDER_RETENTION_DAYS: i64 = 30;
 const ROOM_MEMBERSHIPS_SELECT_BY_ROOM_SQL: &str = "SELECT room_id, profile_id, status, role, source_link_id, tag, created_at_ms, updated_at_ms FROM room_memberships WHERE room_id = ?1 ORDER BY CASE status WHEN 'active' THEN 0 WHEN 'pending' THEN 1 WHEN 'left' THEN 2 WHEN 'removed' THEN 3 WHEN 'banned' THEN 4 ELSE 5 END, CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 WHEN 'moderator' THEN 2 WHEN 'member' THEN 3 WHEN 'restricted' THEN 4 WHEN 'guest' THEN 5 ELSE 6 END, created_at_ms ASC, profile_id ASC";
-const ROOM_CALL_SELECT_BY_ID_SQL: &str = "SELECT call_id, room_id, state, media_type, created_by_profile_id, created_by_device_id, state_version, started_at_ms, updated_at_ms, ended_at_ms, expires_at_ms FROM room_call_sessions WHERE call_id = ?1";
-const ROOM_CALL_ACTIVE_SELECT_BY_ROOM_SQL: &str = "SELECT call_id, room_id, state, media_type, created_by_profile_id, created_by_device_id, state_version, started_at_ms, updated_at_ms, ended_at_ms, expires_at_ms FROM room_call_sessions WHERE room_id = ?1 AND state = 'active' ORDER BY started_at_ms DESC LIMIT 1";
-const ROOM_CALL_SELECT_BY_ROOM_AND_ID_SQL: &str = "SELECT call_id, room_id, state, media_type, created_by_profile_id, created_by_device_id, state_version, started_at_ms, updated_at_ms, ended_at_ms, expires_at_ms FROM room_call_sessions WHERE room_id = ?1 AND call_id = ?2";
+const ROOM_CALL_SELECT_BY_ID_SQL: &str = "SELECT call_id, room_id, state, media_type, created_by_profile_id, created_by_device_id, state_version, started_at_ms, updated_at_ms, ended_at_ms, expires_at_ms, media_contract FROM room_call_sessions WHERE call_id = ?1";
+const ROOM_CALL_ACTIVE_SELECT_BY_ROOM_SQL: &str = "SELECT call_id, room_id, state, media_type, created_by_profile_id, created_by_device_id, state_version, started_at_ms, updated_at_ms, ended_at_ms, expires_at_ms, media_contract FROM room_call_sessions WHERE room_id = ?1 AND state = 'active' ORDER BY started_at_ms DESC LIMIT 1";
+const ROOM_CALL_SELECT_BY_ROOM_AND_ID_SQL: &str = "SELECT call_id, room_id, state, media_type, created_by_profile_id, created_by_device_id, state_version, started_at_ms, updated_at_ms, ended_at_ms, expires_at_ms, media_contract FROM room_call_sessions WHERE room_id = ?1 AND call_id = ?2";
 const ROOM_CALL_PARTICIPANT_SELECT_BY_ID_SQL: &str = "SELECT call_id, room_id, profile_id, device_id, join_state, supports_video, supports_screen_share, muted, deafened, video_enabled, screen_share_enabled, speaking, joined_at_ms, left_at_ms, updated_at_ms FROM room_call_participants WHERE call_id = ?1 AND device_id = ?2";
 const ROOM_CALL_PARTICIPANTS_SELECT_BY_CALL_SQL: &str = "SELECT call_id, room_id, profile_id, device_id, join_state, supports_video, supports_screen_share, muted, deafened, video_enabled, screen_share_enabled, speaking, joined_at_ms, left_at_ms, updated_at_ms FROM room_call_participants WHERE call_id = ?1 ORDER BY CASE join_state WHEN 'joined' THEN 0 WHEN 'reconnecting' THEN 1 WHEN 'left' THEN 2 WHEN 'removed' THEN 3 ELSE 4 END, joined_at_ms ASC, profile_id ASC, device_id ASC";
 const ROOM_CALL_MEDIA_PARTICIPANT_SELECT_BY_ID_SQL: &str = "SELECT call_id, room_id, profile_id, device_id, publish_audio, publish_video, publish_screen_share, subscribe_all, created_at_ms, updated_at_ms FROM room_call_media_participants WHERE call_id = ?1 AND device_id = ?2";
@@ -180,6 +180,19 @@ fn room_call_expires_at_ms(
     now_ms + (ttl_seconds as i64) * 1000
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlobUploadSessionRow {
+    pub session_id: String,
+    pub device_id: String,
+    pub profile_id: String,
+    pub upload_length: u64,
+    pub body_sha256_b64: String,
+    pub access_token_sha256_b64: String,
+    pub ttl_seconds: i64,
+    pub created_at_ms: i64,
+    pub expires_at_ms: i64,
+}
+
 #[derive(Debug, Clone)]
 pub struct BlobRow {
     pub rel_path: String,
@@ -301,6 +314,14 @@ pub struct RoomRow {
     pub pinned_message_id: Option<String>,
     pub created_at_ms: i64,
     pub updated_at_ms: i64,
+    /// Закрытые темы (06.10.2026, ТЗ TZ_ROOM_PRIVATE_TOPICS): к какой комнате
+    /// привязана ветка. `None` — обычная комната (все комнаты до этой правки).
+    pub parent_room_id: Option<String>,
+    /// `room` или `topic`. Ветка — полноценная комната со своим составом и
+    /// ключом; вложенность только в один уровень.
+    pub kind: String,
+    /// Р-2: «Участники могут создавать закрытые темы». По умолчанию выключено.
+    pub allow_members_create_topics: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -331,6 +352,13 @@ pub struct RoomInviteLinkRow {
     pub updated_at_ms: i64,
 }
 
+/// Контракт медиа открытого созвона — всё, что было до E2EE. Пустой запрос
+/// (выпущенные сборки) означает именно его.
+pub const ROOM_MEDIA_CONTRACT_V1: &str = "room_media_v1";
+/// Контракт созвона со сквозным шифрованием медиа (ТЗ E2EE групповых
+/// созвонов, ЗВ-С1). Своя комната LiveKit, свой токен.
+pub const ROOM_MEDIA_CONTRACT_E2EE_V1: &str = "room_media_e2ee_v1";
+
 #[derive(Debug, Clone)]
 pub struct RoomCallRow {
     pub call_id: String,
@@ -344,6 +372,8 @@ pub struct RoomCallRow {
     pub updated_at_ms: i64,
     pub ended_at_ms: Option<i64>,
     pub expires_at_ms: i64,
+    /// Контракт медиа, его задаёт создатель и он не меняется до конца созвона.
+    pub media_contract: String,
 }
 
 #[derive(Debug, Clone)]
@@ -394,6 +424,15 @@ pub struct RoomCallMutationResult {
     pub snapshot: RoomCallSnapshot,
 }
 
+/// Устройства профиля, выведенные из идущего созвона комнаты при бане,
+/// исключении или выходе из комнаты (ЗВ-С3).
+#[derive(Debug, Clone)]
+pub struct RoomCallEviction {
+    /// Созвон после изменения (состояние могло стать `ended`).
+    pub call: RoomCallRow,
+    pub device_ids: Vec<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct RoomCallMediaHealthSummary {
     pub active_room_call_count: i64,
@@ -435,6 +474,44 @@ pub struct TransferRoomOwnershipResult {
 pub struct DeleteRoomResult {
     pub room: RoomRow,
     pub deleted_profile_ids: Vec<String>,
+    /// Закрытые ветки, удалённые вместе с комнатой. Только для журнала и
+    /// обработчика — в ответ клиенту НЕ идут (Р-1: владелец комнаты не знает
+    /// чужих веток).
+    pub deleted_topic_room_ids: Vec<String>,
+}
+
+/// Вид комнаты: обычная.
+pub const ROOM_KIND_ROOM: &str = "room";
+/// Вид комнаты: закрытая ветка (дочерняя комната).
+pub const ROOM_KIND_TOPIC: &str = "topic";
+/// Р-4: не больше 20 живых веток у одной комнаты.
+pub const MAX_TOPICS_PER_ROOM: i64 = 20;
+
+/// Что каскад сделал с одной закрытой веткой, когда участник перестал быть
+/// действующим в основной комнате.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TopicCascadeAction {
+    /// Участник снят с ветки (status = removed).
+    Removed,
+    /// Снят владелец ветки; ветка перешла к следующему участнику.
+    OwnerReplaced { next_owner_profile_id: String },
+    /// Снят последний действующий участник — ветка удалена целиком.
+    Deleted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TopicCascadeEffect {
+    pub topic_room_id: String,
+    pub profile_id: String,
+    pub action: TopicCascadeAction,
+}
+
+/// Ветки комнаты глазами одного участника (Р-1): свои — с названиями,
+/// чужие — только числом.
+#[derive(Debug, Clone)]
+pub struct RoomTopicsForMember {
+    pub topics: Vec<RoomRow>,
+    pub hidden_count: i64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -473,6 +550,12 @@ pub struct UpdateRoomStateResult {
 #[derive(Debug, Clone)]
 pub enum CreateRoomError {
     Conflict(RoomRow),
+    /// Родитель не найден, удалён или сам является веткой.
+    BadParent,
+    /// Создатель не действующий участник родителя или у него нет права (Р-2).
+    TopicCreateForbidden,
+    /// У родителя уже MAX_TOPICS_PER_ROOM живых веток (Р-4).
+    TopicLimit,
     Storage(String),
 }
 
@@ -480,6 +563,9 @@ pub enum CreateRoomError {
 pub enum UpsertRoomMembershipError {
     RoomNotFound,
     InvalidOwnerMutation,
+    /// 🔴 Состав ветки ⊆ состав основной комнаты: действующим в ветке может
+    /// быть только действующий участник родителя.
+    NotParentMember,
     Storage(String),
 }
 
@@ -520,6 +606,8 @@ pub enum RedeemRoomInviteError {
     InviteExpired,
     InviteUsageLimitReached,
     Banned,
+    /// У закрытых веток ссылок-приглашений нет: состав выбирают поимённо.
+    TopicNoInviteLinks,
     Storage(String),
 }
 
@@ -571,7 +659,7 @@ pub enum AdmitRoomMessageError {
     Storage(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RoomCallControlError {
     RoomNotFound,
     CallNotFound,
@@ -581,7 +669,20 @@ pub enum RoomCallControlError {
     Storage(String),
 }
 
-const ROOM_SELECT_BY_ID_SQL: &str = "SELECT room_id, version, membership_version, owner_profile_id, created_by_device_id, title, description, avatar_hash, avatar_image_b64, reactions_mode, allow_text, allow_media, allow_add_members, allow_pin_messages, allow_change_group_info, allow_change_tag, join_approval_required, slow_mode_seconds, chat_history_visible, pinned_message_id, created_at_ms, updated_at_ms FROM rooms WHERE room_id = ?1";
+/// Отказ во входе в созвон комнаты с учётом контракта медиа (ЗВ-С1, ЗВ-С4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RoomCallJoinError {
+    Control(RoomCallControlError),
+    /// В комнате уже идёт созвон с другим контрактом; внутри — его контракт.
+    /// Созвон в комнате один, второй не заводится.
+    ContractMismatch(String),
+    /// Реле сейчас не заводит E2EE-созвоны.
+    E2eeUnavailable,
+    /// В E2EE-созвоне нет мест.
+    CallFull,
+}
+
+const ROOM_SELECT_BY_ID_SQL: &str = "SELECT room_id, version, membership_version, owner_profile_id, created_by_device_id, title, description, avatar_hash, avatar_image_b64, reactions_mode, allow_text, allow_media, allow_add_members, allow_pin_messages, allow_change_group_info, allow_change_tag, join_approval_required, slow_mode_seconds, chat_history_visible, pinned_message_id, created_at_ms, updated_at_ms, parent_room_id, kind, allow_members_create_topics FROM rooms WHERE room_id = ?1";
 
 fn map_room_row(row: &rusqlite::Row<'_>) -> Result<RoomRow, rusqlite::Error> {
     Ok(RoomRow {
@@ -607,6 +708,9 @@ fn map_room_row(row: &rusqlite::Row<'_>) -> Result<RoomRow, rusqlite::Error> {
         pinned_message_id: row.get(19)?,
         created_at_ms: row.get(20)?,
         updated_at_ms: row.get(21)?,
+        parent_room_id: row.get(22)?,
+        kind: row.get(23)?,
+        allow_members_create_topics: row.get::<_, i64>(24)? != 0,
     })
 }
 
@@ -653,6 +757,7 @@ fn map_room_call_row(row: &rusqlite::Row<'_>) -> Result<RoomCallRow, rusqlite::E
         updated_at_ms: row.get(8)?,
         ended_at_ms: row.get(9)?,
         expires_at_ms: row.get(10)?,
+        media_contract: row.get(11)?,
     })
 }
 
@@ -787,6 +892,282 @@ fn next_membership_created_at(
     }
 }
 
+/// Удаляет комнату и всё её локальное состояние в уже открытой транзакции.
+/// Ровно те же строки, что всегда стирал `delete_room`; вынесено, чтобы
+/// каскад закрытых веток удалял ветку тем же путём, а не своим.
+fn delete_room_rows_tx(
+    tx: &rusqlite::Transaction<'_>,
+    room_id: &str,
+) -> Result<usize, rusqlite::Error> {
+    let mut deleted = 0usize;
+    deleted += tx.execute(
+        "DELETE FROM room_call_media_participants WHERE room_id = ?1",
+        params![room_id],
+    )?;
+    deleted += tx.execute(
+        "DELETE FROM room_call_participants WHERE room_id = ?1",
+        params![room_id],
+    )?;
+    deleted += tx.execute(
+        "DELETE FROM room_call_sessions WHERE room_id = ?1",
+        params![room_id],
+    )?;
+    deleted += tx.execute(
+        "DELETE FROM room_message_index WHERE room_id = ?1",
+        params![room_id],
+    )?;
+    deleted += tx.execute(
+        "DELETE FROM room_invite_links WHERE room_id = ?1",
+        params![room_id],
+    )?;
+    deleted += tx.execute(
+        "DELETE FROM room_memberships WHERE room_id = ?1",
+        params![room_id],
+    )?;
+    deleted += tx.execute("DELETE FROM rooms WHERE room_id = ?1", params![room_id])?;
+    Ok(deleted)
+}
+
+/// Живые закрытые ветки комнаты (комнаты удаляются целиком, поэтому «живая»
+/// = «строка есть»).
+fn topic_room_ids_tx(
+    tx: &rusqlite::Transaction<'_>,
+    parent_room_id: &str,
+) -> Result<Vec<String>, rusqlite::Error> {
+    let mut stmt = tx.prepare(
+        "SELECT room_id FROM rooms WHERE parent_room_id = ?1 ORDER BY created_at_ms ASC, room_id ASC",
+    )?;
+    stmt.query_map(params![parent_room_id], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()
+}
+
+/// 🔴 КАСКАД ЗАКРЫТЫХ ВЕТОК. Вызывается в ТОЙ ЖЕ транзакции, что и изменение
+/// состава основной комнаты, когда `profile_id` перестал быть в ней
+/// действующим (вышел, исключён, забанен, удалил профиль).
+///
+/// Состав ветки ⊆ состав основной комнаты — главный инвариант закрытых тем.
+/// Если каскад не сработает, исключённый из комнаты останется в ветке и будет
+/// получать её сообщения. Поэтому он здесь, на сервере, атомарно с причиной,
+/// а не на клиенте.
+///
+/// В каждой ветке, где профиль действующий:
+/// - он становится `removed` (роль — `member`, как при обычном исключении),
+///   версия и `membership_version` ветки растут — клиенты меняют ключ
+///   обычным путём;
+/// - если он владелец, ветка переходит к самому давнему из оставшихся
+///   действующих участников (сначала админы, потом модераторы, потом
+///   участники); если никого не осталось — ветка удаляется целиком.
+///
+/// Идемпотентно: повторный вызов ничего не находит и ничего не меняет.
+fn cascade_parent_exit_tx(
+    tx: &rusqlite::Transaction<'_>,
+    parent_room_id: &str,
+    profile_id: &str,
+    now_ms: i64,
+) -> Result<Vec<TopicCascadeEffect>, rusqlite::Error> {
+    let child_room_ids = {
+        let mut stmt = tx.prepare(
+            "SELECT r.room_id FROM rooms r JOIN room_memberships m ON m.room_id = r.room_id WHERE r.parent_room_id = ?1 AND m.profile_id = ?2 AND m.status = 'active' ORDER BY r.created_at_ms ASC, r.room_id ASC",
+        )?;
+        stmt.query_map(params![parent_room_id, profile_id], |row| {
+            row.get::<_, String>(0)
+        })?
+        .collect::<Result<Vec<_>, _>>()?
+    };
+
+    let mut effects = Vec::with_capacity(child_room_ids.len());
+    for child_room_id in child_room_ids {
+        let child = tx.query_row(
+            ROOM_SELECT_BY_ID_SQL,
+            params![child_room_id.clone()],
+            map_room_row,
+        )?;
+        let membership = tx.query_row(
+            ROOM_MEMBERSHIP_SELECT_BY_ID_SQL,
+            params![child_room_id.clone(), profile_id],
+            map_room_membership_row,
+        )?;
+
+        let mut next_owner_profile_id: Option<String> = None;
+        if child.owner_profile_id == profile_id {
+            // Преемник обязан сам быть действующим в основной комнате:
+            // иначе ветка ушла бы тому, кого каскад тоже должен снять.
+            let successor = tx
+                .query_row(
+                    "SELECT m.profile_id FROM room_memberships m WHERE m.room_id = ?1 AND m.status = 'active' AND m.profile_id <> ?2 AND EXISTS (SELECT 1 FROM room_memberships p WHERE p.room_id = ?3 AND p.profile_id = m.profile_id AND p.status = 'active') ORDER BY CASE m.role WHEN 'admin' THEN 0 WHEN 'moderator' THEN 1 WHEN 'member' THEN 2 WHEN 'restricted' THEN 3 WHEN 'guest' THEN 4 ELSE 5 END, m.created_at_ms ASC, m.profile_id ASC LIMIT 1",
+                    params![child_room_id.clone(), profile_id, parent_room_id],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?;
+            let Some(successor) = successor else {
+                // Никого не осталось — ветка удаляется так же, как её удалил
+                // бы владелец (`delete_room`).
+                delete_room_rows_tx(tx, &child_room_id)?;
+                effects.push(TopicCascadeEffect {
+                    topic_room_id: child_room_id,
+                    profile_id: profile_id.to_string(),
+                    action: TopicCascadeAction::Deleted,
+                });
+                continue;
+            };
+            tx.execute(
+                "UPDATE room_memberships SET role = 'owner', updated_at_ms = ?3 WHERE room_id = ?1 AND profile_id = ?2",
+                params![child_room_id.clone(), successor.clone(), now_ms],
+            )?;
+            next_owner_profile_id = Some(successor);
+        }
+
+        let next_created_at_ms = next_membership_created_at(Some(&membership), "removed", now_ms);
+        tx.execute(
+            "UPDATE room_memberships SET status = 'removed', role = 'member', created_at_ms = ?3, updated_at_ms = ?4 WHERE room_id = ?1 AND profile_id = ?2",
+            params![child_room_id.clone(), profile_id, next_created_at_ms, now_ms],
+        )?;
+        tx.execute(
+            "UPDATE rooms SET owner_profile_id = ?2, version = ?3, membership_version = ?4, updated_at_ms = ?5 WHERE room_id = ?1",
+            params![
+                child_room_id.clone(),
+                next_owner_profile_id
+                    .clone()
+                    .unwrap_or_else(|| child.owner_profile_id.clone()),
+                child.version + 1,
+                child.membership_version + 1,
+                now_ms,
+            ],
+        )?;
+        effects.push(TopicCascadeEffect {
+            topic_room_id: child_room_id,
+            profile_id: profile_id.to_string(),
+            action: match next_owner_profile_id {
+                Some(next_owner_profile_id) => {
+                    TopicCascadeAction::OwnerReplaced { next_owner_profile_id }
+                }
+                None => TopicCascadeAction::Removed,
+            },
+        });
+    }
+    Ok(effects)
+}
+
+/// Тело `upsert_room_membership` в уже открытой транзакции (без commit).
+/// Вынесено, чтобы каскад закрытых веток шёл в той же транзакции.
+fn upsert_room_membership_tx(
+    tx: &rusqlite::Transaction<'_>,
+    room_id: &str,
+    profile_id: &str,
+    status: &str,
+    role: &str,
+    source_link_id: Option<String>,
+    now_ms: i64,
+) -> Result<Result<UpsertRoomMembershipResult, UpsertRoomMembershipError>, rusqlite::Error> {
+    let room = tx
+        .query_row(ROOM_SELECT_BY_ID_SQL, params![room_id], map_room_row)
+        .optional()?;
+    let Some(room) = room else {
+        return Ok(Err(UpsertRoomMembershipError::RoomNotFound));
+    };
+
+    if profile_id == room.owner_profile_id {
+        if status != "active" || role != "owner" || source_link_id.is_some() {
+            return Ok(Err(UpsertRoomMembershipError::InvalidOwnerMutation));
+        }
+    } else if role == "owner" {
+        return Ok(Err(UpsertRoomMembershipError::InvalidOwnerMutation));
+    }
+
+    // 🔴 Состав ветки ⊆ состав основной комнаты. Проверка ДО ответа «уже
+    // так»: «остаться действующим» в ветке без родителя тоже нельзя.
+    // Снять/забанить в ветке можно всегда — это обычные правила комнаты.
+    if status == "active"
+        && let Some(parent_room_id) = room.parent_room_id.as_deref()
+    {
+        let parent_status = tx
+            .query_row(
+                "SELECT status FROM room_memberships WHERE room_id = ?1 AND profile_id = ?2",
+                params![parent_room_id, profile_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        if parent_status.as_deref() != Some("active") {
+            return Ok(Err(UpsertRoomMembershipError::NotParentMember));
+        }
+    }
+
+    let existing = tx
+        .query_row(
+            ROOM_MEMBERSHIP_SELECT_BY_ID_SQL,
+            params![room_id, profile_id],
+            map_room_membership_row,
+        )
+        .optional()?;
+
+    if let Some(existing_membership) = existing.clone() {
+        if existing_membership.status == status
+            && existing_membership.role == role
+            && existing_membership.source_link_id == source_link_id
+        {
+            return Ok(Ok(UpsertRoomMembershipResult {
+                changed: false,
+                room,
+                membership: existing_membership,
+            }));
+        }
+
+        if existing_membership.status == "left" && status == "removed" {
+            return Ok(Ok(UpsertRoomMembershipResult {
+                changed: false,
+                room,
+                membership: existing_membership,
+            }));
+        }
+
+        if existing_membership.status == "banned" && status == "removed" {
+            return Ok(Ok(UpsertRoomMembershipResult {
+                changed: false,
+                room,
+                membership: existing_membership,
+            }));
+        }
+    }
+
+    let next_created_at_ms = next_membership_created_at(existing.as_ref(), status, now_ms);
+
+    tx.execute(
+        "INSERT INTO room_memberships(room_id, profile_id, status, role, source_link_id, created_at_ms, updated_at_ms) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(room_id, profile_id) DO UPDATE SET status = excluded.status, role = excluded.role, source_link_id = excluded.source_link_id, created_at_ms = excluded.created_at_ms, updated_at_ms = excluded.updated_at_ms",
+        params![
+            room_id,
+            profile_id,
+            status,
+            role,
+            source_link_id,
+            next_created_at_ms,
+            now_ms,
+        ],
+    )?;
+
+    tx.execute(
+        "UPDATE rooms SET version = ?2, membership_version = ?3, updated_at_ms = ?4 WHERE room_id = ?1",
+        params![
+            room_id,
+            room.version + 1,
+            room.membership_version + 1,
+            now_ms,
+        ],
+    )?;
+
+    let updated_room = tx.query_row(ROOM_SELECT_BY_ID_SQL, params![room_id], map_room_row)?;
+    let membership = tx.query_row(
+        ROOM_MEMBERSHIP_SELECT_BY_ID_SQL,
+        params![room_id, profile_id],
+        map_room_membership_row,
+    )?;
+
+    Ok(Ok(UpsertRoomMembershipResult {
+        changed: true,
+        room: updated_room,
+        membership,
+    }))
+}
+
 fn normalize_invite_allowed_role(role: &str) -> &'static str {
     match role.trim().to_ascii_lowercase().as_str() {
         "owner" | "admin" | "moderator" => "member",
@@ -802,6 +1183,27 @@ fn normalize_room_reactions_mode(value: &str) -> &'static str {
         "none" => "none",
         _ => "all",
     }
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct TransportReportRow {
+    pub day_index: i64,
+    pub platform: String,
+    pub net_kind: String,
+    pub path_used: String,
+    pub country: String,
+    pub build: i64,
+    pub count: i64,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct TransportFailureRow {
+    pub day_index: i64,
+    pub platform: String,
+    pub net_kind: String,
+    pub path_kind: String,
+    pub country: String,
+    pub count: i64,
 }
 
 #[derive(Clone)]
@@ -1024,6 +1426,25 @@ CREATE TABLE IF NOT EXISTS blobs (
 
 CREATE INDEX IF NOT EXISTS blobs_expires_idx ON blobs(expires_at_ms);
 
+-- Загрузка частями с докачкой (разбор медиа 15.11.2026). Сессия живёт до
+-- `expires_at_ms` (сутки); принятое лежит в `sessions/<id>.part` рядом с
+-- файлами, длина файла и есть смещение. Готовая сессия становится обычной
+-- строкой `blobs` и удаляется.
+CREATE TABLE IF NOT EXISTS blob_upload_sessions (
+    session_id TEXT PRIMARY KEY,
+    device_id TEXT NOT NULL,
+    profile_id TEXT NOT NULL DEFAULT '',
+    upload_length INTEGER NOT NULL,
+    body_sha256_b64 TEXT NOT NULL,
+    access_token_sha256_b64 TEXT NOT NULL,
+    ttl_seconds INTEGER NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    expires_at_ms INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS blob_upload_sessions_device_idx
+    ON blob_upload_sessions(device_id);
+
 CREATE TABLE IF NOT EXISTS rooms (
     room_id TEXT PRIMARY KEY,
     version INTEGER NOT NULL,
@@ -1046,7 +1467,10 @@ CREATE TABLE IF NOT EXISTS rooms (
     chat_history_visible INTEGER NOT NULL DEFAULT 0,
     pinned_message_id TEXT,
     created_at_ms INTEGER NOT NULL,
-    updated_at_ms INTEGER NOT NULL
+    updated_at_ms INTEGER NOT NULL,
+    parent_room_id TEXT,
+    kind TEXT NOT NULL DEFAULT 'room',
+    allow_members_create_topics INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS rooms_owner_updated_idx ON rooms(owner_profile_id, updated_at_ms DESC);
@@ -1120,7 +1544,8 @@ CREATE TABLE IF NOT EXISTS room_call_sessions (
     started_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL,
     ended_at_ms INTEGER,
-    expires_at_ms INTEGER NOT NULL
+    expires_at_ms INTEGER NOT NULL,
+    media_contract TEXT NOT NULL DEFAULT 'room_media_v1'
 );
 
 CREATE INDEX IF NOT EXISTS room_call_sessions_room_active_idx ON room_call_sessions(room_id, state, started_at_ms DESC);
@@ -1202,6 +1627,25 @@ CREATE TABLE IF NOT EXISTS support_cleared (
     profile_id TEXT PRIMARY KEY,
     cleared_at_ms INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS transport_reports_daily (
+    day_index INTEGER NOT NULL,
+    platform TEXT NOT NULL,
+    net_kind TEXT NOT NULL,
+    path_used TEXT NOT NULL,
+    country TEXT NOT NULL,
+    build INTEGER NOT NULL,
+    count INTEGER NOT NULL,
+    PRIMARY KEY(day_index, platform, net_kind, path_used, country, build)
+);
+CREATE TABLE IF NOT EXISTS transport_failures_daily (
+    day_index INTEGER NOT NULL,
+    platform TEXT NOT NULL,
+    net_kind TEXT NOT NULL,
+    path_kind TEXT NOT NULL,
+    country TEXT NOT NULL,
+    count INTEGER NOT NULL,
+    PRIMARY KEY(day_index, platform, net_kind, path_kind, country)
+);
 "#,
                 )?;
 
@@ -1229,9 +1673,13 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                 let mut has_room_slow_mode_seconds = false;
                 let mut has_room_chat_history_visible = false;
                 let mut has_room_pinned_message_id = false;
+                let mut has_room_parent_room_id = false;
+                let mut has_room_kind = false;
+                let mut has_room_allow_members_create_topics = false;
                 let mut has_room_membership_tag = false;
                 let mut has_device_activity_superseded = false;
                 let mut has_device_activity_client_build = false;
+                let mut has_room_call_media_contract = false;
                 {
                     let mut stmt = c.prepare("PRAGMA table_info(blobs)")?;
                     let mut rows = stmt.query([])?;
@@ -1314,6 +1762,15 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                         if col_name == "pinned_message_id" {
                             has_room_pinned_message_id = true;
                         }
+                        if col_name == "parent_room_id" {
+                            has_room_parent_room_id = true;
+                        }
+                        if col_name == "kind" {
+                            has_room_kind = true;
+                        }
+                        if col_name == "allow_members_create_topics" {
+                            has_room_allow_members_create_topics = true;
+                        }
                     }
                 }
 
@@ -1344,6 +1801,17 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                         }
                         if col_name == "from_device_id" {
                             has_pending_from_device_id = true;
+                        }
+                    }
+                }
+
+                {
+                    let mut stmt = c.prepare("PRAGMA table_info(room_call_sessions)")?;
+                    let mut rows = stmt.query([])?;
+                    while let Some(row) = rows.next()? {
+                        let col_name: String = row.get(1)?;
+                        if col_name == "media_contract" {
+                            has_room_call_media_contract = true;
                         }
                     }
                 }
@@ -1380,6 +1848,11 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                         [],
                     )?;
                 }
+                // С3: квота живых файлов на устройство считается по этому индексу.
+                c.execute(
+                    "CREATE INDEX IF NOT EXISTS blobs_owner_device_idx ON blobs(owner_device_id, expires_at_ms)",
+                    [],
+                )?;
                 if !has_room_membership_version {
                     c.execute(
                         "ALTER TABLE rooms ADD COLUMN membership_version INTEGER NOT NULL DEFAULT 1",
@@ -1458,6 +1931,31 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                 if !has_room_pinned_message_id {
                     c.execute("ALTER TABLE rooms ADD COLUMN pinned_message_id TEXT", [])?;
                 }
+                // ЗАКРЫТЫЕ ТЕМЫ (06.10.2026, Ф1). Ветка — дочерняя комната.
+                // Все комнаты, заведённые до этих столбцов, — обычные: NULL
+                // родителя, kind = 'room', создавать ветки участникам нельзя.
+                // Только ADD COLUMN: таблицу не перестраиваем.
+                if !has_room_parent_room_id {
+                    c.execute("ALTER TABLE rooms ADD COLUMN parent_room_id TEXT", [])?;
+                }
+                if !has_room_kind {
+                    c.execute(
+                        "ALTER TABLE rooms ADD COLUMN kind TEXT NOT NULL DEFAULT 'room'",
+                        [],
+                    )?;
+                }
+                if !has_room_allow_members_create_topics {
+                    c.execute(
+                        "ALTER TABLE rooms ADD COLUMN allow_members_create_topics INTEGER NOT NULL DEFAULT 0",
+                        [],
+                    )?;
+                }
+                // Индекс — здесь, а не в базовой схеме: на старой базе столбец
+                // появляется только после ALTER выше (см. pending_device_attempt_idx).
+                c.execute(
+                    "CREATE INDEX IF NOT EXISTS rooms_parent_room_idx ON rooms(parent_room_id)",
+                    [],
+                )?;
                 if !has_room_membership_tag {
                     c.execute("ALTER TABLE room_memberships ADD COLUMN tag TEXT", [])?;
                 }
@@ -1559,6 +2057,15 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                     // rows are treated as not-superseded.
                     c.execute(
                         "ALTER TABLE device_activity ADD COLUMN superseded_at_ms INTEGER NOT NULL DEFAULT 0",
+                        [],
+                    )?;
+                }
+                if !has_room_call_media_contract {
+                    // E2EE ГРУППОВЫХ СОЗВОНОВ (06.10.2026, ЗВ-С1). Контракт медиа
+                    // созвона. DEFAULT — открытый контракт: все созвоны, заведённые
+                    // до этого столбца, им и были.
+                    c.execute(
+                        "ALTER TABLE room_call_sessions ADD COLUMN media_contract TEXT NOT NULL DEFAULT 'room_media_v1'",
                         [],
                     )?;
                 }
@@ -1771,6 +2278,97 @@ CREATE TABLE IF NOT EXISTS support_cleared (
     /// Отметка — единственный способ сообщить телефону, что ленты больше нет:
     /// на обычном опросе удаление выглядит как «новых ответов нет».
     /// Возвращает, сколько строк удалено (тикеты + ответы).
+    /// Э1: обезличенный отчёт о путях доставки — только счётчики по дням.
+    /// Ни адресов, ни идентификаторов: строка таблицы — это «сколько раз в
+    /// такой день на такой платформе в такой сети дошло таким путём».
+    pub async fn transport_report_record(
+        &self,
+        day_index: i64,
+        platform: &str,
+        net_kind: &str,
+        path_used: &str,
+        country: &str,
+        build: i64,
+        paths_failed: &[String],
+    ) -> Result<(), String> {
+        let platform = platform.to_string();
+        let net_kind = net_kind.to_string();
+        let path_used = path_used.to_string();
+        let country = country.to_string();
+        let failed: Vec<String> = paths_failed.to_vec();
+        self.conn
+            .call(move |c| -> Result<(), rusqlite::Error> {
+                c.execute(
+                    "INSERT INTO transport_reports_daily(day_index, platform, net_kind, path_used, country, build, count) \
+                     VALUES(?1, ?2, ?3, ?4, ?5, ?6, 1) \
+                     ON CONFLICT(day_index, platform, net_kind, path_used, country, build) \
+                     DO UPDATE SET count = count + 1",
+                    params![day_index, platform, net_kind, path_used, country, build],
+                )?;
+                for kind in failed {
+                    c.execute(
+                        "INSERT INTO transport_failures_daily(day_index, platform, net_kind, path_kind, country, count) \
+                         VALUES(?1, ?2, ?3, ?4, ?5, 1) \
+                         ON CONFLICT(day_index, platform, net_kind, path_kind, country) \
+                         DO UPDATE SET count = count + 1",
+                        params![day_index, platform, net_kind, kind, country],
+                    )?;
+                }
+                Ok(())
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// Сводка отчётов начиная с дня `since_day_index` (включительно).
+    pub async fn transport_report_stats(
+        &self,
+        since_day_index: i64,
+    ) -> Result<(Vec<TransportReportRow>, Vec<TransportFailureRow>), String> {
+        self.conn
+            .call(move |c| -> Result<(Vec<TransportReportRow>, Vec<TransportFailureRow>), rusqlite::Error> {
+                let mut st = c.prepare(
+                    "SELECT day_index, platform, net_kind, path_used, country, build, count \
+                     FROM transport_reports_daily WHERE day_index >= ?1 \
+                     ORDER BY day_index DESC, count DESC LIMIT 5000",
+                )?;
+                let used = st
+                    .query_map(params![since_day_index], |r| {
+                        Ok(TransportReportRow {
+                            day_index: r.get(0)?,
+                            platform: r.get(1)?,
+                            net_kind: r.get(2)?,
+                            path_used: r.get(3)?,
+                            country: r.get(4)?,
+                            build: r.get(5)?,
+                            count: r.get(6)?,
+                        })
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?;
+                let mut st = c.prepare(
+                    "SELECT day_index, platform, net_kind, path_kind, country, count \
+                     FROM transport_failures_daily WHERE day_index >= ?1 \
+                     ORDER BY day_index DESC, count DESC LIMIT 5000",
+                )?;
+                let failed = st
+                    .query_map(params![since_day_index], |r| {
+                        Ok(TransportFailureRow {
+                            day_index: r.get(0)?,
+                            platform: r.get(1)?,
+                            net_kind: r.get(2)?,
+                            path_kind: r.get(3)?,
+                            country: r.get(4)?,
+                            count: r.get(5)?,
+                        })
+                    })?
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok((used, failed))
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     pub async fn support_clear_profile(
         &self,
         profile_id: &str,
@@ -1956,6 +2554,12 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                     "INSERT INTO push_tokens(device_id, token, platform, policy_json, updated_at_ms) VALUES(?1, ?2, ?3, ?4, ?5)\n                     ON CONFLICT(device_id, platform) DO UPDATE SET token = excluded.token, policy_json = excluded.policy_json, updated_at_ms = excluded.updated_at_ms",
                     params![device_id, token, platform, policy_json, now_ms],
                 )?;
+                // Устройство вернуло себе токен — значит, оно живо: снять с него
+                // отметку «вытеснен», поставленную прежним захватом (29.10.2026).
+                c.execute(
+                    "UPDATE device_activity SET superseded_at_ms = 0 WHERE device_id = ?1 AND superseded_at_ms > 0",
+                    params![device_id],
+                )?;
                 // FIX-SERVER-2 (R-02 push dedup): a physical FCM/APNs token is
                 // unique to one app install on one phone, so any OTHER device_id
                 // still holding this exact token is a stale/zombie identity from
@@ -2093,6 +2697,12 @@ CREATE TABLE IF NOT EXISTS support_cleared (
     /// the device is alive (it just proved possession of the identity
     /// key). Called from the WS `handle_socket` handshake and from
     /// `http_welcome` for the parity HTTP path.
+    ///
+    /// 🔴 Вход снимает отметку «вытеснен» (29.10.2026): устройство, которое
+    /// доказало владение ключом, живо и может получать. Без этого отметка от
+    /// одного захвата токена (второй аккаунт или отладочная сборка на том же
+    /// телефоне, 10.10) оставалась навсегда, и отправители через
+    /// `GET /v1/active_devices` 19 дней не слали живому Android ни строчки.
     pub async fn record_device_login(
         &self,
         device_id: &str,
@@ -2109,6 +2719,7 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                      ON CONFLICT(device_id) DO UPDATE SET \
                        profile_id = CASE WHEN excluded.profile_id <> '' THEN excluded.profile_id ELSE device_activity.profile_id END, \
                        last_pump_at_ms = MAX(device_activity.last_pump_at_ms, excluded.last_pump_at_ms), \
+                       superseded_at_ms = 0, \
                        updated_at_ms = excluded.updated_at_ms",
                     params![device_id, profile_id, now_ms],
                 )?;
@@ -2432,6 +3043,91 @@ CREATE TABLE IF NOT EXISTS support_cleared (
             .map_err(|e| e.to_string())
     }
 
+    /// Сборки, названные устройствами (ТЗ E2EE групповых созвонов, ЗВ-С5):
+    /// число из конца строки сборки. Устройства без строки активности в ответ
+    /// не попадают. Справочно — только для подсказки интерфейсу и пушей.
+    pub async fn client_builds_for_devices(
+        &self,
+        device_ids: Vec<String>,
+    ) -> Result<std::collections::HashMap<String, i64>, String> {
+        let ids: Vec<String> = device_ids
+            .into_iter()
+            .map(|d| d.trim().to_string())
+            .filter(|d| !d.is_empty())
+            .collect();
+        if ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        self.conn
+            .call(move |c| -> Result<std::collections::HashMap<String, i64>, rusqlite::Error> {
+                let mut out = std::collections::HashMap::new();
+                for chunk in ids.chunks(400) {
+                    let placeholders = vec!["?"; chunk.len()].join(",");
+                    let sql = format!(
+                        "SELECT device_id, client_build FROM device_activity WHERE device_id IN ({placeholders})"
+                    );
+                    let mut stmt = c.prepare(&sql)?;
+                    let mut rows = stmt.query(rusqlite::params_from_iter(chunk.iter()))?;
+                    while let Some(row) = rows.next()? {
+                        let device_id: String = row.get(0)?;
+                        let raw: String = row.get(1)?;
+                        out.insert(device_id, parse_client_build(&raw));
+                    }
+                }
+                Ok(out)
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Новейшая сборка среди живых устройств каждого профиля (ЗВ-С5): то же
+    /// понятие «живое», что у [`Self::oldest_client_build_for_profiles`].
+    /// Профиль без живых устройств в ответ не попадает.
+    pub async fn newest_client_build_by_profile(
+        &self,
+        profile_ids: Vec<String>,
+        active_since_ms: i64,
+    ) -> Result<std::collections::HashMap<String, i64>, String> {
+        let ids: Vec<String> = profile_ids
+            .into_iter()
+            .map(|p| p.trim().to_string())
+            .filter(|p| !p.is_empty())
+            .collect();
+        if ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+        self.conn
+            .call(move |c| -> Result<std::collections::HashMap<String, i64>, rusqlite::Error> {
+                let mut out: std::collections::HashMap<String, i64> =
+                    std::collections::HashMap::new();
+                for chunk in ids.chunks(400) {
+                    let placeholders = vec!["?"; chunk.len()].join(",");
+                    let sql = format!(
+                        "SELECT profile_id, client_build FROM device_activity \
+                         WHERE profile_id IN ({placeholders}) AND superseded_at_ms = 0 \
+                           AND MAX(last_pump_at_ms, last_push_delivered_at_ms) >= ?"
+                    );
+                    let mut stmt = c.prepare(&sql)?;
+                    let mut args: Vec<rusqlite::types::Value> = chunk
+                        .iter()
+                        .map(|p| rusqlite::types::Value::Text(p.clone()))
+                        .collect();
+                    args.push(rusqlite::types::Value::Integer(active_since_ms));
+                    let mut rows = stmt.query(rusqlite::params_from_iter(args))?;
+                    while let Some(row) = rows.next()? {
+                        let profile_id: String = row.get(0)?;
+                        let raw: String = row.get(1)?;
+                        let build = parse_client_build(&raw);
+                        let entry = out.entry(profile_id).or_insert(build);
+                        *entry = (*entry).max(build);
+                    }
+                }
+                Ok(out)
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     pub async fn device_activity_list_for_profile(
         &self,
         profile_id: &str,
@@ -2592,13 +3288,39 @@ CREATE TABLE IF NOT EXISTS support_cleared (
         title: &str,
         now_ms: i64,
     ) -> Result<CreateRoomResult, CreateRoomError> {
+        self.create_room_with_parent(
+            room_id,
+            owner_profile_id,
+            created_by_device_id,
+            title,
+            None,
+            now_ms,
+        )
+        .await
+    }
+
+    /// Создание комнаты; с `parent_room_id` — закрытой ветки (ТЗ закрытых тем,
+    /// Ф1). Без родителя путь тот же, что был всегда, байт в байт.
+    ///
+    /// Для ветки все проверки идут в той же транзакции, что и вставка: иначе
+    /// между проверкой «создатель — участник родителя» и вставкой мог бы
+    /// пройти его выход из родителя, и ветка родилась бы с чужим владельцем.
+    pub async fn create_room_with_parent(
+        &self,
+        room_id: &str,
+        owner_profile_id: &str,
+        created_by_device_id: &str,
+        title: &str,
+        parent_room_id: Option<&str>,
+        now_ms: i64,
+    ) -> Result<CreateRoomResult, CreateRoomError> {
         let room_id = room_id.to_string();
         let owner_profile_id = owner_profile_id.to_string();
         let created_by_device_id = created_by_device_id.to_string();
         let title = title.to_string();
-        let outcome = self
-            .conn
-            .call(move |c| -> Result<Result<CreateRoomResult, RoomRow>, rusqlite::Error> {
+        let parent_room_id = parent_room_id.map(|value| value.to_string());
+        self.conn
+            .call(move |c| -> Result<Result<CreateRoomResult, CreateRoomError>, rusqlite::Error> {
                 let owner_profile_id_for_existing = owner_profile_id.clone();
                 let created_by_device_id_for_existing = created_by_device_id.clone();
                 let title_for_existing = title.clone();
@@ -2611,9 +3333,13 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                     .optional()?;
 
                 if let Some(room) = existing {
+                    // Повтор того же создания — не ошибка. Родитель входит в
+                    // «тот же»: ветка с другим родителем (или обычная комната
+                    // с тем же id) — конфликт, а не тихий успех.
                     if room.owner_profile_id == owner_profile_id_for_existing
                         && room.created_by_device_id == created_by_device_id_for_existing
                         && room.title == title_for_existing
+                        && room.parent_room_id == parent_room_id
                     {
                         return Ok(Ok(CreateRoomResult {
                             created: false,
@@ -2621,18 +3347,77 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                         }));
                     }
 
-                    return Ok(Err(room));
+                    return Ok(Err(CreateRoomError::Conflict(room)));
                 }
 
                 let tx = c.transaction()?;
+                if let Some(parent_room_id) = parent_room_id.as_deref() {
+                    let parent = tx
+                        .query_row(
+                            ROOM_SELECT_BY_ID_SQL,
+                            params![parent_room_id],
+                            map_room_row,
+                        )
+                        .optional()?;
+                    // Вложенность — только в один уровень: ветка ветки
+                    // недопустима.
+                    let Some(parent) = parent else {
+                        return Ok(Err(CreateRoomError::BadParent));
+                    };
+                    if parent.kind != ROOM_KIND_ROOM || parent.parent_room_id.is_some() {
+                        return Ok(Err(CreateRoomError::BadParent));
+                    }
+                    let parent_membership = tx
+                        .query_row(
+                            ROOM_MEMBERSHIP_SELECT_BY_ID_SQL,
+                            params![parent_room_id, owner_profile_id.clone()],
+                            map_room_membership_row,
+                        )
+                        .optional()?;
+                    // Р-2: создают владелец и админы; остальные действующие
+                    // (кроме restricted/guest) — только если комната разрешила.
+                    let allowed = match parent_membership {
+                        Some(membership) if membership.status == "active" => {
+                            parent.owner_profile_id == owner_profile_id
+                                || matches!(membership.role.as_str(), "owner" | "admin")
+                                || (parent.allow_members_create_topics
+                                    && matches!(membership.role.as_str(), "moderator" | "member"))
+                        }
+                        _ => false,
+                    };
+                    if !allowed {
+                        return Ok(Err(CreateRoomError::TopicCreateForbidden));
+                    }
+                    let live_topics: i64 = tx.query_row(
+                        "SELECT COUNT(*) FROM rooms WHERE parent_room_id = ?1",
+                        params![parent_room_id],
+                        |row| row.get(0),
+                    )?;
+                    if live_topics >= MAX_TOPICS_PER_ROOM {
+                        return Ok(Err(CreateRoomError::TopicLimit));
+                    }
+                }
+
+                // §3.1 ТЗ: людей в ветку добавляют владелец и админы ветки,
+                // поэтому у ветки «участники могут добавлять» по умолчанию
+                // выключено (владелец может включить). Обычная комната —
+                // как всегда.
+                let (kind, allow_add_members) = if parent_room_id.is_some() {
+                    (ROOM_KIND_TOPIC, 0)
+                } else {
+                    (ROOM_KIND_ROOM, 1)
+                };
                 tx.execute(
-                    "INSERT INTO rooms(room_id, version, membership_version, owner_profile_id, created_by_device_id, title, description, avatar_hash, avatar_image_b64, reactions_mode, allow_text, allow_media, allow_add_members, allow_pin_messages, allow_change_group_info, allow_change_tag, join_approval_required, slow_mode_seconds, chat_history_visible, created_at_ms, updated_at_ms) VALUES(?1, 1, 1, ?2, ?3, ?4, NULL, NULL, NULL, 'all', 1, 1, 1, 1, 1, 0, 0, 0, 0, ?5, ?5)",
+                    "INSERT INTO rooms(room_id, version, membership_version, owner_profile_id, created_by_device_id, title, description, avatar_hash, avatar_image_b64, reactions_mode, allow_text, allow_media, allow_add_members, allow_pin_messages, allow_change_group_info, allow_change_tag, join_approval_required, slow_mode_seconds, chat_history_visible, created_at_ms, updated_at_ms, parent_room_id, kind, allow_members_create_topics) VALUES(?1, 1, 1, ?2, ?3, ?4, NULL, NULL, NULL, 'all', 1, 1, ?8, 1, 1, 0, 0, 0, 0, ?5, ?5, ?6, ?7, 0)",
                     params![
                         room_id.clone(),
                         owner_profile_id.clone(),
                         created_by_device_id.clone(),
                         title.clone(),
-                        now_ms
+                        now_ms,
+                        parent_room_id.clone(),
+                        kind,
+                        allow_add_members,
                     ],
                 )?;
 
@@ -2655,12 +3440,7 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                 }))
             })
             .await
-            .map_err(|e| CreateRoomError::Storage(e.to_string()))?;
-
-        match outcome {
-            Ok(result) => Ok(result),
-            Err(existing_room) => Err(CreateRoomError::Conflict(existing_room)),
-        }
+            .map_err(|e| CreateRoomError::Storage(e.to_string()))?
     }
 
     pub async fn get_room(&self, room_id: &str) -> Result<Option<RoomRow>, String> {
@@ -2676,6 +3456,39 @@ CREATE TABLE IF NOT EXISTS support_cleared (
             .await
             .map_err(|e| e.to_string())?;
         Ok(row)
+    }
+
+    /// Закрытые ветки комнаты для одного участника (Р-1). Видны только те, где
+    /// он действующий; остальные — одним числом, без id и названий: даже
+    /// владелец основной комнаты не знает о чужих ветках, пока его не позвали.
+    pub async fn list_room_topics_for_member(
+        &self,
+        parent_room_id: &str,
+        profile_id: &str,
+    ) -> Result<RoomTopicsForMember, String> {
+        let parent_room_id = parent_room_id.to_string();
+        let profile_id = profile_id.to_string();
+        self.conn
+            .call(move |c| -> Result<RoomTopicsForMember, rusqlite::Error> {
+                let mut stmt = c.prepare(
+                    "SELECT room_id, version, membership_version, owner_profile_id, created_by_device_id, title, description, avatar_hash, avatar_image_b64, reactions_mode, allow_text, allow_media, allow_add_members, allow_pin_messages, allow_change_group_info, allow_change_tag, join_approval_required, slow_mode_seconds, chat_history_visible, pinned_message_id, created_at_ms, updated_at_ms, parent_room_id, kind, allow_members_create_topics FROM rooms r WHERE r.parent_room_id = ?1 AND EXISTS (SELECT 1 FROM room_memberships m WHERE m.room_id = r.room_id AND m.profile_id = ?2 AND m.status = 'active') ORDER BY r.created_at_ms ASC, r.room_id ASC",
+                )?;
+                let topics = stmt
+                    .query_map(params![parent_room_id.clone(), profile_id], map_room_row)?
+                    .collect::<Result<Vec<_>, _>>()?;
+                let total: i64 = c.query_row(
+                    "SELECT COUNT(*) FROM rooms WHERE parent_room_id = ?1",
+                    params![parent_room_id],
+                    |row| row.get(0),
+                )?;
+                let hidden_count = (total - topics.len() as i64).max(0);
+                Ok(RoomTopicsForMember {
+                    topics,
+                    hidden_count,
+                })
+            })
+            .await
+            .map_err(|e| e.to_string())
     }
 
     pub async fn get_room_membership(
@@ -2789,13 +3602,15 @@ CREATE TABLE IF NOT EXISTS support_cleared (
     }
 
     /// Number of rooms OWNED by a profile (monetization §C-3 group-create cap).
+    /// Закрытые ветки не считаются: это часть комнаты, а не новая группа, и
+    /// предел групп не должен съедаться темами (их и так не больше 20).
     pub async fn count_owned_rooms(&self, owner_profile_id: &str) -> Result<i64, String> {
         let owner = owner_profile_id.to_string();
         let count = self
             .conn
             .call(move |c| -> Result<i64, rusqlite::Error> {
                 c.query_row(
-                    "SELECT COUNT(*) FROM rooms WHERE owner_profile_id = ?1",
+                    "SELECT COUNT(*) FROM rooms WHERE owner_profile_id = ?1 AND kind <> 'topic'",
                     params![owner],
                     |row| row.get(0),
                 )
@@ -2806,6 +3621,9 @@ CREATE TABLE IF NOT EXISTS support_cleared (
     }
 
     /// Number of rooms a profile is an ACTIVE member of (group-join cap).
+    /// Членство в закрытых ветках не считается — по той же причине, что и в
+    /// `count_owned_rooms`. NOT EXISTS (а не JOIN), чтобы строки без комнаты
+    /// считались как раньше.
     pub async fn count_active_memberships_for_profile(
         &self,
         profile_id: &str,
@@ -2815,7 +3633,7 @@ CREATE TABLE IF NOT EXISTS support_cleared (
             .conn
             .call(move |c| -> Result<i64, rusqlite::Error> {
                 c.query_row(
-                    "SELECT COUNT(*) FROM room_memberships WHERE profile_id = ?1 AND status = 'active'",
+                    "SELECT COUNT(*) FROM room_memberships m WHERE m.profile_id = ?1 AND m.status = 'active' AND NOT EXISTS (SELECT 1 FROM rooms r WHERE r.room_id = m.room_id AND r.kind = 'topic')",
                     params![profile_id],
                     |row| row.get(0),
                 )
@@ -3091,6 +3909,9 @@ CREATE TABLE IF NOT EXISTS support_cleared (
             .map_err(|e| e.to_string())
     }
 
+    /// Вход открытым контрактом без условий E2EE — как до контракта медиа.
+    /// Нужен тестам, которые проверяют остальное поведение созвона.
+    #[cfg(test)]
     pub async fn create_or_join_room_call(
         &self,
         room_id: &str,
@@ -3105,15 +3926,65 @@ CREATE TABLE IF NOT EXISTS support_cleared (
         screen_share_enabled: bool,
         now_ms: i64,
     ) -> Result<RoomCallMutationResult, RoomCallControlError> {
+        self.create_or_join_room_call_for_contract(
+            room_id,
+            profile_id,
+            device_id,
+            media_type,
+            supports_video,
+            supports_screen_share,
+            muted,
+            deafened,
+            video_enabled,
+            screen_share_enabled,
+            ROOM_MEDIA_CONTRACT_V1,
+            true,
+            i64::MAX,
+            now_ms,
+        )
+        .await
+        .map_err(|err| match err {
+            RoomCallJoinError::Control(err) => err,
+            other => RoomCallControlError::Storage(format!("{other:?}")),
+        })
+    }
+
+    /// Создать созвон комнаты или войти в идущий (ЗВ-С1, ЗВ-С4).
+    ///
+    /// `media_contract` задаёт контракт нового созвона; в идущий созвон
+    /// пускают только с его контрактом — проверка внутри транзакции, поэтому
+    /// созвон в комнате остаётся один. `allow_create_e2ee = false` запрещает
+    /// заводить E2EE-созвон. `e2ee_max_participants` — предел участников
+    /// E2EE-созвона: считаются устройства в состояниях joined, joining и
+    /// reconnecting, кроме самого входящего (повторный вход не упирается в
+    /// предел). Открытого контракта предел не касается.
+    pub async fn create_or_join_room_call_for_contract(
+        &self,
+        room_id: &str,
+        profile_id: &str,
+        device_id: &str,
+        media_type: &str,
+        supports_video: bool,
+        supports_screen_share: bool,
+        muted: bool,
+        deafened: bool,
+        video_enabled: bool,
+        screen_share_enabled: bool,
+        media_contract: &str,
+        allow_create_e2ee: bool,
+        e2ee_max_participants: i64,
+        now_ms: i64,
+    ) -> Result<RoomCallMutationResult, RoomCallJoinError> {
         let room_id = room_id.to_string();
         let profile_id = profile_id.to_string();
         let device_id = device_id.to_string();
+        let media_contract = media_contract.to_string();
         let requested_media_type = normalize_room_call_media_type(media_type).to_string();
         let room_call_active_ttl_seconds = self.room_call_active_ttl_seconds;
         let room_call_terminal_ttl_seconds = self.call_session_terminal_ttl_seconds;
         let outcome = self
             .conn
-            .call(move |c| -> Result<Result<RoomCallMutationResult, RoomCallControlError>, rusqlite::Error> {
+            .call(move |c| -> Result<Result<RoomCallMutationResult, RoomCallJoinError>, rusqlite::Error> {
                 let tx = c.transaction()?;
 
                 let room_exists = tx
@@ -3125,7 +3996,7 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                     .optional()?
                     .is_some();
                 if !room_exists {
-                    return Ok(Err(RoomCallControlError::RoomNotFound));
+                    return Ok(Err(RoomCallJoinError::Control(RoomCallControlError::RoomNotFound)));
                 }
 
                 let membership = tx
@@ -3136,10 +4007,10 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                     )
                     .optional()?;
                 let Some(membership) = membership else {
-                    return Ok(Err(RoomCallControlError::NotActiveMember));
+                    return Ok(Err(RoomCallJoinError::Control(RoomCallControlError::NotActiveMember)));
                 };
                 if membership.status != "active" {
-                    return Ok(Err(RoomCallControlError::NotActiveMember));
+                    return Ok(Err(RoomCallJoinError::Control(RoomCallControlError::NotActiveMember)));
                 }
 
                 let existing_active_call = tx
@@ -3152,8 +4023,26 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                 let created_new_call = existing_active_call.is_none();
                 let wants_video = requested_media_type == "video" || video_enabled;
                 let mut call = if let Some(active_call) = existing_active_call {
+                    if active_call.media_contract != media_contract {
+                        return Ok(Err(RoomCallJoinError::ContractMismatch(
+                            active_call.media_contract,
+                        )));
+                    }
+                    if active_call.media_contract == ROOM_MEDIA_CONTRACT_E2EE_V1 {
+                        let occupied: i64 = tx.query_row(
+                            "SELECT COUNT(*) FROM room_call_participants WHERE call_id = ?1 AND device_id <> ?2 AND join_state IN ('joined', 'joining', 'reconnecting')",
+                            params![active_call.call_id.clone(), device_id.clone()],
+                            |row| row.get(0),
+                        )?;
+                        if occupied >= e2ee_max_participants {
+                            return Ok(Err(RoomCallJoinError::CallFull));
+                        }
+                    }
                     active_call
                 } else {
+                    if media_contract == ROOM_MEDIA_CONTRACT_E2EE_V1 && !allow_create_e2ee {
+                        return Ok(Err(RoomCallJoinError::E2eeUnavailable));
+                    }
                     let call_id = Uuid::now_v7().to_string();
                     let initial_media_type = if wants_video { "video" } else { "audio" };
                     let expires_at_ms = room_call_expires_at_ms(
@@ -3163,7 +4052,7 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                         room_call_terminal_ttl_seconds,
                     );
                     tx.execute(
-                        "INSERT INTO room_call_sessions(call_id, room_id, state, media_type, created_by_profile_id, created_by_device_id, state_version, started_at_ms, updated_at_ms, ended_at_ms, expires_at_ms) VALUES(?1, ?2, 'active', ?3, ?4, ?5, 1, ?6, ?6, NULL, ?7)",
+                        "INSERT INTO room_call_sessions(call_id, room_id, state, media_type, created_by_profile_id, created_by_device_id, state_version, started_at_ms, updated_at_ms, ended_at_ms, expires_at_ms, media_contract) VALUES(?1, ?2, 'active', ?3, ?4, ?5, 1, ?6, ?6, NULL, ?7, ?8)",
                         params![
                             call_id.clone(),
                             room_id.clone(),
@@ -3172,6 +4061,7 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                             device_id.clone(),
                             now_ms,
                             expires_at_ms,
+                            media_contract.clone(),
                         ],
                     )?;
                     tx.query_row(
@@ -3272,7 +4162,7 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                 Ok(Ok(RoomCallMutationResult { changed, snapshot }))
             })
             .await
-            .map_err(|e| RoomCallControlError::Storage(e.to_string()))?;
+            .map_err(|e| RoomCallJoinError::Control(RoomCallControlError::Storage(e.to_string())))?;
         outcome
     }
 
@@ -3691,6 +4581,100 @@ CREATE TABLE IF NOT EXISTS support_cleared (
         outcome
     }
 
+    /// Профиль больше не член комнаты (бан, исключение, выход): его
+    /// устройства в идущем созвоне комнаты получают `join_state` — `removed`
+    /// или `left` — ровно как при исключении модератором: флаги сброшены,
+    /// регистрация медиа удалена, версия созвона растёт, последний ушедший
+    /// закрывает созвон (ЗВ-С3). Созвона нет или профиля в нём нет — `None`,
+    /// ничего не пишется.
+    pub async fn evict_profile_from_active_room_call(
+        &self,
+        room_id: &str,
+        profile_id: &str,
+        join_state: &str,
+        now_ms: i64,
+    ) -> Result<Option<RoomCallEviction>, String> {
+        if !matches!(join_state, "removed" | "left") {
+            return Err(format!("bad eviction join_state: {join_state}"));
+        }
+        let room_id = room_id.to_string();
+        let profile_id = profile_id.to_string();
+        let join_state = join_state.to_string();
+        let room_call_active_ttl_seconds = self.room_call_active_ttl_seconds;
+        let room_call_terminal_ttl_seconds = self.call_session_terminal_ttl_seconds;
+        self.conn
+            .call(move |c| -> Result<Option<RoomCallEviction>, rusqlite::Error> {
+                let tx = c.transaction()?;
+                let Some(call) = tx
+                    .query_row(
+                        ROOM_CALL_ACTIVE_SELECT_BY_ROOM_SQL,
+                        params![room_id.clone()],
+                        map_room_call_row,
+                    )
+                    .optional()?
+                else {
+                    return Ok(None);
+                };
+                let device_ids: Vec<String> = {
+                    let mut stmt = tx.prepare(
+                        "SELECT device_id FROM room_call_participants WHERE call_id = ?1 AND profile_id = ?2 AND join_state IN ('joined', 'joining', 'reconnecting') ORDER BY device_id ASC",
+                    )?;
+                    let rows = stmt.query_map(params![call.call_id.clone(), profile_id.clone()], |row| {
+                        row.get::<_, String>(0)
+                    })?;
+                    rows.collect::<Result<Vec<_>, _>>()?
+                };
+                if device_ids.is_empty() {
+                    return Ok(None);
+                }
+                tx.execute(
+                    "UPDATE room_call_participants SET join_state = ?3, muted = 0, deafened = 0, video_enabled = 0, screen_share_enabled = 0, speaking = 0, left_at_ms = ?4, updated_at_ms = ?4 WHERE call_id = ?1 AND profile_id = ?2 AND join_state IN ('joined', 'joining', 'reconnecting')",
+                    params![call.call_id.clone(), profile_id.clone(), join_state, now_ms],
+                )?;
+                tx.execute(
+                    "DELETE FROM room_call_media_participants WHERE call_id = ?1 AND profile_id = ?2",
+                    params![call.call_id.clone(), profile_id.clone()],
+                )?;
+                let joined_participant_count: i64 = tx.query_row(
+                    "SELECT COUNT(*) FROM room_call_participants WHERE call_id = ?1 AND join_state IN ('joined', 'reconnecting')",
+                    params![call.call_id.clone()],
+                    |row| row.get(0),
+                )?;
+                let next_state = if joined_participant_count == 0 {
+                    "ended"
+                } else {
+                    "active"
+                };
+                let next_ended_at_ms = (next_state == "ended").then_some(now_ms);
+                let next_expires_at_ms = room_call_expires_at_ms(
+                    next_state,
+                    now_ms,
+                    room_call_active_ttl_seconds,
+                    room_call_terminal_ttl_seconds,
+                );
+                tx.execute(
+                    "UPDATE room_call_sessions SET state = ?2, state_version = ?3, updated_at_ms = ?4, ended_at_ms = ?5, expires_at_ms = ?6 WHERE call_id = ?1",
+                    params![
+                        call.call_id.clone(),
+                        next_state,
+                        call.state_version + 1,
+                        now_ms,
+                        next_ended_at_ms,
+                        next_expires_at_ms,
+                    ],
+                )?;
+                let call = tx.query_row(
+                    ROOM_CALL_SELECT_BY_ID_SQL,
+                    params![call.call_id],
+                    map_room_call_row,
+                )?;
+                tx.commit()?;
+                Ok(Some(RoomCallEviction { call, device_ids }))
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     pub async fn end_room_call(
         &self,
         room_id: &str,
@@ -3890,6 +4874,44 @@ CREATE TABLE IF NOT EXISTS support_cleared (
         chat_history_visible: bool,
         now_ms: i64,
     ) -> Result<UpdateRoomStateResult, UpdateRoomStateError> {
+        self.update_room_settings_with_topics(
+            room_id,
+            reactions_mode,
+            allow_text,
+            allow_media,
+            allow_add_members,
+            allow_pin_messages,
+            allow_change_group_info,
+            allow_change_tag,
+            join_approval_required,
+            slow_mode_seconds,
+            chat_history_visible,
+            None,
+            now_ms,
+        )
+        .await
+    }
+
+    /// То же, что `update_room_settings`, плюс Р-2 «участники могут создавать
+    /// закрытые темы». `None` — поле не прислали (выпущенные сборки):
+    /// значение остаётся прежним.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn update_room_settings_with_topics(
+        &self,
+        room_id: &str,
+        reactions_mode: &str,
+        allow_text: bool,
+        allow_media: bool,
+        allow_add_members: bool,
+        allow_pin_messages: bool,
+        allow_change_group_info: bool,
+        allow_change_tag: bool,
+        join_approval_required: bool,
+        slow_mode_seconds: i64,
+        chat_history_visible: bool,
+        allow_members_create_topics: Option<bool>,
+        now_ms: i64,
+    ) -> Result<UpdateRoomStateResult, UpdateRoomStateError> {
         let room_id = room_id.to_string();
         let reactions_mode = normalize_room_reactions_mode(reactions_mode).to_string();
         let outcome = self
@@ -3913,14 +4935,18 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                     || room.allow_change_tag != allow_change_tag
                     || room.join_approval_required != join_approval_required
                     || room.slow_mode_seconds != normalized_slow_mode_seconds
-                    || room.chat_history_visible != chat_history_visible;
+                    || room.chat_history_visible != chat_history_visible
+                    || allow_members_create_topics
+                        .is_some_and(|value| value != room.allow_members_create_topics);
+                let next_allow_members_create_topics =
+                    allow_members_create_topics.unwrap_or(room.allow_members_create_topics);
                 if !changed {
                     tx.commit()?;
                     return Ok(Ok(UpdateRoomStateResult { changed: false, room }));
                 }
 
                 tx.execute(
-                    "UPDATE rooms SET reactions_mode = ?2, allow_text = ?3, allow_media = ?4, allow_add_members = ?5, allow_pin_messages = ?6, allow_change_group_info = ?7, allow_change_tag = ?8, join_approval_required = ?9, slow_mode_seconds = ?10, chat_history_visible = ?11, version = ?12, updated_at_ms = ?13 WHERE room_id = ?1",
+                    "UPDATE rooms SET reactions_mode = ?2, allow_text = ?3, allow_media = ?4, allow_add_members = ?5, allow_pin_messages = ?6, allow_change_group_info = ?7, allow_change_tag = ?8, join_approval_required = ?9, slow_mode_seconds = ?10, chat_history_visible = ?11, version = ?12, updated_at_ms = ?13, allow_members_create_topics = ?14 WHERE room_id = ?1",
                     params![
                         room_id.clone(),
                         reactions_mode,
@@ -3935,6 +4961,7 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                         if chat_history_visible { 1 } else { 0 },
                         room.version + 1,
                         now_ms,
+                        if next_allow_members_create_topics { 1 } else { 0 },
                     ],
                 )?;
 
@@ -4281,11 +5308,24 @@ CREATE TABLE IF NOT EXISTS support_cleared (
         profile_id: &str,
         now_ms: i64,
     ) -> Result<UpsertRoomMembershipResult, LeaveRoomError> {
+        self.leave_room_with_cascade(room_id, profile_id, now_ms)
+            .await
+            .map(|(result, _cascade)| result)
+    }
+
+    /// Выход из комнаты + 🔴 каскад закрытых веток в той же транзакции:
+    /// вышедший из основной комнаты выходит и из всех её веток.
+    pub async fn leave_room_with_cascade(
+        &self,
+        room_id: &str,
+        profile_id: &str,
+        now_ms: i64,
+    ) -> Result<(UpsertRoomMembershipResult, Vec<TopicCascadeEffect>), LeaveRoomError> {
         let room_id = room_id.to_string();
         let profile_id = profile_id.to_string();
         let outcome = self
             .conn
-            .call(move |c| -> Result<Result<UpsertRoomMembershipResult, LeaveRoomError>, rusqlite::Error> {
+            .call(move |c| -> Result<Result<(UpsertRoomMembershipResult, Vec<TopicCascadeEffect>), LeaveRoomError>, rusqlite::Error> {
                 let tx = c.transaction()?;
                 let room = tx
                     .query_row(ROOM_SELECT_BY_ID_SQL, params![room_id.clone()], map_room_row)
@@ -4309,12 +5349,23 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                     existing_membership.status.as_str(),
                     "left" | "removed" | "banned"
                 ) {
+                    // Повтор выхода тоже догоняет каскад: если когда-то
+                    // ветка осталась с ним (сбой до этой правки), сейчас
+                    // она его отпустит. Без веток — пустой проход.
+                    let cascade = if room.kind == ROOM_KIND_ROOM {
+                        cascade_parent_exit_tx(&tx, &room_id, &profile_id, now_ms)?
+                    } else {
+                        Vec::new()
+                    };
                     tx.commit()?;
-                    return Ok(Ok(UpsertRoomMembershipResult {
-                        changed: false,
-                        room,
-                        membership: existing_membership,
-                    }));
+                    return Ok(Ok((
+                        UpsertRoomMembershipResult {
+                            changed: false,
+                            room,
+                            membership: existing_membership,
+                        },
+                        cascade,
+                    )));
                 }
                 if existing_membership.status != "active" {
                     return Ok(Err(LeaveRoomError::MembershipNotActive));
@@ -4370,15 +5421,23 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                 )?;
                 let membership = tx.query_row(
                     ROOM_MEMBERSHIP_SELECT_BY_ID_SQL,
-                    params![room_id, profile_id],
+                    params![room_id.clone(), profile_id.clone()],
                     map_room_membership_row,
                 )?;
+                let cascade = if updated_room.kind == ROOM_KIND_ROOM {
+                    cascade_parent_exit_tx(&tx, &room_id, &profile_id, now_ms)?
+                } else {
+                    Vec::new()
+                };
                 tx.commit()?;
-                Ok(Ok(UpsertRoomMembershipResult {
-                    changed: true,
-                    room: updated_room,
-                    membership,
-                }))
+                Ok(Ok((
+                    UpsertRoomMembershipResult {
+                        changed: true,
+                        room: updated_room,
+                        membership,
+                    },
+                    cascade,
+                )))
             })
             .await
             .map_err(|e| LeaveRoomError::Storage(e.to_string()))?;
@@ -4418,35 +5477,19 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                     .collect::<Result<Vec<_>, _>>()?
                 };
 
-                tx.execute(
-                    "DELETE FROM room_call_media_participants WHERE room_id = ?1",
-                    params![room_id.clone()],
-                )?;
-                tx.execute(
-                    "DELETE FROM room_call_participants WHERE room_id = ?1",
-                    params![room_id.clone()],
-                )?;
-                tx.execute(
-                    "DELETE FROM room_call_sessions WHERE room_id = ?1",
-                    params![room_id.clone()],
-                )?;
-                tx.execute(
-                    "DELETE FROM room_message_index WHERE room_id = ?1",
-                    params![room_id.clone()],
-                )?;
-                tx.execute(
-                    "DELETE FROM room_invite_links WHERE room_id = ?1",
-                    params![room_id.clone()],
-                )?;
-                tx.execute(
-                    "DELETE FROM room_memberships WHERE room_id = ?1",
-                    params![room_id.clone()],
-                )?;
-                tx.execute("DELETE FROM rooms WHERE room_id = ?1", params![room_id])?;
+                // 🔴 Удаление основной комнаты удаляет все её закрытые ветки
+                // в той же транзакции: ветка без родителя — это комната,
+                // о которой больше никто не знает, но которая продолжает жить.
+                let deleted_topic_room_ids = topic_room_ids_tx(&tx, &room_id)?;
+                for topic_room_id in &deleted_topic_room_ids {
+                    delete_room_rows_tx(&tx, topic_room_id)?;
+                }
+                delete_room_rows_tx(&tx, &room_id)?;
                 tx.commit()?;
                 Ok(Ok(DeleteRoomResult {
                     room,
                     deleted_profile_ids,
+                    deleted_topic_room_ids,
                 }))
             })
             .await
@@ -4532,6 +5575,46 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                         "DELETE FROM call_signal_dedup WHERE call_id = ?1",
                         params![call_id],
                     )?;
+                }
+
+                // 🔴 Закрытые ветки при удалении профиля. Без этого блока:
+                // ветки его комнат остались бы без родителя, а ветки, которыми
+                // он владел в чужих комнатах, ушли бы вместе с ним, хотя в них
+                // есть другие участники.
+                // 1) Комнаты профиля удаляются ниже целиком — их ветки тоже.
+                {
+                    let doomed_topic_room_ids = {
+                        let mut stmt = tx.prepare(
+                            "SELECT room_id FROM rooms WHERE parent_room_id IN (SELECT room_id FROM rooms WHERE owner_profile_id = ?1) ORDER BY room_id ASC",
+                        )?;
+                        stmt.query_map(params![profile_id.clone()], |row| {
+                            row.get::<_, String>(0)
+                        })?
+                        .collect::<Result<Vec<_>, _>>()?
+                    };
+                    for topic_room_id in &doomed_topic_room_ids {
+                        deleted_rows += delete_room_rows_tx(&tx, topic_room_id)?;
+                    }
+                }
+                // 2) В чужих комнатах — обычный каскад выхода: ветка переходит
+                // к следующему участнику или удаляется, если он был последним.
+                {
+                    let foreign_parent_room_ids = {
+                        let mut stmt = tx.prepare(
+                            "SELECT DISTINCT m.room_id FROM room_memberships m JOIN rooms r ON r.room_id = m.room_id WHERE m.profile_id = ?1 AND r.kind = 'room' AND r.owner_profile_id <> ?1 ORDER BY m.room_id ASC",
+                        )?;
+                        stmt.query_map(params![profile_id.clone()], |row| {
+                            row.get::<_, String>(0)
+                        })?
+                        .collect::<Result<Vec<_>, _>>()?
+                    };
+                    let cascade_now_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_millis() as i64)
+                        .unwrap_or(0);
+                    for parent_room_id in &foreign_parent_room_ids {
+                        cascade_parent_exit_tx(&tx, parent_room_id, &profile_id, cascade_now_ms)?;
+                    }
                 }
 
                 deleted_rows += tx.execute(
@@ -4880,6 +5963,35 @@ CREATE TABLE IF NOT EXISTS support_cleared (
         source_link_id: Option<&str>,
         now_ms: i64,
     ) -> Result<UpsertRoomMembershipResult, UpsertRoomMembershipError> {
+        self.upsert_room_membership_with_cascade(
+            room_id,
+            profile_id,
+            status,
+            role,
+            source_link_id,
+            now_ms,
+        )
+        .await
+        .map(|(result, _cascade)| result)
+    }
+
+    /// Изменение членства + правила закрытых веток в той же транзакции:
+    /// - 🔴 в ветке действующим может быть только действующий участник
+    ///   основной комнаты (`NotParentMember`);
+    /// - 🔴 кто перестал быть действующим в основной комнате (исключён,
+    ///   забанен, переведён в ожидание), тот выходит из всех её веток
+    ///   (`cascade_parent_exit_tx`). Каскад идёт и на повторе без изменений:
+    ///   идемпотентен и догоняет, если раньше не прошёл.
+    pub async fn upsert_room_membership_with_cascade(
+        &self,
+        room_id: &str,
+        profile_id: &str,
+        status: &str,
+        role: &str,
+        source_link_id: Option<&str>,
+        now_ms: i64,
+    ) -> Result<(UpsertRoomMembershipResult, Vec<TopicCascadeEffect>), UpsertRoomMembershipError>
+    {
         let room_id = room_id.to_string();
         let profile_id = profile_id.to_string();
         let status = status.to_string();
@@ -4888,119 +6000,37 @@ CREATE TABLE IF NOT EXISTS support_cleared (
             .map(|value| value.trim())
             .filter(|value| !value.is_empty())
             .map(|value| value.to_string());
-        let outcome = self
-            .conn
+        self.conn
             .call(
-                move |c| -> Result<Result<UpsertRoomMembershipResult, UpsertRoomMembershipError>, rusqlite::Error> {
+                move |c| -> Result<Result<(UpsertRoomMembershipResult, Vec<TopicCascadeEffect>), UpsertRoomMembershipError>, rusqlite::Error> {
                     let tx = c.transaction()?;
-                    let room = tx
-                        .query_row(
-                            ROOM_SELECT_BY_ID_SQL,
-                            params![room_id.clone()],
-                            map_room_row,
-                        )
-                        .optional()?;
-                    let Some(room) = room else {
-                        return Ok(Err(UpsertRoomMembershipError::RoomNotFound));
+                    let outcome = upsert_room_membership_tx(
+                        &tx,
+                        &room_id,
+                        &profile_id,
+                        &status,
+                        &role,
+                        source_link_id.clone(),
+                        now_ms,
+                    )?;
+                    let result = match outcome {
+                        Ok(result) => result,
+                        // Ошибка: транзакция откатывается (ничего не писали).
+                        Err(err) => return Ok(Err(err)),
                     };
-
-                    if profile_id == room.owner_profile_id {
-                        if status != "active" || role != "owner" || source_link_id.is_some() {
-                            return Ok(Err(UpsertRoomMembershipError::InvalidOwnerMutation));
-                        }
-                    } else if role == "owner" {
-                        return Ok(Err(UpsertRoomMembershipError::InvalidOwnerMutation));
-                    }
-
-                    let existing = tx
-                        .query_row(
-                            ROOM_MEMBERSHIP_SELECT_BY_ID_SQL,
-                            params![room_id.clone(), profile_id.clone()],
-                            map_room_membership_row,
-                        )
-                        .optional()?;
-
-                    if let Some(existing_membership) = existing.clone() {
-                        if existing_membership.status == status
-                            && existing_membership.role == role
-                            && existing_membership.source_link_id == source_link_id
-                        {
-                            tx.commit()?;
-                            return Ok(Ok(UpsertRoomMembershipResult {
-                                changed: false,
-                                room,
-                                membership: existing_membership,
-                            }));
-                        }
-
-                        if existing_membership.status == "left" && status == "removed" {
-                            tx.commit()?;
-                            return Ok(Ok(UpsertRoomMembershipResult {
-                                changed: false,
-                                room,
-                                membership: existing_membership,
-                            }));
-                        }
-
-                        if existing_membership.status == "banned" && status == "removed" {
-                            tx.commit()?;
-                            return Ok(Ok(UpsertRoomMembershipResult {
-                                changed: false,
-                                room,
-                                membership: existing_membership,
-                            }));
-                        }
-                    }
-
-                    let next_created_at_ms =
-                        next_membership_created_at(existing.as_ref(), &status, now_ms);
-
-                    tx.execute(
-                        "INSERT INTO room_memberships(room_id, profile_id, status, role, source_link_id, created_at_ms, updated_at_ms) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(room_id, profile_id) DO UPDATE SET status = excluded.status, role = excluded.role, source_link_id = excluded.source_link_id, created_at_ms = excluded.created_at_ms, updated_at_ms = excluded.updated_at_ms",
-                        params![
-                            room_id.clone(),
-                            profile_id.clone(),
-                            status,
-                            role,
-                            source_link_id,
-                            next_created_at_ms,
-                            now_ms,
-                        ],
-                    )?;
-
-                    tx.execute(
-                        "UPDATE rooms SET version = ?2, membership_version = ?3, updated_at_ms = ?4 WHERE room_id = ?1",
-                        params![
-                            room_id.clone(),
-                            room.version + 1,
-                            room.membership_version + 1,
-                            now_ms,
-                        ],
-                    )?;
-
-                    let updated_room = tx.query_row(
-                        ROOM_SELECT_BY_ID_SQL,
-                        params![room_id.clone()],
-                        map_room_row,
-                    )?;
-                    let membership = tx.query_row(
-                        ROOM_MEMBERSHIP_SELECT_BY_ID_SQL,
-                        params![room_id, profile_id],
-                        map_room_membership_row,
-                    )?;
-
+                    let cascade = if result.room.kind == ROOM_KIND_ROOM
+                        && result.membership.status != "active"
+                    {
+                        cascade_parent_exit_tx(&tx, &room_id, &profile_id, now_ms)?
+                    } else {
+                        Vec::new()
+                    };
                     tx.commit()?;
-
-                    Ok(Ok(UpsertRoomMembershipResult {
-                        changed: true,
-                        room: updated_room,
-                        membership,
-                    }))
+                    Ok(Ok((result, cascade)))
                 },
             )
             .await
-            .map_err(|e| UpsertRoomMembershipError::Storage(e.to_string()))?;
-        outcome
+            .map_err(|e| UpsertRoomMembershipError::Storage(e.to_string()))?
     }
 
     pub async fn transfer_room_ownership(
@@ -5187,6 +6217,13 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                 let Some(room) = room else {
                     return Ok(Err(RedeemRoomInviteError::RoomNotFound));
                 };
+                // Ссылок у закрытых веток не бывает (создание закрыто в
+                // обработчике); это вторая стена на случай, если ссылка всё же
+                // появится: состав ветки выбирают поимённо из участников
+                // основной комнаты, а ссылка обошла бы эту проверку.
+                if room.kind == ROOM_KIND_TOPIC {
+                    return Ok(Err(RedeemRoomInviteError::TopicNoInviteLinks));
+                }
                 let existing_membership = tx
                     .query_row(
                         ROOM_MEMBERSHIP_SELECT_BY_ID_SQL,
@@ -5525,6 +6562,136 @@ CREATE TABLE IF NOT EXISTS support_cleared (
             .await
             .map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    pub async fn blob_session_insert(&self, row: BlobUploadSessionRow) -> Result<(), String> {
+        self.conn
+            .call(move |c| -> Result<(), rusqlite::Error> {
+                c.execute(
+                    "INSERT INTO blob_upload_sessions(session_id, device_id, profile_id, upload_length, body_sha256_b64, access_token_sha256_b64, ttl_seconds, created_at_ms, expires_at_ms) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    params![
+                        row.session_id,
+                        row.device_id,
+                        row.profile_id,
+                        row.upload_length as i64,
+                        row.body_sha256_b64,
+                        row.access_token_sha256_b64,
+                        row.ttl_seconds,
+                        row.created_at_ms,
+                        row.expires_at_ms
+                    ],
+                )?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn blob_session_get(
+        &self,
+        session_id: &str,
+        now_ms: i64,
+    ) -> Result<Option<BlobUploadSessionRow>, String> {
+        let sid = session_id.to_string();
+        self.conn
+            .call(move |c| -> Result<Option<BlobUploadSessionRow>, rusqlite::Error> {
+                c.query_row(
+                    "SELECT session_id, device_id, profile_id, upload_length, body_sha256_b64, access_token_sha256_b64, ttl_seconds, created_at_ms, expires_at_ms FROM blob_upload_sessions WHERE session_id = ?1 AND expires_at_ms > ?2",
+                    params![sid, now_ms],
+                    |r| {
+                        Ok(BlobUploadSessionRow {
+                            session_id: r.get(0)?,
+                            device_id: r.get(1)?,
+                            profile_id: r.get(2)?,
+                            upload_length: r.get::<_, i64>(3)?.max(0) as u64,
+                            body_sha256_b64: r.get(4)?,
+                            access_token_sha256_b64: r.get(5)?,
+                            ttl_seconds: r.get(6)?,
+                            created_at_ms: r.get(7)?,
+                            expires_at_ms: r.get(8)?,
+                        })
+                    },
+                )
+                .optional()
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn blob_session_delete(&self, session_id: &str) -> Result<(), String> {
+        let sid = session_id.to_string();
+        self.conn
+            .call(move |c| -> Result<(), rusqlite::Error> {
+                c.execute(
+                    "DELETE FROM blob_upload_sessions WHERE session_id = ?1",
+                    params![sid],
+                )?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Просроченные сессии: удаляет строки, возвращает их id (файлы кусков
+    /// удаляет вызывающий).
+    pub async fn blob_sessions_cleanup_expired(&self, now_ms: i64) -> Result<Vec<String>, String> {
+        self.conn
+            .call(move |c| -> Result<Vec<String>, rusqlite::Error> {
+                let mut stmt = c.prepare(
+                    "SELECT session_id FROM blob_upload_sessions WHERE expires_at_ms <= ?1",
+                )?;
+                let ids = stmt
+                    .query_map(params![now_ms], |r| r.get::<_, String>(0))?
+                    .collect::<Result<Vec<_>, _>>()?;
+                c.execute(
+                    "DELETE FROM blob_upload_sessions WHERE expires_at_ms <= ?1",
+                    params![now_ms],
+                )?;
+                Ok(ids)
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Открытые сессии устройства: число и заявленный объём — для квоты и
+    /// предела одновременных загрузок.
+    pub async fn blob_sessions_open_for_device(
+        &self,
+        device_id: &str,
+        now_ms: i64,
+    ) -> Result<(i64, i64), String> {
+        let did = device_id.to_string();
+        self.conn
+            .call(move |c| -> Result<(i64, i64), rusqlite::Error> {
+                c.query_row(
+                    "SELECT COUNT(*), COALESCE(SUM(upload_length), 0) FROM blob_upload_sessions \
+                     WHERE device_id = ?1 AND expires_at_ms > ?2",
+                    params![did, now_ms],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// С3: сколько байт живых (непросроченных) файлов залило устройство.
+    pub async fn blob_live_bytes_for_device(
+        &self,
+        device_id: &str,
+        now_ms: i64,
+    ) -> Result<i64, String> {
+        let did = device_id.to_string();
+        self.conn
+            .call(move |c| -> Result<i64, rusqlite::Error> {
+                c.query_row(
+                    "SELECT COALESCE(SUM(size_bytes), 0) FROM blobs \
+                     WHERE owner_device_id = ?1 AND expires_at_ms > ?2",
+                    params![did, now_ms],
+                    |r| r.get(0),
+                )
+            })
+            .await
+            .map_err(|e| e.to_string())
     }
 
     pub async fn blob_get(&self, blob_id: &str, now_ms: i64) -> Result<Option<BlobRow>, String> {
@@ -5976,8 +7143,18 @@ CREATE TABLE IF NOT EXISTS support_cleared (
         let v = self
             .conn
             .call(move |c| -> Result<u64, rusqlite::Error> {
+                // 🔴 РАЗНЫЕ СООБЩЕНИЯ, А НЕ СТРОКИ (15.11.2026, владелец: «за 3
+                // смс на значке 6»). Отправитель повторяет неподтверждённое
+                // сообщение новым конвертом с тем же `payload_event_id`, пока
+                // спящий телефон его не заберёт (замер на проде: 643 пары
+                // «устройство+сообщение» на 4346 строк, до 13 копий). Приложение
+                // показывает одно сообщение, а значок считал каждую копию.
+                // Конверт без `payload_event_id` считается сам по себе.
                 let cnt: i64 = c.query_row(
-                    "SELECT COUNT(*) FROM pending WHERE device_id = ?1 AND expires_at_ms > ?2 \
+                    "SELECT COUNT(DISTINCT COALESCE( \
+                       json_extract(transport_meta_json, '$.message.payload_event_id'), \
+                       'msg:' || msg_id)) \
+                     FROM pending WHERE device_id = ?1 AND expires_at_ms > ?2 \
                      AND deliver_at_ms <= ?2 \
                      AND transport_meta_json LIKE '%chat_message_v1%'",
                     params![device_id_owned, now_ms],
@@ -6217,7 +7394,12 @@ CREATE TABLE IF NOT EXISTS support_cleared (
                     "INSERT OR IGNORE INTO call_signal_dedup(call_id, call_attempt_id, signal_id, created_at_ms) VALUES(?1, ?2, ?3, ?4)",
                     params![&signal.call_id, &signal.call_attempt_id, &signal.signal_id, now_ms],
                 )?;
-                if inserted <= 0 {
+                // `execute` отдаёт usize, поэтому «меньше нуля» не бывает:
+                // ноль означает, что INSERT OR IGNORE промолчал, то есть
+                // такой сигнал уже был. Сравнение на равенство — то же
+                // поведение, но без ложного впечатления, что бывает минус
+                // (и без отказа clippy на весь крейт).
+                if inserted == 0 {
                     tx.commit()?;
                     return Ok(false);
                 }
@@ -7031,6 +8213,39 @@ mod tests {
             store.pending_message_count("dev1", now + 1).await.unwrap(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn pending_message_count_counts_resent_copies_once() {
+        // 15.11.2026: «3 сообщения — на значке 6». Повтор того же сообщения
+        // (новый msg_id, тот же payload_event_id) — одно непрочитанное.
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        let now = 1_000_000i64;
+        let meta = |e: &str| {
+            format!(
+                r#"{{"kind":"chat_message_v1","message":{{"convo_id":"c","message_kind":"text","payload_event_id":"{e}","created_at_ms":1}}}}"#
+            )
+        };
+        for (msg, ev) in [("m1", "e1"), ("m1r", "e1"), ("m1r2", "e1"), ("m2", "e2"), ("m2r", "e2"), ("m3", "e3")] {
+            store
+                .enqueue("dev1", msg, "QQ", Some(&meta(ev)), 600, now)
+                .await
+                .unwrap();
+        }
+        // Чат-конверт без payload_event_id — считается отдельно, как раньше.
+        store
+            .enqueue("dev1", "m4", "QQ", Some(r#"{"kind":"chat_message_v1","message":{}}"#), 600, now)
+            .await
+            .unwrap();
+        // Другое устройство не влияет.
+        store
+            .enqueue("dev2", "x1", "QQ", Some(&meta("e1")), 600, now)
+            .await
+            .unwrap();
+        assert_eq!(store.pending_count("dev1", now + 1).await.unwrap(), 7);
+        assert_eq!(store.pending_message_count("dev1", now + 1).await.unwrap(), 4);
+        assert_eq!(store.pending_message_count("dev2", now + 1).await.unwrap(), 1);
     }
 
     #[tokio::test]
@@ -10214,6 +11429,57 @@ mod tests {
         assert!(new_row.last_pump_at_ms > 0);
     }
 
+    /// Захват токена вторым device_id на том же телефоне — не приговор: если
+    /// прежнее устройство снова входит или возвращает себе токен, оно живо, и
+    /// отметка «вытеснен» снимается (29.10.2026, Android 19 дней вне рассылки).
+    #[tokio::test]
+    async fn superseded_flag_clears_when_device_comes_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("relay.db");
+        let store = RelayStore::open(&path).await.unwrap();
+        for dev in ["phone-a", "phone-b"] {
+            store
+                .record_device_login(dev, Some("profileY"), 10_000)
+                .await
+                .unwrap();
+        }
+        store
+            .upsert_push_token("phone-a", "shared-token", "android", None, 10_000)
+            .await
+            .unwrap();
+        // Второй аккаунт / сборка на том же телефоне регистрирует тот же токен.
+        store
+            .upsert_push_token("phone-b", "shared-token", "android", None, 20_000)
+            .await
+            .unwrap();
+        let superseded = |rows: &[DeviceActivityRow], id: &str| {
+            rows.iter().find(|r| r.device_id == id).unwrap().superseded_at_ms
+        };
+        let rows = store.device_activity_list_for_profile("profileY").await.unwrap();
+        assert!(superseded(&rows, "phone-a") > 0, "захват помечает прежнее устройство");
+
+        // Прежнее устройство снова входит — отметка снята.
+        store
+            .record_device_login("phone-a", Some("profileY"), 30_000)
+            .await
+            .unwrap();
+        let rows = store.device_activity_list_for_profile("profileY").await.unwrap();
+        assert_eq!(superseded(&rows, "phone-a"), 0, "вход снимает отметку");
+
+        // Снова захват, затем возврат токена — тоже снимает.
+        store
+            .upsert_push_token("phone-b", "shared-token", "android", None, 40_000)
+            .await
+            .unwrap();
+        store
+            .upsert_push_token("phone-a", "shared-token", "android", None, 50_000)
+            .await
+            .unwrap();
+        let rows = store.device_activity_list_for_profile("profileY").await.unwrap();
+        assert_eq!(superseded(&rows, "phone-a"), 0, "возврат токена снимает отметку");
+        assert!(superseded(&rows, "phone-b") > 0, "а захватчик теперь вытеснен");
+    }
+
     /// ПОВТОРНЫЙ БАННЕР О ТОМ ЖЕ СООБЩЕНИИ (полевая жалоба 02.09.2026).
     ///
     /// Страховка отправителя пересобирает недоставленное сообщение в НОВЫЙ
@@ -10313,6 +11579,974 @@ mod tests {
             .await
             .unwrap();
         assert!(other_msg);
+    }
+
+    /// ЗВ-С1: на старой базе у созвонов нет столбца контракта. Открытие
+    /// дописывает его, и всё, что было до него, читается открытым контрактом.
+    #[tokio::test]
+    async fn migration_adds_media_contract_to_existing_room_call_sessions() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("relay.db");
+        {
+            let c = rusqlite::Connection::open(&path).unwrap();
+            c.execute_batch(
+                "CREATE TABLE room_call_sessions (
+                    call_id TEXT PRIMARY KEY,
+                    room_id TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    media_type TEXT NOT NULL,
+                    created_by_profile_id TEXT NOT NULL,
+                    created_by_device_id TEXT NOT NULL,
+                    state_version INTEGER NOT NULL,
+                    started_at_ms INTEGER NOT NULL,
+                    updated_at_ms INTEGER NOT NULL,
+                    ended_at_ms INTEGER,
+                    expires_at_ms INTEGER NOT NULL
+                );
+                INSERT INTO room_call_sessions VALUES(
+                    'call-old-1', 'room-old-1', 'active', 'audio', 'profile-old-1',
+                    'device-old-1', 1, 10, 10, NULL, 9999999999999
+                );",
+            )
+            .unwrap();
+        }
+        let store = RelayStore::open(&path).await.unwrap();
+        // Повторное открытие той же базы не ломается: миграция идемпотентна.
+        drop(store);
+        let store = RelayStore::open(&path).await.unwrap();
+        store
+            .create_room("room-old-1", "profile-old-1", "device-old-1", "Old", 5)
+            .await
+            .unwrap();
+        let snapshot = store
+            .get_room_call("room-old-1", "call-old-1", None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.call.media_contract, ROOM_MEDIA_CONTRACT_V1);
+    }
+
+    async fn contract_test_room(store: &RelayStore, room_id: &str, members: &[&str]) {
+        store
+            .create_room(room_id, "profile-owner-ct", "device-owner-ct", "Contract", 1_000)
+            .await
+            .unwrap();
+        for member in members {
+            store
+                .upsert_room_membership(room_id, member, "active", "member", None, 1_001)
+                .await
+                .unwrap();
+        }
+    }
+
+    async fn join_with_contract(
+        store: &RelayStore,
+        room_id: &str,
+        profile_id: &str,
+        device_id: &str,
+        contract: &str,
+        allow_create_e2ee: bool,
+        cap: i64,
+        now: i64,
+    ) -> Result<RoomCallMutationResult, RoomCallJoinError> {
+        store
+            .create_or_join_room_call_for_contract(
+                room_id, profile_id, device_id, "audio", false, false, false, false, false,
+                false, contract, allow_create_e2ee, cap, now,
+            )
+            .await
+    }
+
+    /// ЗВ-С1: контракт задаёт создатель; в идущий созвон пускают только с его
+    /// контрактом, и второй созвон в комнате не заводится.
+    #[tokio::test]
+    async fn room_call_contract_is_set_by_creator_and_enforced_on_join() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        contract_test_room(&store, "room-ct-1", &["profile-a-ct", "profile-b-ct"]).await;
+
+        let created = join_with_contract(
+            &store, "room-ct-1", "profile-owner-ct", "device-owner-ct",
+            ROOM_MEDIA_CONTRACT_E2EE_V1, true, 20, 2_000,
+        )
+        .await
+        .unwrap();
+        assert_eq!(created.snapshot.call.media_contract, ROOM_MEDIA_CONTRACT_E2EE_V1);
+
+        let mismatch = join_with_contract(
+            &store, "room-ct-1", "profile-a-ct", "device-a-ct",
+            ROOM_MEDIA_CONTRACT_V1, true, 20, 2_100,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            mismatch,
+            RoomCallJoinError::ContractMismatch(ROOM_MEDIA_CONTRACT_E2EE_V1.to_string())
+        );
+        // Отказ ничего не записал: в созвоне по-прежнему один участник.
+        let snapshot = store
+            .get_active_room_call("room-ct-1", None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.call.call_id, created.snapshot.call.call_id);
+        assert_eq!(snapshot.participants.len(), 1);
+
+        let joined = join_with_contract(
+            &store, "room-ct-1", "profile-b-ct", "device-b-ct",
+            ROOM_MEDIA_CONTRACT_E2EE_V1, false, 20, 2_200,
+        )
+        .await
+        .unwrap();
+        // Запрет создания не мешает войти в уже идущий E2EE-созвон.
+        assert_eq!(joined.snapshot.call.call_id, created.snapshot.call.call_id);
+        assert_eq!(joined.snapshot.participants.len(), 2);
+
+        // Открытый созвон: E2EE-запрос получает его контракт в отказе.
+        contract_test_room(&store, "room-ct-2", &["profile-a-ct"]).await;
+        join_with_contract(
+            &store, "room-ct-2", "profile-owner-ct", "device-owner-ct",
+            ROOM_MEDIA_CONTRACT_V1, true, 20, 3_000,
+        )
+        .await
+        .unwrap();
+        let mismatch = join_with_contract(
+            &store, "room-ct-2", "profile-a-ct", "device-a-ct",
+            ROOM_MEDIA_CONTRACT_E2EE_V1, true, 20, 3_100,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            mismatch,
+            RoomCallJoinError::ContractMismatch(ROOM_MEDIA_CONTRACT_V1.to_string())
+        );
+    }
+
+    /// Реле, не принимающее E2EE, не заводит E2EE-созвон и ничего не пишет.
+    #[tokio::test]
+    async fn room_call_e2ee_create_is_refused_when_not_allowed() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        contract_test_room(&store, "room-ct-3", &[]).await;
+        let err = join_with_contract(
+            &store, "room-ct-3", "profile-owner-ct", "device-owner-ct",
+            ROOM_MEDIA_CONTRACT_E2EE_V1, false, 20, 2_000,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err, RoomCallJoinError::E2eeUnavailable);
+        assert!(store.get_active_room_call("room-ct-3", None).await.unwrap().is_none());
+    }
+
+    /// ЗВ-С4: предел E2EE-созвона считает joined/joining/reconnecting, кроме
+    /// самого входящего; ушедшие место освобождают; открытого контракта
+    /// предел не касается.
+    #[tokio::test]
+    async fn room_call_e2ee_cap_counts_live_participants_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        contract_test_room(&store, "room-ct-4", &["profile-a-ct", "profile-b-ct"]).await;
+        let created = join_with_contract(
+            &store, "room-ct-4", "profile-owner-ct", "device-owner-ct",
+            ROOM_MEDIA_CONTRACT_E2EE_V1, true, 2, 2_000,
+        )
+        .await
+        .unwrap();
+        join_with_contract(
+            &store, "room-ct-4", "profile-a-ct", "device-a-ct",
+            ROOM_MEDIA_CONTRACT_E2EE_V1, true, 2, 2_100,
+        )
+        .await
+        .unwrap();
+        let full = join_with_contract(
+            &store, "room-ct-4", "profile-b-ct", "device-b-ct",
+            ROOM_MEDIA_CONTRACT_E2EE_V1, true, 2, 2_200,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(full, RoomCallJoinError::CallFull);
+        // Повторный вход уже вошедшего не упирается в предел.
+        join_with_contract(
+            &store, "room-ct-4", "profile-a-ct", "device-a-ct",
+            ROOM_MEDIA_CONTRACT_E2EE_V1, true, 2, 2_300,
+        )
+        .await
+        .unwrap();
+        // Ушедший освобождает место.
+        store
+            .leave_room_call("room-ct-4", &created.snapshot.call.call_id, "profile-a-ct", "device-a-ct", 2_400)
+            .await
+            .unwrap();
+        join_with_contract(
+            &store, "room-ct-4", "profile-b-ct", "device-b-ct",
+            ROOM_MEDIA_CONTRACT_E2EE_V1, true, 2, 2_500,
+        )
+        .await
+        .unwrap();
+
+        contract_test_room(&store, "room-ct-5", &["profile-a-ct", "profile-b-ct"]).await;
+        for (profile, device, now) in [
+            ("profile-owner-ct", "device-owner-ct", 3_000),
+            ("profile-a-ct", "device-a-ct", 3_100),
+            ("profile-b-ct", "device-b-ct", 3_200),
+        ] {
+            join_with_contract(
+                &store, "room-ct-5", profile, device, ROOM_MEDIA_CONTRACT_V1, true, 2, now,
+            )
+            .await
+            .unwrap();
+        }
+    }
+
+    /// ЗВ-С3: вывод профиля из созвона — как исключение модератором; при
+    /// пустом созвоне он заканчивается; без участия профиля ничего не пишется.
+    #[tokio::test]
+    async fn evict_profile_from_active_room_call_matches_moderator_remove() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        contract_test_room(&store, "room-ev-1", &["profile-a-ct"]).await;
+        let created = join_with_contract(
+            &store, "room-ev-1", "profile-owner-ct", "device-owner-ct",
+            ROOM_MEDIA_CONTRACT_E2EE_V1, true, 20, 2_000,
+        )
+        .await
+        .unwrap();
+        for device in ["device-a1-ct", "device-a2-ct"] {
+            join_with_contract(
+                &store, "room-ev-1", "profile-a-ct", device,
+                ROOM_MEDIA_CONTRACT_E2EE_V1, true, 20, 2_100,
+            )
+            .await
+            .unwrap();
+        }
+        store
+            .upsert_room_call_media_participant(
+                "room-ev-1", &created.snapshot.call.call_id, "profile-a-ct", "device-a1-ct",
+                true, false, false, true, 2_150,
+            )
+            .await
+            .unwrap();
+
+        assert!(store
+            .evict_profile_from_active_room_call("room-ev-1", "profile-a-ct", "kicked", 2_200)
+            .await
+            .is_err());
+        assert!(store
+            .evict_profile_from_active_room_call("room-ev-1", "profile-nobody", "removed", 2_200)
+            .await
+            .unwrap()
+            .is_none());
+
+        let version_before = store
+            .get_room_call("room-ev-1", &created.snapshot.call.call_id, None)
+            .await
+            .unwrap()
+            .unwrap()
+            .call
+            .state_version;
+        let eviction = store
+            .evict_profile_from_active_room_call("room-ev-1", "profile-a-ct", "removed", 2_300)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(eviction.device_ids, vec!["device-a1-ct", "device-a2-ct"]);
+        assert_eq!(eviction.call.state, "active");
+        assert_eq!(eviction.call.state_version, version_before + 1);
+        let snapshot = store
+            .get_room_call("room-ev-1", &created.snapshot.call.call_id, None)
+            .await
+            .unwrap()
+            .unwrap();
+        for p in snapshot.participants.iter().filter(|p| p.profile_id == "profile-a-ct") {
+            assert_eq!(p.join_state, "removed");
+            assert_eq!(p.left_at_ms, Some(2_300));
+        }
+        assert!(snapshot.media_participants.is_empty());
+        // Повтор ничего не меняет.
+        assert!(store
+            .evict_profile_from_active_room_call("room-ev-1", "profile-a-ct", "removed", 2_400)
+            .await
+            .unwrap()
+            .is_none());
+
+        let last = store
+            .evict_profile_from_active_room_call("room-ev-1", "profile-owner-ct", "left", 2_500)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(last.call.state, "ended");
+        assert_eq!(last.call.ended_at_ms, Some(2_500));
+    }
+
+    // ── Закрытые темы (ТЗ TZ_ROOM_PRIVATE_TOPICS_2026-10-06, Ф1) ──────────
+
+    const TP_PARENT: &str = "room-tp-parent";
+
+    /// Основная комната: владелец, админ и три участника, вступавшие по
+    /// очереди (порядок важен для выбора преемника ветки).
+    async fn topics_parent_fixture(store: &RelayStore) {
+        store
+            .create_room(TP_PARENT, "tp-owner", "tp-owner-dev", "Parent", 1_000)
+            .await
+            .unwrap();
+        store
+            .upsert_room_membership(TP_PARENT, "tp-admin", "active", "admin", None, 1_001)
+            .await
+            .unwrap();
+        for (i, profile_id) in ["tp-a", "tp-b", "tp-c"].iter().enumerate() {
+            store
+                .upsert_room_membership(
+                    TP_PARENT,
+                    profile_id,
+                    "active",
+                    "member",
+                    None,
+                    1_010 + i as i64,
+                )
+                .await
+                .unwrap();
+        }
+    }
+
+    async fn tp_create_topic(store: &RelayStore, topic_id: &str, owner: &str, now: i64) -> RoomRow {
+        store
+            .create_room_with_parent(
+                topic_id,
+                owner,
+                &format!("{owner}-dev"),
+                "Topic",
+                Some(TP_PARENT),
+                now,
+            )
+            .await
+            .unwrap()
+            .room
+    }
+
+    async fn tp_add(store: &RelayStore, topic_id: &str, profile_id: &str, role: &str, now: i64) {
+        store
+            .upsert_room_membership(topic_id, profile_id, "active", role, None, now)
+            .await
+            .unwrap();
+    }
+
+    async fn tp_status(store: &RelayStore, room_id: &str, profile_id: &str) -> Option<String> {
+        store
+            .get_room_membership(room_id, profile_id)
+            .await
+            .unwrap()
+            .map(|membership| membership.status)
+    }
+
+    /// Миграция: на старой базе у комнат нет новых столбцов. Открытие их
+    /// дописывает, и всё, что было, читается обычной комнатой.
+    #[tokio::test]
+    async fn migration_adds_topic_columns_to_existing_rooms() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("relay.db");
+        {
+            let c = rusqlite::Connection::open(&path).unwrap();
+            c.execute_batch(
+                "CREATE TABLE rooms (
+                    room_id TEXT PRIMARY KEY,
+                    version INTEGER NOT NULL,
+                    owner_profile_id TEXT NOT NULL,
+                    created_by_device_id TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    created_at_ms INTEGER NOT NULL,
+                    updated_at_ms INTEGER NOT NULL
+                );
+                INSERT INTO rooms VALUES('room-old-tp', 3, 'profile-old', 'device-old', 'Old', 10, 20);",
+            )
+            .unwrap();
+        }
+        let store = RelayStore::open(&path).await.unwrap();
+        drop(store);
+        let store = RelayStore::open(&path).await.unwrap();
+        let room = store.get_room("room-old-tp").await.unwrap().unwrap();
+        assert_eq!(room.kind, ROOM_KIND_ROOM);
+        assert_eq!(room.parent_room_id, None);
+        assert!(!room.allow_members_create_topics);
+        assert_eq!(room.version, 3);
+
+        let index_exists: bool = store
+            .conn
+            .call(|c| -> Result<bool, rusqlite::Error> {
+                c.query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'rooms_parent_room_idx'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map(|n| n == 1)
+            })
+            .await
+            .unwrap();
+        assert!(index_exists);
+    }
+
+    /// Р-2: создают владелец и админы; участники — только если комната
+    /// разрешила; restricted, вышедшие и посторонние — никогда.
+    #[tokio::test]
+    async fn create_topic_enforces_parent_and_creator_rights() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        store
+            .upsert_room_membership(TP_PARENT, "tp-restricted", "active", "restricted", None, 1_020)
+            .await
+            .unwrap();
+
+        let create = |room_id: &'static str, owner: &'static str, parent: &'static str| {
+            let store = &store;
+            async move {
+                store
+                    .create_room_with_parent(room_id, owner, "dev-x", "Topic", Some(parent), 2_000)
+                    .await
+            }
+        };
+
+        assert!(matches!(
+            create("tp-t0", "tp-admin", "room-missing").await,
+            Err(CreateRoomError::BadParent)
+        ));
+        assert!(matches!(
+            create("tp-t0", "tp-stranger", TP_PARENT).await,
+            Err(CreateRoomError::TopicCreateForbidden)
+        ));
+        assert!(matches!(
+            create("tp-t0", "tp-a", TP_PARENT).await,
+            Err(CreateRoomError::TopicCreateForbidden)
+        ));
+
+        let by_admin = create("tp-t1", "tp-admin", TP_PARENT).await.unwrap();
+        assert!(by_admin.created);
+        assert_eq!(by_admin.room.kind, ROOM_KIND_TOPIC);
+        assert_eq!(by_admin.room.parent_room_id.as_deref(), Some(TP_PARENT));
+        assert_eq!(by_admin.room.owner_profile_id, "tp-admin");
+        // §3.1: людей в ветку добавляют владелец и админы ветки.
+        assert!(!by_admin.room.allow_add_members);
+        let owner_membership = store
+            .get_room_membership("tp-t1", "tp-admin")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(owner_membership.status, "active");
+        assert_eq!(owner_membership.role, "owner");
+        assert!(create("tp-t2", "tp-owner", TP_PARENT).await.unwrap().created);
+
+        // Вложенность — один уровень: ветка ветки недопустима.
+        assert!(matches!(
+            create("tp-t3", "tp-admin", "tp-t1").await,
+            Err(CreateRoomError::BadParent)
+        ));
+
+        store
+            .update_room_settings_with_topics(
+                TP_PARENT, "all", true, true, true, true, true, false, false, 0, false,
+                Some(true), 2_100,
+            )
+            .await
+            .unwrap();
+        assert!(create("tp-t4", "tp-a", TP_PARENT).await.unwrap().created);
+        assert!(matches!(
+            create("tp-t5", "tp-restricted", TP_PARENT).await,
+            Err(CreateRoomError::TopicCreateForbidden)
+        ));
+
+        // Вышедший из основной комнаты ветку уже не создаст.
+        store.leave_room(TP_PARENT, "tp-b", 2_200).await.unwrap();
+        assert!(matches!(
+            create("tp-t6", "tp-b", TP_PARENT).await,
+            Err(CreateRoomError::TopicCreateForbidden)
+        ));
+    }
+
+    #[tokio::test]
+    async fn create_topic_is_idempotent_and_conflicts_on_other_parent() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        store
+            .create_room("room-tp-other", "tp-admin", "tp-admin-dev", "Other", 1_500)
+            .await
+            .unwrap();
+
+        let first = tp_create_topic(&store, "tp-idem", "tp-admin", 2_000).await;
+        let again = store
+            .create_room_with_parent("tp-idem", "tp-admin", "tp-admin-dev", "Topic", Some(TP_PARENT), 2_500)
+            .await
+            .unwrap();
+        assert!(!again.created);
+        assert_eq!(again.room.version, first.version);
+
+        assert!(matches!(
+            store
+                .create_room_with_parent("tp-idem", "tp-admin", "tp-admin-dev", "Topic", Some("room-tp-other"), 2_600)
+                .await,
+            Err(CreateRoomError::Conflict(_))
+        ));
+        // Тот же id без родителя — тоже конфликт, а не тихий успех.
+        assert!(matches!(
+            store
+                .create_room("tp-idem", "tp-admin", "tp-admin-dev", "Topic", 2_700)
+                .await,
+            Err(CreateRoomError::Conflict(_))
+        ));
+    }
+
+    /// Р-4: не больше 20 живых веток; удалённая освобождает место.
+    #[tokio::test]
+    async fn create_topic_respects_limit_of_twenty_live_topics() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        for i in 0..MAX_TOPICS_PER_ROOM {
+            tp_create_topic(&store, &format!("tp-lim-{i}"), "tp-admin", 2_000 + i).await;
+        }
+        assert!(matches!(
+            store
+                .create_room_with_parent("tp-lim-x", "tp-owner", "tp-owner-dev", "Topic", Some(TP_PARENT), 3_000)
+                .await,
+            Err(CreateRoomError::TopicLimit)
+        ));
+        store.delete_room("tp-lim-0", "tp-admin").await.unwrap();
+        assert!(
+            store
+                .create_room_with_parent("tp-lim-x", "tp-owner", "tp-owner-dev", "Topic", Some(TP_PARENT), 3_100)
+                .await
+                .unwrap()
+                .created
+        );
+    }
+
+    /// 🔴 Состав ветки ⊆ состав основной комнаты.
+    #[tokio::test]
+    async fn topic_membership_requires_active_parent_membership() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        tp_create_topic(&store, "tp-sub", "tp-admin", 2_000).await;
+
+        tp_add(&store, "tp-sub", "tp-a", "member", 2_010).await;
+        assert!(matches!(
+            store
+                .upsert_room_membership("tp-sub", "tp-stranger", "active", "member", None, 2_020)
+                .await,
+            Err(UpsertRoomMembershipError::NotParentMember)
+        ));
+        store
+            .upsert_room_membership(TP_PARENT, "tp-b", "pending", "member", None, 2_030)
+            .await
+            .unwrap();
+        assert!(matches!(
+            store
+                .upsert_room_membership("tp-sub", "tp-b", "active", "member", None, 2_040)
+                .await,
+            Err(UpsertRoomMembershipError::NotParentMember)
+        ));
+        // Снять в ветке можно всегда — обычные правила комнаты.
+        let removed = store
+            .upsert_room_membership("tp-sub", "tp-a", "removed", "member", None, 2_050)
+            .await
+            .unwrap();
+        assert!(removed.changed);
+        // Обычная комната живёт как раньше: посторонний добавляется.
+        assert!(
+            store
+                .upsert_room_membership(TP_PARENT, "tp-stranger", "active", "member", None, 2_060)
+                .await
+                .unwrap()
+                .changed
+        );
+    }
+
+    /// 🔴 Каскад: исключённый из основной комнаты выходит из её веток;
+    /// версии ветки растут; чужие ветки не трогаются; повтор — пустой.
+    #[tokio::test]
+    async fn cascade_on_parent_remove_removes_member_from_topics() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        tp_create_topic(&store, "tp-c1", "tp-admin", 2_000).await;
+        tp_create_topic(&store, "tp-c2", "tp-admin", 2_001).await;
+        tp_add(&store, "tp-c1", "tp-a", "member", 2_010).await;
+        tp_add(&store, "tp-c2", "tp-b", "member", 2_011).await;
+        let before_c1 = store.get_room("tp-c1").await.unwrap().unwrap();
+        let before_c2 = store.get_room("tp-c2").await.unwrap().unwrap();
+
+        let (result, cascade) = store
+            .upsert_room_membership_with_cascade(TP_PARENT, "tp-a", "removed", "member", None, 3_000)
+            .await
+            .unwrap();
+        assert_eq!(result.membership.status, "removed");
+        assert_eq!(
+            cascade,
+            vec![TopicCascadeEffect {
+                topic_room_id: "tp-c1".into(),
+                profile_id: "tp-a".into(),
+                action: TopicCascadeAction::Removed,
+            }]
+        );
+        let child = store.get_room_membership("tp-c1", "tp-a").await.unwrap().unwrap();
+        assert_eq!(child.status, "removed");
+        assert_eq!(child.role, "member");
+        let after_c1 = store.get_room("tp-c1").await.unwrap().unwrap();
+        assert_eq!(after_c1.version, before_c1.version + 1);
+        assert_eq!(after_c1.membership_version, before_c1.membership_version + 1);
+        assert_eq!(after_c1.owner_profile_id, "tp-admin");
+        let after_c2 = store.get_room("tp-c2").await.unwrap().unwrap();
+        assert_eq!(after_c2.version, before_c2.version);
+        assert_eq!(tp_status(&store, "tp-c2", "tp-b").await.as_deref(), Some("active"));
+
+        // Повтор (в т.ч. ответ «без изменений») каскада не повторяет.
+        let (_again, cascade_again) = store
+            .upsert_room_membership_with_cascade(TP_PARENT, "tp-a", "removed", "member", None, 3_100)
+            .await
+            .unwrap();
+        assert!(cascade_again.is_empty());
+        assert_eq!(
+            store.get_room("tp-c1").await.unwrap().unwrap().version,
+            after_c1.version
+        );
+        // И вернуть его в ветку нельзя, пока он не в основной комнате.
+        assert!(matches!(
+            store
+                .upsert_room_membership("tp-c1", "tp-a", "active", "member", None, 3_200)
+                .await,
+            Err(UpsertRoomMembershipError::NotParentMember)
+        ));
+    }
+
+    #[tokio::test]
+    async fn cascade_on_parent_ban_and_leave() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        tp_create_topic(&store, "tp-bl", "tp-admin", 2_000).await;
+        tp_add(&store, "tp-bl", "tp-a", "member", 2_010).await;
+        tp_add(&store, "tp-bl", "tp-b", "moderator", 2_011).await;
+
+        let (_banned, cascade) = store
+            .upsert_room_membership_with_cascade(TP_PARENT, "tp-a", "banned", "member", None, 3_000)
+            .await
+            .unwrap();
+        assert_eq!(cascade.len(), 1);
+        assert_eq!(tp_status(&store, "tp-bl", "tp-a").await.as_deref(), Some("removed"));
+
+        let (_left, cascade) = store
+            .leave_room_with_cascade(TP_PARENT, "tp-b", 3_100)
+            .await
+            .unwrap();
+        assert_eq!(cascade.len(), 1);
+        assert_eq!(cascade[0].action, TopicCascadeAction::Removed);
+        let b = store.get_room_membership("tp-bl", "tp-b").await.unwrap().unwrap();
+        assert_eq!(b.status, "removed");
+        assert_eq!(b.role, "member");
+
+        // Повторный выход — пустой проход, ничего не ломает.
+        let (again, cascade) = store
+            .leave_room_with_cascade(TP_PARENT, "tp-b", 3_200)
+            .await
+            .unwrap();
+        assert!(!again.changed);
+        assert!(cascade.is_empty());
+
+        // Выход из самой ветки каскада не порождает (у ветки нет веток).
+        tp_add(&store, "tp-bl", "tp-c", "member", 3_300).await;
+        let (_, cascade) = store
+            .leave_room_with_cascade("tp-bl", "tp-c", 3_400)
+            .await
+            .unwrap();
+        assert!(cascade.is_empty());
+        assert_eq!(tp_status(&store, TP_PARENT, "tp-c").await.as_deref(), Some("active"));
+    }
+
+    /// 🔴 Ушёл владелец ветки: ветка переходит админу ветки, даже если
+    /// участник вступил раньше; среди равных — к самому давнему.
+    #[tokio::test]
+    async fn cascade_transfers_topic_ownership_preferring_admin_then_oldest() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        store
+            .update_room_settings_with_topics(
+                TP_PARENT, "all", true, true, true, true, true, false, false, 0, false,
+                Some(true), 1_900,
+            )
+            .await
+            .unwrap();
+
+        // Ветка 1: владелец tp-a; tp-b (участник, раньше), tp-c (админ, позже).
+        tp_create_topic(&store, "tp-own1", "tp-a", 2_000).await;
+        tp_add(&store, "tp-own1", "tp-b", "member", 2_010).await;
+        tp_add(&store, "tp-own1", "tp-c", "admin", 2_020).await;
+        // Ветка 2: владелец tp-a; два участника — побеждает более давний.
+        tp_create_topic(&store, "tp-own2", "tp-a", 2_001).await;
+        tp_add(&store, "tp-own2", "tp-c", "member", 2_030).await;
+        tp_add(&store, "tp-own2", "tp-b", "member", 2_040).await;
+        let before = store.get_room("tp-own1").await.unwrap().unwrap();
+
+        let (_, cascade) = store
+            .upsert_room_membership_with_cascade(TP_PARENT, "tp-a", "removed", "member", None, 3_000)
+            .await
+            .unwrap();
+        assert_eq!(
+            cascade,
+            vec![
+                TopicCascadeEffect {
+                    topic_room_id: "tp-own1".into(),
+                    profile_id: "tp-a".into(),
+                    action: TopicCascadeAction::OwnerReplaced {
+                        next_owner_profile_id: "tp-c".into()
+                    },
+                },
+                TopicCascadeEffect {
+                    topic_room_id: "tp-own2".into(),
+                    profile_id: "tp-a".into(),
+                    action: TopicCascadeAction::OwnerReplaced {
+                        next_owner_profile_id: "tp-c".into()
+                    },
+                },
+            ]
+        );
+        let t1 = store.get_room("tp-own1").await.unwrap().unwrap();
+        assert_eq!(t1.owner_profile_id, "tp-c");
+        assert_eq!(t1.version, before.version + 1);
+        assert_eq!(t1.membership_version, before.membership_version + 1);
+        let new_owner = store.get_room_membership("tp-own1", "tp-c").await.unwrap().unwrap();
+        assert_eq!(new_owner.status, "active");
+        assert_eq!(new_owner.role, "owner");
+        let old_owner = store.get_room_membership("tp-own1", "tp-a").await.unwrap().unwrap();
+        assert_eq!(old_owner.status, "removed");
+        assert_eq!(old_owner.role, "member");
+        assert_eq!(
+            store.get_room("tp-own2").await.unwrap().unwrap().owner_profile_id,
+            "tp-c"
+        );
+        // Новый владелец ведёт ветку по обычным правилам.
+        assert!(
+            store
+                .upsert_room_membership("tp-own2", "tp-b", "removed", "member", None, 3_100)
+                .await
+                .unwrap()
+                .changed
+        );
+    }
+
+    /// 🔴 Ушёл последний (он же владелец) — ветка удаляется целиком.
+    #[tokio::test]
+    async fn cascade_deletes_topic_when_owner_was_last_member() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        tp_create_topic(&store, "tp-solo", "tp-admin", 2_000).await;
+        // Бывший участник ветки (уже снят) не наследует её.
+        tp_add(&store, "tp-solo", "tp-b", "member", 2_010).await;
+        store
+            .upsert_room_membership("tp-solo", "tp-b", "removed", "member", None, 2_020)
+            .await
+            .unwrap();
+        store
+            .create_room_invite_link("tp-solo", "tp-link-1", "tpslug1", "tp-admin", None, None, false, "member", 2_030)
+            .await
+            .unwrap();
+
+        let (_, cascade) = store
+            .upsert_room_membership_with_cascade(TP_PARENT, "tp-admin", "removed", "member", None, 3_000)
+            .await
+            .unwrap();
+        assert_eq!(cascade.len(), 1);
+        assert_eq!(cascade[0].action, TopicCascadeAction::Deleted);
+        assert!(store.get_room("tp-solo").await.unwrap().is_none());
+        assert!(store.list_room_memberships("tp-solo").await.unwrap().is_empty());
+        assert!(store.list_room_invite_links("tp-solo").await.unwrap().is_empty());
+        // Основная комната жива.
+        assert!(store.get_room(TP_PARENT).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn parent_delete_removes_all_topics() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        tp_create_topic(&store, "tp-d1", "tp-admin", 2_000).await;
+        tp_create_topic(&store, "tp-d2", "tp-owner", 2_001).await;
+        tp_add(&store, "tp-d1", "tp-a", "member", 2_010).await;
+        store
+            .create_room("room-tp-unrelated", "tp-a", "tp-a-dev", "Other", 2_020)
+            .await
+            .unwrap();
+
+        let deleted = store.delete_room(TP_PARENT, "tp-owner").await.unwrap();
+        let mut ids = deleted.deleted_topic_room_ids.clone();
+        ids.sort();
+        assert_eq!(ids, vec!["tp-d1".to_string(), "tp-d2".to_string()]);
+        assert!(store.get_room("tp-d1").await.unwrap().is_none());
+        assert!(store.get_room("tp-d2").await.unwrap().is_none());
+        assert!(store.list_room_memberships("tp-d1").await.unwrap().is_empty());
+        assert!(store.get_room("room-tp-unrelated").await.unwrap().is_some());
+
+        // Удаление самой ветки её владельцем — обычное, родителя не трогает.
+        topics_parent_fixture(&store).await;
+        tp_create_topic(&store, "tp-d3", "tp-admin", 4_000).await;
+        let deleted = store.delete_room("tp-d3", "tp-admin").await.unwrap();
+        assert!(deleted.deleted_topic_room_ids.is_empty());
+        assert!(store.get_room(TP_PARENT).await.unwrap().is_some());
+    }
+
+    /// Передача владения ОСНОВНОЙ комнатой ветки не трогает.
+    #[tokio::test]
+    async fn parent_ownership_transfer_does_not_touch_topics() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        tp_create_topic(&store, "tp-tr", "tp-owner", 2_000).await;
+        tp_add(&store, "tp-tr", "tp-a", "member", 2_010).await;
+        let before = store.get_room("tp-tr").await.unwrap().unwrap();
+
+        store
+            .transfer_room_ownership(TP_PARENT, "tp-owner", "tp-admin", 3_000)
+            .await
+            .unwrap();
+        let after = store.get_room("tp-tr").await.unwrap().unwrap();
+        assert_eq!(after.owner_profile_id, "tp-owner");
+        assert_eq!(after.version, before.version);
+        assert_eq!(after.membership_version, before.membership_version);
+        assert_eq!(tp_status(&store, "tp-tr", "tp-owner").await.as_deref(), Some("active"));
+    }
+
+    /// Удаление профиля: ветки его комнат уходят с комнатами; ветка, которой
+    /// он владел в чужой комнате, переходит следующему участнику.
+    #[tokio::test]
+    async fn delete_profile_data_cascades_topics() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        tp_create_topic(&store, "tp-pd1", "tp-admin", 2_000).await;
+        tp_add(&store, "tp-pd1", "tp-b", "member", 2_010).await;
+        tp_create_topic(&store, "tp-pd2", "tp-owner", 2_001).await;
+        tp_add(&store, "tp-pd2", "tp-admin", "member", 2_011).await;
+
+        store.delete_profile_data("tp-admin", &[]).await.unwrap();
+        let pd1 = store.get_room("tp-pd1").await.unwrap().unwrap();
+        assert_eq!(pd1.owner_profile_id, "tp-b");
+        assert_eq!(tp_status(&store, "tp-pd1", "tp-b").await.as_deref(), Some("active"));
+        assert_eq!(tp_status(&store, "tp-pd1", "tp-admin").await, None);
+        assert_eq!(tp_status(&store, "tp-pd2", "tp-admin").await, None);
+
+        store.delete_profile_data("tp-owner", &[]).await.unwrap();
+        assert!(store.get_room(TP_PARENT).await.unwrap().is_none());
+        assert!(store.get_room("tp-pd1").await.unwrap().is_none());
+        assert!(store.get_room("tp-pd2").await.unwrap().is_none());
+        assert!(store.list_room_memberships("tp-pd1").await.unwrap().is_empty());
+    }
+
+    /// Предел групп (монетизация §C-3) ветки не съедают.
+    #[tokio::test]
+    async fn monetization_counts_exclude_topics() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        tp_create_topic(&store, "tp-m1", "tp-admin", 2_000).await;
+        tp_create_topic(&store, "tp-m2", "tp-admin", 2_001).await;
+        tp_add(&store, "tp-m1", "tp-a", "member", 2_010).await;
+
+        assert_eq!(store.count_owned_rooms("tp-admin").await.unwrap(), 0);
+        assert_eq!(store.count_owned_rooms("tp-owner").await.unwrap(), 1);
+        assert_eq!(
+            store.count_active_memberships_for_profile("tp-a").await.unwrap(),
+            1
+        );
+    }
+
+    /// Р-1: свои ветки — списком, чужие — числом, даже у владельца комнаты.
+    #[tokio::test]
+    async fn list_topics_shows_own_topics_and_counts_hidden() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        tp_create_topic(&store, "tp-l1", "tp-admin", 2_000).await;
+        tp_create_topic(&store, "tp-l2", "tp-admin", 2_001).await;
+        tp_add(&store, "tp-l2", "tp-a", "member", 2_010).await;
+        tp_add(&store, "tp-l1", "tp-b", "member", 2_011).await;
+        store
+            .upsert_room_membership("tp-l1", "tp-b", "removed", "member", None, 2_012)
+            .await
+            .unwrap();
+
+        let owner_view = store.list_room_topics_for_member(TP_PARENT, "tp-owner").await.unwrap();
+        assert!(owner_view.topics.is_empty());
+        assert_eq!(owner_view.hidden_count, 2);
+
+        let a_view = store.list_room_topics_for_member(TP_PARENT, "tp-a").await.unwrap();
+        assert_eq!(
+            a_view.topics.iter().map(|t| t.room_id.as_str()).collect::<Vec<_>>(),
+            vec!["tp-l2"]
+        );
+        assert_eq!(a_view.hidden_count, 1);
+
+        // Снятый с ветки её больше не видит.
+        let b_view = store.list_room_topics_for_member(TP_PARENT, "tp-b").await.unwrap();
+        assert!(b_view.topics.is_empty());
+        assert_eq!(b_view.hidden_count, 2);
+
+        let admin_view = store.list_room_topics_for_member(TP_PARENT, "tp-admin").await.unwrap();
+        assert_eq!(admin_view.topics.len(), 2);
+        assert_eq!(admin_view.hidden_count, 0);
+    }
+
+    /// Флаг Р-2: без поля — прежнее значение; старый путь его не сбрасывает.
+    #[tokio::test]
+    async fn room_settings_keep_topic_flag_when_absent() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        let base = store.get_room(TP_PARENT).await.unwrap().unwrap();
+
+        let unchanged = store
+            .update_room_settings_with_topics(
+                TP_PARENT, "all", true, true, true, true, true, false, false, 0, false, None, 2_000,
+            )
+            .await
+            .unwrap();
+        assert!(!unchanged.changed);
+
+        let on = store
+            .update_room_settings_with_topics(
+                TP_PARENT, "all", true, true, true, true, true, false, false, 0, false,
+                Some(true), 2_100,
+            )
+            .await
+            .unwrap();
+        assert!(on.changed);
+        assert!(on.room.allow_members_create_topics);
+        assert_eq!(on.room.version, base.version + 1);
+
+        let legacy = store
+            .update_room_settings(
+                TP_PARENT, "all", true, true, true, true, true, false, false, 7, false, 2_200,
+            )
+            .await
+            .unwrap();
+        assert!(legacy.changed);
+        assert!(legacy.room.allow_members_create_topics);
+    }
+
+    #[tokio::test]
+    async fn redeem_invite_is_refused_for_topic_rooms() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(&dir.path().join("relay.db")).await.unwrap();
+        topics_parent_fixture(&store).await;
+        tp_create_topic(&store, "tp-inv", "tp-admin", 2_000).await;
+        store
+            .create_room_invite_link("tp-inv", "tp-link-2", "tpslug2", "tp-admin", None, None, false, "member", 2_010)
+            .await
+            .unwrap();
+        assert!(matches!(
+            store.redeem_room_invite("tpslug2", "tp-a", 2_020).await,
+            Err(RedeemRoomInviteError::TopicNoInviteLinks)
+        ));
+        assert_eq!(tp_status(&store, "tp-inv", "tp-a").await, None);
     }
 }
 

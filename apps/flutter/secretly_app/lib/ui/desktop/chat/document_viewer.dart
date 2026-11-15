@@ -23,6 +23,8 @@ import '../../../l10n/app_localizations.dart';
 import '../design/tokens.dart';
 import 'desktop_pdf_bridge.dart';
 import 'document_viewer_kind.dart';
+import '../primitives/motion_widgets.dart';
+import 'desktop_media_window.dart';
 
 class DesktopDocumentViewer extends StatefulWidget {
   const DesktopDocumentViewer({
@@ -47,12 +49,27 @@ class DesktopDocumentViewer extends StatefulWidget {
     required DesktopViewerKind kind,
     Future<void> Function()? onOpenExternally,
     Future<void> Function()? onSaveAs,
-  }) {
-    return showGeneralDialog<void>(
+  }) async {
+    // Сперва — своё окно ОС, как у Telegram (05.10.2026).
+    final inWindow = await DesktopMediaWindow.open(
+      context: context,
+      title: title,
+      builder: (_) => DesktopDocumentViewer(
+        file: file,
+        title: title,
+        kind: kind,
+        onOpenExternally: onOpenExternally,
+        onSaveAs: onSaveAs,
+      ),
+    );
+    if (inWindow || !context.mounted) return;
+    // Раскрывается из места щелчка, как фото (05.10.2026).
+    final origin = DPointerMemory.lastDown;
+    return showDesktopOverlay<void>(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.transparent,
-      transitionDuration: const Duration(milliseconds: 180),
+      transitionDuration: DMotion.modalIn,
+      reverseTransitionDuration: DMotion.base,
       pageBuilder: (ctx, anim, secondary) => DesktopDocumentViewer(
         file: file,
         title: title,
@@ -60,6 +77,8 @@ class DesktopDocumentViewer extends StatefulWidget {
         onOpenExternally: onOpenExternally,
         onSaveAs: onSaveAs,
       ),
+      transitionBuilder: (ctx, a, b, child) =>
+          DZoomFromPoint(animation: a, origin: origin, child: child),
     );
   }
 
@@ -205,7 +224,7 @@ class _DesktopDocumentViewerState extends State<DesktopDocumentViewer> {
           IconButton(
             tooltip: l10n.cancel,
             icon: const Icon(Icons.close_rounded, color: Colors.white),
-            onPressed: () => Navigator.of(context).maybePop(),
+            onPressed: () => DesktopViewerScope.close(context),
           ),
         ],
       ),

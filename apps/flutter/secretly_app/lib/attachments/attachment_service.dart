@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:math';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -14,6 +15,7 @@ import 'package:convert/convert.dart';
 import 'package:crypto/crypto.dart' as crypto;
 
 import '../diagnostics/diag_log.dart';
+import '../security/auth_signer.dart';
 import '../transport/blob_client.dart';
 
 class AttachmentService {
@@ -37,21 +39,57 @@ class AttachmentService {
     String? mime,
   }) async {
     final key = _randomBytes(_fileKeyLen);
-    final algo = Xchacha20.poly1305Aead();
-    final secretKey = SecretKey(key);
-    final box = await algo.encrypt(plaintext, secretKey: secretKey);
+    final ciphertext = await _offMainThread(
+      plaintext.length,
+      () => _encryptV0Pure(plaintext, key),
+    );
+    return AttachmentUploadBundle(
+      fileKeyB64: base64Encode(key),
+      ciphertext: ciphertext,
+      plaintextSizeBytes: plaintext.length,
+      mime: mime,
+    );
+  }
 
+  /// Шифрование v0 в памяти: nonce(24) + mac(16) + шифртекст. Без состояния —
+  /// годится для изолята.
+  static Future<Uint8List> _encryptV0Pure(
+    Uint8List plaintext,
+    Uint8List key,
+  ) async {
+    final algo = Xchacha20.poly1305Aead();
+    final box = await algo.encrypt(plaintext, secretKey: SecretKey(key));
     final out = BytesBuilder(copy: false);
     out.add(box.nonce);
     out.add(box.mac.bytes);
     out.add(box.cipherText);
+    return out.takeBytes();
+  }
 
-    return AttachmentUploadBundle(
-      fileKeyB64: base64Encode(key),
-      ciphertext: out.takeBytes(),
-      plaintextSizeBytes: plaintext.length,
-      mime: mime,
-    );
+  /// Порог, начиная с которого шифрование и расшифровка в памяти уходят в
+  /// отдельный изолят (14.11.2026). Чистый Dart считает XChaCha20 синхронно:
+  /// снимок в 24 МБ занимал главный поток на секунды — кадры не рисовались,
+  /// Android показывал «приложение не отвечает». Мелочь дешевле посчитать на
+  /// месте, чем копировать в изолят.
+  static const int offMainThreadMinBytes = 256 * 1024;
+
+  /// Считает [work] в отдельном изоляте, а при любом сбое там — на месте.
+  /// Ошибка самой криптографии (неверная метка подлинности) поэтому всегда
+  /// приходит из расчёта на месте — с тем же типом и текстом, что и раньше.
+  static Future<Uint8List> _offMainThread(
+    int size,
+    Future<Uint8List> Function() work,
+  ) async {
+    if (size < offMainThreadMinBytes || kIsWeb) return work();
+    try {
+      return await Isolate.run(work, debugName: 'attachment-crypto');
+    } catch (e) {
+      DiagLog.event('attachments', 'crypto_isolate_fallback', {
+        'bytes': size,
+        'reason': e.runtimeType.toString(),
+      });
+      return work();
+    }
   }
 
   /// v1: chunked file encryption to avoid loading large files into memory.
@@ -73,16 +111,76 @@ class AttachmentService {
   }) async {
     final plainLen = await plaintextFile.length();
     final key = _randomBytes(_fileKeyLen);
-    final secretKey = SecretKey(key);
-    final algo = Xchacha20.poly1305Aead();
 
     final outPath = pJoin(
       tempDir.path,
       'secretly_att_${DateTime.now().millisecondsSinceEpoch}_${_randTag()}.bin',
     );
     final outFile = File(outPath);
-    final out = await outFile.open(mode: FileMode.write);
+    final noncePrefix = _randomBytes(_v1NoncePrefixLen);
+    final inPath = plaintextFile.path;
 
+    // О12 (разбор медиа 15.11.2026): шифрование файла частями — тоже вне
+    // главного потока, как шифрование в памяти с 14.11. Чистый Dart считает
+    // XChaCha20 синхронно: ролик в сотни МБ держал интерфейс. Сбой изолята —
+    // считаем на месте, с чистого листа.
+    Uint8List digestBytes;
+    if (kIsWeb) {
+      digestBytes = await _encryptFileV1Pure(
+        inPath,
+        outPath,
+        key,
+        noncePrefix,
+        chunkSize,
+      );
+    } else {
+      try {
+        digestBytes = await Isolate.run(
+          () => _encryptFileV1Pure(inPath, outPath, key, noncePrefix, chunkSize),
+          debugName: 'attachment-crypto-file',
+        );
+      } catch (e) {
+        DiagLog.event('attachments', 'crypto_isolate_fallback', {
+          'bytes': plainLen,
+          'reason': e.runtimeType.toString(),
+          'file': true,
+        });
+        try {
+          if (await outFile.exists()) await outFile.delete();
+        } catch (_) {}
+        digestBytes = await _encryptFileV1Pure(
+          inPath,
+          outPath,
+          key,
+          noncePrefix,
+          chunkSize,
+        );
+      }
+    }
+
+    final cipherLen = await outFile.length();
+    return AttachmentEncryptedFileBundle(
+      fileKeyB64: base64Encode(key),
+      ciphertextFile: outFile,
+      plaintextSizeBytes: plainLen,
+      ciphertextSizeBytes: cipherLen,
+      sha256B64: base64Encode(digestBytes),
+      mime: mime,
+    );
+  }
+
+  /// Формат v1 частями (см. [encryptFileForUpload]); возвращает SHA-256
+  /// шифротекста. Статическая и без `this` — выполняется в изоляте.
+  static Future<Uint8List> _encryptFileV1Pure(
+    String inPath,
+    String outPath,
+    Uint8List key,
+    Uint8List noncePrefix,
+    int chunkSize,
+  ) async {
+    final secretKey = SecretKey(key);
+    final algo = Xchacha20.poly1305Aead();
+    final out = await File(outPath).open(mode: FileMode.write);
     final digestSink = AccumulatorSink<crypto.Digest>();
     final hashSink = crypto.sha256.startChunkedConversion(digestSink);
 
@@ -91,17 +189,16 @@ class AttachmentService {
       await out.writeFrom(bytes);
     }
 
-    final noncePrefix = _randomBytes(_v1NoncePrefixLen);
     final header = BytesBuilder(copy: false);
     header.add(_magic);
     header.add([0x01]);
     final cs = ByteData(4)..setUint32(0, chunkSize, Endian.big);
     header.add(cs.buffer.asUint8List());
     header.add(noncePrefix);
-    await writeAll(header.takeBytes());
 
-    final inFile = await plaintextFile.open();
+    final inFile = await File(inPath).open();
     try {
+      await writeAll(header.takeBytes());
       var counter = 0;
       while (true) {
         final plain = await inFile.read(chunkSize);
@@ -133,17 +230,65 @@ class AttachmentService {
       await out.close();
       hashSink.close();
     }
+    return Uint8List.fromList(digestSink.events.single.bytes);
+  }
 
-    final digest = digestSink.events.single;
-    final cipherLen = await outFile.length();
-    return AttachmentEncryptedFileBundle(
-      fileKeyB64: base64Encode(key),
-      ciphertextFile: outFile,
-      plaintextSizeBytes: plainLen,
-      ciphertextSizeBytes: cipherLen,
-      sha256B64: base64Encode(digest.bytes),
-      mime: mime,
-    );
+  /// Расшифровка формата v1 в файл. Без `this` — выполняется в изоляте.
+  /// Сбой: выходной файл удаляется, бросается [_DecryptFailure] с исходной
+  /// ошибкой и счётчиками для журнала.
+  static Future<void> _decryptFileV1Pure(
+    String inPath,
+    String outPath,
+    Uint8List key,
+    Uint8List noncePrefix,
+    int headerLen,
+  ) async {
+    final algo = Xchacha20.poly1305Aead();
+    final secretKey = SecretKey(key);
+    final input = await File(inPath).open();
+    final output = await File(outPath).open(mode: FileMode.write);
+    var failed = false;
+    var chunksDecoded = 0;
+    var bytesWritten = 0;
+    try {
+      await input.setPosition(headerLen);
+      var counter = 0;
+      while (true) {
+        final lenBytes = await _readExactOrNull(input, 4);
+        if (lenBytes == null) break;
+        final plainLen = ByteData.sublistView(lenBytes).getUint32(0, Endian.big);
+        final macBytes = await _readExact(input, _macLen);
+        final ct = await _readExact(input, plainLen);
+
+        final nonce = Uint8List(_nonceLen);
+        nonce.setRange(0, _v1NoncePrefixLen, noncePrefix);
+        final cBytes = ByteData(8)..setUint64(0, counter, Endian.big);
+        nonce.setRange(
+          _v1NoncePrefixLen,
+          _nonceLen,
+          cBytes.buffer.asUint8List(),
+        );
+        counter++;
+
+        final box = SecretBox(ct, nonce: nonce, mac: Mac(macBytes));
+        final plain = await algo.decrypt(box, secretKey: secretKey);
+        await output.writeFrom(plain);
+        chunksDecoded++;
+        bytesWritten += plain.length;
+      }
+    } catch (e, st) {
+      failed = true;
+      throw _DecryptFailure(e, st, chunksDecoded, bytesWritten);
+    } finally {
+      await input.close();
+      await output.close();
+      if (failed) {
+        try {
+          final f = File(outPath);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
+    }
   }
 
   /// v0: encrypt whole file in-memory (MVP). Later: chunked streaming.
@@ -151,14 +296,42 @@ class AttachmentService {
     Uint8List plaintext, {
     required int ttlSeconds,
     String? mime,
+    // Отправка частями с докачкой (флаг `media`, 15.11.2026): ход загрузки и
+    // отмена — как у больших файлов. Без флага — прежний один запрос.
+    bool resumable = false,
+    void Function(int sentBytes, int totalBytes)? onUploadProgress,
+    BlobUploadCancelToken? cancelToken,
   }) async {
     final bundle = await encryptForUpload(plaintext, mime: mime);
     final blobAccessTokenB64 = base64Encode(_randomBytes(_blobAccessTokenLen));
-    final upload = await blobClient.uploadCiphertext(
-      bundle.ciphertext,
-      ttlSeconds: ttlSeconds,
-      accessTokenB64: blobAccessTokenB64,
-    );
+    final cipher = bundle.ciphertext;
+    BlobUploadResult? viaSession;
+    if (resumable) {
+      try {
+        viaSession = await blobClient.uploadCiphertextResumable(
+          length: cipher.length,
+          read: (offset, n) async => Uint8List.sublistView(
+            cipher,
+            offset,
+            offset + n,
+          ),
+          ttlSeconds: ttlSeconds,
+          bodySha256B64: await AuthSigner.sha256B64(cipher),
+          accessTokenB64: blobAccessTokenB64,
+          onProgress: onUploadProgress,
+          cancelToken: cancelToken,
+        );
+      } on BlobResumableUnsupported {
+        viaSession = null;
+      }
+    }
+    final upload =
+        viaSession ??
+        await blobClient.uploadCiphertext(
+          cipher,
+          ttlSeconds: ttlSeconds,
+          accessTokenB64: blobAccessTokenB64,
+        );
     return EncryptedAttachment(
       blobId: upload.blobId,
       ciphertextSizeBytes: upload.sizeBytes,
@@ -179,6 +352,7 @@ class AttachmentService {
     void Function(int sentBytes, int totalBytes)? onUploadProgress,
     void Function(String stage)? onStage,
     BlobUploadCancelToken? cancelToken,
+    bool resumable = false,
   }) async {
     if (!kReleaseMode) {
       developer.log(
@@ -210,9 +384,30 @@ class AttachmentService {
     // проекте нет, он встречается в коде ровно один раз. Три отменённые
     // отправки двухсотмегабайтного видео — почти шестьсот мегабайт мусора,
     // который не уберёт никто.
-    final BlobUploadResult upload;
+    BlobUploadResult? upload;
     try {
-      upload = await blobClient.uploadCiphertextFile(
+      if (resumable) {
+        final raf = await bundle.ciphertextFile.open();
+        try {
+          upload = await blobClient.uploadCiphertextResumable(
+            length: bundle.ciphertextSizeBytes,
+            read: (offset, n) async {
+              await raf.setPosition(offset);
+              return raf.read(n);
+            },
+            ttlSeconds: ttlSeconds,
+            bodySha256B64: bundle.sha256B64,
+            accessTokenB64: blobAccessTokenB64,
+            onProgress: onUploadProgress,
+            cancelToken: cancelToken,
+          );
+        } on BlobResumableUnsupported {
+          upload = null;
+        } finally {
+          await raf.close();
+        }
+      }
+      upload ??= await blobClient.uploadCiphertextFile(
         bundle.ciphertextFile,
         ttlSeconds: ttlSeconds,
         bodySha256B64: bundle.sha256B64,
@@ -256,6 +451,18 @@ class AttachmentService {
     if (key.length != _fileKeyLen) {
       throw StateError('bad file_key');
     }
+    return _offMainThread(
+      ciphertext.length,
+      () => _decryptDownloadedPure(ciphertext, key),
+    );
+  }
+
+  /// Расшифровка вложения в памяти (v1 по кускам или v0). Без состояния —
+  /// годится для изолята.
+  static Future<Uint8List> _decryptDownloadedPure(
+    Uint8List ciphertext,
+    Uint8List key,
+  ) async {
 
     // v1 magic.
     if (ciphertext.length >= 5 + 1 + 4 + _v1NoncePrefixLen) {
@@ -369,59 +576,40 @@ class AttachmentService {
         }
 
         final noncePrefix = header.sublist(10, 10 + _v1NoncePrefixLen);
-        final algo = Xchacha20.poly1305Aead();
         await outputFile.parent.create(recursive: true);
-        final output = await outputFile.open(mode: FileMode.write);
-        var failed = false;
-        var chunksDecoded = 0;
-        var bytesWritten = 0;
-        try {
-          var counter = 0;
-          while (true) {
-            final lenBytes = await _readExactOrNull(input, 4);
-            if (lenBytes == null) break;
-            final plainLen = ByteData.sublistView(
-              lenBytes,
-            ).getUint32(0, Endian.big);
-            final macBytes = await _readExact(input, _macLen);
-            final ct = await _readExact(input, plainLen);
-
-            final nonce = Uint8List(_nonceLen);
-            nonce.setRange(0, _v1NoncePrefixLen, noncePrefix);
-            final cBytes = ByteData(8)..setUint64(0, counter, Endian.big);
-            nonce.setRange(
-              _v1NoncePrefixLen,
-              _nonceLen,
-              cBytes.buffer.asUint8List(),
+        final inPath = ciphertextFile.path;
+        final outPath = outputFile.path;
+        const headerLen = 5 + 1 + 4 + _v1NoncePrefixLen;
+        // О12 (разбор медиа 15.11.2026): расшифровка частями — вне главного
+        // потока. Сбой в изоляте (в том числе неверная метка подлинности) —
+        // повтор на месте: ошибка и запись в журнал приходят оттуда, с тем же
+        // типом и текстом, что и раньше.
+        if (!kIsWeb) {
+          try {
+            await Isolate.run(
+              () => _decryptFileV1Pure(
+                inPath,
+                outPath,
+                key,
+                noncePrefix,
+                headerLen,
+              ),
+              debugName: 'attachment-crypto-file',
             );
-            counter++;
-
-            final box = SecretBox(ct, nonce: nonce, mac: Mac(macBytes));
-            final plain = await algo.decrypt(box, secretKey: SecretKey(key));
-            await output.writeFrom(plain);
-            chunksDecoded++;
-            bytesWritten += plain.length;
+            return outputFile;
+          } catch (_) {
+            // На месте — ниже.
           }
-        } catch (e) {
-          failed = true;
-          // PR-D (Bug 15): emit a breadcrumb so field reports of «вложение
-          // не открывается» become diagnosable. The output file is still
-          // deleted in `finally` to avoid leaving a half-decrypted blob.
+        }
+        try {
+          await _decryptFileV1Pure(inPath, outPath, key, noncePrefix, headerLen);
+        } on _DecryptFailure catch (f) {
           DiagLog.event('attachment', 'decrypt_failed', {
-            'reason': e.runtimeType.toString(),
-            'chunks_ok': chunksDecoded,
-            'bytes_written': bytesWritten,
+            'reason': f.cause.runtimeType.toString(),
+            'chunks_ok': f.chunksDecoded,
+            'bytes_written': f.bytesWritten,
           });
-          rethrow;
-        } finally {
-          await output.close();
-          if (failed) {
-            try {
-              if (await outputFile.exists()) {
-                await outputFile.delete();
-              }
-            } catch (_) {}
-          }
+          Error.throwWithStackTrace(f.cause, f.stackTrace);
         }
         return outputFile;
       }
@@ -443,6 +631,16 @@ class AttachmentService {
     final r = Random();
     return List.generate(8, (_) => chars[r.nextInt(chars.length)]).join();
   }
+}
+
+/// Сбой расшифровки v1 со счётчиками для журнала (см. [AttachmentService]).
+class _DecryptFailure implements Exception {
+  _DecryptFailure(this.cause, this.stackTrace, this.chunksDecoded, this.bytesWritten);
+
+  final Object cause;
+  final StackTrace stackTrace;
+  final int chunksDecoded;
+  final int bytesWritten;
 }
 
 class AttachmentEncryptedFileBundle {

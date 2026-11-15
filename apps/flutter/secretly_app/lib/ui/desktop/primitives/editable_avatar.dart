@@ -10,6 +10,7 @@ import 'avatar.dart';
 import 'context_menu.dart';
 import 'desktop_tooltip.dart';
 import 'hover_listener.dart';
+import 'motion_widgets.dart';
 
 /// Портрет, который можно сменить, — как в Telegram Desktop (29.09.2026).
 ///
@@ -198,7 +199,7 @@ class _DesktopEditableAvatarState extends State<DesktopEditableAvatar> {
                 child: HoverListener(
                   cursor: SystemMouseCursors.click,
                   onTap: widget.onChoose,
-                  builder: (ctx, hovered, pressed) => AnimatedContainer(
+                  builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: AnimatedContainer(
                     duration: DMotion.fast,
                     width: 26,
                     height: 26,
@@ -215,7 +216,7 @@ class _DesktopEditableAvatarState extends State<DesktopEditableAvatar> {
                       size: 13,
                       color: hovered || pressed ? Colors.white : c.textSecondary,
                     ),
-                  ),
+                  )),
                 ),
               ),
             ),

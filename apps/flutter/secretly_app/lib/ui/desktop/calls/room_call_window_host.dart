@@ -8,7 +8,9 @@ import 'package:flutter/widgets.dart';
 import '../app/desktop_app_view_model.dart';
 import '../app/desktop_child_window_app.dart';
 import '../services/desktop_child_windows.dart';
+import '../../../diagnostics/diag_log.dart';
 import '../services/desktop_ui_prefs.dart';
+import 'call_mini_window.dart' show DesktopCallMiniSize;
 import 'call_main_window_reveal.dart';
 import 'one_to_one_call_screen.dart' show DesktopCallOwnWindow;
 import 'room_call_window.dart';
@@ -37,6 +39,20 @@ abstract final class DesktopRoomCallWindows {
   static String? get openRoomId =>
       DesktopChildWindows.instance.isOpen(windowId) ? _roomId : null;
 
+  /// 🔴 СВЁРНУТЫЙ СОЗВОН — ТОЖЕ ОКНО ОС (05.10.2026, владелец: «мини-окно
+  /// можно было перетаскивать везде, не только внутри приложения»).
+  ///
+  /// Комната, чей созвон сейчас свёрнут в мини-окно ОС; `null` — не свёрнут.
+  /// Окно звонка не прячется, а ужимается до мини-окна в углу экрана поверх
+  /// всех программ; мини внутри приложения в это время не показывается.
+  static final ValueNotifier<String?> miniRoom = ValueNotifier<String?>(null);
+
+  /// Строитель мини-вида для окна ОС. Задаёт хозяин (главное окно): только у
+  /// него есть участники, имя комнаты и действия созвона. Не задан — «Свернуть»
+  /// прячет окно, и созвон идёт мини-окном внутри приложения, как раньше.
+  static Widget Function(BuildContext context, String roomId, String title)?
+  buildMini;
+
   static Future<bool> open({
     required DesktopAppViewModel vm,
     required String groupId,
@@ -62,20 +78,36 @@ abstract final class DesktopRoomCallWindows {
         size: size,
         minSize: minSize,
         topmost: DesktopUiPrefs.callWindowPinned.value,
-        onCloseRequested: () => unawaited(minimize()),
+        // Крестик большого окна — свернуть в мини-окно; крестик мини-окна —
+        // вернуть созвон в главное окно (полоса и мини внутри приложения).
+        onCloseRequested: () => unawaited(
+          miniRoom.value == groupId ? minimizeToMain() : minimize(),
+        ),
         builder: (_) => DesktopChildWindowApp(
           locale: vm.controller.appLocaleOverride,
           resolveLocale: vm.controller.resolveAppUiLocale,
-          home: DesktopRoomCallWindow(
-            vm: vm,
-            groupId: groupId,
-            title: title,
-            onClose: () => unawaited(close()),
-            ownWindow: DesktopCallOwnWindow(
-              pinned: DesktopUiPrefs.callWindowPinned,
-              onTogglePin: () => unawaited(togglePin()),
-              onSetFullScreen: (on) => windows.setFullScreen(windowId, on),
-            ),
+          home: ValueListenableBuilder<String?>(
+            valueListenable: miniRoom,
+            builder: (ctx, mini, _) {
+              final miniView = buildMini;
+              if (mini == groupId && miniView != null) {
+                return miniView(ctx, groupId, title);
+              }
+              return DesktopRoomCallWindow(
+                vm: vm,
+                groupId: groupId,
+                title: title,
+                onClose: () => unawaited(close()),
+                onMinimize: buildMini == null
+                    ? null
+                    : () => unawaited(minimize()),
+                ownWindow: DesktopCallOwnWindow(
+                  pinned: DesktopUiPrefs.callWindowPinned,
+                  onTogglePin: () => unawaited(togglePin()),
+                  onSetFullScreen: (on) => windows.setFullScreen(windowId, on),
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -95,6 +127,7 @@ abstract final class DesktopRoomCallWindows {
   static Future<void> close() async {
     _closes++;
     _roomId = null;
+    miniRoom.value = null;
     await DesktopChildWindows.instance.close(windowId);
   }
 
@@ -102,6 +135,47 @@ abstract final class DesktopRoomCallWindows {
   /// главном окне. 🔴 А главное спрятано в трей — выводим и его, иначе живой
   /// микрофон остался бы без единого окна на экране (30.09.2026).
   static Future<void> minimize() async {
+    final windows = DesktopChildWindows.instance;
+    final roomId = _roomId;
+    final video = isVideoNow?.call() ?? false;
+    if (buildMini == null || roomId == null || !windows.isOpen(windowId)) {
+      await minimizeToMain();
+      return;
+    }
+    if (miniRoom.value == roomId) return;
+    miniRoom.value = roomId;
+    final size = DesktopCallMiniSize.of(video: video);
+    await windows.setFullScreen(windowId, false);
+    await windows.setSize(windowId, size, minSize: size);
+    await windows.placeAtCorner(windowId, 0, ownMonitor: true);
+    await windows.setTopmost(windowId, true);
+    DiagLog.event('room_call_window', 'mini', const <String, Object?>{
+      'on': true,
+    });
+  }
+
+  /// Есть ли у созвона картинка (камера, экран) — мини-окно с ней выше.
+  /// Задаёт хозяин вместе с [buildMini].
+  static bool Function()? isVideoNow;
+
+  /// «Развернуть» мини-окно созвона: прежний размер, закрепление — как
+  /// решил человек.
+  static Future<void> expand() async {
+    final windows = DesktopChildWindows.instance;
+    if (miniRoom.value == null || !windows.isOpen(windowId)) return;
+    miniRoom.value = null;
+    await windows.setSize(windowId, size, minSize: minSize);
+    await windows.setTopmost(windowId, DesktopUiPrefs.callWindowPinned.value);
+    await windows.focus(windowId);
+    DiagLog.event('room_call_window', 'mini', const <String, Object?>{
+      'on': false,
+    });
+  }
+
+  /// Спрятать окно ОС: созвон идёт мини-окном и полосой ВНУТРИ главного
+  /// окна. 🔴 А главное спрятано в трей — выводим и его, иначе живой
+  /// микрофон остался бы без единого окна на экране (30.09.2026).
+  static Future<void> minimizeToMain() async {
     await close();
     await DesktopMainWindowReveal.revealIfHidden();
   }
@@ -111,7 +185,9 @@ abstract final class DesktopRoomCallWindows {
   static Future<void> togglePin() async {
     final next = !DesktopUiPrefs.callWindowPinned.value;
     await DesktopUiPrefs.setCallWindowPinned(next);
-    if (DesktopChildWindows.instance.isOpen(windowId)) {
+    // Мини-окно всегда поверх всех: «закрепить» решает только большое.
+    if (DesktopChildWindows.instance.isOpen(windowId) &&
+        miniRoom.value == null) {
       await DesktopChildWindows.instance.setTopmost(windowId, next);
     }
   }

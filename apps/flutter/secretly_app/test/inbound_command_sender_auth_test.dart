@@ -502,7 +502,14 @@ void main() {
         src.indexOf('  Future<void> sendControlMessage({'),
         src.indexOf('  Future<void> sendControlMessage({') + 6000,
       );
-      expect(control.contains('caps: const <String>[E2ePayloadV1.capRoomKeyV2]'), isTrue);
+      // 06.10.2026: к rk2 добавилась rc1 — «понимаю ключи созвона» (ТЗ E2EE
+      // созвонов, ЗР-14). rk2 по-прежнему объявляется в каждой служебной
+      // посылке.
+      final capsAt = control.indexOf('caps: const <String>[');
+      expect(capsAt, greaterThan(0));
+      final caps = control.substring(capsAt, control.indexOf(']', capsAt));
+      expect(caps.contains('E2ePayloadV1.capRoomKeyV2'), isTrue);
+      expect(caps.contains('kRoomCallKeyCapability'), isTrue);
     });
   });
 

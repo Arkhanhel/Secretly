@@ -15,7 +15,8 @@ import 'profile_fx.dart' as fx;
 /// Идентификатор обложки в профиле → сцена набора.
 ///
 /// 🔴 ЧЕТЫРЁХ СЦЕН НАБОРА ЗДЕСЬ НЕТ, И ЭТО НЕ ЗАБЫВЧИВОСТЬ. «Светлячки»,
-/// «Салют», «Галактика» и «Чёрная дыра» у нас уже есть — своей реализацией, и
+/// «Салют», «Галактика» и «Чёрная дыра» у нас уже есть — своей реализацией
+/// (с 13.11.2026 первые три — переделка под старыми id, см. ниже), и
 /// «Чёрная дыра» вдобавок единственная умеет пускать фотографию ВНУТРЬ сцены
 /// (передний слой поверх портрета). Подменить их набором значит молча изменить
 /// то, что человек уже выбрал. Нужна замена — это решение владельца, не
@@ -49,6 +50,37 @@ const Map<String, fx.ProfileCoverStyle> kLiveCoverKinds =
   'moon_path': fx.ProfileCoverStyle.moonPath,
   'ripples': fx.ProfileCoverStyle.ripples,
   'spotlight': fx.ProfileCoverStyle.spotlight,
+  // 🔴 13.11.2026: ПЕРЕДЕЛАННЫЕ СТАРЫЕ ОБЛОЖКИ — те же id, что лежат в
+  // `profile_meta` у людей, новая живая сцена вместо запечённой картинки
+  // (решение владельца). «Светлячки», «Салют» и «Галактика» заменены именно
+  // так: под своим старым id, а не сценой набора. «Чёрная дыра» не тронута.
+  'space': fx.ProfileCoverStyle.classicSpace,
+  'waves': fx.ProfileCoverStyle.classicWaves,
+  'meteors': fx.ProfileCoverStyle.classicMeteors,
+  'marks': fx.ProfileCoverStyle.classicMarks,
+  'goldhaze': fx.ProfileCoverStyle.classicGoldHaze,
+  'logos': fx.ProfileCoverStyle.classicLogos,
+  'fire': fx.ProfileCoverStyle.classicFire,
+  'fog': fx.ProfileCoverStyle.classicFog,
+  'bears': fx.ProfileCoverStyle.classicBears,
+  'rainbow': fx.ProfileCoverStyle.classicRainbow,
+  'fireflies': fx.ProfileCoverStyle.classicFireflies,
+  'fireworks': fx.ProfileCoverStyle.classicFireworks,
+  'fireworks_gold': fx.ProfileCoverStyle.classicGoldWillow,
+  'reef': fx.ProfileCoverStyle.classicReef,
+  'galaxy': fx.ProfileCoverStyle.classicGalaxy,
+  'aurora_sky': fx.ProfileCoverStyle.classicAuroraSky,
+  // Эксклюзивная коллекция обложек (13.11.2026).
+  'cloth': fx.ProfileCoverStyle.cloth,
+  'balls': fx.ProfileCoverStyle.balls,
+  'orbits': fx.ProfileCoverStyle.orbits,
+  'chaos': fx.ProfileCoverStyle.chaos,
+  'life': fx.ProfileCoverStyle.life,
+  'compass': fx.ProfileCoverStyle.compass,
+  'plush': fx.ProfileCoverStyle.plush,
+  'storm': fx.ProfileCoverStyle.storm,
+  'ink': fx.ProfileCoverStyle.ink,
+  'warp': fx.ProfileCoverStyle.warp,
 };
 
 List<String> get kLiveCoverIds => kLiveCoverKinds.keys.toList(growable: false);

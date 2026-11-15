@@ -17,6 +17,11 @@ analyzer:
     - third_party/audiotags/**
     - third_party/liquid_glass_widgets/**
     - third_party/ffmpeg_kit_flutter_new/**
+    - third_party/flutter_webrtc/**
+    # Служебный инструмент сборки Rust (копия cargokit) — свой pubspec и свои
+    # зависимости, приложением не импортируется.
+    - third_party/secretly_transport_ffi/cargokit/**
+    - third_party/secretly_transport_ffi/**/build/**
 
 linter:
   # The lint rules applied to this project can be customized in the

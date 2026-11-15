@@ -9,6 +9,7 @@ import 'package:ffmpeg_kit_flutter_new/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import '../build_variant.dart';
 import 'h264_encoder.dart';
 
 /// Telegram-style outgoing-video compression.
@@ -25,7 +26,14 @@ class VideoCompressor {
   /// Skip files already this small — re-encoding them saves little and only
   /// costs CPU/time. Public so the upload worker can predict whether a compress
   /// phase will run (and thus reserve the first half of the progress ring).
-  static const int skipBelowBytes = 3 * 1024 * 1024; // 3 MB
+  ///
+  /// 🔴 В облегчённой сборке порог поднят выше любого файла. Это ОДНА точка, по
+  /// которой отправщик (`app_controller`) решает, будет ли фаза сжатия: иначе
+  /// он честно зарезервировал бы под неё первую половину кольца, а она так и
+  /// простояла бы на нуле — сжимать нечем.
+  static const int skipBelowBytes = kVideoToolsAvailable
+      ? 3 * 1024 * 1024 // 3 MB
+      : 0x7fffffffffffffff;
 
   /// Video duration in ms (via ffprobe), or 0 if unknown. Used to turn ffmpeg's
   /// per-frame statistics into a 0..1 compression fraction for the UI ring.
@@ -51,6 +59,8 @@ class VideoCompressor {
     String sourcePath, {
     void Function(double fraction)? onProgress,
   }) async {
+    // Облегчённая сборка: FFmpeg нет — файл уходит как снят, без сжатия.
+    if (!kVideoToolsAvailable) return sourcePath;
     try {
       final src = File(sourcePath);
       if (!await src.exists()) return sourcePath;

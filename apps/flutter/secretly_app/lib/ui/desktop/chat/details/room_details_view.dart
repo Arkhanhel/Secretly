@@ -51,6 +51,9 @@ import '../../primitives/desktop_screen_window.dart';
 import '../mute_choice.dart';
 import '../clear_history_dialog.dart';
 import '../../../room_details_screen.dart' show RoomInviteLinksScreen;
+import '../../primitives/motion_widgets.dart';
+import '../../../disappearing_messages_ui.dart';
+import '../../../../messages/disappearing_flags.dart' show DisappearingPeerSupport;
 
 /// Панель подробностей комнаты.
 ///
@@ -82,6 +85,11 @@ typedef _RoomPane = ({
   List<RoomMember> pending,
   List<RoomMember> banned,
   RoomPolicyState? policy,
+  // Исчезающие у всех участников (ТЗ 22.10.2026): видимость по флагу
+  // сервера, действующий таймер и унаследован ли он темой.
+  bool disappearVisible,
+  int? disappearSeconds,
+  bool disappearInherited,
 });
 
 class RoomDetailsView extends StatefulWidget {
@@ -160,6 +168,11 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
   /// которое всегда отвечает отказом, — не меню.
   RoomPolicyState? _policy;
 
+  /// Общий таймер комнаты (ТЗ 22.10.2026).
+  bool _disappearVisible = false;
+  int? _disappearSeconds;
+  bool _disappearInherited = false;
+
   /// Room settings + member list, loaded once per settled burst of controller
   /// ticks and republished only when either actually differs.
   ///
@@ -197,6 +210,9 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
         pending: const <RoomMember>[],
         banned: const <RoomMember>[],
         policy: null,
+        disappearVisible: false,
+        disappearSeconds: null,
+        disappearInherited: false,
       ),
       load: _loadRoom,
       signature: _roomSignature,
@@ -293,12 +309,32 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
       _groupId,
     );
     final policy = await widget.controller.getRoomPolicyState(_groupId);
+    var disappearVisible = false;
+    int? disappearSeconds;
+    var disappearInherited = false;
+    try {
+      disappearVisible = await widget.controller.disappearingVisibleForRoom(
+        _groupId,
+      );
+      if (disappearVisible) {
+        disappearSeconds = await widget.controller
+            .effectiveRoomDisappearSeconds(_groupId);
+        disappearInherited = await widget.controller.roomDisappearInherited(
+          _groupId,
+        );
+      }
+    } catch (_) {
+      disappearVisible = false;
+    }
     return (
       settings: settings,
       members: members,
       pending: pending,
       banned: banned,
       policy: policy,
+      disappearVisible: disappearVisible,
+      disappearSeconds: disappearSeconds,
+      disappearInherited: disappearInherited,
     );
   }
 
@@ -312,7 +348,13 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
   /// stops reflecting reality. Both classes are small enough that "all of
   /// them" is verifiable by eye against the model.
   String _roomSignature(_RoomPane value) {
-    final buffer = StringBuffer();
+    final buffer = StringBuffer()
+      ..write(value.disappearVisible)
+      ..write(':')
+      ..write(value.disappearSeconds ?? 0)
+      ..write(':')
+      ..write(value.disappearInherited)
+      ..write('|');
     final s = value.settings;
     if (s == null) {
       buffer.write('-');
@@ -408,6 +450,9 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
       _pending = _room.value.pending;
       _banned = _room.value.banned;
       _policy = _room.value.policy;
+      _disappearVisible = _room.value.disappearVisible;
+      _disappearSeconds = _room.value.disappearSeconds;
+      _disappearInherited = _room.value.disappearInherited;
     });
   }
 
@@ -789,6 +834,51 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
     }
   }
 
+  /// Таймер комнаты: окно выбора с предупреждением о старых версиях.
+  Future<void> _pickRoomDisappear() async {
+    final cc = DColors.of(context);
+    DisappearingPeerSupport? support;
+    try {
+      support = await widget.controller.disappearingRoomSupport(_groupId);
+    } catch (_) {
+      support = DisappearingPeerSupport.unknown;
+    }
+    if (!mounted) return;
+    final choice = await showDisappearingTimerPicker(
+      context,
+      current: _disappearInherited ? -1 : _disappearSeconds,
+      customMinSeconds: widget.controller.disappearCustomMinSeconds,
+      customMaxSeconds: widget.controller.disappearCustomMaxSeconds,
+      warning: disappearingSupportWarning(support, l10n, room: true),
+      backgroundColor: cc.elevated,
+      textColor: cc.textPrimary,
+      accentColor: cc.accentPrimary,
+      warningColor: cc.danger,
+      dialogShower:
+          <T>({required BuildContext context, required WidgetBuilder builder}) =>
+              showDesktopDialog<T>(context: context, builder: builder),
+    );
+    if (choice == null) return;
+    if (!_disappearInherited && choice.seconds == _disappearSeconds) return;
+    await _setRoomDisappear(choice.seconds);
+  }
+
+  Future<void> _setRoomDisappear(int? seconds) async {
+    try {
+      await widget.controller.setRoomDisappearSeconds(
+        groupId: _groupId,
+        seconds: seconds,
+      );
+      if (!mounted) return;
+      await _refresh();
+      if (!mounted) return;
+      _toast(l10n.disappearingUpdated);
+    } catch (_) {
+      if (!mounted) return;
+      _toast(l10n.disappearingSetFailed, danger: true);
+    }
+  }
+
   Future<void> _toggleMute() async {
     final next = !_muted;
     setState(() => _muted = next);
@@ -922,7 +1012,8 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
   Future<void> _addMembers() async {
     final List<Contact> contacts;
     try {
-      contacts = (await widget.controller.listContacts())
+      // В закрытую ветку — только участники основной комнаты.
+      contacts = (await widget.controller.listRoomAddCandidates(_groupId))
           .where((c) => !widget.controller.isSavedMessagesConvo(c.profileId))
           .toList(growable: false);
     } catch (e) {
@@ -1167,7 +1258,7 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
     required String okLabel,
     bool danger = false,
   }) {
-    return showDialog<bool>(
+    return showDesktopDialog<bool>(
       context: context,
       builder: (ctx) {
         final cc = DColors.of(ctx);
@@ -1661,6 +1752,30 @@ class _RoomDetailsViewState extends State<RoomDetailsView> {
                 value: _archived,
                 onChanged: (_) => _toggleArchived(),
               ),
+              // · ИСЧЕЗАЮЩИЕ У ВСЕХ УЧАСТНИКОВ (ТЗ 22.10.2026) — только при
+              // открытом флаге сервера. Менять — владельцу и администраторам;
+              // остальные видят значение, переключатель у них неактивен.
+              if (_disappearVisible)
+                DetailsToggleRow(
+                  icon: FluentIcons.timer_24_filled,
+                  label: l10n.disappearingTitle,
+                  subtitle: (_disappearSeconds ?? 0) > 0
+                      ? l10n.disappearingSubtitleOn(
+                          formatDisappearDuration(_disappearSeconds!, l10n),
+                        )
+                      : l10n.desktopContactOff,
+                  value: (_disappearSeconds ?? 0) > 0,
+                  onChanged: (_policy?.canManageSettings ?? false)
+                      ? (on) => unawaited(
+                          on
+                              ? _pickRoomDisappear()
+                              : _setRoomDisappear(null),
+                        )
+                      : (_) => _toast(l10n.disappearingAdminOnly),
+                  onTap: (_policy?.canManageSettings ?? false)
+                      ? _pickRoomDisappear
+                      : () => _toast(l10n.disappearingAdminOnly),
+                ),
             ],
           ),
           const SizedBox(height: DSpace.s),
@@ -2199,7 +2314,7 @@ class _MemberRow extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                 ],
-                Icon(
+                DMorphIcon(
                   call!.deafened
                       ? FluentIcons.speaker_off_24_filled
                       : (call!.muted
@@ -2211,6 +2326,7 @@ class _MemberRow extends StatelessWidget {
                   color: call!.deafened
                       ? c.warning
                       : (call!.muted ? c.textDisabled : c.voice),
+                  style: DMorphStyle.spin,
                 ),
                 const SizedBox(width: 6),
               ],
@@ -2260,7 +2376,7 @@ class _MemberMenuButton extends StatelessWidget {
               ),
             );
           },
-          builder: (ctx, hovered, pressed) => Container(
+          builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: Container(
             width: 26,
             height: 26,
             alignment: Alignment.center,
@@ -2273,7 +2389,7 @@ class _MemberMenuButton extends StatelessWidget {
               size: 16,
               color: c.textSecondary,
             ),
-          ),
+          )),
         ),
                                ),
     );

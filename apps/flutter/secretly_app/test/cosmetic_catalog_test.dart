@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:secretly_app/entitlements/cosmetic_catalog.dart';
 import 'package:secretly_app/entitlements/entitlement_models.dart';
+import 'package:secretly_app/ui/premium/cosmetics_catalog.dart';
 import 'package:secretly_app/ui/theme_presets.dart';
 
 EntitlementState _free() => const EntitlementState(
@@ -49,6 +50,32 @@ void main() {
     test('all current wallpapers are free', () {
       expect(kPremiumWallpaperIds, isEmpty);
       expect(isCosmeticFree(CosmeticKind.wallpaper, 'any_existing_id'), isTrue);
+    });
+
+    // Решение владельца 13.11.2026: 10 бесплатных — 6 рамок и 4 обложки.
+    test('6 free frames and 4 free covers, all of them real catalog ids', () {
+      expect(kFreeAvatarFrameIds, hasLength(6));
+      expect(kFreeProfileCoverIds, hasLength(4));
+      final frameIds = kAllAvatarFrames.map((f) => f.id).toSet();
+      final coverIds = kAllProfileCovers.map((c) => c.id).toSet();
+      expect(frameIds.containsAll(kFreeAvatarFrameIds), isTrue);
+      expect(coverIds.containsAll(kFreeProfileCoverIds), isTrue);
+    });
+
+    test('free frame/cover allowed on free tier, the rest is Premium', () {
+      expect(isCosmeticAllowed(_free(), CosmeticKind.avatarFrame, 'neon'), isTrue);
+      expect(isCosmeticAllowed(_free(), CosmeticKind.profileCover, 'waves'), isTrue);
+      expect(isCosmeticAllowed(_free(), CosmeticKind.avatarFrame, 'cat'), isFalse);
+      expect(isCosmeticAllowed(_free(), CosmeticKind.profileCover, 'blackhole'), isFalse);
+      expect(isCosmeticAllowed(_free(), CosmeticKind.profileCover, 'custom'), isFalse);
+      expect(isCosmeticAllowed(_premium(), CosmeticKind.avatarFrame, 'cat'), isTrue);
+    });
+
+    // Проба 'x' отвечает «оплачен ли Premium» — эмодзи-статус, иконка
+    // приложения, своя обложка. Бесплатный id с таким именем сломал бы их.
+    test("probe id 'x' is never free", () {
+      expect(isCosmeticFree(CosmeticKind.avatarFrame, 'x'), isFalse);
+      expect(isCosmeticFree(CosmeticKind.profileCover, 'x'), isFalse);
     });
   });
 

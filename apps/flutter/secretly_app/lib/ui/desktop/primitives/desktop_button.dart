@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import '../design/tokens.dart';
 import 'desktop_tooltip.dart';
 import 'hover_listener.dart';
+import 'motion_widgets.dart';
+
+export 'motion_widgets.dart' show DMorphStyle;
 
 enum DButtonKind { filled, tonal, ghost, danger }
 
@@ -107,24 +110,37 @@ class DesktopButton extends StatelessWidget {
             overlay = hoverOverlay;
           }
         }
-        return AnimatedContainer(
-          duration: DMotion.fast,
-          curve: DMotion.easeOutCubic,
-          padding: _padding,
-          decoration: BoxDecoration(
-            color: Color.alphaBlend(overlay, bg),
-            borderRadius: BorderRadius.circular(DRadii.sm),
-          ),
-          child: Row(
-            mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: _iconSize, color: fg),
-                const SizedBox(width: DSpace.s),
+        // 🔴 Кнопка — физическая (05.10.2026, «дорого и плавно»): вжимается
+        // под нажатием и мягко отпускается; подпись и значок при смене
+        // перетекают («Сохранить» → «Сохранено»), ширина меняется плавно.
+        return DPressScale(
+          pressed: pressed && !disabled,
+          scale: 0.97,
+          child: AnimatedContainer(
+            duration: DMotion.fast,
+            curve: DMotion.easeOutCubic,
+            padding: _padding,
+            decoration: BoxDecoration(
+              color: Color.alphaBlend(overlay, bg),
+              borderRadius: BorderRadius.circular(DRadii.sm),
+            ),
+            child: Row(
+              mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (icon != null) ...[
+                  DMorphIcon(icon!, size: _iconSize, color: fg),
+                  const SizedBox(width: DSpace.s),
+                ],
+                // Без Flexible, как и прежний Text: кнопка бывает в строке
+                // без ограничения ширины (там Flexible — ошибка разметки).
+                DMorphText(
+                  label,
+                  style: _textStyle.copyWith(color: fg),
+                  alignment: Alignment.center,
+                ),
               ],
-              Text(label, style: _textStyle.copyWith(color: fg)),
-            ],
+            ),
           ),
         );
       },
@@ -148,6 +164,7 @@ class DesktopIconButton extends StatelessWidget {
     this.bgColor,
     this.kind = DIconButtonKind.ghost,
     this.radius,
+    this.morph = DMorphStyle.scale,
   });
 
   final IconData icon;
@@ -167,6 +184,11 @@ class DesktopIconButton extends StatelessWidget {
   /// где значок стоит внутри другой формы, кружок спорит с ней. Параметр
   /// добавочный, умолчание прежнее — ни одно существующее место не меняется.
   final double? radius;
+
+  /// Как значок превращается при смене (мик ↔ мик выключен, ▶ ↔ ⏸):
+  /// по умолчанию вырастает из центра, у переключателей с действием —
+  /// с поворотом ([DMorphStyle.spin]).
+  final DMorphStyle morph;
 
   @override
   Widget build(BuildContext context) {
@@ -202,15 +224,24 @@ class DesktopIconButton extends StatelessWidget {
         if (kind == DIconButtonKind.danger && (hovered || pressed)) {
           bg = c.danger.withValues(alpha: pressed ? 0.30 : 0.18);
         }
-        return AnimatedContainer(
-          duration: DMotion.fast,
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(radius ?? DRadii.pill),
+        // Вжимается под нажатием, значок при смене превращается, цвет
+        // значка перетекает вместе с подложкой (05.10.2026).
+        return DPressScale(
+          pressed: pressed && !disabled,
+          scale: 0.9,
+          child: AnimatedContainer(
+            duration: DMotion.fast,
+            curve: DMotion.standard,
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(radius ?? DRadii.pill),
+            ),
+            child: Center(
+              child: DMorphIcon(icon, size: iconSize, color: fg, style: morph),
+            ),
           ),
-          child: Icon(icon, size: iconSize, color: fg),
         );
       },
     );

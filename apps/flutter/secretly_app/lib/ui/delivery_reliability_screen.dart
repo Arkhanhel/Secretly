@@ -3,7 +3,9 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../reliability/delivery_reliability_service.dart';
+import 'settings_group.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_top_bar.dart';
 
@@ -21,7 +23,12 @@ import 'widgets/frosted_top_bar.dart';
 /// re-check automatically when the user comes back from system settings
 /// (lifecycle resume).
 class DeliveryReliabilityScreen extends StatefulWidget {
-  const DeliveryReliabilityScreen({super.key, this.service, this.healthLoader});
+  const DeliveryReliabilityScreen({
+    super.key,
+    this.service,
+    this.healthLoader,
+    this.connectionSection,
+  });
 
   /// Injectable for tests; defaults to the real platform channels.
   final DeliveryReliabilityService? service;
@@ -30,6 +37,11 @@ class DeliveryReliabilityScreen extends StatefulWidget {
   /// renders (without the health block) in tests and on the settings route
   /// before the controller is ready.
   final Future<Map<String, int>> Function()? healthLoader;
+
+  /// Переключатель «Фоновое соединение» (перенесён из «Уведомлений» по
+  /// макету владельца, 11.2026). Его хранение живёт в экране настроек,
+  /// поэтому сюда он приходит готовым; с баннера доставки — не передаётся.
+  final Widget? connectionSection;
 
   @override
   State<DeliveryReliabilityScreen> createState() =>
@@ -172,6 +184,7 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
     final topPad = MediaQuery.of(context).padding.top + kToolbarHeight + 16;
     final bottomPad = MediaQuery.of(context).padding.bottom + 24;
     final status = _status;
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -210,6 +223,21 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
       body: ListView(
         padding: EdgeInsets.fromLTRB(16, topPad, 16, bottomPad),
         children: [
+          // Без локализаций (тесты, ранний старт) вступления просто нет.
+          if (l10n != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: SettingsPageIntro(
+              icon: const Icon(
+                Icons.network_check_rounded,
+                color: Color(0xFF35B86B),
+                size: 28,
+              ),
+              color: const Color(0xFF35B86B),
+              text: l10n.settingsIntroReliability,
+              inset: 4,
+            ),
+          ),
           // Delivery health. Shown above the OS-permission rows because it
           // answers a different question: not "can the system wake us" but
           // "is anything actually stuck right now". Quarantined wires with
@@ -273,6 +301,13 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
                 ).colorScheme.onSurface.withValues(alpha: 0.55),
               ),
             ),
+          ],
+          if (widget.connectionSection != null) ...[
+            SettingsGroupHeader(
+              l10n?.settingsGroupConnection ?? 'Connection',
+              inset: 16,
+            ),
+            widget.connectionSection!,
           ],
         ],
       ),

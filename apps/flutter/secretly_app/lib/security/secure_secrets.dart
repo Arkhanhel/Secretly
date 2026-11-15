@@ -66,8 +66,37 @@ class ContentKeyUnavailable implements Exception {
   String toString() => 'ContentKeyUnavailable($reason)';
 }
 
+/// Секрет в хранилище есть, но прочитать его не удалось (15.11.2026).
+///
+/// 🔴 Раньше такая ошибка вела к УДАЛЕНИЮ ячейки: секрет профиля, пароль
+/// автокопии, секрет замка и сид поддержки стирались при любом сбое чтения,
+/// в том числе временном («keystore», «usernotauthenticated» — устройство
+/// только что перезагружено, хранилище ключей занято). Секрет профиля после
+/// этого не выпускается заново, то есть один сбой стоил владения профилем, а
+/// пустой секрет замка выключал замок. Теперь ячейка остаётся на месте:
+/// временная ошибка повторяется, постоянная называется по имени ячейки.
+/// Удаляет секрет только явное действие человека.
+class SecureSecretUnreadable implements Exception {
+  SecureSecretUnreadable(this.slot, {required this.permanent, this.reason});
+
+  /// Имя ячейки без идентификатора профиля: `profile_secret`, `app_lock`…
+  final String slot;
+
+  /// Ключ хранилища недействителен (шифротекст не сходится), а не «сейчас
+  /// занято». Повтор не поможет.
+  final bool permanent;
+  final String? reason;
+
+  @override
+  String toString() =>
+      'SecureSecretUnreadable($slot, permanent: $permanent, $reason)';
+}
+
 class SecureSecrets {
   SecureSecrets._(this._secureStorage);
+
+  /// Ячейки, которые в этом запуске не прочитались. Для диагностики и экранов.
+  static final Set<String> unreadableSlots = <String>{};
 
   static const _dbPassKey = 'secretly/db_passphrase_v1';
   static const _cryptoKey = 'secretly/crypto_key_v1_b64';
@@ -381,14 +410,15 @@ class SecureSecrets {
   Future<Uint8List> getOrCreateSupportSeed() async {
     String? existing;
     try {
-      existing = await _secureStorage.read(key: _supportSeedKey);
-    } catch (e) {
-      if (_isRecoverableSecureStorageError(e)) {
-        await _safeDelete(_supportSeedKey);
-        existing = null;
-      } else {
-        rethrow;
-      }
+      existing = await _readKeepingOnError(_supportSeedKey, slot: 'support_seed');
+    } on SecureSecretUnreadable catch (e) {
+      // Временный сбой — не повод выпускать новый сид: старые ответы
+      // поддержки стали бы нечитаемы. Пусть вызывающий повторит позже.
+      if (!e.permanent) rethrow;
+      // Ключ недействителен: старый сид не вернуть ничем. Удаление нужно,
+      // чтобы запись ниже прошла там, где испорченную запись не перезаписать.
+      await _safeDelete(_supportSeedKey);
+      existing = null;
     }
     if (existing != null && existing.isNotEmpty) {
       return Uint8List.fromList(base64Decode(existing));
@@ -425,19 +455,18 @@ class SecureSecrets {
   static String _appLockSecretKey(String scopeId) =>
       '$_appLockSecretKeyPrefix/$scopeId';
 
+  /// `null` — секрета нет ИЛИ он сейчас не читается: тогда ячейка остаётся
+  /// на месте (см. [SecureSecretUnreadable]) и следующий запуск попробует
+  /// снова. Различить можно по [unreadableSlots].
   Future<String?> getProfileSecretB64(String profileId) async {
-    String? v;
     try {
-      v = await _secureStorage.read(key: _profileSecretKey(profileId));
-    } catch (e) {
-      if (_isRecoverableSecureStorageError(e)) {
-        await _safeDelete(_profileSecretKey(profileId));
-        v = null;
-      } else {
-        rethrow;
-      }
+      return await _readKeepingOnError(
+        _profileSecretKey(profileId),
+        slot: 'profile_secret',
+      );
+    } on SecureSecretUnreadable {
+      return null;
     }
-    return (v == null || v.isEmpty) ? null : v;
   }
 
   Future<void> setProfileSecretB64({
@@ -497,6 +526,10 @@ class SecureSecrets {
         '$_profileSecretKeyPrefix/${profileId.trim()}',
         '$_safeBackupAutoPasswordKeyPrefix/${profileId.trim()}',
         '$_appLockSecretKeyPrefix/${profileId.trim()}',
+        // 15.11.2026: сид ключа аккаунта (AIK). Его здесь не было, и 04.09
+        // сбойную ячейку Xiaomi так и не нашли — не читалась именно она.
+        // Ключ совпадает с `AccountIdentityStore` (account_identity.dart).
+        'secretly/account_identity_v1/${profileId.trim()}',
       ],
       if (profileId != null &&
           profileId.trim().isNotEmpty &&
@@ -579,19 +612,17 @@ class SecureSecrets {
     return removed;
   }
 
+  /// `null` — пароля нет или он сейчас не читается; ячейка не удаляется.
+  /// Новый пароль запишет только сам человек.
   Future<String?> getSafeBackupAutoPassword(String profileId) async {
-    String? v;
     try {
-      v = await _secureStorage.read(key: _safeBackupAutoPasswordKey(profileId));
-    } catch (e) {
-      if (_isRecoverableSecureStorageError(e)) {
-        await _safeDelete(_safeBackupAutoPasswordKey(profileId));
-        v = null;
-      } else {
-        rethrow;
-      }
+      return await _readKeepingOnError(
+        _safeBackupAutoPasswordKey(profileId),
+        slot: 'backup_auto_password',
+      );
+    } on SecureSecretUnreadable {
+      return null;
     }
-    return (v == null || v.isEmpty) ? null : v;
   }
 
   Future<void> setSafeBackupAutoPassword({
@@ -608,20 +639,11 @@ class SecureSecrets {
     await _safeDelete(_safeBackupAutoPasswordKey(profileId));
   }
 
-  Future<String?> getAppLockSecret(String scopeId) async {
-    String? value;
-    try {
-      value = await _secureStorage.read(key: _appLockSecretKey(scopeId));
-    } catch (e) {
-      if (_isRecoverableSecureStorageError(e)) {
-        await _safeDelete(_appLockSecretKey(scopeId));
-        value = null;
-      } else {
-        rethrow;
-      }
-    }
-    return (value == null || value.isEmpty) ? null : value;
-  }
+  /// `null` — замок без секрета. Не читается — [SecureSecretUnreadable]:
+  /// 🔴 вызывающий обязан оставить замок ЗАПЕРТЫМ. Раньше здесь возвращался
+  /// `null`, и запуск принимал это за «секрета нет» — замок выключался.
+  Future<String?> getAppLockSecret(String scopeId) =>
+      _readKeepingOnError(_appLockSecretKey(scopeId), slot: 'app_lock');
 
   Future<void> setAppLockSecret({
     required String scopeId,
@@ -640,6 +662,51 @@ class SecureSecrets {
     } catch (_) {
       // ignore
     }
+  }
+
+  /// Читает ячейку, НИКОГДА не удаляя её при ошибке.
+  ///
+  /// Временную ошибку повторяет (как [_readDbPassphraseWithRetry]). Не
+  /// прочиталось — запись в журнал с именем ячейки и
+  /// [SecureSecretUnreadable]. Ошибки, не похожие на сбой хранилища,
+  /// пробрасываются как раньше.
+  Future<String?> _readKeepingOnError(
+    String key, {
+    required String slot,
+    int attempts = 4,
+  }) async {
+    Object? lastError;
+    var permanent = false;
+    for (var attempt = 0; attempt < attempts; attempt++) {
+      try {
+        final v = await _secureStorage.read(key: key);
+        unreadableSlots.remove(slot);
+        return (v == null || v.isEmpty) ? null : v;
+      } catch (e) {
+        if (!_isRecoverableSecureStorageError(e)) rethrow;
+        lastError = e;
+        if (isPermanentKeystoreInvalidation(e)) {
+          permanent = true;
+          break;
+        }
+        if (attempt + 1 < attempts) {
+          await Future<void>.delayed(
+            Duration(milliseconds: 120 * (attempt + 1)),
+          );
+        }
+      }
+    }
+    unreadableSlots.add(slot);
+    DiagLog.event('security', 'secret_unreadable', {
+      'slot': slot,
+      'permanent': permanent,
+      'err': lastError.runtimeType.toString(),
+    });
+    throw SecureSecretUnreadable(
+      slot,
+      permanent: permanent,
+      reason: '$lastError'.split('\n').first,
+    );
   }
 
   bool _isRecoverableSecureStorageError(Object e) {

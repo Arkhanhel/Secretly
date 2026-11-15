@@ -16,6 +16,7 @@
 library;
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -27,6 +28,7 @@ import '../../widgets/secretly_sticker_widgets.dart'
 import '../design/tokens.dart';
 import '../primitives/desktop_button.dart';
 import '../primitives/hover_listener.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Почему набор нельзя поставить — или можно.
 enum DesktopStickerPackAvailability {
@@ -42,6 +44,10 @@ enum DesktopStickerPackAvailability {
   /// Автор неизвестен (стикер пришёл в группу без отметки об авторе): просить
   /// набор не у кого, и кнопка бы обманывала.
   noAuthor,
+
+  /// Автор закрыл набор (ТЗ 14.11.2026): виден присланный стикер и размытые
+  /// клетки под замком, добавить нельзя.
+  locked,
 }
 
 @immutable
@@ -54,6 +60,7 @@ class DesktopStickerPackView {
     this.inFlight = false,
     this.received = 0,
     this.expected = 0,
+    this.lockedPreviews = const <Uint8List>[],
   });
 
   final String title;
@@ -66,6 +73,11 @@ class DesktopStickerPackView {
   final bool inFlight;
   final int received;
   final int expected;
+
+  /// Размытые превью закрытого набора от автора (около 24 px).
+  final List<Uint8List> lockedPreviews;
+
+  bool get isLocked => availability == DesktopStickerPackAvailability.locked;
 
   /// Сколько плиток дорисовать пустыми, чтобы размер набора был виден ДО
   /// установки. Ограничено, иначе окно растянет набор на тысячу.
@@ -96,18 +108,24 @@ class DesktopStickerPackDialog extends StatelessWidget {
     required Future<void> Function() onInstall,
     required Future<void> Function(SecretlyStickerDescriptor) onSend,
   }) {
-    return showGeneralDialog<void>(
+    // Карточка набора раскрывается из нажатой наклейки (05.10.2026).
+    final origin = DPointerMemory.lastDown;
+    return showDesktopOverlay<void>(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'sticker-pack',
       barrierColor: Colors.black.withValues(alpha: 0.45),
-      transitionDuration: DMotion.medium,
-      pageBuilder: (ctx, a, b) => Center(
-        child: DesktopStickerPackDialog(
-          changed: changed,
-          snapshot: snapshot,
-          onInstall: onInstall,
-          onSend: onSend,
+      pageBuilder: (ctx, a, b) => DZoomFromPoint(
+        animation: a,
+        origin: origin,
+        fromScale: 0.85,
+        child: Center(
+          child: DesktopStickerPackDialog(
+            changed: changed,
+            snapshot: snapshot,
+            onInstall: onInstall,
+            onSend: onSend,
+          ),
         ),
       ),
     );
@@ -164,9 +182,28 @@ class DesktopStickerPackDialog extends StatelessWidget {
                 style: DType.bodyStrong.copyWith(color: c.textPrimary),
               ),
               const SizedBox(height: 2),
-              Text(
-                l10n.desktopStickerPackCount(v.total),
-                style: DType.caption.copyWith(color: c.textSecondary),
+              Row(
+                children: [
+                  if (v.isLocked) ...[
+                    Icon(
+                      Icons.lock_rounded,
+                      size: 13,
+                      color: c.textSecondary,
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  Flexible(
+                    child: Text(
+                      v.isLocked
+                          ? '${l10n.stickerPackClosedLabel} · '
+                                '${l10n.desktopStickerPackCount(v.total)}'
+                          : l10n.desktopStickerPackCount(v.total),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: DType.caption.copyWith(color: c.textSecondary),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -201,8 +238,22 @@ class DesktopStickerPackDialog extends StatelessWidget {
       ),
       itemCount: tiles,
       itemBuilder: (ctx, i) {
-        if (i >= v.stickers.length) return _placeholder(c);
+        if (i >= v.stickers.length) {
+          if (!v.isLocked) return _placeholder(c);
+          final pi = i - v.stickers.length;
+          return _lockedTile(
+            c,
+            pi < v.lockedPreviews.length ? v.lockedPreviews[pi] : null,
+          );
+        }
         final s = v.stickers[i];
+        // Из закрытого набора отсюда не отправляется (В-4 в ТЗ).
+        if (v.isLocked) {
+          return Padding(
+            padding: const EdgeInsets.all(4),
+            child: SecretlyStickerAssetView(sticker: s, size: 72),
+          );
+        }
         return HoverListener(
           onTap: () {
             Navigator.of(ctx).maybePop();
@@ -219,6 +270,33 @@ class DesktopStickerPackDialog extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  /// Плитка закрытого набора: размытое превью от автора (или пусто) под
+  /// замком.
+  Widget _lockedTile(DColorSet c, Uint8List? preview) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(DRadii.sm),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _placeholder(c),
+          if (preview != null)
+            Opacity(
+              opacity: 0.7,
+              child: Image.memory(
+                preview,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.low,
+                gaplessPlayback: true,
+              ),
+            ),
+          Center(
+            child: Icon(Icons.lock_rounded, size: 18, color: c.textSecondary),
+          ),
+        ],
+      ),
     );
   }
 
@@ -251,6 +329,21 @@ class DesktopStickerPackDialog extends StatelessWidget {
           l10n.desktopStickerPackOwn,
           textAlign: TextAlign.center,
           style: DType.label.copyWith(color: c.textSecondary),
+        );
+      case DesktopStickerPackAvailability.locked:
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.lock_rounded, size: 15, color: c.textSecondary),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                l10n.stickerPackClosedNote,
+                textAlign: TextAlign.center,
+                style: DType.label.copyWith(color: c.textSecondary),
+              ),
+            ),
+          ],
         );
       case DesktopStickerPackAvailability.noAuthor:
         return Text(

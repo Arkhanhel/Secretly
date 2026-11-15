@@ -88,6 +88,10 @@ dependencies:
   audio_session: ^0.2.2
   audiotags:
     path: third_party/audiotags
+  # Э1: библиотека транспорта на Rust (core/rust/secretly_transport), собирается
+  # cargokit на всех платформах. В Dart её загружает lib/transport/transport_core.dart.
+  secretly_transport_ffi:
+    path: third_party/secretly_transport_ffi
   record: ^6.0.0
   speech_to_text: ^7.0.0
   video_player: ^2.10.0
@@ -100,10 +104,10 @@ dependencies:
   # third_party/ffmpeg_kit_flutter_new/MODIFICATIONS.md.
   ffmpeg_kit_flutter_new:
     path: third_party/ffmpeg_kit_flutter_new
-  flutter_webrtc: 0.12.12+hotfix.1
+  flutter_webrtc: 1.6.2+hotfix.4
   flutter_background: 1.3.1
-  livekit_client: 2.4.0
-  connectivity_plus: ^6.1.5
+  livekit_client: 2.13.1
+  connectivity_plus: ^7.0.0
   line_awesome_flutter: ^3.0.1
   fluentui_system_icons: ^1.1.273
   shimmer: ^3.0.0
@@ -184,6 +188,10 @@ dev_dependencies:
   fake_async: ^1.3.3
   flutter_test:
     sdk: flutter
+  # Память вместо платформы для `SharedPreferencesAsync` в тестах пространства
+  # профиля (Э2): признак активного пространства хранится сырым ключом, и его
+  # нельзя подменить через `SharedPreferences.setMockInitialValues`.
+  shared_preferences_platform_interface: ^2.4.2
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -216,6 +224,10 @@ flutter:
 
   assets:
     - pubspec.yaml
+    # Перечень украшений по требованию (Э7): путь → отпечаток и размер.
+    # Десятки килобайт, нужен и полной сборке — по нему же сверяется
+    # целостность скачанного. Собирается tools/build_on_demand_assets.py.
+    - assets/on_demand_manifest.json
     - assets/icon/
     - assets/app_icons/
     - assets/avatars/dicebear/
@@ -348,3 +360,10 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# Своя копия flutter_webrtc (15.11.2026): три исправления ANR и сбоя из Google
+# Play Console — см. third_party/flutter_webrtc/SECRETLY_CHANGES.md. Версия та же,
+# что в dependencies; LiveKit берёт её же.
+dependency_overrides:
+  flutter_webrtc:
+    path: third_party/flutter_webrtc

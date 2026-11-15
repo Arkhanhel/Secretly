@@ -36,6 +36,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../app/app_controller.dart';
 import '../../../models/e2e_payload_v1.dart';
 import '../primitives/desktop_snackbar.dart';
+import '../design/motion.dart';
+import '../primitives/motion_widgets.dart';
+import 'desktop_media_window.dart';
 
 /// One image entry in the desktop photo viewer's gallery. Carries enough
 /// metadata to render the header (author + time) and resolve the blob on
@@ -77,13 +80,29 @@ class DesktopPhotoViewer extends StatefulWidget {
     required AppController controller,
     required List<DesktopPhotoItem> items,
     required int initialIndex,
-  }) {
-    if (items.isEmpty) return Future<void>.value();
-    return showGeneralDialog<void>(
+  }) async {
+    if (items.isEmpty) return;
+    final start = initialIndex.clamp(0, items.length - 1);
+    // 🔴 Сперва — своё окно ОС, как у Telegram (05.10.2026). Нельзя — внутри
+    // приложения, как раньше.
+    final inWindow = await DesktopMediaWindow.open(
+      context: context,
+      title: items[start].authorName,
+      builder: (_) => DesktopPhotoViewer(
+        controller: controller,
+        items: items,
+        initialIndex: start,
+      ),
+    );
+    if (inWindow || !context.mounted) return;
+    // Фото раскрывается из места, где по нему щёлкнули, и уходит туда же
+    // (05.10.2026); уход быстрее входа.
+    final origin = DPointerMemory.lastDown;
+    return showDesktopOverlay<void>(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.transparent,
-      transitionDuration: const Duration(milliseconds: 200),
+      transitionDuration: DMotion.modalIn,
+      reverseTransitionDuration: DMotion.base,
       pageBuilder: (ctx, anim, secondary) {
         return DesktopPhotoViewer(
           controller: controller,
@@ -91,10 +110,8 @@ class DesktopPhotoViewer extends StatefulWidget {
           initialIndex: initialIndex.clamp(0, items.length - 1),
         );
       },
-      transitionBuilder: (ctx, anim, secondary, child) {
-        final curved = CurvedAnimation(parent: anim, curve: Curves.easeOut);
-        return FadeTransition(opacity: curved, child: child);
-      },
+      transitionBuilder: (ctx, anim, secondary, child) =>
+          DZoomFromPoint(animation: anim, origin: origin, child: child),
     );
   }
 
@@ -201,7 +218,7 @@ class _DesktopPhotoViewerState extends State<DesktopPhotoViewer> {
   }
 
   void _close() {
-    Navigator.of(context).maybePop();
+    DesktopViewerScope.close(context);
   }
 
   void _next() {

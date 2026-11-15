@@ -1,6 +1,7 @@
 # Secretly — Threat Model
 
-**Version 1.2 — 26 September 2026** (1.1: 2 September 2026; 1.0: 25 August 2026)
+**Version 1.3 — 8 October 2026** (1.2: 26 September 2026; 1.1: 2 September 2026;
+1.0: 25 August 2026)
 
 This document states what Secretly protects, against whom, and — equally
 important — **what it does not protect against**. Every claim here is meant to be
@@ -9,6 +10,14 @@ it is named as such rather than omitted.
 
 Written for independent auditors, corporate reviewers, and anyone deciding
 whether this tool fits their risk.
+
+**Changes in 1.3.** Group calls get end-to-end encryption, rolled out in
+stages from release 1.8.66 (§3.5). Two things a malicious server can still do
+in group calls are added to A3, and the server can no longer switch on a
+participant's microphone or camera. Private topics and group call metadata
+are added to §5.2. A duress code for the phone app lock is described under
+A4a, with its limit stated in §5.14. Social recovery through guardians is
+described in §5.15.
 
 **Changes in 1.2.** Group calls are named as not end-to-end encrypted (§3.5).
 The metadata the servers keep is listed in full (§5.2). Four things a malicious
@@ -63,7 +72,7 @@ signatures close this for every device that signs: to succeed, the server has
 to change that device's identity key in the open, which resets verification and
 shows a notice. What remains open is listed in §5.10.
 
-Four more things a malicious server can do today; each is being closed:
+Six more things a malicious server can do today; each is being closed:
 
 - **Use a legacy handshake.** An old wire format still opens new sessions
   without the handshake signature, so the server can show a message "from" any
@@ -74,17 +83,45 @@ Four more things a malicious server can do today; each is being closed:
   refusals of unsigned handshakes (§5.10) is signed with the server's own
   configuration key. It exists so that delivery survives the rollout. Builds
   released after unsigned handshakes are refused for everyone will ignore it.
-- **Substitute a computer during linking.** Until the next phone release, the
-  phone trusts the computer's key as served by the key server when it hands the
-  account over to a newly linked computer. The fix — the computer's key
-  fingerprint in the linking QR code, checked by the phone — is in the code.
+- **Substitute a computer during linking.** A phone older than release 1.8.62
+  trusts the computer's key as served by the key server when it hands the
+  account over to a newly linked computer. Since 1.8.62 the linking QR code
+  carries the computer's key fingerprint and the phone checks it.
 - **Decide room membership.** Room membership lives on the relay and is not
   signed. The server can add a member, or a device of a member, to a room; that
   member then receives the room key. It appears in the member list.
+- **Add a device to a group call.** The relay decides who is in a call. A
+  device it adds appears as a tile, and receives the call keys only if it is
+  among the devices the clients already know for that member (§3.5).
+- **Create new group calls without encryption during the rollout.** Until
+  encryption is required for every new call, a signed configuration value
+  decides what share of new calls is created encrypted. An unencrypted call
+  is labelled "Not end-to-end encrypted" with an open red lock on phones and
+  desktops (since 14.11.2026 in every unencrypted call, not only while the
+  rollout is active). With the share at 0 (the state on 13.11.2026) every
+  room call is unencrypted to the server, and every call shows the label. The server cannot switch a
+  running encrypted call to an unencrypted one, and since 1.8.66 it can only
+  switch a participant's microphone, camera or screen sharing off, never on.
 
 ### A4 — Attacker with physical access to an unlocked device
 
 Out of scope. An unlocked device with the app open is the user's own session.
+
+**A4a — Attacker who coerces the user to unlock (from release 1.8.66, phones).**
+The app lock can hold a second code, the duress code. Entered at the lock
+screen, it opens a separate, empty profile — a real account on the server, so
+it works like any fresh install — while the real profile's database, files,
+settings and keys stay on the device under a different namespace that the
+decoy cannot reach. The user may choose to have the second code erase the
+real profile first (irreversible; the server is not contacted, so the moment
+of erasure is not observable on the network). Both codes are verified with
+the same amount of work, so the response time does not reveal whether a
+second code exists; biometrics always open the real profile. What this does
+not do: it does not hide the existence of a second profile from anyone who can
+read the device's storage directly (§5.14), and it does not protect the real
+profile once the attacker has the real code. Failed attempts back off (5
+seconds after 3 attempts, 5 minutes after 9), and the user can choose to have
+everything erased after 10 failed attempts.
 
 ### A5 — Attacker with physical access to a locked device
 
@@ -201,14 +238,45 @@ whether it is a video call travel beside the ciphertext; the invitation also
 carries the caller's display name and profile id; and the push that rings the
 phone carries the caller's display name through Apple or Google.
 
-**Group calls are not end-to-end encrypted.** They go through our own LiveKit
-media server (SFU), which runs on the same host as the relay. Audio, video and
-screen sharing are encrypted in transit between each device and the server, but
-the server decodes them, so the operator could listen. It also sees who is in a
-call, when, and each participant's IP address. End-to-end encryption for group
-calls — a key per participant, distributed over the existing end-to-end
-channel — is the next piece of work on calls. Even then, the server will see
-who takes part, when, and who is speaking.
+**Group-call end-to-end encryption is implemented (builds 648+) but not yet
+switched on:** as of 13.11.2026 no store release contains it and the rollout
+share is 0, so today the media server sees room-call media. They go through our own LiveKit media server (SFU), which runs on the
+same host as the relay. In an encrypted call each participant draws a random
+256-bit key and sends it to the other participants' devices over the same
+end-to-end sessions as messages; keys are accepted only from devices that have
+proven their handshake signature. Each audio and video frame is encrypted with
+AES-128-GCM under a key derived from it with PBKDF2-SHA256 (WebRTC frame
+encryption), so the SFU forwards frames it cannot decrypt. A participant's key
+changes when someone leaves, is removed or is banned, and when new senders
+appear. Clients refuse to play a track that is not encrypted and publish their
+own tracks only once encryption is in place. Encrypted and unencrypted calls
+use separate media rooms and never mix.
+
+During the rollout some new calls are still created without encryption, and
+older versions can only join those. Such a call is encrypted only in transit
+between each device and the server, which decodes it, and the app labels it
+"Not end-to-end encrypted". Encryption becomes required for every new call
+once older versions are gone.
+
+Limits of the first version: at most 20 participants per encrypted call; no
+fresh key on join, so a late joiner could decrypt earlier media if someone had
+recorded it (the SFU does not record); no replay protection for frames within a
+track; screen sharing from an iPhone is not available in encrypted calls; and
+call membership is decided by the relay (A3).
+
+What the operator still sees, encrypted or not:
+
+- **relay** — who started a call, who joined and left and when, mute, video and
+  screen-sharing state, the call's media contract, and each device's build;
+- **media server** — participants' IP addresses and times, packet sizes and
+  timing, pauses in speech, who is speaking and when (audio levels), the first
+  byte of each audio frame, video resolution and layers, and track names;
+- **TURN** — IP addresses and ports, the device identifier used to log in, and
+  traffic volume;
+- **Apple and Google** — that a call is ringing, and when.
+
+Nobody but the participants sees or hears the audio, video or shared screen of
+an encrypted call.
 
 **Your IP address is visible to the person you are calling — by default.**
 One-to-one calls connect peer-to-peer, which is standard WebRTC behaviour and
@@ -224,6 +292,36 @@ rather than Google's, so no third party observes call metadata when the relay
 omits ICE servers; the relay-only setting above now exists; and the
 `validateIceConfigForSession` guard, which used to run *after* the fallback had
 already rewritten the policy and therefore never fired, now runs before it.
+
+**Calls under censorship (prepared, not yet published).** When the app reaches
+our servers through a mirror, a CDN name, a volunteer proxy, SOCKS or Tor, a
+direct peer-to-peer call would both fail and reveal the attempt. In that case a
+one-to-one call is forced through the server, and where the server offers TURN
+over TLS on port 443, only through that — traffic that looks like ordinary
+HTTPS to the same kind of host.
+
+Group calls follow the same rule with one deliberate difference: they change
+nothing unless the server actually offers TURN over TLS on 443. Forbidding a
+direct connection with nothing to fall back to does not protect a group call,
+it ends it for every participant at once. A one-to-one call can fail honestly
+and show the caller a refusal; a group of ten cannot.
+
+What this does not hide: TURN over TLS carries the media through our server, so
+packet sizes and timing still identify a real-time call to an observer who
+measures them. We do not claim a call is invisible — only that blocking it
+costs more than blocking one UDP port.
+
+**Decorations fetched on demand (lightweight Android build).** That build does
+not ship the 365 profile icons or the chat wallpapers; it asks the server for
+one when it is shown. Each file is requested by its SHA-256 and checked against
+a list that ships inside the signed application package, so a server that
+substitutes a file simply fails the check and the decoration is dropped. The
+request carries no account, no device identifier and no signature, like the
+sticker and cosmetic requests next to it — but it does tell the server that
+somebody at that address wanted this particular decoration. That is a weaker
+position than the full build, which asks for nothing, and it is the reason the
+mechanism covers only decorations: nothing about a message, a contact or a key
+travels this way.
 
 ### 3.6 Account model
 
@@ -276,7 +374,9 @@ social graph and activity patterns are derivable by the operator.
 Beyond envelopes, the servers keep:
 
 - **rooms** — name, description, avatar, membership and roles, and an index of
-  who posted in a room and when (kept 30 days);
+  who posted in a room and when (kept 30 days). A private topic is a room of
+  its own, so its name, its members and the room it belongs to are stored the
+  same way; the names of ordinary topics travel end-to-end encrypted;
 - **your profile as you publish it** — nickname, photo, bio, emoji status — and
   when you were last online;
 - **devices** — your devices, their build numbers and push tokens, with
@@ -285,6 +385,8 @@ Beyond envelopes, the servers keep:
 - **blocks** — who blocked whom;
 - **one-to-one calls** — which devices called which, and when (kept 6 hours, or
   15 minutes after the call ends);
+- **group calls** — who took part and when, and the call metadata listed in
+  §3.5;
 - **in transit** — the sender's display name and a group's title, which the
   relay uses for notification titles.
 
@@ -449,6 +551,34 @@ device (§5.8). Dictation is moving to on-device only.
 - Link previews are built by the sender's device, which fetches the page; the
   website sees the sender's IP address. Recipients do not contact it.
 - Message translation downloads language models through Google ML Kit (§5.9).
+
+### 5.15 Social recovery: what guardians and the server know
+
+From release 1.8.67 a person can choose 2 to 5 guardians and a threshold of at
+least 2. The identity (profile, profile secret, account identity key, server
+binding, optionally the safe-backup password) is encrypted with
+XChaCha20-Poly1305 under a random 256-bit key bound to the profile and setup
+version; the key is split with Shamir's scheme over GF(256). Each guardian
+receives one part and the encrypted blob over the ordinary end-to-end
+channel. Fewer guardians than the threshold learn nothing about the key; a
+forged part is detected by the authentication tag. The server sees only that
+end-to-end messages were exchanged.
+
+What it does not protect against: the threshold of guardians colluding; an
+attacker who talks enough guardians into releasing parts (the app requires
+confirming four check words derived from the request, by voice, but cannot
+enforce it); the guardians' own devices being compromised.
+
+### 5.14 The duress code is not deniable against forensics
+
+The decoy profile (A4a) lives beside the real one: a second database, a
+second set of directories and a second set of keychain entries, plus a second
+lock record. Anyone who reads the device's storage directly — a forensic
+extraction, or a rooted or jailbroken device — can see that two profiles
+exist. Making the real profile indistinguishable from free space would need
+hidden-volume style storage and is a separate piece of work. The feature is
+for the moment someone demands to look at an unlocked phone, not for a
+laboratory.
 
 ## 6. Out of scope
 

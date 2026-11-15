@@ -54,8 +54,10 @@ identities; since 1.8.58 the initiator signs the handshake. Messages and media
 use XChaCha20-Poly1305. Server backups and the recovery kit use AES-256-GCM
 with a key derived by PBKDF2-HMAC-SHA256. The local database is SQLCipher on
 phones and SQLite3 Multiple Ciphers on desktop. One-to-one calls are DTLS-SRTP,
-end to end. Group calls go through our own LiveKit media server and are, for
-now, encrypted only in transit — see the threat model.
+end to end. Group calls go through our own LiveKit media server; from 1.8.66
+they are end-to-end encrypted with per-sender frame keys, rolled out in stages,
+and calls created without it are encrypted only in transit — see the threat
+model.
 
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) is the place to start reading.
 
@@ -64,7 +66,7 @@ now, encrypted only in transit — see the threat model.
 Please read [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) before you conclude
 anything about what this protects. It lists what we defend against, and section
 5 lists what we do not: there is no certificate pinning, the relay sees metadata,
-group calls are not yet end-to-end encrypted, key material is not zeroed because
+group call encryption is still rolling out, key material is not zeroed because
 Dart is garbage-collected, and the Double Ratchet implementation is ours rather
 than a reviewed library. We would rather you found that in our own
 documentation than in a blog post.

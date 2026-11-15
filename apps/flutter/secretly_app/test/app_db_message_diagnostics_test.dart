@@ -242,7 +242,7 @@ void main() {
     });
 
     test(
-      'contact device key drift resets sessions and prunes removed devices',
+      'contact signed-prekey rotation keeps sessions and prunes removed devices',
       () async {
         final db = await AppDb.openForTesting();
         try {
@@ -310,8 +310,10 @@ void main() {
             signedPrekeySigB64: 'sig-a-rotated',
           );
 
-          expect(await db.sessionGet('peer-device-a'), isNull);
-          expect(await db.sessionV3Get('peer-device-a'), isNull);
+          // Б5 Э3 (24.10.2026): a new signed prekey under the same identity is
+          // a rotation and leaves the live session alone (it used to reset it).
+          expect(await db.sessionGet('peer-device-a'), isNotNull);
+          expect(await db.sessionV3Get('peer-device-a'), isNotNull);
 
           await db.contactDevicesDeleteMissing(
             profileId: 'peer-profile',

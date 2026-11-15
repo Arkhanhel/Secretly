@@ -168,18 +168,80 @@ ChatWallpaperAnimMode desktopWallpaperAnimModeFor({
 /// Вложенный `TickerMode` только сужает: спрятанное окно и экран под
 /// настройками, звонком или замком гасят движение и без неё. Возврат фокуса
 /// продолжает анимацию с того же места.
+///
+/// С 15.11.2026 — ещё и только пока человек действует в окне, см.
+/// [DesktopDecorationActivity].
 class DesktopDecorationMotion extends StatelessWidget {
   const DesktopDecorationMotion({super.key, required this.child});
 
   final Widget child;
 
+  static final Listenable _gates = Listenable.merge([
+    DesktopWindowActivity.focused,
+    DesktopDecorationActivity.awake,
+  ]);
+
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<bool>(
-      valueListenable: DesktopWindowActivity.focused,
-      builder: (context, focused, child) =>
-          TickerMode(enabled: focused, child: child!),
+    return ListenableBuilder(
+      listenable: _gates,
+      builder: (context, child) => TickerMode(
+        enabled: DesktopDecorationActivity.motionAllowed,
+        child: child!,
+      ),
       child: child,
     );
+  }
+}
+
+/// Украшения замирают в простое (15.11.2026, решение владельца).
+///
+/// 🔴 Замер: пока на экране движется хоть одна живая рамка, ПК перерисовывает
+/// всё окно на каждом кадре — около четверти ядра, даже когда человек просто
+/// смотрит в список (см. `DecorationClock`). Поэтому рамки, эмодзи-статусы и
+/// дрейф обоев движутся, пока человек что-то делает в окне — водит мышью,
+/// щёлкает, крутит, печатает, — и ещё [idleAfter] после этого; потом
+/// замирают на месте до следующего действия. В простое окно не рисует
+/// ничего.
+///
+/// Индикаторы (кружки загрузки, пульс связи) сюда не относятся и не замирают
+/// никогда — см. [DesktopDecorationMotion].
+class DesktopDecorationActivity {
+  DesktopDecorationActivity._();
+
+  /// Сколько украшения движутся после последнего действия человека.
+  static Duration idleAfter = const Duration(seconds: 10);
+
+  /// Человек действовал в окне не дольше [idleAfter] назад.
+  static final ValueNotifier<bool> awake = ValueNotifier<bool>(true);
+
+  static Timer? _sleep;
+  static int _lastPokeMs = -1 << 31;
+
+  /// Движение украшений разрешено: окно в фокусе и человек не в простое.
+  static bool get motionAllowed =>
+      DesktopWindowActivity.focused.value && awake.value;
+
+  /// Человек что-то сделал в окне. Вызывается на каждое движение мыши, так
+  /// что таймер перезапускается не чаще четырёх раз в секунду.
+  static void poke() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (awake.value && _sleep != null && now - _lastPokeMs < 250) return;
+    _lastPokeMs = now;
+    _sleep?.cancel();
+    _sleep = Timer(idleAfter, () {
+      _sleep = null;
+      awake.value = false;
+    });
+    awake.value = true;
+  }
+
+  @visibleForTesting
+  static void debugReset() {
+    _sleep?.cancel();
+    _sleep = null;
+    _lastPokeMs = -1 << 31;
+    awake.value = true;
+    idleAfter = const Duration(seconds: 10);
   }
 }

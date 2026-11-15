@@ -46,6 +46,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : FlutterFragmentActivity() {
     companion object {
+        // Тип файла сообщений без сети; совпадает с EnvelopeFile.mimeType в Dart.
+        private const val OFFLINE_ENVELOPE_MIME = "application/x-secretly-envelopes"
+
         // Tracks whether MainActivity is between onStart and onStop. Used by
         // SecretlyFirebaseMessagingService to decide whether to launch the
         // full-screen IncomingCallActivity automatically: when the user is
@@ -266,6 +269,14 @@ class MainActivity : FlutterFragmentActivity() {
     // Music tags fallback: MediaMetadataRetriever may take tens of ms on a big
     // file, so it runs off the UI thread too.
     private val musicTagsExecutor: java.util.concurrent.ExecutorService =
+        java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    // 🔴 Запись в «Загрузки» — не в главном потоке (15.11.2026, Play Console:
+    // ANR «configureFlutterEngine$lambda$20 → ContentResolver.delete», сборка
+    // 635). Удаление прежней копии, вставка в MediaStore и копирование файла
+    // (автокопия с медиа — десятки мегабайт) шли прямо в главном потоке; медленный
+    // провайдер MediaStore держал интерфейс дольше 5 с.
+    private val mediaStoreExecutor: java.util.concurrent.ExecutorService =
         java.util.concurrent.Executors.newSingleThreadExecutor()
 
     /** Title/artist via the SYSTEM parser, or null when it finds none. */
@@ -608,11 +619,12 @@ class MainActivity : FlutterFragmentActivity() {
                         result.error("bad_args", "fileName and sourcePath are required", null)
                         return@setMethodCallHandler
                     }
+                    mediaStoreExecutor.execute {
                     try {
                         val source = File(sourcePath)
                         if (!source.exists()) {
-                            result.error("no_source", "source file is missing", null)
-                            return@setMethodCallHandler
+                            runOnUiThread { result.error("no_source", "source file is missing", null) }
+                            return@execute
                         }
                         val savedPath: String
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -670,9 +682,10 @@ class MainActivity : FlutterFragmentActivity() {
                             }
                             savedPath = target.absolutePath
                         }
-                        result.success(savedPath)
+                        runOnUiThread { result.success(savedPath) }
                     } catch (error: Exception) {
-                        result.error("save_failed", error.message, null)
+                        runOnUiThread { result.error("save_failed", error.message, null) }
+                    }
                     }
                 }
 
@@ -1436,10 +1449,14 @@ class MainActivity : FlutterFragmentActivity() {
     private fun handleIncomingShareIntent(intent: Intent?) {
         val i = intent ?: return
         val action = i.action ?: return
-        if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) {
+        // Файл сообщений без сети (.secretly), открытый из другого приложения,
+        // идёт тем же путём, что и «Поделиться»: копия в кеш и разбор в Dart.
+        val envelopeView = action == Intent.ACTION_VIEW && isOfflineEnvelopeView(i)
+        if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE && !envelopeView) {
             return
         }
-        val payload = buildSharePayload(i) ?: return
+        val payload = (if (envelopeView) buildEnvelopeViewPayload(i) else buildSharePayload(i))
+            ?: return
         val sink = shareIntentSink
         if (sink == null) {
             pendingSharePayload = payload
@@ -1448,6 +1465,18 @@ class MainActivity : FlutterFragmentActivity() {
             trySink(sink, payload)
         }
         i.action = null
+    }
+
+    private fun isOfflineEnvelopeView(intent: Intent): Boolean {
+        val data = intent.data ?: return false
+        if (intent.type == OFFLINE_ENVELOPE_MIME) return true
+        return data.lastPathSegment?.lowercase()?.endsWith(".secretly") == true
+    }
+
+    private fun buildEnvelopeViewPayload(intent: Intent): Map<String, Any?>? {
+        val uri = intent.data ?: return null
+        val copied = copySharedUriToCache(uri, OFFLINE_ENVELOPE_MIME) ?: return null
+        return mapOf("files" to listOf(copied), "text" to null)
     }
 
     private fun buildSharePayload(intent: Intent): Map<String, Any?>? {

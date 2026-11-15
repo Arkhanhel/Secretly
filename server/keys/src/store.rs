@@ -962,6 +962,9 @@ VALUES('D-old', 'P-old', 'ik-old', 'spk-old', 'sig-old', 1000);
     }
 }
 
+/// Б5 (24.10.2026): one-time prekeys keys keeps on offer per device.
+pub const MAX_ONE_TIME_PREKEYS_PER_DEVICE: i64 = 200;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OneTimePrekey {
     pub prekey_id: i64,
@@ -986,6 +989,19 @@ pub struct DeviceKeyBundle {
     pub account_identity_pub_b64: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub device_cert_b64: Option<String>,
+    /// Б5 (24.10.2026): which of the device's signed prekeys this is. 1 — the
+    /// only one any build before Б5 has — is left out of the JSON, so responses
+    /// stay byte-identical until a device actually rotates.
+    #[serde(default = "default_signed_prekey_id", skip_serializing_if = "is_default_signed_prekey_id")]
+    pub signed_prekey_id: i64,
+}
+
+pub fn default_signed_prekey_id() -> i64 {
+    1
+}
+
+fn is_default_signed_prekey_id(id: &i64) -> bool {
+    *id == 1
 }
 
 #[derive(Debug, Clone)]
@@ -1078,6 +1094,25 @@ pub enum EntitlementRebind {
 /// 🔴 Вынесено отдельной функцией НАМЕРЕННО: это единственная арифметика во
 /// всём этапе, и проверять её через переменные окружения и живую базу значило
 /// бы не проверять вовсе.
+/// Запирание ВСЕГО профиля — запасное, на случай подбора из множества сетей.
+///
+/// К4 (14.11.2026): порог 200, задержка от минуты до часа. Чтобы запереть
+/// владельца, теперь нужно двести неудач из двадцати с лишним разных сетей
+/// (каждая запирается сама после десяти), а не десять запросов откуда угодно.
+pub fn backup_access_profile_lock_deadline_ms(attempts: i64, now_ms: i64) -> i64 {
+    const FREE_ATTEMPTS: i64 = 200;
+    const BASE_DELAY_MS: i64 = 60_000;
+    const MAX_DELAY_MS: i64 = 60 * 60 * 1000;
+    if attempts < FREE_ATTEMPTS {
+        return 0;
+    }
+    let steps = (attempts - FREE_ATTEMPTS).min(40) as u32;
+    let delay = BASE_DELAY_MS.saturating_mul(1i64.checked_shl(steps).unwrap_or(i64::MAX));
+    now_ms + delay.clamp(BASE_DELAY_MS, MAX_DELAY_MS)
+}
+
+/// Запирание одной сети для одного профиля: с десятой неудачи, удваиваясь
+/// до суток.
 pub fn backup_access_lock_deadline_ms(attempts: i64, now_ms: i64) -> i64 {
     const FREE_ATTEMPTS: i64 = 10;
     const BASE_DELAY_MS: i64 = 60_000;
@@ -1181,7 +1216,12 @@ CREATE TABLE IF NOT EXISTS device_key_bundles (
   -- verifies them as a pair without cross-referencing another row. A device on
   -- an old build has neither, which correctly reads as "no certificate".
   account_identity_pub_b64 TEXT,
-  device_cert_b64 TEXT
+  device_cert_b64 TEXT,
+  -- Б5 (24.10.2026): the number the device gives its CURRENT signed prekey and
+  -- when that key first appeared here. A build from before this sends no number
+  -- and always means 1. Added in the ALTER list below as well.
+  signed_prekey_id INTEGER NOT NULL DEFAULT 1,
+  signed_prekey_created_ms INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS device_key_bundles_profile_idx ON device_key_bundles(profile_id);
@@ -1195,6 +1235,19 @@ CREATE TABLE IF NOT EXISTS one_time_prekeys (
 );
 
 CREATE INDEX IF NOT EXISTS one_time_prekeys_device_created_idx ON one_time_prekeys(device_id, created_at_ms);
+
+-- К4 (аудит 11.11.2026): неудачи токена копии по СЕТИ того, кто подбирает.
+-- Счёт по профилю целиком позволял любому, кто знает profile_id, запереть
+-- восстановление владельцу на сутки. Теперь сутки ждёт только сеть
+-- подбирающего; общий счёт профиля — запасной, с высоким порогом.
+CREATE TABLE IF NOT EXISTS backup_access_net (
+    profile_id TEXT NOT NULL,
+    net TEXT NOT NULL,
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until_ms INTEGER NOT NULL DEFAULT 0,
+    updated_ms INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (profile_id, net)
+);
 
 CREATE TABLE IF NOT EXISTS profile_backups (
     profile_id TEXT PRIMARY KEY,
@@ -1294,6 +1347,15 @@ CREATE INDEX IF NOT EXISTS device_tombstones_profile_idx
                 );
                 let _ = c.execute(
                     "ALTER TABLE device_key_bundles ADD COLUMN device_cert_b64 TEXT",
+                    [],
+                );
+                // Б5 (24.10.2026) — both halves of the schema, as above.
+                let _ = c.execute(
+                    "ALTER TABLE device_key_bundles ADD COLUMN signed_prekey_id INTEGER NOT NULL DEFAULT 1",
+                    [],
+                );
+                let _ = c.execute(
+                    "ALTER TABLE device_key_bundles ADD COLUMN signed_prekey_created_ms INTEGER",
                     [],
                 );
                 let _ = c.execute(
@@ -1530,13 +1592,118 @@ ON CONFLICT(profile_id) DO UPDATE SET
                     .optional()?
                     .unwrap_or(0)
                     + 1;
-                let lock_ms = backup_access_lock_deadline_ms(attempts, now_ms);
+                let lock_ms = backup_access_profile_lock_deadline_ms(attempts, now_ms);
                 c.execute(
                     "UPDATE profile_backups SET failed_attempts = ?2, locked_until_ms = ?3 \
                      WHERE profile_id = ?1",
                     params![&pid, attempts, lock_ms],
                 )?;
                 Ok(attempts)
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// До какого времени закрыта сеть [net] для профиля (0 — открыта).
+    pub async fn backup_access_net_lock_until_ms(
+        &self,
+        profile_id: &str,
+        net: &str,
+    ) -> Result<i64, String> {
+        let pid = profile_id.to_string();
+        let net = net.to_string();
+        self.conn
+            .call(move |c| -> Result<i64, rusqlite::Error> {
+                c.query_row(
+                    "SELECT locked_until_ms FROM backup_access_net WHERE profile_id = ?1 AND net = ?2",
+                    params![pid, net],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map(|v| v.unwrap_or(0))
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Неудача из сети [net]: возвращает (неудач подряд, закрыто до).
+    /// Заодно убирает записи, не менявшиеся неделю, — таблица не растёт.
+    pub async fn backup_access_net_note_failure(
+        &self,
+        profile_id: &str,
+        net: &str,
+        now_ms: i64,
+    ) -> Result<(i64, i64), String> {
+        let pid = profile_id.to_string();
+        let net = net.to_string();
+        self.conn
+            .call(move |c| -> Result<(i64, i64), rusqlite::Error> {
+                let attempts: i64 = c
+                    .query_row(
+                        "SELECT failed_attempts FROM backup_access_net WHERE profile_id = ?1 AND net = ?2",
+                        params![&pid, &net],
+                        |r| r.get(0),
+                    )
+                    .optional()?
+                    .unwrap_or(0)
+                    + 1;
+                let lock_ms = backup_access_lock_deadline_ms(attempts, now_ms);
+                c.execute(
+                    "INSERT INTO backup_access_net(profile_id, net, failed_attempts, locked_until_ms, updated_ms) \
+                     VALUES (?1, ?2, ?3, ?4, ?5) \
+                     ON CONFLICT(profile_id, net) DO UPDATE SET \
+                       failed_attempts = excluded.failed_attempts, \
+                       locked_until_ms = excluded.locked_until_ms, \
+                       updated_ms = excluded.updated_ms",
+                    params![&pid, &net, attempts, lock_ms, now_ms],
+                )?;
+                c.execute(
+                    "DELETE FROM backup_access_net WHERE updated_ms < ?1 AND locked_until_ms < ?2",
+                    params![now_ms - 7 * 24 * 60 * 60 * 1000, now_ms],
+                )?;
+                Ok((attempts, lock_ms))
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Сколько копий лежит без опоры для токена (К5): их отдают по одному
+    /// profile_id. По нему видно, когда можно включать
+    /// `SECRETLY_KEYS_BACKUP_ACCESS_MODE=strict`.
+    ///
+    /// 🔴 Не звать при старте и в горячих путях: запрос читает всю таблицу
+    /// копий (15.11.2026: 6 ГБ, 5 с на прогретом кеше), а соединение у keys
+    /// одно — все запросы ждали бы. Считать вручную, см. 35-backup-access.conf.
+    #[allow(dead_code)]
+    pub async fn backup_count_without_verifier(&self) -> Result<i64, String> {
+        self.conn
+            .call(|c| -> Result<i64, rusqlite::Error> {
+                c.query_row(
+                    "SELECT COUNT(*) FROM profile_backups \
+                     WHERE access_verifier_b64 IS NULL OR access_verifier_b64 = ''",
+                    [],
+                    |r| r.get(0),
+                )
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// К8: владелец удаляет свою копию с сервера. Счётчики неудач — вместе с
+    /// ней. `true`, если копия была.
+    pub async fn backup_delete(&self, profile_id: &str) -> Result<bool, String> {
+        let pid = profile_id.to_string();
+        self.conn
+            .call(move |c| -> Result<bool, rusqlite::Error> {
+                let n = c.execute(
+                    "DELETE FROM profile_backups WHERE profile_id = ?1",
+                    params![&pid],
+                )?;
+                c.execute(
+                    "DELETE FROM backup_access_net WHERE profile_id = ?1",
+                    params![&pid],
+                )?;
+                Ok(n > 0)
             })
             .await
             .map_err(|e| e.to_string())
@@ -1550,7 +1717,11 @@ ON CONFLICT(profile_id) DO UPDATE SET
                 c.execute(
                     "UPDATE profile_backups SET failed_attempts = 0, locked_until_ms = 0 \
                      WHERE profile_id = ?1",
-                    params![pid],
+                    params![&pid],
+                )?;
+                c.execute(
+                    "DELETE FROM backup_access_net WHERE profile_id = ?1",
+                    params![&pid],
                 )?;
                 Ok(())
             })
@@ -1898,6 +2069,10 @@ ON CONFLICT(profile_id) DO UPDATE SET
                     )?;
                     tx.execute(
                         "DELETE FROM profile_backups WHERE profile_id = ?1",
+                        params![profile_id],
+                    )?;
+                    tx.execute(
+                        "DELETE FROM backup_access_net WHERE profile_id = ?1",
                         params![profile_id],
                     )?;
                     tx.execute(
@@ -3013,6 +3188,10 @@ FROM entitlements WHERE profile_id = ?1
                     "DELETE FROM profile_backups WHERE profile_id = ?1",
                     params![pid.clone()],
                 )?;
+                tx.execute(
+                    "DELETE FROM backup_access_net WHERE profile_id = ?1",
+                    params![pid.clone()],
+                )?;
                 deleted_rows += tx.execute(
                     "DELETE FROM device_metadata WHERE profile_id = ?1",
                     params![pid.clone()],
@@ -3083,6 +3262,39 @@ FROM entitlements WHERE profile_id = ?1
         account_identity_pub_b64: Option<&str>,
         device_cert_b64: Option<&str>,
     ) -> Result<bool, String> {
+        self.publish_key_bundle_with_spk_id(
+            profile_id,
+            device_id,
+            identity_key_pub_b64,
+            signed_prekey_pub_b64,
+            signed_prekey_sig_b64,
+            default_signed_prekey_id(),
+            one_time_prekeys,
+            now_ms,
+            account_identity_pub_b64,
+            device_cert_b64,
+        )
+        .await
+    }
+
+    /// Б5 (24.10.2026): [publish_key_bundle] with the number of the signed
+    /// prekey. `signed_prekey_created_ms` moves only when the key itself
+    /// changes; a row from before Б5 had one key for the device's whole life, so
+    /// its age is the device's age.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn publish_key_bundle_with_spk_id(
+        &self,
+        profile_id: &str,
+        device_id: &str,
+        identity_key_pub_b64: &str,
+        signed_prekey_pub_b64: &str,
+        signed_prekey_sig_b64: &str,
+        signed_prekey_id: i64,
+        one_time_prekeys: Vec<OneTimePrekey>,
+        now_ms: i64,
+        account_identity_pub_b64: Option<&str>,
+        device_cert_b64: Option<&str>,
+    ) -> Result<bool, String> {
         let pid = profile_id.to_string();
         let did = device_id.to_string();
         let ik = identity_key_pub_b64.to_string();
@@ -3143,8 +3355,8 @@ FROM entitlements WHERE profile_id = ?1
                     // ConflictAlgorithm.replace on the client — so a column left
                     // out here would silently keep a stale value forever, and the
                     // client republishes roughly every 12 hours.
-                    "INSERT INTO device_key_bundles(device_id, profile_id, identity_key_pub_b64, signed_prekey_pub_b64, signed_prekey_sig_b64, updated_at_ms, account_identity_pub_b64, device_cert_b64)
-                     VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                    "INSERT INTO device_key_bundles(device_id, profile_id, identity_key_pub_b64, signed_prekey_pub_b64, signed_prekey_sig_b64, updated_at_ms, account_identity_pub_b64, device_cert_b64, signed_prekey_id, signed_prekey_created_ms)
+                     VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?6)
                      ON CONFLICT(device_id) DO UPDATE SET
                        profile_id=excluded.profile_id,
                        identity_key_pub_b64=excluded.identity_key_pub_b64,
@@ -3152,8 +3364,17 @@ FROM entitlements WHERE profile_id = ?1
                        signed_prekey_sig_b64=excluded.signed_prekey_sig_b64,
                        updated_at_ms=excluded.updated_at_ms,
                        account_identity_pub_b64=excluded.account_identity_pub_b64,
-                       device_cert_b64=excluded.device_cert_b64",
-                    params![did.clone(), pid.clone(), ik, spk, spk_sig, now_ms, aik, cert],
+                       device_cert_b64=excluded.device_cert_b64,
+                       signed_prekey_id=excluded.signed_prekey_id,
+                       signed_prekey_created_ms=CASE
+                         WHEN device_key_bundles.signed_prekey_pub_b64 <> excluded.signed_prekey_pub_b64
+                           THEN excluded.signed_prekey_created_ms
+                         ELSE COALESCE(
+                           device_key_bundles.signed_prekey_created_ms,
+                           (SELECT created_at_ms FROM devices WHERE device_id = excluded.device_id),
+                           excluded.signed_prekey_created_ms)
+                       END",
+                    params![did.clone(), pid.clone(), ik, spk, spk_sig, now_ms, aik, cert, signed_prekey_id],
                 )?;
 
                 // FIX-SERVER-1: a key publish (client republishes ~every 12h and
@@ -3171,6 +3392,22 @@ FROM entitlements WHERE profile_id = ?1
                         params![did.clone(), otk.prekey_id, otk.prekey_pub_b64, now_ms],
                     )?;
                 }
+
+                // Б5 (24.10.2026): at most MAX_ONE_TIME_PREKEYS_PER_DEVICE on
+                // offer per device; the oldest go first. Builds before Б5 add 20
+                // every 12 h whatever is left, and pools of 1 000+ were found on
+                // live devices. The client keeps the private halves, so nothing
+                // it relies on breaks — keys simply stops handing those out.
+                tx.execute(
+                    "DELETE FROM one_time_prekeys
+                      WHERE device_id = ?1
+                        AND prekey_id NOT IN (
+                          SELECT prekey_id FROM one_time_prekeys
+                           WHERE device_id = ?1
+                           ORDER BY created_at_ms DESC, prekey_id DESC
+                           LIMIT ?2)",
+                    params![did.clone(), MAX_ONE_TIME_PREKEYS_PER_DEVICE],
+                )?;
 
                 tx.commit()?;
                 Ok(true)
@@ -3230,7 +3467,7 @@ FROM entitlements WHERE profile_id = ?1
                     // возвращать ноль» сохраняется без отдельной проверки.
                     let mut stmt = tx.prepare(
                         "SELECT b.device_id, b.identity_key_pub_b64, b.signed_prekey_pub_b64, b.signed_prekey_sig_b64,
-                                b.account_identity_pub_b64, b.device_cert_b64
+                                b.account_identity_pub_b64, b.device_cert_b64, b.signed_prekey_id
                          FROM device_key_bundles b
                          JOIN devices d ON d.device_id = b.device_id
                          WHERE b.profile_id = ?1
@@ -3272,6 +3509,7 @@ FROM entitlements WHERE profile_id = ?1
                         let signed_prekey_sig_b64: String = row.get(3)?;
                         let account_identity_pub_b64: Option<String> = row.get(4)?;
                         let device_cert_b64: Option<String> = row.get(5)?;
+                        let signed_prekey_id: i64 = row.get(6)?;
 
                         // Pop one OTK (oldest).
                         let otk: Option<OneTimePrekey> = tx
@@ -3302,6 +3540,7 @@ FROM entitlements WHERE profile_id = ?1
                             one_time_prekey: otk,
                             account_identity_pub_b64,
                             device_cert_b64,
+                            signed_prekey_id,
                         });
                     }
 
@@ -3314,6 +3553,53 @@ FROM entitlements WHERE profile_id = ?1
             .await
             .map_err(|e| e.to_string())?;
         Ok(bundles)
+    }
+
+    /// Б5 (24.10.2026): how many one-time prekeys of the device are still on
+    /// offer and the lowest number among them — the client tops up by the first
+    /// and forgets private halves below the second.
+    pub async fn one_time_prekey_stats(&self, device_id: &str) -> Result<(i64, Option<i64>), String> {
+        let did = device_id.to_string();
+        self.conn
+            .call(move |c| -> Result<(i64, Option<i64>), rusqlite::Error> {
+                c.query_row(
+                    "SELECT COUNT(*), MIN(prekey_id) FROM one_time_prekeys WHERE device_id = ?1",
+                    params![did],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    #[cfg(test)]
+    pub async fn signed_prekey_created_ms(&self, device_id: &str) -> Result<Option<i64>, String> {
+        let did = device_id.to_string();
+        self.conn
+            .call(move |c| -> Result<Option<i64>, rusqlite::Error> {
+                c.query_row(
+                    "SELECT signed_prekey_created_ms FROM device_key_bundles WHERE device_id = ?1",
+                    params![did],
+                    |r| r.get(0),
+                )
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    #[cfg(test)]
+    pub async fn clear_signed_prekey_created_ms(&self, device_id: &str) -> Result<(), String> {
+        let did = device_id.to_string();
+        self.conn
+            .call(move |c| -> Result<(), rusqlite::Error> {
+                c.execute(
+                    "UPDATE device_key_bundles SET signed_prekey_created_ms = NULL WHERE device_id = ?1",
+                    params![did],
+                )?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| e.to_string())
     }
 
     #[cfg(test)]
@@ -3367,7 +3653,8 @@ FROM entitlements WHERE profile_id = ?1
                 let row = tx
                     .query_row(
                         "SELECT b.profile_id, b.identity_key_pub_b64, b.signed_prekey_pub_b64,
-                                b.signed_prekey_sig_b64, b.account_identity_pub_b64, b.device_cert_b64
+                                b.signed_prekey_sig_b64, b.account_identity_pub_b64, b.device_cert_b64,
+                                b.signed_prekey_id
                            FROM device_key_bundles b
                            JOIN devices d ON d.device_id = b.device_id AND d.profile_id = b.profile_id
                           WHERE b.device_id = ?1",
@@ -3380,11 +3667,12 @@ FROM entitlements WHERE profile_id = ?1
                                 r.get::<_, String>(3)?,
                                 r.get::<_, Option<String>>(4)?,
                                 r.get::<_, Option<String>>(5)?,
+                                r.get::<_, i64>(6)?,
                             ))
                         },
                     )
                     .optional()?;
-                let Some((profile_id, ik, spk, sig, account, cert)) = row else {
+                let Some((profile_id, ik, spk, sig, account, cert, spk_id)) = row else {
                     tx.commit()?;
                     return Ok(None);
                 };
@@ -3417,6 +3705,7 @@ FROM entitlements WHERE profile_id = ?1
                         one_time_prekey: otk,
                         account_identity_pub_b64: account,
                         device_cert_b64: cert,
+                        signed_prekey_id: spk_id,
                     },
                 )))
             })

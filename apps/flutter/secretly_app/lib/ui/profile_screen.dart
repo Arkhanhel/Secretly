@@ -18,6 +18,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../attachments/attachment_failure.dart';
+import '../build_variant.dart';
 import '../app/app_controller.dart';
 import '../billing/show_paywall.dart';
 import '../media/music_tags.dart';
@@ -794,11 +795,19 @@ class _ProfileScreenState extends State<ProfileScreen>
                 const Center(child: SecretlyGlassSheetHandle()),
                 const SizedBox(height: 12),
                 Text(
-                  _label(
-                    context,
-                    ru: 'Выберите фотографию или видео',
-                    en: 'Choose photo or video',
-                  ),
+                  // Облегчённая сборка: видео здесь нет, поэтому и в заголовке
+                  // его не обещаем.
+                  kVideoToolsAvailable
+                      ? _label(
+                          context,
+                          ru: 'Выберите фотографию или видео',
+                          en: 'Choose photo or video',
+                        )
+                      : _label(
+                          context,
+                          ru: 'Выберите фотографию',
+                          en: 'Choose a photo',
+                        ),
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 12),
@@ -813,7 +822,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                   ),
                   onTap: () => Navigator.of(context).pop('gallery'),
                 ),
-                const SizedBox(height: 8),
+                // Облегчённая сборка: видео-портрет держится на FFmpeg (короткая
+                // петля + кадр для собеседников) — возможность не предлагаем.
+                if (kVideoToolsAvailable) const SizedBox(height: 8),
+                if (kVideoToolsAvailable)
                 ListTile(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -977,6 +989,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   /// and applies it as the premium animated (video) avatar. The video plays
   /// locally; the still rides avatar_png_b64 to interlocutors.
   Future<void> _chooseAvatarVideo() async {
+    if (!kVideoToolsAvailable) return;
     if (!await _ensureCosmeticAccess()) return;
     final x = await ImagePicker().pickVideo(source: ImageSource.gallery);
     if (x == null || !mounted) return;

@@ -423,6 +423,12 @@ class _RoomPermissionsFormState extends State<_RoomPermissionsForm> {
               (v) => _set(s.copyWith(allowChangeGroupInfo: v))),
           _toggle(l10n.desktopRoomPermChangeTag, s.allowChangeTag,
               (v) => _set(s.copyWith(allowChangeTag: v))),
+          // Закрытые темы (Р-2): по умолчанию их создают владелец и админы.
+          // У самой закрытой темы вложенных нет — и переключателя тоже.
+          if (!s.isPrivateTopic)
+            _toggle(l10n.roomPrivateTopicAllowMembers,
+                s.allowMembersCreateTopics,
+                (v) => _set(s.copyWith(allowMembersCreateTopics: v))),
         ]),
         _section(l10n.desktopRoomPermJoinSection, [
           _toggle(l10n.desktopRoomPermApproval, s.joinApprovalRequired,

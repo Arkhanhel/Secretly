@@ -37,7 +37,25 @@ class PendingPhotoUpload {
     this.waveform,
     this.durationMs,
     this.videoNote = false,
+    this.prepare,
+    this.deleteFileAfterSend = false,
+    this.mirrorPreview = false,
   }) : createdAtMs = DateTime.now().millisecondsSinceEpoch;
+
+  /// Сделать итоговый файл перед загрузкой (кружок: склейка/зеркалирование,
+  /// 15.11.2026). Выполняется один раз; результат — в [preparedPath], повтор
+  /// после сбоя берёт его. `null` от функции — отправляется [filePath].
+  final Future<String?> Function()? prepare;
+
+  /// Временный файл приложения (кружок) — удалить после удачной отправки:
+  /// копия уже лежит в кэше вложений.
+  final bool deleteFileAfterSend;
+
+  /// Пузырь в очереди показывает кадр зеркально (сырой кусок фронтальной
+  /// камеры, кружок).
+  final bool mirrorPreview;
+
+  String? preparedPath;
 
   final String id;
   final String filePath;
@@ -102,6 +120,13 @@ class PendingPhotoUpload {
   /// keep their index alignment, but the collage hides it and the send worker
   /// skips it — cancelling one photo must NOT cancel the whole album.
   bool canceled = false;
+
+  /// О2 (разбор медиа 15.11.2026): отправка сорвалась по сети/серверу —
+  /// пузырь остаётся «не отправлено» с кнопкой повтора, а не исчезает.
+  /// `null` — идёт или ждёт очереди.
+  Object? failedError;
+  bool get failed => failedError != null;
+
   int _lastSentBytes = 0;
   int _lastTickMs = DateTime.now().millisecondsSinceEpoch;
   int _lastUiTickMs = 0;

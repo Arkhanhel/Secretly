@@ -39,14 +39,17 @@ void main() {
     );
     expect(find.byIcon(FluentIcons.alert_24_regular), findsOneWidget);
 
-    // Трей: «без звука на час».
+    // Трей: «без звука на час». Значок превращается (05.10.2026) — ждём,
+    // пока прежний уйдёт.
     svc.doNotDisturbListenable.value = true;
     await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
     expect(find.byIcon(FluentIcons.alert_off_24_regular), findsOneWidget);
 
     // Час истёк — служба сбрасывает то же значение.
     svc.doNotDisturbListenable.value = false;
     await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
     expect(find.byIcon(FluentIcons.alert_24_regular), findsOneWidget);
   });
 }

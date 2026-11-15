@@ -171,8 +171,15 @@ void main() {
     ).readAsStringSync();
 
     test('крестик прячет окно, из созвона не выводит', () {
-      // `minimize` = `close` + вывести главное окно из трея (30.09.2026).
-      expect(host.contains('onCloseRequested: () => unawaited(minimize()),'), isTrue);
+      // 05.10.2026: крестик большого окна сворачивает его в мини-окно ОС,
+      // крестик мини-окна — возвращает созвон в главное окно
+      // (`minimizeToMain` = `close` + вывести главное окно из трея).
+      expect(
+        host.contains(
+          'miniRoom.value == groupId ? minimizeToMain() : minimize(),',
+        ),
+        isTrue,
+      );
       expect(host.contains('leaveRelayRoomCall'), isFalse);
     });
 

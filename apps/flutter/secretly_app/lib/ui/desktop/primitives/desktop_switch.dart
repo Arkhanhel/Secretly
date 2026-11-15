@@ -80,8 +80,8 @@ class DesktopSwitch extends StatelessWidget {
         onTap: enabled ? () => onChanged!(!value) : null,
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
         builder: (ctx, hovered, pressed) => AnimatedContainer(
-          duration: DMotion.base,
-          curve: DMotion.easeOutCubic,
+          duration: DMotion.of(ctx, DMotion.medium),
+          curve: DMotion.standard,
           width: width,
           height: height,
           padding: EdgeInsets.all(pad),
@@ -93,16 +93,20 @@ class DesktopSwitch extends StatelessWidget {
                 : track,
             borderRadius: BorderRadius.circular(height / 2),
           ),
+          // Ручка скользит по кривой скольжения и под нажатием вытягивается
+          // в сторону хода — как у настоящего тумблера (05.10.2026).
           child: AnimatedAlign(
-            duration: DMotion.base,
-            curve: DMotion.easeOutCubic,
+            duration: DMotion.of(ctx, DMotion.medium),
+            curve: DMotion.glideCurve,
             alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-            child: Container(
-              width: knob,
+            child: AnimatedContainer(
+              duration: DMotion.of(ctx, pressed ? DMotion.press : DMotion.medium),
+              curve: DMotion.standard,
+              width: pressed && enabled ? knob + knob * 0.28 : knob,
               height: knob,
               decoration: BoxDecoration(
                 color: value ? Colors.white : (offKnobColor ?? c.textSecondary),
-                shape: BoxShape.circle,
+                borderRadius: BorderRadius.circular(knob / 2),
                 boxShadow: offKnobColor == null
                     ? null
                     : const [

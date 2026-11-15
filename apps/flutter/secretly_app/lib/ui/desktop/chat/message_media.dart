@@ -399,6 +399,12 @@ class DesktopMediaTile extends StatelessWidget {
         progress: a.uploadProgress!,
         onCancel: onCancelUpload,
       );
+    } else if (failed && a.gone) {
+      // П7: срок хранения истёк — кнопки повтора нет, повторять нечего.
+      center = MediaCenterButton(
+        icon: FluentIcons.image_off_24_regular,
+        tooltip: l10n.attachmentExpiredOnServer,
+      );
     } else if (failed) {
       center = MediaCenterButton(
         icon: FluentIcons.arrow_clockwise_24_regular,
@@ -420,7 +426,7 @@ class DesktopMediaTile extends StatelessWidget {
     // Пока снимок уходит, открывать нечего: нажатие — только по кольцу.
     final VoidCallback? tap = uploading
         ? null
-        : (failed ? onRetry : (ready ? onOpen : null));
+        : (failed ? (a.gone ? null : onRetry) : (ready ? onOpen : null));
     return MouseRegion(
       cursor: tap != null ? SystemMouseCursors.click : MouseCursor.defer,
       child: GestureDetector(
@@ -882,6 +888,9 @@ class DesktopFileRow extends StatelessWidget {
     final Widget status;
     if (_uploading) {
       status = Text(uploadStatusText(a, l10n), style: statusStyle);
+    } else if (a.failed && a.gone) {
+      // П7: срок хранения истёк — «Повторить» не предлагаем.
+      status = Text(l10n.attachmentExpiredOnServer, style: statusStyle);
     } else if (a.failed) {
       status = _StatusLine(
         prefix: l10n.desktopPhotoLoadFailed,
@@ -891,8 +900,15 @@ class DesktopFileRow extends StatelessWidget {
         onLink: onDownload,
       );
     } else if (_busy) {
+      // П5: с ходом скачивания — «Скачивание 45 % · 3,2 МБ».
+      final pct = a.downloadProgress == null
+          ? null
+          : '${(a.downloadProgress! * 100).round()} %';
+      final detail = [?pct, if (size.isNotEmpty) size].join(' · ');
       status = Text(
-        size.isEmpty ? l10n.desktopServerBackupLoading : l10n.desktopMediaDownloading(size),
+        detail.isEmpty
+            ? l10n.desktopServerBackupLoading
+            : l10n.desktopMediaDownloading(detail),
         style: statusStyle,
       );
     } else if (_downloaded) {
@@ -965,7 +981,9 @@ class DesktopFileRow extends StatelessWidget {
       );
     }
     final IconData icon;
-    if (a.failed) {
+    if (a.failed && a.gone) {
+      icon = FluentIcons.document_dismiss_24_regular;
+    } else if (a.failed) {
       icon = FluentIcons.arrow_clockwise_24_regular;
     } else if (!_downloaded) {
       icon = FluentIcons.arrow_download_24_filled;

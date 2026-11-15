@@ -17,6 +17,7 @@
 //!   SECRETLY_APPSTORE_ROOT_CERT_DER_B64    base64 of Apple Root CA - G3 (DER)
 //!   SECRETLY_PLAY_PACKAGE                  e.g. com.secretly.secretly_app
 //!   SECRETLY_PLAY_SERVICE_ACCOUNT_JSON     SA JSON content or a path to it
+//!   SECRETLY_BILLING_APPSTORE_SANDBOX      allow (по умолчанию) | deny
 //!
 //! Anonymity (§0.2): only the opaque store transaction id and the profile id are
 //! stored; nothing personal is extracted or logged from receipts.
@@ -92,10 +93,35 @@ fn default_token_uri() -> String {
     "https://oauth2.googleapis.com/token".to_string()
 }
 
+/// 13.11.2026: покупки из песочницы Apple (TestFlight, тестовые сборки
+/// владельца) подписаны тем же корнем Apple, что и настоящие. По умолчанию
+/// `Allow` — как было до сих пор, владелец проверяет ими покупки; `Deny`
+/// оператор включает сам, когда тесты на проде больше не нужны.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AppStoreSandboxPolicy {
+    #[default]
+    Allow,
+    Deny,
+}
+
+impl AppStoreSandboxPolicy {
+    /// Только явное `deny` запрещает; пусто или опечатка — `Allow`, чтобы
+    /// ошибка в настройке не отняла у людей купленное.
+    pub fn parse(raw: Option<&str>) -> Self {
+        match raw.map(|s| s.trim().to_ascii_lowercase()) {
+            Some(ref v) if v == "deny" => AppStoreSandboxPolicy::Deny,
+            _ => AppStoreSandboxPolicy::Allow,
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct BillingVerifyConfig {
     pub appstore_bundle_id: Option<String>,
     pub apple_root_der: Option<Vec<u8>>,
+    pub appstore_sandbox: AppStoreSandboxPolicy,
+    /// `true` только при `SECRETLY_BILLING_APPSTORE_CHAIN_OIDS=enforce`.
+    pub appstore_enforce_chain_oids: bool,
     pub play_package: Option<String>,
     pub play_sa: Option<PlayServiceAccount>,
 }
@@ -125,6 +151,12 @@ impl BillingVerifyConfig {
                     .decode(b.trim())
                     .ok()
             }),
+            appstore_sandbox: AppStoreSandboxPolicy::parse(
+                env_nonempty("SECRETLY_BILLING_APPSTORE_SANDBOX").as_deref(),
+            ),
+            appstore_enforce_chain_oids: env_nonempty("SECRETLY_BILLING_APPSTORE_CHAIN_OIDS")
+                .map(|v| v.trim().eq_ignore_ascii_case("enforce"))
+                .unwrap_or(false),
             play_package: env_nonempty("SECRETLY_PLAY_PACKAGE"),
             play_sa: env_nonempty("SECRETLY_PLAY_SERVICE_ACCOUNT_JSON")
                 .and_then(|raw| load_play_sa(&raw)),
@@ -148,18 +180,65 @@ struct AppStorePayload {
     expires_date: Option<i64>,
     #[serde(rename = "revocationDate")]
     revocation_date: Option<i64>,
+    /// "Production" | "Sandbox" | "Xcode" | "LocalTesting".
+    environment: Option<String>,
+}
+
+/// 13.11.2026: OID расширений из требований Apple к проверке JWS StoreKit 2.
+/// Без них к корню G3 сводится любой сертификат от Apple WWDR, в том числе
+/// обычный сертификат разработчика, ключ которого есть у любого разработчика.
+const APPLE_OID_RECEIPT_SIGNING_LEAF: &str = "1.2.840.113635.100.6.11.1";
+const APPLE_OID_WWDR_INTERMEDIATE: &str = "1.2.840.113635.100.6.2.1";
+
+/// Что не так с цепочкой x5c по правилам Apple, или `None`.
+fn app_store_chain_oid_violation(certs: &[X509Certificate]) -> Option<&'static str> {
+    if certs.len() != 3 {
+        return Some("x5c chain is not leaf/intermediate/root");
+    }
+    if !has_extension_oid(&certs[0], APPLE_OID_RECEIPT_SIGNING_LEAF) {
+        return Some("leaf lacks App Store receipt-signing OID");
+    }
+    if !has_extension_oid(&certs[1], APPLE_OID_WWDR_INTERMEDIATE) {
+        return Some("intermediate lacks Apple WWDR OID");
+    }
+    None
+}
+
+fn has_extension_oid(cert: &X509Certificate, oid: &str) -> bool {
+    cert.extensions()
+        .iter()
+        .any(|e| e.oid.to_id_string() == oid)
 }
 
 /// Verifies a StoreKit2 signed transaction JWS:
 ///  1. ES256 signature over header.payload using the leaf cert's key,
 ///  2. x5c chain leaf←intermediate←root with the root pinned to Apple's root,
 ///  3. certificate validity windows,
-///  4. bundleId match,
+///  4. Apple OIDs on leaf and intermediate,
+///  5. bundleId present and matching,
+///  6. environment against `sandbox` policy,
 /// then maps productId → tier. A revoked/refunded receipt resolves to `free`.
 pub fn verify_app_store_jws(
     jws: &str,
     expected_bundle_id: &str,
     apple_root_der: &[u8],
+    sandbox: AppStoreSandboxPolicy,
+) -> Result<VerifiedPurchase, VerifyError> {
+    verify_app_store_jws_with(jws, expected_bundle_id, apple_root_der, sandbox, true)
+}
+
+/// То же, но проверку OID цепочки можно перевести в «только журнал»
+/// (`enforce_chain_oids = false`). 13.11.2026: настоящего чека Apple в тестах
+/// нет — проверка сверена с документацией и библиотекой Apple, но не с живой
+/// покупкой. Ошибка здесь = человек заплатил и не получил Premium, поэтому на
+/// проде сначала журнал (`SECRETLY_BILLING_APPSTORE_CHAIN_OIDS` пусто или
+/// `warn`), после первых настоящих покупок без предупреждения — `enforce`.
+pub fn verify_app_store_jws_with(
+    jws: &str,
+    expected_bundle_id: &str,
+    apple_root_der: &[u8],
+    sandbox: AppStoreSandboxPolicy,
+    enforce_chain_oids: bool,
 ) -> Result<VerifiedPurchase, VerifyError> {
     let header = jsonwebtoken::decode_header(jws)
         .map_err(|e| VerifyError::Malformed(format!("header: {e}")))?;
@@ -201,6 +280,17 @@ pub fn verify_app_store_jws(
             return Err(VerifyError::Untrusted("certificate expired or not yet valid".into()));
         }
     }
+    // 13.11.2026: у Apple цепочка всегда из трёх [лист, WWDR, корень G3] —
+    // так же проверяет их app-store-server-library. Лист обязан быть
+    // сертификатом подписи покупок, промежуточный — WWDR.
+    if let Some(why) = app_store_chain_oid_violation(&certs) {
+        if enforce_chain_oids {
+            return Err(VerifyError::Untrusted(why.into()));
+        }
+        tracing::warn!(
+            "billing: App Store chain check would reject ({why}); accepted because SECRETLY_BILLING_APPSTORE_CHAIN_OIDS is not 'enforce'"
+        );
+    }
 
     // Verify the JWS ES256 signature with the leaf public key.
     // jsonwebtoken/ring's from_ec_der expects the RAW uncompressed EC point
@@ -216,10 +306,12 @@ pub fn verify_app_store_jws(
         .map_err(|e| VerifyError::Untrusted(format!("jws signature: {e}")))?
         .claims;
 
-    if let Some(ref b) = payload.bundle_id {
-        if b != expected_bundle_id {
-            return Err(VerifyError::Untrusted("bundleId mismatch".into()));
-        }
+    // 13.11.2026: в настоящей покупке StoreKit 2 bundleId есть всегда;
+    // без него покупку нельзя привязать к нашему приложению.
+    match payload.bundle_id.as_deref() {
+        Some(b) if b == expected_bundle_id => {}
+        Some(_) => return Err(VerifyError::Untrusted("bundleId mismatch".into())),
+        None => return Err(VerifyError::Untrusted("missing bundleId".into())),
     }
     let store_tx_id = payload
         .original_transaction_id
@@ -236,6 +328,21 @@ pub fn verify_app_store_jws(
     }
     let (tier, _is_sub) = tier_for_product(&payload.product_id)
         .ok_or_else(|| VerifyError::UnknownProduct(payload.product_id.clone()))?;
+    // 13.11.2026: песочница проверяется только там, где покупка что-то даёт;
+    // отзыв выше проходит всегда — он только отнимает. Поле пустое — как
+    // раньше, пропускаем: отказ мог бы задеть настоящую покупку.
+    if let Some(env) = payload.environment.as_deref() {
+        if env != "Production" {
+            if sandbox == AppStoreSandboxPolicy::Deny {
+                return Err(VerifyError::Untrusted(format!("environment {env} denied")));
+            }
+            tracing::warn!(
+                "billing: App Store {} transaction accepted (product={}, policy=allow) — grants or extends an entitlement",
+                env,
+                payload.product_id
+            );
+        }
+    }
     Ok(VerifiedPurchase {
         store_tx_id,
         tier,
@@ -476,7 +583,12 @@ mod tests {
 
     #[test]
     fn app_store_rejects_garbage_jws() {
-        let err = verify_app_store_jws("not.a.jws", "com.secretly.messenger", b"root");
+        let err = verify_app_store_jws(
+            "not.a.jws",
+            "com.secretly.messenger",
+            b"root",
+            AppStoreSandboxPolicy::Allow,
+        );
         assert!(matches!(err, Err(VerifyError::Malformed(_))));
     }
 
@@ -535,46 +647,98 @@ mod tests {
         assert_eq!(appstore_notification_inner_jws("garbage"), None);
     }
 
-    /// Regression for the InvalidSignature bug: build a real ES256 x5c chain
-    /// (self-signed root → leaf), sign a StoreKit2-style JWS with the leaf key,
-    /// and assert verify_app_store_jws actually validates the signature, maps the
-    /// product to a tier, and rejects a wrong bundle / wrong pinned root.
-    #[test]
-    fn app_store_verifies_real_chain_signature() {
-        use jsonwebtoken::{Algorithm, EncodingKey, Header};
-        use rcgen::{BasicConstraints, CertificateParams, IsCa, KeyPair};
+    /// Синтетическая цепочка в форме Apple: корень → промежуточный → лист.
+    /// `leaf_oid` / `int_oid` — ставить ли OID Apple на лист и промежуточный.
+    struct TestChain {
+        root_der: Vec<u8>,
+        x5c: Vec<String>,
+        leaf_key: rcgen::KeyPair,
+    }
 
+    fn apple_like_chain(leaf_oid: bool, int_oid: bool) -> TestChain {
+        use rcgen::{BasicConstraints, CertificateParams, CustomExtension, IsCa, KeyPair};
         let b64 = |d: &[u8]| base64::engine::general_purpose::STANDARD.encode(d);
+        // Apple кладёт в эти расширения DER NULL.
+        let marker = |arc: &[u64]| CustomExtension::from_oid_content(arc, vec![0x05, 0x00]);
 
-        let ca_key = KeyPair::generate().unwrap();
-        let mut ca_params = CertificateParams::new(vec!["Test Root".to_string()]).unwrap();
-        ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
-        let ca_cert = ca_params.self_signed(&ca_key).unwrap();
+        let root_key = KeyPair::generate().unwrap();
+        let mut root_params = CertificateParams::new(vec!["Test Root".to_string()]).unwrap();
+        root_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        let root_cert = root_params.self_signed(&root_key).unwrap();
+
+        let int_key = KeyPair::generate().unwrap();
+        let mut int_params = CertificateParams::new(vec!["Test WWDR".to_string()]).unwrap();
+        int_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+        if int_oid {
+            int_params
+                .custom_extensions
+                .push(marker(&[1, 2, 840, 113635, 100, 6, 2, 1]));
+        }
+        let int_cert = int_params.signed_by(&int_key, &root_cert, &root_key).unwrap();
 
         let leaf_key = KeyPair::generate().unwrap();
-        let leaf_params = CertificateParams::new(vec!["leaf".to_string()]).unwrap();
-        let leaf_cert = leaf_params.signed_by(&leaf_key, &ca_cert, &ca_key).unwrap();
+        let mut leaf_params = CertificateParams::new(vec!["leaf".to_string()]).unwrap();
+        if leaf_oid {
+            leaf_params
+                .custom_extensions
+                .push(marker(&[1, 2, 840, 113635, 100, 6, 11, 1]));
+        }
+        let leaf_cert = leaf_params.signed_by(&leaf_key, &int_cert, &int_key).unwrap();
 
-        let ca_der = ca_cert.der().to_vec();
-        let leaf_der = leaf_cert.der().to_vec();
+        TestChain {
+            root_der: root_cert.der().to_vec(),
+            x5c: vec![
+                b64(leaf_cert.der()),
+                b64(int_cert.der()),
+                b64(root_cert.der()),
+            ],
+            leaf_key,
+        }
+    }
 
-        let enc = EncodingKey::from_ec_pem(leaf_key.serialize_pem().as_bytes()).unwrap();
+    fn sign_tx(chain: &TestChain, x5c: Vec<String>, claims: serde_json::Value) -> String {
+        use jsonwebtoken::{Algorithm, EncodingKey, Header};
+        let enc = EncodingKey::from_ec_pem(chain.leaf_key.serialize_pem().as_bytes()).unwrap();
         let mut header = Header::new(Algorithm::ES256);
-        header.x5c = Some(vec![b64(&leaf_der), b64(&ca_der)]);
-        let claims = serde_json::json!({
+        header.x5c = Some(x5c);
+        jsonwebtoken::encode(&header, &claims, &enc).unwrap()
+    }
+
+    fn tx_claims(environment: Option<&str>) -> serde_json::Value {
+        let mut c = serde_json::json!({
             "bundleId": "com.secretly.messenger",
             "productId": PRODUCT_MONTHLY,
             "transactionId": "2000000000000001",
         });
-        let jws = jsonwebtoken::encode(&header, &claims, &enc).unwrap();
+        if let Some(e) = environment {
+            c["environment"] = serde_json::json!(e);
+        }
+        c
+    }
 
-        let ok = verify_app_store_jws(&jws, "com.secretly.messenger", &ca_der)
+    const ALLOW: AppStoreSandboxPolicy = AppStoreSandboxPolicy::Allow;
+    const DENY: AppStoreSandboxPolicy = AppStoreSandboxPolicy::Deny;
+
+    /// Regression for the InvalidSignature bug: build a real ES256 x5c chain
+    /// (root → intermediate → leaf, Apple OIDs set), sign a StoreKit2-style JWS
+    /// with the leaf key, and assert verify_app_store_jws actually validates the
+    /// signature, maps the product to a tier, and rejects a wrong bundle / wrong
+    /// pinned root.
+    #[test]
+    fn app_store_verifies_real_chain_signature() {
+        use rcgen::{CertificateParams, KeyPair};
+        let chain = apple_like_chain(true, true);
+        let jws = sign_tx(&chain, chain.x5c.clone(), tx_claims(Some("Production")));
+
+        let ok = verify_app_store_jws(&jws, "com.secretly.messenger", &chain.root_der, ALLOW)
             .expect("valid chain + signature must verify");
         assert_eq!(ok.tier, "premium");
         assert_eq!(ok.store_tx_id, "2000000000000001");
+        // Боевая покупка проходит и при deny.
+        assert!(verify_app_store_jws(&jws, "com.secretly.messenger", &chain.root_der, DENY).is_ok());
 
         // Wrong bundle id → rejected.
-        assert!(verify_app_store_jws(&jws, "com.evil.app", &ca_der).is_err());
+        assert!(verify_app_store_jws(&jws, "com.evil.app", &chain.root_der, ALLOW).is_err());
 
         // Different pinned root → rejected (chain root not pinned).
         let other_key = KeyPair::generate().unwrap();
@@ -583,6 +747,109 @@ mod tests {
             .self_signed(&other_key)
             .unwrap();
         let other_der = other_root.der().to_vec();
-        assert!(verify_app_store_jws(&jws, "com.secretly.messenger", &other_der).is_err());
+        assert!(verify_app_store_jws(&jws, "com.secretly.messenger", &other_der, ALLOW).is_err());
+    }
+
+    /// 13.11.2026: лист без OID подписи покупок (например, сертификат
+    /// разработчика от WWDR) отклоняется, даже если вся цепочка до корня цела.
+    #[test]
+    fn app_store_rejects_leaf_without_receipt_signing_oid() {
+        let chain = apple_like_chain(false, true);
+        let jws = sign_tx(&chain, chain.x5c.clone(), tx_claims(Some("Production")));
+        let err = verify_app_store_jws(&jws, "com.secretly.messenger", &chain.root_der, ALLOW);
+        assert!(matches!(err, Err(VerifyError::Untrusted(ref m)) if m.contains("leaf")));
+    }
+
+    #[test]
+    fn app_store_rejects_intermediate_without_wwdr_oid() {
+        let chain = apple_like_chain(true, false);
+        let jws = sign_tx(&chain, chain.x5c.clone(), tx_claims(Some("Production")));
+        let err = verify_app_store_jws(&jws, "com.secretly.messenger", &chain.root_der, ALLOW);
+        assert!(matches!(err, Err(VerifyError::Untrusted(ref m)) if m.contains("intermediate")));
+    }
+
+    /// Режим «только журнал» (по умолчанию на проде до первых живых покупок):
+    /// нарушение OID не отказывает, но подпись и закреплённый корень — как
+    /// прежде, их режим не ослабляет.
+    #[test]
+    fn app_store_chain_oids_warn_mode_accepts_but_keeps_root_and_signature() {
+        let chain = apple_like_chain(false, false);
+        let jws = sign_tx(&chain, chain.x5c.clone(), tx_claims(Some("Production")));
+        assert!(verify_app_store_jws_with(
+            &jws,
+            "com.secretly.messenger",
+            &chain.root_der,
+            ALLOW,
+            false,
+        )
+        .is_ok());
+        assert!(verify_app_store_jws_with(
+            &jws,
+            "com.secretly.messenger",
+            &chain.root_der,
+            ALLOW,
+            true,
+        )
+        .is_err());
+        let other = apple_like_chain(true, true);
+        assert!(verify_app_store_jws_with(
+            &jws,
+            "com.secretly.messenger",
+            &other.root_der,
+            ALLOW,
+            false,
+        )
+        .is_err());
+    }
+
+    /// Цепочка не из трёх звеньев (лист прямо под корнем) — не форма Apple.
+    #[test]
+    fn app_store_rejects_two_cert_chain() {
+        let chain = apple_like_chain(true, true);
+        let short = vec![chain.x5c[0].clone(), chain.x5c[2].clone()];
+        let jws = sign_tx(&chain, short, tx_claims(Some("Production")));
+        assert!(verify_app_store_jws(&jws, "com.secretly.messenger", &chain.root_der, ALLOW).is_err());
+    }
+
+    #[test]
+    fn app_store_rejects_missing_bundle_id() {
+        let chain = apple_like_chain(true, true);
+        let mut claims = tx_claims(Some("Production"));
+        claims.as_object_mut().unwrap().remove("bundleId");
+        let jws = sign_tx(&chain, chain.x5c.clone(), claims);
+        let err = verify_app_store_jws(&jws, "com.secretly.messenger", &chain.root_der, ALLOW);
+        assert!(matches!(err, Err(VerifyError::Untrusted(ref m)) if m.contains("missing bundleId")));
+    }
+
+    /// Песочница: allow (по умолчанию) — выдаёт как раньше; deny — отказ.
+    /// Отзыв из песочницы проходит при любой политике: он только отнимает.
+    #[test]
+    fn app_store_sandbox_policy() {
+        let chain = apple_like_chain(true, true);
+        let sandbox = sign_tx(&chain, chain.x5c.clone(), tx_claims(Some("Sandbox")));
+        let ok = verify_app_store_jws(&sandbox, "com.secretly.messenger", &chain.root_der, ALLOW)
+            .expect("sandbox allowed by default");
+        assert_eq!(ok.tier, "premium");
+        assert!(verify_app_store_jws(&sandbox, "com.secretly.messenger", &chain.root_der, DENY).is_err());
+
+        let mut revoked = tx_claims(Some("Sandbox"));
+        revoked["revocationDate"] = serde_json::json!(1_700_000_000_000i64);
+        let revoked = sign_tx(&chain, chain.x5c.clone(), revoked);
+        let r = verify_app_store_jws(&revoked, "com.secretly.messenger", &chain.root_der, DENY)
+            .expect("revocation passes under deny");
+        assert_eq!(r.tier, "free");
+
+        // Поля environment нет — как раньше, пропускаем при любой политике.
+        let no_env = sign_tx(&chain, chain.x5c.clone(), tx_claims(None));
+        assert!(verify_app_store_jws(&no_env, "com.secretly.messenger", &chain.root_der, DENY).is_ok());
+    }
+
+    #[test]
+    fn app_store_sandbox_policy_parse() {
+        assert_eq!(AppStoreSandboxPolicy::parse(None), ALLOW);
+        assert_eq!(AppStoreSandboxPolicy::parse(Some("allow")), ALLOW);
+        assert_eq!(AppStoreSandboxPolicy::parse(Some(" DENY ")), DENY);
+        assert_eq!(AppStoreSandboxPolicy::parse(Some("dney")), ALLOW);
+        assert_eq!(BillingVerifyConfig::default().appstore_sandbox, ALLOW);
     }
 }

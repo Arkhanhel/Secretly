@@ -718,6 +718,91 @@ class AppLocalizationsEs extends AppLocalizations {
   String get attachmentTransferUnavailable => 'No se pudo transferir el adjunto ahora. Revisa internet/servidor e inténtalo de nuevo.';
 
   @override
+  String get startupRetry => 'Reintentar';
+
+  @override
+  String get onboardingBackupLater => 'La copia de seguridad aún no está activada: tu perfil todavía se está creando. Actívala más tarde en Ajustes.';
+
+  @override
+  String get keepMediaTitle => 'Guardar multimedia en el dispositivo';
+
+  @override
+  String get keepMediaForever => 'Siempre';
+
+  @override
+  String get keepMediaMonth => '1 mes';
+
+  @override
+  String get keepMediaWeek => '1 semana';
+
+  @override
+  String get keepMediaHint => 'Las fotos, vídeos y archivos descargados más antiguos se eliminan del teléfono. Los mensajes se quedan; lo que ya no está en el servidor (más de 7 días) y lo que enviaste se elimina para siempre.';
+
+  @override
+  String get chatMediaTitle => 'Multimedia por chat';
+
+  @override
+  String get chatMediaShow => 'Calcular por chat';
+
+  @override
+  String chatMediaFilesCount(int count) {
+    return '$count archivos';
+  }
+
+  @override
+  String get chatMediaDeleteTitle => '¿Eliminar la multimedia del chat?';
+
+  @override
+  String get chatMediaDeleteBody => 'Las fotos, vídeos y archivos descargados de este chat se eliminarán del teléfono; los mensajes se quedan. Lo que siga en el servidor (hasta 7 días) se podrá volver a descargar; el resto —lo que enviaste y lo más antiguo— se eliminará para siempre.';
+
+  @override
+  String get chatMediaDeleteConfirm => 'Eliminar';
+
+  @override
+  String get chatMediaEmpty => 'No hay multimedia descargada en los chats';
+
+  @override
+  String galleryShowMore(int count) {
+    return 'Mostrar más (quedan $count)';
+  }
+
+  @override
+  String get autoDownloadCellularTitle => 'Descarga automática con datos móviles';
+
+  @override
+  String get autoDownloadEverything => 'Todo';
+
+  @override
+  String get autoDownloadUpTo15Mb => 'Fotos, vídeos y archivos de hasta 15 MB';
+
+  @override
+  String get autoDownloadPhotosOnly => 'Solo fotos';
+
+  @override
+  String get autoDownloadNothing => 'Nada salvo mensajes de voz';
+
+  @override
+  String get autoDownloadHint => 'Con Wi-Fi se descarga todo. Lo pospuesto se descargará al conectarte a Wi-Fi o cuando lo abras. Los archivos se guardan en el servidor 7 días.';
+
+  @override
+  String get uploadNotSentTapToRetry => 'No enviado: toca para reintentar';
+
+  @override
+  String get uploadRetry => 'Reintentar';
+
+  @override
+  String get attachmentExpiredOnServer => 'El archivo ya no está en el servidor: se guarda 7 días.';
+
+  @override
+  String get attachmentServerRejectedSize => 'El archivo es demasiado grande para el servidor. Envía uno más pequeño o divídelo.';
+
+  @override
+  String get attachmentServerStorageFull => 'El servidor tiene poco espacio ahora mismo. Inténtalo más tarde.';
+
+  @override
+  String get attachmentUploadQuotaExceeded => 'Has alcanzado el límite de almacenamiento de archivos. Los archivos se guardan 7 días: inténtalo más tarde.';
+
+  @override
   String get attachmentSendUnavailable => 'El envío de adjuntos aún no está listo. Inténtalo de nuevo.';
 
   @override
@@ -1066,7 +1151,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get onboardingWelcomeTitle => '¡Bienvenido!';
 
   @override
-  String get onboardingWelcomeSubtitle => 'Un mensajero de nueva generación.\nPrivacidad total. Sin concesiones.';
+  String get onboardingWelcomeSubtitle => 'Un mensajero de nueva generación.\nPrivacidad desde el diseño.';
 
   @override
   String get onboardingCreateAccount => 'Crear cuenta nueva';
@@ -1081,16 +1166,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get onboardingFeatureE2eBody => 'Los mensajes se cifran en tu dispositivo. Solo tú tienes las claves.';
 
   @override
-  String get onboardingFeaturePrivacyTitle => 'Anonimato completo';
+  String get onboardingFeaturePrivacyTitle => 'Sin datos personales';
 
   @override
   String get onboardingFeaturePrivacyBody => 'Sin número de teléfono. Sin vinculación a datos personales.';
 
   @override
-  String get onboardingFeatureRelayTitle => 'Sin intermediarios';
+  String get onboardingFeatureRelayTitle => 'El servidor no lee';
 
   @override
-  String get onboardingFeatureRelayBody => 'El servidor relay no guarda mensajes. Solo los transmite.';
+  String get onboardingFeatureRelayBody => 'El servidor solo transmite mensajes cifrados y los borra tras entregarlos.';
 
   @override
   String get onboardingProfileTitle => 'Tu perfil';
@@ -3416,7 +3501,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get desktopPrivacyEncryption => 'Cifrado';
 
   @override
-  String get desktopPrivacyEncryptionHint => 'Los mensajes, los archivos y las llamadas individuales están cifrados de extremo a extremo; las claves solo están en tus dispositivos. Por ahora, las llamadas grupales solo se cifran en tránsito.';
+  String get desktopPrivacyEncryptionHint => 'Los mensajes, los archivos y las llamadas individuales están cifrados de extremo a extremo; las claves solo están en tus dispositivos. El cifrado de extremo a extremo de las llamadas grupales se activa de forma gradual: un candado en la llamada indica que está activo; sin él, la llamada solo se cifra en tránsito.';
 
   @override
   String get desktopPrivacyE2eeActive => 'El cifrado de extremo a extremo está activo';
@@ -3837,7 +3922,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get desktopSecurityE2ee => 'Cifrado de extremo a extremo';
 
   @override
-  String get desktopSecurityE2eeHint => 'Los mensajes, los archivos y las llamadas individuales se cifran en tu dispositivo, y las claves nunca salen de tus dispositivos. El servidor no puede leer el contenido, pero sí ve datos de servicio, como quién escribe a quién y cuándo. Por ahora, las llamadas grupales solo se cifran en tránsito.';
+  String get desktopSecurityE2eeHint => 'Los mensajes, los archivos y las llamadas individuales se cifran en tu dispositivo, y las claves nunca salen de tus dispositivos. El servidor no puede leer el contenido, pero sí ve datos de servicio, como quién escribe a quién y cuándo. El cifrado de extremo a extremo de las llamadas grupales se activa de forma gradual: un candado en la llamada indica que está activo; sin él, la llamada solo se cifra en tránsito.';
 
   @override
   String get desktopSecurityVerifiedDevices => 'Dispositivos verificados';
@@ -4918,6 +5003,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get desktopProfileEmojiStatusPremiumOnly => 'El estado con emoji es parte de Premium; la suscripción se contrata en la app del teléfono';
+
+  @override
+  String get desktopProfileCosmeticPremiumOnly => 'Este marco o portada es parte de Premium; la suscripción se contrata en la app del teléfono';
 
   @override
   String desktopProfileApplyFailed(Object error) {
@@ -7018,4 +7106,1176 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get desktopSoundNameDefault => 'Predeterminado';
+
+  @override
+  String get roomCallE2eeOn => 'Cifrado de extremo a extremo';
+
+  @override
+  String get roomCallE2eeOnHint => 'Solo los participantes pueden oír y ver esta llamada, no nuestro servidor.';
+
+  @override
+  String get roomCallE2eeConnecting => 'Configurando el cifrado…';
+
+  @override
+  String get roomCallE2eeFailed => 'No se pudo activar el cifrado. Este dispositivo no puede unirse a la llamada.';
+
+  @override
+  String get roomCallE2eeUnsupported => 'Las llamadas grupales cifradas aún no están disponibles en este dispositivo.';
+
+  @override
+  String get roomCallE2eeWaitingKey => 'Esperando la clave';
+
+  @override
+  String get roomCallE2eeFailing => 'No se puede descifrar: quizá tiene una versión antigua';
+
+  @override
+  String roomCallE2eeUnknownParticipants(int count) {
+    return 'Participantes desconocidos sin audio: $count';
+  }
+
+  @override
+  String get roomCallOpenBanner => 'Sin cifrado de extremo a extremo: nuestro servidor puede ver y oír esta llamada';
+
+  @override
+  String get roomCallJoinOpenTitle => '¿Unirse a una llamada sin cifrado?';
+
+  @override
+  String get roomCallJoinOpenBody => 'Esta llamada no tiene cifrado de extremo a extremo: se inició en una versión antigua de Secretly. Nuestro servidor puede verla y oírla.';
+
+  @override
+  String get roomCallJoinOpenAction => 'Unirse de todos modos';
+
+  @override
+  String get roomCallStartChoiceTitle => '¿Iniciar una llamada cifrada?';
+
+  @override
+  String roomCallStartChoiceBody(String names) {
+    return 'Versión antigua de Secretly; no podrán unirse: $names.';
+  }
+
+  @override
+  String get roomCallStartChoiceNotify => 'Avisar en el chat que actualicen';
+
+  @override
+  String get roomCallStartEncrypted => 'Iniciar cifrada';
+
+  @override
+  String get roomCallStartOpen => 'Iniciar sin cifrado';
+
+  @override
+  String get roomCallUpdateNotice => 'Hay una llamada cifrada en curso. Actualiza Secretly para unirte.';
+
+  @override
+  String get roomCallE2eeScreenShareIos => 'Compartir pantalla desde iPhone aún no está disponible en llamadas cifradas';
+
+  @override
+  String get roomCallFull => 'La llamada cifrada está completa';
+
+  @override
+  String get roomPrivateTopicNew => 'Nuevo tema';
+
+  @override
+  String get roomPrivateTopicOpen => 'Abierto';
+
+  @override
+  String get roomPrivateTopicOpenHint => 'Lo ven todos en la sala';
+
+  @override
+  String get roomPrivateTopicClosed => 'Privado';
+
+  @override
+  String get roomPrivateTopicClosedHint => 'Solo invitados. Los demás no sabrán que existe';
+
+  @override
+  String get roomPrivateTopicTitleHint => 'Nombre del tema';
+
+  @override
+  String get roomPrivateTopicMembers => 'A quién invitar';
+
+  @override
+  String get roomPrivateTopicOnlyYou => 'Solo tú por ahora — puedes añadir personas después';
+
+  @override
+  String get roomPrivateTopicCreate => 'Crear';
+
+  @override
+  String get roomPrivateTopicFailed => 'No se pudo crear el tema privado';
+
+  @override
+  String roomPrivateTopicLimit(int count) {
+    return 'Límite de temas privados alcanzado: $count';
+  }
+
+  @override
+  String get roomPrivateTopicLabel => 'Tema privado';
+
+  @override
+  String roomPrivateTopicInRoom(String room) {
+    return 'Tema privado · $room';
+  }
+
+  @override
+  String get roomPrivateTopicAllowMembers => 'Crear temas privados';
+
+  @override
+  String get spaceGateEnterCode => 'Introduce tu código';
+
+  @override
+  String get spaceGateWrongCode => 'El código no coincide. Inténtalo de nuevo.';
+
+  @override
+  String spaceGateWaitSeconds(int seconds) {
+    return 'Espera $seconds s';
+  }
+
+  @override
+  String get spaceGateUnlock => 'Desbloquear';
+
+  @override
+  String get spaceGateUseBiometrics => 'Usar biometría';
+
+  @override
+  String get spaceGateBiometricReason => 'Desbloquea Secretly';
+
+  @override
+  String get duressSetupTitle => 'Código de coacción';
+
+  @override
+  String get duressSetupDescription => 'Este código abre un perfil aparte y vacío en lugar del suyo. Debe ser distinto de su código real. Quien le vea introducirlo verá un mensajero recién instalado.';
+
+  @override
+  String get duressSectionTitle => 'Código de coacción';
+
+  @override
+  String get duressSectionSubtitleSet => 'Configurado. Un segundo código abre un perfil independiente y vacío.';
+
+  @override
+  String get duressSectionSubtitleUnset => 'Un segundo código que abre un perfil independiente y vacío en lugar del tuyo.';
+
+  @override
+  String get duressSectionChange => 'Cambiar';
+
+  @override
+  String get duressSectionSetUp => 'Configurar';
+
+  @override
+  String get duressWipeMainTitle => 'Borrar el perfil principal al introducir el código';
+
+  @override
+  String get duressWipeMainSubtitle => 'Irreversible. La recuperación solo es posible desde un Recovery Kit o una copia de seguridad.';
+
+  @override
+  String get duressRemoveCode => 'Quitar el código de coacción';
+
+  @override
+  String duressWipeAfterAttemptsTitle(int attempts) {
+    return 'Borrar todo después de $attempts intentos fallidos';
+  }
+
+  @override
+  String get duressWipeAfterAttemptsSubtitle => 'Ambos perfiles y el propio bloqueo. Tras 3 intentos fallidos ya se aplica un retardo.';
+
+  @override
+  String get duressSectionFootnote => 'Protege ante un control del tipo «muéstrame tu teléfono», pero no ante un análisis forense del dispositivo. La biometría siempre abre el perfil principal. Para volver a él desde el perfil señuelo, cierra la app e introduce tu código real.';
+
+  @override
+  String get duressSaveFailed => 'No se pudo guardar.';
+
+  @override
+  String get netSettingsImportNoNewMessages => 'No hay mensajes nuevos para este dispositivo.';
+
+  @override
+  String netSettingsImportReceived(int count) {
+    return 'Mensajes recibidos: $count';
+  }
+
+  @override
+  String get netSettingsImportNotEnvelopeFile => 'Este no es un archivo de mensajes de Secretly o ha sido modificado.';
+
+  @override
+  String get netSettingsImportCouldNotOpen => 'No se pudo abrir el archivo.';
+
+  @override
+  String get netSettingsImportCouldNotRead => 'No se pudo leer el archivo. Ábrelo en Secretly: Ajustes → Sin internet → «Abrir un archivo de mensajes».';
+
+  @override
+  String get netSettingsPathDirect => 'Directo';
+
+  @override
+  String get netSettingsPathFallback => 'Por dirección alternativa';
+
+  @override
+  String get netSettingsPathMirror => 'A través de un espejo';
+
+  @override
+  String get netSettingsPathCdn => 'A través de CDN';
+
+  @override
+  String get netSettingsPathProxy => 'A través de proxy';
+
+  @override
+  String get netSettingsPathSocks => 'A través de SOCKS';
+
+  @override
+  String get netSettingsPathTor => 'A través de Tor';
+
+  @override
+  String get netSettingsProxyHostError => 'Introduce un nombre de servidor, por ejemplo proxy.example.org';
+
+  @override
+  String get netSettingsSocksAddressError => 'Introduce una dirección como 127.0.0.1:9050';
+
+  @override
+  String get netSettingsNoContactsYet => 'Aún no hay contactos.';
+
+  @override
+  String get netSettingsPickRecipientTitle => 'Para quién es el archivo';
+
+  @override
+  String get netSettingsNothingToCarry => 'No hay nada que llevar a este contacto de la última semana.';
+
+  @override
+  String get netSettingsCouldNotCreateFile => 'No se pudo crear el archivo.';
+
+  @override
+  String get netSettingsTitle => 'Red';
+
+  @override
+  String get netSettingsPathToServersTitle => 'Ruta a los servidores';
+
+  @override
+  String get netSettingsPathDirectOff => 'Directo. Las rutas alternativas están desactivadas o no están disponibles.';
+
+  @override
+  String get netSettingsTryAlternativeTitle => 'Buscar rutas alternativas';
+
+  @override
+  String get netSettingsTryAlternativeSubtitle => 'Cuando la ruta directa está bloqueada, la app prueba por su cuenta direcciones alternativas, espejos y proxies. El contenido sigue cifrado de extremo a extremo.';
+
+  @override
+  String get netSettingsVolunteerProxyTitle => 'Proxy voluntario';
+
+  @override
+  String get netSettingsVolunteerProxyDescription => 'Un enlace como secretly://proxy#host. El propietario del proxy no puede leer tu tráfico, pero sí ve que usas Secretly.';
+
+  @override
+  String get netSettingsSocksTitle => 'SOCKS5 (por ejemplo, Tor a través de Orbot)';
+
+  @override
+  String get netSettingsSendWithoutNetworkTitle => 'Enviar sin red';
+
+  @override
+  String get netSettingsSendWithoutNetworkSubtitle => 'Un archivo con tus mensajes cifrados a un contacto de la última semana. Entrégalo como quieras: memoria USB, Bluetooth u otro mensajero.';
+
+  @override
+  String get netSettingsOpenMessageFileTitle => 'Abrir un archivo de mensajes';
+
+  @override
+  String get netSettingsOpenMessageFileSubtitle => 'Un archivo .secretly de un contacto. Se omiten los mensajes para otros dispositivos y los que ya tienes.';
+
+  @override
+  String get netSettingsDeliveryReportsTitle => 'Informes de entrega anónimos';
+
+  @override
+  String get netSettingsDeliveryReportsSubtitle => 'Una vez al día: plataforma, tipo de red, qué ruta funcionó y cuáles fallaron, país según el idioma del sistema. Sin identificadores ni direcciones.';
+
+  @override
+  String get netSettingsOrbotTitle => 'A través de Orbot (Tor)';
+
+  @override
+  String get netSettingsOrbotSubtitle => 'Rellena la dirección SOCKS de Orbot: 127.0.0.1:9050. Instala Orbot e inícialo; Secretly no puede comprobar si está funcionando.';
+
+  @override
+  String get netSettingsOrbotDone => 'Dirección SOCKS establecida en Orbot. Inicia Orbot y vuelve aquí.';
+
+  @override
+  String get netSettingsTorTitle => 'Tor como último recurso';
+
+  @override
+  String get netSettingsTorSubtitle => 'Más lento y consume más batería; solo se usa cuando todo lo demás está bloqueado.';
+
+  @override
+  String get socialRecoveryGuardiansTitle => 'Guardianes';
+
+  @override
+  String get socialRecoveryEntryGuardiansSubtitle => 'Amigos que juntos pueden recuperar tu perfil si pierdes el teléfono. Por separado, ninguno puede hacer nada.';
+
+  @override
+  String get socialRecoveryHelpSomeoneTitle => 'Ayudar a alguien a recuperar';
+
+  @override
+  String get socialRecoveryHelpSomeoneSubtitle => 'Si eres el guardián de alguien.';
+
+  @override
+  String get socialRecoveryRecoverMineTitle => 'Recuperar mi perfil';
+
+  @override
+  String get socialRecoveryRecoverMineSubtitle => 'En un teléfono nuevo, con la ayuda de tus guardianes.';
+
+  @override
+  String get socialRecoveryNeedTwoGuardians => 'Elige al menos dos guardianes.';
+
+  @override
+  String get socialRecoverySendSharesFailed => 'No se pudieron enviar las partes. Comprueba tu conexión.';
+
+  @override
+  String get socialRecoveryOwnerIntro => 'Tu perfil se divide en partes entre los guardianes. Para recuperarlo necesitas tantos de ellos como elijas. Elige personas cuya voz reconozcas y con las que hayas comprobado el código de seguridad.';
+
+  @override
+  String get socialRecoveryIsSetUp => 'La recuperación está configurada';
+
+  @override
+  String get socialRecoveryWaitingConfirmations => 'Esperando confirmaciones';
+
+  @override
+  String socialRecoveryConfirmedProgress(int accepted, int total, int threshold) {
+    return '$accepted de $total confirmados. Se necesitan $threshold para recuperar.';
+  }
+
+  @override
+  String get socialRecoveryGuardianHoldsPart => 'Guarda una parte';
+
+  @override
+  String get socialRecoveryGuardianNotSent => 'No enviado';
+
+  @override
+  String get socialRecoveryGuardianSentWaiting => 'Enviado, esperando';
+
+  @override
+  String socialRecoveryPickContacts(int max) {
+    return 'Elige de 2 a $max contactos';
+  }
+
+  @override
+  String get socialRecoveryNoContactsYet => 'Aún no hay contactos.';
+
+  @override
+  String socialRecoveryThresholdLabel(int threshold, int total) {
+    return 'Guardianes necesarios para recuperar: $threshold de $total';
+  }
+
+  @override
+  String get socialRecoveryThresholdWarning => 'Esa cantidad de guardianes, actuando juntos, podría recuperar tu perfil sin ti. Evita personas que se conozcan demasiado entre sí.';
+
+  @override
+  String get socialRecoverySendParts => 'Enviar las partes';
+
+  @override
+  String get socialRecoveryUpdateGuardians => 'Actualizar guardianes';
+
+  @override
+  String get socialRecoveryTurnOff => 'Desactivar la recuperación';
+
+  @override
+  String get socialRecoveryCodeScanTitle => 'Código de recuperación';
+
+  @override
+  String get socialRecoveryNotRecoveryCode => 'Este no es un código de recuperación.';
+
+  @override
+  String get socialRecoveryNoCodeInClipboard => 'No hay ningún código de recuperación en el portapapeles.';
+
+  @override
+  String get socialRecoverySendFailed => 'No se pudo enviar. Comprueba tu conexión.';
+
+  @override
+  String get socialRecoveryHelpRecoverTitle => 'Ayudar a recuperar';
+
+  @override
+  String get socialRecoveryNotGuardianYet => 'Todavía no eres el guardián de nadie. Cuando alguien te elija, su nombre aparecerá aquí.';
+
+  @override
+  String get socialRecoveryWhoAreYouHelping => 'A quién estás ayudando';
+
+  @override
+  String socialRecoveryThresholdOfGuardians(int threshold, int guardians) {
+    return 'Se necesitan $threshold de $guardians guardianes';
+  }
+
+  @override
+  String get socialRecoveryScanCode => 'Escanear código';
+
+  @override
+  String get socialRecoveryPasteCode => 'Pegar código';
+
+  @override
+  String get socialRecoveryCheckWordsByVoice => 'Comprueba las palabras por voz';
+
+  @override
+  String get socialRecoveryCheckWordsExplanation => 'Llama a la persona o quedad en persona. Pídele que lea las palabras de su pantalla. Si alguna palabra no coincide, o no estás seguro de que sea ella, no envíes nada. Así es como un atacante se apoderaría del perfil de otra persona.';
+
+  @override
+  String get socialRecoveryHeardWordsConfirm => 'He escuchado estas palabras de esta persona';
+
+  @override
+  String get socialRecoverySent => 'Enviado';
+
+  @override
+  String get socialRecoverySendMyPart => 'Enviar mi parte';
+
+  @override
+  String get socialRecoveryRecoverProfileTitle => 'Recuperar perfil';
+
+  @override
+  String get socialRecoveryRecoverIntro => 'Este teléfono sustituirá el perfil que ahora está abierto por tu perfil anterior. Tus guardianes envían sus partes y, cuando haya suficientes, la app se reinicia con tu perfil.';
+
+  @override
+  String get socialRecoveryShowCodeToGuardians => 'Mostrar el código a los guardianes';
+
+  @override
+  String get socialRecoveryShowCodeHint => 'Muestra el código a un guardián o envíalo como texto, y luego léele estas palabras en voz alta.';
+
+  @override
+  String get socialRecoveryCopyCode => 'Copiar código';
+
+  @override
+  String get socialRecoveryWaitingGuardians => 'Esperando a los guardianes';
+
+  @override
+  String socialRecoveryReceivedProgress(int received, int threshold) {
+    return 'Recibidas $received de $threshold';
+  }
+
+  @override
+  String get socialRecoveryPartDidNotFit => 'Una de las partes no encajó. Pídeselo a otro guardián.';
+
+  @override
+  String socialRecoveryAssembleFailed(String error) {
+    return 'No se pudo reconstruir el perfil ($error).';
+  }
+
+  @override
+  String get socialRecoveryCancel => 'Cancelar';
+
+  @override
+  String get disappearingTitle => 'Mensajes temporales';
+
+  @override
+  String disappearingSubtitleOn(Object duration) {
+    return '$duration · para todos en el chat';
+  }
+
+  @override
+  String get disappearingDialogHint => 'Los mensajes se eliminan de los dispositivos de todos los participantes cuando se acaba el tiempo. No protege contra capturas de pantalla ni contra dispositivos con una versión antigua de la app.';
+
+  @override
+  String get disappearingCustom => 'Personalizado…';
+
+  @override
+  String get disappearingCustomTitle => 'Tiempo personalizado';
+
+  @override
+  String disappearingCustomHint(Object min, Object max) {
+    return 'De $min a $max';
+  }
+
+  @override
+  String get disappearingUnitSeconds => 'segundos';
+
+  @override
+  String get disappearingUnitMinutes => 'minutos';
+
+  @override
+  String get disappearingUnitHours => 'horas';
+
+  @override
+  String get disappearingUnitDays => 'días';
+
+  @override
+  String get disappearingCustomInvalid => 'Introduce un número dentro del rango permitido';
+
+  @override
+  String disappearingBannerOn(Object duration) {
+    return 'Mensajes temporales: $duration';
+  }
+
+  @override
+  String get disappearingPeerOutdated => 'Tu contacto tiene una versión antigua de la app: en su lado los mensajes no desaparecerán.';
+
+  @override
+  String get disappearingOwnOutdated => 'Uno de tus dispositivos tiene una versión antigua de la app: allí los mensajes no desaparecerán.';
+
+  @override
+  String get disappearingSupportUnknown => 'No se pudo comprobar la versión de la app de tu contacto.';
+
+  @override
+  String get disappearingChipTooltip => 'Mensajes temporales — para todos en el chat';
+
+  @override
+  String get disappearingUpdated => 'Se cambió el temporizador de mensajes temporales';
+
+  @override
+  String get disappearingSetFailed => 'No se pudo cambiar el temporizador';
+
+  @override
+  String get disappearingAdminOnly => 'Solo el propietario y los administradores pueden cambiar el temporizador';
+
+  @override
+  String get disappearingRoomOutdated => 'Algunos miembros tienen una versión antigua de la app: para ellos los mensajes no desaparecerán.';
+
+  @override
+  String get disappearingQuoteGone => 'El mensaje desapareció';
+
+  @override
+  String get serverAuthAlertTitle => 'La respuesta del servidor no superó la verificación';
+
+  @override
+  String get serverAuthAlertBody => 'Alguien entre tú y el servidor de Secretly podría estar alterando los datos. Tus chats existentes siguen protegidos y funcionando. No se aceptarán contactos ni dispositivos nuevos hasta que esto se resuelva. Prueba otra red o un proxy.';
+
+  @override
+  String get serverAuthAlertDismiss => 'Entendido';
+
+  @override
+  String get stickerPackAccessTitle => 'Quién puede añadir este paquete';
+
+  @override
+  String get stickerPackAccessOpen => 'Abierto';
+
+  @override
+  String get stickerPackAccessOpenHint => 'Quien reciba un sticker tuyo podrá añadir el paquete completo. Nunca se sube al servidor.';
+
+  @override
+  String get stickerPackAccessClosed => 'Cerrado';
+
+  @override
+  String get stickerPackAccessClosedHint => 'Solo tú tendrás el paquete. Verán los stickers que les envíes, pero no podrán añadir el paquete. Los stickers enviados se quedan en su dispositivo: esto no impide capturas de pantalla.';
+
+  @override
+  String get stickerPackClosedExistingNote => 'Quien ya añadió el paquete lo conservará.';
+
+  @override
+  String get stickerPackClosedLabel => 'Paquete cerrado';
+
+  @override
+  String get stickerPackClosedNote => 'El autor no permite añadir este paquete';
+
+  @override
+  String get stickerCreateFromPhoto => 'Desde una foto';
+
+  @override
+  String get stickerCreateTextOnly => 'Sticker de texto';
+
+  @override
+  String stickerCreateFailed(String error) {
+    return 'No se pudo crear el sticker: $error';
+  }
+
+  @override
+  String stickerPackMissingNote(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Faltan $count stickers por transferir: puede que el autor tenga una versión antigua de la app',
+      one: 'Falta $count sticker por transferir: puede que el autor tenga una versión antigua de la app',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get stickerAddedToPack => 'Sticker añadido al paquete';
+
+  @override
+  String stickerSaveFailed(String error) {
+    return 'No se pudo guardar: $error';
+  }
+
+  @override
+  String get stickerFavoritesPackTitle => 'Favoritos';
+
+  @override
+  String get stickerAddedToFavorites => 'Sticker añadido a favoritos';
+
+  @override
+  String get stickerAnimationUnavailable => 'La animación no está disponible en este dispositivo';
+
+  @override
+  String get stickerMotionPickTitle => 'Elige un efecto de movimiento';
+
+  @override
+  String get stickerMotionSlow => 'Lento';
+
+  @override
+  String get stickerMotionNormal => 'Normal';
+
+  @override
+  String get stickerMotionFast => 'Rápido';
+
+  @override
+  String get stickerMotionPulse => 'Pulso';
+
+  @override
+  String get stickerMotionBounce => 'Salto';
+
+  @override
+  String get stickerMotionWobble => 'Balanceo';
+
+  @override
+  String get stickerMotionTada => 'Tachán';
+
+  @override
+  String get stickerReadyTitle => 'Tu sticker';
+
+  @override
+  String get stickerPickEmojiHint => 'Elige los emoji que corresponden al sticker';
+
+  @override
+  String get stickerSend => 'Enviar sticker';
+
+  @override
+  String get stickerAnimating => 'Animando…';
+
+  @override
+  String get stickerChangeMotion => 'Cambiar movimiento';
+
+  @override
+  String get stickerAnimatePremium => 'Animar · Premium';
+
+  @override
+  String get stickerMakeFavorite => 'Añadir a favoritos';
+
+  @override
+  String get stickerAddToPack => 'Añadir al paquete';
+
+  @override
+  String get stickerBack => 'Atrás';
+
+  @override
+  String get stickerNewPack => 'Nuevo paquete';
+
+  @override
+  String get stickerNewPackHint => 'Ponle un nombre al paquete.';
+
+  @override
+  String get stickerCreate => 'Crear';
+
+  @override
+  String get stickerEditorObjectNotFound => 'No se reconoció ningún objeto';
+
+  @override
+  String get stickerEditorPickObject => 'Selecciona un objeto';
+
+  @override
+  String get stickerEditorText => 'Texto';
+
+  @override
+  String get stickerEditorSelectObject => 'Selecciona el objeto';
+
+  @override
+  String get stickerWord => 'Sticker';
+
+  @override
+  String get stickerEditorUndo => 'Deshacer';
+
+  @override
+  String get stickerEditorRedo => 'Rehacer';
+
+  @override
+  String get stickerEditorDelete => 'Eliminar';
+
+  @override
+  String get stickerEditorDone => 'Listo';
+
+  @override
+  String get stickerEditorBgNone => 'Sin fondo';
+
+  @override
+  String get stickerEditorBgSolid => 'Relleno';
+
+  @override
+  String get stickerEditorBgPill => 'Etiqueta';
+
+  @override
+  String get stickerEditorOutline => 'Contorno';
+
+  @override
+  String get stickerEditorBackground => 'Fondo';
+
+  @override
+  String get stickerEditorRecut => 'Recortar de nuevo';
+
+  @override
+  String get stickerEditorCut => 'Recortar objeto';
+
+  @override
+  String get stickerEditorDraw => 'Dibujo';
+
+  @override
+  String get stickerEditorAdjust => 'Ajustes';
+
+  @override
+  String get stickerEditorEmoji => 'Emoji';
+
+  @override
+  String get stickerEditorExposure => 'Exposición';
+
+  @override
+  String get stickerEditorContrast => 'Contraste';
+
+  @override
+  String get stickerEditorSaturation => 'Saturación';
+
+  @override
+  String get stickerEditorTapObjects => 'Toca los objetos que quieres conservar';
+
+  @override
+  String get stickerEditorObjectSelected => 'Objeto seleccionado';
+
+  @override
+  String stickerPackInstallFailed(String error) {
+    return 'No se pudo instalar el paquete de stickers: $error';
+  }
+
+  @override
+  String stickerPackRemoveFailed(String error) {
+    return 'No se pudo eliminar el paquete de stickers: $error';
+  }
+
+  @override
+  String get stickerPackRemoveTitle => '¿Eliminar el paquete de stickers?';
+
+  @override
+  String stickerPackRemoveBody(String title) {
+    return 'El paquete \"$title\" seguirá en el catálogo, pero se eliminarán sus archivos locales.';
+  }
+
+  @override
+  String get stickerPackRemoveAction => 'Eliminar';
+
+  @override
+  String stickerPackRemovedSnack(String title) {
+    return '\"$title\" eliminado de este dispositivo.';
+  }
+
+  @override
+  String get stickerPackEdit => 'editar';
+
+  @override
+  String get stickerPackCoverUpdated => 'Portada del paquete actualizada';
+
+  @override
+  String stickerPackFull(int max) {
+    return 'Este paquete ya tiene $max stickers: crea uno nuevo';
+  }
+
+  @override
+  String get settingsGroupProfile => 'Perfil';
+
+  @override
+  String get settingsGroupRecovery => 'Recuperación';
+
+  @override
+  String get settingsCaptionAccountRestore => 'El ID y la copia de seguridad sirven para recuperar tu cuenta en un teléfono nuevo. Apunta el ID y guárdalo lejos del teléfono.';
+
+  @override
+  String get settingsGroupLeave => 'Cerrar sesión y eliminar';
+
+  @override
+  String get settingsCaptionLeave => 'Cerrar sesión borra los datos solo en este dispositivo. Eliminar borra también el perfil del servidor y no se puede deshacer.';
+
+  @override
+  String get settingsGroupGeneral => 'General';
+
+  @override
+  String get settingsGroupMessages => 'Mensajes';
+
+  @override
+  String get settingsCaptionMessages => 'Cualquiera que tenga tu teléfono en la mano puede ver el texto y el nombre en la notificación.';
+
+  @override
+  String get settingsGroupCalls => 'Llamadas';
+
+  @override
+  String get settingsGroupInApp => 'Dentro de la app';
+
+  @override
+  String get settingsCaptionInApp => 'Sonidos y vibración mientras Secretly está abierto.';
+
+  @override
+  String get settingsGroupNotificationLook => 'Cómo se ven las notificaciones';
+
+  @override
+  String get settingsGroupBackground => 'En segundo plano';
+
+  @override
+  String get settingsGroupQr => 'Código QR';
+
+  @override
+  String get settingsGroupPersonal => 'Personal';
+
+  @override
+  String get settingsGroupWhoCan => 'Quién puede verte y escribirte';
+
+  @override
+  String get settingsGroupNewChats => 'Chats nuevos';
+
+  @override
+  String get settingsGroupSearchBlocking => 'Búsqueda y bloqueos';
+
+  @override
+  String get settingsGroupPhoneContacts => 'Contactos del teléfono';
+
+  @override
+  String get settingsGroupInactive => 'Si no entro durante mucho tiempo';
+
+  @override
+  String get settingsCaptionInactive => 'Si no abres Secretly durante ese tiempo, la cuenta se elimina sola.';
+
+  @override
+  String get settingsGroupAppLanguage => 'Idioma de la app';
+
+  @override
+  String get settingsGroupTranslation => 'Traducción';
+
+  @override
+  String get settingsGroupStatus => 'Estado';
+
+  @override
+  String get settingsGroupBlocked => 'Si Secretly está bloqueado';
+
+  @override
+  String get settingsCaptionBlocked => 'Normalmente no hay que configurar nada. El proxy y Orbot son para cuando las rutas alternativas no funcionan.';
+
+  @override
+  String get settingsGroupOwnProxy => 'Proxy propio';
+
+  @override
+  String get settingsGroupOffline => 'Sin internet';
+
+  @override
+  String get settingsCaptionOffline => 'Es un archivo, no una conexión en vivo: tu contacto leerá los mensajes cuando abra el archivo.';
+
+  @override
+  String get settingsGroupHelpDelivery => 'Ayudar a mejorar la entrega';
+
+  @override
+  String get netHowItWorksTitle => 'Cómo funciona';
+
+  @override
+  String get netHowItWorksSubtitle => 'En pocas palabras: cómo evitar bloqueos y enviar sin internet';
+
+  @override
+  String get netHowStep1Title => 'Cómo llega un mensaje';
+
+  @override
+  String get netHowStep1Body => 'Tu teléfono cifra el mensaje antes de enviarlo. El servidor lo guarda cifrado mientras tu contacto está desconectado y se lo entrega cuando se conecta. El servidor no puede leerlo.';
+
+  @override
+  String get netHowStep2Title => 'Si Secretly está bloqueado';
+
+  @override
+  String get netHowStep2Body => '«Buscar rutas alternativas» viene activado. La app prueba sola una dirección de reserva, una copia del servidor («espejo») y grandes redes de entrega («CDN»), difíciles de bloquear del todo. La primera conexión puede tardar más.';
+
+  @override
+  String get netHowStep3Title => 'Si eso no ayudó';
+
+  @override
+  String get netHowStep3Body => 'Pide a alguien de confianza un enlace de proxy y pégalo en «Proxy voluntario». También puedes instalar Orbot, la app de la red Tor. Es más lento y Orbot gasta batería.';
+
+  @override
+  String get netHowStep4Title => 'Sin internet en absoluto';
+
+  @override
+  String get netHowStep4Body => 'Pulsa «Enviar sin red», elige a tu contacto y pásale el archivo como quieras: memoria USB, AirDrop, Bluetooth. Lo abrirá en Secretly. El archivo solo lleva mensajes ya escritos en la última semana. Aún no hay conexión en vivo por Bluetooth ni a través de teléfonos cercanos.';
+
+  @override
+  String get netHowStep5Title => 'Llamadas';
+
+  @override
+  String get netHowStep5Body => 'En «Privacidad» puedes ocultar tu dirección en las llamadas: la llamada pasa por nuestro servidor y tu contacto no ve tu dirección IP. El retraso puede crecer un poco.';
+
+  @override
+  String get netHowStep6Title => 'Para que los mensajes no lleguen tarde';
+
+  @override
+  String get netHowStep6Body => 'El sistema del teléfono puede «dormir» Secretly y entonces los mensajes llegan solo al abrir la app. En «Fiabilidad» verás qué impide la entrega.';
+
+  @override
+  String get settingsHelpGotIt => 'Entendido';
+
+  @override
+  String get settingsHelpTip => 'Consejo';
+
+  @override
+  String get settingsHelpButton => 'Explicación';
+
+  @override
+  String get settingsHubAccountGroup => 'Cuenta y protección';
+
+  @override
+  String get settingsHubTalkGroup => 'Comunicación';
+
+  @override
+  String get settingsHubConnectionGroup => 'Conexión';
+
+  @override
+  String get settingsHubPhoneGroup => 'Teléfono';
+
+  @override
+  String get settingsHubMoreGroup => 'Más';
+
+  @override
+  String get settingsHubAccountSub => 'Nombre, Secretly ID, QR, copia de seguridad';
+
+  @override
+  String get settingsHubPrivacySub => 'Quién te ve y puede escribirte';
+
+  @override
+  String get settingsHubSecuritySub => 'Bloqueo de la app, chats personales';
+
+  @override
+  String get settingsHubDevicesSub => 'Dónde está abierta tu cuenta';
+
+  @override
+  String get settingsHubNotificationsSub => 'Mensajes, salas, llamadas';
+
+  @override
+  String get settingsHubChatsSub => 'Tema, fondos, burbujas, icono';
+
+  @override
+  String get settingsHubLanguageSub => 'Idioma de la app y traducción';
+
+  @override
+  String get settingsHubNetworkSub => 'Cómo llega Secretly a sus servidores';
+
+  @override
+  String get settingsHubOfflineSub => 'Pasar mensajes en un archivo';
+
+  @override
+  String get settingsHubReliabilitySub => 'Qué puede retrasar la entrega';
+
+  @override
+  String get settingsHubSystemSub => 'Restablecer y mensajes del sistema';
+
+  @override
+  String get settingsHubInviteSub => 'Compartir un enlace';
+
+  @override
+  String get settingsHubDonateSub => 'Ayudar al proyecto';
+
+  @override
+  String get settingsHubSupportSub => 'Escríbenos';
+
+  @override
+  String get settingsHubPolicySub => 'Qué se guarda y dónde';
+
+  @override
+  String get settingsHubAboutSub => 'Versión y licencias';
+
+  @override
+  String get settingsIntroAccount => 'Cómo te ven los demás y cómo no perder el acceso a tus chats.';
+
+  @override
+  String get settingsIntroPrivacy => 'Decide quién ve tus datos y quién puede contactarte.';
+
+  @override
+  String get settingsIntroSecurity => 'Protección por si tu teléfono acaba en otras manos.';
+
+  @override
+  String get settingsIntroNotifications => 'Qué avisarte y cómo. Empieza por el interruptor principal.';
+
+  @override
+  String get settingsIntroLanguage => 'El idioma en el que te habla Secretly.';
+
+  @override
+  String get settingsIntroNetwork => 'Cómo se conecta Secretly a sus servidores. Normalmente no hace falta cambiar nada.';
+
+  @override
+  String get settingsIntroOffline => 'Si no hay nada de internet, puedes pasar los mensajes en un archivo: en una memoria USB, por Bluetooth o con otra app de mensajería.';
+
+  @override
+  String get settingsIntroReliability => 'Comprobamos si el sistema impide que mensajes y llamadas lleguen a tiempo.';
+
+  @override
+  String get settingsIntroPower => 'Desactiva los efectos si el teléfono se calienta o se descarga rápido.';
+
+  @override
+  String get settingsIntroStorage => 'Cuánto espacio ocupa Secretly en tu teléfono.';
+
+  @override
+  String get settingsIntroSystem => 'Acciones de servicio. Úsalas solo si algo ha ido mal.';
+
+  @override
+  String get settingsGroupShare => 'Compartir';
+
+  @override
+  String get settingsGroupMedia => 'Multimedia';
+
+  @override
+  String get settingsGroupData => 'Datos';
+
+  @override
+  String get settingsGroupLock => 'Bloqueo';
+
+  @override
+  String get settingsGroupManual => 'Configuración manual';
+
+  @override
+  String get settingsHelpManual => 'Solo hace falta si las rutas alternativas no han funcionado. Elige una opción: un proxy de un voluntario de confianza, SOCKS5 o Tor con Orbot.';
+
+  @override
+  String get settingsGroupConnection => 'Conexión';
+
+  @override
+  String get settingsGroupSend => 'Enviar';
+
+  @override
+  String get settingsGroupReceive => 'Recibir';
+
+  @override
+  String get settingsOpenPersonalChats => 'Abrir chats personales';
+
+  @override
+  String get settingsOpenPersonalChatsSub => 'Tu colección oculta de chats';
+
+  @override
+  String get offlineStep1Title => 'Crea un archivo';
+
+  @override
+  String get offlineStep1Body => 'Elige un contacto: el archivo incluirá tus mensajes cifrados para esa persona de la última semana.';
+
+  @override
+  String get offlineStep2Title => 'Pásalo como quieras';
+
+  @override
+  String get offlineStep2Body => 'Memoria USB, Bluetooth, AirDrop u otra app de mensajería. Solo el destinatario puede leer los mensajes.';
+
+  @override
+  String get offlineStep3Title => 'Tu contacto abre el archivo';
+
+  @override
+  String get offlineStep3Body => 'En Secretly: «Sin internet» → «Abrir un archivo de mensajes». Los mensajes aparecerán en el chat.';
+
+  @override
+  String get translateSameLanguage => 'El mensaje ya está en este idioma';
+
+  @override
+  String get translateUndetected => 'No se pudo detectar el idioma. Elige el idioma original en Ajustes → Idioma.';
+
+  @override
+  String get translateUnsupported => 'El traductor del teléfono aún no conoce este idioma';
+
+  @override
+  String get translateDownloadFailed => 'No se pudo descargar el paquete de idioma. Revisa la conexión y vuelve a tocar.';
+
+  @override
+  String get translateFailed => 'No se pudo traducir. Vuelve a tocar.';
+
+  @override
+  String get translateNothing => 'Aquí no hay nada que traducir';
+
+  @override
+  String get translateDownloading => 'Descargando el paquete de idioma: solo hace falta una vez';
+
+  @override
+  String get translateButtonTooltip => 'Traducir';
+
+  @override
+  String get attachmentMetadataScrubFailed => 'No se pudieron quitar la ubicación y los datos del teléfono de este archivo, así que no se envió. Prueba con otra foto o envíala como archivo.';
+
+  @override
+  String get backupServerWrongPassword => 'Contraseña incorrecta o no hay copia para este ID de perfil. Revisa el ID, el teclado y las mayúsculas.';
+
+  @override
+  String backupServerLocked(String time) {
+    return 'Demasiadas contraseñas incorrectas desde esta red. Vuelve a intentarlo después de las $time o desde otra red.';
+  }
+
+  @override
+  String get backupServerSection => 'Copia en el servidor';
+
+  @override
+  String get backupServerDelete => 'Eliminar copia del servidor';
+
+  @override
+  String get backupServerDeleteFooter => 'La copia cifrada se elimina del servidor. Las copias de este dispositivo y en archivos se conservan.';
+
+  @override
+  String get backupServerDeleteConfirmTitle => '¿Eliminar la copia del servidor?';
+
+  @override
+  String get backupServerDeleteConfirmBody => 'No podrás restaurar tus chats desde el servidor en un teléfono nuevo. La copia automática al servidor se desactivará. No se puede deshacer.';
+
+  @override
+  String get backupServerDeleteConfirm => 'Eliminar';
+
+  @override
+  String get backupServerDeleteDone => 'Copia eliminada del servidor';
+
+  @override
+  String get backupServerDeleteNone => 'No había copia en el servidor';
+
+  @override
+  String get backupServerDeleteFailed => 'No se pudo eliminar la copia. Revisa la conexión e inténtalo de nuevo.';
+
+  @override
+  String get backupAutoErrorNoPassword => 'La copia automática no se crea: no hay contraseña de copia. Configúrala: sin contraseña no se puede cifrar la copia.';
+
+  @override
+  String get backupAutoErrorWeakPassword => 'La copia automática no se crea: la contraseña ya no cumple los requisitos. Configura una nueva.';
+
+  @override
+  String backupKeystoreUnreadable(String slot) {
+    return 'No se pudo leer la clave «$slot» del almacenamiento protegido del teléfono, así que no se creó la copia. Tus chats en este teléfono están intactos. Contacta con soporte: se puede arreglar sin perder datos.';
+  }
+
+  @override
+  String get stickerDeleteTitle => '¿Eliminar el sticker?';
+
+  @override
+  String stickerDeleteBody(String title) {
+    return 'El sticker se quitará de «$title». Los que ya enviaste en chats se quedan.';
+  }
+
+  @override
+  String get stickerDeleteLastTitle => '¿Eliminar todo el paquete?';
+
+  @override
+  String stickerDeleteLastBody(String title) {
+    return 'Es el último sticker de «$title». Al eliminarlo se elimina todo el paquete.';
+  }
+
+  @override
+  String get stickerDeleteAction => 'Eliminar';
+
+  @override
+  String get stickerPackSettings => 'Ajustes del paquete';
+
+  @override
+  String get stickerMore => 'Más';
+
+  @override
+  String get stickerPackRemoveFromMine => 'Quitar de mis paquetes';
+
+  @override
+  String stickerPackRemoveFromMineBody(String title) {
+    return '«$title» desaparecerá de tu panel. El autor y los demás lo conservan; puedes volver a añadirlo tocando un sticker suyo en un chat.';
+  }
+
+  @override
+  String get stickerPackDeleteWhole => 'Eliminar paquete';
+
+  @override
+  String get stickerPackDeleteWholeTitle => '¿Eliminar el paquete?';
+
+  @override
+  String stickerPackDeleteWholeBody(String title) {
+    return 'El paquete «$title» se eliminará de este dispositivo. Los stickers ya enviados se quedan en los chats.';
+  }
+
+  @override
+  String get stickerMakeCover => 'Usar como portada';
+
+  @override
+  String get stickerRemoveFromFavorites => 'Quitar de favoritos';
+
+  @override
+  String get stickerRemovedFromFavorites => 'Quitado de favoritos';
+
+  @override
+  String stickerAddToThisPack(String title) {
+    return 'Añadir a «$title»';
+  }
+
+  @override
+  String get stickerAddSticker => 'Añadir sticker';
 }

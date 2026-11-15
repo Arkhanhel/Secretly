@@ -41,7 +41,7 @@
 | Local data theft | The local database is encrypted at rest — SQLCipher on phones, SQLite3 Multiple Ciphers on desktop — with a random passphrase kept by the OS. Media files are regular files under the OS's storage encryption |
 | Backup leak | `SafeBackup`/`RecoveryKit` — archive encrypted with a **user-chosen password** (PBKDF2-HMAC-SHA256: 400 000 iterations for SafeBackup, 200 000 for RecoveryKit), not with the identity key. Access-token remediation in progress — see THREAT_MODEL §3.4 |
 | Delivery tampering | The `delivered` receipt is sent only after decrypt+apply, and the relay cannot forge it. The relay-level acknowledgement can come earlier: an undecryptable wire is acknowledged and quarantined so it does not block the mailbox |
-| Call eavesdropping | One-to-one: DTLS-SRTP end to end, signalling inside the E2EE channel. Room calls: LiveKit SFU, DTLS-SRTP to the server only — **not end-to-end**; the JWT controls who may join, not who can listen (THREAT_MODEL §3.5) |
+| Call eavesdropping | One-to-one: DTLS-SRTP end to end, signalling inside the E2EE channel. Room calls: LiveKit SFU. End-to-end frame encryption (per-sender keys sent over the E2EE channel) is implemented in builds 648+ and switched on by a signed rollout share; as of 13.11.2026 no store release contains it and the share is 0, so every room call today is DTLS-SRTP to the server only — the SFU can see the media. The "not end-to-end encrypted" mark is shown only while the rollout is active on the device. The relay decides who joins a call; an added device is visible and gets keys only if it is a known device of that member (THREAT_MODEL §3.5) |
 
 ---
 
@@ -203,7 +203,7 @@ decryptFromWire(wire):
   → advance ratchet to correct chain/message index
   → derive message key from chain
   → AEAD decrypt(message_key, ciphertext)
-  → throws on any failure (fail-closed: no ACK, message dropped)
+  → throws on any failure (fail-closed: nothing is applied; see the delivery invariant below)
 ```
 
 **Delivery invariant:** the `delivered` receipt goes back to the sender only after `decryptFromWire` and `handleDecryptedInboundPayload` both succeed, so the relay cannot make an unprocessed message look delivered. The relay-level acknowledgement is separate: a wire that cannot be decrypted is acknowledged and quarantined, so it does not block the mailbox, and the sender is asked to resend.

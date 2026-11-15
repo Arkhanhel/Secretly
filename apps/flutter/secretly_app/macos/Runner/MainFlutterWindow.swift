@@ -519,6 +519,13 @@ private final class ChildWindowBridge: NSObject, NSWindowDelegate {
       result(multiViewIvar() != nil)
       return
     }
+    // Работает ли VoiceOver (05.10.2026). Свои окна прячутся только при нём:
+    // «семантику» Flutter включают и другие программы с доступом к
+    // «Универсальному доступу», а им второе окно не мешает.
+    if call.method == "isScreenReaderRunning" {
+      result(NSWorkspace.shared.isVoiceOverEnabled)
+      return
+    }
     guard let args = call.arguments as? [String: Any],
       let id = args["id"] as? String, !id.isEmpty
     else {
@@ -620,6 +627,21 @@ private final class ChildWindowBridge: NSObject, NSWindowDelegate {
         }
       case "minimize":
         window.miniaturize(nil)
+      case "placeAtCorner":
+        // Правый нижний угол видимой части экрана, где стоит окно (05.10.2026):
+        // туда уходит свёрнутый звонок, как «картинка в картинке» у Telegram.
+        // [slot] — ряд снизу вверх, как у окошек уведомлений Windows.
+        let slot = CGFloat((args["slot"] as? NSNumber)?.doubleValue ?? 0)
+        if let visible = (window.screen ?? NSScreen.main)?.visibleFrame {
+          let margin: CGFloat = 16
+          let gap: CGFloat = 10
+          let size = window.frame.size
+          window.setFrameOrigin(
+            NSPoint(
+              x: visible.maxX - margin - size.width,
+              y: visible.minY + margin + slot * (size.height + gap)
+            ))
+        }
       case "setTitle":
         window.title = (args["title"] as? String) ?? ""
       case "setSize":

@@ -10,24 +10,40 @@ them. It exists because an auditor's first question is not "what did you build"
 but "what do you already know is broken" — and the honest answer to that is
 worth more than a clean-looking page.
 
-Last updated: 26 September 2026. Entries are removed when the fix reaches
+Last updated: 8 October 2026. Entries are removed when the fix reaches
 people, not when the code is written.
 
 ---
 
 ## Encryption and protocol
 
-### Group calls are not end-to-end encrypted
+### Group call encryption is still rolling out
 
-Group calls go through our own LiveKit media server, which decodes them. Audio,
-video and screen sharing are encrypted only between each device and that server,
-so the operator could listen. One-to-one calls are unaffected: they are
-end-to-end encrypted and travel directly between the two devices.
+From 1.8.66 group calls can be end-to-end encrypted: each participant encrypts
+their own frames with a key that only the other participants' devices receive.
+A call shows a lock when this is on. Until the rollout finishes, some calls are
+still created without it, and anyone on an older version can only join those.
+Such a call is labelled "Not end-to-end encrypted": treat it as a call over a
+server you have to trust. One-to-one calls are unaffected.
 
-Until this ships, treat a group call as a call over a server you have to trust.
+Limits of the first version:
 
-**Fix:** a key per participant, distributed over the existing end-to-end
-channel; the server keeps only ciphertext. In development.
+- Up to 20 participants per encrypted call.
+- A late joiner receives each sender's current key, so they could decrypt
+  media from earlier in the call if someone had recorded it. Our media server
+  does not record calls. A fresh key on every join is planned.
+- There is no replay protection for frames within a track: the server can
+  resend a frame it has already forwarded.
+- Screen sharing from an iPhone is not available in encrypted calls yet.
+- Who is in a call is decided by the relay (see "Room membership is decided by
+  the relay" below). An added device shows up as a tile, and gets the keys
+  only if it is listed among that member's devices.
+- The servers still see call metadata: who is in the call and when, IP
+  addresses, packet sizes and timing, and who is speaking. Threat model §3.5.
+
+**Fix:** a fresh key on join and a higher participant limit after measuring
+key setup on phones; making encryption required for all new calls once older
+versions are gone.
 
 ### A legacy handshake still opens sessions without a signature
 
@@ -87,7 +103,10 @@ authentic — each chunk is authenticated — but the file may be incomplete.
 The full list is in the threat model (§5.2): room names, descriptions, avatars
 and membership; who posted in a room and when; your profile as you publish it;
 device build numbers and push tokens with notification preferences; who blocked
-whom; one-to-one call sessions. Sender display names and group titles travel
+whom; one-to-one call sessions; who takes part in group calls and when. A
+private topic is a room of its own, so its name, its members and the room it
+belongs to are visible like any room's; the names of ordinary topics travel
+end-to-end encrypted. Sender display names and group titles travel
 beside the ciphertext so the relay can build a notification title, and reach
 Apple or Google in that title unless you choose hidden previews.
 
@@ -111,6 +130,40 @@ A copy of the device identity seed lives in the app group's settings so the
 notification extension can use it. Moving it into the keychain is planned; it
 needs testing on devices first, because a mistake there would stop
 notifications from being decrypted in the background.
+
+### The duress code is not deniable against forensics
+
+From 1.8.66 a second app-lock code can open a separate, empty profile. The
+real profile's database, files and secrets stay on the device under a
+different namespace; the decoy cannot reach them. Anyone who can read the
+device's storage directly (a forensic extraction, a rooted or jailbroken
+device) can see that two profiles exist, and that two lock records exist. The
+feature protects against a casual check of the unlocked phone, not against a
+laboratory. Both codes take the same time to check, so timing does not reveal
+the second one.
+
+**Fix:** hidden-volume style storage, where the real profile is
+indistinguishable from free space, is a separate project and is not planned
+for this release.
+
+### Message files carry only what is already encrypted
+
+A `.secretly` file holds messages that were already encrypted for the
+contact's devices. A message to a device that has never been in contact with
+yours cannot be written into a file, because starting a session needs the
+key server. Messages for the contact's other devices are in the file too and
+are skipped on import; the file's signature proves which device made it, not
+who the person is — that comes from the end-to-end session as usual.
+
+### Social recovery trusts the people you choose
+
+Guardians, acting together in the number you set, can restore your profile
+without you. A person who obtains your recovery code can try to persuade them;
+the four check words and the instruction to confirm by voice are the only
+defence — there is no technical one. Recovery restores your identity, not your
+message history: history comes back only from a safe backup. Guardians hold
+their part inside the app's database; a guardian who loses their phone
+without a backup loses the part, and you need to pick a replacement.
 
 ### Media files are ordinary files
 
@@ -136,18 +189,19 @@ transcripts are not removed yet.
 
 ## Licensing and builds
 
-### FFmpeg ships under the GPL
+### FFmpeg ships under the GPL on desktop
 
-The app bundles the `full-gpl` build of FFmpegKit, which includes x264. FFmpeg
-as shipped is therefore under the GPL, not the LGPL. Our own code stays
+Since 1.8.64 the iOS and Android apps ship the LGPL build of FFmpegKit, and video
+is encoded by the system H.264 encoder. The macOS and Windows apps still bundle
+the `full-gpl` build, which includes x264, so FFmpeg as shipped on desktop is
+under the GPL, not the LGPL. Our own code stays
 AGPL-3.0, and the two are compatible, but this blocks the commercial licence and
 sits badly with app-store distribution. An earlier version of `NOTICE` claimed
 the GPL build was not used; that claim was wrong and was corrected on
 26 September 2026.
 
-**Fix:** the LGPL build (`ffmpeg_kit_flutter_new_full`) with the platforms' own
-hardware video encoders. The API is identical; the work is in retuning video
-quality per platform and testing it on real devices.
+**Fix:** the same LGPL build on desktop, with the platforms' own hardware video
+encoders, as already done on the phones.
 
 ### Builds are not reproducible
 

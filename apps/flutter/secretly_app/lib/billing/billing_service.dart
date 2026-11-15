@@ -469,8 +469,8 @@ class BillingService {
           // credited premium. The entitlement grant is retried independently
           // (restore / retryUnfinishedPurchases / webhook / admin), and the
           // verifier grants premium LOCALLY fail-open when the store confirms a
-          // purchase but our server can't verify it (CLAUDE.md: "billing fails
-          // OPEN"). Acknowledging a real store purchase can never gate a security
+          // purchase but our server can't verify it (monetization rule: "billing
+          // fails OPEN"). Acknowledging a real store purchase can never gate a security
           // feature, so this is strictly safe.
           await _completeIfNeeded(pd);
           break;

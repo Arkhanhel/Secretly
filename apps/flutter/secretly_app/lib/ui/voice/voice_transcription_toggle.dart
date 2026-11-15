@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../../app/app_controller.dart';
+import '../../build_variant.dart';
 import '../../billing/show_paywall.dart';
 import '../../entitlements/feature_gate.dart';
 import '../widgets/premium_glass.dart' show kPremiumGold;
@@ -123,6 +124,13 @@ class VoiceTranscriptionIconButton extends StatelessWidget {
     return ListenableBuilder(
       listenable: tx,
       builder: (context, _) {
+        // Облегчённая сборка: расшифровывать нечем (whisper в пакет не едет) —
+        // значка нет вовсе, вместо нажатия в пустоту. Уже лежащую на диске
+        // расшифровку значок по-прежнему разворачивает: плагин там не нужен,
+        // поэтому проверка внутри построителя — она ждёт чтения кэша.
+        if (!kVoiceTranscriptionAvailable && tx.text == null) {
+          return const SizedBox.shrink();
+        }
         final muted = color.withValues(alpha: 0.55);
         if (tx.state == VoiceTxState.working) {
           return Padding(

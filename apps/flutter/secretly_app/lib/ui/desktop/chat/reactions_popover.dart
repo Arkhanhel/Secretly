@@ -43,6 +43,7 @@ import '../../emoji/noto_emoji_catalog.dart'
 import '../design/tokens.dart';
 import 'noto_emoji_lottie.dart';
 import 'recent_reactions_store.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Visual side the popover should anchor to. Same enum-shape as
 /// `PopoverSide` so existing callers can keep their semantics; we keep our
@@ -98,12 +99,12 @@ class ReactionsPopover {
     // Палитра места вызова едет в окно — см. [DColors.carry].
     final palette = DColors.maybeOf(context);
 
-    return showGeneralDialog<String>(
+    return showDesktopOverlay<String>(
       context: context,
-      barrierColor: Colors.transparent,
       barrierDismissible: true,
       barrierLabel: 'reactions',
-      transitionDuration: DMotion.fast,
+      transitionDuration: DMotion.popIn,
+      reverseTransitionDuration: DMotion.popOut,
       pageBuilder: (ctx, anim, _) {
         return DColors.carry(
           palette,
@@ -232,36 +233,39 @@ class _ReactionsScaffoldState extends State<_ReactionsScaffold> {
               top: _y,
               width: _kWidth,
               height: _expanded ? _kExpandedH : _kCompactH,
-              child: AnimatedBuilder(
+              // Карточка вырастает из пузыря без отскока (05.10.2026);
+              // пружинят только сами реакции под курсором — там это смысл.
+              child: DPopTransition(
                 animation: widget.animation,
-                builder: (ctx, child) {
-                  final t = Curves.easeOutBack
-                      .transform(widget.animation.value.clamp(0.0, 1.0));
-                  return Opacity(
-                    opacity: widget.animation.value,
-                    child: Transform.scale(
-                      scale: 0.94 + 0.06 * t,
-                      alignment:
-                          widget.side == ReactionsAnchorSide.above
-                              ? Alignment.bottomCenter
-                              : Alignment.topCenter,
-                      child: child,
-                    ),
-                  );
-                },
+                fromScale: 0.9,
+                fromOffset: Offset(
+                  0,
+                  widget.side == ReactionsAnchorSide.above ? 6 : -6,
+                ),
+                alignment: widget.side == ReactionsAnchorSide.above
+                    ? Alignment.bottomCenter
+                    : Alignment.topCenter,
                 child: _Card(
                   c: c,
-                  child: _expanded
+                  // Ряд ↔ сетка перетекают, пока карточка растёт.
+                  child: DSwapSwitcher(
+                    offset: 0.04,
+                    animateSize: false,
+                    alignment: Alignment.topCenter,
+                    child: _expanded
                       ? _ExpandedGrid(
+                          key: const ValueKey<String>('grid'),
                           onPicked: _onPicked,
                           onCollapse: _toggleExpanded,
                           allowed: widget.allowed,
                         )
                       : _CompactRow(
+                          key: const ValueKey<String>('row'),
                           onPicked: _onPicked,
                           onExpand: _toggleExpanded,
                           emojis: quickReactionsFor(widget.allowed),
                         ),
+                  ),
                 ),
               ),
             ),
@@ -354,6 +358,7 @@ class QuickReactionRow extends StatelessWidget {
 
 class _CompactRow extends StatelessWidget {
   const _CompactRow({
+    super.key,
     required this.onPicked,
     required this.onExpand,
     required this.emojis,
@@ -481,6 +486,7 @@ class _ExpandBtnState extends State<_ExpandBtn> {
 /// entries; the store is updated from `chat_thread_panel._applyReaction`.
 class _ExpandedGrid extends StatefulWidget {
   const _ExpandedGrid({
+    super.key,
     required this.onPicked,
     required this.onCollapse,
     this.allowed,

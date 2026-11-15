@@ -8,6 +8,7 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import '../../design/tokens.dart';
 import '../../primitives/avatar.dart';
 import '../../primitives/hover_listener.dart';
+import '../../primitives/motion_widgets.dart';
 
 /// Карточка участника комнаты — всплывает по щелчку в списке.
 ///
@@ -311,7 +312,7 @@ class _CardIconButton extends StatelessWidget {
       child: HoverListener(
         onTap: onTap,
         cursor: SystemMouseCursors.click,
-        builder: (ctx, hovered, pressed) => Container(
+        builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: Container(
           width: 36,
           height: 36,
           alignment: Alignment.center,
@@ -321,7 +322,7 @@ class _CardIconButton extends StatelessWidget {
             border: Border.all(color: c.borderSubtle),
           ),
           child: Icon(icon, size: 17, color: c.textPrimary),
-        ),
+        )),
       ),
     );
   }

@@ -63,6 +63,21 @@
 /// непрерывный фронт на высоком окне важнее точного следования дудлам.
 /// Плитки выбора статичных картинок — по-прежнему целиком по высоте (виден
 /// весь градиент), живые — настоящим масштабом, куском как в чате.
+///
+/// 🔴 КАК НА ТЕЛЕФОНЕ, И ДОСТРАИВАЕТСЯ ТУДА, КУДА ТЯНУТ (05.10.2026,
+/// владелец: «фон в чатах сильно мелкий… в стандарте он должен выглядеть как
+/// на телефоне, а при расширении окна генеративно расширяется в ту сторону,
+/// в которую расширяют»). Плитка 900 давала в окне по умолчанию две-три
+/// колонки с зеркальными стыками и дудлы вдвое мельче, чем были до О1. Теперь:
+///   • размер — одна картинка на всю ширину переписки в окне по умолчанию
+///     (1440×920, переписка ~1000 в ширину): колонка ~1012, как картинка
+///     «по покрытию» на телефоне — целиком, без стыков и близнецов;
+///   • привязка — к ЛЕВОМУ ВЕРХНЕМУ углу переписки, по вертикали картинка
+///     выровнена серединой по высоте окна по умолчанию
+///     ([kDesktopWallpaperReferenceHeight]). Тянут вправо — справа добавляются
+///     колонки, вниз — снизу ряды, а то, что уже было видно, стоит на месте.
+///     Прежние «колонки от центра» и «ряды от низа» сдвигали весь узор при
+///     каждом шаге растягивания.
 library;
 
 import 'dart:math' as math;
@@ -108,11 +123,19 @@ TileMode desktopWallpaperTileModeFor(String assetPath) {
 /// при 100 % картинка занимает 5,8 МБ вместо прежних до 14,7.
 const double kDesktopWallpaperMaxChatHeight = 1600;
 
-/// Высота одной плитки узора в переписке, в логических точках (01.10.2026).
+/// Высота одной плитки узора в переписке, в логических точках (05.10.2026).
 ///
-/// Дудл при ней ~47 точек — как на телефоне (~45). Окно выше — узор
-/// достраивается рядами, ниже — плитка обрезается сверху, но не сжимается.
-const double kDesktopWallpaperTileHeight = 900;
+/// Картинка 9:16 при ней — колонка ~1012 точек: в окне по умолчанию одна
+/// картинка закрывает всю ширину переписки, как «по покрытию» на телефоне
+/// (до 05.10 было 900 — дудлы вдвое мельче, две-три колонки со стыками).
+/// Окно больше — узор достраивается колонками и рядами, меньше — обрезается,
+/// но не сжимается.
+const double kDesktopWallpaperTileHeight = 1800;
+
+/// Высота переписки в окне по умолчанию (1440×920), в логических точках: на
+/// ней картинка стоит серединой посередине — видна средняя полоса, как на
+/// телефоне. Выше окно — снизу добавляется продолжение узора.
+const double kDesktopWallpaperReferenceHeight = 920;
 
 /// Высота декодирования плиток выбора статичных обоев, в физических пикселях:
 /// плитка ~165 логических в высоту, при 200 % — 330, запас есть.
@@ -205,11 +228,24 @@ DesktopPatternTiling desktopPatternTiling({
   if (area.isEmpty || image.isEmpty || !area.isFinite || !image.isFinite) {
     return DesktopPatternTiling.empty;
   }
-  // [tileHeight] задан — плитка постоянного размера, ряды от низа области;
-  // не задан — плитка во всю высоту области (плитки выбора картинок).
-  final rowHeight =
-      tileHeight != null && tileHeight > 0 ? tileHeight : area.height;
-  final scale = rowHeight / image.height;
+  // [tileHeight] задан — плитка постоянного размера от левого верхнего угла
+  // области (переписка, см. шапку: 05.10.2026); не задан — плитка во всю
+  // высоту области, колонки от центра (плитки выбора и поле волны).
+  if (tileHeight != null && tileHeight > 0) {
+    final scale = tileHeight / image.height;
+    final columnWidth = image.width * scale;
+    // Колонка на левом краю — исходная картинка; вправо её продолжение.
+    // Нечётное число колонок вокруг неё: правый край закрыт всегда.
+    final needed = math.max(1, (area.width / columnWidth).ceil());
+    return DesktopPatternTiling(
+      scale: scale,
+      columnWidth: columnWidth,
+      columns: needed * 2 - 1,
+      originX: 0,
+      originY: (kDesktopWallpaperReferenceHeight - tileHeight) / 2,
+    );
+  }
+  final scale = area.height / image.height;
   final columnWidth = image.width * scale;
   final needed = (area.width / columnWidth).ceil();
   return DesktopPatternTiling(
@@ -217,7 +253,7 @@ DesktopPatternTiling desktopPatternTiling({
     columnWidth: columnWidth,
     columns: (needed ~/ 2) * 2 + 1,
     originX: (area.width - columnWidth) / 2,
-    originY: area.height - rowHeight,
+    originY: 0,
   );
 }
 
@@ -236,7 +272,14 @@ int desktopWallpaperDecodeHeight({
   final dpr = devicePixelRatio.isFinite && devicePixelRatio > 0
       ? devicePixelRatio.clamp(1.0, 4.0)
       : 1.0;
-  return (kDesktopWallpaperMaxChatHeight * dpr).ceil();
+  // Плитка переписки выше самой высокой панели — декод по большему из двух,
+  // иначе дудлы растягивались бы из меньшего декода и мылились.
+  return (math.max(
+            kDesktopWallpaperMaxChatHeight,
+            kDesktopWallpaperTileHeight,
+          ) *
+          dpr)
+      .ceil();
 }
 
 /// [source], декодированный до высоты [desktopWallpaperDecodeHeight].

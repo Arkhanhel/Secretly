@@ -28,7 +28,13 @@ class BackgroundDecrypt {
   const BackgroundDecrypt._();
 
   static const String _leaseHolder = 'bg-inbox';
-  static const int _leaseTtlMs = 2 * 60 * 1000;
+  /// Срок аренды фонового прохода.
+  ///
+  /// 🔴 БЫЛО 2 МИНУТЫ (до 07.10.2026). Проход ограничен бюджетом в 12 секунд
+  /// (`BackgroundInboxFetcher._overallBudget`), и, упёршись в него, может быть
+  /// остановлен системой вместе с движком — не отпустив аренду. Тогда главный
+  /// изолят ждал её две минуты. Дольше бюджета с запасом держать незачем.
+  static const int _leaseTtlMs = 20 * 1000;
 
   /// Attempt an in-background decrypt pass over [items] (relay `/v1/pending`
   /// rows: `{msg_id, ciphertext_b64}`). Returns a short status string on a real

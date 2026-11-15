@@ -8,6 +8,8 @@ import 'package:flutter/painting.dart' show PaintingBinding;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import 'attachment_cache_location.dart';
+
 /// Per-category disk usage snapshot (all values in bytes).
 ///
 /// Categories mirror the on-disk cache layout audited in
@@ -112,8 +114,10 @@ class CacheManager {
 
   // ---- known cache directory names ---------------------------------------
 
+  // Under attachmentCacheParentDirectory() (iOS: Application Support,
+  // elsewhere: Documents):
+  static const String _attachmentsDir = kAttachmentCacheDirName; // re-fetchable
   // Under getApplicationDocumentsDirectory():
-  static const String _attachmentsDir = 'attachments'; // re-fetchable
   static const String _contactAvatarsDir = 'contact_avatars'; // re-fetchable
   static const String _stickersDir = 'stickers'; // protected (LRU-managed)
   static const String _profileMediaDir = 'profile_media'; // protected (own)
@@ -196,9 +200,10 @@ class CacheManager {
       temp = await getTemporaryDirectory();
     } catch (_) {}
 
-    final attachments = await _dirSize(_sub(docs, _attachmentsDir));
+    final attParent = await _attachmentsParent();
+    final attachments = await _dirSize(_sub(attParent, _attachmentsDir));
     final attachmentsProtected = await _attachmentsProtectedBytes(
-      docs,
+      attParent,
       irreplaceableAttachmentBlobIds,
     );
     final contactAvatars = await _dirSize(_sub(docs, _contactAvatarsDir));
@@ -268,7 +273,7 @@ class CacheManager {
     // still-fetchable remote blobs). Unknown protected set → skip entirely.
     if (irreplaceableAttachmentBlobIds != null) {
       await _deleteAttachmentFilesExcept(
-        _sub(docs, _attachmentsDir),
+        _sub(await _attachmentsParent(), _attachmentsDir),
         irreplaceableAttachmentBlobIds,
       );
     }
@@ -302,6 +307,16 @@ class CacheManager {
   }
 
   // ---- helpers -----------------------------------------------------------
+
+  /// П2 (15.11.2026): на iPhone медиа переписки — вне «Документов»
+  /// (attachment_cache_location.dart), на остальных — там же, где были.
+  Future<Directory?> _attachmentsParent() async {
+    try {
+      return await attachmentCacheParentDirectory();
+    } catch (_) {
+      return null;
+    }
+  }
 
   Directory? _sub(Directory? base, String name) =>
       base == null ? null : Directory(p.join(base.path, name));

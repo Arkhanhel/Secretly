@@ -12,6 +12,7 @@ import '../design/tokens.dart';
 import '../primitives/desktop_button.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../primitives/hover_listener.dart';
+import '../../server_auth_alert_banner.dart';
 import '../services/desktop_update_service.dart';
 
 /// Подвал панели списка: состояние связи слева, вход в архив справа.
@@ -55,46 +56,55 @@ class ChatListFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
-    return Container(
-      height: 44,
-      padding: EdgeInsets.symmetric(
-        horizontal: compact ? DSpace.xs : DSpace.m,
-      ),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: c.borderSubtle)),
-      ),
-      child: Row(
-        mainAxisAlignment: compact
-            ? MainAxisAlignment.center
-            : MainAxisAlignment.start,
-        children: [
-          if (compact) ...[
-            _SyncPill(sync: sync, compact: true),
-            const _UpdateButton(compact: true),
-          ] else
-            // «Обновить» — вплотную к состоянию связи: оба отвечают на
-            // вопрос «в порядке ли моё приложение».
-            Expanded(
-              child: Row(
-                children: [
-                  Flexible(child: _SyncPill(sync: sync)),
-                  const _UpdateButton(),
-                ],
-              ),
-            ),
-          if (compact && sync != null && onOpenArchive != null)
-            const SizedBox(width: DSpace.xs),
-          if (onOpenArchive != null)
-            DesktopIconButton(
-              icon: FluentIcons.archive_24_regular,
-              tooltip: l10n.archive,
-              size: 28,
-              iconSize: 16,
-              color: archiveActive ? c.accentPrimary : null,
-              onPressed: onOpenArchive,
-            ),
-        ],
-      ),
+    // Б3 Э2: над подвалом — предупреждение «ответ сервера не прошёл
+    // проверку». Пусто, пока отказа не было; в узкой колонке текст не
+    // помещается — там его нет, есть на телефоне и в широком списке.
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (!compact) const ServerAuthAlertBanner(compact: true),
+        Container(
+          height: 44,
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? DSpace.xs : DSpace.m,
+          ),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: c.borderSubtle)),
+          ),
+          child: Row(
+            mainAxisAlignment: compact
+                ? MainAxisAlignment.center
+                : MainAxisAlignment.start,
+            children: [
+              if (compact) ...[
+                _SyncPill(sync: sync, compact: true),
+                const _UpdateButton(compact: true),
+              ] else
+                // «Обновить» — вплотную к состоянию связи: оба отвечают на
+                // вопрос «в порядке ли моё приложение».
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(child: _SyncPill(sync: sync)),
+                      const _UpdateButton(),
+                    ],
+                  ),
+                ),
+              if (compact && sync != null && onOpenArchive != null)
+                const SizedBox(width: DSpace.xs),
+              if (onOpenArchive != null)
+                DesktopIconButton(
+                  icon: FluentIcons.archive_24_regular,
+                  tooltip: l10n.archive,
+                  size: 28,
+                  iconSize: 16,
+                  color: archiveActive ? c.accentPrimary : null,
+                  onPressed: onOpenArchive,
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

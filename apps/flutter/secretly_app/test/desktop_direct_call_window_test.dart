@@ -17,6 +17,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/calls/call_state.dart';
+import 'package:secretly_app/ui/desktop/calls/call_mini_window.dart';
 import 'package:secretly_app/ui/desktop/calls/direct_call_window.dart';
 import 'package:secretly_app/ui/desktop/services/desktop_child_windows.dart';
 import 'package:secretly_app/ui/desktop/services/desktop_ui_prefs.dart';
@@ -335,5 +336,84 @@ void main() {
       final toggle = screen.substring(screen.indexOf('Future<void> _toggleFullScreen() async {'));
       expect(toggle.indexOf('own.onSetFullScreen(next)'), lessThan(toggle.indexOf('windowManager.isFullScreen()')));
     });
+  });
+
+  // 🔴 05.10.2026, владелец: «когда звонок сворачивается в мини-окно — чтобы
+  // его можно было перетаскивать везде, а не только внутри приложения».
+  // Свёрнутый звонок — то же окно ОС, ужатое в угол поверх всех программ.
+  group('мини-окно — тоже окно ОС', () {
+    testWidgets('«Свернуть» — окно ужимается в угол своего монитора поверх всех', (
+      t,
+    ) async {
+      final w = await ready();
+      await drive(t, () => w.sync(state(CallPhase.connected), title: 'И'));
+      calls.clear();
+      await drive(t, () => w.minimize());
+      expect(w.mini.value, isTrue);
+      expect(
+        methods(),
+        containsAllInOrder(<String>['setSize', 'placeAtCorner', 'setTopmost']),
+      );
+      expect(methods(), isNot(contains('close')), reason: 'окно не прячется');
+      final mini = DesktopCallMiniSize.of(video: false);
+      expect(argsOf('setSize')['width'], mini.width);
+      expect(argsOf('setSize')['height'], mini.height);
+      expect(argsOf('placeAtCorner')['ownMonitor'], isTrue);
+      expect(argsOf('setTopmost')['on'], isTrue);
+
+      calls.clear();
+      await drive(t, () => w.expand());
+      expect(w.mini.value, isFalse);
+      expect(
+        argsOf('setSize')['width'],
+        DesktopDirectCallWindowShape.audio.size.width,
+      );
+      // Поверх всех — как решил человек кнопкой «закрепить» (по умолчанию нет).
+      expect(argsOf('setTopmost')['on'], isFalse);
+      expect(methods(), contains('focus'));
+    }, skip: !(Platform.isMacOS || Platform.isWindows));
+
+    testWidgets('входящий не сворачивается — его принимают или отклоняют', (
+      t,
+    ) async {
+      final w = await ready();
+      await drive(
+        t,
+        () => w.sync(state(CallPhase.ringingIncoming), title: 'И'),
+      );
+      calls.clear();
+      await drive(t, () => w.minimize());
+      expect(w.mini.value, isFalse);
+      expect(methods(), isEmpty);
+    }, skip: !(Platform.isMacOS || Platform.isWindows));
+
+    testWidgets('свёрнутый стал видео — мини с картинкой, а не большое окно', (
+      t,
+    ) async {
+      final w = await ready();
+      await drive(t, () => w.sync(state(CallPhase.connected), title: 'И'));
+      await drive(t, () => w.minimize());
+      calls.clear();
+      await drive(
+        t,
+        () => w.sync(state(CallPhase.connected, video: true), title: 'И'),
+      );
+      expect(w.mini.value, isTrue);
+      expect(
+        argsOf('setSize')['height'],
+        DesktopCallMiniSize.of(video: true).height,
+      );
+    }, skip: !(Platform.isMacOS || Platform.isWindows));
+
+    testWidgets('звонок кончился в мини-окне — окно закрыто, признак сброшен', (
+      t,
+    ) async {
+      final w = await ready();
+      await drive(t, () => w.sync(state(CallPhase.connected), title: 'И'));
+      await drive(t, () => w.minimize());
+      await drive(t, () => w.sync(state(CallPhase.idle), title: 'И'));
+      expect(w.mini.value, isFalse);
+      expect(w.isOpen, isFalse);
+    }, skip: !(Platform.isMacOS || Platform.isWindows));
   });
 }

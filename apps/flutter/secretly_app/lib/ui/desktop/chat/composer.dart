@@ -22,6 +22,7 @@ import '../primitives/avatar.dart';
 import '../primitives/desktop_button.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../primitives/hover_listener.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Reply / Edit context displayed above the composer.
 ///
@@ -422,11 +423,16 @@ class _ComposerState extends State<Composer> {
     return '$mm:$ss';
   }
 
+  /// Сколько раз отправляли — по нему самолётик на кнопке улетает и при
+  /// отправке клавишей, а не только щелчком (05.10.2026).
+  int _sendTick = 0;
+
   void _trySend() {
     final txt = widget.controller.text.trim();
     if (txt.isEmpty) return;
     widget.onSend(txt);
     widget.controller.clear();
+    if (mounted) setState(() => _sendTick++);
   }
 
   /// Отложенная отправка. Поле чистим ТОЛЬКО когда время выбрано: передумав,
@@ -583,10 +589,26 @@ class _ComposerState extends State<Composer> {
             onPressed: () => unawaited(_stopRecording(send: false)),
           ),
           const SizedBox(width: 8),
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: c.danger, shape: BoxShape.circle),
+          // Точка записи мягко «дышит» — ровно в такт часам записи, без своей
+          // бесконечной анимации (05.10.2026).
+          AnimatedOpacity(
+            opacity: (_recMs ~/ 800).isEven ? 1 : 0.35,
+            duration: DMotion.of(context, const Duration(milliseconds: 700)),
+            curve: DMotion.easeInOut,
+            child: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: c.danger,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: c.danger.withValues(alpha: 0.45),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+            ),
           ),
           const SizedBox(width: 10),
           Text(
@@ -669,15 +691,29 @@ class _ComposerState extends State<Composer> {
               children: [
           // Карточка ссылки — над карточкой ответа: ответ ближе к полю, потому
           // что относится к набираемому, а карточка — к ссылке внутри него.
-          if (_linkBarVisible)
-            DesktopLinkPreviewDraftBar(
-              draft: widget.linkPreviewDraft!,
-              frameColor: Colors.transparent,
-              frameWidth: 0,
-              fill: Colors.transparent,
-            ),
-          if (widget.context != null)
-            _contextCard(c, widget.context!, roundTop: !_linkBarVisible),
+          //
+          // Обе карточки РАСКРЫВАЮТСЯ над полем и сворачиваются обратно
+          // (05.10.2026): поле плавно растёт, лента над ним плавно уступает
+          // место, а не прыгает на высоту карточки.
+          DExpand(
+            open: _linkBarVisible,
+            alignment: Alignment.bottomCenter,
+            child: _linkBarVisible
+                ? DesktopLinkPreviewDraftBar(
+                    draft: widget.linkPreviewDraft!,
+                    frameColor: Colors.transparent,
+                    frameWidth: 0,
+                    fill: Colors.transparent,
+                  )
+                : const SizedBox.shrink(),
+          ),
+          DExpand(
+            open: widget.context != null,
+            alignment: Alignment.bottomCenter,
+            child: widget.context != null
+                ? _contextCard(c, widget.context!, roundTop: !_linkBarVisible)
+                : const SizedBox.shrink(),
+          ),
           Container(
             // Геометрия из макета: содержимое от 34 точек, поля 10/8, то есть
             // внешняя высота около 52; радиус 12.
@@ -692,9 +728,17 @@ class _ComposerState extends State<Composer> {
             // половина высоты: однострочное поле — таблетка.
             constraints: const BoxConstraints(minHeight: 46, maxHeight: 240),
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-            child: _recording
-                ? _recordingBar(c)
+            // Поле ↔ полоса записи перетекают друг в друга (05.10.2026):
+            // старое уезжает и гаснет, новое приезжает на его место.
+            child: DSwapSwitcher(
+              offset: 0.35,
+              child: _recording
+                ? KeyedSubtree(
+                    key: const ValueKey<String>('rec'),
+                    child: _recordingBar(c),
+                  )
                 : Row(
+                    key: const ValueKey<String>('input'),
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Padding(
@@ -797,12 +841,14 @@ class _ComposerState extends State<Composer> {
                               onScheduleTap: widget.onScheduleSend == null
                                   ? null
                                   : _trySendLater,
+                              launches: _sendTick,
                             ),
                           ],
                         ),
                       ),
                     ],
                   ),
+            ),
           ),
               ],
             ),
@@ -928,29 +974,41 @@ class _ComposerState extends State<Composer> {
 /// отличалось от «прикрепить» и «эмодзи» — то есть главное действие выглядело
 /// как служебное. Заливка тем же градиентом, что у своих пузырей, связывает
 /// кнопку с тем, что она производит.
-class _SendButton extends StatelessWidget {
-  const _SendButton({required this.onTap, this.onScheduleTap});
+class _SendButton extends StatefulWidget {
+  const _SendButton({
+    required this.onTap,
+    this.onScheduleTap,
+    this.launches = 0,
+  });
 
-  /// `null` — текста нет: кнопка видна, но не нажимается.
   final VoidCallback? onTap;
 
-  /// 🔴 «ОТПРАВИТЬ ПОЗЖЕ» — ПРАВОЙ КНОПКОЙ ПО ОТПРАВКЕ.
-  ///
-  /// На телефоне это удержание кнопки отправки. Удержания на столе нет, а
-  /// заводить рядом вторую кнопку ради редкого действия значит тратить место
-  /// главного действия на служебное. Правая кнопка — привычный способ
-  /// спросить «а как ещё можно»; подсказка о ней написана прямо в подсказке
-  /// самой отправки, иначе это было бы тайным знанием.
+  /// Счётчик отправок поля: сменился — самолётик улетает.
+  final int launches;
+
   final VoidCallback? onScheduleTap;
+
+  @override
+  State<_SendButton> createState() => _SendButtonState();
+}
+
+/// 🔴 ОТПРАВКА — ДВИЖЕНИЕ, А НЕ ЩЕЛЧОК (05.10.2026, «всё плавным и
+/// дорогим»).
+///
+/// Без текста кнопка чуть меньше и погашена; с первой буквой — подрастает
+/// и загорается: готова. Нажатие вжимает её, а самолётик УЛЕТАЕТ вверх
+/// вправо, и на его место из-за угла влетает новый: видно, что сообщение
+/// ушло, ещё до того, как оно появилось в ленте.
+class _SendButtonState extends State<_SendButton> {
+  void _send() => widget.onTap?.call();
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final c = DColors.of(context);
+    final onTap = widget.onTap;
     final enabled = onTap != null;
-    // Подсказка ЧИТАЕТ настройку: при «Enter — перенос строки» отправляет
-    // Shift+Enter, и подпись обязана говорить именно это. Слова о сквозном
-    // шифровании переехали сюда из строки под полем (28.09.2026).
+    final current = ValueKey<int>(widget.launches);
     return ValueListenableBuilder<bool>(
       valueListenable: DesktopUiPrefs.enterToSend,
       builder: (ctx, enterToSend, child) => DesktopTooltip(
@@ -961,54 +1019,79 @@ class _SendButton extends StatelessWidget {
         child: child!,
       ),
       child: HoverListener(
-        onTap: onTap,
-        onSecondaryTapDown: (enabled && onScheduleTap != null)
-            ? (_) => onScheduleTap!()
+        onTap: enabled ? _send : null,
+        onSecondaryTapDown: (enabled && widget.onScheduleTap != null)
+            ? (_) => widget.onScheduleTap!()
             : null,
         cursor: enabled
             ? SystemMouseCursors.click
             : SystemMouseCursors.basic,
-        builder: (ctx, hovered, pressed) => AnimatedContainer(
-          duration: DMotion.fast,
-          width: 34,
-          height: 34,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: enabled
-                  ? [c.accentPrimary, c.accentPrimaryAlt]
-                  // Погашенная кнопка — та же форма серым: пустое место на
-                  // её месте сдвигало бы микрофон под курсор.
-                  : [c.elevated, c.elevated],
-            ),
-            borderRadius: BorderRadius.circular(11),
-            // 🔴 ТЕНЬ ПОСТОЯННАЯ, а не «по наведению».
-            //
-            // Она включалась только под курсором — то есть кнопка отрывалась
-            // от поля ровно тогда, когда на неё уже смотрят, и лежала плоско
-            // всё остальное время. В макете тень у неё есть всегда: это
-            // главное действие поля ввода, и приподнятость — то, чем оно
-            // отличается от соседних прозрачных кружков. Наведение тень
-            // УСИЛИВАЕТ, а не зажигает.
-            border: enabled ? null : Border.all(color: c.borderSubtle),
-            boxShadow: enabled
-                ? [
-                    BoxShadow(
-                      color: c.accentPrimaryAlt.withValues(
-                        alpha: hovered ? 0.45 : 0.32,
-                      ),
-                      blurRadius: hovered ? 24 : 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ]
-                : const [],
+        builder: (ctx, hovered, pressed) => AnimatedScale(
+          scale: pressed && enabled ? 0.88 : (enabled ? 1.0 : 0.92),
+          duration: DMotion.of(
+            ctx,
+            pressed ? DMotion.press : DMotion.release,
           ),
-          child: Icon(
-            FluentIcons.send_24_filled,
-            size: 19,
-            color: enabled ? Colors.white : c.textDisabled,
+          curve: pressed ? DMotion.standard : DMotion.decelerate,
+          child: AnimatedContainer(
+            duration: DMotion.of(ctx, DMotion.base),
+            curve: DMotion.standard,
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: enabled
+                    ? [c.accentPrimary, c.accentPrimaryAlt]
+                    : [c.elevated, c.elevated],
+              ),
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(
+                color: enabled ? Colors.transparent : c.borderSubtle,
+              ),
+              boxShadow: enabled
+                  ? [
+                      BoxShadow(
+                        color: c.accentPrimaryAlt.withValues(
+                          alpha: hovered ? 0.45 : 0.32,
+                        ),
+                        blurRadius: hovered ? 24 : 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ]
+                  // Пустой список тоже перетекает: свечение гаснет плавно.
+                  : const [],
+            ),
+            child: AnimatedSwitcher(
+              duration: DMotion.of(ctx, DMotion.xslow),
+              reverseDuration: DMotion.of(ctx, DMotion.medium),
+              switchInCurve: DMotion.decelerate,
+              switchOutCurve: DMotion.accelerate,
+              transitionBuilder: (child, anim) {
+                final incoming = child.key == current;
+                // Уходящий улетает вверх вправо, новый влетает снизу слева.
+                return SlideTransition(
+                  position: Tween<Offset>(
+                    begin: incoming
+                        ? const Offset(-0.9, 0.9)
+                        : const Offset(1.1, -1.1),
+                    end: Offset.zero,
+                  ).animate(anim),
+                  child: FadeTransition(opacity: anim, child: child),
+                );
+              },
+              child: KeyedSubtree(
+                key: current,
+                child: DMorphIcon(
+                  FluentIcons.send_24_filled,
+                  size: 19,
+                  color: enabled ? Colors.white : c.textDisabled,
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -1034,17 +1117,22 @@ class _RoundIcon extends StatelessWidget {
     final fg = color ?? c.textPrimary;
     final btn = HoverListener(
       onTap: onTap,
-      builder: (ctx, hovered, pressed) => AnimatedContainer(
-        duration: DMotion.fast,
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: hovered
-              ? (color != null ? c.selected : c.hover)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(DRadii.pill),
+      builder: (ctx, hovered, pressed) => DPressScale(
+        pressed: pressed,
+        scale: 0.88,
+        child: AnimatedContainer(
+          duration: DMotion.fast,
+          curve: DMotion.standard,
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: hovered
+                ? (color != null ? c.selected : c.hover)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(DRadii.pill),
+          ),
+          child: Center(child: DMorphIcon(icon, size: 18, color: fg)),
         ),
-        child: Icon(icon, size: 18, color: fg),
       ),
     );
     if (tooltip == null) return btn;

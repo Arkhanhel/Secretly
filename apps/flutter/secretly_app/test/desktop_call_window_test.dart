@@ -389,11 +389,28 @@ void main() {
     });
 
     test('🔴 замок не выброшен молча, а переехал в подсказку', () {
+      // 06.10.2026 (ТЗ E2EE созвонов): подсказка зависит от состояния
+      // шифрования. Открытый созвон (состояния нет) — прежнее честное «при
+      // передаче»; замок — только когда своё шифрование включено.
       expect(
-        call.contains('message: l10n.desktopRoomCallTransportEncrypted'),
+        call.contains('message: desktopRoomCallSecurityHint(e2ee, l10n)'),
         isTrue,
       );
-      expect(call.contains('lock_closed_16_filled'), isFalse);
+      final hint = File(
+        'lib/ui/desktop/calls/room_call_e2ee_desktop.dart',
+      ).readAsStringSync();
+      expect(
+        hint.contains(
+          'if (status == null) return l10n.desktopRoomCallTransportEncrypted;',
+        ),
+        isTrue,
+      );
+      // Замок в шапке — только под условием, никогда безусловно.
+      final lockAt = call.indexOf('lock_closed_16_filled');
+      expect(lockAt, greaterThan(0));
+      final guardAt = call.lastIndexOf('if (e2ee?.secure ?? false)', lockAt);
+      expect(guardAt, greaterThan(0));
+      expect(lockAt - guardAt, lessThan(200));
     });
 
     // 26.09.2026: групповой созвон идёт через LiveKit без E2EE. Окно не

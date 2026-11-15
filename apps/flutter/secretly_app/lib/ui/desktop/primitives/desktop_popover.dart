@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../design/tokens.dart';
+import 'motion_widgets.dart';
 
 enum PopoverSide { above, below, left, right }
 
@@ -78,12 +79,12 @@ class DesktopPopover {
 
     // Палитра места вызова едет в окно — см. [DColors.carry].
     final palette = DColors.maybeOf(context);
-    return showGeneralDialog<T>(
+    return showDesktopOverlay<T>(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'popover',
-      barrierColor: Colors.transparent,
-      transitionDuration: DMotion.fast,
+      transitionDuration: DMotion.popIn,
+      reverseTransitionDuration: DMotion.popOut,
       pageBuilder: (ctx, a, b) {
         return DColors.carry(
           palette,
@@ -97,7 +98,6 @@ class DesktopPopover {
           ),
         );
       },
-      transitionBuilder: (ctx, a, b, child) => child,
     );
   }
 
@@ -187,6 +187,20 @@ class _PopoverScaffold extends StatelessWidget {
     }
   }
 
+  /// Откуда карточка выезжает: из-под кнопки, к которой приставлена.
+  Offset _drift() {
+    switch (side) {
+      case PopoverSide.above:
+        return const Offset(0, 6);
+      case PopoverSide.below:
+        return const Offset(0, -6);
+      case PopoverSide.left:
+        return const Offset(6, 0);
+      case PopoverSide.right:
+        return const Offset(-6, 0);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
@@ -214,26 +228,19 @@ class _PopoverScaffold extends StatelessWidget {
             Positioned(
               left: position.dx,
               top: position.dy,
-              child: AnimatedBuilder(
+              // Растёт от кнопки, к которой приставлена, и чуть выезжает
+              // из-под неё; без отскока (05.10.2026).
+              child: DPopTransition(
                 animation: animation,
-                builder: (ctx, _) {
-                  final t = Curves.easeOutBack.transform(
-                    animation.value.clamp(0.0, 1.0),
-                  );
-                  return Opacity(
-                    opacity: animation.value,
-                    child: Transform.scale(
-                      scale: 0.96 + 0.04 * t,
-                      alignment: _origin(),
-                      child: _PopoverCard(
-                        c: c,
-                        width: width,
-                        maxHeight: maxHeight,
-                        child: child,
-                      ),
-                    ),
-                  );
-                },
+                alignment: _origin(),
+                fromScale: 0.92,
+                fromOffset: _drift(),
+                child: _PopoverCard(
+                  c: c,
+                  width: width,
+                  maxHeight: maxHeight,
+                  child: child,
+                ),
               ),
             ),
           ],

@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../../calls/call_state.dart';
 import '../../../l10n/app_localizations.dart';
 import '../../../rooms/room_call_manager.dart';
+import '../../../rooms/call_e2ee/room_call_e2ee_status.dart';
 import '../../../rooms/room_call_media_controller.dart';
 import '../../../rooms/room_call_media_state.dart';
 import '../../../rooms/room_call_state.dart';
@@ -24,6 +25,7 @@ import 'call_presence.dart';
 import 'call_stage_pick.dart';
 import 'one_to_one_call_screen.dart';
 import 'room_call_media_guard.dart';
+import 'room_call_window_host.dart' show DesktopRoomCallWindows;
 
 /// Мини-окна свёрнутых звонков — всё, что плавает поверх приложения.
 ///
@@ -75,6 +77,7 @@ class _DesktopCallMiniHostState extends State<DesktopCallMiniHost> {
     super.initState();
     _presence.directMinimized.addListener(_changed);
     _presence.roomWindowOpen.addListener(_changed);
+    DesktopRoomCallWindows.miniRoom.addListener(_changed);
     DesktopUiPrefs.callMiniCorner.addListener(_changed);
     RoomCallManager.instance?.state.addListener(_changed);
     widget.direct?.state.addListener(_changed);
@@ -99,6 +102,7 @@ class _DesktopCallMiniHostState extends State<DesktopCallMiniHost> {
   void dispose() {
     _presence.directMinimized.removeListener(_changed);
     _presence.roomWindowOpen.removeListener(_changed);
+    DesktopRoomCallWindows.miniRoom.removeListener(_changed);
     DesktopUiPrefs.callMiniCorner.removeListener(_changed);
     RoomCallManager.instance?.state.removeListener(_changed);
     widget.direct?.state.removeListener(_changed);
@@ -144,6 +148,8 @@ class _DesktopCallMiniHostState extends State<DesktopCallMiniHost> {
     final roomId = state.roomId.trim();
     if (roomId.isEmpty) return null;
     if (_presence.roomWindowOpen.value == roomId) return null;
+    // Свёрнут в своё окно ОС — мини внутри приложения не нужно (05.10.2026).
+    if (DesktopRoomCallWindows.miniRoom.value == roomId) return null;
     return roomId;
   }
 
@@ -170,12 +176,12 @@ class _DesktopCallMiniHostState extends State<DesktopCallMiniHost> {
     final roomId = _roomVisible;
     if (roomId != null) {
       final title = _titleFor(roomId);
-      final video = _RoomMini.hasStage();
+      final video = DesktopRoomCallMini.hasStage();
       entries.add(
         DesktopCallMiniEntry(
           id: 'room',
           size: DesktopCallMiniSize.of(video: video),
-          child: _RoomMini(
+          child: DesktopRoomCallMini(
             roomId: roomId,
             title: title,
             video: video,
@@ -214,8 +220,13 @@ class _DesktopCallMiniHostState extends State<DesktopCallMiniHost> {
 
 /// Мини-окно комнатного созвона: кто на сцене, сколько в эфире, свои
 /// микрофон и камера, развернуть, выйти.
-class _RoomMini extends StatefulWidget {
-  const _RoomMini({
+/// Мини-вид созвона комнаты: внутри приложения — плавающая карточка, а в
+/// своём окне ОС (05.10.2026, [windowed]) — содержимое мини-окна, которое
+/// перетаскивается по всему экрану.
+class DesktopRoomCallMini extends StatefulWidget {
+  const DesktopRoomCallMini({
+    super.key,
+    this.windowed = false,
     required this.roomId,
     required this.title,
     required this.video,
@@ -241,6 +252,9 @@ class _RoomMini extends StatefulWidget {
   final Future<void> Function(bool enable) onToggleCamera;
   final Future<void> Function() onLeave;
   final VoidCallback onExpand;
+
+  /// Своё окно ОС: карточка без рамки и тени, на всё окно.
+  final bool windowed;
 
   static RoomCallRuntimeState? get _runtime =>
       RoomCallManager.instance?.state.value;
@@ -286,10 +300,10 @@ class _RoomMini extends StatefulWidget {
   static bool hasStage() => _screens().isNotEmpty || _cameras().isNotEmpty;
 
   @override
-  State<_RoomMini> createState() => _RoomMiniState();
+  State<DesktopRoomCallMini> createState() => _DesktopRoomCallMiniState();
 }
 
-class _RoomMiniState extends State<_RoomMini> {
+class _DesktopRoomCallMiniState extends State<DesktopRoomCallMini> {
   List<RoomMember> _members = const <RoomMember>[];
   CachedRoomCall? _call;
   String _loadedCallId = '';
@@ -320,7 +334,7 @@ class _RoomMiniState extends State<_RoomMini> {
   }
 
   @override
-  void didUpdateWidget(_RoomMini old) {
+  void didUpdateWidget(DesktopRoomCallMini old) {
     super.didUpdateWidget(old);
     if (old.roomId != widget.roomId) {
       _members = const <RoomMember>[];
@@ -329,7 +343,7 @@ class _RoomMiniState extends State<_RoomMini> {
       _lastSpeaker = null;
       unawaited(_loadMembers());
     }
-    final callId = _RoomMini._runtime?.callId ?? '';
+    final callId = DesktopRoomCallMini._runtime?.callId ?? '';
     if (callId != _loadedCallId) unawaited(_loadCall());
   }
 
@@ -344,7 +358,7 @@ class _RoomMiniState extends State<_RoomMini> {
   }
 
   Future<void> _loadCall() async {
-    final callId = _RoomMini._runtime?.callId ?? '';
+    final callId = DesktopRoomCallMini._runtime?.callId ?? '';
     _loadedCallId = callId;
     try {
       final call = await widget.loadCall(widget.roomId);
@@ -390,21 +404,21 @@ class _RoomMiniState extends State<_RoomMini> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final runtime = _RoomMini._runtime;
-    final media = _RoomMini._media;
+    final runtime = DesktopRoomCallMini._runtime;
+    final media = DesktopRoomCallMini._media;
     final participants = [
       for (final p in runtime?.participants ?? const <RoomCallParticipantRuntimeState>[])
         if (p.isJoined) p,
     ];
-    final cameras = _RoomMini._cameras();
-    final speaking = _RoomMini._speaking();
+    final cameras = DesktopRoomCallMini._cameras();
+    final speaking = DesktopRoomCallMini._speaking();
     _lastSpeaker = nextLastSpeaker(
       speaking: speaking,
       cameras: cameras,
       previous: _lastSpeaker,
     );
     final pick = pickStageVideo(
-      screenShares: _RoomMini._screens(),
+      screenShares: DesktopRoomCallMini._screens(),
       cameras: cameras,
       speaking: speaking,
       lastSpeaker: _lastSpeaker,
@@ -466,10 +480,22 @@ class _RoomMiniState extends State<_RoomMini> {
             left: 8,
             top: 8,
             right: 8,
-            // Без замка: групповой созвон пока не сквозной (см. подсказку в
-            // окне созвона). Замок вернётся вместе с E2EE созвонов.
+            // Замок — только у зашифрованного созвона и только когда своё
+            // шифрование включено (ТЗ E2EE созвонов, §8.2). Открытый созвон
+            // по-прежнему без замка.
             child: Row(
-              children: [DesktopCallMiniChip(label: status, secure: false)],
+              children: [
+                DesktopCallMiniChip(
+                  label: status,
+                  secure:
+                      media is RoomCallE2eeStatusSource &&
+                      ((media as RoomCallE2eeStatusSource)
+                              .e2eeStatus
+                              .value
+                              ?.secure ??
+                          false),
+                ),
+              ],
             ),
           ),
           if (caption.isNotEmpty)
@@ -512,6 +538,7 @@ class _RoomMiniState extends State<_RoomMini> {
     }
 
     return DesktopCallMiniCard(
+      framed: !widget.windowed,
       video: widget.video,
       stage: stage,
       semanticLabel: '$title · $status',

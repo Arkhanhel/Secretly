@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 
 import '../design/tokens.dart';
 import 'hover_listener.dart';
+import 'motion_widgets.dart';
 
 class CtxMenuItem {
   const CtxMenuItem({
@@ -58,12 +59,12 @@ class ContextMenu {
     // Второе меню пункта-подменю получает палитру первого явно: к моменту
     // его показа первого в дереве уже нет.
     palette ??= DColors.maybeOf(context);
-    return showGeneralDialog(
+    return showDesktopOverlay<void>(
       context: context,
-      barrierColor: Colors.transparent,
       barrierDismissible: true,
       barrierLabel: 'ctx',
-      transitionDuration: DMotion.fast,
+      transitionDuration: DMotion.popIn,
+      reverseTransitionDuration: DMotion.popOut,
       pageBuilder: (ctx, a, b) {
         return DColors.carry(
           palette,
@@ -76,7 +77,6 @@ class ContextMenu {
           ),
         );
       },
-      transitionBuilder: (ctx, a, b, child) => child,
     );
   }
 }
@@ -125,6 +125,14 @@ class _CtxScaffold extends StatelessWidget {
 
     void dismiss() => Navigator.of(context).maybePop();
 
+    // Меню растёт ИЗ ТОЧКИ, где нажали (05.10.2026), — как в macOS: глаз
+    // ведёт от курсора к пунктам, а не ищет, откуда что взялось. Меню,
+    // прижатое к краю окна, растёт из того места, куда его сдвинули.
+    Alignment originIn(double top, double height) => Alignment(
+      (((position.dx - x) / width) * 2 - 1).clamp(-1.0, 1.0),
+      (((position.dy - top) / height) * 2 - 1).clamp(-1.0, 1.0),
+    );
+
     return Shortcuts(
       shortcuts: const {
         SingleActivator(LogicalKeyboardKey.escape): _DismissIntent(),
@@ -149,39 +157,28 @@ class _CtxScaffold extends StatelessWidget {
               Positioned(
                 left: x,
                 top: headerTop,
-                child: AnimatedBuilder(
+                child: DPopTransition(
                   animation: animation,
-                  builder: (ctx, _) {
-                    return Opacity(
-                      opacity: animation.value,
-                      child: Transform.scale(
-                        scale: 0.96 + 0.04 * animation.value,
-                        alignment: Alignment.bottomLeft,
-                        // No SizedBox here — the header sizes to its own
-                        // intrinsic width (the reactions row is usually
-                        // wider than the menu and may overflow on the
-                        // right; the dismiss tap handles that gracefully).
-                        child: headerBuilder!(ctx, dismiss),
-                      ),
-                    );
-                  },
+                  alignment: originIn(headerTop, headerHeight),
+                  fromScale: 0.9,
+                  fromOffset: const Offset(0, 6),
+                  // No SizedBox here — the header sizes to its own
+                  // intrinsic width (the reactions row is usually
+                  // wider than the menu and may overflow on the
+                  // right; the dismiss tap handles that gracefully).
+                  child: Builder(
+                    builder: (ctx) => headerBuilder!(ctx, dismiss),
+                  ),
                 ),
               ),
             Positioned(
               left: x,
               top: menuTop,
-              child: AnimatedBuilder(
+              child: DPopTransition(
                 animation: animation,
-                builder: (ctx, _) {
-                  return Opacity(
-                    opacity: animation.value,
-                    child: Transform.scale(
-                      scale: 0.96 + 0.04 * animation.value,
-                      alignment: Alignment.topLeft,
-                      child: _CtxCard(c: c, sections: sections, width: width),
-                    ),
-                  );
-                },
+                alignment: originIn(menuTop, menuHeight),
+                fromScale: 0.9,
+                child: _CtxCard(c: c, sections: sections, width: width),
               ),
             ),
           ],

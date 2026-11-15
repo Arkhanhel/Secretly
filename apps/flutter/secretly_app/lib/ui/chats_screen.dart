@@ -22,6 +22,7 @@ import 'app_brand_logo.dart';
 import 'call_history_screen.dart';
 import 'chat_screen.dart';
 import 'own_device_removed_banner.dart';
+import 'server_auth_alert_banner.dart';
 import 'delivery_health_banner.dart';
 import 'contact_details_screen.dart';
 import 'desktop_chats_workspace.dart';
@@ -2217,6 +2218,9 @@ class _ChatsScreenState extends State<ChatsScreen>
                 const DeliveryHealthBanner(),
                 // У-1: устройство отключено от аккаунта — сказать прямо.
                 OwnDeviceRemovedBanner(controller: controller),
+                // Б3 Э2: ответ сервера не прошёл проверку подписи. Пусто, пока
+                // отказа не было (доля 0 — у всех).
+                const ServerAuthAlertBanner(),
                 // PART 1 — custom-folder strip is now a PINNED overlay (below),
                 // so it stays fixed under the top islands instead of scrolling
                 // away. Reserve its height here so the first row isn't hidden.

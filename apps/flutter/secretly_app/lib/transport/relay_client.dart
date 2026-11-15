@@ -12,6 +12,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'attested_senders.dart';
 import 'resilient_http_client.dart';
+import 'response_signature.dart';
 import '../calls/call_ice_config.dart';
 import '../ratchet/wire_v3.dart';
 import '../messages/message_delivery_state.dart';
@@ -96,6 +97,8 @@ class RelayActiveDevicesSnapshot {
     required this.nowMs,
     required this.thresholdMs,
     this.liveness = const <RelayDeviceLiveness>[],
+    this.allBuildAtLeast,
+    this.minBuildChecked,
   });
 
   final String profileId;
@@ -109,6 +112,16 @@ class RelayActiveDevicesSnapshot {
   /// Пусто, если реле старое и поля не присылает, — тогда вызывающий обязан
   /// вести себя как раньше и никого не отсеивать.
   final List<RelayDeviceLiveness> liveness;
+
+  /// Исчезающие сообщения (ТЗ 22.10.2026, §2.4): понимают ли таймер ВСЕ
+  /// устройства, которым пойдёт отправка. Приходит только по запросу с
+  /// `minBuild`; `null` — реле не спрашивали, старое реле, или у профиля нет
+  /// строк активности («неизвестно»). Вызывающий трактует `null` как
+  /// «не удалось проверить», а не как «понимают».
+  final bool? allBuildAtLeast;
+
+  /// Порог, по которому реле считало [allBuildAtLeast].
+  final int? minBuildChecked;
 }
 
 /// Факт о жизни устройства, как его видит реле.
@@ -156,11 +169,16 @@ class RelayDeviceLiveness {
     required this.deviceId,
     required this.lastSignalMs,
     required this.superseded,
+    this.buildAtLeast,
   });
 
   final String deviceId;
   final int lastSignalMs;
   final bool superseded;
+
+  /// Сборка устройства не старше порога `minBuild` запроса; `null` — порог
+  /// не запрашивали или реле поля не знает.
+  final bool? buildAtLeast;
 }
 
 class RelayCallSessionSnapshot {
@@ -260,6 +278,9 @@ class RelayRoom {
     required this.pinnedMessageId,
     required this.createdAtMs,
     required this.updatedAtMs,
+    this.kind = kRelayRoomKindRoom,
+    this.parentRoomId,
+    this.allowMembersCreateTopics = false,
   });
 
   final String roomId;
@@ -285,11 +306,24 @@ class RelayRoom {
   final int createdAtMs;
   final int updatedAtMs;
 
+  /// Закрытые темы (06.10.2026, docs/TZ_ROOM_PRIVATE_TOPICS_2026-10-06.md):
+  /// закрытая ветка — это комната с `kind = topic` и родителем. Старое реле
+  /// полей не шлёт — значит, обычная комната.
+  final String kind;
+  final String? parentRoomId;
+
+  /// Могут ли участники (не только владелец и админы) создавать закрытые
+  /// ветки в этой комнате. По умолчанию — нет (решение владельца Р-2).
+  final bool allowMembersCreateTopics;
+
+  bool get isTopic => kind == kRelayRoomKindTopic && parentRoomId != null;
+
   factory RelayRoom.fromJson(Map<String, dynamic> json) {
     final description = _jsonString(json['description']);
     final avatarHash = _jsonString(json['avatar_hash']);
     final avatarImageB64 = _jsonString(json['avatar_image_b64']);
     final pinnedMessageId = _jsonString(json['pinned_message_id']);
+    final parentRoomId = _jsonString(json['parent_room_id']);
     return RelayRoom(
       roomId: _jsonString(json['room_id']),
       version: _jsonNullableInt(json['version']) ?? 0,
@@ -331,9 +365,17 @@ class RelayRoom {
       pinnedMessageId: pinnedMessageId.isEmpty ? null : pinnedMessageId,
       createdAtMs: _jsonNullableInt(json['created_at_ms']) ?? 0,
       updatedAtMs: _jsonNullableInt(json['updated_at_ms']) ?? 0,
+      kind: _jsonString(json['kind']) == kRelayRoomKindTopic
+          ? kRelayRoomKindTopic
+          : kRelayRoomKindRoom,
+      parentRoomId: parentRoomId.isEmpty ? null : parentRoomId,
+      allowMembersCreateTopics: _jsonBool(json['allow_members_create_topics']),
     );
   }
 }
+
+const String kRelayRoomKindRoom = 'room';
+const String kRelayRoomKindTopic = 'topic';
 
 class RelayRoomMembership {
   const RelayRoomMembership({
@@ -716,6 +758,7 @@ class RelayRoomCall {
     required this.updatedAtMs,
     required this.endedAtMs,
     required this.expiresAtMs,
+    this.mediaContract = 'room_media_v1',
   });
 
   final String callId;
@@ -729,6 +772,11 @@ class RelayRoomCall {
   final int updatedAtMs;
   final int? endedAtMs;
   final int expiresAtMs;
+
+  /// Контракт медиа созвона (ТЗ E2EE созвонов, ЗВ-С1): `room_media_v1` —
+  /// открытый, `room_media_e2ee_v1` — со сквозным шифрованием. Старое реле
+  /// поля не шлёт — значит открытый.
+  final String mediaContract;
 
   bool get isActive => state == 'active' && endedAtMs == null;
 
@@ -749,6 +797,9 @@ class RelayRoomCall {
       updatedAtMs: _jsonNullableInt(json['updated_at_ms']) ?? 0,
       endedAtMs: _jsonNullableInt(json['ended_at_ms']),
       expiresAtMs: _jsonNullableInt(json['expires_at_ms']) ?? 0,
+      mediaContract: _jsonString(json['media_contract']).isEmpty
+          ? 'room_media_v1'
+          : _jsonString(json['media_contract']),
     );
   }
 }
@@ -770,6 +821,7 @@ class RelayRoomCallParticipant {
     required this.joinedAtMs,
     required this.leftAtMs,
     required this.updatedAtMs,
+    this.e2eeCapable,
   });
 
   final String callId;
@@ -787,6 +839,10 @@ class RelayRoomCallParticipant {
   final int joinedAtMs;
   final int? leftAtMs;
   final int updatedAtMs;
+
+  /// Подсказка реле (ЗВ-С5): сборка устройства умеет зашифрованные созвоны.
+  /// `null` — реле не знает. Только для интерфейса, не для решений о ключах.
+  final bool? e2eeCapable;
 
   bool get isJoined => joinState == 'joined' || joinState == 'reconnecting';
 
@@ -809,6 +865,9 @@ class RelayRoomCallParticipant {
       joinedAtMs: _jsonNullableInt(json['joined_at_ms']) ?? 0,
       leftAtMs: _jsonNullableInt(json['left_at_ms']),
       updatedAtMs: _jsonNullableInt(json['updated_at_ms']) ?? 0,
+      e2eeCapable: json['e2ee_capable'] is bool
+          ? json['e2ee_capable'] as bool
+          : null,
     );
   }
 }
@@ -905,6 +964,36 @@ class RelayRoomCallMutationResult {
   }
 }
 
+/// Ответ `GET /v1/rooms/{room}/call/e2ee_readiness` (ЗВ-С5).
+class RelayRoomCallE2eeReadiness {
+  const RelayRoomCallE2eeReadiness({
+    required this.minBuild,
+    required this.membersWithoutCapableDevice,
+  });
+
+  /// Сборка, с которой устройство умеет зашифрованные созвоны; `null` —
+  /// реле не знает, и тогда список пуст.
+  final int? minBuild;
+
+  /// Профили членов комнаты, у которых нет ни одного такого устройства.
+  final List<String> membersWithoutCapableDevice;
+
+  bool get known => minBuild != null;
+
+  factory RelayRoomCallE2eeReadiness.fromJson(Map<String, dynamic> json) {
+    return RelayRoomCallE2eeReadiness(
+      minBuild: _jsonNullableInt(json['min_build']),
+      membersWithoutCapableDevice:
+          ((json['members_without_capable_device'] as List?) ??
+                  const <Object?>[])
+              .whereType<String>()
+              .map((v) => v.trim())
+              .where((v) => v.isNotEmpty)
+              .toList(growable: false),
+    );
+  }
+}
+
 enum RelayRoomCallMediaTopology {
   centralized;
 
@@ -993,6 +1082,7 @@ class RelayRoomCallMediaParticipant {
     required this.receiveVideo,
     required this.receiveScreenShare,
     required this.updatedAtMs,
+    this.e2eeCapable,
   });
 
   final String profileId;
@@ -1013,6 +1103,9 @@ class RelayRoomCallMediaParticipant {
   final bool receiveVideo;
   final bool receiveScreenShare;
   final int updatedAtMs;
+
+  /// См. [RelayRoomCallParticipant.e2eeCapable].
+  final bool? e2eeCapable;
 
   bool get isJoined => joinState == 'joined' || joinState == 'reconnecting';
 
@@ -1038,6 +1131,9 @@ class RelayRoomCallMediaParticipant {
       receiveVideo: _jsonBool(json['receive_video']),
       receiveScreenShare: _jsonBool(json['receive_screen_share']),
       updatedAtMs: _jsonNullableInt(json['updated_at_ms']) ?? 0,
+      e2eeCapable: json['e2ee_capable'] is bool
+          ? json['e2ee_capable'] as bool
+          : null,
     );
   }
 }
@@ -1285,7 +1381,7 @@ class RelayClient {
     this.onFirstDrainCompleted,
     this.clientBuild = '',
     this.onServerError,
-  }) : _http = httpClient ?? createResilientHttpClient(),
+  }) : _http = SignedResponseClient(httpClient ?? createResilientHttpClient()),
        _ownsHttpClient = httpClient == null,
        _identityKeyPairOverride = identityKeyPairOverride,
        _webSocketConnector = webSocketConnector ?? connectResilientWebSocket;
@@ -1877,6 +1973,43 @@ class RelayClient {
     );
   }
 
+  /// Контракт созвона (ТЗ E2EE созвонов, ЗВ-С1) едет параметром запроса и
+  /// НЕ входит в подписываемое сообщение: подписи старых и новых сборок
+  /// одинаковы, а старое реле незнакомый параметр просто не читает.
+  static Uri _withMediaContract(Uri uri, String? mediaContract) {
+    final contract = (mediaContract ?? '').trim();
+    if (contract.isEmpty) return uri;
+    return uri.replace(
+      queryParameters: <String, String>{
+        ...uri.queryParameters,
+        'media_contract': contract,
+      },
+    );
+  }
+
+  /// Кто из членов комнаты не войдёт в зашифрованный созвон (ЗВ-С5): нет ни
+  /// одного устройства новой сборки. Подпись — как у чтения созвона.
+  Future<RelayRoomCallE2eeReadiness> getRoomCallE2eeReadiness({
+    required String roomId,
+  }) async {
+    final operation = 'Relay room call e2ee readiness';
+    final cleanedRoomId = roomId.trim();
+    final uri = _requireHttpBaseUrl(operation).resolve(
+      '/v1/rooms/${Uri.encodeComponent(cleanedRoomId)}/call/e2ee_readiness',
+    );
+    final json = await _getSignedJson(
+      operation: operation,
+      uri: uri,
+      buildMessage: (tsMs, nonceB64) => AuthSigner.relayHttpRoomCallGetMessage(
+        deviceId: deviceId,
+        roomId: cleanedRoomId,
+        tsMs: tsMs,
+        nonceB64: nonceB64,
+      ),
+    );
+    return RelayRoomCallE2eeReadiness.fromJson(json);
+  }
+
   Future<Map<String, dynamic>> _getSignedJson({
     required String operation,
     required Uri uri,
@@ -1905,25 +2038,42 @@ class RelayClient {
     return _decodeRelayJsonBody(operation, response);
   }
 
+  /// [parentRoomId] — закрытая ветка этой комнаты (06.10.2026). Без него
+  /// запрос и подпись прежние, байт в байт.
   Future<RelayRoomCreateResult> createRoom({
     required String roomId,
     required String title,
+    String? parentRoomId,
   }) async {
     final operation = 'Relay room create';
     final cleanedRoomId = roomId.trim();
     final cleanedTitle = title.trim();
+    final cleanedParent = (parentRoomId ?? '').trim();
     final uri = _requireHttpBaseUrl(operation).resolve('/v1/rooms');
     final json = await _postSignedJson(
       operation: operation,
       uri: uri,
-      body: <String, Object?>{'room_id': cleanedRoomId, 'title': cleanedTitle},
-      buildMessage: (tsMs, nonceB64) => AuthSigner.relayHttpRoomCreateMessage(
-        deviceId: deviceId,
-        roomId: cleanedRoomId,
-        title: cleanedTitle,
-        tsMs: tsMs,
-        nonceB64: nonceB64,
-      ),
+      body: <String, Object?>{
+        'room_id': cleanedRoomId,
+        'title': cleanedTitle,
+        if (cleanedParent.isNotEmpty) 'parent_room_id': cleanedParent,
+      },
+      buildMessage: (tsMs, nonceB64) => cleanedParent.isEmpty
+          ? AuthSigner.relayHttpRoomCreateMessage(
+              deviceId: deviceId,
+              roomId: cleanedRoomId,
+              title: cleanedTitle,
+              tsMs: tsMs,
+              nonceB64: nonceB64,
+            )
+          : AuthSigner.relayHttpRoomCreateTopicMessage(
+              deviceId: deviceId,
+              roomId: cleanedRoomId,
+              parentRoomId: cleanedParent,
+              title: cleanedTitle,
+              tsMs: tsMs,
+              nonceB64: nonceB64,
+            ),
     );
     return RelayRoomCreateResult.fromJson(json);
   }
@@ -2043,6 +2193,40 @@ class RelayClient {
       ),
     );
     return RelayRoom.fromJson(json);
+  }
+
+  /// Исчезающие сообщения (ТЗ 22.10.2026): поймут ли таймер все активные
+  /// участники комнаты [roomId]. Тот же запрос комнаты с `?min_build=N`;
+  /// параметр в подписанное сообщение не входит (подсказка, а не допуск).
+  /// `null` — старое реле, нет строк активности или ошибка: «неизвестно».
+  Future<bool?> fetchRoomMembersBuildAtLeast({
+    required String roomId,
+    required int minBuild,
+  }) async {
+    if (minBuild <= 0) return null;
+    final operation = 'Relay room members build';
+    final cleanedRoomId = roomId.trim();
+    try {
+      final uri = _requireHttpBaseUrl(operation).resolve(
+        '/v1/rooms/${Uri.encodeComponent(cleanedRoomId)}?min_build=$minBuild',
+      );
+      final json = await _getSignedJson(
+        operation: operation,
+        uri: uri,
+        buildMessage: (tsMs, nonceB64) => AuthSigner.relayHttpRoomGetMessage(
+          deviceId: deviceId,
+          roomId: cleanedRoomId,
+          tsMs: tsMs,
+          nonceB64: nonceB64,
+        ),
+      );
+      return switch (json['members_build_at_least']) {
+        final bool v => v,
+        _ => null,
+      };
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<RelayRoomMembersSnapshot> listRoomMembers({
@@ -2246,6 +2430,8 @@ class RelayClient {
     required bool joinApprovalRequired,
     required int slowModeSeconds,
     required bool chatHistoryVisible,
+    // Закрытые темы: `null` — не трогать (запрос и подпись прежние).
+    bool? allowMembersCreateTopics,
   }) async {
     final operation = 'Relay room settings update';
     final cleanedRoomId = roomId.trim();
@@ -2267,6 +2453,8 @@ class RelayClient {
         'join_approval_required': joinApprovalRequired,
         'slow_mode_seconds': slowModeSeconds,
         'chat_history_visible': chatHistoryVisible,
+        if (allowMembersCreateTopics != null)
+          'allow_members_create_topics': allowMembersCreateTopics,
       },
       buildMessage: (tsMs, nonceB64) =>
           AuthSigner.relayHttpRoomSettingsUpdateMessage(
@@ -2284,6 +2472,7 @@ class RelayClient {
             chatHistoryVisible: chatHistoryVisible,
             tsMs: tsMs,
             nonceB64: nonceB64,
+            allowMembersCreateTopics: allowMembersCreateTopics,
           ),
     );
     return RelayRoomStateMutationResult.fromJson(json);
@@ -2469,12 +2658,18 @@ class RelayClient {
     return json['ok'] == true;
   }
 
-  Future<RelayRoomCallSnapshot> getRoomCall({required String roomId}) async {
+  Future<RelayRoomCallSnapshot> getRoomCall({
+    required String roomId,
+    String? mediaContract,
+  }) async {
     final operation = 'Relay room call get';
     final cleanedRoomId = roomId.trim();
-    final uri = _requireHttpBaseUrl(
-      operation,
-    ).resolve('/v1/rooms/${Uri.encodeComponent(cleanedRoomId)}/call');
+    final uri = _withMediaContract(
+      _requireHttpBaseUrl(
+        operation,
+      ).resolve('/v1/rooms/${Uri.encodeComponent(cleanedRoomId)}/call'),
+      mediaContract,
+    );
     final json = await _getSignedJson(
       operation: operation,
       uri: uri,
@@ -2497,8 +2692,10 @@ class RelayClient {
     bool deafened = false,
     bool videoEnabled = false,
     bool screenShareEnabled = false,
+    String? mediaContract,
   }) async {
     final operation = 'Relay room call join';
+    final contract = (mediaContract ?? '').trim();
     final cleanedRoomId = roomId.trim();
     final cleanedMediaType = mediaType.trim().toLowerCase() == 'video'
         ? 'video'
@@ -2517,6 +2714,7 @@ class RelayClient {
         'deafened': deafened,
         'video_enabled': videoEnabled,
         'screen_share_enabled': screenShareEnabled,
+        if (contract.isNotEmpty) 'media_contract': contract,
       },
       buildMessage: (tsMs, nonceB64) => AuthSigner.relayHttpRoomCallJoinMessage(
         deviceId: deviceId,
@@ -2663,12 +2861,16 @@ class RelayClient {
   Future<RelayRoomCallMediaSession> getRoomCallMedia({
     required String roomId,
     required String callId,
+    String? mediaContract,
   }) async {
     final operation = 'Relay room call media get';
     final cleanedRoomId = roomId.trim();
     final cleanedCallId = callId.trim();
-    final uri = _requireHttpBaseUrl(operation).resolve(
-      '/v1/rooms/${Uri.encodeComponent(cleanedRoomId)}/call/${Uri.encodeComponent(cleanedCallId)}/media',
+    final uri = _withMediaContract(
+      _requireHttpBaseUrl(operation).resolve(
+        '/v1/rooms/${Uri.encodeComponent(cleanedRoomId)}/call/${Uri.encodeComponent(cleanedCallId)}/media',
+      ),
+      mediaContract,
     );
     final json = await _getSignedJson(
       operation: operation,
@@ -2692,8 +2894,10 @@ class RelayClient {
     bool publishVideo = false,
     bool publishScreenShare = false,
     bool subscribeAll = true,
+    String? mediaContract,
   }) async {
     final operation = 'Relay room call media join';
+    final contract = (mediaContract ?? '').trim();
     final cleanedRoomId = roomId.trim();
     final cleanedCallId = callId.trim();
     final uri = _requireHttpBaseUrl(operation).resolve(
@@ -2707,6 +2911,7 @@ class RelayClient {
         'publish_video': publishVideo,
         'publish_screen_share': publishScreenShare,
         'subscribe_all': subscribeAll,
+        if (contract.isNotEmpty) 'media_contract': contract,
       },
       buildMessage: (tsMs, nonceB64) =>
           AuthSigner.relayHttpRoomCallMediaJoinMessage(
@@ -2965,13 +3170,22 @@ class RelayClient {
 
   Future<RelayActiveDevicesSnapshot?> fetchActiveDevices({
     required String peerProfileId,
+    // Исчезающие сообщения (ТЗ 22.10.2026, §2.4): порог сборки, по которому
+    // реле добавит подсказку `build_at_least`. Null или 0 — запрос ровно
+    // прежний, байт в байт. Параметр не входит в подписанное сообщение:
+    // это подсказка для плашки, а не допуск.
+    int? minBuild,
   }) async {
     final base = httpBaseUrl;
     if (base == null) return null;
     final cleanedPeer = peerProfileId.trim();
     if (cleanedPeer.isEmpty) return null;
     try {
-      final uri = base.resolve('/v1/active_devices/$deviceId/$cleanedPeer');
+      final uri = (minBuild != null && minBuild > 0)
+          ? base.resolve(
+              '/v1/active_devices/$deviceId/$cleanedPeer?min_build=$minBuild',
+            )
+          : base.resolve('/v1/active_devices/$deviceId/$cleanedPeer');
       final tsMs = ServerClock.instance.nowMs();
       final nonceB64 = AuthSigner.randomNonceB64(bytes: 16);
       final msg = AuthSigner.relayHttpActiveDevicesMessage(
@@ -3021,6 +3235,10 @@ class RelayClient {
             deviceId: id,
             lastSignalMs: (item['last_signal_ms'] as num?)?.toInt() ?? 0,
             superseded: item['superseded'] == true,
+            buildAtLeast: switch (item['build_at_least']) {
+              final bool v => v,
+              _ => null,
+            },
           ),
         );
       }
@@ -3031,6 +3249,13 @@ class RelayClient {
         nowMs: _jsonNullableInt(json['now_ms']) ?? 0,
         thresholdMs: _jsonNullableInt(json['threshold_ms']) ?? 0,
         liveness: liveness,
+        // Новые поля реле (23.10.2026): только булево — любой другой тип
+        // значит «неизвестно», как и отсутствие.
+        allBuildAtLeast: switch (json['all_build_at_least']) {
+          final bool v => v,
+          _ => null,
+        },
+        minBuildChecked: _jsonNullableInt(json['min_build_checked']),
       );
     } catch (e) {
       // Network / parse / signing failure: treat as "filter unavailable",
@@ -3269,6 +3494,10 @@ class RelayClient {
       }
       final json = jsonDecode(resp.body) as Map<String, dynamic>;
       return CallIceConfigSnapshot.fromJson(json);
+    } on ServerUnauthenticatedException {
+      // Б3 Э2: тип нужен вызывающему — при подмене он не откатывается на
+      // прямое соединение.
+      rethrow;
     } catch (e) {
       throw StateError('Relay ice config failed: $e');
     }
@@ -4085,6 +4314,25 @@ class RelayClient {
   }
 
   /// Sends a single ACK over HTTP. Returns true iff the relay accepted it.
+  /// Э1: обезличенный отчёт о путях доставки. Без подписи — намеренно, см.
+  /// `TransportReport`. Ложь — не дошёл; повторим в другой день.
+  Future<bool> postTransportReport(Map<String, Object?> report) async {
+    final base = httpBaseUrl;
+    if (base == null) return false;
+    try {
+      final resp = await _http
+          .post(
+            base.resolve('/v1/transport/report'),
+            headers: const {'content-type': 'application/json'},
+            body: jsonEncode(report),
+          )
+          .timeout(_httpTimeout);
+      return resp.statusCode >= 200 && resp.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> _ackOverHttp({required int seq, required String msgId}) async {
     final base = httpBaseUrl;
     if (base == null) return false;

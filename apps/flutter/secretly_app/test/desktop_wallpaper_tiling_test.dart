@@ -272,11 +272,13 @@ void main() {
 
   group('декодирование — один раз на плотность пикселей', () {
     test('высота декодирования зависит только от плотности', () {
-      expect(desktopWallpaperDecodeHeight(devicePixelRatio: 1), 1600);
-      expect(desktopWallpaperDecodeHeight(devicePixelRatio: 1.25), 2000);
-      expect(desktopWallpaperDecodeHeight(devicePixelRatio: 2), 3200);
-      expect(desktopWallpaperDecodeHeight(devicePixelRatio: double.nan), 1600);
-      expect(desktopWallpaperDecodeHeight(devicePixelRatio: 0), 1600);
+      // Плитка переписки (1800) выше самой высокой панели (1600) — декод
+      // по ней, чтобы дудлы не растягивались из меньшего декода.
+      expect(desktopWallpaperDecodeHeight(devicePixelRatio: 1), 1800);
+      expect(desktopWallpaperDecodeHeight(devicePixelRatio: 1.25), 2250);
+      expect(desktopWallpaperDecodeHeight(devicePixelRatio: 2), 3600);
+      expect(desktopWallpaperDecodeHeight(devicePixelRatio: double.nan), 1800);
+      expect(desktopWallpaperDecodeHeight(devicePixelRatio: 0), 1800);
       expect(
         desktopWallpaperDecodeHeight(devicePixelRatio: 2, preview: true),
         kDesktopWallpaperPreviewDecodeHeight,
@@ -566,6 +568,7 @@ void main() {
       WidgetTester t,
       String id, {
       bool preview = false,
+      DColorSet palette = kDColorsDark,
     }) async {
       late Widget out;
       await t.pumpWidget(
@@ -575,7 +578,7 @@ void main() {
               out = buildDesktopChatWallpaper(
                 context,
                 wallpaperId: id,
-                palette: kDColorsDark,
+                palette: palette,
                 animMode: ChatWallpaperAnimMode.off,
                 preview: preview,
               );
@@ -604,8 +607,33 @@ void main() {
       final mint = await build(
         t,
         encodeAssetChatWallpaperId(kLightThemeStandardChatWallpaperAssetPath),
+        palette: kDColorsLight,
       );
       expect((mint as DesktopTiledWallpaperImage).tileMode, TileMode.repeated);
+    });
+
+    testWidgets('🔴 картинка чужой темы рисуется своей парой (05.10)', (
+      t,
+    ) async {
+      String shown(Widget w) => switch ((w as DesktopTiledWallpaperImage)
+          .image) {
+        final AssetImage a => a.assetName,
+        final ResizeImage r => (r.imageProvider as AssetImage).assetName,
+        final other => '$other',
+      };
+      const sky = '${kLightThemeChatWallpaperAssetRoot}wallpaper_light_sky.jpg';
+      const graphite =
+          '${kBundledChatWallpaperAssetRoot}wallpaper_dark_graphite.jpg';
+      final skyInDark = await build(t, encodeAssetChatWallpaperId(sky));
+      expect(shown(skyInDark), endsWith('wallpaper_dark_graphite.jpg'));
+      final graphiteInLight = await build(
+        t,
+        encodeAssetChatWallpaperId(graphite),
+        palette: kDColorsLight,
+      );
+      expect(shown(graphiteInLight), endsWith('wallpaper_light_sky.jpg'));
+      final graphiteInDark = await build(t, encodeAssetChatWallpaperId(graphite));
+      expect(shown(graphiteInDark), endsWith('wallpaper_dark_graphite.jpg'));
     });
 
     testWidgets('живые обои ПК — с раскладкой, телефон — без', (t) async {
@@ -695,17 +723,64 @@ void main() {
       expect(scales, {kDesktopWallpaperTileHeight / image.height});
     });
 
-    test('ряды растут от низа: у поля ввода узор стоит на месте', () {
-      for (final h in const [420.0, 900.0, 1300.0]) {
+    test('🔴 тянут вправо и вниз — видимое стоит на месте (05.10)', () {
+      // Владелец: «при расширении окна генеративно расширяется в ту
+      // сторону, в которую расширяют». Узор привязан к левому верхнему углу:
+      // при любом размере окна точка узора остаётся в той же точке экрана.
+      final matrices = <Float64List>[
+        for (final size in const [
+          Size(700, 640),
+          Size(1012, 920),
+          Size(1900, 920),
+          Size(1012, 1400),
+          Size(2500, 1600),
+        ])
+          desktopPatternMatrix(
+            desktopPatternTiling(
+              area: size,
+              image: image,
+              tileHeight: kDesktopWallpaperTileHeight,
+            ),
+            Offset.zero,
+          ),
+      ];
+      for (final m in matrices) {
+        expect(m[12], matrices.first[12]);
+        expect(m[13], matrices.first[13]);
+      }
+    });
+
+    test('🔴 окно по умолчанию — одна картинка во всю ширину, как на '
+        'телефоне (05.10)', () {
+      // Окно 1440×920: переписка ~1000 в ширину. Колонка не уже её — стыков и
+      // зеркальных близнецов в окне по умолчанию нет.
+      const nine16 = Size(1440, 2560);
+      final t = desktopPatternTiling(
+        area: const Size(1000, kDesktopWallpaperReferenceHeight),
+        image: nine16,
+        tileHeight: kDesktopWallpaperTileHeight,
+      );
+      expect(t.columnWidth, greaterThanOrEqualTo(1000));
+      expect(t.originX, 0);
+      // Середина картинки — посередине высоты окна по умолчанию.
+      expect(
+        t.originY + kDesktopWallpaperTileHeight / 2,
+        closeTo(kDesktopWallpaperReferenceHeight / 2, 1e-9),
+      );
+      // Дудл примерно вдвое крупнее прежнего (плитка 900).
+      expect(kDesktopWallpaperTileHeight / 900, closeTo(2, 1e-9));
+    });
+
+    test('колонки закрывают правый край при любой ширине', () {
+      for (final w in const [300.0, 1012.0, 1013.0, 2500.0, 5100.0]) {
         final t = desktopPatternTiling(
-          area: Size(1200, h),
+          area: Size(w, 900),
           image: image,
           tileHeight: kDesktopWallpaperTileHeight,
         );
-        expect(t.originY, h - kDesktopWallpaperTileHeight);
-        final m = desktopPatternMatrix(t, Offset.zero);
-        // Низ плитки — на низе области при любой высоте.
-        expect(m[13] + image.height * t.scale, closeTo(h, 1e-9));
+        expect(t.columns.isOdd, isTrue);
+        final right = t.firstColumnX + t.columns * t.columnWidth;
+        expect(right, greaterThanOrEqualTo(w));
       }
     });
 
@@ -727,4 +802,54 @@ void main() {
       );
     });
   });
+
+  // Последней: подмена пары — общее состояние на весь файл.
+  test('🔴 стандартные обои: телефон — как был, ПК — «Небо» и «Графит» (05.10)',
+      () {
+    expect(
+      themeStandardChatWallpaperId(darkMode: false),
+      encodeAssetChatWallpaperId(kLightThemeStandardChatWallpaperAssetPath),
+      reason: 'без подмены — телефонная пара',
+    );
+    expect(
+      themeStandardChatWallpaperId(darkMode: true),
+      encodeAssetChatWallpaperId(kDarkThemeStandardChatWallpaperAssetPath),
+    );
+    installDesktopStandardChatWallpapers();
+    expect(
+      themeStandardChatWallpaperId(darkMode: false),
+      encodeAssetChatWallpaperId(kDesktopLightStandardChatWallpaperAssetPath),
+    );
+    expect(
+      themeStandardChatWallpaperId(darkMode: true),
+      encodeAssetChatWallpaperId(kDesktopDarkStandardChatWallpaperAssetPath),
+    );
+    // Пара стандартных — пара и при смене темы: конфликта цветов нет.
+    expect(
+      desktopThemedChatWallpaperAssetPath(
+        kDesktopDarkStandardChatWallpaperAssetPath,
+        dark: false,
+      ),
+      kDesktopLightStandardChatWallpaperAssetPath,
+    );
+    expect(
+      desktopThemedChatWallpaperAssetPath(
+        kDesktopLightStandardChatWallpaperAssetPath,
+        dark: true,
+      ),
+      kDesktopDarkStandardChatWallpaperAssetPath,
+    );
+    // У каждой картинки набора есть пара, и она — из другой темы.
+    for (final name in kFeaturedChatWallpaperBasenames) {
+      final pair = kDesktopWallpaperThemePairs[name];
+      expect(pair, isNotNull, reason: name);
+      expect(name.contains('_dark_'), isNot(pair!.contains('_dark_')));
+      final root = pair.contains('_dark_')
+          ? kBundledChatWallpaperAssetRoot
+          : kLightThemeChatWallpaperAssetRoot;
+      expect(File('$root$pair').existsSync(), isTrue, reason: pair);
+    }
+  },
+      skip: artAssetsArePlaceholders ? artAssetsSkipReason : null,
+    );
 }

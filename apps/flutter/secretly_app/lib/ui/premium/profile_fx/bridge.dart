@@ -19,7 +19,8 @@ part of '../profile_fx.dart';
 FrameSim? createOwnFrameSim(String id) => switch (id) {
   'drift' => DriftFrame(),
   'astronaut' => AstronautFrame(),
-  _ => null,
+  // 13.11.2026: переделанные старые рамки и эксклюзивная коллекция.
+  _ => createClassicFrameSim(id) ?? createCollectionFrameSim(id),
 };
 
 FrameSim createFrameSim(AvatarFrame frame) => switch (frame) {

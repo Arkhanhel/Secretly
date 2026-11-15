@@ -35,7 +35,35 @@ enum ProfileCoverStyle {
   blackHole('Чёрная дыра', true),
   moonPath('Дорожка', true),
   ripples('Круги на воде', true),
-  spotlight('Прожектор', true);
+  spotlight('Прожектор', true),
+  // Переделанные старые обложки (13.11.2026) — classic.dart.
+  classicSpace('Космос'),
+  classicWaves('Волны'),
+  classicMeteors('Метеоры'),
+  classicMarks('Иконки'),
+  classicGoldHaze('Золотая дымка'),
+  classicLogos('Наши иконки'),
+  classicFire('Костёр'),
+  classicFog('Дым'),
+  classicBears('Мишки'),
+  classicRainbow('Радуга'),
+  classicFireflies('Светлячки'),
+  classicFireworks('Салют'),
+  classicGoldWillow('Золотой салют'),
+  classicReef('Подводный мир'),
+  classicGalaxy('Галактика', true),
+  classicAuroraSky('Северное сияние'),
+  // Эксклюзивная коллекция обложек (13.11.2026) — collection.dart.
+  cloth('Полотно'),
+  balls('Шарики'),
+  orbits('Притяжение', true),
+  chaos('Хаос'),
+  life('Жизнь'),
+  compass('Компасы'),
+  plush('Плюш'),
+  storm('Гроза'),
+  ink('Чернила'),
+  warp('Гиперпрыжок', true);
 
   const ProfileCoverStyle(this.title, [this.usesAvatar = false]);
   final String title;
@@ -73,7 +101,37 @@ enum ProfileCoverStyle {
         ProfileCoverStyle.moonPath => _MoonPath(),
         ProfileCoverStyle.ripples => _Ripples(),
         ProfileCoverStyle.spotlight => _Spotlight(),
+        _ => _createClassicCover(this) ?? _createCollectionCover(this) ?? _Snow(),
       };
+}
+
+/// Касания, переданные обложке со стороны: превью «Рамки и обложки» ставит
+/// портрет поверх сцены, и палец на портрете до сцены не доходит. Экран
+/// зовёт [poke] с глобальной точкой касания — обложка отвечает так же, как
+/// на прямое касание (вспышка, круги, волна вокруг рамки).
+class CoverPokes extends ChangeNotifier {
+  Offset? _last;
+
+  /// Последняя точка касания в глобальных координатах.
+  Offset? get last => _last;
+
+  void poke(Offset global) {
+    _last = global;
+    notifyListeners();
+  }
+}
+
+/// Раздаёт [CoverPokes] живым обложкам ниже по дереву.
+class CoverPokeScope extends InheritedWidget {
+  const CoverPokeScope({super.key, required this.pokes, required super.child});
+
+  final CoverPokes pokes;
+
+  static CoverPokes? of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<CoverPokeScope>()?.pokes;
+
+  @override
+  bool updateShouldNotify(CoverPokeScope oldWidget) => oldWidget.pokes != pokes;
 }
 
 /// Живая обложка профиля. Заполняет всё доступное место —
@@ -122,11 +180,25 @@ class _ProfileCoverState extends State<ProfileCover> with SingleTickerProviderSt
   ui.Image? _acc;
   Size _accSize = Size.zero;
   bool _dark = true;
+  CoverPokes? _pokes;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final pokes = CoverPokeScope.of(context);
+    if (!identical(pokes, _pokes)) {
+      _pokes?.removeListener(_onPoke);
+      _pokes = pokes?..addListener(_onPoke);
+    }
     _sync();
+  }
+
+  void _onPoke() {
+    final g = _pokes?.last;
+    if (g == null || !widget.interactive || !mounted) return;
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return;
+    _tap = box.globalToLocal(g);
   }
 
   @override
@@ -207,6 +279,7 @@ class _ProfileCoverState extends State<ProfileCover> with SingleTickerProviderSt
 
   @override
   void dispose() {
+    _pokes?.removeListener(_onPoke);
     _ticker.dispose();
     _clock.dispose();
     _acc?.dispose();
@@ -231,6 +304,16 @@ class _ProfileCoverState extends State<ProfileCover> with SingleTickerProviderSt
             _ptr = e.localPosition;
           },
           onPointerMove: (e) => _ptr = e.localPosition,
+          // 🔴 13.11.2026: палец отпустили — касание кончилось. Без этого на
+          // телефоне последняя точка жила вечно: вмятина на «Полотне», вторая
+          // масса в «Притяжении», магнит в «Компасах». Мышь остаётся: над
+          // сценой она «наводится», и её ведёт onHover.
+          onPointerUp: (e) {
+            if (e.kind != ui.PointerDeviceKind.mouse) _ptr = null;
+          },
+          onPointerCancel: (e) {
+            if (e.kind != ui.PointerDeviceKind.mouse) _ptr = null;
+          },
           child: child,
         ),
       );

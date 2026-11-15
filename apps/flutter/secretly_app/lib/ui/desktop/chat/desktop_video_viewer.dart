@@ -19,6 +19,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
 import '../design/tokens.dart';
+import '../primitives/motion_widgets.dart';
+import 'desktop_media_window.dart';
 
 class DesktopVideoViewer extends StatefulWidget {
   const DesktopVideoViewer({
@@ -40,13 +42,27 @@ class DesktopVideoViewer extends StatefulWidget {
     String authorName = '',
     String timeLabel = '',
     String? filename,
-  }) {
-    return showGeneralDialog<void>(
+  }) async {
+    // Сперва — своё окно ОС, как у Telegram (05.10.2026).
+    final inWindow = await DesktopMediaWindow.open(
+      context: context,
+      title: (filename ?? '').trim().isNotEmpty ? filename! : authorName,
+      builder: (_) => DesktopVideoViewer(
+        file: file,
+        authorName: authorName,
+        timeLabel: timeLabel,
+        filename: filename,
+      ),
+    );
+    if (inWindow || !context.mounted) return;
+    // Раскрывается из места щелчка, как фото (05.10.2026).
+    final origin = DPointerMemory.lastDown;
+    return showDesktopOverlay<void>(
       context: context,
       barrierDismissible: false,
       barrierLabel: 'video',
-      barrierColor: Colors.transparent,
-      transitionDuration: DMotion.base,
+      transitionDuration: DMotion.modalIn,
+      reverseTransitionDuration: DMotion.base,
       pageBuilder: (ctx, a, b) => DesktopVideoViewer(
         file: file,
         authorName: authorName,
@@ -54,7 +70,7 @@ class DesktopVideoViewer extends StatefulWidget {
         filename: filename,
       ),
       transitionBuilder: (ctx, a, b, child) =>
-          FadeTransition(opacity: a, child: child),
+          DZoomFromPoint(animation: a, origin: origin, child: child),
     );
   }
 
@@ -142,7 +158,7 @@ class _DesktopVideoViewerState extends State<DesktopVideoViewer> {
     if (e is! KeyDownEvent) return KeyEventResult.ignored;
     final k = e.logicalKey;
     if (k == LogicalKeyboardKey.escape) {
-      Navigator.of(context).maybePop();
+      DesktopViewerScope.close(context);
       return KeyEventResult.handled;
     }
     if (k == LogicalKeyboardKey.space) {
@@ -216,7 +232,7 @@ class _DesktopVideoViewerState extends State<DesktopVideoViewer> {
               label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => Navigator.of(context).maybePop(),
+                onTap: () => DesktopViewerScope.close(context),
                 child: Container(color: Colors.black.withValues(alpha: 0.92)),
               ),
             ),
@@ -320,7 +336,7 @@ class _DesktopVideoViewerState extends State<DesktopVideoViewer> {
               _GlyphButton(
                   icon: FluentIcons.dismiss_24_regular,
                   tooltip: l10n.desktopViewerCloseEsc,
-                  onTap: () => Navigator.of(context).maybePop()),
+                  onTap: () => DesktopViewerScope.close(context)),
             ],
           ),
         ),

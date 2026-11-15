@@ -22,6 +22,7 @@ import 'emoji_popover.dart';
 import 'media_group_layout.dart';
 import 'message_media.dart';
 import 'outgoing_media.dart';
+import '../primitives/motion_widgets.dart';
 
 // 🔴 ОКНО ОТПРАВКИ ФАЙЛОВ — КАК В TELEGRAM ДЛЯ macOS.
 //
@@ -81,12 +82,12 @@ Future<Object> showSendMediaDialog(
 }) async {
   final echo = ValueNotifier<String>(caption);
   try {
-    final result = await showGeneralDialog<Object>(
+    // Как окна ПК (05.10.2026): затемнение отдельно, карточка поднимается
+    // и проявляется, уход короче входа; раньше масштабировался весь слой.
+    final result = await showDesktopOverlay<Object>(
       context: context,
       barrierDismissible: false,
       barrierLabel: 'send-media',
-      barrierColor: Colors.transparent,
-      transitionDuration: DMotion.medium,
       pageBuilder: (ctx, animation, _) => SendMediaDialog(
         animation: animation,
         initialFiles: files,
@@ -99,16 +100,6 @@ Future<Object> showSendMediaDialog(
         captionEcho: echo,
         closeWhen: closeWhen,
       ),
-      transitionBuilder: (ctx, a, b, child) {
-        final scale = Tween<double>(
-          begin: 0.94,
-          end: 1.0,
-        ).chain(CurveTween(curve: DMotion.easeOutCubic)).animate(a);
-        return FadeTransition(
-          opacity: a,
-          child: ScaleTransition(scale: scale, child: child),
-        );
-      },
     );
     // Окно могли закрыть и не нашими кнопками — подпись не теряем и тогда.
     return result ?? SendMediaDismissed(echo.value);
@@ -479,7 +470,10 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
                 child: AnimatedBuilder(
                   animation: animation,
                   builder: (context, _) {
-                    final t = animation.value;
+                    final t = DMotion.eased(
+                      animation,
+                      inCurve: DMotion.standard,
+                    );
                     return BackdropFilter(
                       filter: ui.ImageFilter.blur(sigmaX: 8 * t, sigmaY: 8 * t),
                       child: ColoredBox(
@@ -494,7 +488,11 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
           Center(
             child: GestureDetector(
               onTap: () {},
-              child: Container(
+              child: DPopTransition(
+                animation: animation,
+                fromScale: 0.95,
+                fromOffset: const Offset(0, 14),
+                child: Container(
                 key: const ValueKey('send-media-card'),
                 width: _kDialogWidth,
                 constraints: BoxConstraints(maxHeight: screen.height * 0.88),
@@ -540,6 +538,7 @@ class _SendMediaDialogState extends State<SendMediaDialog> {
                     ],
                   ),
                 ),
+              ),
               ),
             ),
           ),
@@ -998,7 +997,7 @@ class _HoverRemovableState extends State<_HoverRemovable> {
                       message: l10n.desktopSendRemove,
                       child: HoverListener(
                         onTap: widget.onRemove,
-                        builder: (ctx, hovered, pressed) => Container(
+                        builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: Container(
                           key: const ValueKey('send-media-remove'),
                           width: 24,
                           height: 24,
@@ -1014,7 +1013,7 @@ class _HoverRemovableState extends State<_HoverRemovable> {
                             size: 14,
                             color: Colors.white,
                           ),
-                        ),
+                        )),
                       ),
                     ),
                   ),
@@ -1047,7 +1046,7 @@ class _SendRoundButton extends StatelessWidget {
       child: HoverListener(
         onTap: enabled ? onTap : null,
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-        builder: (ctx, hovered, pressed) => AnimatedContainer(
+        builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: AnimatedContainer(
           key: const ValueKey('send-media-send'),
           duration: DMotion.fast,
           width: 40,
@@ -1088,7 +1087,7 @@ class _SendRoundButton extends StatelessWidget {
                   size: 20,
                   color: onTap != null ? Colors.white : c.textDisabled,
                 ),
-        ),
+        )),
       ),
     );
   }

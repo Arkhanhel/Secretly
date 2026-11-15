@@ -17,6 +17,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
 import 'push/background_worker.dart';
 import 'push/push_wake_service.dart';
+import 'ui/network_settings_screen.dart'
+    show importOfflineEnvelopeFileWithFeedback, isOfflineEnvelopeFileName;
 import 'ui/app_shell.dart';
 import 'ui/widgets/island_backdrop.dart';
 import 'ui/active_call_screen.dart';
@@ -36,10 +38,16 @@ import 'app/onboarding_state.dart';
 import 'app/platform_share_target.dart';
 import 'calls/call_manager.dart';
 import 'diagnostics/diag_log.dart';
+import 'diagnostics/notif_tap_trail.dart';
 import 'rooms/room_call_manager.dart';
 import 'ui/attachment_error_text.dart';
 import 'ui/share_target_sheet.dart';
 import 'security/app_security_manager.dart';
+import 'security/space_gate.dart';
+import 'ui/animations/page_transitions.dart';
+import 'ui/social_recovery_screen.dart';
+import 'security/social_recovery.dart';
+import 'transport/transport_paths.dart';
 import 'sync/peer_history_service.dart';
 import 'ui/theme_presets.dart';
 import 'ui/theme_transition.dart';
@@ -49,9 +57,16 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'ui/liquid_glass_flags.dart';
 import 'ui/thermal_guard.dart';
 import 'legal/ffmpeg_mobile_license.dart';
+import 'assets/on_demand_assets.dart';
+import 'transport/resilient_http_client.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 🔴 Пространство профиля выбирается ПЕРВЫМ (Э2, код принуждения): до
+  // первого обращения к настройкам, до пушей и до фоновых задач — префикс
+  // настроек нельзя сменить после первого чтения. Если код принуждения не
+  // настроен, шлюз молча входит в основное пространство.
+  await SpaceGate.resolveAtStartup();
   // Лицензии вшитых шрифтов — обе требуют, чтобы текст ехал вместе с
   // дистрибутивом. Flutter собирает экран лицензий только по пакетам из `pub`
   // и ассетов не видит, поэтому шрифты заявляются здесь. Вызов дешёвый:
@@ -60,6 +75,18 @@ Future<void> main() async {
   registerThirdPartyLicenses();
   // FFmpeg на телефоне — LGPL-3.0: запись и текст лицензии (04.10.2026).
   registerMobileFfmpegLicense();
+  // Украшения по требованию (Э7): в облегчённой сборке значки профиля и обои
+  // не лежат в пакете, а берутся по мере надобности и проверяются по
+  // отпечатку из перечня. Настраивается здесь, до первого экрана: дальше
+  // загрузчик спрашивают из виджетов, и спрашивать его «когда-нибудь потом»
+  // значило бы показать пустые квадраты на первом же открытии.
+  //
+  // В полной сборке загрузчик тоже стоит, но не работает: файл находится в
+  // пакете на первом шаге, и ни сети, ни диска он не касается.
+  OnDemandAssets.instance = OnDemandAssets(
+    relayBaseUrl: () async => _onDemandRelayBaseUrl,
+    fetch: _fetchOnDemandAsset,
+  );
   // PERF(cache): cap the in-memory decoded-image cache above the 100 MB
   // default. Full-resolution camera photos (~48 MB ARGB) would otherwise evict
   // the cache after a couple of images and force constant re-decodes while
@@ -164,6 +191,25 @@ Future<void> main() async {
   );
 }
 
+/// Адрес реле для украшений: берётся из того же места, что и у остального
+/// приложения, и потому уезжает теми же обходными путями (Э1).
+Uri? _onDemandRelayBaseUrl;
+
+/// Скачивание украшения. Обычный устойчивый клиент приложения — значит,
+/// зеркала, CDN, прокси и SOCKS работают и здесь.
+Future<Uint8List> _fetchOnDemandAsset(Uri url) async {
+  final client = createResilientHttpClient();
+  try {
+    final response = await client.get(url);
+    if (response.statusCode != 200) {
+      throw StateError('on-demand asset: status ${response.statusCode}');
+    }
+    return response.bodyBytes;
+  } finally {
+    client.close();
+  }
+}
+
 class _StartupLoadingSurface extends StatefulWidget {
   const _StartupLoadingSurface();
 
@@ -260,6 +306,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   CallManager? _callManager;
   RoomCallManager? _roomCallManager;
   StreamSubscription? _restartSub;
+  StreamSubscription<AppLockEmergency>? _lockEmergencySub;
   StreamSubscription? _deepLinkSub;
   StreamSubscription<PlatformSharePayload>? _shareTargetSub;
   StreamSubscription<String>? _pushTokenRefreshSub;
@@ -812,7 +859,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _restartSub = _controller.restartRequested.listen((_) {
         _restart();
       });
+      _lockEmergencySub?.cancel();
+      _lockEmergencySub = _controller.security.emergencies.listen(
+        _onLockEmergency,
+      );
       if (!mounted || generation != _startupGeneration) return;
+      // Адрес реле для украшений по требованию (Э7): тот же, что у всего
+      // приложения, поэтому и обходные пути те же. Ставится после подъёма
+      // контроллера — до него спрашивать адрес не у кого.
+      _onDemandRelayBaseUrl = _controller.relayHttpBaseUrl;
       // Healthy boot → re-arm the zombie-DB launch retry budget.
       _dbClosedInitRetries = 0;
       _initRetryTimer?.cancel();
@@ -913,7 +968,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   void _registerPlatformShareTargetHandler() {
-    if (!Platform.isAndroid || _shareTargetSub != null) return;
+    // iOS — с 15.11.2026: «Поделиться → Secretly» (расширение SecretlyShare
+    // кладёт файлы в общую папку, приложение отдаёт их этим же событием).
+    if (!(Platform.isAndroid || Platform.isIOS) || _shareTargetSub != null) {
+      return;
+    }
     _shareTargetSub = PlatformShareTarget.stream.listen(
       (payload) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1066,6 +1125,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     }
   }
 
+  /// Код принуждения или предел попыток в замке работающего приложения:
+  /// стираем, что просили, переводим процесс в нужное пространство и
+  /// пересоздаём контроллер — он поднимется уже в другом профиле.
+  Future<void> _onLockEmergency(AppLockEmergency event) async {
+    try {
+      await SpaceGate.applyEmergency(event, security: _controller.security);
+    } catch (_) {
+      // Даже при сбое стирания из настоящего профиля нужно уйти.
+    }
+    await _restart();
+  }
+
   Future<void> _restart() async {
     _startupGeneration++;
     setState(() {
@@ -1150,12 +1221,95 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _openRoomInvite(roomInviteTarget);
       return;
     }
+    final recoveryCode = RecoveryRequestCode.tryParse(uri.toString());
+    if (recoveryCode != null) {
+      final nav = CallManager.navigatorKey.currentState;
+      nav?.push(
+        SecretlyPageRoute<void>(
+          builder: (_) => GuardianHelpScreen(
+            controller: _controller,
+            initialCode: recoveryCode,
+          ),
+        ),
+      );
+      return;
+    }
+    final proxy = tryParseTransportProxyUri(uri);
+    if (proxy != null) {
+      unawaited(_confirmTransportProxy(proxy.$1, proxy.$2));
+      return;
+    }
+    final endpoints = tryParseTransportEndpointsUri(uri);
+    if (endpoints != null) {
+      unawaited(_controller.applyTransportEndpointsLink(endpoints));
+      return;
+    }
+    if (uri.scheme == 'file' && isOfflineEnvelopeFileName(uri.path)) {
+      unawaited(_importOfflineEnvelopeFromFileUri(uri));
+      return;
+    }
     if (uri.scheme != 'secretly') return;
     if (uri.host == 'room') {
       final convoId = uri.pathSegments.firstOrNull?.trim();
       if (convoId == null || convoId.isEmpty) return;
       _openConvoById(convoId);
       return;
+    }
+  }
+
+  /// Файл `.secretly`, открытый в Secretly из другого приложения на iOS
+  /// («Открыть в…»): система передаёт его ссылкой `file://`.
+  Future<void> _importOfflineEnvelopeFromFileUri(Uri uri) async {
+    final nav = CallManager.navigatorKey.currentState;
+    if (nav == null) return;
+    final context = nav.context;
+    final unlocked = await ensureSecurityScopeUnlocked(
+      context: context,
+      controller: _controller,
+      scope: SecurityLockScope.app,
+    );
+    if (!unlocked || !mounted || !context.mounted) return;
+    await importOfflineEnvelopeFileWithFeedback(
+      context,
+      _controller,
+      uri.toFilePath(),
+    );
+  }
+
+  /// Ссылка `secretly://proxy#host`: прокси ставится только после явного
+  /// согласия — иначе любая ссылка в чате могла бы увести трафик на чужой узел.
+  Future<void> _confirmTransportProxy(String host, int port) async {
+    final ctx = CallManager.navigatorKey.currentContext;
+    if (ctx == null || !ctx.mounted) return;
+    final ru = wave1LocaleIsRussian(ctx);
+    final shown = port == 443 ? host : '$host:$port';
+    final ok = await showDialog<bool>(
+      context: ctx,
+      builder: (dialogCtx) => AlertDialog(
+        title: Text(ru ? 'Использовать прокси?' : 'Use this proxy?'),
+        content: Text(
+          ru
+              ? 'Когда серверы Secretly недоступны напрямую, приложение будет '
+                    'ходить через $shown. Владелец прокси не видит содержимое, '
+                    'но видит, что вы пользуетесь Secretly.'
+              : 'When the Secretly servers are unreachable directly, the app '
+                    'will go through $shown. The proxy owner cannot read your '
+                    'traffic, but can see that you use Secretly.',
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(false),
+            child: Text(ru ? 'Отмена' : 'Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(true),
+            child: Text(ru ? 'Использовать' : 'Use'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await _controller.setTransportProxy(host: host, port: port);
     }
   }
 
@@ -1198,6 +1352,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       scope: SecurityLockScope.app,
     );
     if (!unlocked || !mounted || !context.mounted) return;
+
+    // Файлы сообщений без сети (.secretly) не пересылаются в чат, а
+    // принимаются: это входящие, доставленные мимо сети.
+    final envelopeFiles = payload.files
+        .where((f) => isOfflineEnvelopeFileName(f.name ?? f.path, mime: f.mime))
+        .toList();
+    if (envelopeFiles.isNotEmpty && envelopeFiles.length == payload.files.length) {
+      for (final f in envelopeFiles) {
+        if (!context.mounted) return;
+        await importOfflineEnvelopeFileWithFeedback(context, _controller, f.path);
+      }
+      return;
+    }
 
     final conversation = await showShareTargetConversationSheet(
       context: context,
@@ -1372,9 +1539,21 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _openConvoById(String convoId) async {
+  Future<void> _openConvoById(String convoId, {int attempt = 0}) async {
     final nav = CallManager.navigatorKey.currentState;
-    if (nav == null) return;
+    if (nav == null) {
+      // 13.11.2026 (Т10): при холодном запуске с нажатия на уведомление
+      // навигатор мог ещё не подняться — чат молча терялся, открывался
+      // главный экран. Повторяем до ~10 с.
+      unawaited(NotifTapTrail.add('open_nav_null_$attempt', convoId));
+      if (attempt < 40 && mounted) {
+        Future<void>.delayed(const Duration(milliseconds: 250), () {
+          if (mounted) unawaited(_openConvoById(convoId, attempt: attempt + 1));
+        });
+      }
+      return;
+    }
+    unawaited(NotifTapTrail.add('open_start', convoId));
     final normalizedConvoId = convoId.startsWith('req:')
         ? convoId.substring(4)
         : convoId;
@@ -1388,6 +1567,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         forcePrompt: true,
       );
       if (!unlocked) {
+        unawaited(NotifTapTrail.add('open_unlock_denied', convoId));
         return;
       }
     }
@@ -1412,6 +1592,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     // other when arriving via a notification or deep link. Back from the chat
     // then lands on the home list, not another chat underneath.
     nav.popUntil((route) => route.isFirst);
+    unawaited(NotifTapTrail.add('open_push', convoId));
     await nav.push(
       MaterialPageRoute<void>(
         settings: RouteSettings(name: chatRouteName(effectiveConvoId)),
@@ -1450,6 +1631,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _restartSub?.cancel();
+    _lockEmergencySub?.cancel();
     _deepLinkSub?.cancel();
     _initRetryTimer?.cancel();
     _shareTargetSub?.cancel();
@@ -1560,10 +1742,37 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                           body: Center(
                             child: _error.isEmpty
                                 ? const _StartupLoadingSurface()
-                                : Text(
-                                    'Error: $_error',
-                                    style: const TextStyle(
-                                      color: Colors.white70,
+                                // Play, отзыв 7.11.2026: ошибка запуска была
+                                // тупиком — текст без кнопки. Теперь «Повторить»
+                                // запускает приложение заново (тот же путь, что
+                                // самовосстановление при закрытой базе).
+                                : Padding(
+                                    padding: const EdgeInsets.all(24),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'Error: $_error',
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            color: Colors.white70,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        FilledButton(
+                                          key: const ValueKey('startup:retry'),
+                                          onPressed: () {
+                                            setState(() => _error = '');
+                                            unawaited(_restart());
+                                          },
+                                          child: Text(
+                                            AppLocalizations.of(
+                                                  context,
+                                                )?.startupRetry ??
+                                                'Retry',
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                           ),

@@ -255,10 +255,10 @@ void main() {
         profileBackgroundPaths: const <String>[],
         profileMusicPaths: const <String>[],
         personalConvoIds: const <String>[],
+        // 13.11.2026: незнакомая таблица теперь допустима (копия новой
+        // версии), поэтому «сломанный» снимок — испорченная строка.
         dbSnapshot: <String, Object?>{
-          'messages': <Object?>[
-            <String, Object?>{'id': 1, 'body': 'hello'},
-          ],
+          'contacts': <Object?>['not a row'],
         },
       );
       final payload = await SafeBackupV1.encryptToPayload(

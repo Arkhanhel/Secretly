@@ -159,10 +159,13 @@ party sees your address. A per-user setting forces `relay_only` to hide it, at
 the cost of latency.
 
 **Group calls:** audio, video and screen sharing go through our self-hosted
-LiveKit media server (SFU) on the same host. They are encrypted in transit
-between each device and the server, **not end to end**: the server can decode
-them. End-to-end encryption for group calls is the next piece of work on
-calls.
+LiveKit media server (SFU) on the same host. From 1.8.66 a call can be end to
+end encrypted: each sender encrypts its frames (AES-128-GCM, WebRTC frame
+encryption) with its own key, sent to the other participants over the
+end-to-end sessions used for messages, so the SFU forwards frames it cannot
+decrypt. This is rolled out in stages by a signed configuration value; a call
+created without it is encrypted only between each device and the server, and
+the app labels it. Limits and what the server still sees: THREAT_MODEL §3.5.
 
 ## Backup
 

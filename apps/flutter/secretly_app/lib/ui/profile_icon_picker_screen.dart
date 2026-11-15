@@ -19,6 +19,7 @@ import 'paywall_screen.dart';
 import 'profile_icon_asset_catalog.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_header_island.dart';
+import '../assets/on_demand_asset_image.dart';
 
 /// Prefix marking a server-hosted cosmetic icon selection (vs a bundled asset
 /// path). The suffix is the catalog item id.
@@ -197,8 +198,12 @@ class _ProfileIconPickerScreenState extends State<ProfileIconPickerScreen> {
     double? height,
     double fallbackSize = 24,
   }) {
-    return Image.asset(
-      assetPath,
+    // Украшения по требованию (Э7): в облегчённой сборке значка в пакете нет,
+    // и байты придут с сервера под проверку отпечатка. В полной сборке это
+    // ровно `Image.asset`. Не загрузился — на месте значка общий глиф, как и
+    // при любой другой неудаче чтения.
+    return Image(
+      image: OnDemandAssetImage(assetPath),
       fit: fit,
       width: width,
       height: height,

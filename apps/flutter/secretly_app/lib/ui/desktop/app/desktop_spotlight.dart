@@ -15,6 +15,7 @@ import '../../../security/app_security_manager.dart' show SecurityLockScope;
 import '../chat/details/desktop_selection_store.dart';
 import 'desktop_file_match.dart';
 import '../design/tokens.dart';
+import '../primitives/motion_widgets.dart';
 import '../primitives/avatar.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../shell/sidebar.dart' show DesktopSection;
@@ -782,7 +783,13 @@ class _WindowSearchFieldState extends State<WindowSearchField> {
         offset: const Offset(0, 8),
         child: TapRegion(
           groupId: _tapGroup,
-          child: ConstrainedBox(
+          // Выдача выпадает из поля и мягко садится (05.10.2026).
+          child: DAppear(
+            duration: DMotion.popIn,
+            offset: const Offset(0, -6),
+            fromScale: 0.97,
+            alignment: Alignment.topLeft,
+            child: ConstrainedBox(
             constraints: BoxConstraints(
               minWidth: WindowSearchField.dropdownWidth,
               maxWidth: WindowSearchField.dropdownWidth,
@@ -841,6 +848,7 @@ class _WindowSearchFieldState extends State<WindowSearchField> {
                 ),
               ),
             ),
+          ),
           ),
         ),
       ),

@@ -17,7 +17,7 @@ use axum::{
 };
 use base64::Engine as _;
 use dashmap::DashMap;
-use ed25519_dalek::{Signature, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use futures_util::{SinkExt, StreamExt};
 use hmac::{Hmac, Mac};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
@@ -42,6 +42,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
 mod cosmetics_catalog;
+mod nonce_persist;
 mod sticker_catalog;
 mod store;
 use cosmetics_catalog::CosmeticsCatalogDocument;
@@ -50,11 +51,13 @@ use store::{
     AdmitRoomMessageError, CallSignalRecord, CreateRoomError, CreateRoomInviteLinkError,
     DeleteRoomError, DeviceActivityRow, LeaveRoomError, PendingRow, PushTokenRow,
     RedeemRoomInviteError, RelayStore,
-    RoomCallControlError, RoomCallMediaHealthSummary, RoomCallMediaParticipantRow,
+    ROOM_MEDIA_CONTRACT_E2EE_V1, ROOM_MEDIA_CONTRACT_V1, RoomCallControlError, RoomCallJoinError,
+    RoomCallEviction, RoomCallMediaHealthSummary, RoomCallMediaParticipantRow,
     RoomCallParticipantRow, RoomCallRow, RoomCallSnapshot, RoomInviteLinkRow, RoomMembershipRow,
     RoomRow, SetRoomInviteLinkRevokedError, SetRoomMemberTagError, SetRoomPinnedMessageError,
     TransferRoomOwnershipError, UnbanRoomMembershipError, UpdateRoomStateError,
     UpsertRoomMembershipError,
+    ROOM_KIND_TOPIC, TopicCascadeAction, TopicCascadeEffect,
 };
 
 type HmacSha1 = Hmac<Sha1>;
@@ -254,12 +257,9 @@ struct PushHealthResponse {
     android_push_ready: bool,
     ios_push_ready: bool,
     ios_voip_push_ready: bool,
-    push_tokens_total: i64,
-    push_tokens_android: i64,
-    push_tokens_ios: i64,
-    push_tokens_ios_voip: i64,
-    push_tokens_unsupported: i64,
-    push_tokens_updated_last_24h: i64,
+    // 11.11.2026: счётчики push-токенов из открытой точки убраны — это число
+    // устройств и его динамика, а наружу нужна только готовность. Скрипты
+    // проверки читают `status`/`*_ready`, счётчики не разбирал никто.
     apns_environment: Option<String>,
     apns_environment_fallback_enabled: Option<bool>,
     apns_voip_topic: Option<String>,
@@ -360,11 +360,20 @@ async fn push_health(State(state): State<AppState>) -> impl IntoResponse {
     let push_ready = fcm_v1_configured || fcm_legacy_configured;
     let ios_voip_push_ready = apns_voip_configured;
     let apns_voip = state.apns_voip.as_ref().as_ref();
-    let stats = state
-        .store
-        .push_token_stats(now_ms())
-        .await
-        .unwrap_or_default();
+    // Счётчики остаются оператору — в журнале на уровне debug, не в ответе.
+    if tracing::enabled!(tracing::Level::DEBUG) {
+        if let Ok(stats) = state.store.push_token_stats(now_ms()).await {
+            tracing::debug!(
+                total = stats.total,
+                android = stats.android,
+                ios = stats.ios,
+                ios_voip = stats.ios_voip,
+                unsupported = stats.unsupported,
+                updated_last_24h = stats.updated_last_24h,
+                "push token stats"
+            );
+        }
+    }
     let body = PushHealthResponse {
         status: if push_ready { "ok" } else { "degraded" },
         service: "relay_push",
@@ -375,12 +384,6 @@ async fn push_health(State(state): State<AppState>) -> impl IntoResponse {
         android_push_ready: push_ready,
         ios_push_ready: push_ready && fcm_v1_configured,
         ios_voip_push_ready,
-        push_tokens_total: stats.total,
-        push_tokens_android: stats.android,
-        push_tokens_ios: stats.ios,
-        push_tokens_ios_voip: stats.ios_voip,
-        push_tokens_unsupported: stats.unsupported,
-        push_tokens_updated_last_24h: stats.updated_last_24h,
         apns_environment: apns_voip.map(|config| config.environment.clone()),
         apns_environment_fallback_enabled: apns_voip
             .map(|config| config.allow_environment_fallback),
@@ -498,6 +501,14 @@ struct AppState {
     blobs_dir: Arc<PathBuf>,
     sticker_catalog_dir: Arc<PathBuf>,
     cosmetics_dir: Arc<PathBuf>,
+    /// Каталог файлов приложения, разложенных ПО ХЕШУ их содержимого.
+    ///
+    /// Облегчённая мобильная сборка не несёт декоративные файлы (узоры, наборы
+    /// украшений, звуки) внутри пакета и тянет их отсюда по SHA-256.
+    ///
+    /// Плоский каталог: имя файла = `sha256_hex`, без вложенности. См.
+    /// [`http_app_asset`] — там же объяснено, почему тут не нужна подпись.
+    app_assets_dir: Arc<PathBuf>,
     limiter: Arc<IpRateLimiter>,
     /// AUD-080: per-invite-slug bucket. Slows down probing of a single
     /// well-known slug, even when the caller rotates devices / IPs.
@@ -523,6 +534,9 @@ struct AppState {
     max_pending_per_device: u64,
     keys_internal_base_url: Arc<String>,
     internal_key: Arc<String>,
+    /// Б3 Э3 (25.10.2026): ключ подписи ответов реле и его номер; `None` — реле
+    /// не подписывает (как до Б3).
+    resp_signer: Arc<Option<(String, SigningKey)>>,
     http: HttpClient,
     identity_cache: Arc<DashMap<String, String>>,
     /// П-5 (25.09.2026): когда ключ личности попал в кэш — для срока в
@@ -557,6 +571,10 @@ struct AppState {
     // big room safely. 0 in either = the exception is off.
     big_room_members: i64,
     big_room_min_build: i64,
+    /// ТЗ E2EE групповых созвонов: условия контракта `room_media_e2ee_v1`.
+    room_call_e2ee: Arc<RoomCallE2eeConfig>,
+    /// ЗВ-С3: служебный путь к LiveKit RoomService. По умолчанию выключен.
+    livekit_admin: Arc<LiveKitAdmin>,
 }
 
 /// Per-tier limits resolved for a profile from keys `/v1/profile/{id}/entitlements`.
@@ -602,6 +620,401 @@ impl RelayRoomMediaBackendKind {
         match self {
             Self::Unavailable => "unavailable",
             Self::Livekit => "livekit",
+        }
+    }
+}
+
+/// ТЗ E2EE групповых созвонов (06.10.2026, ЗВ-С1, ЗВ-С4, ЗВ-С5, ЗВ-С8):
+/// условия реле для контракта `room_media_e2ee_v1`. Читаются один раз при
+/// запуске. Выпущенные сборки контракта не называют, и для них умолчания
+/// ничего не меняют.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RoomCallE2eeConfig {
+    /// `SECRETLY_ROOM_CALL_E2EE_ACCEPT` (по умолчанию да): заводить ли новые
+    /// E2EE-созвоны. «0»/«false» — откат реле без выпуска: новый E2EE-созвон
+    /// получает 409 `room_call_e2ee_unavailable`, идущие доживают.
+    accept: bool,
+    /// `SECRETLY_ROOM_CALL_E2EE_REQUIRED` (по умолчанию нет): флаг-день (Ф5).
+    /// Открытые созвоны не заводятся, в них не входят, токены v1 не выдаются.
+    required: bool,
+    /// `SECRETLY_ROOM_CALL_E2EE_MAX_PARTICIPANTS` (20, зажим 2..50): предел
+    /// участников E2EE-созвона (Р-3). От монетизации не зависит.
+    max_participants: i64,
+    /// `SECRETLY_ROOM_CALL_E2EE_MIN_BUILD` (не задано): первая сборка, которая
+    /// умеет E2EE-созвоны. Задано — снимок созвона несёт `e2ee_capable`,
+    /// работает `/call/e2ee_readiness`, и пуш о E2EE-созвоне старым сборкам не
+    /// уходит (ЗВ-С5, ЗВ-С8). Номер сборки берётся из неподписанного заголовка,
+    /// поэтому это только подсказка интерфейсу, а не допуск.
+    min_build: Option<i64>,
+}
+
+impl Default for RoomCallE2eeConfig {
+    fn default() -> Self {
+        RoomCallE2eeConfig {
+            accept: true,
+            required: false,
+            max_participants: 20,
+            min_build: None,
+        }
+    }
+}
+
+impl RoomCallE2eeConfig {
+    fn from_env() -> Self {
+        Self::from_lookup(|key| env::var(key).ok())
+    }
+
+    /// Разбор без окружения процесса — чтобы тесты не делили переменные.
+    fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Self {
+        let d = RoomCallE2eeConfig::default();
+        let text = |key: &str| get(key).map(|v| v.trim().to_ascii_lowercase());
+        let accept = !matches!(text("SECRETLY_ROOM_CALL_E2EE_ACCEPT").as_deref(), Some("0" | "false"));
+        let required = matches!(
+            text("SECRETLY_ROOM_CALL_E2EE_REQUIRED").as_deref(),
+            Some("1" | "true" | "yes" | "on")
+        );
+        let max_participants = text("SECRETLY_ROOM_CALL_E2EE_MAX_PARTICIPANTS")
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(d.max_participants)
+            .clamp(2, 50);
+        let min_build = text("SECRETLY_ROOM_CALL_E2EE_MIN_BUILD")
+            .and_then(|v| v.parse::<i64>().ok())
+            .filter(|v| *v > 0);
+        RoomCallE2eeConfig {
+            accept,
+            required,
+            max_participants,
+            min_build,
+        }
+    }
+}
+
+/// Транспорт служебных вызовов LiveKit. Отдельной чертой — чтобы тесты
+/// проверяли запросы без сети. Ответ — HTTP-код.
+trait LiveKitAdminTransport: Send + Sync {
+    fn post_json(
+        &self,
+        url: String,
+        bearer: String,
+        body: serde_json::Value,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<u16, String>> + Send>>;
+}
+
+struct ReqwestLiveKitAdminTransport {
+    http: HttpClient,
+}
+
+impl LiveKitAdminTransport for ReqwestLiveKitAdminTransport {
+    fn post_json(
+        &self,
+        url: String,
+        bearer: String,
+        body: serde_json::Value,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<u16, String>> + Send>> {
+        let http = self.http.clone();
+        Box::pin(async move {
+            let resp = http
+                .post(&url)
+                .bearer_auth(bearer)
+                .json(&body)
+                .send()
+                .await
+                // Без адреса и заголовков: в журнал не попадает ничего лишнего.
+                .map_err(|e| e.without_url().to_string())?;
+            Ok(resp.status().as_u16())
+        })
+    }
+}
+
+/// Служебный вызов LiveKit RoomService (Twirp).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum LiveKitAdminOp {
+    RemoveParticipant { room: String, identity: String },
+    DeleteRoom { room: String },
+}
+
+impl LiveKitAdminOp {
+    fn method(&self) -> &'static str {
+        match self {
+            Self::RemoveParticipant { .. } => "RemoveParticipant",
+            Self::DeleteRoom { .. } => "DeleteRoom",
+        }
+    }
+
+    fn room(&self) -> &str {
+        match self {
+            Self::RemoveParticipant { room, .. } | Self::DeleteRoom { room } => room,
+        }
+    }
+
+    fn body(&self) -> serde_json::Value {
+        match self {
+            Self::RemoveParticipant { room, identity } => {
+                serde_json::json!({ "room": room, "identity": identity })
+            }
+            Self::DeleteRoom { room } => serde_json::json!({ "room": room }),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LiveKitAdminVideoGrant {
+    room: String,
+    room_admin: bool,
+    room_create: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct LiveKitAdminClaims {
+    exp: i64,
+    iss: String,
+    nbf: i64,
+    video: LiveKitAdminVideoGrant,
+}
+
+/// Срок служебного токена LiveKit: вызов идёт сразу, повтор — в пределах секунд.
+const LIVEKIT_ADMIN_TOKEN_TTL_SECONDS: i64 = 60;
+/// Первый вызов и до трёх повторов.
+const LIVEKIT_ADMIN_MAX_ATTEMPTS: u32 = 4;
+
+/// ЗВ-С3: реле само выкидывает из SFU исключённых, забаненных и ушедших из
+/// комнаты и закрывает комнату LiveKit по концу созвона. Без этого человек,
+/// которого убрали из созвона, остаётся в комнате SFU, пока не истечёт его
+/// токен. Флаг `SECRETLY_RELAY_ROOM_MEDIA_LIVEKIT_ADMIN_ENABLED` (по умолчанию
+/// нет): выключен — ни одного вызова и ни одной правки состава при бане или
+/// выходе из комнаты.
+struct LiveKitAdmin {
+    enabled: bool,
+    http_base: String,
+    api_key: String,
+    api_secret: String,
+    backoff_ms: u64,
+    transport: Arc<dyn LiveKitAdminTransport>,
+}
+
+/// Адрес Twirp из адреса LiveKit для клиентов: ws → http, wss → https.
+/// `SECRETLY_RELAY_ROOM_MEDIA_LIVEKIT_ADMIN_URL` — если служебный адрес другой.
+fn livekit_admin_http_base(livekit_url: &str, override_url: Option<&str>) -> String {
+    let raw = override_url
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .unwrap_or(livekit_url.trim());
+    let converted = if let Some(rest) = raw.strip_prefix("wss://") {
+        format!("https://{rest}")
+    } else if let Some(rest) = raw.strip_prefix("ws://") {
+        format!("http://{rest}")
+    } else {
+        raw.to_string()
+    };
+    converted.trim_end_matches('/').to_string()
+}
+
+impl LiveKitAdmin {
+    /// Выключенный путь — для тестового состояния реле.
+    #[cfg(test)]
+    fn disabled() -> Self {
+        LiveKitAdmin {
+            enabled: false,
+            http_base: String::new(),
+            api_key: String::new(),
+            api_secret: String::new(),
+            backoff_ms: 500,
+            transport: Arc::new(ReqwestLiveKitAdminTransport {
+                http: HttpClient::new(),
+            }),
+        }
+    }
+
+    fn from_env(room_media: &RelayRoomMediaRuntimeConfig) -> Self {
+        let enabled = matches!(
+            env::var("SECRETLY_RELAY_ROOM_MEDIA_LIVEKIT_ADMIN_ENABLED")
+                .map(|v| v.trim().to_ascii_lowercase())
+                .as_deref(),
+            Ok("1" | "true" | "yes" | "on")
+        );
+        let override_url = optional_string_env("SECRETLY_RELAY_ROOM_MEDIA_LIVEKIT_ADMIN_URL");
+        let http = HttpClient::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(10))
+            .build()
+            .expect("build livekit admin http client");
+        LiveKitAdmin {
+            enabled,
+            http_base: livekit_admin_http_base(&room_media.livekit_url, override_url.as_deref()),
+            api_key: room_media.livekit_api_key.clone(),
+            api_secret: room_media.livekit_api_secret.clone(),
+            backoff_ms: 500,
+            transport: Arc::new(ReqwestLiveKitAdminTransport { http }),
+        }
+    }
+
+    /// Вызовы в LiveKit идут, только если флаг включён и есть куда и чем.
+    fn calls_ready(&self) -> bool {
+        self.enabled
+            && !self.http_base.is_empty()
+            && !self.api_key.trim().is_empty()
+            && !self.api_secret.trim().is_empty()
+    }
+
+    fn token(&self, room: &str, now_s: i64) -> Result<String, String> {
+        let claims = LiveKitAdminClaims {
+            exp: now_s + LIVEKIT_ADMIN_TOKEN_TTL_SECONDS,
+            iss: self.api_key.clone(),
+            nbf: now_s.saturating_sub(5),
+            video: LiveKitAdminVideoGrant {
+                room: room.to_string(),
+                room_admin: true,
+                room_create: true,
+            },
+        };
+        jsonwebtoken::encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(self.api_secret.as_bytes()),
+        )
+        .map_err(|e| format!("livekit admin token: {e}"))
+    }
+
+    /// Вызов с повтором: до трёх повторов с удвоением паузы. 404 — участника
+    /// или комнаты в SFU уже нет, это успех.
+    async fn execute(&self, op: &LiveKitAdminOp) -> Result<(), String> {
+        let url = format!("{}/twirp/livekit.RoomService/{}", self.http_base, op.method());
+        let mut last_err = String::new();
+        for attempt in 0..LIVEKIT_ADMIN_MAX_ATTEMPTS {
+            if attempt > 0 {
+                let pause = self.backoff_ms.saturating_mul(1 << (attempt - 1));
+                tokio::time::sleep(Duration::from_millis(pause)).await;
+            }
+            let bearer = self.token(op.room(), now_ms() / 1000)?;
+            match self.transport.post_json(url.clone(), bearer, op.body()).await {
+                Ok(code) if (200..300).contains(&code) || code == 404 => return Ok(()),
+                Ok(code) => last_err = format!("status {code}"),
+                Err(err) => last_err = err,
+            }
+        }
+        Err(last_err)
+    }
+}
+
+/// Запустить служебный вызов в фоне, не задерживая ответ клиенту. Ошибка —
+/// в журнал на уровне warn, без секретов.
+fn livekit_admin_dispatch(state: &AppState, op: LiveKitAdminOp) {
+    if !state.livekit_admin.calls_ready() {
+        return;
+    }
+    let admin = state.livekit_admin.clone();
+    tokio::spawn(async move {
+        if let Err(err) = admin.execute(&op).await {
+            tracing::warn!(
+                method = op.method(),
+                room_ref = %log_fingerprint(op.room()),
+                error = %err,
+                "livekit admin call failed"
+            );
+        }
+    });
+}
+
+/// Выкинуть из комнаты SFU устройства, которые реле вывело из созвона, и
+/// закрыть комнату, если созвон на этом закончился.
+fn livekit_admin_dispatch_eviction(
+    state: &AppState,
+    call: &RoomCallRow,
+    profile_id: &str,
+    device_ids: &[String],
+) {
+    let room = room_media_backend_room_name_for_contract(
+        &call.room_id,
+        &call.call_id,
+        &call.media_contract,
+    );
+    for device_id in device_ids {
+        livekit_admin_dispatch(
+            state,
+            LiveKitAdminOp::RemoveParticipant {
+                room: room.clone(),
+                identity: room_media_backend_participant_identity(profile_id, device_id),
+            },
+        );
+    }
+    if call.state == "ended" {
+        livekit_admin_dispatch(state, LiveKitAdminOp::DeleteRoom { room });
+    }
+}
+
+/// Бан, исключение или выход из комнаты во время созвона (ЗВ-С3): устройства
+/// профиля выводятся из созвона так же, как при исключении модератором, и
+/// выкидываются из SFU. Под тем же флагом, что и вызовы LiveKit: выключен —
+/// созвон не трогается вовсе. Сбой здесь не отменяет смену членства.
+async fn evict_profile_from_room_call(
+    state: &AppState,
+    room_id: &str,
+    profile_id: &str,
+    join_state: &str,
+) {
+    if !state.livekit_admin.enabled {
+        return;
+    }
+    match state
+        .store
+        .evict_profile_from_active_room_call(room_id, profile_id, join_state, now_ms())
+        .await
+    {
+        Ok(Some(RoomCallEviction { call, device_ids })) => {
+            tracing::info!(
+                room_ref=%log_fingerprint(room_id),
+                profile_ref=%log_fingerprint(profile_id),
+                call_ref=%log_fingerprint(&call.call_id),
+                devices=device_ids.len(),
+                join_state,
+                "room call participants evicted after membership change"
+            );
+            livekit_admin_dispatch_eviction(state, &call, profile_id, &device_ids);
+        }
+        Ok(None) => {}
+        Err(err) => {
+            tracing::warn!(room_ref=%log_fingerprint(room_id), error=%err, "room call eviction failed");
+        }
+    }
+}
+
+/// Последствия 🔴 каскада закрытых веток вне базы: снятые с ветки выходят и
+/// из её созвона (как при обычном исключении, ЗВ-С3). Удалённая ветка — как
+/// при `http_room_delete`. Состав уже изменён в транзакции; здесь только
+/// журнал и SFU. Названия веток в журнал не пишем никогда.
+async fn apply_topic_cascade_side_effects(
+    state: &AppState,
+    parent_room_id: &str,
+    effects: &[TopicCascadeEffect],
+) {
+    for effect in effects {
+        match &effect.action {
+            TopicCascadeAction::Removed => {
+                tracing::info!(parent_room_ref=%log_fingerprint(parent_room_id), topic_room_ref=%log_fingerprint(&effect.topic_room_id), profile_ref=%log_fingerprint(&effect.profile_id), "closed topic cascade: member removed");
+                evict_profile_from_room_call(
+                    state,
+                    &effect.topic_room_id,
+                    &effect.profile_id,
+                    "removed",
+                )
+                .await;
+            }
+            TopicCascadeAction::OwnerReplaced {
+                next_owner_profile_id,
+            } => {
+                tracing::info!(parent_room_ref=%log_fingerprint(parent_room_id), topic_room_ref=%log_fingerprint(&effect.topic_room_id), profile_ref=%log_fingerprint(&effect.profile_id), next_owner_profile_ref=%log_fingerprint(next_owner_profile_id), "closed topic cascade: owner removed, ownership transferred");
+                evict_profile_from_room_call(
+                    state,
+                    &effect.topic_room_id,
+                    &effect.profile_id,
+                    "removed",
+                )
+                .await;
+            }
+            TopicCascadeAction::Deleted => {
+                tracing::info!(parent_room_ref=%log_fingerprint(parent_room_id), topic_room_ref=%log_fingerprint(&effect.topic_room_id), profile_ref=%log_fingerprint(&effect.profile_id), "closed topic cascade: last member removed, topic deleted");
+            }
         }
     }
 }
@@ -692,6 +1105,48 @@ struct GoogleTokenResp {
     expires_in: i64,
 }
 
+/// Ключ лимита по адресу (11.11.2026, подготовка к IPv6).
+///
+/// 🔴 IPv6-АДРЕС НЕЛЬЗЯ СЧИТАТЬ «ОДНИМ КЛИЕНТОМ». Абоненту выдают сеть /64, и
+/// внутри неё адрес можно менять хоть на каждом запросе. Лимит по полному
+/// адресу тогда не ограничивает никого, а таблица корзин растёт без предела —
+/// с каждым новым адресом. Поэтому IPv6 сводится к сети /64: так считают и
+/// крупные сервисы, и это то, что получает один абонент.
+///
+/// Адрес вида `::ffff:a.b.c.d` — тот же IPv4 в IPv6-обёртке: считаем его как
+/// IPv4, иначе один клиент получил бы две корзины.
+fn rate_limit_key(ip: std::net::IpAddr) -> std::net::IpAddr {
+    match ip {
+        std::net::IpAddr::V4(_) => ip,
+        std::net::IpAddr::V6(v6) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return std::net::IpAddr::V4(v4);
+            }
+            let s = v6.segments();
+            std::net::IpAddr::V6(std::net::Ipv6Addr::new(s[0], s[1], s[2], s[3], 0, 0, 0, 0))
+        }
+    }
+}
+
+/// Раз в минуту убирает из лимита по адресу наполнившиеся корзины.
+///
+/// Без этого таблица только растёт: запись появляется на каждый новый адрес и
+/// не исчезает никогда. С IPv4 рост ограничен числом адресов у нападающего, с
+/// IPv6 — нет, поэтому чистка обязательна вместе с IPv6.
+fn spawn_ip_limiter_pruner(limiter: Arc<IpRateLimiter>) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tick.tick().await;
+            let removed = limiter.prune_idle(Instant::now());
+            if removed > 0 {
+                tracing::debug!(removed, "ip rate limiter pruned idle buckets");
+            }
+        }
+    });
+}
+
 #[derive(Clone)]
 struct IpRateLimiter {
     buckets: DashMap<std::net::IpAddr, TokenBucket>,
@@ -716,10 +1171,13 @@ impl IpRateLimiter {
 
     fn allow(&self, ip: std::net::IpAddr) -> bool {
         let now = Instant::now();
-        let mut entry = self.buckets.entry(ip).or_insert(TokenBucket {
-            tokens: self.capacity,
-            last: now,
-        });
+        let mut entry = self
+            .buckets
+            .entry(rate_limit_key(ip))
+            .or_insert(TokenBucket {
+                tokens: self.capacity,
+                last: now,
+            });
 
         let elapsed = now.duration_since(entry.last).as_secs_f64();
         if elapsed > 0.0 {
@@ -733,6 +1191,24 @@ impl IpRateLimiter {
         } else {
             false
         }
+    }
+
+    /// Убирает корзины, которые уже наполнились до краёв. Такая корзина ничем
+    /// не отличается от отсутствующей: следующий запрос с этого адреса заведёт
+    /// новую, тоже полную. Корзины, которые ещё не наполнились, остаются — иначе
+    /// чистка сбрасывала бы лимит тому, кто его исчерпал. Возвращает число убранных.
+    fn prune_idle(&self, now: Instant) -> usize {
+        if self.refill_per_sec <= 0.0 {
+            return 0;
+        }
+        let before = self.buckets.len();
+        let capacity = self.capacity;
+        let refill = self.refill_per_sec;
+        self.buckets.retain(|_, b| {
+            let refilled = b.tokens + now.saturating_duration_since(b.last).as_secs_f64() * refill;
+            refilled < capacity
+        });
+        before.saturating_sub(self.buckets.len())
     }
 }
 
@@ -953,7 +1429,17 @@ async fn rate_limit(
             || path == "/v1/sticker-catalog/manifest"
             || path == "/v1/cosmetics/manifest"
             || path.starts_with("/v1/cosmetics/assets/")
-            || path.starts_with("/v1/sticker-catalog/assets/");
+            // Файлы приложения по хешу содержимого — такая же публичная
+            // декоративная статика, как косметика и наклейки рядом: тянутся
+            // пачкой при первом запуске облегчённой сборки.
+            || path.starts_with("/v1/app-assets/")
+            || path.starts_with("/v1/sticker-catalog/assets/")
+            // Куски загрузки с докачкой: каждый подписан устройством, идут
+            // по одному на сессию, а сессий у устройства не больше 16. Под
+            // общим пределом (2 запроса/с с адреса) большой файл и соседи по
+            // NAT упирались бы в 429.
+            || (req.method() == axum::http::Method::PUT
+                && path.starts_with("/v1/blob/upload/session/"));
         if exempt {
             return next.run(req).await;
         }
@@ -1533,14 +2019,59 @@ async fn enforce_group_join_limit(
     Ok(())
 }
 
+/// Р4 (аудит 11.11.2026): технический потолок комнаты, который действует
+/// ВСЕГДА, а не только при включённой монетизации. Без него комната росла
+/// без предела: попарная рассылка ключа и сообщений на тысячи устройств
+/// кладёт и отправителя, и реле. Уже большие комнаты не трогаются — отказ
+/// только новому участнику. Переменная `SECRETLY_RELAY_ROOM_HARD_MAX_MEMBERS`
+/// (0 или меньше — потолка нет, как было до 14.11.2026).
+fn room_hard_max_members() -> i64 {
+    i64_env("SECRETLY_RELAY_ROOM_HARD_MAX_MEMBERS", 1000)
+}
+
 /// Enforces the per-group member-size cap (owner's tier governs the room).
 /// Fails open; grandfathers rooms already over the cap.
+/// Технический потолок комнаты — ВСЕГДА, с монетизацией и без (15.11.2026).
+///
+/// Р4 (14.11) обещал «предел действует всегда», но обе точки вызова стояли под
+/// `if state.monetization_enabled`, а у реле на проде монетизация не задана —
+/// потолок не работал вовсе. Большие комнаты (`SECRETLY_BIG_ROOM_MEMBERS`) он
+/// не урезает; 0 — без потолка. Только добавление участника, существующих не
+/// трогает.
+async fn enforce_room_hard_cap(state: &AppState, room_id: &str) -> Result<(), (StatusCode, String)> {
+    enforce_room_hard_cap_at(state, room_id, room_hard_max_members()).await
+}
+
+async fn enforce_room_hard_cap_at(
+    state: &AppState,
+    room_id: &str,
+    hard: i64,
+) -> Result<(), (StatusCode, String)> {
+    let hard = if hard > 0 { hard.max(state.big_room_members) } else { hard };
+    if hard > 0 {
+        let members = state
+            .store
+            .count_active_room_members(room_id)
+            .await
+            .unwrap_or(0);
+        if over_limit(members, hard) {
+            tracing::warn!(room_id = %room_id, members = members, cap = hard, "room hard member cap");
+            return Err((
+                StatusCode::PAYMENT_REQUIRED,
+                "group_member_limit_reached".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 async fn enforce_group_size_limit(
     state: &AppState,
     owner_profile_id: &str,
     room_id: &str,
     joining_profile_id: &str,
 ) -> Result<(), (StatusCode, String)> {
+    enforce_room_hard_cap(state, room_id).await?;
     if !state.monetization_enabled {
         return Ok(());
     }
@@ -1680,6 +2211,39 @@ fn is_valid_room_id(s: &str, max_len: usize) -> bool {
 
 fn is_valid_uuid(s: &str) -> bool {
     Uuid::parse_str(s).is_ok()
+}
+
+/// Проверка параметра адреса `/v1/app-assets/{sha256_hex}`.
+///
+/// 🔴 НАМЕРЕННО СТРОЖЕ, ЧЕМ [`is_valid_id`], И НЕ ЧЕРЕЗ НЕГО. Это значение
+/// становится ИМЕНЕМ ФАЙЛА на диске, а `is_valid_id` пропускает `-`, `_` и
+/// любую длину до предела — то есть позволил бы адресовать в том же каталоге
+/// что-то, что файлом приложения не является. Здесь ровно 64 знака `0-9a-f`:
+/// любой другой вид — отказ, а не попытка «починить» строку.
+///
+/// Прописные буквы отбиваются тоже намеренно: на регистронезависимой файловой
+/// системе `AB…` и `ab…` — ОДИН файл, и один файл получил бы два разных адреса,
+/// а значит и два кеша у посредников при `immutable`.
+fn is_app_asset_hash(s: &str) -> bool {
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// SHA-256 содержимого в виде строчной шестнадцатиричной строки.
+///
+/// Складывается вручную, без отдельного крейта: нужен ровно один вид записи —
+/// такой же, как в адресе, иначе сверка в [`http_app_asset`] будет сравнивать
+/// разные представления одного и того же хеша.
+fn sha256_hex_lower(data: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let digest = Sha256::digest(data);
+    let mut out = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    out
 }
 
 fn log_fingerprint(value: &str) -> String {
@@ -2995,6 +3559,50 @@ fn http_blob_upload_auth_message(
     .into_bytes()
 }
 
+fn http_blob_session_create_auth_message(
+    device_id: &str,
+    ttl_seconds: u64,
+    upload_length: u64,
+    body_sha256_b64: &str,
+    access_token_sha256_b64: &str,
+    ts_ms: i64,
+    nonce_b64: &str,
+) -> Vec<u8> {
+    format!(
+        "SECRETLY-RELAY-HTTP-BLOB-SESSION-CREATE-V1\ndevice_id={}\nttl_seconds={}\nupload_length={}\nbody_sha256_b64={}\naccess_token_sha256_b64={}\nts_ms={}\nnonce_b64={}\n",
+        device_id, ttl_seconds, upload_length, body_sha256_b64, access_token_sha256_b64, ts_ms, nonce_b64
+    )
+    .into_bytes()
+}
+
+fn http_blob_session_put_auth_message(
+    device_id: &str,
+    session_id: &str,
+    offset: u64,
+    chunk_sha256_b64: &str,
+    ts_ms: i64,
+    nonce_b64: &str,
+) -> Vec<u8> {
+    format!(
+        "SECRETLY-RELAY-HTTP-BLOB-SESSION-PUT-V1\ndevice_id={}\nsession_id={}\noffset={}\nchunk_sha256_b64={}\nts_ms={}\nnonce_b64={}\n",
+        device_id, session_id, offset, chunk_sha256_b64, ts_ms, nonce_b64
+    )
+    .into_bytes()
+}
+
+fn http_blob_session_status_auth_message(
+    device_id: &str,
+    session_id: &str,
+    ts_ms: i64,
+    nonce_b64: &str,
+) -> Vec<u8> {
+    format!(
+        "SECRETLY-RELAY-HTTP-BLOB-SESSION-STATUS-V1\ndevice_id={}\nsession_id={}\nts_ms={}\nnonce_b64={}\n",
+        device_id, session_id, ts_ms, nonce_b64
+    )
+    .into_bytes()
+}
+
 fn http_blob_get_auth_message(
     device_id: &str,
     blob_id: &str,
@@ -3139,6 +3747,62 @@ fn http_room_create_auth_message(
     format!(
         "SECRETLY-RELAY-HTTP-ROOM-CREATE-V1\ndevice_id={}\nroom_id={}\ntitle={}\nts_ms={}\nnonce_b64={}\n",
         device_id, room_id, title, ts_ms, nonce_b64
+    )
+    .into_bytes()
+}
+
+/// 🔴 Подпись создания ЗАКРЫТОЙ ВЕТКИ (ТЗ закрытых тем, Ф1). Свой
+/// заголовок, а не V1 с лишней строкой: подпись под запросом без родителя не
+/// подходит к запросу с родителем и наоборот, поэтому перехваченный запрос
+/// нельзя переиграть, срезав или подменив `parent_room_id`. Клиент обязан
+/// собирать эти байты ровно так же (тест формата ниже).
+fn http_room_create_topic_auth_message(
+    device_id: &str,
+    room_id: &str,
+    parent_room_id: &str,
+    title: &str,
+    ts_ms: i64,
+    nonce_b64: &str,
+) -> Vec<u8> {
+    format!(
+        "SECRETLY-RELAY-HTTP-ROOM-CREATE-TOPIC-V1\ndevice_id={}\nroom_id={}\nparent_room_id={}\ntitle={}\nts_ms={}\nnonce_b64={}\n",
+        device_id, room_id, parent_room_id, title, ts_ms, nonce_b64
+    )
+    .into_bytes()
+}
+
+/// Выбор подписи создания: без родителя — V1 байт в байт (выпущенные
+/// сборки), с родителем — CREATE-TOPIC-V1.
+fn http_room_create_auth_message_for(
+    device_id: &str,
+    room_id: &str,
+    title: &str,
+    parent_room_id: Option<&str>,
+    ts_ms: i64,
+    nonce_b64: &str,
+) -> Vec<u8> {
+    match parent_room_id {
+        None => http_room_create_auth_message(device_id, room_id, title, ts_ms, nonce_b64),
+        Some(parent_room_id) => http_room_create_topic_auth_message(
+            device_id,
+            room_id,
+            parent_room_id,
+            title,
+            ts_ms,
+            nonce_b64,
+        ),
+    }
+}
+
+fn http_room_topics_list_auth_message(
+    device_id: &str,
+    room_id: &str,
+    ts_ms: i64,
+    nonce_b64: &str,
+) -> Vec<u8> {
+    format!(
+        "SECRETLY-RELAY-HTTP-ROOM-TOPICS-LIST-V1\ndevice_id={}\nroom_id={}\nts_ms={}\nnonce_b64={}\n",
+        device_id, room_id, ts_ms, nonce_b64
     )
     .into_bytes()
 }
@@ -3293,6 +3957,93 @@ fn http_room_settings_update_auth_message(
         nonce_b64,
     )
     .into_bytes()
+}
+
+/// Подпись настроек с полем Р-2 закрытых тем. Свой заголовок V2: запрос с
+/// флагом нельзя переиграть без флага (или с другим значением) под старой
+/// подписью V1. Строки — как у V1, флаг идёт после chat_history_visible.
+#[allow(clippy::too_many_arguments)]
+fn http_room_settings_update_v2_auth_message(
+    device_id: &str,
+    room_id: &str,
+    reactions_mode: &str,
+    allow_text: bool,
+    allow_media: bool,
+    allow_add_members: bool,
+    allow_pin_messages: bool,
+    allow_change_group_info: bool,
+    allow_change_tag: bool,
+    join_approval_required: bool,
+    slow_mode_seconds: i64,
+    chat_history_visible: bool,
+    allow_members_create_topics: bool,
+    ts_ms: i64,
+    nonce_b64: &str,
+) -> Vec<u8> {
+    format!(
+        "SECRETLY-RELAY-HTTP-ROOM-SETTINGS-UPDATE-V2\ndevice_id={}\nroom_id={}\nreactions_mode={}\nallow_text={}\nallow_media={}\nallow_add_members={}\nallow_pin_messages={}\nallow_change_group_info={}\nallow_change_tag={}\njoin_approval_required={}\nslow_mode_seconds={}\nchat_history_visible={}\nallow_members_create_topics={}\nts_ms={}\nnonce_b64={}\n",
+        device_id,
+        room_id,
+        reactions_mode,
+        if allow_text { 1 } else { 0 },
+        if allow_media { 1 } else { 0 },
+        if allow_add_members { 1 } else { 0 },
+        if allow_pin_messages { 1 } else { 0 },
+        if allow_change_group_info { 1 } else { 0 },
+        if allow_change_tag { 1 } else { 0 },
+        if join_approval_required { 1 } else { 0 },
+        slow_mode_seconds,
+        if chat_history_visible { 1 } else { 0 },
+        if allow_members_create_topics { 1 } else { 0 },
+        ts_ms,
+        nonce_b64,
+    )
+    .into_bytes()
+}
+
+/// Подпись запроса настроек: без поля Р-2 — V1 байт в байт, с полем — V2.
+fn http_room_settings_update_auth_message_for(
+    device_id: &str,
+    req: &HttpRoomSettingsUpdateReq,
+    room_id: &str,
+    ts_ms: i64,
+    nonce_b64: &str,
+) -> Vec<u8> {
+    match req.allow_members_create_topics {
+        None => http_room_settings_update_auth_message(
+            device_id,
+            room_id,
+            &req.reactions_mode,
+            req.allow_text,
+            req.allow_media,
+            req.allow_add_members,
+            req.allow_pin_messages,
+            req.allow_change_group_info,
+            req.allow_change_tag,
+            req.join_approval_required,
+            req.slow_mode_seconds,
+            req.chat_history_visible,
+            ts_ms,
+            nonce_b64,
+        ),
+        Some(allow_members_create_topics) => http_room_settings_update_v2_auth_message(
+            device_id,
+            room_id,
+            &req.reactions_mode,
+            req.allow_text,
+            req.allow_media,
+            req.allow_add_members,
+            req.allow_pin_messages,
+            req.allow_change_group_info,
+            req.allow_change_tag,
+            req.join_approval_required,
+            req.slow_mode_seconds,
+            req.chat_history_visible,
+            allow_members_create_topics,
+            ts_ms,
+            nonce_b64,
+        ),
+    }
 }
 
 fn http_room_message_admission_auth_message(
@@ -3857,6 +4608,17 @@ struct HttpActiveDevicesResp {
     /// реле лишь сообщает факты. Поле ДОБАВЛЕНО рядом со старым `device_ids`:
     /// клиенты, которые о нём не знают, ведут себя ровно как раньше.
     devices: Vec<HttpDeviceLiveness>,
+    /// Исчезающие сообщения (ТЗ 22.10.2026, §2.4): понимают ли таймер ВСЕ
+    /// устройства из `device_ids`. Появляется только по запросу
+    /// `?min_build=N` и только когда у профиля есть строки активности; иначе
+    /// поля нет, и клиент считает ответ «неизвестно». Устройство без
+    /// названной сборки считается старым. Клиенты, не знающие о поле, ведут
+    /// себя как раньше.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    all_build_at_least: Option<bool>,
+    /// Эхо порога, по которому считалось `all_build_at_least`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    min_build_checked: Option<i64>,
 }
 
 /// Факт о жизни одного устройства: когда оно в последний раз забирало почту или
@@ -3866,6 +4628,10 @@ struct HttpDeviceLiveness {
     device_id: String,
     last_signal_ms: i64,
     superseded: bool,
+    /// Сборка устройства не старше `?min_build`. Только по запросу; без
+    /// порога поля нет.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    build_at_least: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -3910,6 +4676,10 @@ struct HttpProfileDeleteResp {
 struct HttpRoomCreateReq {
     room_id: String,
     title: String,
+    /// Закрытые темы (Ф1): есть — создаётся ветка этой комнаты. Нет —
+    /// обычная комната, всё как раньше, включая подпись V1.
+    #[serde(default)]
+    parent_room_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -3934,6 +4704,9 @@ struct HttpRoomSettingsUpdateReq {
     join_approval_required: bool,
     slow_mode_seconds: i64,
     chat_history_visible: bool,
+    /// Р-2 закрытых тем. Нет поля — значение не меняется и подпись V1.
+    #[serde(default)]
+    allow_members_create_topics: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -4081,6 +4854,18 @@ struct HttpRoomCallJoinReq {
     deafened: bool,
     video_enabled: bool,
     screen_share_enabled: bool,
+    /// Контракт медиа (ЗВ-С1). Нет поля — выпущенная сборка, `room_media_v1`.
+    /// В подпись запроса НЕ входит: подписываемое сообщение прежнее.
+    #[serde(default)]
+    media_contract: Option<String>,
+}
+
+/// Запрос GET `/call` и GET `/media` с контрактом (ЗВ-С1). Нет параметра —
+/// выпущенная сборка. В подпись запроса НЕ входит.
+#[derive(Debug, Default, Deserialize)]
+struct HttpRoomCallContractQuery {
+    #[serde(default)]
+    media_contract: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -4117,6 +4902,41 @@ struct HttpRoomResp {
     pinned_message_id: Option<String>,
     created_at_ms: i64,
     updated_at_ms: i64,
+    /// Закрытые темы: `room` или `topic`.
+    kind: String,
+    /// Только у ветки; у обычной комнаты поля в ответе нет.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parent_room_id: Option<String>,
+    allow_members_create_topics: bool,
+    /// Исчезающие сообщения (ТЗ 22.10.2026): поймут ли таймер ВСЕ активные
+    /// участники комнаты. Только по запросу `GET /v1/rooms/{id}?min_build=N`
+    /// и только когда у участников есть строки активности; иначе поля нет.
+    /// Устройство без названной сборки считается старым. Это подсказка для
+    /// плашки, а не допуск; клиенты, не знающие о поле, его не видят.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    members_build_at_least: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    min_build_checked: Option<i64>,
+}
+
+/// Одна закрытая ветка в списке тем комнаты — только то, что нужно полосе
+/// тем; полное состояние — через GET /v1/rooms/{topic_room_id}.
+#[derive(Debug, Serialize)]
+struct HttpRoomTopicResp {
+    room_id: String,
+    title: String,
+    owner_profile_id: String,
+    version: i64,
+    membership_version: i64,
+    created_at_ms: i64,
+    updated_at_ms: i64,
+}
+
+/// Р-1: свои ветки — списком, чужие — только числом.
+#[derive(Debug, Serialize)]
+struct HttpRoomTopicsResp {
+    topics: Vec<HttpRoomTopicResp>,
+    hidden_count: i64,
 }
 
 #[derive(Debug, Serialize)]
@@ -4291,6 +5111,8 @@ struct HttpRoomCallResp {
     updated_at_ms: i64,
     ended_at_ms: Option<i64>,
     expires_at_ms: i64,
+    /// Контракт медиа созвона (ЗВ-С5). Поле добавочное.
+    media_contract: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -4310,6 +5132,10 @@ struct HttpRoomCallParticipantResp {
     joined_at_ms: i64,
     left_at_ms: Option<i64>,
     updated_at_ms: i64,
+    /// Подсказка интерфейсу (ЗВ-С5): сборка устройства умеет E2EE-созвоны.
+    /// Только когда задан `SECRETLY_ROOM_CALL_E2EE_MIN_BUILD`; иначе поля нет.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    e2ee_capable: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -4358,6 +5184,9 @@ struct HttpRoomCallMediaJoinReq {
     publish_video: bool,
     publish_screen_share: bool,
     subscribe_all: bool,
+    /// Контракт медиа (ЗВ-С1). Нет поля — `room_media_v1`. Вне подписи.
+    #[serde(default)]
+    media_contract: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -4387,6 +5216,19 @@ struct HttpRoomCallMediaParticipantResp {
     receive_video: bool,
     receive_screen_share: bool,
     updated_at_ms: i64,
+    /// См. [`HttpRoomCallParticipantResp::e2ee_capable`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    e2ee_capable: Option<bool>,
+}
+
+/// Ответ GET `/v1/rooms/{room}/call/e2ee_readiness` (ЗВ-С5, окно выбора §8.3).
+#[derive(Debug, Serialize)]
+struct HttpRoomCallE2eeReadinessResp {
+    /// `SECRETLY_ROOM_CALL_E2EE_MIN_BUILD`; не задано — `null` и пустой список.
+    min_build: Option<i64>,
+    /// Члены комнаты (кроме спросившего), у которых ни одно живое устройство
+    /// не названо сборкой не ниже `min_build`.
+    members_without_capable_device: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -4457,6 +5299,11 @@ fn room_to_http_resp(room: RoomRow) -> HttpRoomResp {
         pinned_message_id: room.pinned_message_id,
         created_at_ms: room.created_at_ms,
         updated_at_ms: room.updated_at_ms,
+        kind: room.kind,
+        parent_room_id: room.parent_room_id,
+        allow_members_create_topics: room.allow_members_create_topics,
+        members_build_at_least: None,
+        min_build_checked: None,
     }
 }
 
@@ -4558,6 +5405,7 @@ fn room_call_to_http_resp(call: RoomCallRow) -> Result<HttpRoomCallResp, (Status
         updated_at_ms: call.updated_at_ms,
         ended_at_ms: call.ended_at_ms,
         expires_at_ms: call.expires_at_ms,
+        media_contract: call.media_contract,
     })
 }
 
@@ -4580,6 +5428,7 @@ fn room_call_participant_to_http_resp(
         joined_at_ms: participant.joined_at_ms,
         left_at_ms: participant.left_at_ms,
         updated_at_ms: participant.updated_at_ms,
+        e2ee_capable: None,
     })
 }
 
@@ -4608,11 +5457,116 @@ fn room_call_snapshot_to_http_parts(
     Ok((room, call, participants, self_participant))
 }
 
+/// Какие устройства созвона умеют E2EE-созвоны (ЗВ-С5). `None` — порог не
+/// задан, и поле в ответе не появляется. Ошибка хранилища — тоже `None`:
+/// это подсказка, а не допуск, и ронять из-за неё снимок нельзя.
+async fn room_call_e2ee_capable_map<'a>(
+    state: &AppState,
+    device_ids: impl Iterator<Item = &'a str>,
+) -> Option<std::collections::HashMap<String, bool>> {
+    let min_build = state.room_call_e2ee.min_build?;
+    let ids: Vec<String> = device_ids.map(str::to_string).collect();
+    match state.store.client_builds_for_devices(ids.clone()).await {
+        Ok(builds) => Some(
+            ids.into_iter()
+                .map(|id| {
+                    let capable = builds.get(&id).is_some_and(|b| *b >= min_build);
+                    (id, capable)
+                })
+                .collect(),
+        ),
+        Err(err) => {
+            tracing::warn!(error=%err, "room call e2ee capability lookup failed");
+            None
+        }
+    }
+}
+
+/// [`room_call_snapshot_to_http_parts`] с подсказкой `e2ee_capable`.
+async fn room_call_snapshot_to_http_parts_with_caps(
+    state: &AppState,
+    snapshot: RoomCallSnapshot,
+) -> Result<
+    (
+        HttpRoomResp,
+        HttpRoomCallResp,
+        Vec<HttpRoomCallParticipantResp>,
+        Option<HttpRoomCallParticipantResp>,
+    ),
+    (StatusCode, String),
+> {
+    let caps = room_call_e2ee_capable_map(
+        state,
+        snapshot
+            .participants
+            .iter()
+            .chain(snapshot.self_participant.iter())
+            .map(|p| p.device_id.as_str()),
+    )
+    .await;
+    let parts = room_call_snapshot_to_http_parts(snapshot);
+    let (room, call, mut participants, mut self_participant) = parts?;
+    if let Some(caps) = caps {
+        for p in participants.iter_mut().chain(self_participant.iter_mut()) {
+            p.e2ee_capable = Some(caps.get(&p.device_id).copied().unwrap_or(false));
+        }
+    }
+    Ok((room, call, participants, self_participant))
+}
+
+/// Подсказка `e2ee_capable` в описании медиа (ЗВ-С5).
+async fn fill_room_call_media_e2ee_capable(state: &AppState, media: &mut HttpRoomCallMediaResp) {
+    let caps = room_call_e2ee_capable_map(
+        state,
+        media.participants.iter().map(|p| p.device_id.as_str()),
+    )
+    .await;
+    if let Some(caps) = caps {
+        for p in media.participants.iter_mut() {
+            p.e2ee_capable = Some(caps.get(&p.device_id).copied().unwrap_or(false));
+        }
+    }
+}
+
 fn room_call_participant_is_joined(join_state: &str) -> bool {
     matches!(
         join_state.trim().to_ascii_lowercase().as_str(),
         "joined" | "reconnecting"
     )
+}
+
+/// Контракт, названный клиентом (ЗВ-С1). `None` — выпущенная сборка, которая
+/// контракта не знает. Незнакомое значение — 400 `invalid_media_contract`.
+fn parse_requested_media_contract(
+    raw: Option<&str>,
+) -> Result<Option<&'static str>, (StatusCode, String)> {
+    match raw {
+        None => Ok(None),
+        Some(ROOM_MEDIA_CONTRACT_V1) => Ok(Some(ROOM_MEDIA_CONTRACT_V1)),
+        Some(ROOM_MEDIA_CONTRACT_E2EE_V1) => Ok(Some(ROOM_MEDIA_CONTRACT_E2EE_V1)),
+        Some(_) => Err((StatusCode::BAD_REQUEST, "invalid_media_contract".into())),
+    }
+}
+
+/// Проверка контракта на входах `/media` (GET и join): токен и описание
+/// медиа получает только запрос с контрактом созвона, а после флаг-дня
+/// открытый созвон токенов не получает вовсе.
+fn ensure_room_call_media_contract(
+    state: &AppState,
+    call: &RoomCallRow,
+    requested: Option<&'static str>,
+) -> Result<(), (StatusCode, String)> {
+    let requested = requested.unwrap_or(ROOM_MEDIA_CONTRACT_V1);
+    if requested != call.media_contract {
+        return Err((
+            StatusCode::CONFLICT,
+            format!("room_call_contract_mismatch:{}", call.media_contract),
+        ));
+    }
+    if state.room_call_e2ee.required && call.media_contract == ROOM_MEDIA_CONTRACT_V1 {
+        return Err((StatusCode::CONFLICT, "room_call_e2ee_required".into()));
+    }
+    Ok(())
 }
 
 fn build_http_ice_config_resp_for_device(
@@ -4636,7 +5590,7 @@ fn build_http_ice_config_resp_for_device(
     if !cfg.turn_urls.is_empty() && !turn_secret.is_empty() {
         let ttl_seconds = cfg.turn_ttl_seconds as i64;
         let expires_at_s = (now_ms() / 1000) + ttl_seconds;
-        let username = build_turn_rest_username(device_id, expires_at_s);
+        let username = build_turn_rest_username(turn_secret, device_id, expires_at_s);
         let credential = build_turn_rest_credential(turn_secret, &username).ok_or((
             StatusCode::INTERNAL_SERVER_ERROR,
             "turn credential generation failed".into(),
@@ -4717,6 +5671,23 @@ fn room_media_backend_participant_identity(profile_id: &str, device_id: &str) ->
     format!("secretly-participant-{device_segment}-{suffix}")
 }
 
+/// Имя комнаты LiveKit для созвона с данным контрактом (ЗР-7, И-3): у
+/// E2EE-созвона своя комната с суффиксом `-e2ee1`, так что медиа двух
+/// контрактов никогда не встречается в одной комнате SFU. Открытый
+/// контракт — ровно прежнее имя.
+fn room_media_backend_room_name_for_contract(
+    room_id: &str,
+    call_id: &str,
+    media_contract: &str,
+) -> String {
+    let base = room_media_backend_room_name(room_id, call_id);
+    if media_contract == ROOM_MEDIA_CONTRACT_E2EE_V1 {
+        format!("{base}-e2ee1")
+    } else {
+        base
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LiveKitVideoGrantClaims {
@@ -4725,6 +5696,10 @@ struct LiveKitVideoGrantClaims {
     can_publish: bool,
     can_publish_data: bool,
     can_subscribe: bool,
+    /// Только у токена E2EE-контракта (ЗВ-С2): участник не может переписать
+    /// свою metadata. У открытого контракта поля нет — токен побайтово прежний.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    can_update_own_metadata: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -4737,8 +5712,61 @@ struct LiveKitAccessTokenClaims {
     metadata: String,
 }
 
+/// Содержимое токена LiveKit для участника созвона комнаты.
+///
+/// Открытый контракт (`room_media_v1`) — побайтово как до E2EE: на metadata и
+/// канале данных держатся плитки, говорящий, громкость и мини-окно
+/// выпущенных сборок (ЗВ-С2). E2EE-контракт: metadata только
+/// `{"cv":"room_media_e2ee_v1"}` — ни профиля, ни устройства; канал данных
+/// закрыт; свою metadata участник не меняет. Участников клиент сопоставляет
+/// по identity, а не по metadata.
+fn build_livekit_room_media_claims(
+    config: &RelayRoomMediaRuntimeConfig,
+    media_contract: &str,
+    room_id: &str,
+    call_id: &str,
+    session_id: &str,
+    requester_profile_id: &str,
+    requester_device_id: &str,
+    room_name: &str,
+    participant_identity: &str,
+    now_s: i64,
+) -> LiveKitAccessTokenClaims {
+    let expires_at_s = now_s + config.token_ttl_seconds as i64;
+    let e2ee = media_contract == ROOM_MEDIA_CONTRACT_E2EE_V1;
+    let metadata = if e2ee {
+        serde_json::json!({ "cv": ROOM_MEDIA_CONTRACT_E2EE_V1 }).to_string()
+    } else {
+        serde_json::json!({
+            "room_id": room_id,
+            "call_id": call_id,
+            "session_id": session_id,
+            "profile_id": requester_profile_id,
+            "device_id": requester_device_id,
+            "contract_version": "room_media_v1",
+        })
+        .to_string()
+    };
+    LiveKitAccessTokenClaims {
+        exp: expires_at_s,
+        iss: config.livekit_api_key.clone(),
+        sub: participant_identity.to_string(),
+        nbf: now_s.saturating_sub(5),
+        video: LiveKitVideoGrantClaims {
+            room: room_name.to_string(),
+            room_join: true,
+            can_publish: true,
+            can_publish_data: !e2ee,
+            can_subscribe: true,
+            can_update_own_metadata: if e2ee { Some(false) } else { None },
+        },
+        metadata,
+    }
+}
+
 fn build_livekit_room_media_access_token(
     config: &RelayRoomMediaRuntimeConfig,
+    media_contract: &str,
     room_id: &str,
     call_id: &str,
     session_id: &str,
@@ -4748,30 +5776,19 @@ fn build_livekit_room_media_access_token(
     participant_identity: &str,
 ) -> Result<(String, i64), (StatusCode, String)> {
     let now_s = now_ms() / 1000;
-    let expires_at_s = now_s + config.token_ttl_seconds as i64;
-    let metadata = serde_json::json!({
-        "room_id": room_id,
-        "call_id": call_id,
-        "session_id": session_id,
-        "profile_id": requester_profile_id,
-        "device_id": requester_device_id,
-        "contract_version": "room_media_v1",
-    })
-    .to_string();
-    let claims = LiveKitAccessTokenClaims {
-        exp: expires_at_s,
-        iss: config.livekit_api_key.clone(),
-        sub: participant_identity.to_string(),
-        nbf: now_s.saturating_sub(5),
-        video: LiveKitVideoGrantClaims {
-            room: room_name.to_string(),
-            room_join: true,
-            can_publish: true,
-            can_publish_data: true,
-            can_subscribe: true,
-        },
-        metadata,
-    };
+    let claims = build_livekit_room_media_claims(
+        config,
+        media_contract,
+        room_id,
+        call_id,
+        session_id,
+        requester_profile_id,
+        requester_device_id,
+        room_name,
+        participant_identity,
+        now_s,
+    );
+    let expires_at_s = claims.exp;
     let token = jsonwebtoken::encode(
         &Header::new(Algorithm::HS256),
         &claims,
@@ -4800,7 +5817,11 @@ fn room_call_media_backend_resp(
     (StatusCode, String),
 > {
     let config = state.room_media.as_ref();
-    let room_name = room_media_backend_room_name(&snapshot.call.room_id, &snapshot.call.call_id);
+    let room_name = room_media_backend_room_name_for_contract(
+        &snapshot.call.room_id,
+        &snapshot.call.call_id,
+        &snapshot.call.media_contract,
+    );
     match config.effective_backend {
         RelayRoomMediaBackendKind::Livekit => {
             if !requester_is_joined {
@@ -4821,6 +5842,7 @@ fn room_call_media_backend_resp(
                 room_media_backend_participant_identity(requester_profile_id, requester_device_id);
             let (access_token, access_token_expires_at_ms) = build_livekit_room_media_access_token(
                 config,
+                &snapshot.call.media_contract,
                 &snapshot.call.room_id,
                 &snapshot.call.call_id,
                 &snapshot.call.call_id,
@@ -4903,6 +5925,7 @@ fn room_call_media_participant_to_http_resp(
         receive_video: joined && subscribe_all,
         receive_screen_share: joined && subscribe_all,
         updated_at_ms: participant.updated_at_ms,
+        e2ee_capable: None,
     })
 }
 
@@ -4951,7 +5974,7 @@ fn room_call_snapshot_to_media_resp(
         room_id: snapshot.call.room_id.clone(),
         call_id: snapshot.call.call_id.clone(),
         session_id: snapshot.call.call_id.clone(),
-        contract_version: "room_media_v1".to_string(),
+        contract_version: snapshot.call.media_contract.clone(),
         topology: HttpRoomCallMediaTopology::Centralized,
         capability_state,
         media_type: room_call_media_type_from_str(&snapshot.call.media_type)?,
@@ -5575,6 +6598,142 @@ fn authorize_room_membership_upsert(
     Ok(())
 }
 
+// ── Б3 Э3 (25.10.2026): подпись ответов реле ───────────────────────────────
+//
+// То же, что у keys (docs/TZ_SERVER_AUTH_B3_2026-10-25.md §4): на GET с
+// заголовком `x-secretly-resp-nonce` ответ на маршрут, по которому клиент
+// решает про состав комнаты, созвон и устройства, несёт
+// `x-secretly-resp-sig: v1;kid=…;ts=…;sig=…`. Тела не меняются; без `nonce`
+// (любая выпущенная сборка) и без ключа — всё как раньше.
+//
+// Ключ — свой у реле (`SECRETLY_RELAY_RESP_SIGNING_KEY`, сид base64 32 байт,
+// в файле секретов); открытая половина и номер раздаются в подписанном
+// `/v1/config` keys (блок `server_auth`). Подпись hello по WebSocket не
+// делаем: без связки с TLS посредник переслал бы её как есть (§3 ТЗ).
+
+const RESP_NONCE_HEADER: &str = "x-secretly-resp-nonce";
+const RESP_SIG_HEADER: &str = "x-secretly-resp-sig";
+const RESP_SIGN_BODY_LIMIT: usize = 4 * 1024 * 1024;
+
+/// Сид и номер ключа из окружения. Номер — 1..16 латинских букв и цифр,
+/// по умолчанию `relay1`. Нет сида или он битый — `None`.
+fn load_resp_signer() -> Option<(String, SigningKey)> {
+    resp_signer_from(|k| env::var(k).ok())
+}
+
+fn resp_signer_from(get: impl Fn(&str) -> Option<String>) -> Option<(String, SigningKey)> {
+    let raw = get("SECRETLY_RELAY_RESP_SIGNING_KEY")?;
+    let seed = base64::engine::general_purpose::STANDARD.decode(raw.trim()).ok()?;
+    let seed: [u8; 32] = seed.try_into().ok()?;
+    let kid = get("SECRETLY_RELAY_RESP_KID")
+        .map(|v| v.trim().to_string())
+        .filter(|v| (1..=16).contains(&v.len()) && v.bytes().all(|b| b.is_ascii_alphanumeric()))
+        .unwrap_or_else(|| "relay1".to_string());
+    Some((kid, SigningKey::from_bytes(&seed)))
+}
+
+/// Каноническое подписываемое сообщение ответа — то же, что у keys и в Dart
+/// `responseSigningMessage`. Заморожено.
+fn resp_signing_message(
+    kid: &str,
+    method: &str,
+    path: &str,
+    nonce: &str,
+    ts_ms: i64,
+    status: u16,
+    body_sha256_b64: &str,
+) -> String {
+    format!(
+        "SECRETLY-RESP-V1\nkid={kid}\nmethod={method}\npath={path}\nnonce={nonce}\nts_ms={ts_ms}\nstatus={status}\nbody_sha256_b64={body_sha256_b64}\n"
+    )
+}
+
+/// Маршруты Э3. Совпадает с Dart `relayResponseSignedPath`.
+fn resp_signed_route(method: &axum::http::Method, path: &str) -> bool {
+    if method != axum::http::Method::GET {
+        return false;
+    }
+    let segs: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+    match segs.as_slice() {
+        ["v1", "rooms", id] => !id.is_empty(),
+        ["v1", "rooms", id, "members"] | ["v1", "rooms", id, "call"] => !id.is_empty(),
+        ["v1", "rooms", id, "call", "e2ee_readiness"] => !id.is_empty(),
+        ["v1", "active_devices", d, p] => !d.is_empty() && !p.is_empty(),
+        ["v1", "ice", d] => !d.is_empty(),
+        _ => false,
+    }
+}
+
+fn resp_nonce_ok(nonce: &str) -> bool {
+    (8..=64).contains(&nonce.len())
+        && nonce
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'=' | b'-' | b'_'))
+}
+
+async fn sign_response(
+    signer: Option<&(String, SigningKey)>,
+    method: &str,
+    path: &str,
+    nonce: &str,
+    ts_ms: i64,
+    resp: axum::response::Response,
+) -> axum::response::Response {
+    let Some((kid, sk)) = signer else { return resp };
+    let status = resp.status();
+    if !(status.is_success() || status.is_client_error()) {
+        return resp;
+    }
+    let (mut parts, body) = resp.into_parts();
+    let Ok(bytes) = axum::body::to_bytes(body, RESP_SIGN_BODY_LIMIT).await else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    let body_hash = base64::engine::general_purpose::STANDARD.encode(Sha256::digest(&bytes));
+    let message = resp_signing_message(kid, method, path, nonce, ts_ms, status.as_u16(), &body_hash);
+    let sig = base64::engine::general_purpose::STANDARD.encode(sk.sign(message.as_bytes()).to_bytes());
+    if let Ok(v) = HeaderValue::from_str(&format!("v1;kid={kid};ts={ts_ms};sig={sig}")) {
+        parts.headers.insert(RESP_SIG_HEADER, v);
+    }
+    parts.headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    axum::response::Response::from_parts(parts, Body::from(bytes))
+}
+
+async fn sign_responses(
+    State(state): State<AppState>,
+    req: Request<Body>,
+    next: middleware::Next,
+) -> axum::response::Response {
+    let nonce = req
+        .headers()
+        .get(RESP_NONCE_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|n| resp_nonce_ok(n))
+        .map(str::to_string);
+    let signable = state.resp_signer.is_some()
+        && nonce.is_some()
+        && resp_signed_route(req.method(), req.uri().path());
+    if !signable {
+        return next.run(req).await;
+    }
+    let method = req.method().as_str().to_string();
+    let path = req
+        .uri()
+        .path_and_query()
+        .map(|p| p.as_str().to_string())
+        .unwrap_or_else(|| req.uri().path().to_string());
+    let resp = next.run(req).await;
+    sign_response(
+        state.resp_signer.as_ref().as_ref(),
+        &method,
+        &path,
+        nonce.as_deref().unwrap_or_default(),
+        now_ms(),
+        resp,
+    )
+    .await
+}
+
 fn now_ms() -> i64 {
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -5646,22 +6805,109 @@ fn evict_existing_ws_session(
     })));
 }
 
+// 11.11.2026, аудит: у сокета не было срока на приветствие и предела очереди
+// исходящих кадров. Клиент шлёт hello сразу после установки соединения (одна
+// подпись), 30 с — с большим запасом на медленную мобильную сеть.
+const WS_HELLO_TIMEOUT_SECS: u64 = 30;
+// Очередь меряется и в кадрах, и в байтах. Запас на законный пик: досылка
+// при hello — до 500 Deliver по ~256 КБ (≈130 МБ) плюс проход повторной
+// доставки. При переполнении сокет закрывается, а не теряет кадры молча:
+// Deliver лежат в почтовом ящике до ACK и придут после переподключения.
+const WS_OUTGOING_QUEUE_MAX_FRAMES: usize = 8192;
+const WS_OUTGOING_QUEUE_MAX_BYTES: usize = 256 * 1024 * 1024;
+
+fn ws_message_bytes(msg: &Message) -> usize {
+    match msg {
+        Message::Text(t) => t.len(),
+        Message::Binary(b) => b.len(),
+        _ => 16,
+    }
+}
+
+/// Перекачивает очередь соединения в сокет, считая, сколько ждёт отправки.
+///
+/// Кадры забираются из канала сразу, даже пока предыдущий ещё уходит, — иначе
+/// объём очереди не посчитать. Возвращает `true`, если остановилась из-за
+/// переполнения (медленный или не читающий клиент), `false` — если сокет
+/// закрылся или каналу больше некому писать.
+async fn ws_outgoing_pump<S>(
+    sink: S,
+    mut rx: mpsc::UnboundedReceiver<Message>,
+    max_frames: usize,
+    max_bytes: usize,
+) -> bool
+where
+    S: futures_util::Sink<Message> + Unpin + Send + 'static,
+{
+    type InFlight<S> = std::pin::Pin<Box<dyn std::future::Future<Output = (S, bool)> + Send>>;
+    let mut queue: std::collections::VecDeque<Message> = std::collections::VecDeque::new();
+    let mut queued_bytes = 0usize;
+    let mut rx_open = true;
+    let mut idle_sink = Some(sink);
+    let mut in_flight: Option<InFlight<S>> = None;
+    loop {
+        if in_flight.is_none() {
+            if let Some(msg) = queue.pop_front() {
+                queued_bytes = queued_bytes.saturating_sub(ws_message_bytes(&msg));
+                let Some(mut s) = idle_sink.take() else {
+                    return false;
+                };
+                in_flight = Some(Box::pin(async move {
+                    let ok = s.send(msg).await.is_ok();
+                    (s, ok)
+                }));
+            } else if !rx_open {
+                return false;
+            }
+        }
+        tokio::select! {
+            next = rx.recv(), if rx_open => match next {
+                Some(msg) => {
+                    queued_bytes = queued_bytes.saturating_add(ws_message_bytes(&msg));
+                    queue.push_back(msg);
+                    if queue.len() > max_frames || queued_bytes > max_bytes {
+                        return true;
+                    }
+                }
+                None => rx_open = false,
+            },
+            (s, ok) = async { in_flight.as_mut().expect("in flight").await }, if in_flight.is_some() => {
+                in_flight = None;
+                if !ok {
+                    return false;
+                }
+                idle_sink = Some(s);
+            }
+        }
+    }
+}
+
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
 
 async fn handle_socket(socket: WebSocket, state: AppState) {
-    let (mut ws_sender, mut ws_receiver) = socket.split();
+    let (ws_sender, mut ws_receiver) = socket.split();
 
     // Per-connection outgoing queue.
-    let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
+    let (tx, rx) = mpsc::unbounded_channel::<Message>();
 
+    // Конец перекачки (переполнение или мёртвый сокет) будит приёмный цикл:
+    // без этого соединение висело бы открытым, а клиент не переподключался.
+    let outgoing_closed = Arc::new(tokio::sync::Notify::new());
+    let outgoing_closed_signal = Arc::clone(&outgoing_closed);
     let outgoing_task = tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
-            if ws_sender.send(msg).await.is_err() {
-                break;
-            }
+        let overflow = ws_outgoing_pump(
+            ws_sender,
+            rx,
+            WS_OUTGOING_QUEUE_MAX_FRAMES,
+            WS_OUTGOING_QUEUE_MAX_BYTES,
+        )
+        .await;
+        if overflow {
+            tracing::warn!("ws outgoing queue overflow; closing connection");
         }
+        outgoing_closed_signal.notify_one();
     });
 
     // Last time we received a WebSocket-level Pong (or any liveness
@@ -5677,7 +6923,19 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     // Сборка, названная в приветствии, — её надо пережить разбор и дойти до
     // записи активности ниже (см. «Замер раскатки для СОКЕТ-ЖИТЕЛЕЙ»).
     let mut hello_client_build: Option<String> = None;
-    let did = if let Some(Ok(Message::Text(text))) = ws_receiver.next().await {
+    let first = match tokio::time::timeout(
+        Duration::from_secs(WS_HELLO_TIMEOUT_SECS),
+        ws_receiver.next(),
+    )
+    .await
+    {
+        Ok(first) => first,
+        Err(_) => {
+            tracing::info!("ws hello timeout; closing connection");
+            return;
+        }
+    };
+    let did = if let Some(Ok(Message::Text(text))) = first {
         match serde_json::from_str::<ClientMsg>(&text) {
             Ok(ClientMsg::HelloAuth {
                 device_id,
@@ -5995,7 +7253,20 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
         }
     });
 
-    while let Some(Ok(msg)) = ws_receiver.next().await {
+    loop {
+        let next = tokio::select! {
+            next = ws_receiver.next() => next,
+            _ = outgoing_closed.notified() => {
+                tracing::info!(
+                    device_ref = %log_fingerprint(&did),
+                    "ws outgoing stopped; closing connection"
+                );
+                break;
+            }
+        };
+        let Some(Ok(msg)) = next else {
+            break;
+        };
         match msg {
             Message::Text(text) => match serde_json::from_str::<ClientMsg>(&text) {
                 Ok(ClientMsg::Ping) => {
@@ -7216,10 +8487,28 @@ async fn http_room_create(
         return Err((StatusCode::BAD_REQUEST, "bad room_id".into()));
     }
     let title = normalize_room_title(&req.title)?;
+    // Закрытые темы: поле есть — оно обязано быть настоящим id комнаты.
+    // Пустая строка не превращается в «нет поля»: иначе запрос молча стал бы
+    // обычной комнатой под подписью ветки.
+    let parent_room_id = match req.parent_room_id.as_deref() {
+        None => None,
+        Some(parent_room_id) => {
+            if !is_valid_room_id(parent_room_id, 128) || parent_room_id == req.room_id {
+                return Err((StatusCode::BAD_REQUEST, "bad_parent".into()));
+            }
+            Some(parent_room_id)
+        }
+    };
     let requester_device_id = if require_auth_enabled() {
         let (device_id, ts_ms, nonce_b64, _sig) = http_auth_headers(&headers)?;
-        let msg =
-            http_room_create_auth_message(&device_id, &req.room_id, &title, ts_ms, &nonce_b64);
+        let msg = http_room_create_auth_message_for(
+            &device_id,
+            &req.room_id,
+            &title,
+            parent_room_id,
+            ts_ms,
+            &nonce_b64,
+        );
         let _ = verify_http_auth(&state, &headers, Some(&device_id), msg).await?;
         device_id
     } else {
@@ -7230,17 +8519,25 @@ async fn http_room_create(
         .ok_or((StatusCode::UNAUTHORIZED, "unknown creator device".into()))?;
 
     // Monetization §C-3: cap owned groups (fail-open, grandfathers existing).
-    enforce_group_create_limit(&state, &owner_profile_id).await?;
+    // Закрытая ветка — часть комнаты, а не новая группа: под предел не
+    // попадает (её собственный предел — Р-4, 20 на комнату).
+    if parent_room_id.is_none() {
+        enforce_group_create_limit(&state, &owner_profile_id).await?;
+    }
 
     tracing::info!(room_ref=%log_fingerprint(&req.room_id), creator_device_ref=%log_fingerprint(&requester_device_id), owner_profile_ref=%log_fingerprint(&owner_profile_id), "http room create request");
+    if let Some(parent_room_id) = parent_room_id {
+        tracing::info!(room_ref=%log_fingerprint(&req.room_id), parent_room_ref=%log_fingerprint(parent_room_id), "http room create request is a closed topic");
+    }
 
     let result = match state
         .store
-        .create_room(
+        .create_room_with_parent(
             &req.room_id,
             &owner_profile_id,
             &requester_device_id,
             &title,
+            parent_room_id,
             now_ms(),
         )
         .await
@@ -7252,6 +8549,18 @@ async fn http_room_create(
                 StatusCode::CONFLICT,
                 "room already exists with different authoritative metadata".into(),
             ));
+        }
+        Err(CreateRoomError::BadParent) => {
+            tracing::warn!(room_ref=%log_fingerprint(&req.room_id), parent_room_ref=%parent_room_id.map(log_fingerprint).unwrap_or_default(), requester_device_ref=%log_fingerprint(&requester_device_id), "http room topic create refused: bad parent");
+            return Err((StatusCode::BAD_REQUEST, "bad_parent".into()));
+        }
+        Err(CreateRoomError::TopicCreateForbidden) => {
+            tracing::warn!(room_ref=%log_fingerprint(&req.room_id), parent_room_ref=%parent_room_id.map(log_fingerprint).unwrap_or_default(), requester_profile_ref=%log_fingerprint(&owner_profile_id), "http room topic create refused: forbidden");
+            return Err((StatusCode::FORBIDDEN, "topic_create_forbidden".into()));
+        }
+        Err(CreateRoomError::TopicLimit) => {
+            tracing::warn!(room_ref=%log_fingerprint(&req.room_id), parent_room_ref=%parent_room_id.map(log_fingerprint).unwrap_or_default(), "http room topic create refused: topic limit");
+            return Err((StatusCode::CONFLICT, "topic_limit".into()));
         }
         Err(CreateRoomError::Storage(err)) => {
             return Err((StatusCode::INTERNAL_SERVER_ERROR, err));
@@ -7265,10 +8574,32 @@ async fn http_room_create(
     }))
 }
 
+/// Маршрут `GET /v1/rooms/{room_id}`: читает необязательный `?min_build=N`
+/// (исчезающие сообщения, ТЗ 22.10.2026) и отдаёт тот же ответ, что
+/// [`http_room_get`]. Мусор в параметре — подсказки нет, а не 400.
+async fn http_room_get_route(
+    Path(room_id): Path<String>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Json<HttpRoomResp>, (StatusCode, String)> {
+    let min_build = active_devices_min_build(&query);
+    http_room_get_inner(room_id, headers, state, min_build).await
+}
+
 async fn http_room_get(
     Path(room_id): Path<String>,
     headers: HeaderMap,
     State(state): State<AppState>,
+) -> Result<Json<HttpRoomResp>, (StatusCode, String)> {
+    http_room_get_inner(room_id, headers, state, None).await
+}
+
+async fn http_room_get_inner(
+    room_id: String,
+    headers: HeaderMap,
+    state: AppState,
+    min_build: Option<i64>,
 ) -> Result<Json<HttpRoomResp>, (StatusCode, String)> {
     if !is_valid_room_id(&room_id, 128) {
         return Err((StatusCode::BAD_REQUEST, "bad room_id".into()));
@@ -7294,7 +8625,86 @@ async fn http_room_get(
 
     tracing::info!(room_ref=%log_fingerprint(&room_id), requester_device_ref=%log_fingerprint(&requester_device_id), "http room get");
 
-    Ok(Json(room_to_http_resp(room)))
+    let mut resp = room_to_http_resp(room);
+    if let Some(threshold) = min_build {
+        // Ошибка хранилища — подсказки нет, запрос не падает.
+        if let Ok(memberships) = state.store.list_room_memberships(&room_id).await {
+            let profiles: Vec<String> = memberships
+                .into_iter()
+                .filter(|m| m.status == "active")
+                .map(|m| m.profile_id)
+                .collect();
+            if let Ok(Some(oldest)) = state
+                .store
+                .oldest_client_build_for_profiles(
+                    profiles,
+                    now_ms() - BIG_ROOM_DEVICE_ACTIVE_WINDOW_MS,
+                )
+                .await
+            {
+                resp.members_build_at_least = Some(oldest >= threshold);
+                resp.min_build_checked = Some(threshold);
+            }
+        }
+    }
+    Ok(Json(resp))
+}
+
+/// GET /v1/rooms/{room_id}/topics — закрытые ветки комнаты глазами
+/// спрашивающего (ТЗ закрытых тем, Ф1). Только действующему участнику самой
+/// комнаты. 🔴 Р-1: чужие ветки — только `hidden_count`, без id и названий,
+/// даже для владельца комнаты.
+async fn http_room_topics_list(
+    Path(room_id): Path<String>,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Json<HttpRoomTopicsResp>, (StatusCode, String)> {
+    if !is_valid_room_id(&room_id, 128) {
+        return Err((StatusCode::BAD_REQUEST, "bad room_id".into()));
+    }
+    let requester_device_id = if require_auth_enabled() {
+        let (device_id, ts_ms, nonce_b64, _sig) = http_auth_headers(&headers)?;
+        let msg = http_room_topics_list_auth_message(&device_id, &room_id, ts_ms, &nonce_b64);
+        let _ = verify_http_auth(&state, &headers, Some(&device_id), msg).await?;
+        device_id
+    } else {
+        required_http_device_id_header(&headers)?
+    };
+
+    let room = state
+        .store
+        .get_room(&room_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+        .ok_or((StatusCode::NOT_FOUND, "room not found".into()))?;
+    let requester_profile_id =
+        requester_profile_id_for_device(&state, &requester_device_id).await?;
+    ensure_room_active_member_access(&state, &room, &requester_profile_id).await?;
+
+    let listing = state
+        .store
+        .list_room_topics_for_member(&room_id, &requester_profile_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    tracing::info!(room_ref=%log_fingerprint(&room_id), requester_device_ref=%log_fingerprint(&requester_device_id), visible_topics=listing.topics.len(), hidden_topics=listing.hidden_count, "http room topics list");
+
+    Ok(Json(HttpRoomTopicsResp {
+        topics: listing
+            .topics
+            .into_iter()
+            .map(|topic| HttpRoomTopicResp {
+                room_id: topic.room_id,
+                title: topic.title,
+                owner_profile_id: topic.owner_profile_id,
+                version: topic.version,
+                membership_version: topic.membership_version,
+                created_at_ms: topic.created_at_ms,
+                updated_at_ms: topic.updated_at_ms,
+            })
+            .collect(),
+        hidden_count: listing.hidden_count,
+    }))
 }
 
 fn room_error(
@@ -7448,22 +8858,8 @@ async fn http_room_settings_update(
     let requester_device_id = if require_auth_enabled() {
         let (device_id, ts_ms, nonce_b64, _sig) =
             http_auth_headers(&headers).map_err(|err| room_error_from_pair("auth_invalid", err))?;
-        let msg = http_room_settings_update_auth_message(
-            &device_id,
-            &room_id,
-            &req.reactions_mode,
-            req.allow_text,
-            req.allow_media,
-            req.allow_add_members,
-            req.allow_pin_messages,
-            req.allow_change_group_info,
-            req.allow_change_tag,
-            req.join_approval_required,
-            req.slow_mode_seconds,
-            req.chat_history_visible,
-            ts_ms,
-            &nonce_b64,
-        );
+        let msg =
+            http_room_settings_update_auth_message_for(&device_id, &req, &room_id, ts_ms, &nonce_b64);
         let _ = verify_http_auth(&state, &headers, Some(&device_id), msg)
             .await
             .map_err(|err| room_error_from_pair("auth_invalid", err))?;
@@ -7495,7 +8891,7 @@ async fn http_room_settings_update(
 
     let result = state
         .store
-        .update_room_settings(
+        .update_room_settings_with_topics(
             &room_id,
             &req.reactions_mode,
             req.allow_text,
@@ -7507,6 +8903,7 @@ async fn http_room_settings_update(
             req.join_approval_required,
             req.slow_mode_seconds,
             req.chat_history_visible,
+            req.allow_members_create_topics,
             now_ms(),
         )
         .await;
@@ -8250,20 +9647,24 @@ async fn http_room_members_upsert(
     // new active member. Existing active members and non-active transitions
     // (pending/left/removed/banned) are never blocked. Owner's tier governs the
     // room; fails open.
-    if state.monetization_enabled && req.status.as_str() == "active" {
+    if req.status.as_str() == "active" {
         let already_active = target_membership
             .as_ref()
             .map(|m| m.status == "active")
             .unwrap_or(false);
         if !already_active {
-            enforce_group_size_limit(&state, &room.owner_profile_id, &room_id, &req.profile_id)
-                .await?;
+            if state.monetization_enabled {
+                enforce_group_size_limit(&state, &room.owner_profile_id, &room_id, &req.profile_id)
+                    .await?;
+            } else {
+                enforce_room_hard_cap(&state, &room_id).await?;
+            }
         }
     }
 
     let result = state
         .store
-        .upsert_room_membership(
+        .upsert_room_membership_with_cascade(
             &room_id,
             &req.profile_id,
             req.status.as_str(),
@@ -8272,7 +9673,7 @@ async fn http_room_members_upsert(
             now_ms(),
         )
         .await;
-    let result = match result {
+    let (result, topic_cascade) = match result {
         Ok(result) => result,
         Err(UpsertRoomMembershipError::RoomNotFound) => {
             return Err((StatusCode::NOT_FOUND, "room not found".into()));
@@ -8283,6 +9684,10 @@ async fn http_room_members_upsert(
                 "invalid owner membership mutation".into(),
             ));
         }
+        Err(UpsertRoomMembershipError::NotParentMember) => {
+            tracing::warn!(room_ref=%log_fingerprint(&room_id), requester_profile_ref=%log_fingerprint(&requester_profile_id), target_profile_ref=%log_fingerprint(&req.profile_id), "http room membership upsert refused: not a member of the parent room");
+            return Err((StatusCode::CONFLICT, "not_parent_member".into()));
+        }
         Err(UpsertRoomMembershipError::Storage(err)) => {
             return Err((StatusCode::INTERNAL_SERVER_ERROR, err));
         }
@@ -8290,6 +9695,18 @@ async fn http_room_members_upsert(
     let membership = room_membership_to_http_resp(result.membership)?;
 
     tracing::info!(room_ref=%log_fingerprint(&room_id), requester_device_ref=%log_fingerprint(&requester_device_id), requester_profile_ref=%log_fingerprint(&requester_profile_id), target_profile_ref=%log_fingerprint(&req.profile_id), changed=result.changed, "http room membership upsert");
+
+    // ЗВ-С3: забаненный, исключённый или ушедший больше не в созвоне и не в SFU.
+    match req.status {
+        HttpRoomMembershipStatus::Banned | HttpRoomMembershipStatus::Removed => {
+            evict_profile_from_room_call(&state, &room_id, &req.profile_id, "removed").await;
+        }
+        HttpRoomMembershipStatus::Left => {
+            evict_profile_from_room_call(&state, &room_id, &req.profile_id, "left").await;
+        }
+        HttpRoomMembershipStatus::Active | HttpRoomMembershipStatus::Pending => {}
+    }
+    apply_topic_cascade_side_effects(&state, &room_id, &topic_cascade).await;
 
     Ok(Json(HttpRoomMembershipUpsertResp {
         ok: true,
@@ -8321,9 +9738,9 @@ async fn http_room_leave(
 
     let result = state
         .store
-        .leave_room(&room_id, &requester_profile_id, now_ms())
+        .leave_room_with_cascade(&room_id, &requester_profile_id, now_ms())
         .await;
-    let result = match result {
+    let (result, topic_cascade) = match result {
         Ok(result) => result,
         Err(LeaveRoomError::RoomNotFound) => {
             return Err((StatusCode::NOT_FOUND, "room not found".into()));
@@ -8343,6 +9760,10 @@ async fn http_room_leave(
     };
 
     tracing::info!(room_ref=%log_fingerprint(&room_id), requester_device_ref=%log_fingerprint(&requester_device_id), requester_profile_ref=%log_fingerprint(&requester_profile_id), changed=result.changed, "http room leave");
+
+    // ЗВ-С3: вышедший из комнаты выходит и из созвона, и из SFU.
+    evict_profile_from_room_call(&state, &room_id, &requester_profile_id, "left").await;
+    apply_topic_cascade_side_effects(&state, &room_id, &topic_cascade).await;
 
     Ok(Json(HttpRoomLeaveResp {
         ok: true,
@@ -8390,6 +9811,10 @@ async fn http_room_delete(
     };
 
     tracing::info!(room_ref=%log_fingerprint(&room_id), requester_device_ref=%log_fingerprint(&requester_device_id), requester_profile_ref=%log_fingerprint(&requester_profile_id), deleted_profiles=result.deleted_profile_ids.len(), "http room delete");
+    if !result.deleted_topic_room_ids.is_empty() {
+        // Число — в журнал; id веток в ответ не идут (Р-1).
+        tracing::info!(room_ref=%log_fingerprint(&room_id), deleted_topics=result.deleted_topic_room_ids.len(), "http room delete removed closed topics");
+    }
 
     Ok(Json(HttpRoomDeleteResp {
         ok: true,
@@ -8648,6 +10073,11 @@ async fn http_room_invite_links_create(
     if !can_manage_room_invite_links(actor_role) {
         return Err((StatusCode::FORBIDDEN, "forbidden".into()));
     }
+    // Закрытые ветки: состав выбирают поимённо из участников основной
+    // комнаты; ссылка пустила бы любого, у кого она есть.
+    if room.kind == ROOM_KIND_TOPIC {
+        return Err((StatusCode::BAD_REQUEST, "topic_no_invite_links".into()));
+    }
 
     let link_id = Uuid::now_v7().to_string();
     let slug = Uuid::now_v7().simple().to_string();
@@ -8802,6 +10232,11 @@ async fn http_room_invite_preview(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
         .ok_or((StatusCode::NOT_FOUND, "room not found".into()))?;
+    // Ссылок у веток не бывает; если всё же есть — предпросмотр не должен
+    // раскрывать название ветки постороннему (Р-1).
+    if room.kind == ROOM_KIND_TOPIC {
+        return Err((StatusCode::BAD_REQUEST, "topic_no_invite_links".into()));
+    }
     let requester_membership = state
         .store
         .get_room_membership(&room.room_id, &requester_profile_id)
@@ -8870,7 +10305,9 @@ async fn http_room_invite_redeem(
     // Monetization §C-3: cap joined groups. Fail-open and skip the gate for a
     // profile that is ALREADY an active member of this room (re-redeem must
     // never be blocked — only a genuinely new join counts against the cap).
-    if state.monetization_enabled {
+    // Потолок комнаты (Р4) проверяется всегда; лимиты тарифа — только с
+    // монетизацией (15.11.2026, см. [`enforce_room_hard_cap`]).
+    {
         let invite = state
             .store
             .get_room_invite_link_by_slug(&slug)
@@ -8888,7 +10325,7 @@ async fn http_room_invite_redeem(
         };
         let membership_status = membership.as_ref().map(|m| m.status.as_str());
         let already_member = membership_status == Some("active");
-        if !already_member {
+        if state.monetization_enabled && !already_member {
             enforce_group_join_limit(&state, &requester_profile_id).await?;
         }
 
@@ -8903,13 +10340,17 @@ async fn http_room_invite_redeem(
             if let Ok(Some(room)) = state.store.get_room(&invite.room_id).await {
                 let joins_active = !(room.join_approval_required || invite.requires_approval);
                 if joins_active {
-                    enforce_group_size_limit(
-                        &state,
-                        &room.owner_profile_id,
-                        &room.room_id,
-                        &requester_profile_id,
-                    )
-                    .await?;
+                    if state.monetization_enabled {
+                        enforce_group_size_limit(
+                            &state,
+                            &room.owner_profile_id,
+                            &room.room_id,
+                            &requester_profile_id,
+                        )
+                        .await?;
+                    } else {
+                        enforce_room_hard_cap(&state, &room.room_id).await?;
+                    }
                 }
             }
         }
@@ -8936,6 +10377,9 @@ async fn http_room_invite_redeem(
         Err(RedeemRoomInviteError::Banned) => {
             return Err((StatusCode::FORBIDDEN, "forbidden".into()));
         }
+        Err(RedeemRoomInviteError::TopicNoInviteLinks) => {
+            return Err((StatusCode::BAD_REQUEST, "topic_no_invite_links".into()));
+        }
         Err(RedeemRoomInviteError::Storage(err)) => {
             return Err((StatusCode::INTERNAL_SERVER_ERROR, err));
         }
@@ -8959,10 +10403,12 @@ async fn http_room_call_get(
     Path(room_id): Path<String>,
     headers: HeaderMap,
     State(state): State<AppState>,
+    Query(query): Query<HttpRoomCallContractQuery>,
 ) -> Result<Json<HttpRoomCallSnapshotResp>, (StatusCode, String)> {
     if !is_valid_room_id(&room_id, 128) {
         return Err((StatusCode::BAD_REQUEST, "bad room_id".into()));
     }
+    let requested_contract = parse_requested_media_contract(query.media_contract.as_deref())?;
     let requester_device_id = if require_auth_enabled() {
         let (device_id, ts_ms, nonce_b64, _sig) = http_auth_headers(&headers)?;
         let msg = http_room_call_get_auth_message(&device_id, &room_id, ts_ms, &nonce_b64);
@@ -8987,6 +10433,12 @@ async fn http_room_call_get(
         .get_active_room_call(&room_id, Some(&requester_device_id))
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    // ЗВ-С1: выпущенная сборка E2EE-созвона не видит вовсе — для неё в
+    // комнате созвона нет. Войти она не сможет, а «созвона нет» она
+    // понимает правильно и чистит кэш.
+    let snapshot = snapshot.filter(|snapshot| {
+        requested_contract.is_some() || snapshot.call.media_contract != ROOM_MEDIA_CONTRACT_E2EE_V1
+    });
 
     tracing::info!(
         room_ref=%log_fingerprint(&room_id),
@@ -8998,7 +10450,7 @@ async fn http_room_call_get(
 
     if let Some(snapshot) = snapshot {
         let (room, call, participants, self_participant) =
-            room_call_snapshot_to_http_parts(snapshot)?;
+            room_call_snapshot_to_http_parts_with_caps(&state, snapshot).await?;
         return Ok(Json(HttpRoomCallSnapshotResp {
             exists: true,
             room,
@@ -9017,6 +10469,80 @@ async fn http_room_call_get(
     }))
 }
 
+/// GET `/v1/rooms/{room}/call/e2ee_readiness` — для окна выбора у создателя
+/// (ЗВ-С5, §8.3): кто из членов комнаты не войдёт в E2EE-созвон, потому что ни
+/// одно его живое устройство не на новой сборке. Подпись и доступ — ровно как
+/// у GET `/call` (то же подписываемое сообщение); повтор подписи между ними
+/// закрыт общим учётом nonce.
+async fn http_room_call_e2ee_readiness(
+    Path(room_id): Path<String>,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Json<HttpRoomCallE2eeReadinessResp>, (StatusCode, String)> {
+    if !is_valid_room_id(&room_id, 128) {
+        return Err((StatusCode::BAD_REQUEST, "bad room_id".into()));
+    }
+    let requester_device_id = if require_auth_enabled() {
+        let (device_id, ts_ms, nonce_b64, _sig) = http_auth_headers(&headers)?;
+        let msg = http_room_call_get_auth_message(&device_id, &room_id, ts_ms, &nonce_b64);
+        let _ = verify_http_auth(&state, &headers, Some(&device_id), msg).await?;
+        device_id
+    } else {
+        required_http_device_id_header(&headers)?
+    };
+    let requester_profile_id =
+        requester_profile_id_for_device(&state, &requester_device_id).await?;
+
+    let room = state
+        .store
+        .get_room(&room_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+        .ok_or((StatusCode::NOT_FOUND, "room not found".into()))?;
+    ensure_room_active_member_access(&state, &room, &requester_profile_id).await?;
+
+    let Some(min_build) = state.room_call_e2ee.min_build else {
+        return Ok(Json(HttpRoomCallE2eeReadinessResp {
+            min_build: None,
+            members_without_capable_device: Vec::new(),
+        }));
+    };
+    let members: Vec<String> = state
+        .store
+        .list_room_memberships(&room_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+        .into_iter()
+        .filter(|m| m.status == HttpRoomMembershipStatus::Active.as_str())
+        .map(|m| m.profile_id)
+        .filter(|p| *p != requester_profile_id)
+        .collect();
+    let newest = state
+        .store
+        .newest_client_build_by_profile(
+            members.clone(),
+            now_ms() - BIG_ROOM_DEVICE_ACTIVE_WINDOW_MS,
+        )
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let members_without_capable_device: Vec<String> = members
+        .into_iter()
+        .filter(|p| !newest.get(p).is_some_and(|b| *b >= min_build))
+        .collect();
+
+    tracing::info!(
+        room_ref=%log_fingerprint(&room_id),
+        requester_device_ref=%log_fingerprint(&requester_device_id),
+        lagging=members_without_capable_device.len(),
+        "http room call e2ee readiness"
+    );
+
+    Ok(Json(HttpRoomCallE2eeReadinessResp {
+        min_build: Some(min_build),
+        members_without_capable_device,
+    }))
+}
+
 async fn http_room_call_join(
     Path(room_id): Path<String>,
     headers: HeaderMap,
@@ -9026,6 +10552,8 @@ async fn http_room_call_join(
     if !is_valid_room_id(&room_id, 128) {
         return Err((StatusCode::BAD_REQUEST, "bad room_id".into()));
     }
+    let requested_contract = parse_requested_media_contract(req.media_contract.as_deref())?;
+    let media_contract = requested_contract.unwrap_or(ROOM_MEDIA_CONTRACT_V1);
     let requester_device_id = if require_auth_enabled() {
         let (device_id, ts_ms, nonce_b64, _sig) = http_auth_headers(&headers)?;
         let msg = http_room_call_join_auth_message(
@@ -9049,13 +10577,21 @@ async fn http_room_call_join(
     let requester_profile_id =
         requester_profile_id_for_device(&state, &requester_device_id).await?;
 
+    // Флаг-день (Ф5): открытый созвон не заводится и в него не входят.
+    if media_contract == ROOM_MEDIA_CONTRACT_V1 && state.room_call_e2ee.required {
+        return Err((StatusCode::CONFLICT, "room_call_e2ee_required".into()));
+    }
+
     // Monetization §C-3: cap call participants (owner's tier governs; fail-open;
-    // rejoin and the first joiner are never blocked).
-    enforce_call_participant_limit(&state, &room_id, &requester_profile_id).await?;
+    // rejoin and the first joiner are never blocked). Предел E2EE-созвона —
+    // свой и от монетизации не зависит (ЗВ-С4): его держит хранилище.
+    if media_contract == ROOM_MEDIA_CONTRACT_V1 {
+        enforce_call_participant_limit(&state, &room_id, &requester_profile_id).await?;
+    }
 
     let result = state
         .store
-        .create_or_join_room_call(
+        .create_or_join_room_call_for_contract(
             &room_id,
             &requester_profile_id,
             &requester_device_id,
@@ -9066,30 +10602,50 @@ async fn http_room_call_join(
             req.deafened,
             req.video_enabled,
             req.screen_share_enabled,
+            media_contract,
+            state.room_call_e2ee.accept,
+            state.room_call_e2ee.max_participants,
             now_ms(),
         )
         .await;
     let result = match result {
         Ok(result) => result,
-        Err(RoomCallControlError::RoomNotFound) => {
+        Err(RoomCallJoinError::Control(RoomCallControlError::RoomNotFound)) => {
             return Err((StatusCode::NOT_FOUND, "room not found".into()));
         }
-        Err(RoomCallControlError::NotActiveMember) => {
+        Err(RoomCallJoinError::Control(RoomCallControlError::NotActiveMember)) => {
             return Err((StatusCode::FORBIDDEN, "forbidden".into()));
         }
-        Err(RoomCallControlError::Storage(err)) => {
+        Err(RoomCallJoinError::Control(RoomCallControlError::Storage(err))) => {
             return Err((StatusCode::INTERNAL_SERVER_ERROR, err));
         }
-        Err(
+        Err(RoomCallJoinError::Control(
             RoomCallControlError::CallNotFound
             | RoomCallControlError::CallNotActive
             | RoomCallControlError::ParticipantNotJoined,
-        ) => {
+        )) => {
             return Err((StatusCode::CONFLICT, "room call state conflict".into()));
+        }
+        Err(RoomCallJoinError::ContractMismatch(call_contract)) => {
+            // Выпущенная сборка, пока идёт E2EE-созвон: созвон в комнате
+            // один, второй не заводим и в этот не пускаем.
+            if requested_contract.is_none() && call_contract == ROOM_MEDIA_CONTRACT_E2EE_V1 {
+                return Err((StatusCode::CONFLICT, "room_call_e2ee_in_progress".into()));
+            }
+            return Err((
+                StatusCode::CONFLICT,
+                format!("room_call_contract_mismatch:{call_contract}"),
+            ));
+        }
+        Err(RoomCallJoinError::E2eeUnavailable) => {
+            return Err((StatusCode::CONFLICT, "room_call_e2ee_unavailable".into()));
+        }
+        Err(RoomCallJoinError::CallFull) => {
+            return Err((StatusCode::CONFLICT, "room_call_full".into()));
         }
     };
     let (room, call, participants, self_participant) =
-        room_call_snapshot_to_http_parts(result.snapshot)?;
+        room_call_snapshot_to_http_parts_with_caps(&state, result.snapshot).await?;
 
     tracing::info!(
         room_ref=%log_fingerprint(&room_id),
@@ -9180,7 +10736,7 @@ async fn http_room_call_self_update(
         }
     };
     let (room, call, participants, self_participant) =
-        room_call_snapshot_to_http_parts(result.snapshot)?;
+        room_call_snapshot_to_http_parts_with_caps(&state, result.snapshot).await?;
 
     tracing::info!(
         room_ref=%log_fingerprint(&room_id),
@@ -9256,7 +10812,7 @@ async fn http_room_call_leave(
         }
     };
     let (room, call, participants, self_participant) =
-        room_call_snapshot_to_http_parts(result.snapshot)?;
+        room_call_snapshot_to_http_parts_with_caps(&state, result.snapshot).await?;
 
     tracing::info!(
         room_ref=%log_fingerprint(&room_id),
@@ -9379,8 +10935,9 @@ async fn http_room_call_participant_remove(
             return Err((StatusCode::INTERNAL_SERVER_ERROR, err));
         }
     };
+    let call_row_for_admin = result.snapshot.call.clone();
     let (room, call, participants, self_participant) =
-        room_call_snapshot_to_http_parts(result.snapshot)?;
+        room_call_snapshot_to_http_parts_with_caps(&state, result.snapshot).await?;
 
     tracing::info!(
         room_ref=%log_fingerprint(&room_id),
@@ -9391,6 +10948,14 @@ async fn http_room_call_participant_remove(
         target_device_ref=%log_fingerprint(&participant_device_id),
         changed=result.changed,
         "http room call participant remove"
+    );
+    // ЗВ-С3: из SFU — тем же путём, что и при бане. Без `changed`: запись могла
+    // уже уйти, а участник — остаться в комнате LiveKit.
+    livekit_admin_dispatch_eviction(
+        &state,
+        &call_row_for_admin,
+        &target_participant.profile_id,
+        std::slice::from_ref(&participant_device_id),
     );
 
     Ok(Json(HttpRoomCallMutationResp {
@@ -9459,8 +11024,19 @@ async fn http_room_call_end(
             return Err((StatusCode::INTERNAL_SERVER_ERROR, err));
         }
     };
+    // ЗВ-С3: конец созвона закрывает и комнату SFU.
+    livekit_admin_dispatch(
+        &state,
+        LiveKitAdminOp::DeleteRoom {
+            room: room_media_backend_room_name_for_contract(
+                &result.snapshot.call.room_id,
+                &result.snapshot.call.call_id,
+                &result.snapshot.call.media_contract,
+            ),
+        },
+    );
     let (room, call, participants, self_participant) =
-        room_call_snapshot_to_http_parts(result.snapshot)?;
+        room_call_snapshot_to_http_parts_with_caps(&state, result.snapshot).await?;
 
     tracing::info!(
         room_ref=%log_fingerprint(&room_id),
@@ -9581,6 +11157,7 @@ async fn http_room_call_media_get(
     Path((room_id, call_id)): Path<(String, String)>,
     headers: HeaderMap,
     State(state): State<AppState>,
+    Query(query): Query<HttpRoomCallContractQuery>,
 ) -> Result<Json<HttpRoomCallMediaResp>, (StatusCode, String)> {
     if !is_valid_room_id(&room_id, 128) {
         return Err((StatusCode::BAD_REQUEST, "bad room_id".into()));
@@ -9588,6 +11165,7 @@ async fn http_room_call_media_get(
     if !is_valid_id(&call_id, 128) {
         return Err((StatusCode::BAD_REQUEST, "bad call_id".into()));
     }
+    let requested_contract = parse_requested_media_contract(query.media_contract.as_deref())?;
     let requester_device_id = if require_auth_enabled() {
         let (device_id, ts_ms, nonce_b64, _sig) = http_auth_headers(&headers)?;
         let msg = http_room_call_media_get_auth_message(
@@ -9618,13 +11196,15 @@ async fn http_room_call_media_get(
     if !snapshot.call.state.eq_ignore_ascii_case("active") {
         return Err((StatusCode::CONFLICT, "room call is not active".into()));
     }
+    ensure_room_call_media_contract(&state, &snapshot.call, requested_contract)?;
 
-    let media = room_call_snapshot_to_media_resp(
+    let mut media = room_call_snapshot_to_media_resp(
         &state,
         &snapshot,
         &requester_device_id,
         &requester_profile_id,
     )?;
+    fill_room_call_media_e2ee_capable(&state, &mut media).await;
 
     tracing::info!(
         room_ref=%log_fingerprint(&room_id),
@@ -9650,6 +11230,7 @@ async fn http_room_call_media_join(
     if !is_valid_id(&call_id, 128) {
         return Err((StatusCode::BAD_REQUEST, "bad call_id".into()));
     }
+    let requested_contract = parse_requested_media_contract(req.media_contract.as_deref())?;
     let requester_device_id = if require_auth_enabled() {
         let (device_id, ts_ms, nonce_b64, _sig) = http_auth_headers(&headers)?;
         let msg = http_room_call_media_join_auth_message(
@@ -9688,6 +11269,7 @@ async fn http_room_call_media_join(
     if !snapshot.call.state.eq_ignore_ascii_case("active") {
         return Err((StatusCode::CONFLICT, "room call is not active".into()));
     }
+    ensure_room_call_media_contract(&state, &snapshot.call, requested_contract)?;
     let self_participant = snapshot
         .self_participant
         .as_ref()
@@ -9731,12 +11313,13 @@ async fn http_room_call_media_join(
             RoomCallControlError::Storage(err) => (StatusCode::INTERNAL_SERVER_ERROR, err),
         })?;
 
-    let media = room_call_snapshot_to_media_resp(
+    let mut media = room_call_snapshot_to_media_resp(
         &state,
         &snapshot,
         &requester_device_id,
         &requester_profile_id,
     )?;
+    fill_room_call_media_e2ee_capable(&state, &mut media).await;
 
     tracing::info!(
         room_ref=%log_fingerprint(&room_id),
@@ -9831,6 +11414,67 @@ impl Drop for TmpBlobGuard {
     }
 }
 
+/// Аварийный откат требования хеша тела при заливке (11.11.2026).
+fn blob_upload_allow_unhashed() -> bool {
+    env::var("SECRETLY_RELAY_BLOB_ALLOW_UNHASHED_UPLOAD")
+        .ok()
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// Проверки заливки без хеша, которые не зависят от тела. Одноразовый код
+/// здесь не помечается — это сделает полная проверка после записи.
+async fn blob_upload_unhashed_precheck(
+    state: &AppState,
+    device_id: &str,
+    ts_ms: i64,
+) -> Result<(), (StatusCode, String)> {
+    if !is_valid_id(device_id, 128) {
+        return Err((StatusCode::UNAUTHORIZED, "bad device_id".into()));
+    }
+    if (ts_ms - now_ms()).abs() > 5 * 60 * 1000 {
+        return Err((StatusCode::UNAUTHORIZED, "timestamp out of range".into()));
+    }
+    if fetch_identity_pub_b64(state, device_id).await.is_none() {
+        return Err((StatusCode::UNAUTHORIZED, "unknown device".into()));
+    }
+    Ok(())
+}
+
+/// Целое из окружения; нет или не число — [default].
+fn u64_from_env_or(name: &str, default: u64) -> u64 {
+    env::var(name)
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(default)
+}
+
+/// Свободное место на разделе с файлами (для непривилегированного
+/// пользователя). `None` — узнать не удалось: тогда не отказываем.
+#[cfg(unix)]
+fn disk_free_bytes(dir: &std::path::Path) -> Option<u64> {
+    use std::os::unix::ffi::OsStrExt;
+    let mut probe = dir.to_path_buf();
+    while !probe.exists() {
+        if !probe.pop() {
+            return None;
+        }
+    }
+    let c = std::ffi::CString::new(probe.as_os_str().as_bytes()).ok()?;
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    // SAFETY: `c` — корректная C-строка, `st` — выделенная структура.
+    let rc = unsafe { libc::statvfs(c.as_ptr(), &mut st) };
+    if rc != 0 {
+        return None;
+    }
+    Some((st.f_bavail as u64).saturating_mul(st.f_frsize as u64))
+}
+
+#[cfg(not(unix))]
+fn disk_free_bytes(_dir: &std::path::Path) -> Option<u64> {
+    None
+}
+
 async fn http_blob_upload(
     State(state): State<AppState>,
     Query(q): Query<BlobUploadQuery>,
@@ -9870,6 +11514,24 @@ async fn http_blob_upload(
                 &nonce_b64,
             );
             let _ = verify_http_auth(&state, &headers, Some(&device_id), msg).await?;
+        } else if blob_upload_allow_unhashed() {
+            // Откат на старое поведение: подпись покрывает хеш тела, поэтому
+            // целиком её не проверить до записи. Отсекаем хотя бы то, что
+            // проверяется без тела: форму, окно времени, известное устройство.
+            blob_upload_unhashed_precheck(&state, &device_id, ts_ms).await?;
+        } else {
+            // 11.11.2026, аудит: без хеша в заголовке до 1 ГБ писались на диск
+            // ДО проверки подписи. Заголовок шлют обе ветки заливки клиента с
+            // самого первого коммита (e2d2b79d), поэтому требуем его.
+            tracing::warn!(
+                device_ref = %log_fingerprint(&device_id),
+                reason = "missing body hash header",
+                "http auth rejected"
+            );
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "missing body hash header".into(),
+            ));
         }
 
         Some((device_id, ts_ms, nonce_b64, body_hash_header))
@@ -9880,8 +11542,8 @@ async fn http_blob_upload(
     // §C-3 (TZ-MONETIZE-01): per-tier attachment ceiling, enforced server-side.
     // Fail-open: monetization disabled / unauthenticated / unresolved entitlement
     // => the hard blob cap (unchanged behaviour). The uploader device in pre_auth
-    // isn't signature-verified yet here, but it only narrows the cap; a spoofed
-    // device still fails the post-stream auth check below.
+    // is signature-verified here unless the unhashed rollback is on; then it
+    // only narrows the cap and a spoofed device still fails after the stream.
     let blob_cap: u64 = if state.monetization_enabled {
         let mut cap = RELAY_MAX_BLOB_BYTES;
         if let Some((device_id, _, _, _)) = pre_auth.as_ref() {
@@ -9897,6 +11559,53 @@ async fn http_blob_upload(
     } else {
         RELAY_MAX_BLOB_BYTES
     };
+
+    // Объявленная длина больше предела — отказ до создания файла (тот же 413,
+    // что дал бы счётчик ниже, только без записи на диск).
+    let declared_len = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.trim().parse::<u64>().ok());
+    if declared_len.is_some_and(|len| len > blob_cap) {
+        return Err((StatusCode::PAYLOAD_TOO_LARGE, "blob too large".into()));
+    }
+
+    // С3 (аудит 11.11.2026): квота хранения и запас диска — до записи.
+    //
+    // Диск: 10.11 сервер уже упирался в NO_SPACE. Если свободного места
+    // меньше `SECRETLY_RELAY_BLOB_MIN_FREE_BYTES` (по умолчанию 5 ГиБ), новые
+    // файлы не принимаются (507) — базы, очередь и копии продолжают работать.
+    // Квота: живые файлы одного устройства не больше
+    // `SECRETLY_RELAY_BLOB_QUOTA_BYTES_PER_DEVICE` (по умолчанию 20 ГиБ);
+    // 0 — без квоты. Устройство здесь проверено подписью (кроме отката на
+    // заливку без хеша — тогда квота лишь сужает, как и потолок выше).
+    let incoming = declared_len.unwrap_or(blob_cap).min(blob_cap);
+    if let Some(free) = disk_free_bytes(state.blobs_dir.as_ref()) {
+        let min_free = u64_from_env_or("SECRETLY_RELAY_BLOB_MIN_FREE_BYTES", 5 << 30);
+        if free < min_free.saturating_add(incoming) {
+            tracing::warn!(free = free, need = incoming, "blob upload refused: disk almost full");
+            return Err((StatusCode::INSUFFICIENT_STORAGE, "server storage full".into()));
+        }
+    }
+    let quota = u64_from_env_or("SECRETLY_RELAY_BLOB_QUOTA_BYTES_PER_DEVICE", 20 << 30);
+    if quota > 0 {
+        if let Some((device_id, _, _, _)) = pre_auth.as_ref() {
+            let used = state
+                .store
+                .blob_live_bytes_for_device(device_id, now)
+                .await
+                .unwrap_or(0)
+                .max(0) as u64;
+            if used.saturating_add(incoming) > quota {
+                tracing::warn!(
+                    device_ref = %log_fingerprint(device_id),
+                    used = used,
+                    "blob upload refused: device storage quota"
+                );
+                return Err((StatusCode::INSUFFICIENT_STORAGE, "blob quota exceeded".into()));
+            }
+        }
+    }
 
     // MVP guardrail (also protects server RAM/disk).
     let blob_id = Uuid::now_v7().to_string();
@@ -10013,6 +11722,420 @@ async fn http_blob_upload(
         size_bytes: size,
         expires_at_ms,
     }))
+}
+
+// ── Загрузка частями с докачкой (разбор медиа 15.11.2026) ─────────────────
+//
+// Как у Signal (TUS) и WhatsApp: файл любого размера уходит кусками, сервер
+// помнит, сколько принял, и после обрыва клиент продолжает с этого места —
+// а не заливает всё заново. Проверки те же, что у `/v1/blob/upload`:
+// подпись устройства (на КАЖДОМ куске), предел размера, место на диске,
+// квота устройства, хеш всего шифротекста перед приёмом. Прежняя заливка
+// одним запросом остаётся для старых сборок без изменений.
+
+/// Самый большой кусок. Клиент выбирает меньше (обычно ~1/8 файла).
+const BLOB_SESSION_MAX_CHUNK_BYTES: u64 = 8 * 1024 * 1024;
+/// Сколько живёт незаконченная сессия.
+const BLOB_SESSION_TTL_MS: i64 = 24 * 3600 * 1000;
+/// Одновременно открытых сессий на устройство.
+const BLOB_SESSION_MAX_OPEN_PER_DEVICE: i64 = 16;
+
+fn blob_sessions_dir(state: &AppState) -> std::path::PathBuf {
+    state.blobs_dir.join("sessions")
+}
+
+fn blob_session_part_path(state: &AppState, session_id: &str) -> std::path::PathBuf {
+    blob_sessions_dir(state).join(format!("{session_id}.part"))
+}
+
+/// Куски одной сессии принимаются по одному: второй одновременный — 409.
+fn blob_session_busy() -> &'static std::sync::Mutex<std::collections::HashSet<String>> {
+    static BUSY: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::OnceLock::new();
+    BUSY.get_or_init(|| std::sync::Mutex::new(std::collections::HashSet::new()))
+}
+
+struct BlobSessionBusyGuard(String);
+
+impl BlobSessionBusyGuard {
+    fn try_take(session_id: &str) -> Option<Self> {
+        let mut set = blob_session_busy().lock().unwrap_or_else(|e| e.into_inner());
+        if set.insert(session_id.to_string()) {
+            Some(Self(session_id.to_string()))
+        } else {
+            None
+        }
+    }
+}
+
+impl Drop for BlobSessionBusyGuard {
+    fn drop(&mut self) {
+        let mut set = blob_session_busy().lock().unwrap_or_else(|e| e.into_inner());
+        set.remove(&self.0);
+    }
+}
+
+#[derive(Deserialize)]
+struct BlobSessionCreateQuery {
+    ttl_seconds: Option<u64>,
+}
+
+#[derive(Serialize, Debug)]
+struct BlobSessionCreateResp {
+    session_id: String,
+    offset: u64,
+    max_chunk_bytes: u64,
+}
+
+#[derive(Serialize)]
+struct BlobSessionPutResp {
+    offset: u64,
+    complete: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blob_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    size_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    expires_at_ms: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct BlobSessionStatusResp {
+    offset: u64,
+    upload_length: u64,
+}
+
+fn blob_session_offset_conflict(offset: u64) -> axum::response::Response {
+    (
+        StatusCode::CONFLICT,
+        Json(serde_json::json!({ "error": "offset mismatch", "offset": offset })),
+    )
+        .into_response()
+}
+
+async fn blob_part_len(path: &std::path::Path) -> u64 {
+    tokio::fs::metadata(path).await.map(|m| m.len()).unwrap_or(0)
+}
+
+/// Те же допуски, что у заливки одним запросом: предел размера по
+/// подписке, запас на диске, квота устройства (вместе с открытыми сессиями).
+async fn blob_session_admit(
+    state: &AppState,
+    device_id: &str,
+    upload_length: u64,
+    now: i64,
+) -> Result<(), (StatusCode, String)> {
+    let mut cap = RELAY_MAX_BLOB_BYTES;
+    if state.monetization_enabled {
+        if let Some(pid) = fetch_profile_id(state, device_id).await {
+            if let Some(ent) = fetch_entitlement(state, &pid).await {
+                if ent.attachment_bytes > 0 {
+                    cap = (ent.attachment_bytes as u64).min(RELAY_MAX_BLOB_BYTES);
+                }
+            }
+        }
+    }
+    if upload_length == 0 || upload_length > cap {
+        return Err((StatusCode::PAYLOAD_TOO_LARGE, "blob too large".into()));
+    }
+    if let Some(free) = disk_free_bytes(state.blobs_dir.as_ref()) {
+        let min_free = u64_from_env_or("SECRETLY_RELAY_BLOB_MIN_FREE_BYTES", 5 << 30);
+        if free < min_free.saturating_add(upload_length) {
+            tracing::warn!(free = free, need = upload_length, "blob session refused: disk almost full");
+            return Err((StatusCode::INSUFFICIENT_STORAGE, "server storage full".into()));
+        }
+    }
+    let (open_count, open_bytes) = state
+        .store
+        .blob_sessions_open_for_device(device_id, now)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    if open_count >= BLOB_SESSION_MAX_OPEN_PER_DEVICE {
+        return Err((StatusCode::TOO_MANY_REQUESTS, "too many open uploads".into()));
+    }
+    let quota = u64_from_env_or("SECRETLY_RELAY_BLOB_QUOTA_BYTES_PER_DEVICE", 20 << 30);
+    if quota > 0 {
+        let used = state
+            .store
+            .blob_live_bytes_for_device(device_id, now)
+            .await
+            .unwrap_or(0)
+            .max(0) as u64;
+        let pending = open_bytes.max(0) as u64;
+        if used.saturating_add(pending).saturating_add(upload_length) > quota {
+            tracing::warn!(
+                device_ref = %log_fingerprint(device_id),
+                used = used,
+                "blob session refused: device storage quota"
+            );
+            return Err((StatusCode::INSUFFICIENT_STORAGE, "blob quota exceeded".into()));
+        }
+    }
+    Ok(())
+}
+
+async fn blob_sessions_sweep(state: &AppState, now: i64) {
+    if let Ok(expired) = state.store.blob_sessions_cleanup_expired(now).await {
+        for sid in expired {
+            let _ = tokio::fs::remove_file(blob_session_part_path(state, &sid)).await;
+        }
+    }
+}
+
+async fn http_blob_session_create(
+    State(state): State<AppState>,
+    Query(q): Query<BlobSessionCreateQuery>,
+    headers: HeaderMap,
+) -> Result<Json<BlobSessionCreateResp>, (StatusCode, String)> {
+    let ttl_seconds = q.ttl_seconds.unwrap_or(7 * 24 * 3600).min(30 * 24 * 3600);
+    let now = now_ms();
+    let access_token_sha256_b64 = header_str(&headers, "x-secretly-blob-access-token-sha256-b64")
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty() && v.len() <= 512)
+        .ok_or((StatusCode::BAD_REQUEST, "missing blob access token hash".into()))?;
+    let body_sha256_b64 = header_str(&headers, "x-secretly-body-sha256-b64")
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty() && v.len() <= 512)
+        .ok_or((StatusCode::BAD_REQUEST, "missing body hash header".into()))?;
+    let upload_length = header_str(&headers, "x-secretly-upload-length")
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .ok_or((StatusCode::BAD_REQUEST, "missing upload length".into()))?;
+
+    let (device_id, ts_ms, nonce_b64, _sig) = http_auth_headers(&headers)?;
+    let msg = http_blob_session_create_auth_message(
+        &device_id,
+        ttl_seconds,
+        upload_length,
+        &body_sha256_b64,
+        &access_token_sha256_b64,
+        ts_ms,
+        &nonce_b64,
+    );
+    let device_id = verify_http_auth(&state, &headers, Some(&device_id), msg).await?;
+    let profile_id = if require_auth_enabled() {
+        fetch_profile_id(&state, &device_id)
+            .await
+            .ok_or((StatusCode::UNAUTHORIZED, "unknown device".into()))?
+    } else {
+        String::new()
+    };
+
+    blob_sessions_sweep(&state, now).await;
+    blob_session_admit(&state, &device_id, upload_length, now).await?;
+
+    let session_id = Uuid::now_v7().simple().to_string();
+    tokio::fs::create_dir_all(blob_sessions_dir(&state))
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    tokio::fs::File::create(blob_session_part_path(&state, &session_id))
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    state
+        .store
+        .blob_session_insert(crate::store::BlobUploadSessionRow {
+            session_id: session_id.clone(),
+            device_id,
+            profile_id,
+            upload_length,
+            body_sha256_b64,
+            access_token_sha256_b64,
+            ttl_seconds: ttl_seconds as i64,
+            created_at_ms: now,
+            expires_at_ms: now + BLOB_SESSION_TTL_MS,
+        })
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    Ok(Json(BlobSessionCreateResp {
+        session_id,
+        offset: 0,
+        max_chunk_bytes: BLOB_SESSION_MAX_CHUNK_BYTES,
+    }))
+}
+
+/// Сессия по id, только своего устройства. Чужая и неизвестная — 404
+/// одинаково: о существовании чужих загрузок ничего не говорим.
+async fn blob_session_load(
+    state: &AppState,
+    session_id: &str,
+    device_id: &str,
+    now: i64,
+) -> Result<crate::store::BlobUploadSessionRow, (StatusCode, String)> {
+    if !is_valid_id(session_id, 64) {
+        return Err((StatusCode::NOT_FOUND, "not found".into()));
+    }
+    let row = state
+        .store
+        .blob_session_get(session_id, now)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?
+        .ok_or((StatusCode::NOT_FOUND, "not found".into()))?;
+    if require_auth_enabled() && row.device_id != device_id {
+        return Err((StatusCode::NOT_FOUND, "not found".into()));
+    }
+    Ok(row)
+}
+
+async fn http_blob_session_status(
+    Path(session_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<BlobSessionStatusResp>, (StatusCode, String)> {
+    let (device_id, ts_ms, nonce_b64, _sig) = http_auth_headers(&headers)?;
+    let msg = http_blob_session_status_auth_message(&device_id, &session_id, ts_ms, &nonce_b64);
+    let device_id = verify_http_auth(&state, &headers, Some(&device_id), msg).await?;
+    let row = blob_session_load(&state, &session_id, &device_id, now_ms()).await?;
+    let offset = blob_part_len(&blob_session_part_path(&state, &session_id)).await;
+    Ok(Json(BlobSessionStatusResp {
+        offset,
+        upload_length: row.upload_length,
+    }))
+}
+
+async fn http_blob_session_put(
+    Path(session_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Body,
+) -> Result<axum::response::Response, (StatusCode, String)> {
+    let offset = header_str(&headers, "x-secretly-upload-offset")
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .ok_or((StatusCode::BAD_REQUEST, "missing upload offset".into()))?;
+    let chunk_sha256_b64 = header_str(&headers, "x-secretly-chunk-sha256-b64")
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty() && v.len() <= 512)
+        .ok_or((StatusCode::BAD_REQUEST, "missing chunk hash".into()))?;
+    let (device_id, ts_ms, nonce_b64, _sig) = http_auth_headers(&headers)?;
+    let msg = http_blob_session_put_auth_message(
+        &device_id,
+        &session_id,
+        offset,
+        &chunk_sha256_b64,
+        ts_ms,
+        &nonce_b64,
+    );
+    let device_id = verify_http_auth(&state, &headers, Some(&device_id), msg).await?;
+    let now = now_ms();
+    let row = blob_session_load(&state, &session_id, &device_id, now).await?;
+    let Some(_busy) = BlobSessionBusyGuard::try_take(&session_id) else {
+        return Err((StatusCode::CONFLICT, "upload busy".into()));
+    };
+
+    let part_path = blob_session_part_path(&state, &session_id);
+    let current = blob_part_len(&part_path).await;
+    if offset != current {
+        return Ok(blob_session_offset_conflict(current));
+    }
+    let remaining = row.upload_length.saturating_sub(current);
+    let limit = remaining.min(BLOB_SESSION_MAX_CHUNK_BYTES);
+
+    // Кусок целиком в память (не больше 8 МБ), проверка хеша — и только
+    // потом в файл: принятое не бывает испорченным, откатывать нечего.
+    let mut chunk: Vec<u8> = Vec::new();
+    let mut stream = body.into_data_stream();
+    while let Some(next) = stream.next().await {
+        let piece = next.map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+        if chunk.len() as u64 + piece.len() as u64 > limit {
+            return Err((StatusCode::PAYLOAD_TOO_LARGE, "chunk too large".into()));
+        }
+        chunk.extend_from_slice(piece.as_ref());
+    }
+    if chunk.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "empty chunk".into()));
+    }
+    let got = base64::engine::general_purpose::STANDARD.encode(Sha256::digest(&chunk));
+    if got != chunk_sha256_b64 {
+        return Err((StatusCode::UNPROCESSABLE_ENTITY, "chunk hash mismatch".into()));
+    }
+    {
+        let mut f = tokio::fs::OpenOptions::new()
+            .append(true)
+            .open(&part_path)
+            .await
+            .map_err(|_| (StatusCode::NOT_FOUND, "not found".into()))?;
+        f.write_all(&chunk)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        f.flush()
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        f.sync_data()
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+    let new_offset = current + chunk.len() as u64;
+    if new_offset < row.upload_length {
+        return Ok(Json(BlobSessionPutResp {
+            offset: new_offset,
+            complete: false,
+            blob_id: None,
+            size_bytes: None,
+            expires_at_ms: None,
+        })
+        .into_response());
+    }
+
+    // Последний кусок: хеш ВСЕГО шифротекста против заявленного при открытии.
+    let whole = {
+        use tokio::io::AsyncReadExt;
+        let mut f = tokio::fs::File::open(&part_path)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        let mut hasher = Sha256::new();
+        let mut buf = vec![0u8; 256 * 1024];
+        loop {
+            let n = f
+                .read(&mut buf)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+        }
+        base64::engine::general_purpose::STANDARD.encode(hasher.finalize())
+    };
+    if whole != row.body_sha256_b64 {
+        let _ = tokio::fs::remove_file(&part_path).await;
+        let _ = state.store.blob_session_delete(&session_id).await;
+        return Err((StatusCode::UNAUTHORIZED, "body hash mismatch".into()));
+    }
+
+    if let Ok(expired) = state.store.cleanup_expired_blobs(now).await {
+        for rel in expired {
+            let _ = tokio::fs::remove_file(state.blobs_dir.join(rel)).await;
+        }
+    }
+    let blob_id = Uuid::now_v7().to_string();
+    let rel_path = format!("{blob_id}.bin");
+    tokio::fs::rename(&part_path, state.blobs_dir.join(&rel_path))
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let expires_at_ms = now + row.ttl_seconds * 1000;
+    state
+        .store
+        .blob_insert(
+            &blob_id,
+            &rel_path,
+            row.upload_length,
+            expires_at_ms,
+            now,
+            &row.device_id,
+            &row.profile_id,
+            &row.access_token_sha256_b64,
+        )
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    let _ = state.store.blob_session_delete(&session_id).await;
+
+    Ok(Json(BlobSessionPutResp {
+        offset: row.upload_length,
+        complete: true,
+        blob_id: Some(blob_id),
+        size_bytes: Some(row.upload_length),
+        expires_at_ms: Some(expires_at_ms),
+    })
+    .into_response())
 }
 
 struct SignedStickerCatalogManifest {
@@ -10250,6 +12373,57 @@ async fn http_cosmetics_asset(
     Ok(([(header::CONTENT_TYPE, content_type)], data))
 }
 
+/// Отдаёт файл приложения по SHA-256 его содержимого.
+///
+/// Нужно облегчённой мобильной сборке: декоративные файлы (узоры, наборы
+/// украшений, звуки) в пакет не кладутся, а догружаются по мере надобности.
+///
+/// Почему ответ НЕ ПОДПИСЫВАЕТСЯ и это не послабление: адресом служит сам хеш
+/// содержимого, а берёт его клиент из ПОДПИСАННОГО пакета приложения, а не из
+/// ответа реле. Подменённый файл просто не сойдётся с хешем на клиенте и будет
+/// отброшен — реле здесь кеш, а не источник доверия. Подпись добавила бы вторую
+/// проверку того же самого и ещё один ключ, который надо где-то хранить.
+async fn http_app_asset(
+    Path(sha256_hex): Path<String>,
+    State(state): State<AppState>,
+) -> Result<([(header::HeaderName, &'static str); 2], Vec<u8>), (StatusCode, String)> {
+    if !is_app_asset_hash(&sha256_hex) {
+        return Err((StatusCode::BAD_REQUEST, "bad app asset hash".into()));
+    }
+    // Каталог плоский, из запроса берётся РОВНО ОДИН компонент пути. Имя уже
+    // проверено как 64 знака `0-9a-f`, поэтому ни `..`, ни `/` сюда не доедут.
+    let data = tokio::fs::read(state.app_assets_dir.join(&sha256_hex))
+        .await
+        .map_err(|_| (StatusCode::NOT_FOUND, "app asset not found".into()))?;
+    // 🔴 СВЕРКА СОДЕРЖИМОГО ПЕРЕД ОТВЕТОМ. Файл на диске мог быть подменён или
+    // побит при выкладке. Отдать его молча — значит переложить разбор на
+    // клиента: тот всё равно отбросит байты по несовпадению хеша, и вместо
+    // внятной ошибки сервера получится «украшение не загружается» без следа в
+    // журнале. Падаем громко здесь: 500 и предупреждение в журнал.
+    let actual = sha256_hex_lower(&data);
+    if actual != sha256_hex {
+        tracing::warn!(
+            requested = %sha256_hex,
+            actual = %actual,
+            bytes = data.len(),
+            "app asset content hash mismatch on disk"
+        );
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "app asset hash mismatch".into(),
+        ));
+    }
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/octet-stream"),
+            // Имя файла И ЕСТЬ его содержимое: при изменении байтов меняется
+            // адрес, поэтому ответ можно кешировать навсегда и не переспрашивать.
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+        ],
+        data,
+    ))
+}
+
 /// 🔴 ОТДАЁТ ПОТОКОМ, А НЕ ЦЕЛИКОМ В ПАМЯТЬ (02.09.2026, аудит передачи файлов).
 ///
 /// Раньше здесь стоял `tokio::fs::read` и возврат `Vec<u8>`, то есть память
@@ -10330,7 +12504,7 @@ async fn http_blob_get(
     }
 
     let abs_path = state.blobs_dir.join(row.rel_path);
-    let file = tokio::fs::File::open(&abs_path)
+    let mut file = tokio::fs::File::open(&abs_path)
         .await
         .map_err(|_| (StatusCode::NOT_FOUND, "not found".into()))?;
     // Длина — из метаданных файла: это ровно те байты, что уйдут в поток.
@@ -10339,17 +12513,92 @@ async fn http_blob_get(
     // недоступны, заголовок просто не ставится: ответ уйдёт chunked, и клиент
     // получит те же байты, лишившись только заранее известного размера.
     let content_length = file.metadata().await.ok().map(|m| m.len());
+
+    // Докачка (разбор медиа 15.11.2026, О6/П5): `Range: bytes=N-` или
+    // `bytes=N-M` — отдаём с N, ответ 206. Без заголовка, с несколькими
+    // диапазонами или непонятным — весь файл, ровно как раньше (старые
+    // клиенты Range не шлют). Подпись запроса диапазон не включает: он лишь
+    // выбирает кусок того же шифротекста, к которому у клиента уже есть доступ.
+    if let Some(len) = content_length {
+        match parse_blob_byte_range(header_str(&headers, "range").as_deref(), len) {
+            BlobByteRange::Full => {}
+            BlobByteRange::Unsatisfiable => {
+                return axum::response::Response::builder()
+                    .status(StatusCode::RANGE_NOT_SATISFIABLE)
+                    .header(header::CONTENT_RANGE, format!("bytes */{len}"))
+                    .body(axum::body::Body::empty())
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
+            }
+            BlobByteRange::Partial { start, end } => {
+                use tokio::io::{AsyncReadExt, AsyncSeekExt};
+                file.seek(std::io::SeekFrom::Start(start))
+                    .await
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+                let part_len = end - start + 1;
+                let stream = tokio_util::io::ReaderStream::new(file.take(part_len));
+                return axum::response::Response::builder()
+                    .status(StatusCode::PARTIAL_CONTENT)
+                    .header(header::CONTENT_TYPE, "application/octet-stream")
+                    .header(header::ACCEPT_RANGES, "bytes")
+                    .header(header::CONTENT_RANGE, format!("bytes {start}-{end}/{len}"))
+                    .header(header::CONTENT_LENGTH, part_len)
+                    .body(axum::body::Body::from_stream(stream))
+                    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()));
+            }
+        }
+    }
+
     let stream = tokio_util::io::ReaderStream::new(file);
     let body = axum::body::Body::from_stream(stream);
     let mut builder = axum::response::Response::builder()
         .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "application/octet-stream");
+        .header(header::CONTENT_TYPE, "application/octet-stream")
+        .header(header::ACCEPT_RANGES, "bytes");
     if let Some(len) = content_length {
         builder = builder.header(header::CONTENT_LENGTH, len);
     }
     builder
         .body(body)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum BlobByteRange {
+    Full,
+    Partial { start: u64, end: u64 },
+    Unsatisfiable,
+}
+
+/// Один диапазон `bytes=N-` / `bytes=N-M` (RFC 9110). Всё прочее — `Full`.
+fn parse_blob_byte_range(raw: Option<&str>, len: u64) -> BlobByteRange {
+    let Some(raw) = raw else {
+        return BlobByteRange::Full;
+    };
+    let Some(spec) = raw.trim().strip_prefix("bytes=") else {
+        return BlobByteRange::Full;
+    };
+    if spec.contains(',') {
+        return BlobByteRange::Full;
+    }
+    let Some((a, b)) = spec.trim().split_once('-') else {
+        return BlobByteRange::Full;
+    };
+    // `bytes=-N` (последние N) клиенты не шлют — отдаём весь файл.
+    let Ok(start) = a.trim().parse::<u64>() else {
+        return BlobByteRange::Full;
+    };
+    if start >= len {
+        return BlobByteRange::Unsatisfiable;
+    }
+    let end = if b.trim().is_empty() {
+        len - 1
+    } else {
+        match b.trim().parse::<u64>() {
+            Ok(e) if e >= start => e.min(len - 1),
+            _ => return BlobByteRange::Full,
+        }
+    };
+    BlobByteRange::Partial { start, end }
 }
 
 async fn http_blocks_list(
@@ -10404,8 +12653,20 @@ async fn http_blocks_list(
 /// when disabled (default), the response advertises `filter_applied=false`
 /// and returns all activity-known device IDs without any staleness check.
 /// The client treats `filter_applied=false` as «do not narrow the fanout».
+/// Порог сборки из строки запроса `?min_build=N` для подсказки об исчезающих
+/// сообщениях. Разбирается руками, а не типизированным `Query`: мусор в
+/// параметре не имеет права превращать рабочий запрос в 400 — подсказки
+/// просто не будет. Ноль и отрицательные — «порог не задан».
+fn active_devices_min_build(query: &std::collections::HashMap<String, String>) -> Option<i64> {
+    query
+        .get("min_build")
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .filter(|v| *v > 0)
+}
+
 async fn http_active_devices(
     Path((device_id, profile_id)): Path<(String, String)>,
+    Query(query): Query<std::collections::HashMap<String, String>>,
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> Result<Json<HttpActiveDevicesResp>, (StatusCode, String)> {
@@ -10429,6 +12690,29 @@ async fn http_active_devices(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
+    // Исчезающие сообщения (ТЗ 22.10.2026, §2.4): сборки устройств — по
+    // запросу. Ошибка хранилища — подсказки нет, запрос не падает: это
+    // подсказка для плашки, а не допуск.
+    let min_build = active_devices_min_build(&query);
+    let builds: Option<std::collections::HashMap<String, i64>> = match min_build {
+        Some(_) if !activity_rows.is_empty() => {
+            let ids: Vec<String> = activity_rows.iter().map(|r| r.device_id.clone()).collect();
+            match state.store.client_builds_for_devices(ids).await {
+                Ok(b) => Some(b),
+                Err(err) => {
+                    tracing::warn!(error=%err, "active_devices: client build lookup failed");
+                    None
+                }
+            }
+        }
+        _ => None,
+    };
+    let build_at_least = |id: &str| -> Option<bool> {
+        let threshold = min_build?;
+        let builds = builds.as_ref()?;
+        Some(builds.get(id).is_some_and(|b| *b >= threshold))
+    };
+
     let filter_enabled = device_staleness_filter_enabled();
     // Спрашивает ли устройство о СВОЁМ профиле. Подпись выше проверена для
     // `device_id`, так что выдать себя за чужое устройство нельзя.
@@ -10447,6 +12731,7 @@ async fn http_active_devices(
                     coarse_last_signal_ms(exact, now)
                 },
                 superseded: row.superseded_at_ms > 0,
+                build_at_least: build_at_least(&row.device_id),
             }
         })
         .collect();
@@ -10462,6 +12747,18 @@ async fn http_active_devices(
             "active_devices: returning unfiltered set (filter off / would empty)"
         );
     }
+    // Итог считается по тем устройствам, которым отправитель будет слать
+    // (`device_ids`), а не по всем известным: вытесненная копия телефона не
+    // должна навсегда держать плашку «старая версия».
+    let all_build_at_least = if builds.is_some() && !device_ids.is_empty() {
+        Some(
+            device_ids
+                .iter()
+                .all(|id| build_at_least(id).unwrap_or(false)),
+        )
+    } else {
+        None
+    };
 
     Ok(Json(HttpActiveDevicesResp {
         profile_id,
@@ -10470,6 +12767,8 @@ async fn http_active_devices(
         now_ms: now,
         threshold_ms: DEVICE_STALENESS_THRESHOLD_MS,
         devices,
+        all_build_at_least,
+        min_build_checked: if builds.is_some() { min_build } else { None },
     }))
 }
 
@@ -10720,6 +13019,151 @@ fn internal_key_matches(state: &AppState, headers: &HeaderMap) -> bool {
     }
     let got = header_str(headers, "x-secretly-internal-key").unwrap_or("");
     !got.is_empty() && got == expected
+}
+
+// ── Э1: обезличенные отчёты о путях доставки ────────────────────────────────
+//
+// Устройство раз в сутки сообщает, каким путём оно дошло до сервера и какие
+// пути падали. Без подписи и без идентификаторов намеренно: подпись устройства
+// связала бы отчёт с человеком, а нам нужны только доли по дням. Лимит по IP
+// общий (middleware `rate_limit`). Значения — только из белых списков: поле
+// со свободным текстом стало бы каналом для чего угодно.
+
+const TRANSPORT_REPORT_PLATFORMS: &[&str] = &["android", "ios", "macos", "windows", "linux"];
+const TRANSPORT_REPORT_NET_KINDS: &[&str] = &["wifi", "cellular", "ethernet", "vpn", "other"];
+const TRANSPORT_REPORT_PATH_KINDS: &[&str] =
+    &["direct", "ip", "mirror", "cdn", "proxy", "socks", "tor"];
+const TRANSPORT_REPORT_MAX_FAILED: usize = 7;
+const TRANSPORT_REPORT_MAX_BUILD: i64 = 1_000_000;
+
+#[derive(Deserialize)]
+struct HttpTransportReportReq {
+    #[serde(default)]
+    build: i64,
+    #[serde(default)]
+    platform: String,
+    #[serde(default)]
+    net_kind: String,
+    #[serde(default)]
+    path_used: String,
+    #[serde(default)]
+    paths_failed: Vec<String>,
+    #[serde(default)]
+    country_hint: String,
+}
+
+/// 🔴 ПО УМОЛЧАНИЮ ВЫКЛЮЧЕНО, И ЭТО ИСПРАВЛЕНИЕ (12.10.2026).
+///
+/// Раньше здесь стояло `unwrap_or(true)`: маршрут включался сам, стоило
+/// выложить новый бинарник. Это обнаружилось при выкладке каталога украшений —
+/// выкладка относилась к другой работе, а вместе с ней на проде молча
+/// открылся бы маршрут, принимающий запросы БЕЗ подписи и пишущий в базу.
+/// Ни один выпущенный клиент их не посылает, то есть пользы ноль, а
+/// поверхность для спама появляется.
+///
+/// Теперь включение — осознанное действие:
+/// `ops/vps/units/secretly-relay.service.d/75-transport-reports.conf`.
+fn transport_reports_enabled() -> bool {
+    std::env::var("SECRETLY_RELAY_TRANSPORT_REPORTS_ENABLED")
+        .ok()
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// Сутки от эпохи по UTC — ключ агрегации.
+fn transport_day_index(now_ms: i64) -> i64 {
+    now_ms.div_euclid(86_400_000)
+}
+
+/// Страна из подсказки локали: две латинские буквы или `--`.
+fn transport_country(raw: &str) -> String {
+    let c = raw.trim().to_ascii_uppercase();
+    if c.len() == 2 && c.bytes().all(|b| b.is_ascii_uppercase()) {
+        c
+    } else {
+        "--".to_string()
+    }
+}
+
+fn transport_pick<'a>(allowed: &[&'a str], raw: &str, fallback: &'a str) -> &'a str {
+    let v = raw.trim().to_ascii_lowercase();
+    allowed
+        .iter()
+        .copied()
+        .find(|a| *a == v)
+        .unwrap_or(fallback)
+}
+
+async fn http_transport_report(
+    State(state): State<AppState>,
+    Json(req): Json<HttpTransportReportReq>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    if !transport_reports_enabled() {
+        return Err((StatusCode::NOT_FOUND, "reports disabled".into()));
+    }
+    let platform = transport_pick(TRANSPORT_REPORT_PLATFORMS, &req.platform, "other");
+    let net_kind = transport_pick(TRANSPORT_REPORT_NET_KINDS, &req.net_kind, "other");
+    let path_used = transport_pick(TRANSPORT_REPORT_PATH_KINDS, &req.path_used, "direct");
+    let build = req.build.clamp(0, TRANSPORT_REPORT_MAX_BUILD);
+    let country = transport_country(&req.country_hint);
+    let mut failed: Vec<String> = Vec::new();
+    for raw in req.paths_failed.iter().take(TRANSPORT_REPORT_MAX_FAILED * 2) {
+        let v = raw.trim().to_ascii_lowercase();
+        if TRANSPORT_REPORT_PATH_KINDS.contains(&v.as_str()) && !failed.contains(&v) {
+            failed.push(v);
+        }
+        if failed.len() >= TRANSPORT_REPORT_MAX_FAILED {
+            break;
+        }
+    }
+    state
+        .store
+        .transport_report_record(
+            transport_day_index(now_ms()),
+            platform,
+            net_kind,
+            path_used,
+            &country,
+            build,
+            &failed,
+        )
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct TransportReportStatsQuery {
+    days: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct HttpTransportReportStatsResp {
+    since_day_index: i64,
+    used: Vec<store::TransportReportRow>,
+    failed: Vec<store::TransportFailureRow>,
+}
+
+async fn http_transport_report_stats(
+    Query(q): Query<TransportReportStatsQuery>,
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> Result<Json<HttpTransportReportStatsResp>, (StatusCode, String)> {
+    if !internal_key_matches(&state, &headers) {
+        return Err((StatusCode::UNAUTHORIZED, "internal key required".into()));
+    }
+    let days = q.days.unwrap_or(7).clamp(1, 366);
+    let since = transport_day_index(now_ms()) - days + 1;
+    let (used, failed) = state
+        .store
+        .transport_report_stats(since)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    Ok(Json(HttpTransportReportStatsResp {
+        since_day_index: since,
+        used,
+        failed,
+    }))
 }
 
 async fn http_support_submit(
@@ -12763,6 +15207,48 @@ fn fcm_legacy_dead_token_error(body: &str) -> Option<String> {
     None
 }
 
+/// ЗВ-С8: пуш «Room call activity» о E2EE-созвоне сборке без поддержки
+/// E2EE не нужен — войти она не сможет, а при опросе получит «созвона нет».
+/// Действует только при заданном `SECRETLY_ROOM_CALL_E2EE_MIN_BUILD`, иначе
+/// всё как раньше. Неизвестная сборка считается старой. Сам конверт остаётся
+/// в ящике — пропускается только пробуждение.
+async fn room_call_e2ee_push_skipped_for_device(
+    state: &AppState,
+    to_device_id: &str,
+    transport_meta_json: Option<&str>,
+) -> bool {
+    let Some(min_build) = state.room_call_e2ee.min_build else {
+        return false;
+    };
+    let Ok(Some(room_call)) = parse_room_call_sync_transport_meta(transport_meta_json) else {
+        return false;
+    };
+    if !room_call.call_exists {
+        return false;
+    }
+    let Some(call_id) = room_call.call_id.as_deref() else {
+        return false;
+    };
+    let Ok(Some(snapshot)) = state
+        .store
+        .get_room_call(&room_call.room_id, call_id, None)
+        .await
+    else {
+        return false;
+    };
+    if snapshot.call.media_contract != ROOM_MEDIA_CONTRACT_E2EE_V1 {
+        return false;
+    }
+    let build = state
+        .store
+        .client_builds_for_devices(vec![to_device_id.to_string()])
+        .await
+        .ok()
+        .and_then(|builds| builds.get(to_device_id).copied())
+        .unwrap_or(0);
+    build < min_build
+}
+
 async fn maybe_send_fcm_data_push(
     state: AppState,
     to_device_id: String,
@@ -12810,6 +15296,16 @@ async fn maybe_send_fcm_data_push(
             // real wake.
             tracing::warn!(device_ref=%device_ref, error=%e, "superseded check failed; proceeding with wake");
         }
+    }
+
+    if room_call_e2ee_push_skipped_for_device(&state, &to_device_id, transport_meta_json.as_deref())
+        .await
+    {
+        tracing::info!(
+            device_ref=%device_ref,
+            "push wake skipped: e2ee room call and the device build cannot join it"
+        );
+        return;
     }
 
     let token_rows = match state.store.list_push_tokens(&to_device_id).await {
@@ -13409,8 +15905,69 @@ fn effective_call_ice_policy(requested: &str, has_turn: bool) -> String {
     }
 }
 
-fn build_turn_rest_username(device_id: &str, expires_at_s: i64) -> String {
-    format!("{}:{}", expires_at_s, device_id)
+/// Имя для TURN по схеме REST API coturn: `срок:псевдоним`.
+///
+/// З4 (аудит 11.11.2026): раньше вторая часть была постоянным `device_id`.
+/// По UDP имя идёт открытым текстом, его видят сеть и журналы coturn, и по
+/// нему связывались все звонки одного устройства. Теперь это HMAC от
+/// секрета TURN, устройства и срока: у каждой выдачи свой псевдоним, а
+/// оператор с секретом может пересчитать его для разбора злоупотреблений.
+/// coturn проверяет только подпись имени и срок, содержимое ему не важно;
+/// квота `user-quota` и раньше считалась по имени со сроком.
+fn build_turn_rest_username(shared_secret: &str, device_id: &str, expires_at_s: i64) -> String {
+    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(shared_secret.as_bytes())
+        .expect("hmac accepts any key length");
+    mac.update(b"secretly-turn-user-v1|");
+    mac.update(device_id.as_bytes());
+    mac.update(b"|");
+    mac.update(expires_at_s.to_string().as_bytes());
+    let tag = mac.finalize().into_bytes();
+    let pseudonym: String = tag[..12].iter().map(|b| format!("{:02x}", b)).collect();
+    format!("{}:{}", expires_at_s, pseudonym)
+}
+
+#[cfg(test)]
+mod storage_guard_tests {
+    use super::*;
+
+    #[test]
+    fn disk_free_is_known_for_an_existing_or_future_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(disk_free_bytes(dir.path()).unwrap_or(0) > 0);
+        // Каталога ещё нет — меряем ближайший существующий родитель.
+        assert!(disk_free_bytes(&dir.path().join("blobs/not/yet")).unwrap_or(0) > 0);
+    }
+
+    #[tokio::test]
+    async fn live_blob_bytes_count_only_this_device_and_unexpired() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = RelayStore::open(dir.path().join("r.db")).await.unwrap();
+        store.blob_insert("b1", "b1.bin", 100, 2_000, 0, "devA", "p", "t").await.unwrap();
+        store.blob_insert("b2", "b2.bin", 50, 2_000, 0, "devA", "p", "t").await.unwrap();
+        store.blob_insert("b3", "b3.bin", 70, 500, 0, "devA", "p", "t").await.unwrap();
+        store.blob_insert("b4", "b4.bin", 999, 2_000, 0, "devB", "p", "t").await.unwrap();
+        assert_eq!(store.blob_live_bytes_for_device("devA", 1_000).await.unwrap(), 150);
+        assert_eq!(store.blob_live_bytes_for_device("nobody", 1_000).await.unwrap(), 0);
+    }
+}
+
+#[cfg(test)]
+mod turn_username_tests {
+    use super::*;
+
+    #[test]
+    fn turn_username_hides_device_id_and_changes_per_issue() {
+        let a = build_turn_rest_username("s3cret", "dev-ABC-123", 1_800_000_000);
+        let b = build_turn_rest_username("s3cret", "dev-ABC-123", 1_800_000_060);
+        let c = build_turn_rest_username("s3cret", "dev-XYZ-999", 1_800_000_000);
+        assert!(a.starts_with("1800000000:"));
+        assert!(!a.contains("dev-ABC"));
+        assert_eq!(a.len(), "1800000000:".len() + 24);
+        assert_ne!(a, b);
+        assert_ne!(a, c);
+        assert_eq!(a, build_turn_rest_username("s3cret", "dev-ABC-123", 1_800_000_000));
+        assert!(build_turn_rest_credential("s3cret", &a).is_some());
+    }
 }
 
 fn build_turn_rest_credential(shared_secret: &str, username: &str) -> Option<String> {
@@ -14310,7 +16867,12 @@ async fn main() {
     let addr: SocketAddr = (ip, port).into();
 
     let db_path = env::var("SECRETLY_RELAY_DB").unwrap_or_else(|_| "relay.db".into());
+    let nonce_journal = nonce_persist::nonce_file_path("SECRETLY_RELAY_NONCE_FILE", &db_path);
     let store = RelayStore::open(db_path).await.expect("open relay store");
+    let used_nonces: Arc<DashMap<String, i64>> = Arc::new(DashMap::new());
+    let restored = nonce_persist::load(&nonce_journal, now_ms(), &used_nonces);
+    tracing::info!(count = restored, "nonce journal restored");
+    nonce_persist::spawn_flusher(nonce_journal, used_nonces.clone(), now_ms);
 
     let blobs_dir = env::var("SECRETLY_BLOBS_DIR").unwrap_or_else(|_| "blobs".into());
     let blobs_dir = PathBuf::from(blobs_dir);
@@ -14320,6 +16882,9 @@ async fn main() {
     let cosmetics_dir = env::var("SECRETLY_RELAY_COSMETICS_DIR")
         .unwrap_or_else(|_| "server/relay/cosmetics".into());
     let cosmetics_dir = PathBuf::from(cosmetics_dir);
+    let app_assets_dir = env::var("SECRETLY_RELAY_APP_ASSETS_DIR")
+        .unwrap_or_else(|_| "server/relay/app_assets".into());
+    let app_assets_dir = PathBuf::from(app_assets_dir);
 
     let keys_internal_base_url = env::var("SECRETLY_RELAY_KEYS_INTERNAL_BASE_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:8081".into());
@@ -14327,6 +16892,7 @@ async fn main() {
     let internal_key = env::var("SECRETLY_INTERNAL_KEY").unwrap_or_default();
     let call_ice = load_call_ice_runtime_config();
     let room_media = load_room_media_runtime_config();
+    let livekit_admin = LiveKitAdmin::from_env(&room_media);
     let call_sessions = load_call_session_runtime_config();
     relay_call_ice_preflight(&call_ice);
     relay_room_media_preflight(&room_media);
@@ -14337,6 +16903,7 @@ async fn main() {
     let cap = u32_from_env("SECRETLY_RELAY_RL_CAP", 60);
     let refill_per_sec = f64_from_env("SECRETLY_RELAY_RL_REFILL_PER_SEC", 2.0);
     let limiter = Arc::new(IpRateLimiter::new(cap, refill_per_sec));
+    spawn_ip_limiter_pruner(limiter.clone());
 
     // AUD-080: invite-redeem-specific limiters. Defaults are conservative:
     // per slug - 10 burst, 1 req/sec sustained.
@@ -14405,6 +16972,7 @@ async fn main() {
         blobs_dir: Arc::new(blobs_dir),
         sticker_catalog_dir: Arc::new(sticker_catalog_dir),
         cosmetics_dir: Arc::new(cosmetics_dir),
+        app_assets_dir: Arc::new(app_assets_dir),
         limiter,
         invite_redeem_slug_limiter,
         invite_redeem_caller_limiter,
@@ -14421,6 +16989,7 @@ async fn main() {
         max_pending_per_device,
         keys_internal_base_url: Arc::new(keys_internal_base_url),
         internal_key: Arc::new(internal_key),
+        resp_signer: Arc::new(load_resp_signer()),
         http: HttpClient::builder()
             .connect_timeout(Duration::from_secs(http_timeout_secs.min(10)))
             .timeout(Duration::from_secs(http_timeout_secs))
@@ -14429,7 +16998,7 @@ async fn main() {
         identity_cache: Arc::new(DashMap::new()),
         identity_cache_at: Arc::new(DashMap::new()),
         profile_cache: Arc::new(DashMap::new()),
-        used_nonces: Arc::new(DashMap::new()),
+        used_nonces,
         push_wake_last_ms: Arc::new(DashMap::new()),
         fcm_legacy_server_key: Arc::new(
             env::var("SECRETLY_RELAY_FCM_SERVER_KEY").unwrap_or_default(),
@@ -14462,6 +17031,8 @@ async fn main() {
         entitlement_cache: Arc::new(DashMap::new()),
         big_room_members: i64_env("SECRETLY_BIG_ROOM_MEMBERS", 0),
         big_room_min_build: i64_env("SECRETLY_BIG_ROOM_MIN_BUILD", 0),
+        room_call_e2ee: Arc::new(RoomCallE2eeConfig::from_env()),
+        livekit_admin: Arc::new(livekit_admin),
     };
 
     // Разовая уборка временных файлов заливки, оставшихся от прошлых запусков.
@@ -14517,7 +17088,8 @@ async fn main() {
         .route("/v1/cancel_scheduled", post(http_cancel_scheduled))
         .route("/v1/device/rebind", post(http_device_rebind))
         .route("/v1/rooms", post(http_room_create))
-        .route("/v1/rooms/{room_id}", get(http_room_get))
+        .route("/v1/rooms/{room_id}", get(http_room_get_route))
+        .route("/v1/rooms/{room_id}/topics", get(http_room_topics_list))
         .route(
             "/v1/rooms/{room_id}/profile",
             post(http_room_profile_update),
@@ -14541,6 +17113,10 @@ async fn main() {
         .route(
             "/v1/rooms/{room_id}/call",
             get(http_room_call_get).post(http_room_call_join),
+        )
+        .route(
+            "/v1/rooms/{room_id}/call/e2ee_readiness",
+            get(http_room_call_e2ee_readiness),
         )
         .route(
             "/v1/rooms/{room_id}/call/{call_id}/self",
@@ -14609,6 +17185,10 @@ async fn main() {
         .route("/v1/support/admin/tickets", get(http_support_admin_tickets))
         .route("/v1/support/admin/reply", post(http_support_admin_reply))
         .route("/v1/support/admin/clear", post(http_support_admin_clear))
+        // Э1: обезличенные отчёты о путях доставки (без подписи) и сводка
+        // для оператора (внутренний ключ).
+        .route("/v1/transport/report", post(http_transport_report))
+        .route("/v1/transport/report/stats", get(http_transport_report_stats))
         // Sprint 2 R3: active-devices probe. Requester device_id signs
         // the request, target profile_id is the second path segment.
         .route(
@@ -14630,10 +17210,22 @@ async fn main() {
             "/v1/cosmetics/assets/{item_id}/{variant}",
             get(http_cosmetics_asset),
         )
+        // Файлы приложения по хешу содержимого: облегчённая сборка догружает
+        // декор, которого нет в пакете.
+        .route("/v1/app-assets/{sha256_hex}", get(http_app_asset))
         .route("/v1/blob/upload", post(http_blob_upload))
+        .route("/v1/blob/upload/session", post(http_blob_session_create))
+        .route(
+            "/v1/blob/upload/session/{session_id}",
+            get(http_blob_session_status).put(http_blob_session_put),
+        )
         .route("/v1/blob/{blob_id}", get(http_blob_get))
         .layer(DefaultBodyLimit::max(RELAY_HTTP_BODY_LIMIT_BYTES))
         .layer(middleware::from_fn_with_state(state.clone(), rate_limit))
+        // Б3: подпись ответов — СНАРУЖИ ограничителя частоты, чтобы и его 429
+        // приходил подписанным: иначе при включённом отказе перегрузка
+        // выглядела бы как подмена (Э2).
+        .layer(middleware::from_fn_with_state(state.clone(), sign_responses))
         .with_state(state);
 
     tracing::info!(%addr, "starting relay service");
@@ -14658,7 +17250,185 @@ async fn shutdown_signal() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn blob_byte_range_parsing() {
+        use super::{BlobByteRange as R, parse_blob_byte_range as p};
+        assert_eq!(p(None, 100), R::Full);
+        assert_eq!(p(Some("bytes=10-"), 100), R::Partial { start: 10, end: 99 });
+        assert_eq!(p(Some("bytes=10-19"), 100), R::Partial { start: 10, end: 19 });
+        assert_eq!(p(Some("bytes=10-500"), 100), R::Partial { start: 10, end: 99 });
+        assert_eq!(p(Some("bytes=0-"), 100), R::Partial { start: 0, end: 99 });
+        assert_eq!(p(Some("bytes=100-"), 100), R::Unsatisfiable);
+        assert_eq!(p(Some("bytes=-10"), 100), R::Full);
+        assert_eq!(p(Some("bytes=1-2,5-6"), 100), R::Full);
+        assert_eq!(p(Some("bytes=20-10"), 100), R::Full);
+        assert_eq!(p(Some("items=1-"), 100), R::Full);
+        assert_eq!(p(Some("bytes=abc-"), 100), R::Full);
+    }
+
+
+    #[test]
+    fn ip_limiter_counts_an_ipv6_slash64_as_one_client() {
+        let limiter = IpRateLimiter::new(2, 0.0);
+        let a: std::net::IpAddr = "2001:db8:1:2::1".parse().unwrap();
+        let b: std::net::IpAddr = "2001:db8:1:2:ffff:0:0:7".parse().unwrap();
+        let other: std::net::IpAddr = "2001:db8:1:3::1".parse().unwrap();
+        assert!(limiter.allow(a));
+        assert!(limiter.allow(b));
+        assert!(
+            !limiter.allow(a),
+            "a third request from the same /64 must hit the limit"
+        );
+        assert!(limiter.allow(other), "a different /64 has its own bucket");
+    }
+
+    #[test]
+    fn ip_limiter_treats_ipv4_mapped_ipv6_as_ipv4() {
+        let limiter = IpRateLimiter::new(1, 0.0);
+        let v4: std::net::IpAddr = "203.0.113.7".parse().unwrap();
+        let mapped: std::net::IpAddr = "::ffff:203.0.113.7".parse().unwrap();
+        assert!(limiter.allow(v4));
+        assert!(!limiter.allow(mapped));
+    }
+
+    #[test]
+    fn ip_limiter_keeps_ipv4_addresses_separate() {
+        let limiter = IpRateLimiter::new(1, 0.0);
+        assert!(limiter.allow("203.0.113.7".parse().unwrap()));
+        assert!(limiter.allow("203.0.113.8".parse().unwrap()));
+        assert!(!limiter.allow("203.0.113.7".parse().unwrap()));
+    }
+
+    #[test]
+    fn ip_limiter_prune_drops_only_refilled_buckets() {
+        let limiter = IpRateLimiter::new(2, 1.0);
+        let busy: std::net::IpAddr = "203.0.113.7".parse().unwrap();
+        let idle: std::net::IpAddr = "2001:db8::1".parse().unwrap();
+        assert!(limiter.allow(busy));
+        assert!(limiter.allow(busy));
+        assert!(limiter.allow(idle));
+        let later = Instant::now() + std::time::Duration::from_millis(1500);
+        // Через 1,5 с: у idle 1 + 1,5 ≥ 2 — полна, убираем; у busy 0 + 1,5 < 2 — остаётся.
+        assert_eq!(limiter.prune_idle(later), 1);
+        assert!(limiter.buckets.contains_key(&rate_limit_key(busy)));
+        assert!(!limiter.buckets.contains_key(&rate_limit_key(idle)));
+    }
+
+    #[test]
+    fn ip_limiter_prune_keeps_everything_without_refill() {
+        let limiter = IpRateLimiter::new(1, 0.0);
+        assert!(limiter.allow("203.0.113.7".parse().unwrap()));
+        let later = Instant::now() + std::time::Duration::from_secs(3600);
+        assert_eq!(limiter.prune_idle(later), 0);
+        assert!(!limiter.allow("203.0.113.7".parse().unwrap()));
+    }
     use super::*;
+
+    // ── Б3 Э3 (25.10.2026): подпись ответов реле ─────────────────────────────
+
+    #[test]
+    fn relay_resp_signing_matches_keys_and_dart_vector() {
+        assert_eq!(
+            resp_signing_message("cfg1", "GET", "/v1/keys/bundle/p?x=1", "bm9uY2U=", 42, 200, "aGFzaA=="),
+            "SECRETLY-RESP-V1\nkid=cfg1\nmethod=GET\npath=/v1/keys/bundle/p?x=1\nnonce=bm9uY2U=\nts_ms=42\nstatus=200\nbody_sha256_b64=aGFzaA==\n"
+        );
+        // Тот же вектор, что в keys и Dart: подпись одной функцией у всех.
+        let sk = SigningKey::from_bytes(&[13u8; 32]);
+        let hash = base64::engine::general_purpose::STANDARD.encode(Sha256::digest(br#"{"ok":true}"#));
+        let msg = resp_signing_message("cfg1", "GET", "/v1/profile/search?query=al+ice&limit=5", "AAAAAAAAAAAAAAAAAAAAAA==", 1760000000123, 200, &hash);
+        assert_eq!(
+            base64::engine::general_purpose::STANDARD.encode(sk.sign(msg.as_bytes()).to_bytes()),
+            "1a4S5zmdkXoR720SaCm0ibXR4cVe6TfpFHGEcgOW1fC1OuFN6q2UB0cOzs9fMAFpGjwcOcWZtSjwD99BnRYRAg=="
+        );
+    }
+
+    #[test]
+    fn relay_resp_signed_routes_are_rooms_calls_devices_ice() {
+        let get = axum::http::Method::GET;
+        for path in [
+            "/v1/rooms/r1",
+            "/v1/rooms/r1/members",
+            "/v1/rooms/r1/call",
+            "/v1/rooms/r1/call/e2ee_readiness",
+            "/v1/active_devices/d1/p1",
+            "/v1/ice/d1",
+        ] {
+            assert!(resp_signed_route(&get, path), "{path}");
+        }
+        for path in [
+            "/v1/rooms",
+            "/v1/rooms/r1/topics",
+            "/v1/rooms/r1/call/c1/media",
+            "/v1/pending/d1",
+            "/v1/blob/b1",
+            "/v1/active_devices/d1",
+            "/health",
+        ] {
+            assert!(!resp_signed_route(&get, path), "{path}");
+        }
+        assert!(!resp_signed_route(&axum::http::Method::POST, "/v1/rooms/r1/members"));
+        assert!(resp_nonce_ok("AAAAAAAAAAAAAAAAAAAAAA=="));
+        assert!(!resp_nonce_ok("short"));
+    }
+
+    #[test]
+    fn relay_resp_signer_reads_seed_and_kid() {
+        let seed = base64::engine::general_purpose::STANDARD.encode([13u8; 32]);
+        let env = |pairs: Vec<(&'static str, String)>| {
+            move |k: &str| pairs.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone())
+        };
+        assert!(resp_signer_from(|_| None).is_none());
+        assert!(resp_signer_from(env(vec![("SECRETLY_RELAY_RESP_SIGNING_KEY", "short".into())])).is_none());
+        let (kid, sk) = resp_signer_from(env(vec![("SECRETLY_RELAY_RESP_SIGNING_KEY", seed.clone())])).unwrap();
+        assert_eq!(kid, "relay1");
+        assert_eq!(
+            base64::engine::general_purpose::STANDARD.encode(sk.verifying_key().to_bytes()),
+            "kaKKC3Q4FZOk2UaVeSCJJq/IrYLIg5t2RDWbnrqaSzo="
+        );
+        let (kid, _) = resp_signer_from(env(vec![
+            ("SECRETLY_RELAY_RESP_SIGNING_KEY", seed.clone()),
+            ("SECRETLY_RELAY_RESP_KID", "relay2".into()),
+        ]))
+        .unwrap();
+        assert_eq!(kid, "relay2");
+        let (kid, _) = resp_signer_from(env(vec![
+            ("SECRETLY_RELAY_RESP_SIGNING_KEY", seed),
+            ("SECRETLY_RELAY_RESP_KID", "bad kid!".into()),
+        ]))
+        .unwrap();
+        assert_eq!(kid, "relay1");
+    }
+
+    #[tokio::test]
+    async fn relay_signed_response_verifies_and_unsigned_cases_pass() {
+        let signer = ("relay1".to_string(), SigningKey::from_bytes(&[13u8; 32]));
+        let vk = signer.1.verifying_key();
+        let body = br#"{"members":[]}"#.to_vec();
+        let resp = (StatusCode::OK, body.clone()).into_response();
+        let path = "/v1/rooms/r1/members";
+        let signed = sign_response(Some(&signer), "GET", path, "bm9uY2Vub25jZQ==", 7, resp).await;
+        assert_eq!(signed.headers()[header::CACHE_CONTROL], "no-store");
+        let h = signed.headers()[RESP_SIG_HEADER].to_str().unwrap().to_string();
+        assert!(h.starts_with("v1;kid=relay1;ts=7;sig="));
+        let got = axum::body::to_bytes(signed.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(got.to_vec(), body, "тело не меняется");
+        let sig = Signature::from_slice(
+            &base64::engine::general_purpose::STANDARD.decode(&h[h.find("sig=").unwrap() + 4..]).unwrap(),
+        )
+        .unwrap();
+        let hash = base64::engine::general_purpose::STANDARD.encode(Sha256::digest(&body));
+        let msg = resp_signing_message("relay1", "GET", path, "bm9uY2Vub25jZQ==", 7, 200, &hash);
+        assert!(vk.verify_strict(msg.as_bytes(), &sig).is_ok());
+        let other = resp_signing_message("relay1", "GET", "/v1/rooms/r2/members", "bm9uY2Vub25jZQ==", 7, 200, &hash);
+        assert!(vk.verify_strict(other.as_bytes(), &sig).is_err());
+
+        let r = sign_response(Some(&signer), "GET", path, "bm9uY2Vub25jZQ==", 7,
+            (StatusCode::BAD_GATEWAY, "x").into_response()).await;
+        assert!(r.headers().get(RESP_SIG_HEADER).is_none());
+        let r = sign_response(None, "GET", path, "bm9uY2Vub25jZQ==", 7,
+            (StatusCode::OK, "x").into_response()).await;
+        assert!(r.headers().get(RESP_SIG_HEADER).is_none());
+    }
     use axum::{
         Json, Router,
         body::to_bytes,
@@ -14676,6 +17446,34 @@ mod tests {
     use tokio_tungstenite::{
         WebSocketStream, connect_async, tungstenite::Message as ClientWsMessage,
     };
+
+    /// Имя файла приложения приходит прямо из адреса и становится именем на
+    /// диске, поэтому проверка должна быть строгой, а не «похожей на хеш».
+    #[test]
+    fn app_asset_hash_accepts_only_lowercase_sha256_hex() {
+        let valid = sha256_hex_lower(b"decorative asset bytes");
+        assert_eq!(valid.len(), 64);
+        assert!(is_app_asset_hash(&valid));
+        assert!(is_app_asset_hash(&"a".repeat(64)));
+        assert!(is_app_asset_hash(
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        ));
+
+        // Прописные: тот же файл на регистронезависимой файловой системе —
+        // значит второй адрес у одного содержимого.
+        assert!(!is_app_asset_hash(&valid.to_ascii_uppercase()));
+        // Не та длина.
+        assert!(!is_app_asset_hash(""));
+        assert!(!is_app_asset_hash(&valid[..63]));
+        assert!(!is_app_asset_hash(&format!("{valid}0")));
+        // Не шестнадцатиричное.
+        assert!(!is_app_asset_hash(&"g".repeat(64)));
+        assert!(!is_app_asset_hash(&format!("{}-", &valid[..63])));
+        // Выход из каталога — самое важное, что здесь отбивается.
+        assert!(!is_app_asset_hash("../x"));
+        assert!(!is_app_asset_hash(&format!("../{}", &valid[..61])));
+        assert!(!is_app_asset_hash(&format!("{}/x", &valid[..62])));
+    }
 
     #[test]
     fn log_fingerprint_is_stable_and_redacted() {
@@ -14801,6 +17599,88 @@ mod tests {
         );
     }
 
+    /// Э1: отчёт о путях — счётчики по дням, значения только из белых
+    /// списков, сводка только по внутреннему ключу.
+    #[tokio::test]
+    async fn transport_report_counts_and_stats() {
+        // Маршрут по умолчанию выключен (он принимает запросы без подписи),
+        // поэтому проверка сама его и включает — как это делает накладка
+        // 75-transport-reports.conf на сервере.
+        // SAFETY: проверки идут в потоках, поэтому переменная окружения —
+        // общая. Эту переменную читает только `transport_reports_enabled()`,
+        // а её зовут лишь два маршрута отчётов, которые больше нигде в
+        // проверках не вызываются. Пересечения нет.
+        unsafe {
+            std::env::set_var("SECRETLY_RELAY_TRANSPORT_REPORTS_ENABLED", "true");
+        }
+        let (mut state, _dir) = test_app_state().await;
+        state.internal_key = Arc::new("k-test".to_string());
+        let ok = |platform: &str, net: &str, used: &str, failed: Vec<&str>, country: &str| {
+            HttpTransportReportReq {
+                build: 655,
+                platform: platform.into(),
+                net_kind: net.into(),
+                path_used: used.into(),
+                paths_failed: failed.into_iter().map(String::from).collect(),
+                country_hint: country.into(),
+            }
+        };
+        for req in [
+            ok("android", "cellular", "mirror", vec!["direct", "ip"], "ua"),
+            ok("android", "cellular", "mirror", vec!["direct"], "UA"),
+            // Мусор сворачивается к допустимым значениям, а не отвергается:
+            // отчёт обезличен, и спорить с ним не с кем.
+            ok("toaster", "mesh", "quantum", vec!["quantum", "direct", "direct"], "Ukraine"),
+        ] {
+            let code = http_transport_report(State(state.clone()), Json(req)).await.unwrap();
+            assert_eq!(code, StatusCode::NO_CONTENT);
+        }
+
+        let no_key = http_transport_report_stats(
+            Query(TransportReportStatsQuery { days: Some(7) }),
+            HeaderMap::new(),
+            State(state.clone()),
+        )
+        .await;
+        assert_eq!(no_key.err().map(|e| e.0), Some(StatusCode::UNAUTHORIZED));
+
+        let mut headers = HeaderMap::new();
+        headers.insert("x-secretly-internal-key", "k-test".parse().unwrap());
+        let Json(stats) = http_transport_report_stats(
+            Query(TransportReportStatsQuery { days: Some(7) }),
+            headers,
+            State(state.clone()),
+        )
+        .await
+        .unwrap();
+        let today = transport_day_index(now_ms());
+        assert!(stats.since_day_index <= today);
+        let mirror = stats
+            .used
+            .iter()
+            .find(|r| r.platform == "android" && r.path_used == "mirror" && r.country == "UA")
+            .expect("две записи слились в одну строку");
+        assert_eq!(mirror.count, 2);
+        assert_eq!(mirror.day_index, today);
+        let other = stats
+            .used
+            .iter()
+            .find(|r| r.platform == "other" && r.path_used == "direct" && r.country == "--")
+            .expect("мусор свёрнут к допустимым значениям");
+        assert_eq!(other.count, 1);
+        let direct_failed = stats
+            .failed
+            .iter()
+            .filter(|r| r.path_kind == "direct")
+            .map(|r| r.count)
+            .sum::<i64>();
+        assert_eq!(direct_failed, 3, "direct падал в трёх отчётах, дубль в одном не считается дважды");
+        assert!(stats.failed.iter().all(|r| r.path_kind != "quantum"));
+        assert_eq!(transport_country("ua"), "UA");
+        assert_eq!(transport_country("Ukraine"), "--");
+        assert_eq!(transport_day_index(86_400_000 * 3 + 5), 3);
+    }
+
     async fn test_app_state() -> (AppState, TempDir) {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("relay.db");
@@ -14812,6 +17692,8 @@ mod tests {
             .await
             .unwrap();
         tokio::fs::create_dir_all(&cosmetics_dir).await.unwrap();
+        let app_assets_dir = dir.path().join("app_assets");
+        tokio::fs::create_dir_all(&app_assets_dir).await.unwrap();
 
         let store = RelayStore::open(&db_path).await.unwrap();
         let state = AppState {
@@ -14821,6 +17703,7 @@ mod tests {
             blobs_dir: Arc::new(blobs_dir),
             sticker_catalog_dir: Arc::new(sticker_catalog_dir),
             cosmetics_dir: Arc::new(cosmetics_dir),
+            app_assets_dir: Arc::new(app_assets_dir),
             limiter: Arc::new(IpRateLimiter::new(10_000, 10_000.0)),
             invite_redeem_slug_limiter: Arc::new(StringKeyRateLimiter::new(10_000, 10_000.0)),
             invite_redeem_caller_limiter: Arc::new(StringKeyRateLimiter::new(10_000, 10_000.0)),
@@ -14836,6 +17719,7 @@ mod tests {
             max_pending_per_device: 5_000,
             keys_internal_base_url: Arc::new("http://127.0.0.1:1".into()),
             internal_key: Arc::new(String::new()),
+            resp_signer: Arc::new(None),
             http: HttpClient::builder()
                 .connect_timeout(Duration::from_secs(1))
                 .timeout(Duration::from_secs(1))
@@ -14878,6 +17762,8 @@ mod tests {
             entitlement_cache: Arc::new(DashMap::new()),
             big_room_members: 0,
             big_room_min_build: 0,
+            room_call_e2ee: Arc::new(RoomCallE2eeConfig::default()),
+            livekit_admin: Arc::new(LiveKitAdmin::disabled()),
         };
 
         (state, dir)
@@ -15036,6 +17922,35 @@ mod tests {
         // Now joined = 1 = cap → next join blocked.
         let err = enforce_group_join_limit(&state, pid).await.unwrap_err();
         assert_eq!(err.0, StatusCode::PAYMENT_REQUIRED);
+    }
+
+    #[tokio::test]
+    async fn room_hard_cap_applies_without_monetization() {
+        // 15.11.2026: потолок обещан «всегда», но стоял под монетизацией.
+        let (state, _dir) = test_app_state().await;
+        assert!(!state.monetization_enabled);
+        let state = AppState { big_room_members: 0, ..state };
+        state
+            .store
+            .create_room("room_hard_1", "owner_h", "dev_owner_h", "A", now_ms())
+            .await
+            .unwrap();
+        for m in ["h1", "h2"] {
+            state
+                .store
+                .upsert_room_membership("room_hard_1", m, "active", "member", None, now_ms())
+                .await
+                .unwrap();
+        }
+        let active = state.store.count_active_room_members("room_hard_1").await.unwrap();
+        // Потолок ровно на нынешнем числе — следующий не входит.
+        let err = enforce_room_hard_cap_at(&state, "room_hard_1", active)
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::PAYMENT_REQUIRED);
+        // Запас есть — входит; 0 — без потолка.
+        assert!(enforce_room_hard_cap_at(&state, "room_hard_1", active + 5).await.is_ok());
+        assert!(enforce_room_hard_cap_at(&state, "room_hard_1", 0).await.is_ok());
     }
 
     #[tokio::test]
@@ -18199,6 +21114,147 @@ mod tests {
         assert_eq!(replay_err.0, StatusCode::UNAUTHORIZED);
     }
 
+    /// Исчезающие сообщения (ТЗ 22.10.2026, §2.4): по `?min_build=N` ответ
+    /// `active_devices` получает подсказку о сборках; без параметра и с мусором
+    /// в нём ответ ровно прежний — старые клиенты ничего не замечают.
+    #[tokio::test]
+    async fn http_active_devices_reports_build_at_least_only_when_asked() {
+        let (state, _dir) = test_app_state().await;
+        let signing_key = SigningKey::from_bytes(&[33u8; 32]);
+        let requester = "dev_dis_requester";
+        let peer_profile = "profile_dis_peer";
+        cache_authenticated_device(&state, requester, "profile_dis_requester", &signing_key);
+
+        let now = now_ms();
+        for (device, build) in [("dev_dis_new", "1.8.70+660"), ("dev_dis_old", "654")] {
+            state
+                .store
+                .record_device_login(device, Some(peer_profile), now)
+                .await
+                .unwrap();
+            state
+                .store
+                .record_pump_activity(device, now)
+                .await
+                .unwrap();
+            state
+                .store
+                .device_activity_set_client_build(device, build, now)
+                .await
+                .unwrap();
+        }
+        // Устройство, которое ни разу не назвало сборку, — старое.
+        state
+            .store
+            .record_device_login("dev_dis_mute", Some(peer_profile), now)
+            .await
+            .unwrap();
+        state
+            .store
+            .record_pump_activity("dev_dis_mute", now)
+            .await
+            .unwrap();
+
+        async fn call(
+            state: &AppState,
+            signing_key: &SigningKey,
+            requester: &str,
+            peer_profile: &str,
+            nonce: &str,
+            query: &[(&str, &str)],
+        ) -> serde_json::Value {
+            let headers = signed_auth_headers(requester, signing_key, nonce, |ts_ms, nonce_b64| {
+                http_active_devices_auth_message(requester, peer_profile, ts_ms, nonce_b64)
+            });
+            let query: std::collections::HashMap<String, String> = query
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect();
+            let resp = http_active_devices(
+                Path((requester.to_string(), peer_profile.to_string())),
+                Query(query),
+                headers,
+                State(state.clone()),
+            )
+            .await
+            .unwrap()
+            .0;
+            serde_json::to_value(resp).unwrap()
+        }
+
+        // Без параметра — прежний ответ, без новых полей.
+        let plain = call(&state, &signing_key, requester, peer_profile, "dis-1", &[]).await;
+        assert!(plain.get("all_build_at_least").is_none());
+        assert!(plain.get("min_build_checked").is_none());
+        for device in plain["devices"].as_array().unwrap() {
+            assert!(device.get("build_at_least").is_none());
+        }
+
+        // Мусор в параметре — тоже прежний ответ, а не 400.
+        let garbage = call(
+            &state,
+            &signing_key,
+            requester,
+            peer_profile,
+            "dis-2",
+            &[("min_build", "abc")],
+        )
+        .await;
+        assert!(garbage.get("all_build_at_least").is_none());
+
+        // Порог 660: новое устройство проходит, старое и молчащее — нет.
+        let checked = call(
+            &state,
+            &signing_key,
+            requester,
+            peer_profile,
+            "dis-3",
+            &[("min_build", "660")],
+        )
+        .await;
+        assert_eq!(checked["min_build_checked"], serde_json::json!(660));
+        assert_eq!(checked["all_build_at_least"], serde_json::json!(false));
+        let by_id: std::collections::HashMap<String, bool> = checked["devices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|d| {
+                (
+                    d["device_id"].as_str().unwrap().to_string(),
+                    d["build_at_least"].as_bool().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(by_id["dev_dis_new"], true);
+        assert_eq!(by_id["dev_dis_old"], false);
+        assert_eq!(by_id["dev_dis_mute"], false);
+
+        // Порог 654: старое проходит, молчащее по-прежнему нет.
+        let lower = call(
+            &state,
+            &signing_key,
+            requester,
+            peer_profile,
+            "dis-4",
+            &[("min_build", "654")],
+        )
+        .await;
+        assert_eq!(lower["all_build_at_least"], serde_json::json!(false));
+
+        // Профиль без строк активности — подсказки нет («неизвестно»).
+        let unknown = call(
+            &state,
+            &signing_key,
+            requester,
+            "profile_dis_nobody",
+            "dis-5",
+            &[("min_build", "660")],
+        )
+        .await;
+        assert!(unknown.get("all_build_at_least").is_none());
+        assert!(unknown.get("min_build_checked").is_none());
+    }
+
     #[tokio::test]
     async fn http_pending_returns_items_for_valid_signed_request() {
         let (state, _dir) = test_app_state().await;
@@ -19273,6 +22329,7 @@ mod tests {
             Json(HttpRoomCreateReq {
                 room_id: room_id.into(),
                 title: "Launch Team".into(),
+                parent_room_id: None,
             }),
         )
         .await
@@ -19316,6 +22373,7 @@ mod tests {
             Json(HttpRoomCreateReq {
                 room_id: room_id.into(),
                 title: "Project Atlas".into(),
+                parent_room_id: None,
             }),
         )
         .await
@@ -19333,6 +22391,7 @@ mod tests {
             Json(HttpRoomCreateReq {
                 room_id: room_id.into(),
                 title: "Project Atlas".into(),
+                parent_room_id: None,
             }),
         )
         .await
@@ -19367,6 +22426,7 @@ mod tests {
             Json(HttpRoomCreateReq {
                 room_id: room_id.into(),
                 title: "Team Mercury".into(),
+                parent_room_id: None,
             }),
         )
         .await
@@ -19384,6 +22444,7 @@ mod tests {
             Json(HttpRoomCreateReq {
                 room_id: room_id.into(),
                 title: "Team Mercury v2".into(),
+                parent_room_id: None,
             }),
         )
         .await
@@ -19427,6 +22488,96 @@ mod tests {
         assert_eq!(response.owner_profile_id, profile_id);
         assert_eq!(response.created_by_device_id, device_id);
         assert_eq!(response.title, "Ops Bridge");
+    }
+
+    /// Исчезающие сообщения (ТЗ 22.10.2026): `?min_build=N` у запроса комнаты
+    /// добавляет подсказку о сборках участников; без параметра и с мусором
+    /// ответ прежний.
+    #[tokio::test]
+    async fn http_room_get_reports_member_builds_only_when_asked() {
+        let (state, _dir) = test_app_state().await;
+        let signing_key = SigningKey::from_bytes(&[56u8; 32]);
+        let device_id = "dev_room_dis_1";
+        let profile_id = "profile_room_dis_1";
+        let room_id = "room_dis_builds_1";
+
+        cache_authenticated_device(&state, device_id, profile_id, &signing_key);
+        state
+            .store
+            .create_room(room_id, profile_id, device_id, "Builds", now_ms())
+            .await
+            .unwrap();
+        let now = now_ms();
+        state
+            .store
+            .record_device_login(device_id, Some(profile_id), now)
+            .await
+            .unwrap();
+        state.store.record_pump_activity(device_id, now).await.unwrap();
+        state
+            .store
+            .device_activity_set_client_build(device_id, "1.8.70+660", now)
+            .await
+            .unwrap();
+
+        async fn get(
+            state: &AppState,
+            key: &SigningKey,
+            device_id: &str,
+            room_id: &str,
+            nonce: &str,
+            query: &[(&str, &str)],
+        ) -> serde_json::Value {
+            let query: std::collections::HashMap<String, String> = query
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect();
+            let resp = http_room_get_route(
+                Path(room_id.to_string()),
+                Query(query),
+                signed_room_get_headers(device_id, key, room_id, nonce),
+                State(state.clone()),
+            )
+            .await
+            .unwrap()
+            .0;
+            serde_json::to_value(resp).unwrap()
+        }
+
+        let plain = get(&state, &signing_key, device_id, room_id, "dis-r1", &[]).await;
+        assert!(plain.get("members_build_at_least").is_none());
+        assert!(plain.get("min_build_checked").is_none());
+        let garbage = get(
+            &state,
+            &signing_key,
+            device_id,
+            room_id,
+            "dis-r2",
+            &[("min_build", "x")],
+        )
+        .await;
+        assert!(garbage.get("members_build_at_least").is_none());
+        let ok = get(
+            &state,
+            &signing_key,
+            device_id,
+            room_id,
+            "dis-r3",
+            &[("min_build", "660")],
+        )
+        .await;
+        assert_eq!(ok["members_build_at_least"], serde_json::json!(true));
+        assert_eq!(ok["min_build_checked"], serde_json::json!(660));
+        let old = get(
+            &state,
+            &signing_key,
+            device_id,
+            room_id,
+            "dis-r4",
+            &[("min_build", "700")],
+        )
+        .await;
+        assert_eq!(old["members_build_at_least"], serde_json::json!(false));
     }
 
     #[tokio::test]
@@ -20047,6 +23198,7 @@ mod tests {
             join_approval_required: true,
             slow_mode_seconds: 45,
             chat_history_visible: true,
+            allow_members_create_topics: None,
         };
 
         let response = http_room_settings_update(
@@ -20148,6 +23300,7 @@ mod tests {
             join_approval_required: false,
             slow_mode_seconds: 0,
             chat_history_visible: false,
+            allow_members_create_topics: None,
         };
 
         let err = http_room_settings_update(
@@ -23090,6 +26243,7 @@ mod tests {
             deafened: false,
             video_enabled: true,
             screen_share_enabled: false,
+            media_contract: None,
         };
 
         let joined = http_room_call_join(
@@ -23110,6 +26264,7 @@ mod tests {
                 deafened: join_req.deafened,
                 video_enabled: join_req.video_enabled,
                 screen_share_enabled: join_req.screen_share_enabled,
+                media_contract: None,
             }),
         )
         .await
@@ -23137,6 +26292,7 @@ mod tests {
                 "room-call-get-1",
             ),
             State(state.clone()),
+            Query(HttpRoomCallContractQuery::default()),
         )
         .await
         .unwrap()
@@ -23219,6 +26375,7 @@ mod tests {
             deafened: false,
             video_enabled: true,
             screen_share_enabled: false,
+            media_contract: None,
         };
         let member_join = HttpRoomCallJoinReq {
             media_type: HttpRoomCallMediaType::Video,
@@ -23228,6 +26385,7 @@ mod tests {
             deafened: false,
             video_enabled: false,
             screen_share_enabled: false,
+            media_contract: None,
         };
 
         let created = http_room_call_join(
@@ -23424,6 +26582,7 @@ mod tests {
             deafened: false,
             video_enabled: true,
             screen_share_enabled: false,
+            media_contract: None,
         };
 
         let created = http_room_call_join(
@@ -23444,6 +26603,7 @@ mod tests {
                 deafened: join_req.deafened,
                 video_enabled: join_req.video_enabled,
                 screen_share_enabled: join_req.screen_share_enabled,
+                media_contract: None,
             }),
         )
         .await
@@ -23469,6 +26629,7 @@ mod tests {
                 deafened: join_req.deafened,
                 video_enabled: join_req.video_enabled,
                 screen_share_enabled: join_req.screen_share_enabled,
+                media_contract: None,
             }),
         )
         .await
@@ -23628,6 +26789,7 @@ mod tests {
             deafened: false,
             video_enabled: false,
             screen_share_enabled: false,
+            media_contract: None,
         };
 
         let created = http_room_call_join(
@@ -23648,6 +26810,7 @@ mod tests {
                 deafened: join_req.deafened,
                 video_enabled: join_req.video_enabled,
                 screen_share_enabled: join_req.screen_share_enabled,
+                media_contract: None,
             }),
         )
         .await
@@ -23673,6 +26836,7 @@ mod tests {
                 deafened: join_req.deafened,
                 video_enabled: join_req.video_enabled,
                 screen_share_enabled: join_req.screen_share_enabled,
+                media_contract: None,
             }),
         )
         .await
@@ -23780,6 +26944,7 @@ mod tests {
             deafened: false,
             video_enabled: true,
             screen_share_enabled: false,
+            media_contract: None,
         };
 
         let created = http_room_call_join(
@@ -23808,6 +26973,7 @@ mod tests {
                 "room-call-media-get-1",
             ),
             State(state),
+            Query(HttpRoomCallContractQuery::default()),
         )
         .await
         .unwrap()
@@ -23905,6 +27071,7 @@ mod tests {
             deafened: false,
             video_enabled: true,
             screen_share_enabled: false,
+            media_contract: None,
         };
 
         let created = http_room_call_join(
@@ -23925,6 +27092,7 @@ mod tests {
                 deafened: join_req.deafened,
                 video_enabled: join_req.video_enabled,
                 screen_share_enabled: join_req.screen_share_enabled,
+                media_contract: None,
             }),
         )
         .await
@@ -23936,6 +27104,7 @@ mod tests {
             publish_video: true,
             publish_screen_share: false,
             subscribe_all: true,
+            media_contract: None,
         };
         let member_join_err = http_room_call_media_join(
             Path((room_id.to_string(), created.call.call_id.clone())),
@@ -23962,6 +27131,7 @@ mod tests {
             deafened: join_req.deafened,
             video_enabled: false,
             screen_share_enabled: join_req.screen_share_enabled,
+            media_contract: None,
         };
 
         let member_call_joined = http_room_call_join(
@@ -23986,6 +27156,7 @@ mod tests {
             publish_video: false,
             publish_screen_share: false,
             subscribe_all: true,
+            media_contract: None,
         };
         let owner_media = http_room_call_media_join(
             Path((room_id.to_string(), created.call.call_id.clone())),
@@ -24032,6 +27203,7 @@ mod tests {
             publish_video: false,
             publish_screen_share: false,
             subscribe_all: false,
+            media_contract: None,
         };
         let member_media = http_room_call_media_join(
             Path((room_id.to_string(), created.call.call_id.clone())),
@@ -24061,6 +27233,7 @@ mod tests {
                 "room-call-media-owner-get-after-join-2",
             ),
             State(state),
+            Query(HttpRoomCallContractQuery::default()),
         )
         .await
         .unwrap()
@@ -24270,6 +27443,7 @@ mod tests {
             deafened: false,
             video_enabled: true,
             screen_share_enabled: false,
+            media_contract: None,
         };
 
         let created = http_room_call_join(
@@ -24293,6 +27467,7 @@ mod tests {
             publish_video: true,
             publish_screen_share: false,
             subscribe_all: true,
+            media_contract: None,
         };
         let media = http_room_call_media_join(
             Path((room_id.to_string(), created.call.call_id.clone())),
@@ -24364,6 +27539,1108 @@ mod tests {
         assert_eq!(payload_json["video"]["roomJoin"], true);
         assert_eq!(payload_json["video"]["canPublish"], true);
         assert_eq!(payload_json["video"]["canSubscribe"], true);
+    }
+
+    /// Тест-вектор identity и имени комнаты LiveKit: клиент (Dart)
+    /// повторяет эти функции и сверяется с теми же строками (§4.1 ТЗ E2EE).
+    #[test]
+    fn room_media_backend_identity_and_room_name_test_vectors() {
+        assert_eq!(
+            room_media_backend_participant_identity("prof-TEST-1", "dev:TEST/1"),
+            "secretly-participant-dev_TEST_1-Dz7mVD6s8H"
+        );
+        assert_eq!(
+            room_media_backend_room_name("room-TEST-1", "call-TEST-1"),
+            "secretly-room-room-TEST-1-AySuA0Y0Ez"
+        );
+        assert_eq!(
+            room_media_backend_room_name_for_contract(
+                "room-TEST-1",
+                "call-TEST-1",
+                ROOM_MEDIA_CONTRACT_V1
+            ),
+            "secretly-room-room-TEST-1-AySuA0Y0Ez"
+        );
+        assert_eq!(
+            room_media_backend_room_name_for_contract(
+                "room-TEST-1",
+                "call-TEST-1",
+                ROOM_MEDIA_CONTRACT_E2EE_V1
+            ),
+            "secretly-room-room-TEST-1-AySuA0Y0Ez-e2ee1"
+        );
+        // Сегмент режется по 18 символам, всё вне [A-Za-z0-9_-] — в «_».
+        assert_eq!(
+            room_media_backend_safe_segment("абв:device/with.long-name", 18),
+            "____device_with_lo"
+        );
+        assert_eq!(room_media_backend_safe_segment("", 18), "x");
+    }
+
+    fn livekit_test_config() -> RelayRoomMediaRuntimeConfig {
+        RelayRoomMediaRuntimeConfig {
+            requested_backend: RelayRoomMediaBackendKind::Livekit,
+            effective_backend: RelayRoomMediaBackendKind::Livekit,
+            livekit_url: "wss://livekit.secretly.test".into(),
+            livekit_api_key: "relay-livekit-key".into(),
+            livekit_api_secret: "relay-livekit-secret".into(),
+            token_ttl_seconds: 300,
+        }
+    }
+
+    /// И-2: токен открытого контракта побайтово прежний — на его metadata и
+    /// канале данных держатся выпущенные сборки (ЗВ-С2).
+    #[test]
+    fn livekit_v1_claims_stay_byte_identical() {
+        let claims = build_livekit_room_media_claims(
+            &livekit_test_config(),
+            ROOM_MEDIA_CONTRACT_V1,
+            "room-1",
+            "call-1",
+            "call-1",
+            "prof-1",
+            "dev-1",
+            "secretly-room-room-1-abc",
+            "secretly-participant-dev-1-xyz",
+            1_000,
+        );
+        assert_eq!(
+            serde_json::to_string(&claims).unwrap(),
+            r#"{"exp":1300,"iss":"relay-livekit-key","sub":"secretly-participant-dev-1-xyz","nbf":995,"video":{"room":"secretly-room-room-1-abc","roomJoin":true,"canPublish":true,"canPublishData":true,"canSubscribe":true},"metadata":"{\"call_id\":\"call-1\",\"contract_version\":\"room_media_v1\",\"device_id\":\"dev-1\",\"profile_id\":\"prof-1\",\"room_id\":\"room-1\",\"session_id\":\"call-1\"}"}"#
+        );
+    }
+
+    /// ЗВ-С2: токен E2EE-контракта — metadata только с контрактом, канал
+    /// данных закрыт, свою metadata не поменять.
+    #[test]
+    fn livekit_e2ee_claims_hide_identity_and_close_data_channel() {
+        let claims = build_livekit_room_media_claims(
+            &livekit_test_config(),
+            ROOM_MEDIA_CONTRACT_E2EE_V1,
+            "room-1",
+            "call-1",
+            "call-1",
+            "prof-1",
+            "dev-1",
+            "secretly-room-room-1-abc-e2ee1",
+            "secretly-participant-dev-1-xyz",
+            1_000,
+        );
+        assert_eq!(
+            serde_json::to_string(&claims).unwrap(),
+            r#"{"exp":1300,"iss":"relay-livekit-key","sub":"secretly-participant-dev-1-xyz","nbf":995,"video":{"room":"secretly-room-room-1-abc-e2ee1","roomJoin":true,"canPublish":true,"canPublishData":false,"canSubscribe":true,"canUpdateOwnMetadata":false},"metadata":"{\"cv\":\"room_media_e2ee_v1\"}"}"#
+        );
+    }
+
+    // ── ТЗ E2EE групповых созвонов: контракт медиа на входах ──────────────
+
+    struct E2eeTestRoom {
+        state: AppState,
+        room_id: String,
+        owner: (String, SigningKey),
+        members: Vec<(String, SigningKey)>,
+        nonce: std::sync::atomic::AtomicU32,
+    }
+
+    impl E2eeTestRoom {
+        fn nonce(&self) -> String {
+            let n = self.nonce.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            format!("{}-e2ee-{n}", self.room_id)
+        }
+
+        fn device(&self, idx: usize) -> (&str, &SigningKey) {
+            if idx == 0 {
+                (self.owner.0.as_str(), &self.owner.1)
+            } else {
+                let m = &self.members[idx - 1];
+                (m.0.as_str(), &m.1)
+            }
+        }
+
+        async fn join(
+            &self,
+            idx: usize,
+            contract: Option<&str>,
+        ) -> Result<HttpRoomCallMutationResp, (StatusCode, String)> {
+            let (device, key) = self.device(idx);
+            let req = HttpRoomCallJoinReq {
+                media_type: HttpRoomCallMediaType::Audio,
+                supports_video: false,
+                supports_screen_share: false,
+                muted: false,
+                deafened: false,
+                video_enabled: false,
+                screen_share_enabled: false,
+                media_contract: contract.map(str::to_string),
+            };
+            let headers =
+                signed_room_call_join_headers(device, key, &self.room_id, &req, &self.nonce());
+            http_room_call_join(
+                Path(self.room_id.clone()),
+                headers,
+                State(self.state.clone()),
+                Json(req),
+            )
+            .await
+            .map(|v| v.0)
+        }
+
+        async fn get(
+            &self,
+            idx: usize,
+            contract: Option<&str>,
+        ) -> Result<HttpRoomCallSnapshotResp, (StatusCode, String)> {
+            let (device, key) = self.device(idx);
+            http_room_call_get(
+                Path(self.room_id.clone()),
+                signed_room_call_get_headers(device, key, &self.room_id, &self.nonce()),
+                State(self.state.clone()),
+                Query(HttpRoomCallContractQuery {
+                    media_contract: contract.map(str::to_string),
+                }),
+            )
+            .await
+            .map(|v| v.0)
+        }
+
+        async fn media_get(
+            &self,
+            idx: usize,
+            call_id: &str,
+            contract: Option<&str>,
+        ) -> Result<HttpRoomCallMediaResp, (StatusCode, String)> {
+            let (device, key) = self.device(idx);
+            http_room_call_media_get(
+                Path((self.room_id.clone(), call_id.to_string())),
+                signed_room_call_media_get_headers(
+                    device,
+                    key,
+                    &self.room_id,
+                    call_id,
+                    &self.nonce(),
+                ),
+                State(self.state.clone()),
+                Query(HttpRoomCallContractQuery {
+                    media_contract: contract.map(str::to_string),
+                }),
+            )
+            .await
+            .map(|v| v.0)
+        }
+
+        async fn media_join(
+            &self,
+            idx: usize,
+            call_id: &str,
+            contract: Option<&str>,
+        ) -> Result<HttpRoomCallMediaResp, (StatusCode, String)> {
+            let (device, key) = self.device(idx);
+            let req = HttpRoomCallMediaJoinReq {
+                publish_audio: true,
+                publish_video: false,
+                publish_screen_share: false,
+                subscribe_all: true,
+                media_contract: contract.map(str::to_string),
+            };
+            let headers = signed_room_call_media_join_headers(
+                device,
+                key,
+                &self.room_id,
+                call_id,
+                &req,
+                &self.nonce(),
+            );
+            http_room_call_media_join(
+                Path((self.room_id.clone(), call_id.to_string())),
+                headers,
+                State(self.state.clone()),
+                Json(req),
+            )
+            .await
+            .map(|v| v.0.media)
+        }
+    }
+
+    async fn e2ee_test_room(
+        state: &AppState,
+        tag: &str,
+        seed: u8,
+        members: usize,
+    ) -> E2eeTestRoom {
+        let room_id = format!("room_e2ee_{tag}");
+        let owner_device = format!("dev_e2ee_{tag}_owner");
+        let owner_profile = format!("profile_e2ee_{tag}_owner");
+        let owner_key = SigningKey::from_bytes(&[seed; 32]);
+        cache_authenticated_device(state, &owner_device, &owner_profile, &owner_key);
+        state
+            .store
+            .create_room(&room_id, &owner_profile, &owner_device, "E2EE", now_ms())
+            .await
+            .unwrap();
+        let mut member_list = Vec::new();
+        for i in 0..members {
+            let device = format!("dev_e2ee_{tag}_m{i}");
+            let profile = format!("profile_e2ee_{tag}_m{i}");
+            let key = SigningKey::from_bytes(&[seed.wrapping_add(1 + i as u8); 32]);
+            cache_authenticated_device(state, &device, &profile, &key);
+            state
+                .store
+                .upsert_room_membership(&room_id, &profile, "active", "member", None, now_ms())
+                .await
+                .unwrap();
+            member_list.push((device, key));
+        }
+        E2eeTestRoom {
+            state: state.clone(),
+            room_id,
+            owner: (owner_device, owner_key),
+            members: member_list,
+            nonce: std::sync::atomic::AtomicU32::new(0),
+        }
+    }
+
+    fn livekit_claims_from_token(token: &str) -> serde_json::Value {
+        let payload = token.split('.').nth(1).unwrap();
+        let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(payload)
+            .unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    /// Без переменных — умолчания; опечатки зажимаются.
+    #[test]
+    fn room_call_e2ee_config_defaults_and_clamps() {
+        assert_eq!(
+            RoomCallE2eeConfig::from_lookup(|_| None),
+            RoomCallE2eeConfig {
+                accept: true,
+                required: false,
+                max_participants: 20,
+                min_build: None,
+            }
+        );
+        let env: std::collections::HashMap<&str, &str> = [
+            ("SECRETLY_ROOM_CALL_E2EE_ACCEPT", "false"),
+            ("SECRETLY_ROOM_CALL_E2EE_REQUIRED", " TRUE "),
+            ("SECRETLY_ROOM_CALL_E2EE_MAX_PARTICIPANTS", "500"),
+            ("SECRETLY_ROOM_CALL_E2EE_MIN_BUILD", " 650 "),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(
+            RoomCallE2eeConfig::from_lookup(|k| env.get(k).map(|v| v.to_string())),
+            RoomCallE2eeConfig {
+                accept: false,
+                required: true,
+                max_participants: 50,
+                min_build: Some(650),
+            }
+        );
+        let typos: std::collections::HashMap<&str, &str> = [
+            ("SECRETLY_ROOM_CALL_E2EE_ACCEPT", "nope"),
+            ("SECRETLY_ROOM_CALL_E2EE_REQUIRED", "maybe"),
+            ("SECRETLY_ROOM_CALL_E2EE_MAX_PARTICIPANTS", "1"),
+            ("SECRETLY_ROOM_CALL_E2EE_MIN_BUILD", "0"),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(
+            RoomCallE2eeConfig::from_lookup(|k| typos.get(k).map(|v| v.to_string())),
+            RoomCallE2eeConfig {
+                accept: true,
+                required: false,
+                max_participants: 2,
+                min_build: None,
+            }
+        );
+    }
+
+    /// ЗВ-С1: выпущенная сборка E2EE-созвона не видит (GET /call без
+    /// контракта — «созвона нет»), не заводит второй и не входит в него.
+    #[tokio::test]
+    async fn room_call_e2ee_is_hidden_from_released_builds() {
+        let (state, _dir) = test_app_state().await;
+        let room = e2ee_test_room(&state, "hidden", 41, 1).await;
+
+        let created = room.join(0, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap();
+        assert_eq!(created.call.media_contract, ROOM_MEDIA_CONTRACT_E2EE_V1);
+
+        let legacy = room.get(1, None).await.unwrap();
+        assert!(!legacy.exists);
+        assert!(legacy.call.is_none());
+        assert!(legacy.participants.is_empty());
+        assert!(legacy.self_participant.is_none());
+        assert_eq!(legacy.room.room_id, room.room_id);
+
+        let aware = room.get(1, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap();
+        assert!(aware.exists);
+        let call = aware.call.as_ref().unwrap();
+        assert_eq!(call.call_id, created.call.call_id);
+        assert_eq!(call.media_contract, ROOM_MEDIA_CONTRACT_E2EE_V1);
+        // Новая сборка, назвавшая открытый контракт, тоже видит созвон.
+        assert!(room.get(1, Some(ROOM_MEDIA_CONTRACT_V1)).await.unwrap().exists);
+
+        let err = room.join(1, None).await.unwrap_err();
+        assert_eq!(err, (StatusCode::CONFLICT, "room_call_e2ee_in_progress".into()));
+        let err = room.join(1, Some(ROOM_MEDIA_CONTRACT_V1)).await.unwrap_err();
+        assert_eq!(
+            err,
+            (
+                StatusCode::CONFLICT,
+                "room_call_contract_mismatch:room_media_e2ee_v1".into()
+            )
+        );
+        let snapshot = state
+            .store
+            .get_active_room_call(&room.room_id, None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.call.call_id, created.call.call_id);
+        assert_eq!(snapshot.participants.len(), 1);
+
+        let joined = room.join(1, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap();
+        assert_eq!(joined.call.call_id, created.call.call_id);
+        assert_eq!(joined.participants.len(), 2);
+    }
+
+    /// ЗВ-С1, ЗВ-С2: токен и описание медиа — только с контрактом созвона;
+    /// E2EE-токен закрыт, открытый — прежний.
+    #[tokio::test]
+    async fn room_call_media_contract_mismatch_gets_no_token() {
+        let (state, _dir) = test_app_state().await;
+        let state = AppState {
+            room_media: Arc::new(livekit_test_config()),
+            ..state
+        };
+        let room = e2ee_test_room(&state, "media", 51, 0).await;
+        let created = room.join(0, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap();
+        let call_id = created.call.call_id.clone();
+
+        let mismatch = (
+            StatusCode::CONFLICT,
+            "room_call_contract_mismatch:room_media_e2ee_v1".to_string(),
+        );
+        assert_eq!(room.media_get(0, &call_id, None).await.unwrap_err(), mismatch);
+        assert_eq!(
+            room.media_get(0, &call_id, Some(ROOM_MEDIA_CONTRACT_V1)).await.unwrap_err(),
+            mismatch
+        );
+        assert_eq!(room.media_join(0, &call_id, None).await.unwrap_err(), mismatch);
+        let snapshot = state
+            .store
+            .get_room_call(&room.room_id, &call_id, None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(snapshot.media_participants.is_empty(), "отказ ничего не записал");
+
+        let media = room
+            .media_join(0, &call_id, Some(ROOM_MEDIA_CONTRACT_E2EE_V1))
+            .await
+            .unwrap();
+        assert_eq!(media.contract_version, ROOM_MEDIA_CONTRACT_E2EE_V1);
+        let room_name = media.backend.room_name.clone().unwrap();
+        assert_eq!(
+            room_name,
+            format!(
+                "{}-e2ee1",
+                room_media_backend_room_name(&room.room_id, &call_id)
+            )
+        );
+        let claims = livekit_claims_from_token(media.backend.access_token.as_deref().unwrap());
+        assert_eq!(claims["video"]["room"], room_name.as_str());
+        assert_eq!(claims["video"]["canPublish"], true);
+        assert_eq!(claims["video"]["canSubscribe"], true);
+        assert_eq!(claims["video"]["canPublishData"], false);
+        assert_eq!(claims["video"]["canUpdateOwnMetadata"], false);
+        assert_eq!(claims["metadata"], r#"{"cv":"room_media_e2ee_v1"}"#);
+        assert_eq!(
+            claims["sub"],
+            room_media_backend_participant_identity(
+                "profile_e2ee_media_owner",
+                "dev_e2ee_media_owner"
+            )
+            .as_str()
+        );
+        let fetched = room
+            .media_get(0, &call_id, Some(ROOM_MEDIA_CONTRACT_E2EE_V1))
+            .await
+            .unwrap();
+        assert_eq!(fetched.contract_version, ROOM_MEDIA_CONTRACT_E2EE_V1);
+        assert!(fetched.backend.access_token.is_some());
+
+        // Открытый созвон: путь выпущенной сборки прежний.
+        let v1_room = e2ee_test_room(&state, "media_v1", 61, 0).await;
+        let v1 = v1_room.join(0, None).await.unwrap();
+        assert_eq!(v1.call.media_contract, ROOM_MEDIA_CONTRACT_V1);
+        let v1_media = v1_room.media_join(0, &v1.call.call_id, None).await.unwrap();
+        assert_eq!(v1_media.contract_version, ROOM_MEDIA_CONTRACT_V1);
+        assert_eq!(
+            v1_media.backend.room_name.as_deref().unwrap(),
+            room_media_backend_room_name(&v1_room.room_id, &v1.call.call_id)
+        );
+        let v1_claims =
+            livekit_claims_from_token(v1_media.backend.access_token.as_deref().unwrap());
+        assert_eq!(v1_claims["video"]["canPublishData"], true);
+        assert!(v1_claims["video"].get("canUpdateOwnMetadata").is_none());
+        let v1_metadata: serde_json::Value =
+            serde_json::from_str(v1_claims["metadata"].as_str().unwrap()).unwrap();
+        assert_eq!(v1_metadata["contract_version"], "room_media_v1");
+        assert_eq!(
+            v1_room
+                .media_get(0, &v1.call.call_id, Some(ROOM_MEDIA_CONTRACT_E2EE_V1))
+                .await
+                .unwrap_err(),
+            (
+                StatusCode::CONFLICT,
+                "room_call_contract_mismatch:room_media_v1".to_string()
+            )
+        );
+        assert_eq!(
+            v1_room
+                .media_get(0, &v1.call.call_id, None)
+                .await
+                .unwrap()
+                .contract_version,
+            ROOM_MEDIA_CONTRACT_V1
+        );
+    }
+
+    /// ЗВ-С4: предел E2EE-созвона — своя переменная.
+    #[tokio::test]
+    async fn room_call_e2ee_cap_refuses_extra_participants() {
+        let (state, _dir) = test_app_state().await;
+        let state = AppState {
+            room_call_e2ee: Arc::new(RoomCallE2eeConfig {
+                max_participants: 2,
+                ..RoomCallE2eeConfig::default()
+            }),
+            ..state
+        };
+        let room = e2ee_test_room(&state, "cap", 71, 2).await;
+        room.join(0, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap();
+        room.join(1, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap();
+        assert_eq!(
+            room.join(2, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap_err(),
+            (StatusCode::CONFLICT, "room_call_full".to_string())
+        );
+        // Повторный вход уже вошедшего не упирается в предел.
+        room.join(1, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap();
+
+        // Открытого созвона предел не касается.
+        let v1_room = e2ee_test_room(&state, "cap_v1", 81, 2).await;
+        for idx in 0..3 {
+            v1_room.join(idx, None).await.unwrap();
+        }
+    }
+
+    /// Флаг-день: открытые созвоны не заводятся, в них не входят и токенов
+    /// не получают.
+    #[tokio::test]
+    async fn room_call_e2ee_required_refuses_open_calls_and_tokens() {
+        let (state, _dir) = test_app_state().await;
+        let room = e2ee_test_room(&state, "required", 91, 1).await;
+        let v1 = room.join(0, None).await.unwrap();
+
+        let required_state = AppState {
+            room_call_e2ee: Arc::new(RoomCallE2eeConfig {
+                required: true,
+                ..RoomCallE2eeConfig::default()
+            }),
+            ..state.clone()
+        };
+        let room = E2eeTestRoom {
+            state: required_state,
+            ..room
+        };
+        let required = (StatusCode::CONFLICT, "room_call_e2ee_required".to_string());
+        assert_eq!(room.join(1, None).await.unwrap_err(), required);
+        assert_eq!(room.join(1, Some(ROOM_MEDIA_CONTRACT_V1)).await.unwrap_err(), required);
+        assert_eq!(room.media_get(0, &v1.call.call_id, None).await.unwrap_err(), required);
+        assert_eq!(room.media_join(0, &v1.call.call_id, None).await.unwrap_err(), required);
+        // E2EE-запрос в идущий открытый созвон — отказ по контракту.
+        assert_eq!(
+            room.join(1, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap_err(),
+            (
+                StatusCode::CONFLICT,
+                "room_call_contract_mismatch:room_media_v1".to_string()
+            )
+        );
+    }
+
+    /// Реле, не принимающее E2EE, не заводит E2EE-созвон; незнакомый
+    /// контракт — 400.
+    #[tokio::test]
+    async fn room_call_e2ee_unavailable_and_invalid_contract_are_refused() {
+        let (state, _dir) = test_app_state().await;
+        let state = AppState {
+            room_call_e2ee: Arc::new(RoomCallE2eeConfig {
+                accept: false,
+                ..RoomCallE2eeConfig::default()
+            }),
+            ..state
+        };
+        let room = e2ee_test_room(&state, "unavailable", 101, 0).await;
+        assert_eq!(
+            room.join(0, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap_err(),
+            (StatusCode::CONFLICT, "room_call_e2ee_unavailable".to_string())
+        );
+        let invalid = (StatusCode::BAD_REQUEST, "invalid_media_contract".to_string());
+        assert_eq!(room.join(0, Some("room_media_v2")).await.unwrap_err(), invalid);
+        assert_eq!(room.get(0, Some("")).await.unwrap_err(), invalid);
+        // Открытый созвон заводится как раньше.
+        let v1 = room.join(0, None).await.unwrap();
+        assert_eq!(room.media_get(0, &v1.call.call_id, Some("bogus")).await.unwrap_err(), invalid);
+        assert_eq!(room.media_join(0, &v1.call.call_id, Some("bogus")).await.unwrap_err(), invalid);
+    }
+
+    async fn seed_device_build(state: &AppState, profile_id: &str, device_id: &str, build: &str) {
+        state
+            .store
+            .record_device_login(device_id, Some(profile_id), now_ms())
+            .await
+            .unwrap();
+        state
+            .store
+            .device_activity_set_client_build(device_id, build, now_ms())
+            .await
+            .unwrap();
+    }
+
+    /// ЗВ-С5: `e2ee_capable` появляется только при заданном пороге и
+    /// считается по сборке устройства.
+    #[tokio::test]
+    async fn room_call_e2ee_capable_hint_follows_min_build() {
+        let (state, _dir) = test_app_state().await;
+        let room = e2ee_test_room(&state, "caps", 111, 1).await;
+        seed_device_build(&state, "profile_e2ee_caps_owner", "dev_e2ee_caps_owner", "1.8.65+651").await;
+        seed_device_build(&state, "profile_e2ee_caps_m0", "dev_e2ee_caps_m0", "645").await;
+        let created = room.join(0, None).await.unwrap();
+        room.join(1, None).await.unwrap();
+
+        // Порог не задан — поля нет вовсе, JSON прежний.
+        let dark = room.get(0, None).await.unwrap();
+        assert!(dark.participants.iter().all(|p| p.e2ee_capable.is_none()));
+        let json = serde_json::to_value(&dark).unwrap();
+        assert!(json["participants"][0].get("e2ee_capable").is_none());
+        let dark_media = room.media_get(0, &created.call.call_id, None).await.unwrap();
+        assert!(dark_media.participants.iter().all(|p| p.e2ee_capable.is_none()));
+
+        let lit = E2eeTestRoom {
+            state: AppState {
+                room_call_e2ee: Arc::new(RoomCallE2eeConfig {
+                    min_build: Some(650),
+                    ..RoomCallE2eeConfig::default()
+                }),
+                ..state.clone()
+            },
+            ..room
+        };
+        let snapshot = lit.get(0, Some(ROOM_MEDIA_CONTRACT_V1)).await.unwrap();
+        let capable = |device: &str| {
+            snapshot
+                .participants
+                .iter()
+                .find(|p| p.device_id == device)
+                .and_then(|p| p.e2ee_capable)
+        };
+        assert_eq!(capable("dev_e2ee_caps_owner"), Some(true));
+        assert_eq!(capable("dev_e2ee_caps_m0"), Some(false));
+        assert_eq!(
+            snapshot.self_participant.as_ref().unwrap().e2ee_capable,
+            Some(true)
+        );
+        let media = lit.media_get(1, &created.call.call_id, None).await.unwrap();
+        for p in &media.participants {
+            assert_eq!(p.e2ee_capable, Some(p.device_id == "dev_e2ee_caps_owner"));
+        }
+    }
+
+    /// ЗВ-С5, §8.3: кто из членов комнаты не войдёт в E2EE-созвон. Подпись —
+    /// та же, что у GET `/call`.
+    #[tokio::test]
+    async fn room_call_e2ee_readiness_lists_members_without_capable_device() {
+        let (state, _dir) = test_app_state().await;
+        let room = e2ee_test_room(&state, "ready", 121, 3).await;
+        // m0: старое и новое устройство — годен; m1: только старое; m2: ни
+        // одного устройства; владелец спрашивает сам и в список не входит.
+        seed_device_build(&state, "profile_e2ee_ready_m0", "dev_ready_m0_a", "645").await;
+        seed_device_build(&state, "profile_e2ee_ready_m0", "dev_ready_m0_b", "1.8.65+651").await;
+        seed_device_build(&state, "profile_e2ee_ready_m1", "dev_ready_m1_a", "645").await;
+        // Ушедший из комнаты в список не входит.
+        state
+            .store
+            .upsert_room_membership(&room.room_id, "profile_e2ee_ready_gone", "left", "member", None, now_ms())
+            .await
+            .unwrap();
+
+        async fn readiness(
+            room: &E2eeTestRoom,
+            idx: usize,
+        ) -> Result<HttpRoomCallE2eeReadinessResp, (StatusCode, String)> {
+            let (device, key) = room.device(idx);
+            http_room_call_e2ee_readiness(
+                Path(room.room_id.clone()),
+                signed_room_call_get_headers(device, key, &room.room_id, &room.nonce()),
+                State(room.state.clone()),
+            )
+            .await
+            .map(|v| v.0)
+        }
+
+        let dark = readiness(&room, 0).await.unwrap();
+        assert_eq!(dark.min_build, None);
+        assert!(dark.members_without_capable_device.is_empty());
+
+        let lit = E2eeTestRoom {
+            state: AppState {
+                room_call_e2ee: Arc::new(RoomCallE2eeConfig {
+                    min_build: Some(650),
+                    ..RoomCallE2eeConfig::default()
+                }),
+                ..state.clone()
+            },
+            ..room
+        };
+        let resp = readiness(&lit, 0).await.unwrap();
+        assert_eq!(resp.min_build, Some(650));
+        let mut lagging = resp.members_without_capable_device.clone();
+        lagging.sort();
+        assert_eq!(
+            lagging,
+            vec![
+                "profile_e2ee_ready_m1".to_string(),
+                "profile_e2ee_ready_m2".to_string()
+            ]
+        );
+        // Спрашивает участник: себя не видит, владелец без устройств — в списке.
+        let from_member = readiness(&lit, 1).await.unwrap();
+        assert!(from_member
+            .members_without_capable_device
+            .contains(&"profile_e2ee_ready_owner".to_string()));
+        assert!(!from_member
+            .members_without_capable_device
+            .contains(&"profile_e2ee_ready_m0".to_string()));
+
+        // Не член комнаты — отказ, как у GET /call.
+        let outsider_key = SigningKey::from_bytes(&[131u8; 32]);
+        cache_authenticated_device(&lit.state, "dev_ready_outsider", "profile_ready_outsider", &outsider_key);
+        let err = http_room_call_e2ee_readiness(
+            Path(lit.room_id.clone()),
+            signed_room_call_get_headers("dev_ready_outsider", &outsider_key, &lit.room_id, "ready-outsider-1"),
+            State(lit.state.clone()),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
+
+    /// ЗВ-С8: пуш о E2EE-созвоне старым и неизвестным сборкам не уходит;
+    /// без порога, для открытого созвона и для «созвон закончился» — как раньше.
+    #[tokio::test]
+    async fn room_call_e2ee_push_is_skipped_for_old_builds() {
+        let (state, _dir) = test_app_state().await;
+        let room = e2ee_test_room(&state, "push", 141, 0).await;
+        let e2ee = room.join(0, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap();
+        let v1_room = e2ee_test_room(&state, "push_v1", 151, 0).await;
+        let v1 = v1_room.join(0, None).await.unwrap();
+        seed_device_build(&state, "profile_push_old", "dev_push_old", "645").await;
+        seed_device_build(&state, "profile_push_new", "dev_push_new", "1.8.65+651").await;
+
+        let meta = |room_id: &str, call_id: &str, exists: bool| {
+            format!(
+                r#"{{"kind":"room_call_sync_v1","room_call":{{"room_id":"{room_id}","call_id":"{call_id}","call_exists":{exists},"state_version":1,"created_at_ms":1}}}}"#
+            )
+        };
+        let e2ee_meta = meta(&room.room_id, &e2ee.call.call_id, true);
+
+        for device in ["dev_push_old", "dev_push_new", "dev_push_unknown"] {
+            assert!(
+                !room_call_e2ee_push_skipped_for_device(&state, device, Some(&e2ee_meta)).await,
+                "без порога ничего не меняется: {device}"
+            );
+        }
+
+        let lit = AppState {
+            room_call_e2ee: Arc::new(RoomCallE2eeConfig {
+                min_build: Some(650),
+                ..RoomCallE2eeConfig::default()
+            }),
+            ..state.clone()
+        };
+        assert!(room_call_e2ee_push_skipped_for_device(&lit, "dev_push_old", Some(&e2ee_meta)).await);
+        assert!(room_call_e2ee_push_skipped_for_device(&lit, "dev_push_unknown", Some(&e2ee_meta)).await);
+        assert!(!room_call_e2ee_push_skipped_for_device(&lit, "dev_push_new", Some(&e2ee_meta)).await);
+
+        let v1_meta = meta(&v1_room.room_id, &v1.call.call_id, true);
+        assert!(!room_call_e2ee_push_skipped_for_device(&lit, "dev_push_old", Some(&v1_meta)).await);
+        let ended_meta = meta(&room.room_id, &e2ee.call.call_id, false);
+        assert!(!room_call_e2ee_push_skipped_for_device(&lit, "dev_push_old", Some(&ended_meta)).await);
+        assert!(!room_call_e2ee_push_skipped_for_device(&lit, "dev_push_old", None).await);
+    }
+
+    // ── ЗВ-С3: служебный путь к LiveKit ─────────────────────────────────
+
+    type FakeLiveKitCall = (String, String, serde_json::Value);
+
+    #[derive(Default)]
+    struct FakeLiveKitTransport {
+        calls: std::sync::Mutex<Vec<FakeLiveKitCall>>,
+        script: std::sync::Mutex<std::collections::VecDeque<Result<u16, String>>>,
+    }
+
+    impl FakeLiveKitTransport {
+        fn scripted(responses: Vec<Result<u16, String>>) -> Arc<Self> {
+            Arc::new(FakeLiveKitTransport {
+                calls: std::sync::Mutex::new(Vec::new()),
+                script: std::sync::Mutex::new(responses.into_iter().collect()),
+            })
+        }
+
+        fn calls(&self) -> Vec<FakeLiveKitCall> {
+            self.calls.lock().unwrap().clone()
+        }
+
+        /// Вызовы уходят в фоне — ждём, пока их станет не меньше `n`.
+        async fn wait_for(&self, n: usize) -> Vec<FakeLiveKitCall> {
+            for _ in 0..200 {
+                if self.calls.lock().unwrap().len() >= n {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            self.calls()
+        }
+    }
+
+    impl LiveKitAdminTransport for FakeLiveKitTransport {
+        fn post_json(
+            &self,
+            url: String,
+            bearer: String,
+            body: serde_json::Value,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<u16, String>> + Send>> {
+            self.calls.lock().unwrap().push((url, bearer, body));
+            let next = self.script.lock().unwrap().pop_front().unwrap_or(Ok(200));
+            Box::pin(async move { next })
+        }
+    }
+
+    fn fake_livekit_admin(fake: Arc<FakeLiveKitTransport>, enabled: bool) -> LiveKitAdmin {
+        LiveKitAdmin {
+            enabled,
+            http_base: "https://livekit.secretly.test".into(),
+            api_key: "relay-livekit-key".into(),
+            api_secret: "relay-livekit-secret".into(),
+            backoff_ms: 0,
+            transport: fake,
+        }
+    }
+
+    fn decode_livekit_admin_bearer(bearer: &str) -> serde_json::Value {
+        let mut validation = jsonwebtoken::Validation::new(Algorithm::HS256);
+        validation.validate_aud = false;
+        jsonwebtoken::decode::<serde_json::Value>(
+            bearer,
+            &jsonwebtoken::DecodingKey::from_secret(b"relay-livekit-secret"),
+            &validation,
+        )
+        .unwrap()
+        .claims
+    }
+
+    /// Служебный токен: roomAdmin + roomCreate на одну комнату, короткий
+    /// срок, подпись ключом реле. Тела запросов Twirp — ровно поля LiveKit.
+    #[tokio::test]
+    async fn livekit_admin_requests_carry_room_admin_token_and_exact_bodies() {
+        let fake = FakeLiveKitTransport::scripted(Vec::new());
+        let admin = fake_livekit_admin(fake.clone(), true);
+        assert!(admin.calls_ready());
+
+        admin
+            .execute(&LiveKitAdminOp::RemoveParticipant {
+                room: "secretly-room-r-abc-e2ee1".into(),
+                identity: "secretly-participant-d-xyz".into(),
+            })
+            .await
+            .unwrap();
+        admin
+            .execute(&LiveKitAdminOp::DeleteRoom {
+                room: "secretly-room-r-abc-e2ee1".into(),
+            })
+            .await
+            .unwrap();
+        let calls = fake.calls();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(
+            calls[0].0,
+            "https://livekit.secretly.test/twirp/livekit.RoomService/RemoveParticipant"
+        );
+        assert_eq!(
+            calls[0].2.to_string(),
+            r#"{"identity":"secretly-participant-d-xyz","room":"secretly-room-r-abc-e2ee1"}"#
+        );
+        assert_eq!(
+            calls[1].0,
+            "https://livekit.secretly.test/twirp/livekit.RoomService/DeleteRoom"
+        );
+        assert_eq!(calls[1].2.to_string(), r#"{"room":"secretly-room-r-abc-e2ee1"}"#);
+
+        for (_, bearer, _) in &calls {
+            let claims = decode_livekit_admin_bearer(bearer);
+            assert_eq!(claims["iss"], "relay-livekit-key");
+            assert_eq!(
+                claims["video"],
+                serde_json::json!({
+                    "room": "secretly-room-r-abc-e2ee1",
+                    "roomAdmin": true,
+                    "roomCreate": true,
+                })
+            );
+            let ttl = claims["exp"].as_i64().unwrap() - claims["nbf"].as_i64().unwrap();
+            assert_eq!(ttl, LIVEKIT_ADMIN_TOKEN_TTL_SECONDS + 5);
+            assert!(claims.get("sub").is_none());
+            assert!(claims.get("metadata").is_none());
+        }
+    }
+
+    /// До трёх повторов; 404 (участника или комнаты уже нет) — успех.
+    #[tokio::test]
+    async fn livekit_admin_retries_then_gives_up() {
+        let op = LiveKitAdminOp::DeleteRoom { room: "r".into() };
+
+        let fake = FakeLiveKitTransport::scripted(vec![Err("boom".into()), Ok(503)]);
+        fake_livekit_admin(fake.clone(), true).execute(&op).await.unwrap();
+        assert_eq!(fake.calls().len(), 3);
+
+        let fake = FakeLiveKitTransport::scripted(vec![Ok(500); 5]);
+        let err = fake_livekit_admin(fake.clone(), true)
+            .execute(&op)
+            .await
+            .unwrap_err();
+        assert_eq!(err, "status 500");
+        assert_eq!(fake.calls().len(), 4);
+
+        let fake = FakeLiveKitTransport::scripted(vec![Ok(404)]);
+        fake_livekit_admin(fake.clone(), true).execute(&op).await.unwrap();
+        assert_eq!(fake.calls().len(), 1);
+    }
+
+    #[test]
+    fn livekit_admin_http_base_follows_client_url() {
+        assert_eq!(
+            livekit_admin_http_base("wss://lk.secretly.test/", None),
+            "https://lk.secretly.test"
+        );
+        assert_eq!(
+            livekit_admin_http_base("ws://127.0.0.1:7880", None),
+            "http://127.0.0.1:7880"
+        );
+        assert_eq!(
+            livekit_admin_http_base("wss://lk.secretly.test", Some(" http://10.0.0.5:7880/ ")),
+            "http://10.0.0.5:7880"
+        );
+        assert_eq!(livekit_admin_http_base("", Some("")), "");
+        assert!(!LiveKitAdmin::disabled().calls_ready());
+    }
+
+    async fn ban_member(room: &E2eeTestRoom, profile_id: &str, status: HttpRoomMembershipStatus) {
+        let (device, key) = room.device(0);
+        let req = HttpRoomMembershipUpsertReq {
+            profile_id: profile_id.to_string(),
+            status,
+            role: HttpRoomMemberRole::Member,
+            source_link_id: None,
+        };
+        let headers = signed_room_members_upsert_headers(
+            device,
+            key,
+            &room.room_id,
+            profile_id,
+            status,
+            HttpRoomMemberRole::Member,
+            None,
+            &room.nonce(),
+        );
+        http_room_members_upsert(
+            Path(room.room_id.clone()),
+            headers,
+            State(room.state.clone()),
+            Json(req),
+        )
+        .await
+        .unwrap();
+    }
+
+    async fn participant_state(state: &AppState, room_id: &str, device_id: &str) -> String {
+        state
+            .store
+            .get_active_room_call(room_id, None)
+            .await
+            .unwrap()
+            .unwrap()
+            .participants
+            .into_iter()
+            .find(|p| p.device_id == device_id)
+            .unwrap()
+            .join_state
+    }
+
+    /// Флаг выключен (по умолчанию): ни одного вызова LiveKit, и бан не
+    /// трогает созвон — всё как раньше.
+    #[tokio::test]
+    async fn livekit_admin_disabled_makes_no_calls_and_keeps_call_intact() {
+        let (state, _dir) = test_app_state().await;
+        let fake = FakeLiveKitTransport::scripted(Vec::new());
+        let state = AppState {
+            livekit_admin: Arc::new(fake_livekit_admin(fake.clone(), false)),
+            ..state
+        };
+        let room = e2ee_test_room(&state, "admin_off", 161, 1).await;
+        let created = room.join(0, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap();
+        room.join(1, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap();
+
+        ban_member(&room, "profile_e2ee_admin_off_m0", HttpRoomMembershipStatus::Banned).await;
+        assert_eq!(
+            participant_state(&state, &room.room_id, "dev_e2ee_admin_off_m0").await,
+            "joined"
+        );
+        let (device, key) = room.device(0);
+        http_room_call_end(
+            Path((room.room_id.clone(), created.call.call_id.clone())),
+            signed_room_call_end_headers(device, key, &room.room_id, &created.call.call_id, &room.nonce()),
+            State(state.clone()),
+        )
+        .await
+        .unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(fake.calls().is_empty());
+    }
+
+    /// ЗВ-С3: исключение модератором, бан, выход из комнаты и конец созвона
+    /// выкидывают из комнаты SFU с правильным контрактом в имени.
+    #[tokio::test]
+    async fn livekit_admin_removes_kicked_banned_and_departed_participants() {
+        let (state, _dir) = test_app_state().await;
+        let fake = FakeLiveKitTransport::scripted(Vec::new());
+        let state = AppState {
+            livekit_admin: Arc::new(fake_livekit_admin(fake.clone(), true)),
+            ..state
+        };
+        let room = e2ee_test_room(&state, "admin_on", 171, 3).await;
+        let created = room.join(0, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap();
+        for idx in 1..=3 {
+            room.join(idx, Some(ROOM_MEDIA_CONTRACT_E2EE_V1)).await.unwrap();
+        }
+        let call_id = created.call.call_id.clone();
+        let sfu_room = format!(
+            "{}-e2ee1",
+            room_media_backend_room_name(&room.room_id, &call_id)
+        );
+        let remove = |profile: &str, device: &str| {
+            (
+                "https://livekit.secretly.test/twirp/livekit.RoomService/RemoveParticipant"
+                    .to_string(),
+                serde_json::json!({
+                    "room": sfu_room,
+                    "identity": room_media_backend_participant_identity(profile, device),
+                }),
+            )
+        };
+        let (owner_device, owner_key) = room.device(0);
+
+        // Исключение модератором.
+        http_room_call_participant_remove(
+            Path((room.room_id.clone(), call_id.clone(), "dev_e2ee_admin_on_m0".to_string())),
+            signed_room_call_participant_remove_headers(
+                owner_device,
+                owner_key,
+                &room.room_id,
+                &call_id,
+                "dev_e2ee_admin_on_m0",
+                &room.nonce(),
+            ),
+            State(state.clone()),
+        )
+        .await
+        .unwrap();
+        let calls = fake.wait_for(1).await;
+        assert_eq!(
+            (calls[0].0.clone(), calls[0].2.clone()),
+            remove("profile_e2ee_admin_on_m0", "dev_e2ee_admin_on_m0")
+        );
+
+        // Бан участника созвона.
+        ban_member(&room, "profile_e2ee_admin_on_m1", HttpRoomMembershipStatus::Banned).await;
+        assert_eq!(
+            participant_state(&state, &room.room_id, "dev_e2ee_admin_on_m1").await,
+            "removed"
+        );
+        let calls = fake.wait_for(2).await;
+        assert_eq!(
+            (calls[1].0.clone(), calls[1].2.clone()),
+            remove("profile_e2ee_admin_on_m1", "dev_e2ee_admin_on_m1")
+        );
+
+        // Выход из комнаты.
+        let (m2_device, m2_key) = room.device(3);
+        http_room_leave(
+            Path(room.room_id.clone()),
+            signed_room_leave_headers(m2_device, m2_key, &room.room_id, &room.nonce()),
+            State(state.clone()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            participant_state(&state, &room.room_id, "dev_e2ee_admin_on_m2").await,
+            "left"
+        );
+        let calls = fake.wait_for(3).await;
+        assert_eq!(
+            (calls[2].0.clone(), calls[2].2.clone()),
+            remove("profile_e2ee_admin_on_m2", "dev_e2ee_admin_on_m2")
+        );
+        let snapshot = state
+            .store
+            .get_active_room_call(&room.room_id, None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(snapshot.call.state, "active", "владелец ещё в созвоне");
+
+        // Конец созвона закрывает комнату SFU.
+        http_room_call_end(
+            Path((room.room_id.clone(), call_id.clone())),
+            signed_room_call_end_headers(owner_device, owner_key, &room.room_id, &call_id, &room.nonce()),
+            State(state.clone()),
+        )
+        .await
+        .unwrap();
+        let calls = fake.wait_for(4).await;
+        assert_eq!(calls.len(), 4);
+        assert_eq!(
+            calls[3].0,
+            "https://livekit.secretly.test/twirp/livekit.RoomService/DeleteRoom"
+        );
+        assert_eq!(calls[3].2, serde_json::json!({ "room": sfu_room }));
+
+        // Открытый созвон: имя комнаты без суффикса.
+        let v1_room = e2ee_test_room(&state, "admin_v1", 181, 1).await;
+        let v1 = v1_room.join(0, None).await.unwrap();
+        v1_room.join(1, None).await.unwrap();
+        ban_member(&v1_room, "profile_e2ee_admin_v1_m0", HttpRoomMembershipStatus::Removed).await;
+        let calls = fake.wait_for(5).await;
+        assert_eq!(
+            calls[4].2,
+            serde_json::json!({
+                "room": room_media_backend_room_name(&v1_room.room_id, &v1.call.call_id),
+                "identity": room_media_backend_participant_identity(
+                    "profile_e2ee_admin_v1_m0",
+                    "dev_e2ee_admin_v1_m0"
+                ),
+            })
+        );
     }
 
     #[test]
@@ -24838,6 +29115,97 @@ mod tests {
         assert_eq!(err.0, StatusCode::UNAUTHORIZED);
     }
 
+    async fn blob_dir_file_count(state: &AppState) -> usize {
+        let mut n = 0;
+        if let Ok(mut entries) = tokio::fs::read_dir(state.blobs_dir.as_ref()).await {
+            while let Ok(Some(_)) = entries.next_entry().await {
+                n += 1;
+            }
+        }
+        n
+    }
+
+    #[tokio::test]
+    async fn http_blob_upload_rejects_missing_body_hash_header_before_writing() {
+        let (state, _dir) = test_app_state().await;
+        let signing_key = SigningKey::from_bytes(&[23u8; 32]);
+        let access_token_b64 = base64::engine::general_purpose::STANDARD.encode([19u8; 32]);
+        let body = b"ciphertext-body";
+        let body_hash = blob_body_hash_b64(body);
+
+        cache_authenticated_device(&state, "dev_uploader_3", "profile_uploader_3", &signing_key);
+        // Подпись верная (по хешу тела), но заголовка с хешем нет.
+        let headers = signed_blob_upload_headers(
+            "dev_uploader_3",
+            &signing_key,
+            60,
+            &body_hash,
+            &access_token_b64,
+            "upload-no-hash",
+            None,
+            true,
+        );
+
+        let err = match http_blob_upload(
+            State(state.clone()),
+            Query(BlobUploadQuery {
+                ttl_seconds: Some(60),
+            }),
+            headers,
+            Body::from(body.to_vec()),
+        )
+        .await
+        {
+            Ok(_) => panic!("expected upload without body hash header to fail"),
+            Err(err) => err,
+        };
+
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(blob_dir_file_count(&state).await, 0);
+    }
+
+    #[tokio::test]
+    async fn http_blob_upload_rejects_declared_oversize_before_writing() {
+        let (state, _dir) = test_app_state().await;
+        let signing_key = SigningKey::from_bytes(&[24u8; 32]);
+        let access_token_b64 = base64::engine::general_purpose::STANDARD.encode([20u8; 32]);
+        let body = b"ciphertext-body";
+        let body_hash = blob_body_hash_b64(body);
+
+        cache_authenticated_device(&state, "dev_uploader_4", "profile_uploader_4", &signing_key);
+        let mut headers = signed_blob_upload_headers(
+            "dev_uploader_4",
+            &signing_key,
+            60,
+            &body_hash,
+            &access_token_b64,
+            "upload-oversize",
+            Some(&body_hash),
+            true,
+        );
+        headers.insert(
+            header::CONTENT_LENGTH,
+            HeaderValue::from_str(&(RELAY_MAX_BLOB_BYTES + 1).to_string()).unwrap(),
+        );
+
+        let err = match http_blob_upload(
+            State(state.clone()),
+            Query(BlobUploadQuery {
+                ttl_seconds: Some(60),
+            }),
+            headers,
+            Body::from(body.to_vec()),
+        )
+        .await
+        {
+            Ok(_) => panic!("expected declared oversize upload to fail"),
+            Err(err) => err,
+        };
+
+        assert_eq!(err.0, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(blob_dir_file_count(&state).await, 0);
+    }
+
     #[tokio::test]
     async fn http_blob_upload_persists_hashed_capability_for_authenticated_owner() {
         let (state, _dir) = test_app_state().await;
@@ -24933,6 +29301,260 @@ mod tests {
             .await
             .unwrap();
 
+        assert_eq!(data.as_ref(), body);
+    }
+
+    fn signed_session_headers(device_id: &str, key: &SigningKey, msg: Vec<u8>, nonce_b64: &str, ts_ms: i64) -> HeaderMap {
+        let sig = base64::engine::general_purpose::STANDARD.encode(key.sign(&msg).to_bytes());
+        let mut h = HeaderMap::new();
+        h.insert("x-secretly-device-id", HeaderValue::from_str(device_id).unwrap());
+        h.insert("x-secretly-ts-ms", HeaderValue::from_str(&ts_ms.to_string()).unwrap());
+        h.insert("x-secretly-nonce-b64", HeaderValue::from_str(nonce_b64).unwrap());
+        h.insert("x-secretly-signature-b64", HeaderValue::from_str(&sig).unwrap());
+        h
+    }
+
+    fn b64(bytes: &[u8]) -> String {
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    }
+
+    fn sha_b64(bytes: &[u8]) -> String {
+        b64(&Sha256::digest(bytes))
+    }
+
+    async fn session_create(
+        state: &AppState,
+        device: &str,
+        key: &SigningKey,
+        body: &[u8],
+        nonce: &str,
+    ) -> Result<Json<BlobSessionCreateResp>, (StatusCode, String)> {
+        let ts = now_ms();
+        let nonce_b64 = b64(nonce.as_bytes());
+        let access = blob_access_token_hash_b64(&b64(&[7u8; 32])).unwrap();
+        let body_sha = sha_b64(body);
+        let msg = http_blob_session_create_auth_message(device, 3600, body.len() as u64, &body_sha, &access, ts, &nonce_b64);
+        let mut h = signed_session_headers(device, key, msg, &nonce_b64, ts);
+        h.insert("x-secretly-blob-access-token-sha256-b64", HeaderValue::from_str(&access).unwrap());
+        h.insert("x-secretly-body-sha256-b64", HeaderValue::from_str(&body_sha).unwrap());
+        h.insert("x-secretly-upload-length", HeaderValue::from_str(&body.len().to_string()).unwrap());
+        http_blob_session_create(State(state.clone()), Query(BlobSessionCreateQuery { ttl_seconds: Some(3600) }), h).await
+    }
+
+    async fn session_put(
+        state: &AppState,
+        device: &str,
+        key: &SigningKey,
+        sid: &str,
+        offset: u64,
+        chunk: &[u8],
+        nonce: &str,
+    ) -> Result<axum::response::Response, (StatusCode, String)> {
+        let ts = now_ms();
+        let nonce_b64 = b64(nonce.as_bytes());
+        let chunk_sha = sha_b64(chunk);
+        let msg = http_blob_session_put_auth_message(device, sid, offset, &chunk_sha, ts, &nonce_b64);
+        let mut h = signed_session_headers(device, key, msg, &nonce_b64, ts);
+        h.insert("x-secretly-upload-offset", HeaderValue::from_str(&offset.to_string()).unwrap());
+        h.insert("x-secretly-chunk-sha256-b64", HeaderValue::from_str(&chunk_sha).unwrap());
+        http_blob_session_put(Path(sid.to_string()), State(state.clone()), h, Body::from(chunk.to_vec())).await
+    }
+
+    async fn json_of(resp: axum::response::Response) -> (StatusCode, serde_json::Value) {
+        let status = resp.status();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        (status, serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null))
+    }
+
+    /// Договор с Dart `BlobClient.session*Message`: тот же образец побайтово.
+    #[test]
+    fn blob_session_auth_messages_match_dart_contract() {
+        assert_eq!(
+            String::from_utf8(http_blob_session_create_auth_message("d1", 60, 10, "B", "A", 5, "N")).unwrap(),
+            "SECRETLY-RELAY-HTTP-BLOB-SESSION-CREATE-V1\ndevice_id=d1\nttl_seconds=60\nupload_length=10\nbody_sha256_b64=B\naccess_token_sha256_b64=A\nts_ms=5\nnonce_b64=N\n"
+        );
+        assert_eq!(
+            String::from_utf8(http_blob_session_put_auth_message("d1", "s1", 7, "C", 5, "N")).unwrap(),
+            "SECRETLY-RELAY-HTTP-BLOB-SESSION-PUT-V1\ndevice_id=d1\nsession_id=s1\noffset=7\nchunk_sha256_b64=C\nts_ms=5\nnonce_b64=N\n"
+        );
+        assert_eq!(
+            String::from_utf8(http_blob_session_status_auth_message("d1", "s1", 5, "N")).unwrap(),
+            "SECRETLY-RELAY-HTTP-BLOB-SESSION-STATUS-V1\ndevice_id=d1\nsession_id=s1\nts_ms=5\nnonce_b64=N\n"
+        );
+    }
+
+    /// Загрузка частями (15.11.2026): куски по очереди, сбой посреди — сервер
+    /// помнит принятое, повтор того же смещения после обрыва получает 409 с
+    /// настоящим смещением, последний кусок даёт обычный blob, который
+    /// скачивается теми же байтами.
+    #[tokio::test]
+    async fn blob_session_upload_in_chunks_resumes_and_finalizes() {
+        let (state, _dir) = test_app_state().await;
+        let key = SigningKey::from_bytes(&[21u8; 32]);
+        cache_authenticated_device(&state, "dev_up_1", "profile_up_1", &key);
+        let body: Vec<u8> = (0..300_000u32).map(|i| (i % 251) as u8).collect();
+
+        let created = session_create(&state, "dev_up_1", &key, &body, "s-create").await.unwrap().0;
+        assert_eq!(created.offset, 0);
+        let sid = created.session_id.clone();
+
+        let (st, v) = json_of(session_put(&state, "dev_up_1", &key, &sid, 0, &body[..100_000], "p1").await.unwrap()).await;
+        assert_eq!(st, StatusCode::OK);
+        assert_eq!(v["offset"], 100_000);
+        assert_eq!(v["complete"], false);
+
+        // Клиент не знает, дошёл ли первый кусок, и шлёт его снова — 409 и
+        // правда о смещении, ничего не задвоено.
+        let (st, v) = json_of(session_put(&state, "dev_up_1", &key, &sid, 0, &body[..100_000], "p1-again").await.unwrap()).await;
+        assert_eq!(st, StatusCode::CONFLICT);
+        assert_eq!(v["offset"], 100_000);
+
+        // Статус — то же смещение.
+        let ts = now_ms();
+        let nonce_b64 = b64(b"status");
+        let msg = http_blob_session_status_auth_message("dev_up_1", &sid, ts, &nonce_b64);
+        let h = signed_session_headers("dev_up_1", &key, msg, &nonce_b64, ts);
+        let status = http_blob_session_status(Path(sid.clone()), State(state.clone()), h).await.unwrap().0;
+        assert_eq!(status.offset, 100_000);
+        assert_eq!(status.upload_length, 300_000);
+
+        let (st, v) = json_of(session_put(&state, "dev_up_1", &key, &sid, 100_000, &body[100_000..], "p2").await.unwrap()).await;
+        assert_eq!(st, StatusCode::OK);
+        assert_eq!(v["complete"], true);
+        assert_eq!(v["size_bytes"], 300_000);
+        let blob_id = v["blob_id"].as_str().unwrap().to_string();
+
+        // Скачивается то же самое, тем же пропуском.
+        let access_token_b64 = b64(&[7u8; 32]);
+        let h = signed_blob_get_headers("dev_up_1", &key, &blob_id, Some(&access_token_b64), "get-after");
+        let resp = http_blob_get(Path(blob_id.clone()), h, State(state.clone())).await.unwrap();
+        let data = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(data.as_ref(), body.as_slice());
+
+        // Сессии больше нет.
+        assert!(session_put(&state, "dev_up_1", &key, &sid, 300_000, b"x", "p3").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn blob_session_rejects_bad_chunk_bad_whole_and_foreign_device() {
+        let (state, _dir) = test_app_state().await;
+        let key = SigningKey::from_bytes(&[22u8; 32]);
+        let other = SigningKey::from_bytes(&[23u8; 32]);
+        cache_authenticated_device(&state, "dev_up_2", "profile_up_2", &key);
+        cache_authenticated_device(&state, "dev_up_3", "profile_up_3", &other);
+        let body = vec![5u8; 50_000];
+        let sid = session_create(&state, "dev_up_2", &key, &body, "c").await.unwrap().0.session_id;
+
+        // Чужое устройство не видит и не пишет чужую сессию.
+        let err = session_put(&state, "dev_up_3", &other, &sid, 0, &body, "foreign").await.unwrap_err();
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+
+        // Хеш куска не совпал с телом — 422, ничего не записано.
+        let ts = now_ms();
+        let nonce_b64 = b64(b"badchunk");
+        let lie = sha_b64(b"other bytes");
+        let msg = http_blob_session_put_auth_message("dev_up_2", &sid, 0, &lie, ts, &nonce_b64);
+        let mut h = signed_session_headers("dev_up_2", &key, msg, &nonce_b64, ts);
+        h.insert("x-secretly-upload-offset", HeaderValue::from_static("0"));
+        h.insert("x-secretly-chunk-sha256-b64", HeaderValue::from_str(&lie).unwrap());
+        let err = http_blob_session_put(Path(sid.clone()), State(state.clone()), h, Body::from(body.clone())).await.unwrap_err();
+        assert_eq!(err.0, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(blob_part_len(&blob_session_part_path(&state, &sid)).await, 0);
+
+        // Кусок лишнего размера — отказ.
+        let err = session_put(&state, "dev_up_2", &key, &sid, 0, &vec![1u8; 50_001], "toolong").await.unwrap_err();
+        assert_eq!(err.0, StatusCode::PAYLOAD_TOO_LARGE);
+
+        // Тело целиком не то, что заявлено при открытии, — 401, сессия убрана.
+        let tampered = vec![6u8; 50_000];
+        let err = session_put(&state, "dev_up_2", &key, &sid, 0, &tampered, "whole").await.unwrap_err();
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert!(state.store.blob_session_get(&sid, now_ms()).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn blob_session_create_refuses_oversize_and_counts_open_sessions_in_quota() {
+        let (state, _dir) = test_app_state().await;
+        let key = SigningKey::from_bytes(&[24u8; 32]);
+        cache_authenticated_device(&state, "dev_up_4", "profile_up_4", &key);
+        // Сверх предела размера.
+        let ts = now_ms();
+        let nonce_b64 = b64(b"huge");
+        let access = blob_access_token_hash_b64(&b64(&[7u8; 32])).unwrap();
+        let len = RELAY_MAX_BLOB_BYTES + 1;
+        let msg = http_blob_session_create_auth_message("dev_up_4", 3600, len, "x", &access, ts, &nonce_b64);
+        let mut h = signed_session_headers("dev_up_4", &key, msg, &nonce_b64, ts);
+        h.insert("x-secretly-blob-access-token-sha256-b64", HeaderValue::from_str(&access).unwrap());
+        h.insert("x-secretly-body-sha256-b64", HeaderValue::from_static("x"));
+        h.insert("x-secretly-upload-length", HeaderValue::from_str(&len.to_string()).unwrap());
+        let err = http_blob_session_create(State(state.clone()), Query(BlobSessionCreateQuery { ttl_seconds: Some(3600) }), h)
+            .await
+            .unwrap_err();
+        assert_eq!(err.0, StatusCode::PAYLOAD_TOO_LARGE);
+
+        // Предел одновременно открытых.
+        for i in 0..BLOB_SESSION_MAX_OPEN_PER_DEVICE {
+            session_create(&state, "dev_up_4", &key, b"abc", &format!("open-{i}")).await.unwrap();
+        }
+        let err = session_create(&state, "dev_up_4", &key, b"abc", "one-more").await.unwrap_err();
+        assert_eq!(err.0, StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    /// Докачка (15.11.2026, О6/П5): `Range` отдаёт хвост с 206 и
+    /// `Content-Range`; за концом файла — 416; без заголовка — 200, как было.
+    #[tokio::test]
+    async fn http_blob_get_serves_byte_range_for_resume() {
+        let (state, _dir) = test_app_state().await;
+        let signing_key = SigningKey::from_bytes(&[11u8; 32]);
+        let access_token_b64 = base64::engine::general_purpose::STANDARD.encode([7u8; 32]);
+        let blob_id = "blobrange1";
+        let body = b"0123456789abcdef";
+
+        cache_authenticated_device(&state, "dev_reader_1", "profile_reader_1", &signing_key);
+        insert_blob_fixture(
+            &state,
+            blob_id,
+            "dev_owner_1",
+            "profile_owner_1",
+            Some(&access_token_b64),
+            body,
+            now_ms() + 60_000,
+        )
+        .await;
+
+        let get = |range: Option<&'static str>, nonce: &'static str| {
+            let mut headers = signed_blob_get_headers(
+                "dev_reader_1",
+                &signing_key,
+                blob_id,
+                Some(&access_token_b64),
+                nonce,
+            );
+            if let Some(r) = range {
+                headers.insert(header::RANGE, HeaderValue::from_static(r));
+            }
+            http_blob_get(Path(blob_id.to_string()), headers, State(state.clone()))
+        };
+
+        let resp = get(Some("bytes=10-"), "range-tail").await.unwrap();
+        assert_eq!(resp.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            resp.headers().get(header::CONTENT_RANGE).and_then(|v| v.to_str().ok()),
+            Some("bytes 10-15/16"),
+        );
+        assert_eq!(
+            resp.headers().get(header::CONTENT_LENGTH).and_then(|v| v.to_str().ok()),
+            Some("6"),
+        );
+        let data = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(data.as_ref(), b"abcdef");
+
+        let resp = get(Some("bytes=16-"), "range-past").await.unwrap();
+        assert_eq!(resp.status(), StatusCode::RANGE_NOT_SATISFIABLE);
+
+        let resp = get(None, "range-none").await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let data = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
         assert_eq!(data.as_ref(), body);
     }
 
@@ -25230,7 +29852,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn push_health_reports_provider_readiness_and_token_counts() {
+    async fn push_health_reports_provider_readiness_without_token_counts() {
         let (mut state, _dir) = test_app_state().await;
         state.fcm_v1 = Arc::new(Some(FcmV1Config {
             project_id: "project-1".into(),
@@ -25284,13 +29906,82 @@ mod tests {
         assert_eq!(json["android_push_ready"], true);
         assert_eq!(json["ios_push_ready"], true);
         assert_eq!(json["ios_voip_push_ready"], true);
-        assert_eq!(json["push_tokens_total"], 3);
-        assert_eq!(json["push_tokens_android"], 1);
-        assert_eq!(json["push_tokens_ios"], 1);
-        assert_eq!(json["push_tokens_ios_voip"], 1);
+        // Число токенов (устройств) наружу не отдаётся.
+        for key in [
+            "push_tokens_total",
+            "push_tokens_android",
+            "push_tokens_ios",
+            "push_tokens_ios_voip",
+            "push_tokens_unsupported",
+            "push_tokens_updated_last_24h",
+        ] {
+            assert!(json.get(key).is_none(), "{key} leaked");
+        }
         assert_eq!(json["apns_environment"], "development");
         assert_eq!(json["apns_environment_fallback_enabled"], true);
         assert_eq!(json["apns_voip_topic"], "com.secretly.messenger.voip");
+    }
+
+    #[tokio::test]
+    async fn ws_outgoing_pump_closes_on_frame_overflow_when_client_does_not_read() {
+        // Клиент не читает: первая отправка не завершается никогда.
+        let stuck = Box::pin(futures_util::sink::unfold((), |_, _msg: Message| {
+            futures_util::future::pending::<Result<(), std::convert::Infallible>>()
+        }));
+        let (tx, rx) = mpsc::unbounded_channel::<Message>();
+        let pump = tokio::spawn(ws_outgoing_pump(stuck, rx, 3, usize::MAX));
+        for i in 0..10 {
+            let _ = tx.send(Message::Text(format!("frame-{i}").into()));
+        }
+        let overflow = tokio::time::timeout(Duration::from_secs(5), pump)
+            .await
+            .expect("pump must stop instead of growing")
+            .unwrap();
+        assert!(overflow);
+        // Канал закрыт — отправители видят ошибку и уходят на запасной путь.
+        assert!(tx.send(Message::Text("late".into())).is_err());
+    }
+
+    #[tokio::test]
+    async fn ws_outgoing_pump_closes_on_byte_overflow() {
+        let stuck = Box::pin(futures_util::sink::unfold((), |_, _msg: Message| {
+            futures_util::future::pending::<Result<(), std::convert::Infallible>>()
+        }));
+        let (tx, rx) = mpsc::unbounded_channel::<Message>();
+        let pump = tokio::spawn(ws_outgoing_pump(stuck, rx, usize::MAX, 1024));
+        let _ = tx.send(Message::Text("first".into()));
+        let _ = tx.send(Message::Text("x".repeat(2048).into()));
+        let overflow = tokio::time::timeout(Duration::from_secs(5), pump)
+            .await
+            .expect("pump must stop on byte overflow")
+            .unwrap();
+        assert!(overflow);
+    }
+
+    #[tokio::test]
+    async fn ws_outgoing_pump_delivers_everything_in_order_for_reading_client() {
+        let seen = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let sink = Box::pin(futures_util::sink::unfold(
+            Arc::clone(&seen),
+            |acc, msg: Message| async move {
+                if let Message::Text(t) = msg {
+                    acc.lock().unwrap().push(t.to_string());
+                }
+                Ok::<_, std::convert::Infallible>(acc)
+            },
+        ));
+        let (tx, rx) = mpsc::unbounded_channel::<Message>();
+        let pump = tokio::spawn(ws_outgoing_pump(sink, rx, 8, usize::MAX));
+        for i in 0..5 {
+            tx.send(Message::Text(format!("m{i}").into())).unwrap();
+        }
+        drop(tx);
+        let overflow = tokio::time::timeout(Duration::from_secs(5), pump)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!overflow);
+        assert_eq!(*seen.lock().unwrap(), vec!["m0", "m1", "m2", "m3", "m4"]);
     }
 
     #[test]
@@ -25613,5 +30304,792 @@ mod tests {
             optional_trimmed_string(" candidate "),
             Some("candidate".to_string())
         );
+    }
+
+    // ── Закрытые темы (ТЗ TZ_ROOM_PRIVATE_TOPICS_2026-10-06, Ф1) ──────────
+
+    /// 🔴 Точный формат подписей: клиент собирает эти байты сам, расхождение
+    /// в одном символе = 401. Без новых полей — V1 байт в байт.
+    #[test]
+    fn closed_topic_auth_message_formats_are_exact() {
+        let create_topic = http_room_create_topic_auth_message(
+            "dev_1",
+            "room_child",
+            "room_parent",
+            "Topic A",
+            1_700_000_000_000,
+            "bm9uY2U=",
+        );
+        assert_eq!(
+            String::from_utf8(create_topic.clone()).unwrap(),
+            "SECRETLY-RELAY-HTTP-ROOM-CREATE-TOPIC-V1\ndevice_id=dev_1\nroom_id=room_child\nparent_room_id=room_parent\ntitle=Topic A\nts_ms=1700000000000\nnonce_b64=bm9uY2U=\n"
+        );
+        assert_eq!(
+            http_room_create_auth_message_for(
+                "dev_1",
+                "room_child",
+                "Topic A",
+                Some("room_parent"),
+                1_700_000_000_000,
+                "bm9uY2U=",
+            ),
+            create_topic
+        );
+        assert_eq!(
+            http_room_create_auth_message_for(
+                "dev_1",
+                "room_child",
+                "Topic A",
+                None,
+                1_700_000_000_000,
+                "bm9uY2U=",
+            ),
+            http_room_create_auth_message(
+                "dev_1",
+                "room_child",
+                "Topic A",
+                1_700_000_000_000,
+                "bm9uY2U="
+            )
+        );
+
+        let mut req = HttpRoomSettingsUpdateReq {
+            reactions_mode: "all".into(),
+            allow_text: true,
+            allow_media: true,
+            allow_add_members: false,
+            allow_pin_messages: true,
+            allow_change_group_info: true,
+            allow_change_tag: false,
+            join_approval_required: false,
+            slow_mode_seconds: 30,
+            chat_history_visible: true,
+            allow_members_create_topics: Some(true),
+        };
+        assert_eq!(
+            String::from_utf8(http_room_settings_update_auth_message_for(
+                "dev_1",
+                &req,
+                "room_parent",
+                1_700_000_000_000,
+                "bm9uY2U=",
+            ))
+            .unwrap(),
+            "SECRETLY-RELAY-HTTP-ROOM-SETTINGS-UPDATE-V2\ndevice_id=dev_1\nroom_id=room_parent\nreactions_mode=all\nallow_text=1\nallow_media=1\nallow_add_members=0\nallow_pin_messages=1\nallow_change_group_info=1\nallow_change_tag=0\njoin_approval_required=0\nslow_mode_seconds=30\nchat_history_visible=1\nallow_members_create_topics=1\nts_ms=1700000000000\nnonce_b64=bm9uY2U=\n"
+        );
+        req.allow_members_create_topics = None;
+        assert_eq!(
+            http_room_settings_update_auth_message_for(
+                "dev_1",
+                &req,
+                "room_parent",
+                1_700_000_000_000,
+                "bm9uY2U=",
+            ),
+            http_room_settings_update_auth_message(
+                "dev_1",
+                "room_parent",
+                "all",
+                true,
+                true,
+                false,
+                true,
+                true,
+                false,
+                false,
+                30,
+                true,
+                1_700_000_000_000,
+                "bm9uY2U=",
+            )
+        );
+
+        assert_eq!(
+            String::from_utf8(http_room_topics_list_auth_message(
+                "dev_1",
+                "room_parent",
+                1_700_000_000_000,
+                "bm9uY2U=",
+            ))
+            .unwrap(),
+            "SECRETLY-RELAY-HTTP-ROOM-TOPICS-LIST-V1\ndevice_id=dev_1\nroom_id=room_parent\nts_ms=1700000000000\nnonce_b64=bm9uY2U=\n"
+        );
+    }
+
+    fn signed_room_create_topic_headers(
+        device_id: &str,
+        signing_key: &SigningKey,
+        room_id: &str,
+        parent_room_id: &str,
+        title: &str,
+        nonce_seed: &str,
+    ) -> HeaderMap {
+        signed_auth_headers(device_id, signing_key, nonce_seed, |ts_ms, nonce_b64| {
+            http_room_create_topic_auth_message(
+                device_id,
+                room_id,
+                parent_room_id,
+                title,
+                ts_ms,
+                nonce_b64,
+            )
+        })
+    }
+
+    fn topic_create_req(room_id: &str, parent_room_id: &str, title: &str) -> HttpRoomCreateReq {
+        HttpRoomCreateReq {
+            room_id: room_id.into(),
+            title: title.into(),
+            parent_room_id: Some(parent_room_id.into()),
+        }
+    }
+
+    /// Основная комната для HTTP-тестов: владелец, админ, участник.
+    async fn topic_http_fixture(
+        state: &AppState,
+        parent_room_id: &str,
+    ) -> (SigningKey, SigningKey, SigningKey) {
+        let owner_key = SigningKey::from_bytes(&[171u8; 32]);
+        let admin_key = SigningKey::from_bytes(&[172u8; 32]);
+        let member_key = SigningKey::from_bytes(&[173u8; 32]);
+        cache_authenticated_device(state, "dev_tp_owner", "pid_tp_owner", &owner_key);
+        cache_authenticated_device(state, "dev_tp_admin", "pid_tp_admin", &admin_key);
+        cache_authenticated_device(state, "dev_tp_member", "pid_tp_member", &member_key);
+        state
+            .store
+            .create_room(parent_room_id, "pid_tp_owner", "dev_tp_owner", "Parent", now_ms())
+            .await
+            .unwrap();
+        state
+            .store
+            .upsert_room_membership(parent_room_id, "pid_tp_admin", "active", "admin", None, now_ms())
+            .await
+            .unwrap();
+        state
+            .store
+            .upsert_room_membership(parent_room_id, "pid_tp_member", "active", "member", None, now_ms())
+            .await
+            .unwrap();
+        (owner_key, admin_key, member_key)
+    }
+
+    #[tokio::test]
+    async fn http_room_create_topic_round_trip_and_signature_binds_parent() {
+        let (state, _dir) = test_app_state().await;
+        let parent = "room_tp_http_parent";
+        let (owner_key, admin_key, member_key) = topic_http_fixture(&state, parent).await;
+        state
+            .store
+            .create_room("room_tp_http_other", "pid_tp_admin", "dev_tp_admin", "Other", now_ms())
+            .await
+            .unwrap();
+
+        let created = http_room_create(
+            State(state.clone()),
+            signed_room_create_topic_headers(
+                "dev_tp_admin",
+                &admin_key,
+                "room_tp_http_child",
+                parent,
+                "Secret",
+                "tp-create-1",
+            ),
+            Json(topic_create_req("room_tp_http_child", parent, "Secret")),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert!(created.created);
+        assert_eq!(created.room.kind, "topic");
+        assert_eq!(created.room.parent_room_id.as_deref(), Some(parent));
+        assert_eq!(created.room.owner_profile_id, "pid_tp_admin");
+        let json = serde_json::to_value(&created.room).unwrap();
+        assert_eq!(json["kind"], "topic");
+        assert_eq!(json["parent_room_id"], parent);
+
+        // Обычная комната: kind есть, parent_room_id в ответе нет вовсе.
+        let plain = http_room_get(
+            Path(parent.to_string()),
+            signed_room_get_headers("dev_tp_owner", &owner_key, parent, "tp-get-plain"),
+            State(state.clone()),
+        )
+        .await
+        .unwrap()
+        .0;
+        let json = serde_json::to_value(&plain).unwrap();
+        assert_eq!(json["kind"], "room");
+        assert!(json.get("parent_room_id").is_none());
+        assert_eq!(json["allow_members_create_topics"], false);
+
+        // 🔴 Подпись V1 (родитель срезан) к запросу с родителем не подходит.
+        let err = http_room_create(
+            State(state.clone()),
+            signed_room_create_headers(
+                "dev_tp_admin",
+                &admin_key,
+                "room_tp_http_child2",
+                "Secret",
+                "tp-create-strip",
+            ),
+            Json(topic_create_req("room_tp_http_child2", parent, "Secret")),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        // И подпись под одним родителем не годится для другого.
+        let err = http_room_create(
+            State(state.clone()),
+            signed_room_create_topic_headers(
+                "dev_tp_admin",
+                &admin_key,
+                "room_tp_http_child2",
+                parent,
+                "Secret",
+                "tp-create-swap",
+            ),
+            Json(topic_create_req(
+                "room_tp_http_child2",
+                "room_tp_http_other",
+                "Secret",
+            )),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+        assert!(state.store.get_room("room_tp_http_child2").await.unwrap().is_none());
+
+        // Повтор — тот же ответ; другой родитель — конфликт.
+        let again = http_room_create(
+            State(state.clone()),
+            signed_room_create_topic_headers(
+                "dev_tp_admin",
+                &admin_key,
+                "room_tp_http_child",
+                parent,
+                "Secret",
+                "tp-create-again",
+            ),
+            Json(topic_create_req("room_tp_http_child", parent, "Secret")),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert!(!again.created);
+        let err = http_room_create(
+            State(state.clone()),
+            signed_room_create_topic_headers(
+                "dev_tp_admin",
+                &admin_key,
+                "room_tp_http_child",
+                "room_tp_http_other",
+                "Secret",
+                "tp-create-other-parent",
+            ),
+            Json(topic_create_req(
+                "room_tp_http_child",
+                "room_tp_http_other",
+                "Secret",
+            )),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::CONFLICT);
+
+        let err = http_room_create(
+            State(state.clone()),
+            signed_room_create_topic_headers(
+                "dev_tp_admin",
+                &admin_key,
+                "room_tp_http_child3",
+                "room_tp_missing",
+                "Secret",
+                "tp-create-missing",
+            ),
+            Json(topic_create_req("room_tp_http_child3", "room_tp_missing", "Secret")),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err, (StatusCode::BAD_REQUEST, "bad_parent".to_string()));
+
+        let err = http_room_create(
+            State(state.clone()),
+            signed_room_create_topic_headers(
+                "dev_tp_member",
+                &member_key,
+                "room_tp_http_child4",
+                parent,
+                "Secret",
+                "tp-create-member",
+            ),
+            Json(topic_create_req("room_tp_http_child4", parent, "Secret")),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            err,
+            (StatusCode::FORBIDDEN, "topic_create_forbidden".to_string())
+        );
+    }
+
+    /// Ветка не попадает под предел групп (монетизация §C-3), а обычная
+    /// комната — по-прежнему попадает.
+    #[tokio::test]
+    async fn http_room_topic_create_is_not_capped_by_group_create_limit() {
+        let (base, _dir) = test_app_state().await;
+        let state = AppState {
+            monetization_enabled: true,
+            ..base
+        };
+        let parent = "room_tp_mon_parent";
+        let (owner_key, _admin_key, _member_key) = topic_http_fixture(&state, parent).await;
+        seed_entitlement(&state, "pid_tp_owner", 1, 20, 50, 8);
+
+        let created = http_room_create(
+            State(state.clone()),
+            signed_room_create_topic_headers(
+                "dev_tp_owner",
+                &owner_key,
+                "room_tp_mon_child",
+                parent,
+                "Secret",
+                "tp-mon-topic",
+            ),
+            Json(topic_create_req("room_tp_mon_child", parent, "Secret")),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert!(created.created);
+
+        let err = http_room_create(
+            State(state.clone()),
+            signed_room_create_headers(
+                "dev_tp_owner",
+                &owner_key,
+                "room_tp_mon_plain",
+                "Plain",
+                "tp-mon-plain",
+            ),
+            Json(HttpRoomCreateReq {
+                room_id: "room_tp_mon_plain".into(),
+                title: "Plain".into(),
+                parent_room_id: None,
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::PAYMENT_REQUIRED);
+    }
+
+    /// Р-1: даже владелец основной комнаты видит чужие ветки только числом.
+    #[tokio::test]
+    async fn http_room_topics_list_hides_foreign_topics() {
+        let (state, _dir) = test_app_state().await;
+        let parent = "room_tp_list_parent";
+        let (owner_key, admin_key, member_key) = topic_http_fixture(&state, parent).await;
+        for (topic_id, title) in [
+            ("room_tp_list_a", "Visible to member"),
+            ("room_tp_list_b", "Admins only"),
+        ] {
+            state
+                .store
+                .create_room_with_parent(
+                    topic_id,
+                    "pid_tp_admin",
+                    "dev_tp_admin",
+                    title,
+                    Some(parent),
+                    now_ms(),
+                )
+                .await
+                .unwrap();
+        }
+        state
+            .store
+            .upsert_room_membership("room_tp_list_a", "pid_tp_member", "active", "member", None, now_ms())
+            .await
+            .unwrap();
+
+        let list = |device_id: &'static str, key: SigningKey, nonce: &'static str| {
+            let state = state.clone();
+            async move {
+                http_room_topics_list(
+                    Path(parent.to_string()),
+                    signed_auth_headers(device_id, &key, nonce, |ts_ms, nonce_b64| {
+                        http_room_topics_list_auth_message(device_id, parent, ts_ms, nonce_b64)
+                    }),
+                    State(state),
+                )
+                .await
+            }
+        };
+
+        let owner_view = list("dev_tp_owner", owner_key, "tp-list-owner").await.unwrap().0;
+        assert!(owner_view.topics.is_empty());
+        assert_eq!(owner_view.hidden_count, 2);
+        let raw = serde_json::to_string(&owner_view).unwrap();
+        assert!(!raw.contains("room_tp_list_"));
+        assert!(!raw.contains("Admins only"));
+
+        let member_view = list("dev_tp_member", member_key, "tp-list-member").await.unwrap().0;
+        assert_eq!(member_view.topics.len(), 1);
+        assert_eq!(member_view.topics[0].room_id, "room_tp_list_a");
+        assert_eq!(member_view.topics[0].title, "Visible to member");
+        assert_eq!(member_view.hidden_count, 1);
+        let raw = serde_json::to_string(&member_view).unwrap();
+        assert!(!raw.contains("room_tp_list_b"));
+        assert!(!raw.contains("Admins only"));
+
+        let admin_view = list("dev_tp_admin", admin_key, "tp-list-admin").await.unwrap().0;
+        assert_eq!(admin_view.topics.len(), 2);
+        assert_eq!(admin_view.hidden_count, 0);
+
+        let stranger_key = SigningKey::from_bytes(&[174u8; 32]);
+        cache_authenticated_device(&state, "dev_tp_stranger", "pid_tp_stranger", &stranger_key);
+        let err = list("dev_tp_stranger", stranger_key, "tp-list-stranger").await.unwrap_err();
+        assert_eq!(err.0, StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn http_room_settings_topic_flag_requires_v2_signature() {
+        let (state, _dir) = test_app_state().await;
+        let parent = "room_tp_settings_parent";
+        let (owner_key, _admin_key, member_key) = topic_http_fixture(&state, parent).await;
+        let req = |flag: Option<bool>| HttpRoomSettingsUpdateReq {
+            reactions_mode: "all".into(),
+            allow_text: true,
+            allow_media: true,
+            allow_add_members: true,
+            allow_pin_messages: true,
+            allow_change_group_info: true,
+            allow_change_tag: false,
+            join_approval_required: false,
+            slow_mode_seconds: 0,
+            chat_history_visible: false,
+            allow_members_create_topics: flag,
+        };
+
+        // Флаг под подписью V1 — отказ: его нельзя подмешать к старой подписи.
+        let err = http_room_settings_update(
+            Path(parent.to_string()),
+            signed_room_settings_update_headers(
+                "dev_tp_owner",
+                &owner_key,
+                parent,
+                &req(Some(true)),
+                "tp-settings-v1-flag",
+            ),
+            State(state.clone()),
+            Json(req(Some(true))),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0, StatusCode::UNAUTHORIZED);
+
+        let signed_v2 = |request: &HttpRoomSettingsUpdateReq, nonce: &str| {
+            signed_auth_headers("dev_tp_owner", &owner_key, nonce, |ts_ms, nonce_b64| {
+                http_room_settings_update_auth_message_for(
+                    "dev_tp_owner",
+                    request,
+                    parent,
+                    ts_ms,
+                    nonce_b64,
+                )
+            })
+        };
+        let on = http_room_settings_update(
+            Path(parent.to_string()),
+            signed_v2(&req(Some(true)), "tp-settings-v2"),
+            State(state.clone()),
+            Json(req(Some(true))),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert!(on.changed);
+        assert!(on.room.allow_members_create_topics);
+
+        // Старая сборка шлёт настройки без поля — флаг не сбрасывается.
+        let legacy = http_room_settings_update(
+            Path(parent.to_string()),
+            signed_room_settings_update_headers(
+                "dev_tp_owner",
+                &owner_key,
+                parent,
+                &req(None),
+                "tp-settings-legacy",
+            ),
+            State(state.clone()),
+            Json(req(None)),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert!(!legacy.changed);
+        assert!(legacy.room.allow_members_create_topics);
+
+        // Теперь участник может создать ветку.
+        let created = http_room_create(
+            State(state.clone()),
+            signed_room_create_topic_headers(
+                "dev_tp_member",
+                &member_key,
+                "room_tp_settings_child",
+                parent,
+                "Ours",
+                "tp-settings-member-create",
+            ),
+            Json(topic_create_req("room_tp_settings_child", parent, "Ours")),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert!(created.created);
+    }
+
+    /// 🔴 Добавить в ветку можно только участника основной комнаты; исключение
+    /// из основной комнаты через HTTP снимает и с ветки.
+    #[tokio::test]
+    async fn http_room_members_upsert_enforces_topic_subset_and_cascades() {
+        let (state, _dir) = test_app_state().await;
+        let parent = "room_tp_members_parent";
+        let (owner_key, admin_key, _member_key) = topic_http_fixture(&state, parent).await;
+        let topic = "room_tp_members_child";
+        state
+            .store
+            .create_room_with_parent(topic, "pid_tp_admin", "dev_tp_admin", "T", Some(parent), now_ms())
+            .await
+            .unwrap();
+
+        let upsert = |device_id: &'static str,
+                      key: &SigningKey,
+                      room_id: &'static str,
+                      profile_id: &'static str,
+                      status: HttpRoomMembershipStatus,
+                      nonce: &'static str| {
+            let headers = signed_room_members_upsert_headers(
+                device_id,
+                key,
+                room_id,
+                profile_id,
+                status,
+                HttpRoomMemberRole::Member,
+                None,
+                nonce,
+            );
+            let state = state.clone();
+            async move {
+                http_room_members_upsert(
+                    Path(room_id.to_string()),
+                    headers,
+                    State(state),
+                    Json(HttpRoomMembershipUpsertReq {
+                        profile_id: profile_id.into(),
+                        status,
+                        role: HttpRoomMemberRole::Member,
+                        source_link_id: None,
+                    }),
+                )
+                .await
+            }
+        };
+
+        let err = upsert(
+            "dev_tp_admin",
+            &admin_key,
+            topic,
+            "pid_tp_stranger",
+            HttpRoomMembershipStatus::Active,
+            "tp-up-stranger",
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err, (StatusCode::CONFLICT, "not_parent_member".to_string()));
+
+        let added = upsert(
+            "dev_tp_admin",
+            &admin_key,
+            topic,
+            "pid_tp_member",
+            HttpRoomMembershipStatus::Active,
+            "tp-up-member",
+        )
+        .await
+        .unwrap()
+        .0;
+        assert!(added.changed);
+        let before = state.store.get_room(topic).await.unwrap().unwrap();
+
+        let removed = upsert(
+            "dev_tp_owner",
+            &owner_key,
+            parent,
+            "pid_tp_member",
+            HttpRoomMembershipStatus::Removed,
+            "tp-up-parent-remove",
+        )
+        .await
+        .unwrap()
+        .0;
+        assert!(removed.changed);
+        let child = state
+            .store
+            .get_room_membership(topic, "pid_tp_member")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(child.status, "removed");
+        let after = state.store.get_room(topic).await.unwrap().unwrap();
+        assert_eq!(after.membership_version, before.membership_version + 1);
+    }
+
+    #[tokio::test]
+    async fn http_room_invite_links_are_refused_for_topics() {
+        let (state, _dir) = test_app_state().await;
+        let parent = "room_tp_links_parent";
+        let (_owner_key, admin_key, _member_key) = topic_http_fixture(&state, parent).await;
+        let topic = "room_tp_links_child";
+        state
+            .store
+            .create_room_with_parent(topic, "pid_tp_admin", "dev_tp_admin", "T", Some(parent), now_ms())
+            .await
+            .unwrap();
+        let err = http_room_invite_links_create(
+            Path(topic.to_string()),
+            signed_room_invite_links_create_headers(
+                "dev_tp_admin",
+                &admin_key,
+                topic,
+                None,
+                None,
+                false,
+                HttpRoomMemberRole::Member,
+                "tp-link-create",
+            ),
+            State(state.clone()),
+            Json(HttpRoomInviteLinkCreateReq {
+                expires_at_ms: None,
+                max_uses: None,
+                requires_approval: Some(false),
+                allowed_role: Some(HttpRoomMemberRole::Member),
+            }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            err,
+            (StatusCode::BAD_REQUEST, "topic_no_invite_links".to_string())
+        );
+        assert!(state.store.list_room_invite_links(topic).await.unwrap().is_empty());
+    }
+
+    /// Дым: ветка — обычная комната для рассылки. Сообщение ветки уходит
+    /// только её участникам; участник одной лишь основной комнаты — not_member.
+    #[tokio::test]
+    async fn room_broadcast_to_topic_reaches_only_topic_members() {
+        let (state, _dir) = test_app_state().await;
+        let parent = "room_tp_bc_parent";
+        let (_owner_key, admin_key, _member_key) = topic_http_fixture(&state, parent).await;
+        let insider_key = SigningKey::from_bytes(&[175u8; 32]);
+        cache_authenticated_device(&state, "dev_tp_insider", "pid_tp_insider", &insider_key);
+        state
+            .store
+            .upsert_room_membership(parent, "pid_tp_insider", "active", "member", None, now_ms())
+            .await
+            .unwrap();
+        let topic = "room_tp_bc_child";
+        state
+            .store
+            .create_room_with_parent(topic, "pid_tp_admin", "dev_tp_admin", "T", Some(parent), now_ms())
+            .await
+            .unwrap();
+        state
+            .store
+            .upsert_room_membership(topic, "pid_tp_insider", "active", "member", None, now_ms())
+            .await
+            .unwrap();
+
+        let msg_id = "00000000-0000-0000-0000-0000000070b1".to_string();
+        let recipients: Vec<String> = ["dev_tp_insider", "dev_tp_member", "dev_tp_owner"]
+            .iter()
+            .map(|v| v.to_string())
+            .collect();
+        let headers = signed_auth_headers("dev_tp_admin", &admin_key, "tp-bc-1", |ts_ms, nonce_b64| {
+            http_room_broadcast_auth_message(
+                "dev_tp_admin",
+                topic,
+                &msg_id,
+                "QUJD",
+                &recipients,
+                None,
+                60,
+                0,
+                ts_ms,
+                nonce_b64,
+            )
+        });
+        let resp = http_room_broadcast(
+            Path(topic.to_string()),
+            State(state.clone()),
+            headers,
+            Json(HttpRoomBroadcastReq {
+                msg_id: msg_id.clone(),
+                ciphertext_b64: "QUJD".into(),
+                recipients: recipients.clone(),
+                ttl_seconds: 60,
+                transport_meta_json: None,
+                deliver_at_ms: None,
+            }),
+        )
+        .await
+        .unwrap()
+        .0;
+        assert_eq!(resp.accepted, vec!["dev_tp_insider".to_string()]);
+        let reasons: Vec<(&str, &str)> = resp
+            .rejected
+            .iter()
+            .map(|r| (r.device_id.as_str(), r.reason))
+            .collect();
+        assert!(reasons.contains(&("dev_tp_member", "not_member")));
+        // Владелец основной комнаты в ветку не приглашён — тоже ничего.
+        assert!(reasons.contains(&("dev_tp_owner", "not_member")));
+        for outsider in ["dev_tp_member", "dev_tp_owner"] {
+            assert!(
+                state
+                    .store
+                    .list_pending_from(outsider, 1, now_ms(), 10)
+                    .await
+                    .unwrap()
+                    .is_empty()
+            );
+        }
+    }
+
+    /// Удаление основной комнаты уносит ветки; ответ о них ничего не
+    /// раскрывает (Р-1).
+    #[tokio::test]
+    async fn http_room_delete_parent_removes_topics_without_revealing_them() {
+        let (state, _dir) = test_app_state().await;
+        let parent = "room_tp_del_parent";
+        let (owner_key, _admin_key, _member_key) = topic_http_fixture(&state, parent).await;
+        let topic = "room_tp_del_child";
+        state
+            .store
+            .create_room_with_parent(topic, "pid_tp_admin", "dev_tp_admin", "T", Some(parent), now_ms())
+            .await
+            .unwrap();
+
+        let resp = http_room_delete(
+            Path(parent.to_string()),
+            signed_room_delete_headers("dev_tp_owner", &owner_key, parent, "tp-del"),
+            State(state.clone()),
+        )
+        .await
+        .unwrap()
+        .0;
+        let raw = serde_json::to_string(&resp).unwrap();
+        assert!(!raw.contains(topic));
+        assert!(state.store.get_room(topic).await.unwrap().is_none());
+        assert!(state.store.get_room(parent).await.unwrap().is_none());
     }
 }

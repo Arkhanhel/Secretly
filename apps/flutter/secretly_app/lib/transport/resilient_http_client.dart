@@ -10,6 +10,9 @@ import 'resilient_http_client_stub.dart'
 
 http.Client createResilientHttpClient() => impl.createResilientHttpClient();
 
+/// Запасные адреса из сборки (Э1: путь `ip` встроенного списка входов).
+Map<String, String> httpDnsFallbacksFromEnv() => impl.httpDnsFallbacksFromEnv();
+
 WebSocketChannel connectResilientWebSocket(
   Uri uri, {
   Duration? pingInterval,

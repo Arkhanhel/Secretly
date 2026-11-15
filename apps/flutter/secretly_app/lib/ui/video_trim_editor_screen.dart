@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
+import '../build_variant.dart';
 import '../media/h264_encoder.dart';
 import 'widgets/broken_media_box.dart';
 
@@ -22,6 +23,11 @@ class VideoTrimEditorResult {
   final int durationMs;
 }
 
+/// 🔴 В ОБЛЕГЧЁННОЙ СБОРКЕ ЭКРАН НЕДОСТУПЕН: и обрезка, и кадрирование, и
+/// плёнка кадров живут на FFmpeg. Заслонки стоят у входов — в камере окна
+/// вложений (`chat_attachment_picker_sheet.dart`) экран просто не открывается,
+/// а [videoTrimFilmstripFrames] и [exportTrimmedVideoFile] отвечают «нечем».
+///
 /// Telegram-style post-capture video editor. Lets the user trim the clip by
 /// duration (filmstrip with draggable handles) and crop the frame (resizable
 /// rectangle) before sending. Exports through FFmpeg — trim-only uses a fast
@@ -40,7 +46,8 @@ class VideoTrimEditorScreen extends StatefulWidget {
   State<VideoTrimEditorScreen> createState() => _VideoTrimEditorScreenState();
 }
 
-class _VideoTrimEditorScreenState extends State<VideoTrimEditorScreen> {
+class _VideoTrimEditorScreenState extends State<VideoTrimEditorScreen>
+    with WidgetsBindingObserver {
   VideoPlayerController? _controller;
   bool _ready = false;
   bool _exporting = false;
@@ -71,11 +78,28 @@ class _VideoTrimEditorScreenState extends State<VideoTrimEditorScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_init());
+  }
+
+  // 🔴 Play Vitals п. 1/12 (15.11.2026): сбой `FlutterJNI.ensureAttachedToNative`
+  // — кадр видео/камеры приходит в движок, уже отсоединённый от окна (свернули
+  // и закрыли). Уходя в фон, перестаём подавать кадры.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      final c = _controller;
+      if (c != null && c.value.isInitialized && c.value.isPlaying) {
+        unawaited(c.pause());
+      }
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller?.removeListener(_onTick);
     _controller?.dispose();
     super.dispose();
@@ -851,6 +875,8 @@ Future<List<File>> videoTrimFilmstripFrames(
   int count = 12,
   int heightPx = 120,
 }) async {
+  // Облегчённая сборка: плёнки кадров нет — трек обрезки её и не покажет.
+  if (!kVideoToolsAvailable) return const <File>[];
   try {
     final dir = await getTemporaryDirectory();
     final stamp = DateTime.now().millisecondsSinceEpoch;
@@ -892,6 +918,9 @@ Future<String?> exportTrimmedVideoFile(
   required int startMs,
   required int endMs,
 }) async {
+  // Облегчённая сборка: обрезать нечем. Вызывающий уже показывает человеку
+  // «не удалось обрезать видео» и оставляет ролик в покое.
+  if (!kVideoToolsAvailable) return null;
   try {
     final dir = await getTemporaryDirectory();
     final stamp = DateTime.now().millisecondsSinceEpoch;

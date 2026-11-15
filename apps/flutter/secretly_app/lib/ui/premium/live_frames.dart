@@ -33,6 +33,7 @@ import '../thermal_guard.dart';
 import '../wave1_l10n.dart';
 import 'cosmetic_animation_scope.dart';
 import 'cosmetic_motion_gate.dart';
+import 'decoration_clock.dart';
 import 'profile_fx.dart';
 
 // 🔴 Наружу отдаём только то, чем пользуется приложение, и БЕЗ `AvatarFrame`:
@@ -77,14 +78,33 @@ const Map<String, AvatarFrame> kLiveFrameKinds = <String, AvatarFrame>{
 /// перечислении, и заводить ради двух штук копию перечисления незачем.
 const List<String> kOwnFrameIds = <String>['drift', 'astronaut'];
 
+/// 🔴 13.11.2026: ПЕРЕДЕЛАННЫЕ СТАРЫЕ РАМКИ. Те же id, что лежат в
+/// `profile_meta` у людей, — вместо запечённой петли теперь живая симуляция
+/// (`profile_fx/frames/classic.dart`). Старые сборки по этим id рисуют свою
+/// прежнюю рамку, так что выбор человека не теряется ни у кого.
+const List<String> kClassicFrameIds = <String>[
+  'cosmic', 'gold', 'orbit', 'neon', 'stars', 'aurora', 'pulse', 'ember', 'nebula', 'electric', 'flame', 'smoke', 'bears', 'rainbow', 'butterfly', 'comet', 'sakura', 'phoenix', 'frost', 'prism',
+];
+
+/// Эксклюзивная коллекция рамок (13.11.2026, `profile_fx/frames/collection.dart`).
+/// Старые сборки этих id не знают и рисуют портрет без рамки — не ломаются.
+const List<String> kCollectionFrameIds = <String>[
+  'dragon', 'ferro', 'jelly', 'beads', 'liquid', 'gears', 'flow', 'flock', 'pwave', 'spiro',
+];
+
 List<String> get kLiveFrameIds => <String>[
   ...kLiveFrameKinds.keys,
   ...kOwnFrameIds,
+  ...kClassicFrameIds,
+  ...kCollectionFrameIds,
 ];
 
 bool isLiveFrameId(String? id) =>
     id != null &&
-    (kLiveFrameKinds.containsKey(id) || kOwnFrameIds.contains(id));
+    (kLiveFrameKinds.containsKey(id) ||
+        kOwnFrameIds.contains(id) ||
+        kClassicFrameIds.contains(id) ||
+        kCollectionFrameIds.contains(id));
 
 /// Ниже этого размера движения нет вовсе: портрет меньше пальца, и дёргающееся
 /// ухо на нём читается как дефект отрисовки, а не как жизнь.
@@ -186,6 +206,37 @@ const Map<String, double> _kLiveFrameActionSeconds = <String, double>{
   'chrome': 2.4,
   'drift': 3.4,
   'astronaut': 3.0,
+  // 13.11.2026 — длительности из дизайн-референса (`dur` каждой рамки).
+  'cosmic': 1.2,
+  'gold': 1.3,
+  'orbit': 1.6,
+  'neon': 1.4,
+  'stars': 1.6,
+  'aurora': 1.8,
+  'pulse': 0.8,
+  'ember': 1.5,
+  'nebula': 1.6,
+  'electric': 0.9,
+  'flame': 1.4,
+  'smoke': 1.4,
+  'bears': 2.4,
+  'rainbow': 1.3,
+  'butterfly': 1.6,
+  'comet': 1.6,
+  'sakura': 1.5,
+  'phoenix': 1.8,
+  'frost': 1.9,
+  'prism': 1.5,
+  'dragon': 1.7,
+  'ferro': 1.2,
+  'jelly': 1.0,
+  'beads': 1.2,
+  'liquid': 1.2,
+  'gears': 1.8,
+  'flow': 1.8,
+  'flock': 1.3,
+  'pwave': 1.2,
+  'spiro': 0.8,
 };
 
 Duration liveFrameActionDuration(String? id) => Duration(
@@ -203,6 +254,21 @@ Duration liveFrameActionDuration(String? id) => Duration(
 /// Обёртка добавляет ровно одну строку, а кнопка достаёт переключатель через
 /// `Builder` — он оказывается НИЖЕ держателя в дереве, хотя в коде написан
 /// раньше.
+/// Скорость портрета, который тащат пальцем, — логические точки в секунду.
+///
+/// 🔴 13.11.2026: рамки переделки (огонь, дым, сакура, стая, феррофлюид…)
+/// чувствуют «ветер» от движения портрета: −0.5 × его скорость. Источник один —
+/// превью на экране выбора, где портрет можно потянуть. Рамка подписывается
+/// БЕЗ зависимости (см. [LiveFrameView]): скорость меняется каждый кадр, и
+/// перестраивать из-за неё виджет незачем — её читает тикер.
+class LiveFrameWindScope extends InheritedNotifier<ValueNotifier<Offset>> {
+  const LiveFrameWindScope({
+    super.key,
+    required ValueNotifier<Offset> velocity,
+    required super.child,
+  }) : super(notifier: velocity);
+}
+
 class LiveFramePressHost extends StatefulWidget {
   const LiveFramePressHost({super.key, required this.frameId, required this.child});
 
@@ -287,6 +353,37 @@ const Map<String, Map<String, String>> _kLiveFrameActions = {
   'drift': {'ru': 'Газу!', 'en': 'Floor it!', 'uk': 'Газу!', 'es': '¡A fondo!', 'pt': 'Acelera!', 'fr': 'Plein gaz !', 'de': 'Vollgas!'},
   'astronaut': {'ru': 'Оттолкнуть', 'en': 'Push off', 'uk': 'Відштовхнути', 'es': 'Empujar', 'pt': 'Empurrar', 'fr': 'Pousser', 'de': 'Abstoßen'},
   'chrome': {'ru': 'Капнуть', 'en': 'Drip', 'uk': 'Крапнути', 'es': 'Gotear', 'pt': 'Pingar', 'fr': 'Goutte', 'de': 'Tropfen'},
+  // 13.11.2026 — переделанные старые рамки и эксклюзивная коллекция.
+  'cosmic': {'ru': 'Волна', 'en': 'Wave', 'uk': 'Хвиля', 'es': 'Onda', 'pt': 'Onda', 'fr': 'Onde', 'de': 'Welle'},
+  'gold': {'ru': 'Звон', 'en': 'Ding', 'uk': 'Дзень', 'es': 'Tintineo', 'pt': 'Tilintar', 'fr': 'Tinter', 'de': 'Klingen'},
+  'orbit': {'ru': 'Разгон', 'en': 'Boost', 'uk': 'Розгін', 'es': 'Acelerar', 'pt': 'Acelerar', 'fr': 'Accélérer', 'de': 'Beschleunigen'},
+  'neon': {'ru': 'Перезажечь', 'en': 'Relight', 'uk': 'Перезапалити', 'es': 'Reencender', 'pt': 'Reacender', 'fr': 'Rallumer', 'de': 'Neu zünden'},
+  'stars': {'ru': 'Встряхнуть', 'en': 'Shake', 'uk': 'Струсити', 'es': 'Sacudir', 'pt': 'Sacudir', 'fr': 'Secouer', 'de': 'Schütteln'},
+  'aurora': {'ru': 'Буря', 'en': 'Storm', 'uk': 'Буря', 'es': 'Tormenta', 'pt': 'Tempestade', 'fr': 'Tempête', 'de': 'Sturm'},
+  'pulse': {'ru': 'Импульс', 'en': 'Pulse', 'uk': 'Імпульс', 'es': 'Pulso', 'pt': 'Pulso', 'fr': 'Impulsion', 'de': 'Impuls'},
+  'ember': {'ru': 'Подуть', 'en': 'Blow', 'uk': 'Подути', 'es': 'Soplar', 'pt': 'Soprar', 'fr': 'Souffler', 'de': 'Pusten'},
+  'nebula': {'ru': 'Сжать', 'en': 'Squeeze', 'uk': 'Стиснути', 'es': 'Apretar', 'pt': 'Apertar', 'fr': 'Presser', 'de': 'Drücken'},
+  'electric': {'ru': 'Разряд', 'en': 'Zap', 'uk': 'Розряд', 'es': 'Descarga', 'pt': 'Descarga', 'fr': 'Décharge', 'de': 'Entladung'},
+  'flame': {'ru': 'Вспышка', 'en': 'Flare', 'uk': 'Спалах', 'es': 'Llamarada', 'pt': 'Labareda', 'fr': 'Flambée', 'de': 'Aufflammen'},
+  'smoke': {'ru': 'Кольцо', 'en': 'Smoke ring', 'uk': 'Кільце', 'es': 'Aro de humo', 'pt': 'Anel', 'fr': 'Rond de fumée', 'de': 'Rauchring'},
+  'bears': {'ru': 'Ку-ку', 'en': 'Peekaboo', 'uk': 'Ку-ку', 'es': '¡Cucú!', 'pt': 'Achou!', 'fr': 'Coucou !', 'de': 'Kuckuck!'},
+  'rainbow': {'ru': 'Веер', 'en': 'Fan out', 'uk': 'Віяло', 'es': 'Abanico', 'pt': 'Leque', 'fr': 'Éventail', 'de': 'Fächer'},
+  'butterfly': {'ru': 'Спугнуть', 'en': 'Startle', 'uk': 'Сполохати', 'es': 'Espantar', 'pt': 'Assustar', 'fr': 'Faire fuir', 'de': 'Aufscheuchen'},
+  'comet': {'ru': 'Разгон', 'en': 'Boost', 'uk': 'Розгін', 'es': 'Acelerar', 'pt': 'Acelerar', 'fr': 'Accélérer', 'de': 'Beschleunigen'},
+  'sakura': {'ru': 'Ветер', 'en': 'Wind', 'uk': 'Вітер', 'es': 'Viento', 'pt': 'Vento', 'fr': 'Vent', 'de': 'Wind'},
+  'phoenix': {'ru': 'Расправить', 'en': 'Spread wings', 'uk': 'Розправити', 'es': 'Desplegar', 'pt': 'Abrir as asas', 'fr': 'Déployer', 'de': 'Ausbreiten'},
+  'frost': {'ru': 'Расколоть', 'en': 'Shatter', 'uk': 'Розколоти', 'es': 'Romper', 'pt': 'Estilhaçar', 'fr': 'Briser', 'de': 'Zersplittern'},
+  'prism': {'ru': 'Качнуть луч', 'en': 'Swing the beam', 'uk': 'Хитнути промінь', 'es': 'Mover el rayo', 'pt': 'Mover o raio', 'fr': 'Balancer le rayon', 'de': 'Strahl schwenken'},
+  'dragon': {'ru': 'Рывок', 'en': 'Dash', 'uk': 'Ривок', 'es': 'Embestida', 'pt': 'Arrancada', 'fr': 'Élan', 'de': 'Vorstoß'},
+  'ferro': {'ru': 'Импульс', 'en': 'Pulse', 'uk': 'Імпульс', 'es': 'Pulso', 'pt': 'Pulso', 'fr': 'Impulsion', 'de': 'Impuls'},
+  'jelly': {'ru': 'Сжать', 'en': 'Squeeze', 'uk': 'Стиснути', 'es': 'Apretar', 'pt': 'Apertar', 'fr': 'Presser', 'de': 'Drücken'},
+  'beads': {'ru': 'Толкнуть', 'en': 'Push', 'uk': 'Штовхнути', 'es': 'Empujar', 'pt': 'Empurrar', 'fr': 'Pousser', 'de': 'Schubsen'},
+  'liquid': {'ru': 'Встряхнуть', 'en': 'Shake', 'uk': 'Струсити', 'es': 'Sacudir', 'pt': 'Sacudir', 'fr': 'Secouer', 'de': 'Schütteln'},
+  'gears': {'ru': 'Завести', 'en': 'Wind up', 'uk': 'Завести', 'es': 'Dar cuerda', 'pt': 'Dar corda', 'fr': 'Remonter', 'de': 'Aufziehen'},
+  'flow': {'ru': 'Закрутить', 'en': 'Swirl', 'uk': 'Закрутити', 'es': 'Arremolinar', 'pt': 'Girar', 'fr': 'Tourbillonner', 'de': 'Wirbeln'},
+  'flock': {'ru': 'Спугнуть', 'en': 'Startle', 'uk': 'Сполохати', 'es': 'Espantar', 'pt': 'Assustar', 'fr': 'Faire fuir', 'de': 'Aufscheuchen'},
+  'pwave': {'ru': 'Сначала', 'en': 'Restart', 'uk': 'Спочатку', 'es': 'Reiniciar', 'pt': 'Recomeçar', 'fr': 'Recommencer', 'de': 'Neu starten'},
+  'spiro': {'ru': 'Сменить узор', 'en': 'New pattern', 'uk': 'Змінити візерунок', 'es': 'Cambiar patrón', 'pt': 'Mudar padrão', 'fr': 'Changer de motif', 'de': 'Muster wechseln'},
 };
 
 /// Подпись кнопки для рамки [id]. `null` — у рамки нет действия, и кнопку
@@ -341,8 +438,14 @@ class _LiveFrameViewState extends State<LiveFrameView>
   double _last = 0;
   bool _animated = false;
 
+  /// Рамка хоть раз сделала шаг движения.
+  bool _hasMoved = false;
+
   /// Нажатие из области над портретом.
   bool _scopePressed = false;
+
+  /// Скорость перетаскиваемого портрета, если над рамкой есть такая область.
+  ValueNotifier<Offset>? _wind;
 
   bool get _pressed => widget.pressed || _scopePressed;
 
@@ -379,6 +482,7 @@ class _LiveFrameViewState extends State<LiveFrameView>
     if (old.id != widget.id) {
       _sim?.dispose();
       _sim = _freshSim(widget.id);
+      _hasMoved = false;
     }
     if (old.size != widget.size) _syncTicker();
   }
@@ -388,6 +492,9 @@ class _LiveFrameViewState extends State<LiveFrameView>
     super.didChangeDependencies();
     // 🔴 Подписка на область идёт ЗДЕСЬ, а не в build: так состояние узнаёт о
     // нажатии, даже если кадр в этот миг рисует тикер, а не перестроение.
+    _wind = context
+        .getInheritedWidgetOfExactType<LiveFrameWindScope>()
+        ?.notifier;
     final pressed = LiveFramePressScope.of(context);
     if (pressed != _scopePressed) {
       _scopePressed = pressed;
@@ -417,14 +524,27 @@ class _LiveFrameViewState extends State<LiveFrameView>
     _animated = allowed;
     if (allowed) {
       _last = DateTime.now().millisecondsSinceEpoch / 1000.0;
-      (_ticker ??= createTicker(_onTick)).start();
+      // ПК: общие часы украшений вместо тикера на каждом обновлении экрана,
+      // см. [DecorationClock]. На телефоне часы выключены — как раньше.
+      if (DecorationClock.enabled) {
+        DecorationClock.subscribe(_onClock);
+      } else {
+        (_ticker ??= createTicker(_onTick)).start();
+      }
     } else {
+      DecorationClock.unsubscribe(_onClock);
       _ticker?.stop();
+      // ПК: рамка, уже бывшая в движении, замирает там, где была, — она
+      // засыпает в простое и просыпается от мыши каждые несколько секунд,
+      // и прыжок позы на каждом засыпании был бы виден (15.11.2026).
+      if (DecorationClock.enabled && _hasMoved) return;
       // Неподвижный кадр — не нулевая секунда: набор прогоняет полторы
       // секунды симуляции, чтобы поза была осмысленной, а не стартовой.
       _sim?.settle();
     }
   }
+
+  void _onClock() => _onTick(Duration.zero);
 
   void _onTick(Duration _) {
     // Держим картинку, пока устройство греется или пока список летит: в эти
@@ -439,13 +559,26 @@ class _LiveFrameViewState extends State<LiveFrameView>
     _last = now;
     // Шаг Эйлера разваливается на длинном кадре: ограничение в 33 мс — то же,
     // что в наборе, и оно же спасает после возвращения из фона.
-    _sim
-      ?..active = _pressed
+    final sim = _sim;
+    if (sim == null) return;
+    final wind = _wind?.value;
+    if (wind != null) {
+      // Точки экрана → координаты холста набора: портрет диаметром
+      // size·avatarFraction соответствует 2·av на холсте 200 × 200.
+      final k = sim.av * 2 / (widget.size * LiveFramePainter.avatarFraction);
+      sim
+        ..ivx = -0.5 * wind.dx * k
+        ..ivy = -0.5 * wind.dy * k;
+    }
+    _hasMoved = true;
+    sim
+      ..active = _pressed
       ..tick(dt > 1 / 30 ? 1 / 30 : dt);
   }
 
   @override
   void dispose() {
+    DecorationClock.unsubscribe(_onClock);
     _ticker?.dispose();
     _sim?.dispose();
     super.dispose();
@@ -509,6 +642,13 @@ class LiveFramePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final k = (size.width * avatarFraction / 2) / sim.av;
     canvas.save();
+    if (ringOnly) {
+      // 🔴 13.11.2026: у части рамок переделки кольцо не одно — «Неон»
+      // рисует снаружи розовые дуги. В значке размером с букву они легли бы
+      // на имя соседа, поэтому кольцо держится в своём квадрате (с запасом
+      // в край кольца, как и раньше).
+      canvas.clipRect((Offset.zero & size).inflate(size.width * 0.05));
+    }
     canvas.translate(size.width / 2, size.height / 2);
     canvas.scale(k);
     canvas.translate(-sim.cx, -sim.cy);
@@ -528,14 +668,20 @@ class LiveFramePainter extends CustomPainter {
       // 🔴 Ободок кольцевой полоской, а не кругом. В наборе здесь сплошной
       // круг подложки ПОД фотографией; у нас фотографию рисует вызывающая
       // сторона, и сплошной круг закрыл бы лицо.
-      canvas.drawCircle(
-        Offset(sim.cx, sim.cy),
-        sim.av + 1.5,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..color = palette.bg,
-      );
+      if (!sim.noGap) {
+        canvas.drawCircle(
+          Offset(sim.cx, sim.cy),
+          sim.av + 1.5,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 3
+            ..color = palette.bg,
+        );
+      }
+      // Слой ПОВЕРХ фотографии в преобразовании тела — морозная виньетка
+      // «Инея». Фото под этой накладкой уже лежит, так что порядок тот же,
+      // что в дизайн-референсе: кольцо → ободок → фото → mid → front.
+      if (!ringOnly && sim.hasMid) sim.mid(canvas, palette);
     });
 
     if (!ringOnly) sim.front(canvas, palette);

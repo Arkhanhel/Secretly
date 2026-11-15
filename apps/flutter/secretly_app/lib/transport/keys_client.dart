@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'server_clock.dart';
 
 import 'resilient_http_client.dart';
+import 'response_signature.dart';
 import 'service_health_status.dart';
 import '../diagnostics/diag_log.dart';
 
@@ -225,10 +226,36 @@ class KeysClient {
     Map<String, String>? headers,
     Duration? timeout,
   }) async {
+    // Б3 Э1 (25.10.2026): ответы, по которым решается, на чей ключ шифровать,
+    // запрашиваются с одноразовым nonce, подпись проверяется и считается.
+    // Б3 Э2: отвергается только при включённом отказе (липкий, по доле).
+    final target = responseSignedTarget(uri);
+    final signed = responseSignedPath('GET', uri.path);
+    if (signed) await ServerAuthEnforcement.ensureRestored();
+    final nonce = signed ? newResponseNonce() : null;
     final resp = await _http
-        .get(uri, headers: headers)
+        .get(
+          uri,
+          headers: nonce == null
+              ? headers
+              : <String, String>{...?headers, kResponseNonceHeader: nonce},
+        )
         .timeout(timeout ?? _httpTimeout);
     _observeServerClock(resp);
+    if (nonce != null && resp.statusCode < 500) {
+      final outcome = await verifyResponseSignature(
+        method: 'GET',
+        target: target,
+        nonce: nonce,
+        status: resp.statusCode,
+        body: resp.bodyBytes,
+        header: resp.headers[kResponseSignatureHeader],
+      );
+      ResponseAuthStats.record(outcome, target);
+      if (ServerAuthEnforcement.shouldReject(outcome, resp.statusCode)) {
+        throw ServerAuthEnforcement.reject(outcome, target);
+      }
+    }
     return resp;
   }
 
@@ -730,6 +757,7 @@ class KeysClient {
     required String profileSecretB64,
     String? accountIdentityPubB64,
     String? deviceCertB64,
+    int signedPrekeyId = 1,
   }) async {
     final uri = baseUrl.resolve('/v1/keys/publish');
     final aik = accountIdentityPubB64?.trim() ?? '';
@@ -760,14 +788,29 @@ class KeysClient {
         // сборок, убив им публикацию ключей — а с ней доставку.
         if (aik.isNotEmpty && cert.isNotEmpty) 'account_identity_pub_b64': aik,
         if (aik.isNotEmpty && cert.isNotEmpty) 'device_cert_b64': cert,
+        // Б5 (24.10.2026): number of the signed prekey, outside the signature
+        // like the pair above. Sent only once a device has rotated, so the
+        // request stays byte-identical until then.
+        if (signedPrekeyId != 1) 'signed_prekey_id': signedPrekeyId,
       }),
     );
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       throw StateError('publishKeys failed: ${resp.statusCode} ${resp.body}');
     }
     final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    // Б5: optional; a keys server from before Б5 does not send them.
+    final remaining = json['otk_remaining'];
+    lastPublishOtkRemaining = remaining is num ? remaining.toInt() : null;
+    final minId = json['otk_min_remaining_id'];
+    lastPublishOtkMinRemainingId = minId is num ? minId.toInt() : null;
     return json['ok'] == true;
   }
+
+  /// Б5 (24.10.2026): one-time prekeys of this device still on offer after
+  /// the last successful [publishKeys], and the lowest number among them;
+  /// `null` when keys did not say.
+  int? lastPublishOtkRemaining;
+  int? lastPublishOtkMinRemainingId;
 
   /// П-1: связка ОДНОГО устройства (`/v1/device/{id}/bundle`) — одноразовый
   /// ключ снимается только у него. Ответ того же вида, что у [fetchBundle].
@@ -1075,6 +1118,14 @@ class KeysClient {
     return json['ok'] == true;
   }
 
+  /// К4 (14.11.2026): почему последняя выдача копии не удалась —
+  /// `wrong_password` или `locked` (с [retryAtMs]). Сервер старее 14.11 поле
+  /// не присылает — тогда оба `null`, и экран пишет «копия не найдена».
+  ({String? reason, int? retryAtMs}) lastBackupGetRefusal = (
+    reason: null,
+    retryAtMs: null,
+  );
+
   Future<(bool exists, String? payload, int updatedAtMs)> backupGet(
     String profileId, {
     String? requesterDeviceId,
@@ -1120,7 +1171,43 @@ class KeysClient {
     final exists = json['exists'] == true;
     final payload = json['payload'] as String?;
     final updatedAtMs = (json['updated_at_ms'] as num?)?.toInt() ?? 0;
+    final reason = json['reason'];
+    lastBackupGetRefusal = (
+      reason: exists ? null : (reason is String ? reason : null),
+      retryAtMs: exists ? null : (json['retry_at_ms'] as num?)?.toInt(),
+    );
     return (exists, payload, updatedAtMs);
+  }
+
+  /// К8 (14.11.2026): удалить свою копию профиля с сервера. Подпись
+  /// устройства того же профиля и секрет профиля — как у заливки копии.
+  /// `true` — копия была и удалена; `false` — её не было.
+  Future<bool> backupDelete({
+    required String profileId,
+    required String requesterDeviceId,
+    required int tsMs,
+    required String nonceB64,
+    required String signatureB64,
+    required String profileSecretB64,
+  }) async {
+    final uri = baseUrl.resolve('/v1/backup/$profileId/delete');
+    final resp = await _post(
+      uri,
+      headers: {
+        'content-type': 'application/json',
+        'x-secretly-device-id': requesterDeviceId,
+        'x-secretly-ts-ms': tsMs.toString(),
+        'x-secretly-nonce-b64': nonceB64,
+        'x-secretly-signature-b64': signatureB64,
+        'x-secretly-profile-secret-b64': profileSecretB64,
+      },
+      body: '{}',
+    );
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw StateError('backupDelete failed: ${resp.statusCode} ${resp.body}');
+    }
+    final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    return json['deleted'] == true;
   }
 
   /// Э-1 (SEC-01): соль для вывода токена доступа к архиву.
@@ -1144,6 +1231,17 @@ class KeysClient {
   /// GET /v1/config — signed monetization kill-switch + limits (S-3). No auth.
   /// Throws on transport/HTTP error; the caller (EntitlementRepository) treats
   /// any failure as fail-open (monetization disabled).
+  /// Э1: подписанный список входов. `null` — на сервере списка нет (404).
+  Future<String?> getTransportEndpoints() async {
+    final uri = baseUrl.resolve('/v1/transport/endpoints');
+    final resp = await _get(uri);
+    if (resp.statusCode == 404) return null;
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      throw StateError('getTransportEndpoints failed: ${resp.statusCode}');
+    }
+    return resp.body;
+  }
+
   Future<Map<String, dynamic>> getConfig() async {
     final uri = baseUrl.resolve('/v1/config');
     final resp = await _get(uri);

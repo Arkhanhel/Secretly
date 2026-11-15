@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import '../../../l10n/app_localizations.dart';
 import '../design/tokens.dart';
 import 'desktop_button.dart';
+import 'motion_widgets.dart';
 
 enum DDialogSize { small, medium, large, auto }
 
@@ -39,12 +40,14 @@ class DesktopDialog {
   }) {
     // Палитра места вызова едет в окно — см. [DColors.carry].
     final palette = DColors.maybeOf(context);
-    return showGeneralDialog<T>(
+    // 🔴 05.10.2026: маршрут со своим уходом (короче входа), а масштаб —
+    // только у карточки. Раньше переход масштабировал ВЕСЬ слой вместе с
+    // затемнением и с отскоком (easeOutBack): по краям окна на мгновение
+    // проступало незатемнённое, а сама карточка подпрыгивала.
+    return showDesktopOverlay<T>(
       context: context,
       barrierDismissible: barrierDismissible,
       barrierLabel: 'dialog',
-      barrierColor: Colors.transparent,
-      transitionDuration: DMotion.medium,
       pageBuilder: (ctx, a, b) {
         return DColors.carry(
           palette,
@@ -58,16 +61,6 @@ class DesktopDialog {
             barrierDismissible: barrierDismissible,
             useBlur: useBlur,
           ),
-        );
-      },
-      transitionBuilder: (ctx, a, b, child) {
-        final scale = Tween<double>(
-          begin: 0.94,
-          end: 1.0,
-        ).chain(CurveTween(curve: DMotion.easeOutBack)).animate(a);
-        return FadeTransition(
-          opacity: a,
-          child: ScaleTransition(scale: scale, child: child),
         );
       },
     );
@@ -132,7 +125,9 @@ class _DialogScaffold extends StatelessWidget {
             children: [
               Semantics(
                 button: true,
-                label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+                label: MaterialLocalizations.of(
+                  context,
+                ).modalBarrierDismissLabel,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: barrierDismissible
@@ -141,7 +136,10 @@ class _DialogScaffold extends StatelessWidget {
                   child: AnimatedBuilder(
                     animation: animation,
                     builder: (ctx, _) {
-                      final t = animation.value;
+                      final t = DMotion.eased(
+                        animation,
+                        inCurve: DMotion.standard,
+                      );
                       return BackdropFilter(
                         filter: ImageFilter.blur(
                           sigmaX: useBlur ? 8 * t : 0,
@@ -158,58 +156,63 @@ class _DialogScaffold extends StatelessWidget {
               Center(
                 child: GestureDetector(
                   onTap: () {}, // swallow taps so they don't dismiss
-                  child: Container(
-                    width: _width(w),
-                    constraints: BoxConstraints(
-                      maxHeight: MediaQuery.of(context).size.height * 0.85,
-                    ),
-                    decoration: BoxDecoration(
-                      color: c.elevated,
-                      borderRadius: BorderRadius.circular(DRadii.lg),
-                      border: Border.all(color: c.borderSubtle),
-                      boxShadow: DShadows.dialog,
-                    ),
-                    // 🔴 Material в основании окна — не украшение, а условие
-                    // работоспособности.
-                    //
-                    // Диалог открывается отдельным маршрутом поверх дерева и
-                    // Material от приложения с собой не приносит. А любое поле
-                    // ввода — это TextField, и он ищет Material в предках:
-                    // без него диалог падает на первой же попытке показать
-                    // поле.
-                    //
-                    // Так и жил диалог создания темы: он НИКОГДА не работал,
-                    // и увидеть это можно было только открыв его руками —
-                    // разметка выглядит совершенно обычной.
-                    //
-                    // Ставим здесь, в основании, а не у каждого поля: иначе
-                    // следующий диалог с полем повторит ту же ошибку, и
-                    // обнаружится она так же поздно. Прозрачный, чтобы не
-                    // перекрыть собственный фон и скругление карточки.
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (title != null) _DialogHeader(title: title!),
-                          Flexible(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                DSpace.xl2,
-                                DSpace.l,
-                                DSpace.xl2,
-                                DSpace.l,
+                  child: DPopTransition(
+                    animation: animation,
+                    fromScale: 0.95,
+                    fromOffset: const Offset(0, 14),
+                    child: Container(
+                      width: _width(w),
+                      constraints: BoxConstraints(
+                        maxHeight: MediaQuery.of(context).size.height * 0.85,
+                      ),
+                      decoration: BoxDecoration(
+                        color: c.elevated,
+                        borderRadius: BorderRadius.circular(DRadii.lg),
+                        border: Border.all(color: c.borderSubtle),
+                        boxShadow: DShadows.dialog,
+                      ),
+                      // 🔴 Material в основании окна — не украшение, а условие
+                      // работоспособности.
+                      //
+                      // Диалог открывается отдельным маршрутом поверх дерева и
+                      // Material от приложения с собой не приносит. А любое поле
+                      // ввода — это TextField, и он ищет Material в предках:
+                      // без него диалог падает на первой же попытке показать
+                      // поле.
+                      //
+                      // Так и жил диалог создания темы: он НИКОГДА не работал,
+                      // и увидеть это можно было только открыв его руками —
+                      // разметка выглядит совершенно обычной.
+                      //
+                      // Ставим здесь, в основании, а не у каждого поля: иначе
+                      // следующий диалог с полем повторит ту же ошибку, и
+                      // обнаружится она так же поздно. Прозрачный, чтобы не
+                      // перекрыть собственный фон и скругление карточки.
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (title != null) _DialogHeader(title: title!),
+                            Flexible(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  DSpace.xl2,
+                                  DSpace.l,
+                                  DSpace.xl2,
+                                  DSpace.l,
+                                ),
+                                child: SingleChildScrollView(child: body),
                               ),
-                              child: SingleChildScrollView(child: body),
                             ),
-                          ),
-                          if (primary != null || secondary != null)
-                            _DialogFooter(
-                              primary: primary,
-                              secondary: secondary,
-                            ),
-                        ],
+                            if (primary != null || secondary != null)
+                              _DialogFooter(
+                                primary: primary,
+                                secondary: secondary,
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -313,4 +316,41 @@ class _DialogFooter extends StatelessWidget {
 
 class _DismissIntent extends Intent {
   const _DismissIntent();
+}
+
+/// Замена `showDialog` для окон ПК на материальных `AlertDialog` и своих
+/// виджетах (05.10.2026): та же подача, что у [DesktopDialog.show] — фон
+/// плавно темнеет, карточка поднимается и проявляется, уход короче входа.
+///
+/// Как и `showDialog`, переносит в окно темы места вызова и палитру ПК.
+Future<T?> showDesktopDialog<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  bool barrierDismissible = true,
+  Color? barrierColor,
+  bool useRootNavigator = true,
+}) {
+  final palette = DColors.maybeOf(context);
+  final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
+  final themes = InheritedTheme.capture(from: context, to: navigator.context);
+  return showDesktopOverlay<T>(
+    context: context,
+    useRootNavigator: useRootNavigator,
+    barrierDismissible: barrierDismissible,
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor:
+        barrierColor ??
+        (palette?.scrim ?? Colors.black).withValues(alpha: 0.5),
+    pageBuilder: (ctx, animation, _) => DColors.carry(
+      palette,
+      themes.wrap(
+        DPopTransition(
+          animation: animation,
+          fromScale: 0.95,
+          fromOffset: const Offset(0, 14),
+          child: Builder(builder: builder),
+        ),
+      ),
+    ),
+  );
 }

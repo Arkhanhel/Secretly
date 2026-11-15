@@ -78,6 +78,16 @@
                 <data android:scheme="https" android:host="links.secretlyapp.com" android:pathPrefix="/profile" />
                 <data android:scheme="https" android:host="links.secretlyapp.com" android:pathPrefix="/room-invite" />
             </intent-filter>
+            <!-- Файл сообщений без сети (.secretly), открытый из другого
+                 приложения. Только свой тип: общий octet-stream сделал бы
+                 Secretly обработчиком любых неизвестных файлов. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="application/x-secretly-envelopes" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

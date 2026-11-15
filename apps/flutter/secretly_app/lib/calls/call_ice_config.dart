@@ -19,6 +19,17 @@ class CallIceServerConfig {
 
   bool get isStun => urls.any((value) => value.startsWith('stun:'));
 
+  /// TURN поверх TLS на 443 — снаружи неотличим от обычного HTTPS (Э5).
+  static bool isTlsTurnOn443(String url) {
+    final u = url.trim().toLowerCase();
+    if (!u.startsWith('turns:')) return false;
+    final hostPort = u.substring('turns:'.length).split('?').first;
+    final colon = hostPort.lastIndexOf(':');
+    // Без порта у `turns:` по умолчанию 5349 (RFC 7065), не 443.
+    if (colon < 0) return false;
+    return hostPort.substring(colon + 1) == '443';
+  }
+
   Map<String, Object?> toRtcMap() {
     final cleanUrls = urls.where((value) => value.trim().isNotEmpty).toList(
       growable: false,

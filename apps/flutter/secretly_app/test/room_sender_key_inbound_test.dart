@@ -146,6 +146,48 @@ void main() {
     });
   });
 
+  group('🔴 gkeyreq — ключ комнаты только участнику (11.11.2026)', () {
+    bool allowed(String who, {List<String> members = const ['bob', 'carol']}) =>
+        AppController.roomKeyRequesterAllowed(
+          requesterProfileId: who,
+          selfProfileId: 'me',
+          memberProfileIds: members,
+        );
+
+    test('участник получает ключ', () {
+      expect(allowed('bob'), isTrue);
+      expect(allowed(' carol '), isTrue);
+    });
+
+    test('моё же второе устройство получает ключ', () {
+      expect(allowed('me', members: const []), isTrue);
+    });
+
+    test('чужой с попарной сессией, но не в составе, — отказ', () {
+      expect(allowed('mallory'), isFalse);
+    });
+
+    test('исключённый (уже нет в составе) — отказ', () {
+      expect(allowed('bob', members: const ['carol']), isFalse);
+    });
+
+    test('неизвестный отправитель — отказ, а не ключ «на всякий случай»', () {
+      expect(allowed(''), isFalse);
+      expect(allowed('   '), isFalse);
+    });
+
+    test('пустой свой профиль не открывает ключ пустому отправителю', () {
+      expect(
+        AppController.roomKeyRequesterAllowed(
+          requesterProfileId: '',
+          selfProfileId: '',
+          memberProfileIds: const [''],
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('gkeyreq recovery — asking without shouting', () {
     test('a member does not ask on the FIRST miss', () {
       // The key and the message travel over two different pairwise sessions and

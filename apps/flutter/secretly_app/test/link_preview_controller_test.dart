@@ -473,7 +473,7 @@ void main() {
     expect('linkPreview: linkPreview'.allMatches(sched).length, 2);
     // Конверты комнаты — сейчас и отложенно.
     expect(
-      body('  Future<void> _dispatchGroupMessageNow({'),
+      body('  Future<int> _dispatchGroupMessageNow({'),
       contains("'linkPreview': linkPreview.toJson()"),
     );
     expect(

@@ -20,6 +20,17 @@ enum AttachmentFailureCode {
   recipientNoDevices,
   contactUnverified,
   noDeliverableTargetDevices,
+  /// ТЗ E1, фаза 2: метаданные снимка или ролика убрать не удалось, а с ними
+  /// (геометка, модель телефона) файл не отправляется.
+  metadataScrubFailed,
+  // О11 (разбор медиа 15.11.2026): ответы сервера на загрузку, которые
+  // раньше показывались как «сервис недоступен» — человек повторял без толку.
+  /// 413: файл больше, чем сервер примет для этого аккаунта.
+  serverRejectedSize,
+  /// 507 «server storage full»: на сервере мало места — временно.
+  serverStorageFull,
+  /// 507 «blob quota exceeded»: исчерпан объём файлов устройства.
+  uploadQuotaExceeded,
   generic,
 }
 
@@ -121,6 +132,17 @@ AttachmentFailureCode classifyAttachmentFailure(
   if (message.contains('no deliverable target devices')) {
     return AttachmentFailureCode.noDeliverableTargetDevices;
   }
+  // О11: ответы реле `/v1/blob/upload` (`blob upload failed: <код> <тело>`).
+  // Раньше их ловило правило «blob upload failed» ниже, и всё было
+  // «сервис недоступен».
+  if (message.contains('blob upload failed: 413')) {
+    return AttachmentFailureCode.serverRejectedSize;
+  }
+  if (message.contains('blob upload failed: 507')) {
+    return message.contains('quota')
+        ? AttachmentFailureCode.uploadQuotaExceeded
+        : AttachmentFailureCode.serverStorageFull;
+  }
   if (_looksLikeServiceUnavailable(message)) {
     return AttachmentFailureCode.serviceUnavailable;
   }
@@ -186,6 +208,14 @@ String _defaultAttachmentFailureMessage(
       return 'Contact is not verified.';
     case AttachmentFailureCode.noDeliverableTargetDevices:
       return 'Could not deliver the attachment to any recipient device.';
+    case AttachmentFailureCode.metadataScrubFailed:
+      return 'Could not remove location and camera data from this file, so it was not sent.';
+    case AttachmentFailureCode.serverRejectedSize:
+      return 'The server does not accept files this large.';
+    case AttachmentFailureCode.serverStorageFull:
+      return 'The server is low on space. Try again later.';
+    case AttachmentFailureCode.uploadQuotaExceeded:
+      return 'File storage limit reached. Try again later.';
     case AttachmentFailureCode.generic:
       return 'Could not send attachment. Try again.';
   }

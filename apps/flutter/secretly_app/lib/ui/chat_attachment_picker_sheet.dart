@@ -20,6 +20,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:video_player/video_player.dart';
 
+import '../build_variant.dart';
 import 'icons/app_icons.dart';
 import 'l10n.dart';
 import 'recent_attachments_store.dart';
@@ -75,7 +76,8 @@ class ChatAttachmentPickerResult {
       filePaths = List<String>.unmodifiable(
         items.map((item) => item.path).toList(growable: false),
       ),
-      fileName = null;
+      fileName = null,
+      fileNames = const <String?>[];
 
   /// Gallery photos/videos picked from the «Галерея» source on the FILE tab.
   /// Same media items as [photos], but the caller must send them through the
@@ -89,7 +91,8 @@ class ChatAttachmentPickerResult {
       filePaths = List<String>.unmodifiable(
         items.map((item) => item.path).toList(growable: false),
       ),
-      fileName = null;
+      fileName = null,
+      fileNames = const <String?>[];
 
   ChatAttachmentPickerResult.file(String filePath, {String? fileName})
     : kind = ChatAttachmentPickerResultKind.file,
@@ -97,31 +100,56 @@ class ChatAttachmentPickerResult {
       filePaths = List<String>.unmodifiable(<String>[filePath]),
       fileName = (fileName != null && fileName.trim().isNotEmpty)
           ? fileName.trim()
-          : null;
+          : null,
+      fileNames = List<String?>.unmodifiable(<String?>[
+        (fileName != null && fileName.trim().isNotEmpty)
+            ? fileName.trim()
+            : null,
+      ]);
+
+  /// О9 (разбор медиа 15.11.2026): несколько документов за раз, как на ПК.
+  /// Тот же вид результата [ChatAttachmentPickerResultKind.file]; каждый
+  /// файл уходит отдельным сообщением. [fileNames] идёт парой к [filePaths].
+  ChatAttachmentPickerResult.files(
+    List<({String path, String? name})> picked,
+  ) : assert(picked.isNotEmpty),
+      kind = ChatAttachmentPickerResultKind.file,
+      mediaItems = const <ChatAttachmentPickerMediaItem>[],
+      filePaths = List<String>.unmodifiable(
+        picked.map((f) => f.path).toList(growable: false),
+      ),
+      fileName = picked.first.name,
+      fileNames = List<String?>.unmodifiable(
+        picked.map((f) => f.name).toList(growable: false),
+      );
 
   ChatAttachmentPickerResult.audio(String filePath)
     : kind = ChatAttachmentPickerResultKind.audio,
       mediaItems = const <ChatAttachmentPickerMediaItem>[],
       filePaths = List<String>.unmodifiable(<String>[filePath]),
-      fileName = null;
+      fileName = null,
+      fileNames = const <String?>[];
 
   ChatAttachmentPickerResult.poll()
     : kind = ChatAttachmentPickerResultKind.poll,
       mediaItems = const <ChatAttachmentPickerMediaItem>[],
       filePaths = const <String>[],
-      fileName = null;
+      fileName = null,
+      fileNames = const <String?>[];
 
   ChatAttachmentPickerResult.topic()
     : kind = ChatAttachmentPickerResultKind.topic,
       mediaItems = const <ChatAttachmentPickerMediaItem>[],
       filePaths = const <String>[],
-      fileName = null;
+      fileName = null,
+      fileNames = const <String?>[];
 
   ChatAttachmentPickerResult.event()
     : kind = ChatAttachmentPickerResultKind.event,
       mediaItems = const <ChatAttachmentPickerMediaItem>[],
       filePaths = const <String>[],
-      fileName = null;
+      fileName = null,
+      fileNames = const <String?>[];
 
   final ChatAttachmentPickerResultKind kind;
   final List<ChatAttachmentPickerMediaItem> mediaItems;
@@ -131,6 +159,10 @@ class ChatAttachmentPickerResult {
   /// from the picker (PlatformFile.name) so the chat shows the real name +
   /// format. Null for non-file results.
   final String? fileName;
+
+  /// Original names for each of [filePaths] (same order); empty for results
+  /// that carry no names.
+  final List<String?> fileNames;
 
   String? get primaryPath => filePaths.isEmpty ? null : filePaths.first;
   ChatAttachmentPickerMediaItem? get primaryMediaItem =>
@@ -177,7 +209,8 @@ class _ChatAttachmentPickerSheet extends StatefulWidget {
 }
 
 class _ChatAttachmentPickerSheetState
-    extends State<_ChatAttachmentPickerSheet> {
+    extends State<_ChatAttachmentPickerSheet>
+    with WidgetsBindingObserver {
   static const int _galleryPageSize = 80;
   static const double _galleryPrefetchExtent = 720;
 
@@ -237,12 +270,41 @@ class _ChatAttachmentPickerSheetState
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_loadGalleryAssets());
     unawaited(_initializeCameraPreview());
   }
 
+  /// Камеру отпустили, уйдя в фон, — вернуть её при возвращении.
+  bool _cameraReleasedForBackground = false;
+
+  // 🔴 Play Vitals п. 1/12 (15.11.2026): сбой `FlutterJNI.ensureAttachedToNative`
+  // — кадр камеры приходит в движок, уже отсоединённый от окна. Как велит
+  // руководство плагина camera: в фоне камеру отпускаем, на переднем плане —
+  // открываем снова. Пока идёт системная камера или выбор (`_busy`), камерой
+  // управляет тот путь.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      if (_busy) return;
+      final controller = _cameraController;
+      if (controller == null) return;
+      _cameraController = null;
+      _cameraReleasedForBackground = true;
+      if (mounted) setState(() {});
+      unawaited(controller.dispose());
+    } else if (state == AppLifecycleState.resumed &&
+        _cameraReleasedForBackground) {
+      _cameraReleasedForBackground = false;
+      if (mounted) unawaited(_initializeCameraPreview());
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     final cameraController = _cameraController;
     _cameraController = null;
     if (cameraController != null) {
@@ -701,10 +763,16 @@ class _ChatAttachmentPickerSheetState
         allowedExtensions: audioOnly
             ? _audioExtensions.toList(growable: false)
             : null,
-        allowMultiple: false,
+        // О9 (разбор медиа 15.11.2026): документы — сразу несколько, как на
+        // ПК; музыка — по одной, как была.
+        allowMultiple: !audioOnly,
         withData: false,
       );
-      final file = picked?.files.single;
+      if (!audioOnly && picked != null && picked.files.length > 1) {
+        await _finishMultiFilePick(picked.files);
+        return;
+      }
+      final file = picked?.files.isEmpty ?? true ? null : picked!.files.first;
       final path = file?.path?.trim();
       if (!mounted || file == null) return;
       if (path == null || path.isEmpty) {
@@ -775,6 +843,57 @@ class _ChatAttachmentPickerSheetState
         setState(() => _busy = false);
       }
     }
+  }
+
+  /// Several documents from the system picker (О9). Same checks as for one
+  /// file; a file that fails them is skipped with the same message, the rest
+  /// still go. Each one is sent as its own message.
+  Future<void> _finishMultiFilePick(List<PlatformFile> files) async {
+    final ok = <({String path, String? name})>[];
+    final accepted = <PlatformFile>[];
+    String? skippedReason;
+    for (final file in files) {
+      final path = file.path?.trim();
+      if (path == null || path.isEmpty) {
+        skippedReason ??= _t(
+          'Не удалось получить путь к файлу',
+          'Could not resolve the selected file path',
+        );
+        continue;
+      }
+      if (!await File(path).exists()) {
+        skippedReason ??= _t(
+          'Файл уже недоступен',
+          'The file is no longer available',
+        );
+        continue;
+      }
+      if (_isAudioPath(path)) {
+        skippedReason ??= _t(
+          'Для треков откройте вкладку Музыка',
+          'Use the Music tab for audio files',
+        );
+        continue;
+      }
+      ok.add((path: path, name: file.name));
+      accepted.add(file);
+    }
+    if (!mounted) return;
+    if (ok.isEmpty) {
+      if (skippedReason != null) _showInlineMessage(skippedReason);
+      return;
+    }
+    for (final f in accepted) {
+      unawaited(
+        RecentAttachmentsStore.instance.record(
+          kind: 'file',
+          sourcePath: f.path!.trim(),
+          fileName: f.name,
+          sizeBytes: f.size,
+        ),
+      );
+    }
+    Navigator.of(context).pop(ChatAttachmentPickerResult.files(ok));
   }
 
   Future<void> _pickFileFromSystem() {
@@ -2308,6 +2427,18 @@ class _InAppCameraPageState extends State<_InAppCameraPage> {
       // not keep streaming frames behind the modal editor.
       await controller.pausePreview();
       if (!mounted) return;
+      // Облегчённая сборка: редактора обрезки нет — снятый клип уходит как
+      // есть, ровно как снятый в системной камере.
+      if (!kVideoToolsAvailable) {
+        Navigator.of(context).pop(
+          ChatAttachmentPickerMediaItem(
+            path: clip.path,
+            kind: ChatAttachmentPickerMediaKind.video,
+            mime: widget.mimeForPath(clip.path) ?? 'video/mp4',
+          ),
+        );
+        return;
+      }
       final edited = await Navigator.of(context).push<VideoTrimEditorResult>(
         MaterialPageRoute<VideoTrimEditorResult>(
           fullscreenDialog: true,
@@ -3274,20 +3405,24 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: VideoTrimTrack(
-                      durationMs: _durationMs,
-                      startMs: _startMs,
-                      endMs: _endMs,
-                      minTrimMs: _minTrimMs,
-                      frames: _frames,
-                      positionMs: video.value.position.inMilliseconds,
-                      onChanged: _onTrimChanged,
+                  // Облегчённая сборка: обрезать нечем — трека нет, и `_hasTrim`
+                  // никогда не станет истиной.
+                  if (kVideoToolsAvailable) ...[
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: VideoTrimTrack(
+                        durationMs: _durationMs,
+                        startMs: _startMs,
+                        endMs: _endMs,
+                        minTrimMs: _minTrimMs,
+                        frames: _frames,
+                        positionMs: video.value.position.inMilliseconds,
+                        onChanged: _onTrimChanged,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
+                    const SizedBox(height: 10),
+                  ],
                 ],
                 _editToolbar(),
                 Padding(

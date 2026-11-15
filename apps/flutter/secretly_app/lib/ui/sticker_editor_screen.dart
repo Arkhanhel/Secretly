@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../app/app_controller.dart';
 import '../stickers/sticker_segmentation_service.dart';
+import 'l10n.dart';
 import 'secretly_snackbar.dart';
 import 'sticker_preview_screen.dart';
 
@@ -33,6 +34,7 @@ class StickerEditorScreen extends StatefulWidget {
     required this.sourcePath,
     required this.controller,
     this.textOnly = false,
+    this.targetPackId,
   });
 
   final String sourcePath;
@@ -41,6 +43,10 @@ class StickerEditorScreen extends StatefulWidget {
   /// Text-only sticker: no photo, transparent canvas, opens straight into text
   /// editing (the «Вырезать объект» pill is hidden).
   final bool textOnly;
+
+  /// Создание из «+» в окне своего набора (15.11.2026): экран готового
+  /// стикера первой кнопкой предлагает «Добавить в этот набор».
+  final String? targetPackId;
 
   @override
   State<StickerEditorScreen> createState() => _StickerEditorScreenState();
@@ -198,7 +204,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
       if (!mounted) return;
       if (seg == null || seg.subjects.isEmpty || frameImg == null) {
         setState(() => _busy = false);
-        _toast('Объект не распознан');
+        _toast(context.l10n.stickerEditorObjectNotFound);
         return;
       }
       _subjectImg.clear();
@@ -225,7 +231,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
   Future<void> _applyCutout() async {
     final seg = _seg;
     if (seg == null || _selected.isEmpty) {
-      _toast('Выберите объект');
+      _toast(context.l10n.stickerEditorPickObject);
       return;
     }
     setState(() => _busy = true);
@@ -734,6 +740,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
         builder: (_) => StickerPreviewScreen(
           stickerPath: finalPath,
           controller: widget.controller,
+          targetPackId: widget.targetPackId,
         ),
       ),
     );
@@ -785,36 +792,40 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
                     )
                   : null),
         title: Text(
-          _editingText ? 'Текст' : (_selecting ? 'Выделите объект' : 'Стикер'),
+          _editingText
+              ? context.l10n.stickerEditorText
+              : (_selecting
+                    ? context.l10n.stickerEditorSelectObject
+                    : context.l10n.stickerWord),
         ),
         actions: [
           if (!_selecting && !_editingText) ...[
             IconButton(
-              tooltip: 'Отменить',
+              tooltip: context.l10n.stickerEditorUndo,
               icon: const Icon(Icons.undo_rounded),
               onPressed: _undoStack.isEmpty ? null : _undo,
             ),
             IconButton(
-              tooltip: 'Вернуть',
+              tooltip: context.l10n.stickerEditorRedo,
               icon: const Icon(Icons.redo_rounded),
               onPressed: _redoStack.isEmpty ? null : _redo,
             ),
           ],
           if (!_selecting && !_editingText && _active >= 0)
             IconButton(
-              tooltip: 'Удалить',
+              tooltip: context.l10n.stickerEditorDelete,
               icon: const Icon(Icons.delete_outline_rounded),
               onPressed: _deleteActive,
             ),
           if (_editingText)
             IconButton(
-              tooltip: 'Готово',
+              tooltip: context.l10n.stickerEditorDone,
               icon: const Icon(Icons.check_rounded),
               onPressed: _commitTextEdit,
             )
           else if (!_selecting)
             IconButton(
-              tooltip: 'Готово',
+              tooltip: context.l10n.stickerEditorDone,
               icon: const Icon(Icons.check_rounded),
               onPressed: _busy ? null : _confirm,
             ),
@@ -910,13 +921,13 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
             ? const [Shadow(color: Colors.black54, blurRadius: 8)]
             : null,
       ),
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         border: InputBorder.none,
         counterText: '',
         isDense: true,
         contentPadding: EdgeInsets.zero,
-        hintText: 'Текст',
-        hintStyle: TextStyle(color: Colors.white38),
+        hintText: context.l10n.stickerEditorText,
+        hintStyle: const TextStyle(color: Colors.white38),
       ),
       onChanged: (_) => setState(() {}),
     );
@@ -998,11 +1009,11 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
                       ),
                     ),
                     const SizedBox(width: 8),
-                    _bgChip(_TextBgStyle.none, 'Без фона'),
+                    _bgChip(_TextBgStyle.none, context.l10n.stickerEditorBgNone),
                     const SizedBox(width: 8),
-                    _bgChip(_TextBgStyle.solid, 'Заливка'),
+                    _bgChip(_TextBgStyle.solid, context.l10n.stickerEditorBgSolid),
                     const SizedBox(width: 8),
-                    _bgChip(_TextBgStyle.pill, 'Плашка'),
+                    _bgChip(_TextBgStyle.pill, context.l10n.stickerEditorBgPill),
                     if (_textBgStyle != _TextBgStyle.none) ...[
                       const SizedBox(width: 8),
                       _colorTargetToggle(),
@@ -1102,9 +1113,9 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
               ),
             ),
             const SizedBox(width: 6),
-            const Text(
-              'Контур',
-              style: TextStyle(color: Colors.white, fontSize: 13),
+            Text(
+              context.l10n.stickerEditorOutline,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
             ),
           ],
         ),
@@ -1114,44 +1125,57 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
 
   /// Toggles whether the right colour slider edits the TEXT or the BACKGROUND.
   Widget _colorTargetToggle() {
-    Widget dot(String label, Color c, bool active) => GestureDetector(
-      onTap: () => setState(() => _colorTargetBg = label == 'Фон'),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(
-            color: active ? Colors.white : Colors.white24,
-            width: active ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 14,
-              height: 14,
-              decoration: BoxDecoration(
-                color: c,
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white30),
+    // Цель выбирается флагом, а не сравнением подписи: подпись теперь
+    // переведена, и сравнение с русским «Фон» молча перестало бы работать.
+    Widget dot(String label, Color c, bool active, {required bool isBg}) =>
+        GestureDetector(
+          onTap: () => setState(() => _colorTargetBg = isBg),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(
+                color: active ? Colors.white : Colors.white24,
+                width: active ? 2 : 1,
               ),
             ),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white, fontSize: 11),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: c,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white30),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  label,
+                  style: const TextStyle(color: Colors.white, fontSize: 11),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    );
+          ),
+        );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        dot('Текст', _textColor, !_colorTargetBg),
+        dot(
+          context.l10n.stickerEditorText,
+          _textColor,
+          !_colorTargetBg,
+          isBg: false,
+        ),
         const SizedBox(width: 6),
-        dot('Фон', _textBgColor, _colorTargetBg),
+        dot(
+          context.l10n.stickerEditorBackground,
+          _textBgColor,
+          _colorTargetBg,
+          isBg: true,
+        ),
       ],
     );
   }
@@ -1481,7 +1505,9 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  _didCut ? 'Вырезать заново' : 'Вырезать объект',
+                  _didCut
+                      ? context.l10n.stickerEditorRecut
+                      : context.l10n.stickerEditorCut,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15,
@@ -1527,7 +1553,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
           children: [
             _compactTabButton(
               Icons.brush_rounded,
-              'Рисунок',
+              context.l10n.stickerEditorDraw,
               _panel == _Panel.draw,
               () => setState(
                 () =>
@@ -1536,7 +1562,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
             ),
             _compactTabButton(
               Icons.tune_rounded,
-              'Коррекция',
+              context.l10n.stickerEditorAdjust,
               _panel == _Panel.adjust,
               () => setState(
                 () => _panel = _panel == _Panel.adjust
@@ -1546,19 +1572,24 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
             ),
             _compactTabButton(
               Icons.format_color_fill_rounded,
-              'Фон',
+              context.l10n.stickerEditorBackground,
               _panel == _Panel.bg,
               () => setState(
                 () => _panel = _panel == _Panel.bg ? _Panel.none : _Panel.bg,
               ),
             ),
-            _compactTabButton(Icons.title_rounded, 'Текст', false, () {
-              setState(() => _panel = _Panel.none);
-              _addOrEditText();
-            }),
+            _compactTabButton(
+              Icons.title_rounded,
+              context.l10n.stickerEditorText,
+              false,
+              () {
+                setState(() => _panel = _Panel.none);
+                _addOrEditText();
+              },
+            ),
             _compactTabButton(
               Icons.emoji_emotions_outlined,
-              'Эмодзи',
+              context.l10n.stickerEditorEmoji,
               false,
               () {
                 setState(() => _panel = _Panel.none);
@@ -1744,7 +1775,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
         mainAxisSize: MainAxisSize.min,
         children: [
           _compactSliderRow(
-            'Экспозиция',
+            context.l10n.stickerEditorExposure,
             _exposure,
             -0.35,
             0.35,
@@ -1752,7 +1783,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
             reset: 0,
           ),
           _compactSliderRow(
-            'Контраст',
+            context.l10n.stickerEditorContrast,
             _contrast,
             0.6,
             1.5,
@@ -1760,7 +1791,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
             reset: 1,
           ),
           _compactSliderRow(
-            'Насыщенность',
+            context.l10n.stickerEditorSaturation,
             _saturation,
             0,
             2,
@@ -1830,7 +1861,9 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              multi ? 'Нажмите на объекты, которые оставить' : 'Объект выделен',
+              multi
+                  ? context.l10n.stickerEditorTapObjects
+                  : context.l10n.stickerEditorObjectSelected,
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
@@ -1845,7 +1878,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
                 ),
                 onPressed: _busy ? null : _applyCutout,
                 icon: const Icon(Icons.content_cut_rounded),
-                label: const Text('Вырезать объект'),
+                label: Text(context.l10n.stickerEditorCut),
               ),
             ),
           ],

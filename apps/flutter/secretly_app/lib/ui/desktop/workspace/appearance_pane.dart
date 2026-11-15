@@ -35,6 +35,7 @@ import '../../theme_presets.dart';
 import '../app/desktop_app_view_model.dart';
 import '../app/desktop_selector.dart' show kDesktopNoTicks;
 import '../chat/bubble_look.dart' show desktopSenderNameColor;
+import '../chat/desktop_wallpaper.dart' show desktopThemedChatWallpaperId;
 import '../chat/desktop_wallpaper_picker.dart';
 import '../design/theme_bridge.dart';
 import '../design/tokens.dart';
@@ -47,6 +48,7 @@ import 'appearance_preview.dart';
 import 'settings_kit.dart';
 import 'settings_style.dart';
 import 'workspace_layout.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Ширина колонки настроек (с полями 32) и пределы колонки предпросмотра —
 /// из макета: `max-width: 760px` у содержимого, `360…460px` у предпросмотра.
@@ -360,8 +362,13 @@ class _DesktopAppearancePaneState extends State<DesktopAppearancePane> {
     final accentOk = p.customAccent == null
         ? custom == 0 && ctrl.appThemePresetId == p.themeId
         : custom == p.customAccent!.toARGB32();
+    // Обои — как они видны в этой теме: «Графит», выбранный в тёмной,
+    // в светлой рисуется «Небом» (`desktopThemedChatWallpaperId`).
     return accentOk &&
-        normalizeChatWallpaperId(ctrl.defaultChatWallpaperId) ==
+        desktopThemedChatWallpaperId(
+              ctrl.defaultChatWallpaperId,
+              dark: dark,
+            ) ==
             p.wallpaper(dark: dark) &&
         normalizeChatBubbleStylePresetId(ctrl.chatBubbleStylePresetId) ==
             p.bubbleId &&
@@ -2120,7 +2127,7 @@ class _NameChip extends StatelessWidget {
       child: HoverListener(
         onTap: onTap,
         cursor: onTap == null ? SystemMouseCursors.basic : SystemMouseCursors.click,
-        builder: (ctx, hovered, _) => AnimatedContainer(
+        builder: (ctx, hovered, pressedNow) => DPressScale(pressed: pressedNow, scale: 0.9, child: AnimatedContainer(
           duration: DMotion.fast,
           padding: const EdgeInsets.fromLTRB(7, 6, 10, 6),
           decoration: BoxDecoration(
@@ -2161,7 +2168,7 @@ class _NameChip extends StatelessWidget {
               ),
             ],
           ),
-        ),
+        )),
       ),
     );
   }

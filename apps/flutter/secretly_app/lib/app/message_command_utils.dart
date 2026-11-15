@@ -406,16 +406,29 @@ List<RoomTopicRef> _topicsFromList(List<Object?> raw) => raw
     .toList(growable: false);
 
 class TopicsSyncCommand {
-  const TopicsSyncCommand({required this.topics, this.baseMark = ''});
+  const TopicsSyncCommand({
+    required this.topics,
+    this.baseMark = '',
+    this.revision = 0,
+  });
   final List<RoomTopicRef> topics;
 
   /// Знак «Основы». Пусто — решётка.
   final String baseMark;
+
+  /// Когда список правили (06.10.2026). Повтор списка несёт ту же ревизию,
+  /// поэтому повтор старого списка не перетирает более новую правку. 0 —
+  /// команда старой сборки: сравнивать по времени сообщения, как раньше.
+  final int revision;
+
+  /// С чем сравнивать свежесть: ревизия, а без неё — время сообщения.
+  int freshnessMs(int messageAtMs) => revision > 0 ? revision : messageAtMs;
 }
 
 String buildTopicsSyncCommand(
   List<RoomTopicRef> topics, {
   String baseMark = '',
+  int revision = 0,
 }) {
   final payload = <String, Object?>{
     'v': 1,
@@ -424,6 +437,7 @@ String buildTopicsSyncCommand(
         .map(roomTopicToMap)
         .toList(growable: false),
     if (baseMark.trim().isNotEmpty) 'baseMark': baseMark.trim(),
+    if (revision > 0) 'rev': revision,
   };
   return '$kTopicsSyncCommandPrefix${base64Url.encode(utf8.encode(jsonEncode(payload)))}';
 }
@@ -450,10 +464,58 @@ TopicsSyncCommand? parseTopicsSyncCommand(String text) {
     return TopicsSyncCommand(
       topics: topics,
       baseMark: (json['baseMark'] as String?)?.trim() ?? '',
+      revision: switch (json['rev']) {
+        final int value => value,
+        final num value => value.toInt(),
+        _ => 0,
+      },
     );
   } catch (_) {
     return null;
   }
+}
+
+/// 🔴 СПИСОК ТЕМ ДОХОДИТ ДО ВСЕХ, А НЕ «ОТПРАВИЛ И ЗАБЫЛ» (06.10.2026).
+///
+/// Жалоба владельца: создал темы на телефоне, у остальных участников их нет,
+/// а сообщения из тем у них лежат в «Основе». Список уходил ОДНИМ скрытым
+/// сообщением в момент правки. Рассылка в комнате идёт каждому участнику
+/// отдельно: кому не дошло — тот не получит список никогда (догон пропусков
+/// комнаты выключен), и новички после создания тем — тоже. А у получателя
+/// без списка фильтр тем выключен, и всё идёт одной лентой.
+///
+/// Теперь автор списка повторяет его при отправке в тему: если ни разу не
+/// дошло после правки, если с прошлой рассылки сменился состав комнаты, если
+/// в прошлый раз дошло не всем (через [kRoomTopicsResendAfterPartial]) и
+/// просто раз в [kRoomTopicsResendInterval]. Выпущенные сборки берут самый
+/// свежий список из ленты, поэтому повтор чинит и их.
+///
+/// Повторяет только АВТОР самого свежего известного ему списка: чужой список
+/// мог устареть, и его повтор перетёр бы новую правку у всех. Автор и «что
+/// уже разослано» помнятся по СОДЕРЖИМОМУ списка, а не по времени: экран
+/// автора принимает его же команду из ленты со временем сервера, и метка
+/// времени меняется, а список — нет.
+const Duration kRoomTopicsResendInterval = Duration(hours: 6);
+const Duration kRoomTopicsResendAfterPartial = Duration(minutes: 15);
+
+bool shouldResendRoomTopics({
+  required bool hasTopics,
+  required bool authoredHere,
+  required int nowMs,
+  required String listHash,
+  required String sentHash,
+  required int sentAtMs,
+  required bool sentPartially,
+  required String membersKey,
+  required String sentMembersKey,
+}) {
+  if (!hasTopics || !authoredHere) return false;
+  if (sentAtMs <= 0 || sentHash != listHash) return true;
+  if (membersKey != sentMembersKey) return true;
+  final wait = sentPartially
+      ? kRoomTopicsResendAfterPartial
+      : kRoomTopicsResendInterval;
+  return nowMs - sentAtMs >= wait.inMilliseconds;
 }
 
 // ── Events / RSVP (room feature) ──────────────────────────────────────────
@@ -1001,6 +1063,7 @@ class SelfMirrorAttachmentCommand {
     this.waveform,
     this.musicTitle,
     this.musicArtist,
+    this.exp,
   });
 
   final String convoId;
@@ -1011,6 +1074,11 @@ class SelfMirrorAttachmentCommand {
   final int createdAtMs;
   final String? blobAccessTokenB64;
   final String? mime;
+
+  /// Срок исчезающего сообщения, секунд (ТЗ 22.10.2026). Optional/additive:
+  /// моё другое устройство ставит своей копии тот же срок, что ушёл
+  /// собеседнику; отсчёт — от [createdAtMs], как у отправителя.
+  final int? exp;
   final String? replyToPayloadEventId;
   final String? mediaGroupId;
 
@@ -1057,6 +1125,7 @@ String buildSelfMirrorAttachmentCommand({
   List<int>? waveform,
   String? musicTitle,
   String? musicArtist,
+  int? exp,
 }) {
   final payload = <String, Object?>{
     'v': 1,
@@ -1066,6 +1135,7 @@ String buildSelfMirrorAttachmentCommand({
     'fileKeyB64': fileKeyB64,
     'sizeBytes': sizeBytes,
     'createdAtMs': createdAtMs,
+    if (exp != null && exp > 0) 'exp': exp,
     if (blobAccessTokenB64 != null && blobAccessTokenB64.trim().isNotEmpty)
       'blobAccessTokenB64': blobAccessTokenB64,
     if (mime != null && mime.trim().isNotEmpty) 'mime': mime.trim(),
@@ -1145,10 +1215,23 @@ SelfMirrorAttachmentCommand? parseSelfMirrorAttachmentCommand(String text) {
       waveform: _selfMirrorWaveform(json['waveform']),
       musicTitle: _selfMirrorLabel(json['musicTitle']),
       musicArtist: _selfMirrorLabel(json['musicArtist']),
+      exp: _selfMirrorDisappearSeconds(json['exp']),
     );
   } catch (_) {
     return null;
   }
+}
+
+/// Срок исчезающего сообщения из зеркала: число в 1…365 дней, иначе `null`.
+int? _selfMirrorDisappearSeconds(Object? raw) {
+  final int? v = switch (raw) {
+    final int value => value,
+    final num value => value.toInt(),
+    final String value => int.tryParse(value),
+    _ => null,
+  };
+  if (v == null || v <= 0 || v > 365 * 24 * 60 * 60) return null;
+  return v;
 }
 
 List<int>? _selfMirrorWaveform(Object? raw) {
@@ -1183,6 +1266,7 @@ class SelfMirrorStickerCommand {
     this.animated = false,
     this.format = 'png',
     this.replyToPayloadEventId,
+    this.exp,
   });
 
   final String convoId;
@@ -1196,6 +1280,9 @@ class SelfMirrorStickerCommand {
   final bool animated;
   final String format;
   final String? replyToPayloadEventId;
+
+  /// Срок исчезающего сообщения, секунд (ТЗ 22.10.2026). Optional/additive.
+  final int? exp;
 }
 
 String buildSelfMirrorStickerCommand({
@@ -1210,6 +1297,7 @@ String buildSelfMirrorStickerCommand({
   bool animated = false,
   String format = 'png',
   String? replyToPayloadEventId,
+  int? exp,
 }) {
   final payload = <String, Object?>{
     'v': 1,
@@ -1219,6 +1307,7 @@ String buildSelfMirrorStickerCommand({
     'packVersion': packVersion,
     'stickerId': stickerId.trim(),
     'createdAtMs': createdAtMs,
+    if (exp != null && exp > 0) 'exp': exp,
     if (emojiHint.trim().isNotEmpty) 'emojiHint': emojiHint.trim(),
     if (label.trim().isNotEmpty) 'label': label.trim(),
     'animated': animated,
@@ -1270,6 +1359,7 @@ SelfMirrorStickerCommand? parseSelfMirrorStickerCommand(String text) {
           : (json['format'] as String).trim(),
       replyToPayloadEventId:
           (json['replyToPayloadEventId'] as String?)?.trim(),
+      exp: _selfMirrorDisappearSeconds(json['exp']),
     );
   } catch (_) {
     return null;
@@ -1574,6 +1664,8 @@ class SelfMirrorConvoStateCommand {
     this.personal,
     this.autoDeleteSet = false,
     this.autoDeleteSeconds,
+    this.disappearSet = false,
+    this.disappearSeconds,
   });
 
   final String convoId;
@@ -1585,13 +1677,20 @@ class SelfMirrorConvoStateCommand {
   final bool autoDeleteSet;
   final int? autoDeleteSeconds;
 
+  /// Общий таймер чата (ТЗ 22.10.2026): зеркало на свои устройства по тому же
+  /// правилу, что `autoDeleteSet`/`autoDeleteSeconds`. Необязательные поля —
+  /// старая сборка их пропускает.
+  final bool disappearSet;
+  final int? disappearSeconds;
+
   /// True when the patch would change nothing — worth not sending at all.
   bool get isEmpty =>
       muted == null &&
       pinned == null &&
       archived == null &&
       personal == null &&
-      !autoDeleteSet;
+      !autoDeleteSet &&
+      !disappearSet;
 }
 
 String buildSelfMirrorConvoStateCommand({
@@ -1603,6 +1702,8 @@ String buildSelfMirrorConvoStateCommand({
   bool? personal,
   bool autoDeleteSet = false,
   int? autoDeleteSeconds,
+  bool disappearSet = false,
+  int? disappearSeconds,
 }) {
   final payload = <String, Object?>{
     'v': 1,
@@ -1614,6 +1715,8 @@ String buildSelfMirrorConvoStateCommand({
     if (personal != null) 'personal': personal,
     if (autoDeleteSet) 'autoDeleteSet': true,
     if (autoDeleteSet) 'autoDeleteSeconds': autoDeleteSeconds,
+    if (disappearSet) 'disappearSet': true,
+    if (disappearSet) 'disappearSeconds': disappearSeconds,
   };
   return '$kSelfMirrorConvoStateCommandPrefix'
       '${base64Url.encode(utf8.encode(jsonEncode(payload)))}';
@@ -1645,6 +1748,11 @@ SelfMirrorConvoStateCommand? parseSelfMirrorConvoStateCommand(String text) {
     };
     final autoDeleteSet = readBool('autoDeleteSet') ?? false;
     final rawAutoDelete = json['autoDeleteSeconds'];
+    final disappearSet = readBool('disappearSet') ?? false;
+    final rawDisappear = json['disappearSeconds'];
+    final parsedDisappear = (!disappearSet || rawDisappear == null)
+        ? null
+        : parseInt(rawDisappear);
     final command = SelfMirrorConvoStateCommand(
       convoId: convoId,
       appliedAtMs: parseInt(json['appliedAtMs']),
@@ -1656,6 +1764,10 @@ SelfMirrorConvoStateCommand? parseSelfMirrorConvoStateCommand(String text) {
       autoDeleteSeconds: (!autoDeleteSet || rawAutoDelete == null)
           ? null
           : parseInt(rawAutoDelete),
+      disappearSet: disappearSet,
+      disappearSeconds: (parsedDisappear != null && parsedDisappear > 0)
+          ? parsedDisappear
+          : null,
     );
     // A patch that changes nothing is malformed, not a no-op worth applying.
     if (command.isEmpty) return null;
@@ -1667,6 +1779,99 @@ SelfMirrorConvoStateCommand? parseSelfMirrorConvoStateCommand(String text) {
 
 bool isSelfMirrorConvoStateCommandText(String text) {
   return text.startsWith(kSelfMirrorConvoStateCommandPrefix);
+}
+
+// ── Исчезающие сообщения: смена таймера чата (ТЗ 22.10.2026, §2.1) ──────
+
+/// Префикс команды «таймер чата изменён». Начинается с `__secretly_`, поэтому
+/// выпущенные сборки прячут её в ленте, превью и уведомлении
+/// (`hiddenControlText`) — сторож на префикс ниже обязателен.
+const String kConvoTimerCommandPrefix = '__secretly_convo_timer_v1__:';
+
+/// Смена общего таймера чата, присланная собеседником (1:1) или своим
+/// устройством. [seconds] `null` — таймер выключен.
+///
+/// В 1:1 у отправителя и получателя разные `convoId` (каждый видит чат под
+/// профилем другого), поэтому получатель применяет команду к чату
+/// ОТПРАВИТЕЛЯ, а [convoId] сверяет только как «адресовано мне».
+class ConvoTimerCommand {
+  const ConvoTimerCommand({
+    required this.convoId,
+    required this.seconds,
+    required this.setAtMs,
+  });
+
+  final String convoId;
+  final int? seconds;
+  final int setAtMs;
+}
+
+String buildConvoTimerCommand({
+  required String convoId,
+  required int? seconds,
+  required int setAtMs,
+}) {
+  final payload = <String, Object?>{
+    'v': 1,
+    'convoId': convoId.trim(),
+    'seconds': (seconds != null && seconds > 0) ? seconds : null,
+    'setAtMs': setAtMs,
+  };
+  return '$kConvoTimerCommandPrefix'
+      '${base64Url.encode(utf8.encode(jsonEncode(payload)))}';
+}
+
+ConvoTimerCommand? parseConvoTimerCommand(String text) {
+  if (!text.startsWith(kConvoTimerCommandPrefix)) return null;
+  final raw = text.substring(kConvoTimerCommandPrefix.length).trim();
+  if (raw.isEmpty) return null;
+  try {
+    final decoded = utf8.decode(base64Url.decode(raw));
+    final jsonObj = jsonDecode(decoded);
+    if (jsonObj is! Map) return null;
+    final json = jsonObj.cast<String, Object?>();
+    final convoId = ((json['convoId'] as String?) ?? '').trim();
+    if (convoId.isEmpty) return null;
+    int? parseInt(Object? v) => switch (v) {
+      final int value => value,
+      final num value => value.toInt(),
+      final String value => int.tryParse(value),
+      _ => null,
+    };
+    final seconds = parseInt(json['seconds']);
+    final setAtMs = parseInt(json['setAtMs']) ?? 0;
+    return ConvoTimerCommand(
+      convoId: convoId,
+      // Мусор, ноль, отрицательное или больше года — «выключен», не падение.
+      seconds: (seconds != null && seconds > 0 && seconds <= 365 * 24 * 60 * 60)
+          ? seconds
+          : null,
+      setAtMs: setAtMs,
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+bool isConvoTimerCommandText(String text) {
+  return text.startsWith(kConvoTimerCommandPrefix);
+}
+
+/// Сколько «из будущего» может быть время смены таймера — как окно подписи
+/// запросов на сервере.
+const int kConvoTimerFutureSkewMs = 5 * 60 * 1000;
+
+/// Время смены таймера, которому можно верить (11.11.2026).
+///
+/// Смена с большим `setAtMs` побеждает, а время ставят часы отправителя. Если
+/// они спешат (или в команде 2100 год), такая смена навсегда «новее» любых
+/// следующих, и таймер у участников расходится. Поэтому время из будущего
+/// обрезается до «сейчас + 5 минут» по своим часам. Ноль и отрицательное —
+/// «время не указано», возвращаются как есть.
+int trustedConvoTimerSetAtMs(int setAtMs, int nowMs) {
+  if (setAtMs <= 0) return setAtMs;
+  final limit = nowMs + kConvoTimerFutureSkewMs;
+  return setAtMs > limit ? limit : setAtMs;
 }
 
 /// A chat-folder change mirrored from one of the user's own devices.

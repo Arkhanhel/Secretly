@@ -23,6 +23,7 @@ import '../primitives/desktop_text_field.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../shell/desktop_shell.dart' show DesktopShellApi;
 import '../shell/list_thread_split.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Contacts section reading [AppController.listContacts] on the desktop
 /// production build. Sorted alphabetically with a search field; selecting a
@@ -315,7 +316,13 @@ class _DesktopContactsSectionState extends State<DesktopContactsSection> {
       return ListThreadSplit.fromApi(
         api,
         list: list,
-        thread: details,
+        // Другой человек — карточка «через затухание» (05.10.2026).
+        thread: DPageSwitcher(
+          child: KeyedSubtree(
+            key: ValueKey<String?>('contact:${selected?.profileId}'),
+            child: details,
+          ),
+        ),
       );
     }
     return Row(

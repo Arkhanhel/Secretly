@@ -97,6 +97,8 @@ import '../chat/desktop_photo_viewer.dart';
 import '../chat/desktop_video_viewer.dart';
 import '../chat/forward_target_dialog.dart';
 import '../chat/room_topics_strip.dart';
+import '../chat/desktop_new_topic_dialog.dart';
+import '../../room_private_topic_ui.dart' show NewRoomTopicChoice;
 import '../chat/clear_history_dialog.dart';
 import '../chat/schedule_send_dialog.dart' show formatScheduleMoment;
 import '../shell/list_thread_split.dart';
@@ -128,6 +130,10 @@ import 'desktop_sync_status.dart';
 import '../services/desktop_window_activity.dart';
 import '../primitives/desktop_screen_window.dart';
 import '../chat/mute_choice.dart';
+import '../primitives/motion_widgets.dart';
+import '../chat/disappearing_banner.dart';
+import '../../disappearing_messages_ui.dart' show disappearingSupportWarning;
+import '../../../messages/disappearing_flags.dart' show DisappearingPeerSupport;
 
 /// Итог отправки копии сообщения при пересылке или сохранении.
 enum _CopyOutcome { sent, noFile, empty }
@@ -284,6 +290,8 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
     // режим обоев ([desktopWallpaperAnimModeFor]). Случается редко, поэтому
     // обычная перерисовка секции здесь дешевле любой точечной подписки.
     DesktopWindowActivity.focused.addListener(_onWindowFocusChanged);
+    // Простой человека тоже гасит дрейф обоев (15.11.2026).
+    DesktopDecorationActivity.awake.addListener(_onWindowFocusChanged);
     // Общий замок снова запер «Личные» (окно было скрыто дольше срока) —
     // спрятать их сразу, а не когда человек сам уйдёт из категории.
     _securitySub = widget.controller.security.changed.listen(
@@ -446,6 +454,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
   @override
   void dispose() {
     DesktopWindowActivity.focused.removeListener(_onWindowFocusChanged);
+    DesktopDecorationActivity.awake.removeListener(_onWindowFocusChanged);
     unawaited(_securitySub?.cancel());
     widget.shellApi.chatCycle.removeListener(_onChatCycle);
     widget.shellApi.unreadCycle?.removeListener(_onUnreadCycle);
@@ -2360,6 +2369,11 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
           break;
         }
       }
+      // Закрытой ветки в списке нет (она внутри своей комнаты), но открыть
+      // её можно — из полосы тем.
+      selected ??= widget.controller.conversationIncludingTopics(
+        _selectedId!,
+      );
     }
     // Личная переписка при закрытых «Личных» не рисуется, кто бы её ни выбрал.
     if (selected != null && !_personalAllowed(selected)) selected = null;
@@ -2495,6 +2509,7 @@ class _DesktopChatsSectionState extends State<DesktopChatsSection> {
               // в списке. Копия этих действий разошлась бы с оригиналом.
               onHeaderMenu: (at) => _chatHeaderMenu(selected!.convoId, at),
               onOpenRoomInvite: _openRoomInviteFromChat,
+              onOpenConversation: _openConversation,
             ),
     );
 
@@ -2537,7 +2552,12 @@ class _ChatThreadHost extends StatefulWidget {
     this.selection,
     this.onHeaderMenu,
     this.onOpenRoomInvite,
+    this.onOpenConversation,
   });
+
+  /// Открыть другую беседу — закрытую ветку из полосы тем. Выбор чата живёт
+  /// в секции.
+  final Future<void> Function(String convoId)? onOpenConversation;
 
   /// Меню чата из шапки переписки. Строит секция — см. `_chatHeaderMenu`.
   final void Function(Offset globalPosition)? onHeaderMenu;
@@ -2664,6 +2684,11 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   // ---------------------------------------------------------------------
 
   List<RoomTopicRef> _roomTopics = const <RoomTopicRef>[];
+  // Закрытые ветки комнаты, в которых я состою (06.10.2026).
+  List<RoomPrivateTopic> _privateTopics = const <RoomPrivateTopic>[];
+  int _privateTopicsLoadSeq = 0;
+  // Эта переписка — закрытая ветка: название основной комнаты для шапки.
+  String? _privateTopicParentTitle;
 
   /// null = «Общий» — everything without a topic, including all history from
   /// before the room had branches.
@@ -2687,7 +2712,42 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   /// телефоне.
   bool Function(String emoji)? _reactionAllowed;
 
-  bool get _topicsVisible => !_isDirect && _roomTopics.isNotEmpty;
+  bool get _topicsVisible =>
+      !_isDirect && (_roomTopics.isNotEmpty || _privateTopics.isNotEmpty);
+
+  Future<void> _loadPrivateTopics() async {
+    if (_isDirect) return;
+    final convoId = _convoId;
+    final seq = ++_privateTopicsLoadSeq;
+    final topics = await widget.controller.listRoomPrivateTopics(convoId);
+    final settings = await widget.controller.getRoomSettings(convoId);
+    String? parentTitle;
+    if (settings.isPrivateTopic) {
+      final parentId = settings.parentRoomId!.trim();
+      for (final c in await widget.controller.listConversations()) {
+        if (c.convoId == parentId) {
+          parentTitle = c.title;
+          break;
+        }
+      }
+    }
+    if (!mounted || seq != _privateTopicsLoadSeq || convoId != _convoId) {
+      return;
+    }
+    if (parentTitle != _privateTopicParentTitle) {
+      setState(() => _privateTopicParentTitle = parentTitle);
+    }
+    final same =
+        topics.length == _privateTopics.length &&
+        Iterable<int>.generate(topics.length).every(
+          (i) =>
+              topics[i].roomId == _privateTopics[i].roomId &&
+              topics[i].title == _privateTopics[i].title &&
+              topics[i].unreadCount == _privateTopics[i].unreadCount,
+        );
+    if (same) return;
+    setState(() => _privateTopics = topics);
+  }
 
   /// Отдаёт состояние тем панели подробностей.
   ///
@@ -2722,8 +2782,11 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   bool _adoptTopicsSync(String rawText, int createdAtMs) {
     final parsed = parseTopicsSyncCommand(rawText);
     if (parsed == null) return false;
-    if (createdAtMs < _topicsSyncAtMs) return false; // stale replay
-    _topicsSyncAtMs = createdAtMs;
+    // Ревизия списка, а без неё — время сообщения: повтор старого списка
+    // не перетирает новую правку.
+    final freshAtMs = parsed.freshnessMs(createdAtMs);
+    if (freshAtMs < _topicsSyncAtMs) return false; // stale replay
+    _topicsSyncAtMs = freshAtMs;
     _roomTopics = parsed.topics;
     _baseTopicMark = parsed.baseMark;
     // 🔴 Принятое кладём в базу: список тем приходит скрытым сообщением, и
@@ -2733,7 +2796,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       widget.controller.rememberRoomTopics(
         groupId: widget.conversation.convoId,
         topics: _roomTopics,
-        syncedAtMs: createdAtMs,
+        syncedAtMs: freshAtMs,
         baseMark: _baseTopicMark,
       ),
     );
@@ -2929,8 +2992,54 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   static const String _kNewTopicSentinel = '__new__';
 
   Future<void> _createTopic() async {
+    // ◆ Закрытые темы (06.10.2026): кто может их создавать (Р-2), выбирает
+    // вид темы в одном окне. Остальным — прежний вопрос о названии.
+    if (await widget.controller.canCreatePrivateTopic(_convoId)) {
+      final me = widget.controller.profileId;
+      final members = (await widget.controller.listRoomMembersDetailed(
+        _convoId,
+      )).where((m) => m.profileId != me).toList(growable: false);
+      if (!mounted) return;
+      final choice = await showDesktopNewTopicDialog(
+        context,
+        members: members,
+      );
+      if (choice == null || !mounted) return;
+      if (choice.isPrivate) {
+        await _createPrivateTopic(choice);
+      } else {
+        await _addOpenTopic(choice.title);
+      }
+      return;
+    }
     final title = await _promptTopicTitle();
     if (title == null || !mounted) return;
+    await _addOpenTopic(title);
+  }
+
+  Future<void> _createPrivateTopic(NewRoomTopicChoice choice) async {
+    try {
+      final roomId = await widget.controller.createPrivateTopic(
+        parentRoomId: _convoId,
+        title: choice.title,
+        memberProfileIds: choice.memberProfileIds,
+      );
+      if (!mounted) return;
+      await _loadPrivateTopics();
+      await widget.onOpenConversation?.call(roomId);
+    } catch (e) {
+      if (!mounted) return;
+      DesktopSnackbar.show(
+        context,
+        message: e is RoomPrivateTopicLimitException
+            ? l10n.roomPrivateTopicLimit(kRoomPrivateTopicsMax)
+            : l10n.roomPrivateTopicFailed,
+        kind: DSnackKind.error,
+      );
+    }
+  }
+
+  Future<void> _addOpenTopic(String title) async {
     final id =
         'topic-${DateTime.now().millisecondsSinceEpoch}-'
         '${_convoId.hashCode.abs() % 0xFFFF}';
@@ -3184,6 +3293,15 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   // and refreshed with the thread.
   int? _autoDeleteSeconds;
 
+  /// Общий таймер чата — исчезают у всех (ТЗ 22.10.2026); `null` — флаг
+  /// сервера закрыт или таймера нет. И поймут ли его все устройства.
+  int? _sharedDisappearSeconds;
+  DisappearingPeerSupport? _disappearSupport;
+
+  /// Сообщения этого чата, исчезнувшие по сроку: цитата на них говорит
+  /// «Сообщение исчезло», а не пропадает молча.
+  Set<String> _disappearedPayloadIds = const <String>{};
+
   // PR7 pagination state ----------------------------------------------
   /// `created_at_ms` of the oldest message currently in [_messages].
   /// Used as the cursor when the user scrolls to the top and we ask
@@ -3341,6 +3459,9 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       _topicsSyncAtMs = 0;
       _currentTopicId = null;
       unawaited(_loadStoredRoomTopics());
+      _privateTopics = const <RoomPrivateTopic>[];
+      _privateTopicParentTitle = null;
+      unawaited(_loadPrivateTopics());
       // Заготовки отправки — свои у каждой переписки.
       _resetUploadsForConvo();
     }
@@ -3422,6 +3543,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     unawaited(_refreshActiveRoomCall());
     // Темы — из базы, а не только из видимой ленты: см. [_loadStoredRoomTopics].
     unawaited(_loadStoredRoomTopics());
+    unawaited(_loadPrivateTopics());
     // Уходящие файлы и ошибки их отправки.
     _subscribeUploads();
   }
@@ -3583,6 +3705,43 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     } catch (_) {
       // best-effort; chip just stays hidden
     }
+    try {
+      final gone = await widget.controller.disappearedPayloadIds(_convoId);
+      if (mounted && gone.length != _disappearedPayloadIds.length) {
+        setState(() => _disappearedPayloadIds = gone);
+      }
+    } catch (_) {
+      // best-effort: без отметок цитата просто не рисуется, как раньше
+    }
+    // Исчезающие у всех участников: значок и плашка — только при открытом
+    // флаге сервера и включённом таймере. Ответ о версиях кэширует
+    // контроллер (час; «не удалось проверить» — две минуты), так что частые
+    // перечитывания реле не нагружают.
+    try {
+      final c = widget.controller;
+      int? shared;
+      DisappearingPeerSupport? support;
+      if (_isDirect &&
+          c.disappearingSendEnabled &&
+          c.canSetDisappearingForConvo(_convoId)) {
+        shared = await c.getChatDisappearSeconds(_convoId);
+        if (shared != null) support = await c.disappearingPeerSupport(_convoId);
+      } else if (!_isDirect && await c.disappearingVisibleForRoom(_convoId)) {
+        // Комната или закрытая тема: действующий таймер (с наследованием) и
+        // поймут ли его все участники.
+        shared = await c.effectiveRoomDisappearSeconds(_convoId);
+        if (shared != null) support = await c.disappearingRoomSupport(_convoId);
+      }
+      if (mounted &&
+          (shared != _sharedDisappearSeconds || support != _disappearSupport)) {
+        setState(() {
+          _sharedDisappearSeconds = shared;
+          _disappearSupport = support;
+        });
+      }
+    } catch (_) {
+      // best-effort: подсказка не должна ронять переписку
+    }
   }
 
   /// Что закреплено в комнате и вправе ли я это менять.
@@ -3646,6 +3805,8 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
   /// Теперь просьба посреди прохода только отмечается, и по его окончании
   /// идёт ровно ОДИН догоняющий проход, сколько бы просьб ни накопилось.
   Future<void> _load() async {
+    // Непрочитанное закрытых веток живёт вместе с лентой.
+    unawaited(_loadPrivateTopics());
     if (_loadInFlight) {
       _loadAgain = true;
       return;
@@ -3975,7 +4136,18 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     return false;
   }
 
+  /// Сообщение ленты с признаком срока (ТЗ 22.10.2026): значок таймера в
+  /// подвале пузыря. Строки без срока выходят ровно прежними.
   Future<MessageData?> _toMessageData(
+    ChatEvent event,
+    List<bubble.MessageReaction> reactions,
+  ) async {
+    final msg = await _toMessageDataBase(event, reactions);
+    if (msg == null || event.disappearSeconds == null) return msg;
+    return msg.copyWith(disappearing: true, expiresAtMs: event.expiresAtMs);
+  }
+
+  Future<MessageData?> _toMessageDataBase(
     ChatEvent event,
     List<bubble.MessageReaction> reactions,
   ) async {
@@ -4345,6 +4517,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
           originPid: packOrigin,
           title: payload.packTitle ?? '',
           stickerCount: payload.packStickerCount,
+          closed: payload.packClosed,
         ),
         time: time,
         timestampMs: event.createdAtMs,
@@ -4835,7 +5008,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       return null;
     }
     final base = _replyPreviewByPayloadId[replyToPayloadEventId];
-    if (base == null) return null;
+    if (base == null) return _disappearedReplyPreview(replyToPayloadEventId);
     // Carry the target id so tapping the quote can jump to the original.
     return ReplyPreview(
       authorName: base.authorName,
@@ -4845,6 +5018,18 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       // Без этого цитата теряла цвет автора ровно на пути в пузырь.
       authorSeed: base.authorSeed,
     );
+  }
+
+  /// Цитата на сообщение, исчезнувшее по сроку (ТЗ 22.10.2026): «Сообщение
+  /// исчезло», без автора и текста — как у Signal. Иначе — `null`, как было.
+  ReplyPreview? _disappearedReplyPreview(String replyToPayloadEventId) {
+    if (!_disappearedPayloadIds.contains(replyToPayloadEventId)) return null;
+    // Зовётся и после `await` в сборке сообщения: ушедший с экрана виджет к
+    // контексту не обращается.
+    if (!mounted) return null;
+    final l10n = AppLocalizations.of(context);
+    if (l10n == null) return null;
+    return ReplyPreview(authorName: '', text: l10n.disappearingQuoteGone);
   }
 
   /// Handler for both the bubble's quick-reaction bar and the existing-chip
@@ -5081,13 +5266,31 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     final key = a.blobId;
     if (_attachmentFetchInFlight.contains(key)) return;
     _attachmentFetchInFlight.add(key);
+    // П5 (разбор медиа 15.11.2026): ход скачивания — в пузырь. Поле
+    // `downloadProgress` давно читалось пузырём, но не заполнялось никем.
+    final progress = widget.controller.attachmentDownloadProgress(key);
+    void onProgress() {
+      final v = progress.value;
+      if (v == null || !mounted) return;
+      _replaceMessage(messageId, (cur) {
+        final att = cur.attachment;
+        if (att == null || att.blobId != key) return cur;
+        return cur.copyWith(attachment: att.copyWith(downloadProgress: v));
+      });
+    }
+
+    progress.addListener(onProgress);
     unawaited(() async {
       File? file;
+      var gone = false;
       try {
         file = await widget.controller.ensureCachedAttachmentFile(a);
-      } catch (_) {
+      } catch (e) {
         file = null;
+        // П7: 404 — файла нет на сервере, повтор не поможет.
+        gone = e.toString().contains('blob download failed: 404');
       }
+      progress.removeListener(onProgress);
       if (!mounted) {
         _attachmentFetchInFlight.remove(key);
         return;
@@ -5109,6 +5312,8 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
             filePath: file?.path,
             loading: false,
             failed: file == null,
+            gone: file == null && gone,
+            clearDownloadProgress: true,
           ),
         );
       });
@@ -6095,6 +6300,12 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       final hasBody =
           m.text.trim().isNotEmpty || m.sticker != null || m.attachment != null;
       if (!hasBody) continue;
+      // Чужой стикер из закрытого набора не пересылается (В-4 в ТЗ
+      // 14.11.2026): автор просил его не распространять. Свой — можно.
+      if ((m.stickerPack?.closed ?? false) && !m.isSelf) {
+        blocked++;
+        continue;
+      }
       try {
         if (!await widget.controller.canForwardFromProfile(
           _sourceProfileIdOf(m),
@@ -6319,9 +6530,21 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     if (ref == null || ref.packId.isEmpty) return;
     final myPid = widget.controller.profileId;
     final isOwn = ref.packId.startsWith('user:$myPid');
+    // Закрытый набор: сразу просим у автора размытые превью.
+    if (ref.closed && !isOwn && ref.originPid.isNotEmpty) {
+      unawaited(
+        widget.controller.requestPeerStickerPackPreviews(
+          packId: ref.packId,
+          originPid: ref.originPid,
+        ),
+      );
+    }
     DesktopStickerPackView snapshot() {
       final local = SecretlyStickerCatalog.pickerPackById(ref.packId);
       final installed = local != null;
+      final lockedView = widget.controller.stickerPackLockedView(ref.packId);
+      final locked =
+          !installed && !isOwn && (ref.closed || lockedView != null);
       final stickers = <SecretlyStickerDescriptor>[
         if (local != null)
           ...local.stickers
@@ -6330,10 +6553,14 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       ];
       final total = installed
           ? local.stickers.length
-          : (ref.stickerCount ?? stickers.length);
+          : (lockedView != null && lockedView.total > 0
+                ? lockedView.total
+                : (ref.stickerCount ?? stickers.length));
       final progress = widget.controller.stickerPackInstallProgress(ref.packId);
       final availability = installed
           ? DesktopStickerPackAvailability.installed
+          : locked
+          ? DesktopStickerPackAvailability.locked
           : isOwn
           ? DesktopStickerPackAvailability.own
           : ref.originPid.isEmpty
@@ -6342,7 +6569,8 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       return DesktopStickerPackView(
         title: (local != null && local.title.isNotEmpty)
             ? local.title
-            : ref.title,
+            : (ref.title.isNotEmpty ? ref.title : (lockedView?.title ?? '')),
+        lockedPreviews: lockedView?.previews ?? const [],
         total: total,
         stickers: stickers,
         availability: availability,
@@ -6657,6 +6885,11 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
     required bool typing,
   }) {
     if (typing) return l10n.desktopChatsTypingEllipsis;
+    // Закрытая ветка говорит, чья она: «Закрытая тема · Комната».
+    final parentTitle = _privateTopicParentTitle;
+    if (!_isDirect && parentTitle != null) {
+      return l10n.roomPrivateTopicInRoom(parentTitle);
+    }
     if (!_isDirect) {
       final count = _roomMemberCount;
       if (count == null || count <= 0) return null;
@@ -6701,6 +6934,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       // комнате спрашивают. Текст тоже общий с телефоном.
       status: _chatHeaderStatus(context, convo: convo, typing: peerTyping),
       disappearingSeconds: _autoDeleteSeconds,
+      sharedDisappearingSeconds: _sharedDisappearSeconds,
       avatarPath: convo.avatarPath,
       frameId: convo.frameId,
       emojiStatus: convo.emojiStatus,
@@ -6777,6 +7011,9 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
             onManage: (t) => unawaited(_manageTopic(t)),
             onManageBase: () => unawaited(_manageBaseTopic()),
             baseMark: _baseTopicMark,
+            privateTopics: _privateTopics,
+            onOpenPrivate: (p) =>
+                unawaited(widget.onOpenConversation?.call(p.roomId)),
           )
         : null;
 
@@ -6799,12 +7036,26 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
             faces: _callFaces(_activeRoomCall!),
           );
 
+    // Исчезающие (ТЗ 22.10.2026, §2.4): предупреждение, если кто-то таймер
+    // не поймёт. При «всё в порядке» места не занимает.
+    final disappearWarning = _sharedDisappearSeconds == null
+        ? null
+        : disappearingSupportWarning(
+            _disappearSupport,
+            AppLocalizations.of(context)!,
+            room: !_isDirect,
+          );
+    final disappearingBanner = disappearWarning == null
+        ? null
+        : DesktopDisappearingBanner(message: disappearWarning);
+
     // Панель перестраивается и на прогресс отправки — отдельно от хоста.
     final thread = ValueListenableBuilder<int>(
       valueListenable: _uploadTick,
       builder: (context, _, _) => ChatThreadPanel(
       topicsStrip: topicsStrip,
       callBanner: callBanner,
+      disappearingBanner: disappearingBanner,
       pinnedPayloadEventId: _isDirect ? null : _pinnedPayloadEventId,
       // Закреплять — только тому, кому комната это позволяет: пункт меню,
       // который всегда отвечает отказом, пунктом меню не является.
@@ -6878,7 +7129,7 @@ class _ChatThreadHostState extends State<_ChatThreadHost> {
       // the «проводит сообщение» switch chosen on the phone apply here.
       wallpaperAnimMode: desktopWallpaperAnimModeFor(
         setting: widget.controller.chatWallpaperAnimMode,
-        windowFocused: DesktopWindowActivity.focused.value,
+        windowFocused: DesktopDecorationActivity.motionAllowed,
       ),
       wallpaperConduct: widget.controller.chatWallpaperConduct,
       // Нужен, когда в «Внешнем виде» выбран один цвет для всех имён.
@@ -7103,7 +7354,7 @@ class _MarkCell extends StatelessWidget {
       child: HoverListener(
         onTap: onTap,
         cursor: SystemMouseCursors.click,
-        builder: (ctx, hovered, pressed) => AnimatedContainer(
+        builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: AnimatedContainer(
           duration: DMotion.fast,
           width: 44,
           height: 44,
@@ -7119,7 +7370,7 @@ class _MarkCell extends StatelessWidget {
             ),
           ),
           child: Icon(icon, size: 20, color: color ?? c.textSecondary),
-        ),
+        )),
       ),
     );
   }

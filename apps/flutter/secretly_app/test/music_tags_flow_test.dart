@@ -293,7 +293,9 @@ void main() {
 
     test('iPhone: канал подключён и читает общие теги', () {
       final swift = File('ios/Runner/AppDelegate.swift').readAsStringSync();
-      expect(swift.contains('attachMusicTagsChannel()'), isTrue);
+      // После перехода на сцены (Т10) канал вешается на явный движок, поэтому
+      // вызов идёт с аргументом. Проверяем сам вызов, а не объявление функции.
+      expect(swift.contains('    attachMusicTagsChannel(messenger)'), isTrue);
       expect(swift.contains('name: "secretly/music_tags"'), isTrue);
       expect(swift.contains('.commonIdentifierTitle'), isTrue);
       expect(swift.contains('.commonIdentifierArtist'), isTrue);

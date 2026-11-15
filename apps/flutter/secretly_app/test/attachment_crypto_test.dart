@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:io';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:secretly_app/attachments/attachment_service.dart';
@@ -65,6 +67,39 @@ void main() {
       );
 
       expect(await decryptedFile.readAsBytes(), plain);
+    } finally {
+      try {
+        await dir.delete(recursive: true);
+      } catch (_) {}
+    }
+  });
+
+  test('О12: испорченный шифротекст — отказ, недорасшифрованный файл удалён; '
+      'хеш шифротекста совпадает', () async {
+    final svc = AttachmentService(blobClient: BlobClient(baseUrl: Uri.parse('http://127.0.0.1:1')));
+    final dir = await Directory.systemTemp.createTemp('secretly_att_bad_');
+    try {
+      final plain = Uint8List.fromList(List<int>.generate(300000, (i) => (i * 7) % 251));
+      final inFile = File('${dir.path}${Platform.pathSeparator}in.bin');
+      final outFile = File('${dir.path}${Platform.pathSeparator}out.bin');
+      await inFile.writeAsBytes(plain, flush: true);
+      final bundle = await svc.encryptFileForUpload(inFile, tempDir: dir);
+      final cipher = await bundle.ciphertextFile.readAsBytes();
+      expect(bundle.ciphertextSizeBytes, cipher.length);
+      final sha = await Sha256().hash(cipher);
+      expect(bundle.sha256B64, base64Encode(sha.bytes));
+      // Портим байт во второй части.
+      cipher[cipher.length - 1000] ^= 0xFF;
+      await bundle.ciphertextFile.writeAsBytes(cipher, flush: true);
+      await expectLater(
+        svc.decryptDownloadedFileToFile(
+          bundle.ciphertextFile,
+          fileKeyB64: bundle.fileKeyB64,
+          outputFile: outFile,
+        ),
+        throwsA(isA<SecretBoxAuthenticationError>()),
+      );
+      expect(outFile.existsSync(), isFalse);
     } finally {
       try {
         await dir.delete(recursive: true);

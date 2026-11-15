@@ -6,6 +6,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 http.Client createResilientHttpClient() => http.Client();
 
+Map<String, String> httpDnsFallbacksFromEnv() => const <String, String>{};
+
 WebSocketChannel connectResilientWebSocket(
   Uri uri, {
   Duration? pingInterval,

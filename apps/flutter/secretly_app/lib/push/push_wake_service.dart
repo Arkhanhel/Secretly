@@ -10,6 +10,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../security/profile_space.dart';
+
 import '../diagnostics/diag_log.dart';
 import 'background_inbox_fetcher.dart';
 
@@ -419,6 +421,11 @@ Future<void> secretlyFirebaseMessagingBackgroundHandler(
   } catch (_) {
     // ignore: missing firebase runtime config
   }
+  // Фон работает с тем же профилем, что открыт в приложении (Э2): до первого
+  // обращения к настройкам.
+  try {
+    await ProfileSpaceRuntime.enterStoredForIsolate();
+  } catch (_) {}
   DiagLog.event('push', 'bg_msg', {
     'has_data': message.data.isNotEmpty,
     'type': (message.data['type'] as Object?)?.toString() ?? '',

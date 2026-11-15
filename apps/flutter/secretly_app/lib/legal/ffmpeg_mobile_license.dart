@@ -15,10 +15,14 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 
+import '../build_variant.dart';
 import '../desktop/ffmpeg_license.dart' show kGplV3LicenseText;
 
 /// Заявить FFmpeg (LGPL-3.0) на экране лицензий. Только iOS и Android.
 void registerMobileFfmpegLicense({@visibleForTesting bool? onMobile}) {
+  // Облегчённая сборка FFmpeg не везёт — заявлять его лицензию в ней значило
+  // бы сообщать о библиотеке, которой в пакете нет.
+  if (!kVideoToolsAvailable) return;
   final mobile = onMobile ?? (!kIsWeb && (Platform.isAndroid || Platform.isIOS));
   if (!mobile) return;
   LicenseRegistry.addLicense(() async* {

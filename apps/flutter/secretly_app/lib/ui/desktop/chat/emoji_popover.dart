@@ -15,6 +15,7 @@ import '../primitives/desktop_text_field.dart';
 import '../primitives/hover_listener.dart';
 import 'emoji_grid.dart';
 import 'gif_picker_tab.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Emoji + stickers popover. Tabs along the top, sticky search, last-used row.
 class EmojiPopover {
@@ -133,7 +134,7 @@ class _EmojiPanelState extends State<_EmojiPanel> {
       return Expanded(
         child: HoverListener(
           onTap: () => setState(() => _tab = t),
-          builder: (ctx, hovered, pressed) => Container(
+          builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: Container(
             height: 40,
             decoration: BoxDecoration(
               color: active ? c.selected : (hovered ? c.hover : Colors.transparent),
@@ -156,7 +157,7 @@ class _EmojiPanelState extends State<_EmojiPanel> {
                     )),
               ],
             ),
-          ),
+          )),
         ),
       );
     }

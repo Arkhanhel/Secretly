@@ -6,7 +6,9 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 
 import '../../../calls/call_state.dart';
+import '../../../diagnostics/diag_log.dart';
 import '../services/desktop_child_windows.dart';
+import 'call_mini_window.dart' show DesktopCallMiniSize;
 import '../services/desktop_ui_prefs.dart';
 
 /// Вид окна звонка: от него зависят размер и «поверх всех».
@@ -77,6 +79,28 @@ class DesktopDirectCallWindow {
   /// хозяину пора перерисовать главное окно.
   final ValueNotifier<int> changes = ValueNotifier<int>(0);
 
+  /// 🔴 СВЁРНУТЫЙ ЗВОНОК — ТОЖЕ ОКНО ОС (05.10.2026, владелец: «когда звонок
+  /// сворачивается в мини-окно, его можно было перетаскивать везде, а не
+  /// только внутри приложения»).
+  ///
+  /// «Свернуть» не прячет окно звонка, а ужимает его до мини-окна в правом
+  /// нижнем углу экрана, поверх всех программ — как «картинка в картинке»
+  /// у Telegram. Это то же окно ОС: тащится за заголовок по всему экрану и на
+  /// другой монитор. «Развернуть» возвращает прежний размер. Содержимое
+  /// хозяин выбирает по этому признаку.
+  final ValueNotifier<bool> mini = ValueNotifier<bool>(false);
+
+  /// Почему звонок в главном окне — в журнал один раз на звонок.
+  String _loggedInlineCallId = '';
+
+  void _logInline(CallState s, String reason) {
+    if (s.callId.isEmpty || s.callId == _loggedInlineCallId) return;
+    _loggedInlineCallId = s.callId;
+    DiagLog.event('call_window', 'inline', <String, Object?>{
+      'reason': reason,
+    });
+  }
+
   void _changed() {
     if (!_disposed) changes.value++;
   }
@@ -110,9 +134,20 @@ class DesktopDirectCallWindow {
     _latest = s;
     _latestTitle = title;
     if (_opening) return; // по окончании открытия сверимся с последним
+    if (s.isActive && !handles(s)) {
+      _logInline(
+        s,
+        !DesktopUiPrefs.callInOwnWindow.value
+            ? 'pref_off'
+            : (_windows.supportedCached != true
+                  ? 'unsupported'
+                  : 'open_failed'),
+      );
+    }
     if (!handles(s)) {
       if (isOpen) {
         _shape = null;
+        mini.value = false;
         await _windows.close(windowId);
         _changed();
       }
@@ -154,6 +189,16 @@ class DesktopDirectCallWindow {
     final previous = _shape;
     if (previous == shape) return;
     _shape = shape;
+    // Свёрнут — остаётся мини-окном, только по размеру нового вида (голосовой
+    // стал видео — мини с картинкой).
+    if (mini.value && shape != DesktopDirectCallWindowShape.incoming) {
+      final size = DesktopCallMiniSize.of(
+        video: shape == DesktopDirectCallWindowShape.video,
+      );
+      await _windows.setSize(windowId, size, minSize: size);
+      await _windows.setTitle(windowId, title);
+      return;
+    }
     // Окно только растёт: разговор, ставший голосовым после видео, не
     // сжимается посреди фразы — человек мог растянуть окно сам.
     final grow = previous == DesktopDirectCallWindowShape.incoming ||
@@ -177,11 +222,41 @@ class DesktopDirectCallWindow {
     await _windows.setTitle(windowId, title);
   }
 
+  /// «Свернуть»: окно звонка ужимается до мини-окна в углу экрана, поверх
+  /// всех программ. Входящий не сворачивается — его надо принять или
+  /// отклонить.
+  Future<void> minimize() async {
+    final s = _latest;
+    if (!isOpen || mini.value || s == null) return;
+    if (s.phase == CallPhase.ringingIncoming) return;
+    mini.value = true;
+    final size = DesktopCallMiniSize.of(video: s.isVideo);
+    await _windows.setFullScreen(windowId, false);
+    await _windows.setSize(windowId, size, minSize: size);
+    await _windows.placeAtCorner(windowId, 0, ownMonitor: true);
+    await _windows.setTopmost(windowId, true);
+    DiagLog.event('call_window', 'mini', const <String, Object?>{'on': true});
+  }
+
+  /// «Развернуть» мини-окно: прежний размер вокруг того же места, поверх
+  /// всех — как решил человек кнопкой «закрепить».
+  Future<void> expand() async {
+    final s = _latest;
+    if (!isOpen || !mini.value || s == null) return;
+    mini.value = false;
+    final shape = _shape ?? shapeFor(s);
+    await _windows.setSize(windowId, shape.size, minSize: shape.minSize);
+    await _windows.setTopmost(windowId, DesktopUiPrefs.callWindowPinned.value);
+    await _windows.focus(windowId);
+    DiagLog.event('call_window', 'mini', const <String, Object?>{'on': false});
+  }
+
   /// «Поверх всех окон» — кнопка в шапке окна звонка.
   Future<void> togglePin() async {
     final next = !DesktopUiPrefs.callWindowPinned.value;
     await DesktopUiPrefs.setCallWindowPinned(next);
-    if (isOpen && _shape != DesktopDirectCallWindowShape.incoming) {
+    // Мини-окно всегда поверх всех: «закрепить» решает только большое окно.
+    if (isOpen && _shape != DesktopDirectCallWindowShape.incoming && !mini.value) {
       await _windows.setTopmost(windowId, next);
     }
   }
@@ -202,6 +277,7 @@ class DesktopDirectCallWindow {
       return;
     }
     _shape = null;
+    mini.value = false;
     unawaited(_windows.close(windowId).then((_) => _changed()));
   }
 
@@ -214,6 +290,7 @@ class DesktopDirectCallWindow {
     if (_disposed) return;
     _disposed = true;
     changes.dispose();
+    mini.dispose();
     await _windows.close(windowId);
   }
 }

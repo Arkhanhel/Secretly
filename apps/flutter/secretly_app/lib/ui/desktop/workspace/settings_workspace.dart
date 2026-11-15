@@ -1779,7 +1779,7 @@ class _DevicesPaneState extends State<_DevicesPane> {
     final controller = widget.controller;
     if (controller == null) return;
     if (_endingDeviceId != null) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showDesktopDialog<bool>(
       context: ctx,
       builder: (dialogCtx) {
         return AlertDialog(
@@ -2158,7 +2158,7 @@ Future<String?> promptDesktopBackupPassword(
   final pw = TextEditingController();
   final confirm = TextEditingController();
   String? error;
-  final result = await showDialog<String>(
+  final result = await showDesktopDialog<String>(
     context: context,
     // 🔴 Поля освобождает само окно, когда его маршрут УШЁЛ (01.10.2026).
     // Раньше `dispose()` звучал сразу после `showDialog` — пока окно ещё
@@ -2275,7 +2275,7 @@ Future<bool> confirmDesktopServerBackupReplace(BuildContext context) async {
 
 /// Освобождает контроллеры полей, когда окно, которому они принадлежат,
 /// действительно ушло: `State.dispose` маршрута звучит ПОСЛЕ анимации ухода.
-/// Освобождать их сразу за `await showDialog(...)` — значит отнять их у полей,
+/// Освобождать их сразу за `await showDesktopDialog(...)` — значит отнять их у полей,
 /// которые ещё рисуются на уезжающем окне.
 class _DisposeWithRoute extends StatefulWidget {
   const _DisposeWithRoute({
@@ -3003,7 +3003,7 @@ class _DangerPaneState extends State<_DangerPane> {
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showDesktopDialog<bool>(
       context: navigator.context,
       useRootNavigator: true,
       builder: (dialogCtx) {
@@ -3035,7 +3035,7 @@ class _DangerPaneState extends State<_DangerPane> {
     // the workspace mid-delete. Uses root navigator so it sits above the
     // settings overlay.
     unawaited(
-      showDialog<void>(
+      showDesktopDialog<void>(
         context: navigator.context,
         barrierDismissible: false,
         useRootNavigator: true,

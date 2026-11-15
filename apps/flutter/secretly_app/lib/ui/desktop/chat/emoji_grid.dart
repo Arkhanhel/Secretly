@@ -18,6 +18,7 @@ import '../../emoji/noto_emoji_catalog.dart'
         kNotoSkinToneVariants;
 import '../design/tokens.dart';
 import '../primitives/hover_listener.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Ключ недавних эмодзи окна выбора в переписке.
 const String kDesktopEmojiRecentsKey = 'desktop_emoji_recents_v1';
@@ -320,7 +321,7 @@ class _DesktopEmojiGridState extends State<DesktopEmojiGrid> {
                       waitDuration: const Duration(milliseconds: 500),
                       child: HoverListener(
                         onTap: () => _jumpTo(sections, i, columns),
-                        builder: (ctx, hovered, pressed) => Container(
+                        builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: Container(
                           width: 30,
                           height: 30,
                           alignment: Alignment.center,
@@ -333,7 +334,7 @@ class _DesktopEmojiGridState extends State<DesktopEmojiGrid> {
                             size: 18,
                             color: c.textSecondary,
                           ),
-                        ),
+                        )),
                       ),
                     ),
                 ],

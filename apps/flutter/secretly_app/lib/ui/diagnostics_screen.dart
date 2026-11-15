@@ -1046,6 +1046,14 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                   _kv('keys', controller.keysBaseUrl.toString()),
                   _kv('relay_http', controller.relayHttpBaseUrl.toString()),
                   _kv('relay_ws', controller.relayWsUrl.toString()),
+                  _kv(
+                    'transport_path',
+                    controller.transportStatus()?.currentKind ?? 'direct (no proxy)',
+                  ),
+                  _kv(
+                    'transport_port',
+                    (controller.transportStatus()?.port ?? 0).toString(),
+                  ),
                   _kv('build_marker', controller.buildMarker),
                   _kv(
                     'client_protocol_version',

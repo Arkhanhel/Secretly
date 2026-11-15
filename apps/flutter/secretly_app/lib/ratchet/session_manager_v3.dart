@@ -136,7 +136,15 @@ class _HandshakeAuthVerdict {
     required this.key,
     required this.proven,
     required this.switchOff,
+    this.requireAll = false,
   });
+
+  /// Флаг-день С-2 (Э4): отказ и для устройства, которое ещё не доказало
+  /// подпись, — если у него ровно один закреплённый ключ.
+  final bool requireAll;
+
+  /// Кому отказывать при неподписанном или неверном рукопожатии.
+  bool get enforced => proven || (requireAll && key != null && pinnedCount == 1);
 
   final String senderDeviceId;
   final String? signatureB64;
@@ -180,7 +188,7 @@ class _HandshakeAuthVerdict {
             : 'key_conflict';
       } else if (sig == null) {
         outcome = 'missing';
-        wouldReject = proven;
+        wouldReject = enforced;
       } else {
         final ok = await HandshakeSignature.verify(
           identityKeyPubB64: k,
@@ -195,7 +203,7 @@ class _HandshakeAuthVerdict {
           ),
         );
         outcome = ok ? 'ok' : 'bad';
-        wouldReject = !ok && proven;
+        wouldReject = !ok && enforced;
         if (ok) provenKey = k;
       }
       if (wouldReject && switchOff) {
@@ -477,7 +485,8 @@ class RatchetSessionManagerV3 {
         selfDeviceId: selfDeviceId,
         peerDeviceId: peerDeviceId,
         recipientSignedPrekeyPubB64: bundle.signedPrekeyPubB64,
-        recipientSignedPrekeyId: 1,
+        // Б5: the number keys gave us; 1 for every device that never rotated.
+        recipientSignedPrekeyId: bundle.signedPrekeyId,
         recipientOneTimePrekeyPubB64:
             useOtk ? bundle.oneTimePrekeyPubB64 : null,
         recipientOneTimePrekeyId: useOtk ? bundle.oneTimePrekeyId : null,
@@ -848,7 +857,10 @@ class RatchetSessionManagerV3 {
       // Выключатель с сервера (подписанный блок `handshake_auth`) читается
       // только для доказанных устройств — отказ возможен лишь у них — и здесь,
       // а не в памяти приложения, чтобы действовать и в фоновом изоляте.
-      final switchOff = proven &&
+      final requireAll =
+          key != null &&
+          (await db.localKvGet(AppDb.kvHandshakeAuthRequireAll)) == '1';
+      final switchOff = (proven || requireAll) &&
           (await db.localKvGet(AppDb.kvHandshakeAuthEnforceDisabled)) == '1';
       return _HandshakeAuthVerdict(
         senderDeviceId: sender,
@@ -857,6 +869,7 @@ class RatchetSessionManagerV3 {
         key: key,
         proven: proven,
         switchOff: switchOff,
+        requireAll: requireAll,
       );
     } catch (_) {
       return null;
@@ -1214,9 +1227,16 @@ class RatchetSessionManagerV3 {
         }
         // ─── First sight of this handshake: today's path, unchanged ──────────
 
-        final spk = await deviceKeys.loadSignedPrekeyKeyPair(
+        // Б5 (24.10.2026): which of our signed prekeys the sender used. Until
+        // this device rotates there is exactly one candidate and everything
+        // below runs once, exactly as before Б5. After a rotation a sender on
+        // an old build still writes `spk_id = 1`, so the previous keys are
+        // tried newest first; the right one is the one the handshake signature
+        // and the AEAD both accept. Nothing is written until one succeeds.
+        final spkCandidates = await deviceKeys.loadSignedPrekeyCandidates(
           profileId: selfProfileId,
           deviceId: selfDeviceId,
+          signedPrekeyId: pre.recipientSignedPrekeyId,
         );
 
         // С-2 (24.09.2026): здесь и только здесь решается подлинность
@@ -1224,66 +1244,113 @@ class RatchetSessionManagerV3 {
         // их рукопожатие было принято раньше. Проверка — на уже загруженном
         // SPK, без обращений к базе. Отказ — до X3DH и до любой записи;
         // транзакция откатывается, живая сессия не тронута.
-        if (handshakeAuth != null) {
-          await handshakeAuth.decide(
-            pre: pre,
-            selfDeviceId: selfDeviceId,
-            selfSignedPrekeyPub: (await spk.extractPublicKey()).bytes,
-          );
-          if (handshakeAuth.reject) {
-            throw HandshakeAuthRejectedException(
-              senderDeviceId: handshakeAuth.senderDeviceId,
-              outcome: handshakeAuth.outcome,
+        SimpleKeyPair? otk;
+        var otkLoaded = false;
+        DoubleRatchetStateV3? accepted;
+        DoubleRatchetDecryptResultV3? dec;
+        HandshakeAuthRejectedException? rejected;
+        Object? lastError;
+        StackTrace? lastStack;
+        for (final candidate in spkCandidates) {
+          final spk = candidate.keyPair;
+          if (handshakeAuth != null) {
+            await handshakeAuth.decide(
+              pre: pre,
+              selfDeviceId: selfDeviceId,
+              selfSignedPrekeyPub: (await spk.extractPublicKey()).bytes,
+            );
+            if (handshakeAuth.reject) {
+              rejected = HandshakeAuthRejectedException(
+                senderDeviceId: handshakeAuth.senderDeviceId,
+                outcome: handshakeAuth.outcome,
+              );
+              continue;
+            }
+          }
+          if (!otkLoaded && pre.recipientOneTimePrekeyId != null) {
+            otk = await deviceKeys.loadOneTimePrekeyKeyPair(
+              profileId: selfProfileId,
+              deviceId: selfDeviceId,
+              prekeyId: pre.recipientOneTimePrekeyId!,
             );
           }
+          otkLoaded = true;
+
+          try {
+            // Derive the shared root key (X3DH-like). We ignore v1.2 chain keys.
+            final v12 = await handshake.responderAccept(
+              selfDeviceId: selfDeviceId,
+              peerDeviceId: pre.senderDeviceId,
+              header: pre,
+              recipientSignedPrekeyKeyPair: spk,
+              recipientOneTimePrekeyKeyPair: otk,
+            );
+
+            // The SKS2 prekey header carries both:
+            // - sender_eph_pub_b64 (handshake ephemeral, used above for X3DH)
+            // - dh_pub_b64 (Double Ratchet DHs public key)
+            // In our current v1.3 design they are expected to match, but prefer dh_pub_b64
+            // to be resilient to future changes.
+            final initiatorDhPubB64 =
+                (header['dh_pub_b64'] as String?) ?? pre.senderEphemeralPubB64;
+
+            final responder = await dr.initResponder(
+              peerDeviceId: pre.senderDeviceId,
+              rootKey: v12.rootKey,
+              recipientSignedPrekeyKeyPair: spk,
+              initiatorDhPub: Uint8List.fromList(base64Decode(initiatorDhPubB64)),
+            );
+
+            final dhPubB64 =
+                (header['dh_pub_b64'] as String?) ?? pre.senderEphemeralPubB64;
+            final pn = (header['pn'] as num?)?.toInt() ?? 0;
+            final n = (header['n'] as num?)?.toInt() ?? 0;
+
+            dec = await decryptWithSkippedTxn(
+              state: responder,
+              headerDhPubB64: dhPubB64,
+              pn: pn,
+              n: n,
+              ciphertext: decoded.ciphertext,
+              aad: decoded.headerBytes,
+            );
+            accepted = dec.updated;
+            break;
+          } catch (e, st) {
+            lastError = e;
+            lastStack = st;
+          }
         }
-        SimpleKeyPair? otk;
-        if (pre.recipientOneTimePrekeyId != null) {
-          otk = await deviceKeys.loadOneTimePrekeyKeyPair(
-            profileId: selfProfileId,
-            deviceId: selfDeviceId,
-            prekeyId: pre.recipientOneTimePrekeyId!,
+        if (accepted == null || dec == null) {
+          // One candidate (every device before its first rotation): the same
+          // exception as before Б5 — the rejection, or the decrypt failure.
+          if (lastError != null) {
+            Error.throwWithStackTrace(lastError, lastStack ?? StackTrace.current);
+          }
+          throw rejected ??
+              StateError('no signed prekey candidate for handshake');
+        }
+        if (spkCandidates.length > 1) {
+          DiagLog.event('hs', 'spk_pick', <String, Object?>{
+            'named': pre.recipientSignedPrekeyId,
+            'candidates': spkCandidates.length,
+          });
+        }
+        final usedOtkId = pre.recipientOneTimePrekeyId;
+        if (usedOtkId != null && otk != null) {
+          // Б5 Э1: only remembered; outside the transaction, never fatal.
+          unawaited(
+            deviceKeys
+                .markOneTimePrekeyUsed(
+                  profileId: selfProfileId,
+                  deviceId: selfDeviceId,
+                  prekeyId: usedOtkId,
+                  nowMs: DateTime.now().millisecondsSinceEpoch,
+                )
+                .catchError((Object _) {}),
           );
         }
-
-        // Derive the shared root key (X3DH-like). We ignore v1.2 chain keys.
-        final v12 = await handshake.responderAccept(
-          selfDeviceId: selfDeviceId,
-          peerDeviceId: pre.senderDeviceId,
-          header: pre,
-          recipientSignedPrekeyKeyPair: spk,
-          recipientOneTimePrekeyKeyPair: otk,
-        );
-
-        // The SKS2 prekey header carries both:
-        // - sender_eph_pub_b64 (handshake ephemeral, used above for X3DH)
-        // - dh_pub_b64 (Double Ratchet DHs public key)
-        // In our current v1.3 design they are expected to match, but prefer dh_pub_b64
-        // to be resilient to future changes.
-        final initiatorDhPubB64 =
-            (header['dh_pub_b64'] as String?) ?? pre.senderEphemeralPubB64;
-
-        var s = await dr.initResponder(
-          peerDeviceId: pre.senderDeviceId,
-          rootKey: v12.rootKey,
-          recipientSignedPrekeyKeyPair: spk,
-          initiatorDhPub: Uint8List.fromList(base64Decode(initiatorDhPubB64)),
-        );
-
-        final dhPubB64 =
-            (header['dh_pub_b64'] as String?) ?? pre.senderEphemeralPubB64;
-        final pn = (header['pn'] as num?)?.toInt() ?? 0;
-        final n = (header['n'] as num?)?.toInt() ?? 0;
-
-        final dec = await decryptWithSkippedTxn(
-          state: s,
-          headerDhPubB64: dhPubB64,
-          pn: pn,
-          n: n,
-          ciphertext: decoded.ciphertext,
-          aad: decoded.headerBytes,
-        );
-        s = dec.updated;
+        var s = accepted;
 
         // Glare tie-break: if we ALSO just initiated our own session toward
         // this peer (both sides re-established at once), both peers must
@@ -1774,6 +1841,11 @@ class RatchetSessionManagerV3 {
       if (pub is String) otkPubB64 = pub;
     }
 
+    // Б5 (24.10.2026): absent (any device before its first rotation) or out
+    // of range — 1, which is what every sender wrote until now.
+    final spkIdRaw = d['signed_prekey_id'];
+    final spkId = spkIdRaw is num && spkIdRaw.toInt() >= 1 ? spkIdRaw.toInt() : 1;
+
     return _PeerBundleV1(
       deviceId: peerDeviceId,
       identityKeyPubB64: identityB64,
@@ -1781,6 +1853,7 @@ class RatchetSessionManagerV3 {
       signedPrekeySigB64: spkSigB64,
       oneTimePrekeyId: otkId,
       oneTimePrekeyPubB64: otkPubB64,
+      signedPrekeyId: spkId,
     );
   }
 }
@@ -1793,6 +1866,7 @@ class _PeerBundleV1 {
     required this.signedPrekeySigB64,
     required this.oneTimePrekeyId,
     required this.oneTimePrekeyPubB64,
+    this.signedPrekeyId = 1,
   });
 
   final String deviceId;
@@ -1801,4 +1875,5 @@ class _PeerBundleV1 {
   final String signedPrekeySigB64;
   final int? oneTimePrekeyId;
   final String? oneTimePrekeyPubB64;
+  final int signedPrekeyId;
 }

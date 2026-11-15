@@ -5,9 +5,9 @@ use axum::{
     Json, Router,
     body::Body,
     extract::DefaultBodyLimit,
-    extract::{ConnectInfo, Path, Query, State},
+    extract::{ConnectInfo, Extension, Path, Query, State},
     http::HeaderMap,
-    http::{Request, StatusCode},
+    http::{HeaderValue, Method, Request, StatusCode},
     middleware,
     response::IntoResponse,
     routing::get,
@@ -25,6 +25,7 @@ use std::{env, net::SocketAddr, sync::Arc, time::Instant};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod billing;
+mod nonce_persist;
 mod store;
 use store::{
     EntitlementRebind, EntitlementRecord, KeysStore, OneTimePrekey, ProfileInactivityStatus,
@@ -52,6 +53,12 @@ const KEYS_BACKUP_MAX_PAYLOAD_BYTES: usize = 200 * 1024 * 1024;
 // must fit under the route body limit, so allow a 1 MB margin over the payload.
 const KEYS_BACKUP_MAX_BODY_BYTES: usize =
     KEYS_BACKUP_MAX_PAYLOAD_BYTES + 1024 * 1024;
+// 11.11.2026, аудит: подпись архива лежит в самом теле, поэтому до 201 МБ
+// читаются в память ещё до любой проверки. Десятки параллельных анонимных
+// заливок клали бы сервис по памяти. Бюджет — общий на все одновременные
+// заливки, в МБ по Content-Length; при нехватке — 503, клиент повторит позже.
+const KEYS_BACKUP_INFLIGHT_DEFAULT_MB: usize = 512;
+const KEYS_BACKUP_MIB: usize = 1024 * 1024;
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -241,6 +248,17 @@ struct HandshakeAuthPayload {
     issued_at_ms: i64,
 }
 
+/// Флаг-день С-2, этап Э4 (14.11.2026): отвергать рукопожатие без верной
+/// подписи от ЛЮБОГО устройства с известным ключом личности, а не только от
+/// уже доказавших, что подписывают. Включать, когда все живые устройства на
+/// сборках ≥ 627 (подпись есть с 1.8.58). Отдельный блок: подписываемое
+/// сообщение `handshake_auth` заморожено.
+#[derive(Serialize)]
+struct HandshakeAuth2Payload {
+    require_all: bool,
+    issued_at_ms: i64,
+}
+
 /// ТЗ мультиустройства (25.09.2026, §2): все пункты П-1…П-5 управляются этим
 /// блоком, все поля — с первого дня. Подписываемое сообщение ЗАМОРОЖЕНО:
 /// дописать поле потом значит молча сломать подпись у всех выпущенных сборок
@@ -265,6 +283,159 @@ struct MultidevicePayload {
     send_journal_percent: i64,
     /// П-1: доля отправителей со сверкой росписи устройств.
     device_check_percent: i64,
+    issued_at_ms: i64,
+}
+
+/// ТЗ E2EE групповых созвонов (06.10.2026, ЗВ-С6, ЗР-6, ЗР-18): выключатели
+/// групповых созвонов. Подписываемое сообщение ЗАМОРОЖЕНО — договор с Dart
+/// `callsSigningMessage`. Понадобится новое поле — новый блок `calls2`.
+///
+/// Умолчания ничего не меняют для выпущенных сборок: созвоны включены, доля
+/// E2EE — 0, обязательности нет. Выключатель снимает групповые созвоны
+/// целиком, а не шифрование (ЗР-6).
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+struct CallsPayload {
+    /// Аварийный выключатель групповых созвонов целиком.
+    group_calls_enabled: bool,
+    /// Доля создателей, у которых новый созвон по умолчанию E2EE (0..100).
+    e2ee_create_percent: i64,
+    /// Флаг-день: открытые созвоны не создаются и не принимаются. У клиента «липкий».
+    e2ee_required: bool,
+    /// Предел участников E2EE-созвона (2..50).
+    max_participants_e2ee: i64,
+    /// Задержка перехода на новый ключ после рассылки, мс (500..5000).
+    key_switch_delay_ms: i64,
+    /// Этап 1.1: храповик ключа при входе нового участника.
+    join_ratchet: bool,
+    issued_at_ms: i64,
+}
+
+/// Additive (2026-10-23, программа «лучше любого конкурента», Б2):
+/// выравнивание длины сообщений. Подписываемое сообщение ЗАМОРОЖЕНО — договор
+/// с Dart `privacySigningMessage`. Понадобится новое поле — блок `privacy2`.
+///
+/// `pad_send_share` — доля профилей (0..100), чьи устройства дописывают к
+/// полезной нагрузке пробелы до размера корзины. Приём флага не ждёт:
+/// выпущенные сборки такие сообщения читают как обычные (JSON допускает
+/// пробелы после объекта). Умолчание 0 — ничего не меняется.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+struct PrivacyPayload {
+    pad_send_share: i64,
+    issued_at_ms: i64,
+}
+
+/// Additive (2026-11-15, разбор медиа): загрузка файлов частями с докачкой.
+/// Подписываемое сообщение ЗАМОРОЖЕНО — договор с Dart `mediaSigningMessage`.
+/// Понадобится новое поле — блок `media2`.
+///
+/// `resumable_upload_share` — доля устройств (0..100), которые отправляют
+/// файлы через сессии реле (`/v1/blob/upload/session`). Остальные — прежней
+/// заливкой одним запросом. Умолчание 0 — ничего не меняется.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+struct MediaPayload {
+    resumable_upload_share: i64,
+    issued_at_ms: i64,
+}
+
+/// Additive (2026-11-14, наборы стикеров, docs/TZ_STICKER_PACKS_2026-11-14.md §7).
+/// Подписываемое сообщение ЗАМОРОЖЕНО — договор с Dart `stickersSigningMessage`.
+/// Понадобится новое поле — блок `stickers2`. Поэтому поля публичных наборов
+/// заведены сразу, хотя сами наборы появятся позже.
+///
+/// Умолчания ничего не меняют: доли 0, поиск выключен. Флагом включается
+/// только ИНТЕРФЕЙС выбора режима и публикации; проверка закрытости набора у
+/// автора от флага не зависит — откат не имеет права открыть закрытое.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+struct StickersPayload {
+    /// Доля устройств, которым показан выбор «закрытый / открытый» (0..100).
+    pack_access_percent: i64,
+    /// Доля устройств с кнопкой «Опубликовать» (0..100). До Э2 — всегда 0.
+    public_publish_percent: i64,
+    /// Поиск публичных наборов.
+    public_search_enabled: bool,
+    issued_at_ms: i64,
+}
+
+/// Additive (2026-10-24, Б5 — гигиена предключей,
+/// docs/TZ_PREKEY_HYGIENE_B5_2026-10-24.md §4). Подписываемое сообщение
+/// ЗАМОРОЖЕНО — договор с Dart `prekeysSigningMessage`. Понадобится новое
+/// поле — блок `prekeys2`.
+///
+/// Все доли — по устройству (0..100). Умолчания — «всё выключено»: при
+/// сомнении клиент ведёт себя как выпущенная сборка.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+struct PrekeysPayload {
+    /// Э2: удаление принятых OTK через 48 ч, пополнение по остатку,
+    /// чистка выданных старше 60 дней.
+    otk_hygiene_share: i64,
+    /// Э3: ротация подписанного предключа.
+    spk_rotate_share: i64,
+    /// Э3: период ротации, дни (1..90).
+    spk_rotate_days: i64,
+    /// Э4: отказ от `SKS1` и провода без штампа реле.
+    legacy_wire_reject_share: i64,
+    issued_at_ms: i64,
+}
+
+/// Additive (2026-10-25, Б3 — подпись ответов сервера,
+/// docs/TZ_SERVER_AUTH_B3_2026-10-25.md §5). Подписываемое сообщение
+/// ЗАМОРОЖЕНО — договор с Dart `serverAuthSigningMessage`. Понадобится новое
+/// поле — блок `server_auth2`.
+///
+/// Проверку подписи ответов новая сборка делает всегда; этот блок решает
+/// только, кому неподписанный ответ — отказ, и раздаёт ключ реле (Э3).
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+struct ServerAuthPayload {
+    /// Доля устройств (0..100), для которых неподписанный или неверный ответ —
+    /// отказ. 0 — только проверка и счёт.
+    enforce_share: i64,
+    /// Э3: ключ подписи ответов реле; пусто — реле не подписывает.
+    relay_kid: String,
+    relay_pub_b64: String,
+    issued_at_ms: i64,
+}
+
+/// Additive (2026-10-23, ТЗ исчезающих сообщений §2.5): выключатели таймера
+/// чата. Подписываемое сообщение ЗАМОРОЖЕНО — договор с Dart
+/// `disappearingSigningMessage`. Понадобится новое поле — новый блок
+/// `disappearing2`.
+///
+/// Два флага по решению владельца 23.10: `send_enabled` гасит только
+/// отправку (срок в сообщении, команды смены таймера, пункт в настройках),
+/// `expire_enabled` — исполнение уже назначенных истечений. Умолчания ничего
+/// не меняют для выпущенных сборок: отправка выключена, доля 0; удаление
+/// включено, потому что без блока клиент обязан исполнять обещанное.
+/// `min_build` = 0 означает «не задан»: клиент считает устройства
+/// собеседника старыми и показывает плашку, пока оператор не назовёт сборку.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+struct DisappearingPayload {
+    /// Отправка срока и команд таймера разрешена.
+    send_enabled: bool,
+    /// Доля профилей, которым отправка разрешена (0..100).
+    send_share: i64,
+    /// Исполнять уже назначенные истечения. Выключать только при ошибке,
+    /// которая удаляет не то.
+    expire_enabled: bool,
+    /// Сборка, с которой таймер понимают; 0 — не задана.
+    min_build: i64,
+    /// Предел «своего» срока, секунд (30 с … 365 д).
+    custom_max_s: i64,
+    issued_at_ms: i64,
+}
+
+/// Additive (2026-10-11, Э1 «Мессенджер без центра»): пути к серверам под
+/// блокировками. Выключатель `enabled` снимает локальный прокси целиком
+/// (клиент ходит напрямую, как до Э1); `endpoints_version` — `issued_at_ms`
+/// списка входов, который отдаёт `/v1/transport/endpoints`, чтобы клиент
+/// знал, что список обновился, не скачивая его на каждый запуск конфига.
+#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+struct TransportPayload {
+    enabled: bool,
+    /// Обезличенные отчёты о путях доставки (решение §4 ТЗ: включены).
+    report_enabled: bool,
+    /// Разрешён ли встроенный Tor как последний путь.
+    tor_enabled: bool,
+    endpoints_version: i64,
     issued_at_ms: i64,
 }
 
@@ -308,10 +479,45 @@ struct ConfigResponse {
     /// Старые клиенты игнорируют оба поля.
     handshake_auth: HandshakeAuthPayload,
     handshake_auth_signature: String,
+    /// Additive (2026-11-14): флаг-день С-2, см. [`HandshakeAuth2Payload`].
+    handshake_auth2: HandshakeAuth2Payload,
+    handshake_auth2_signature: String,
     /// Additive (2026-09-25): выключатели мультиустройства со своей подписью,
     /// см. [`MultidevicePayload`]. Старые клиенты игнорируют оба поля.
     multidevice: MultidevicePayload,
     multidevice_signature: String,
+    /// Additive (2026-10-06): выключатели групповых созвонов со своей
+    /// подписью, см. [`CallsPayload`]. Старые клиенты игнорируют оба поля.
+    calls: CallsPayload,
+    calls_signature: String,
+    /// Additive (2026-10-11): пути под блокировками, см. [`TransportPayload`].
+    /// Старые клиенты игнорируют оба поля.
+    transport: TransportPayload,
+    transport_signature: String,
+    /// Additive (2026-10-23): выключатели исчезающих сообщений со своей
+    /// подписью, см. [`DisappearingPayload`]. Старые клиенты игнорируют оба поля.
+    disappearing: DisappearingPayload,
+    disappearing_signature: String,
+    /// Additive (2026-10-23): выравнивание длины, см. [`PrivacyPayload`].
+    /// Старые клиенты игнорируют оба поля.
+    privacy: PrivacyPayload,
+    privacy_signature: String,
+    /// Additive (2026-11-14): наборы стикеров, см. [`StickersPayload`].
+    /// Старые клиенты игнорируют оба поля.
+    stickers: StickersPayload,
+    stickers_signature: String,
+    /// Additive (2026-11-15): загрузка частями, см. [`MediaPayload`].
+    /// Старые клиенты игнорируют оба поля.
+    media: MediaPayload,
+    media_signature: String,
+    /// Additive (2026-10-24): гигиена предключей, см. [`PrekeysPayload`].
+    /// Старые клиенты игнорируют оба поля.
+    prekeys: PrekeysPayload,
+    prekeys_signature: String,
+    /// Additive (2026-10-25): подпись ответов сервера, см. [`ServerAuthPayload`].
+    /// Старые клиенты игнорируют оба поля.
+    server_auth: ServerAuthPayload,
+    server_auth_signature: String,
     /// Additive (2026-08-03): сведения о новой версии со своей подписью.
     update: UpdatePayload,
     update_signature: String,
@@ -405,6 +611,15 @@ fn handshake_auth_signing_message(p: &HandshakeAuthPayload) -> String {
     )
 }
 
+/// Подписываемое сообщение блока `handshake_auth2`. ОБЯЗАНО совпадать с Dart
+/// `handshakeAuth2SigningMessage` побайтово. Заморожено.
+fn handshake_auth2_signing_message(p: &HandshakeAuth2Payload) -> String {
+    format!(
+        "secretly-handshake-auth2-v1|{}|{}",
+        p.require_all, p.issued_at_ms,
+    )
+}
+
 /// Каноническое подписываемое сообщение блока `multidevice`. ОБЯЗАНО
 /// совпадать с Dart `multideviceSigningMessage` побайтово. Заморожено.
 fn multidevice_signing_message(p: &MultidevicePayload) -> String {
@@ -418,6 +633,225 @@ fn multidevice_signing_message(p: &MultidevicePayload) -> String {
         p.nack_v2_percent,
         p.send_journal_percent,
         p.device_check_percent,
+        p.issued_at_ms,
+    )
+}
+
+/// Каноническое подписываемое сообщение блока `calls`. ОБЯЗАНО совпадать с
+/// Dart `callsSigningMessage` побайтово. Заморожено. Логические поля — как их
+/// печатает Rust: `true` / `false`.
+fn calls_signing_message(p: &CallsPayload) -> String {
+    format!(
+        "secretly-calls-v1|{}|{}|{}|{}|{}|{}|{}",
+        p.group_calls_enabled,
+        p.e2ee_create_percent,
+        p.e2ee_required,
+        p.max_participants_e2ee,
+        p.key_switch_delay_ms,
+        p.join_ratchet,
+        p.issued_at_ms,
+    )
+}
+
+fn transport_signing_message(p: &TransportPayload) -> String {
+    format!(
+        "secretly-transport-v1|{}|{}|{}|{}|{}",
+        p.enabled, p.report_enabled, p.tor_enabled, p.endpoints_version, p.issued_at_ms,
+    )
+}
+
+/// Каноническое подписываемое сообщение блока `privacy`. ОБЯЗАНО совпадать с
+/// Dart `privacySigningMessage` побайтово. Заморожено.
+fn privacy_signing_message(p: &PrivacyPayload) -> String {
+    format!("secretly-privacy-v1|{}|{}", p.pad_send_share, p.issued_at_ms)
+}
+
+/// Каноническое подписываемое сообщение блока `media`. ОБЯЗАНО совпадать с
+/// Dart `mediaSigningMessage` побайтово. Заморожено.
+fn media_signing_message(p: &MediaPayload) -> String {
+    format!(
+        "secretly-media-v1|{}|{}",
+        p.resumable_upload_share, p.issued_at_ms
+    )
+}
+
+/// Каноническое подписываемое сообщение блока `stickers`. ОБЯЗАНО совпадать с
+/// Dart `stickersSigningMessage` побайтово. Заморожено.
+fn stickers_signing_message(p: &StickersPayload) -> String {
+    format!(
+        "secretly-stickers-v1|{}|{}|{}|{}",
+        p.pack_access_percent, p.public_publish_percent, p.public_search_enabled, p.issued_at_ms,
+    )
+}
+
+/// Каноническое подписываемое сообщение блока `prekeys` (Б5). ОБЯЗАНО совпадать
+/// с Dart `prekeysSigningMessage` побайтово. Заморожено.
+fn prekeys_signing_message(p: &PrekeysPayload) -> String {
+    format!(
+        "secretly-prekeys-v1|{}|{}|{}|{}|{}",
+        p.otk_hygiene_share,
+        p.spk_rotate_share,
+        p.spk_rotate_days,
+        p.legacy_wire_reject_share,
+        p.issued_at_ms
+    )
+}
+
+/// Каноническое подписываемое сообщение блока `server_auth` (Б3). ОБЯЗАНО
+/// совпадать с Dart `serverAuthSigningMessage` побайтово. Заморожено.
+fn server_auth_signing_message(p: &ServerAuthPayload) -> String {
+    format!(
+        "secretly-server-auth-v1|{}|{}|{}|{}",
+        p.enforce_share, p.relay_kid, p.relay_pub_b64, p.issued_at_ms
+    )
+}
+
+// ── Б3 (25.10.2026): подпись ответов keys ──────────────────────────────────
+//
+// Защита от посредника с «правильным» TLS-сертификатом (доверенный ОС центр,
+// корпоративный корень, будущее зеркало или CDN): он может переслать ответ,
+// но не изменить его. Клиент кладёт в запрос одноразовый `nonce`; ответ на
+// подписываемый маршрут несёт заголовок с подписью над методом, путём с
+// запросом, `nonce`, кодом и хэшем тела. Тела не меняются ни на байт, и без
+// `nonce` (любая выпущенная сборка) всё как раньше. Ключ — тот же, что
+// подписывает `/v1/config`; строки начинаются с `SECRETLY-RESP-V1` и с
+// подписями конфига (`secretly-…-v1|…`) не пересекаются.
+//
+// От взломанного keys не защищает: у него и ключ. Это Б4 и Б11.
+
+const RESP_SIG_KID: &str = "cfg1";
+const RESP_NONCE_HEADER: &str = "x-secretly-resp-nonce";
+const RESP_SIG_HEADER: &str = "x-secretly-resp-sig";
+/// Подписываемые ответы маленькие; предел — чтобы не держать в памяти чужое.
+const RESP_SIGN_BODY_LIMIT: usize = 4 * 1024 * 1024;
+
+/// Каноническое подписываемое сообщение ответа. ОБЯЗАНО совпадать с Dart
+/// `responseSigningMessage` побайтово. Заморожено.
+fn resp_signing_message(
+    kid: &str,
+    method: &str,
+    path: &str,
+    nonce: &str,
+    ts_ms: i64,
+    status: u16,
+    body_sha256_b64: &str,
+) -> String {
+    format!(
+        "SECRETLY-RESP-V1\nkid={kid}\nmethod={method}\npath={path}\nnonce={nonce}\nts_ms={ts_ms}\nstatus={status}\nbody_sha256_b64={body_sha256_b64}\n"
+    )
+}
+
+/// Маршруты Э1: ответы, по которым клиент решает, на чей ключ шифровать и
+/// кого добавить. Совпадает с Dart `responseSignedPath`.
+fn resp_signed_route(method: &Method, path: &str) -> bool {
+    if method != Method::GET {
+        return false;
+    }
+    let segs: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+    match segs.as_slice() {
+        ["v1", "keys", "bundle", id] => !id.is_empty(),
+        ["v1", "device", id, "bundle"] | ["v1", "device", id, "identity"] => !id.is_empty(),
+        ["v1", "device", id] => !id.is_empty() && *id != "challenge" && *id != "self_status",
+        ["v1", "profile", id, "devices"] | ["v1", "profile", id, "own_devices"] => !id.is_empty(),
+        ["v1", "profile", "search"] => true,
+        _ => false,
+    }
+}
+
+fn resp_nonce_ok(nonce: &str) -> bool {
+    (8..=64).contains(&nonce.len())
+        && nonce
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'=' | b'-' | b'_'))
+}
+
+/// Подписывает готовый ответ. Коды 2xx и 4xx (отказ «нет такого профиля» —
+/// тоже решение); 1xx, 3xx и 5xx — как есть. Без ключа — как есть.
+async fn sign_response(
+    key: Option<&SigningKey>,
+    method: &str,
+    path: &str,
+    nonce: &str,
+    ts_ms: i64,
+    resp: axum::response::Response,
+) -> axum::response::Response {
+    let Some(sk) = key else { return resp };
+    let status = resp.status();
+    if !(status.is_success() || status.is_client_error()) {
+        return resp;
+    }
+    let (mut parts, body) = resp.into_parts();
+    let Ok(bytes) = axum::body::to_bytes(body, RESP_SIGN_BODY_LIMIT).await else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    let body_hash = base64::engine::general_purpose::STANDARD.encode(Sha256::digest(&bytes));
+    let message = resp_signing_message(
+        RESP_SIG_KID,
+        method,
+        path,
+        nonce,
+        ts_ms,
+        status.as_u16(),
+        &body_hash,
+    );
+    let sig = base64::engine::general_purpose::STANDARD.encode(sk.sign(message.as_bytes()).to_bytes());
+    if let Ok(v) = HeaderValue::from_str(&format!("v1;kid={RESP_SIG_KID};ts={ts_ms};sig={sig}")) {
+        parts.headers.insert(RESP_SIG_HEADER, v);
+    }
+    // С одноразовым `nonce` закэшированный ответ всё равно не сойдётся.
+    parts
+        .headers
+        .insert(axum::http::header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    axum::response::Response::from_parts(parts, Body::from(bytes))
+}
+
+async fn sign_responses(
+    State(state): State<AppState>,
+    req: Request<Body>,
+    next: middleware::Next,
+) -> axum::response::Response {
+    let nonce = req
+        .headers()
+        .get(RESP_NONCE_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|n| resp_nonce_ok(n))
+        .map(str::to_string);
+    let signable = state.server_auth.resp_signing_enabled
+        && nonce.is_some()
+        && resp_signed_route(req.method(), req.uri().path());
+    if !signable {
+        return next.run(req).await;
+    }
+    let method = req.method().as_str().to_string();
+    let path = req
+        .uri()
+        .path_and_query()
+        .map(|p| p.as_str().to_string())
+        .unwrap_or_else(|| req.uri().path().to_string());
+    let resp = next.run(req).await;
+    sign_response(
+        state.config_signing_key.as_ref().as_ref(),
+        &method,
+        &path,
+        nonce.as_deref().unwrap_or_default(),
+        now_ms(),
+        resp,
+    )
+    .await
+}
+
+/// Каноническое подписываемое сообщение блока `disappearing`. ОБЯЗАНО
+/// совпадать с Dart `disappearingSigningMessage` побайтово. Заморожено.
+/// Логические поля — как их печатает Rust: `true` / `false`.
+fn disappearing_signing_message(p: &DisappearingPayload) -> String {
+    format!(
+        "secretly-disappearing-v1|{}|{}|{}|{}|{}|{}",
+        p.send_enabled,
+        p.send_share,
+        p.expire_enabled,
+        p.min_build,
+        p.custom_max_s,
         p.issued_at_ms,
     )
 }
@@ -545,6 +979,17 @@ async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
         ),
         None => String::new(),
     };
+    let handshake_auth2 = HandshakeAuth2Payload {
+        require_all: hs_cfg.hs_auth_require_all,
+        issued_at_ms: payload.issued_at_ms,
+    };
+    let handshake_auth2_signature = match state.config_signing_key.as_ref() {
+        Some(sk) => base64::engine::general_purpose::STANDARD.encode(
+            sk.sign(handshake_auth2_signing_message(&handshake_auth2).as_bytes())
+                .to_bytes(),
+        ),
+        None => String::new(),
+    };
     let update_signature = match state.config_signing_key.as_ref() {
         Some(sk) => base64::engine::general_purpose::STANDARD
             .encode(sk.sign(update_signing_message(&update).as_bytes()).to_bytes()),
@@ -576,12 +1021,114 @@ async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
         ),
         None => String::new(),
     };
+    let calls_cfg = state.calls.as_ref();
+    let calls = CallsPayload {
+        group_calls_enabled: calls_cfg.group_calls_enabled,
+        e2ee_create_percent: calls_cfg.e2ee_create_percent,
+        e2ee_required: calls_cfg.e2ee_required,
+        max_participants_e2ee: calls_cfg.max_participants_e2ee,
+        key_switch_delay_ms: calls_cfg.key_switch_delay_ms,
+        join_ratchet: calls_cfg.join_ratchet,
+        issued_at_ms: payload.issued_at_ms,
+    };
+    let calls_signature = match state.config_signing_key.as_ref() {
+        Some(sk) => base64::engine::general_purpose::STANDARD
+            .encode(sk.sign(calls_signing_message(&calls).as_bytes()).to_bytes()),
+        None => String::new(),
+    };
+    let transport = TransportPayload {
+        enabled: state.transport.enabled,
+        report_enabled: state.transport.report_enabled,
+        tor_enabled: state.transport.tor_enabled,
+        endpoints_version: state
+            .transport_endpoints
+            .as_ref()
+            .as_ref()
+            .map(|e| e.issued_at_ms)
+            .unwrap_or(0),
+        issued_at_ms: payload.issued_at_ms,
+    };
+    let transport_signature = match state.config_signing_key.as_ref() {
+        Some(sk) => base64::engine::general_purpose::STANDARD
+            .encode(sk.sign(transport_signing_message(&transport).as_bytes()).to_bytes()),
+        None => String::new(),
+    };
+    let privacy = PrivacyPayload {
+        pad_send_share: state.privacy.pad_send_share,
+        issued_at_ms: payload.issued_at_ms,
+    };
+    let privacy_signature = match state.config_signing_key.as_ref() {
+        Some(sk) => base64::engine::general_purpose::STANDARD
+            .encode(sk.sign(privacy_signing_message(&privacy).as_bytes()).to_bytes()),
+        None => String::new(),
+    };
+    let media = MediaPayload {
+        resumable_upload_share: state.media.resumable_upload_share,
+        issued_at_ms: payload.issued_at_ms,
+    };
+    let media_signature = match state.config_signing_key.as_ref() {
+        Some(sk) => base64::engine::general_purpose::STANDARD
+            .encode(sk.sign(media_signing_message(&media).as_bytes()).to_bytes()),
+        None => String::new(),
+    };
+    let stickers = StickersPayload {
+        pack_access_percent: state.stickers.pack_access_percent,
+        public_publish_percent: state.stickers.public_publish_percent,
+        public_search_enabled: state.stickers.public_search_enabled,
+        issued_at_ms: payload.issued_at_ms,
+    };
+    let stickers_signature = match state.config_signing_key.as_ref() {
+        Some(sk) => base64::engine::general_purpose::STANDARD
+            .encode(sk.sign(stickers_signing_message(&stickers).as_bytes()).to_bytes()),
+        None => String::new(),
+    };
+    let pk_cfg = state.prekeys.as_ref();
+    let prekeys = PrekeysPayload {
+        otk_hygiene_share: pk_cfg.otk_hygiene_share,
+        spk_rotate_share: pk_cfg.spk_rotate_share,
+        spk_rotate_days: pk_cfg.spk_rotate_days,
+        legacy_wire_reject_share: pk_cfg.legacy_wire_reject_share,
+        issued_at_ms: payload.issued_at_ms,
+    };
+    let prekeys_signature = match state.config_signing_key.as_ref() {
+        Some(sk) => base64::engine::general_purpose::STANDARD
+            .encode(sk.sign(prekeys_signing_message(&prekeys).as_bytes()).to_bytes()),
+        None => String::new(),
+    };
+    let sa_cfg = state.server_auth.as_ref();
+    let server_auth = ServerAuthPayload {
+        // Б3 Э2: подпись ответов выключена — отказ у клиентов обязан
+        // сняться, иначе каждый подписываемый ответ стал бы «подменой».
+        enforce_share: if sa_cfg.resp_signing_enabled { sa_cfg.enforce_share } else { 0 },
+        relay_kid: sa_cfg.relay_kid.clone(),
+        relay_pub_b64: sa_cfg.relay_pub_b64.clone(),
+        issued_at_ms: payload.issued_at_ms,
+    };
+    let server_auth_signature = match state.config_signing_key.as_ref() {
+        Some(sk) => base64::engine::general_purpose::STANDARD
+            .encode(sk.sign(server_auth_signing_message(&server_auth).as_bytes()).to_bytes()),
+        None => String::new(),
+    };
+    let dis_cfg = state.disappearing.as_ref();
+    let disappearing = DisappearingPayload {
+        send_enabled: dis_cfg.send_enabled,
+        send_share: dis_cfg.send_share,
+        expire_enabled: dis_cfg.expire_enabled,
+        min_build: dis_cfg.min_build,
+        custom_max_s: dis_cfg.custom_max_s,
+        issued_at_ms: payload.issued_at_ms,
+    };
+    let disappearing_signature = match state.config_signing_key.as_ref() {
+        Some(sk) => base64::engine::general_purpose::STANDARD
+            .encode(sk.sign(disappearing_signing_message(&disappearing).as_bytes()).to_bytes()),
+        None => String::new(),
+    };
     // ETag over the static (limits/flag) part — note issued_at_ms changes each
     // call, so derive the ETag from the limits+flag only for cache stability.
     // The reliability flags are part of the seed too — otherwise flipping a
     // kill-switch would keep serving a stale cached response for up to max-age.
     let etag_seed = format!(
-        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
         m.enabled,
         m.free_attachment_bytes,
         m.free_group_members,
@@ -606,10 +1153,52 @@ async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
         // С-2: выключатель тоже в зерне — иначе «снять отказы за минуты»
         // упёрлось бы в кэш.
         hs_cfg.hs_auth_enforce_disabled,
+        // Флаг-день С-2 — тоже в зерне.
+        hs_cfg.hs_auth_require_all,
         // Блок мультиустройства целиком: любой откат — это смена его полей.
         multidevice_signing_message(&MultidevicePayload {
             issued_at_ms: 0,
             ..multidevice
+        }),
+        // Блок созвонов целиком: выключатель и флаг-день не должны ждать кэша.
+        calls_signing_message(&CallsPayload {
+            issued_at_ms: 0,
+            ..calls
+        }),
+        // Пути под блокировками: выключатель и версия списка — тоже в зерне.
+        transport_signing_message(&TransportPayload {
+            issued_at_ms: 0,
+            ..transport
+        }),
+        // Исчезающие: выключатели отправки и удаления не должны ждать кэша.
+        disappearing_signing_message(&DisappearingPayload {
+            issued_at_ms: 0,
+            ..disappearing
+        }),
+        // Выравнивание длины: доля должна доезжать без ожидания кэша.
+        privacy_signing_message(&PrivacyPayload {
+            issued_at_ms: 0,
+            ..privacy
+        }),
+        // Наборы стикеров: откат доли не должен ждать кэша.
+        stickers_signing_message(&StickersPayload {
+            issued_at_ms: 0,
+            ..stickers
+        }),
+        // Загрузка частями: откат доли не должен ждать кэша.
+        media_signing_message(&MediaPayload {
+            issued_at_ms: 0,
+            ..media
+        }),
+        // Предключи (Б5): откат доли не должен ждать кэша.
+        prekeys_signing_message(&PrekeysPayload {
+            issued_at_ms: 0,
+            ..prekeys
+        }),
+        // Подпись ответов (Б3): включение отказа не должно ждать кэша.
+        server_auth_signing_message(&ServerAuthPayload {
+            issued_at_ms: 0,
+            ..server_auth.clone()
         }),
     );
     let etag = format!(
@@ -642,8 +1231,26 @@ async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
             handshake_signature,
             handshake_auth,
             handshake_auth_signature,
+            handshake_auth2,
+            handshake_auth2_signature,
             multidevice,
             multidevice_signature,
+            calls,
+            calls_signature,
+            transport,
+            transport_signature,
+            disappearing,
+            disappearing_signature,
+            privacy,
+            privacy_signature,
+            stickers,
+            stickers_signature,
+            media,
+            media_signature,
+            prekeys,
+            prekeys_signature,
+            server_auth,
+            server_auth_signature,
             update,
             update_signature,
             support,
@@ -1314,7 +1921,13 @@ async fn redeem(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "appstore root not configured".to_string(),
             ))?;
-            match billing::verify_app_store_jws(jws, bundle, root) {
+            match billing::verify_app_store_jws_with(
+                jws,
+                bundle,
+                root,
+                state.billing.appstore_sandbox,
+                state.billing.appstore_enforce_chain_oids,
+            ) {
                 Ok(v) => v,
                 Err(e) => {
                     tracing::warn!(
@@ -1431,7 +2044,15 @@ async fn webhook_appstore(
         return StatusCode::OK;
     };
     if let Some(tx_jws) = billing::appstore_notification_inner_jws(signed) {
-        if let Ok(v) = billing::verify_app_store_jws(&tx_jws, bundle, root) {
+        if let Ok(v) =
+            billing::verify_app_store_jws_with(
+                &tx_jws,
+                bundle,
+                root,
+                state.billing.appstore_sandbox,
+                state.billing.appstore_enforce_chain_oids,
+            )
+        {
             apply_webhook_update(&state, &v).await;
         }
     }
@@ -1440,10 +2061,29 @@ async fn webhook_appstore(
 
 /// POST /v1/webhooks/play — Google Play Real-Time Developer Notifications (Pub/Sub
 /// push). Always 200; re-verifies via the Developer API before applying.
+///
+/// Аудит 13.11.2026: отправитель не проверялся — подделать выдачу нельзя
+/// (каждое событие перепроверяется у Google), но посторонний тратил квоту
+/// Developer API. Если задан `SECRETLY_BILLING_PLAY_PUSH_TOKEN`, принимаются
+/// только запросы с `?token=<он же>` в адресе — так настраивается адрес
+/// подписки Pub/Sub. Не задан — как раньше (совместимость с текущей
+/// подпиской, пока её адрес не обновлён). Ответ на чужой запрос тоже 200:
+/// Pub/Sub иначе повторял бы его, а постороннему незачем знать причину.
 async fn webhook_play(
     State(state): State<AppState>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
     Json(body): Json<serde_json::Value>,
 ) -> StatusCode {
+    if let Ok(expected) = env::var("SECRETLY_BILLING_PLAY_PUSH_TOKEN") {
+        let expected = expected.trim();
+        if !expected.is_empty() {
+            let got = q.get("token").map(|v| v.trim()).unwrap_or("");
+            if !constant_time_eq(got.as_bytes(), expected.as_bytes()) {
+                tracing::warn!("play webhook rejected: push token mismatch");
+                return StatusCode::OK;
+            }
+        }
+    }
     let (Some(pkg), Some(sa)) = (
         state.billing.play_package.as_deref(),
         state.billing.play_sa.as_ref(),
@@ -1526,6 +2166,16 @@ struct AppState {
     rooms2: Arc<Rooms2Config>,
     handshake: Arc<HandshakeServerConfig>,
     multidevice: Arc<MultideviceServerConfig>,
+    calls: Arc<CallsServerConfig>,
+    disappearing: Arc<DisappearingServerConfig>,
+    privacy: Arc<PrivacyServerConfig>,
+    media: Arc<MediaServerConfig>,
+    stickers: Arc<StickersServerConfig>,
+    prekeys: Arc<PrekeysServerConfig>,
+    server_auth: Arc<ServerAuthServerConfig>,
+    transport: Arc<TransportServerConfig>,
+    /// Подписанный список входов из файла; `None` — файла нет или нет ключа.
+    transport_endpoints: Arc<Option<TransportEndpointsServed>>,
     update: Arc<UpdateServerConfig>,
     support: Arc<SupportServerConfig>,
     // Server Ed25519 key used to sign /v1/config (and later entitlements). None
@@ -1779,6 +2429,9 @@ struct HandshakeServerConfig {
     /// подписи рукопожатия у всех клиентов. По умолчанию выключено — отказы
     /// действуют.
     hs_auth_enforce_disabled: bool,
+    /// Э4: `SECRETLY_HS_AUTH_REQUIRE_ALL=1` — флаг-день, см.
+    /// [`HandshakeAuth2Payload`]. По умолчанию выключено.
+    hs_auth_require_all: bool,
 }
 
 impl Default for HandshakeServerConfig {
@@ -1787,6 +2440,7 @@ impl Default for HandshakeServerConfig {
             prekey_until_confirmed_send_enabled: false,
             prekey_until_confirmed_send_percent: 0,
             hs_auth_enforce_disabled: false,
+            hs_auth_require_all: false,
         }
     }
 }
@@ -1814,10 +2468,18 @@ impl HandshakeServerConfig {
                 v == "1" || v == "true" || v == "yes" || v == "on"
             })
             .unwrap_or(false);
+        let hs_auth_require_all = std::env::var("SECRETLY_HS_AUTH_REQUIRE_ALL")
+            .ok()
+            .map(|v| {
+                let v = v.trim().to_ascii_lowercase();
+                v == "1" || v == "true" || v == "yes" || v == "on"
+            })
+            .unwrap_or(false);
         HandshakeServerConfig {
             prekey_until_confirmed_send_enabled: enabled,
             prekey_until_confirmed_send_percent: percent,
             hs_auth_enforce_disabled,
+            hs_auth_require_all,
         }
     }
 }
@@ -1875,6 +2537,342 @@ impl MultideviceServerConfig {
     }
 }
 
+/// Источник блока `calls` (ТЗ E2EE групповых созвонов, ЗВ-С6). Значения —
+/// только из переменных `SECRETLY_KEYS_CALLS_*` (накладка `70-calls.conf`),
+/// читаются один раз при запуске. Без переменных — умолчания, при которых
+/// выпущенные сборки ведут себя как раньше: созвоны включены, доля 0.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct CallsServerConfig {
+    group_calls_enabled: bool,
+    e2ee_create_percent: i64,
+    e2ee_required: bool,
+    max_participants_e2ee: i64,
+    key_switch_delay_ms: i64,
+    join_ratchet: bool,
+}
+
+impl Default for CallsServerConfig {
+    fn default() -> Self {
+        CallsServerConfig {
+            group_calls_enabled: true,
+            e2ee_create_percent: 0,
+            e2ee_required: false,
+            max_participants_e2ee: 20,
+            key_switch_delay_ms: 2000,
+            join_ratchet: false,
+        }
+    }
+}
+
+impl CallsServerConfig {
+    fn from_env() -> Self {
+        Self::from_lookup(|key| std::env::var(key).ok())
+    }
+
+    /// Разбор без обращения к окружению процесса — чтобы тесты не делили
+    /// глобальные переменные. Опечатка оператора не меняет поведение: число,
+    /// которое не читается, и слово, которое не «да»/«нет», дают умолчание;
+    /// числа зажимаются здесь, на сервере.
+    fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Self {
+        let d = CallsServerConfig::default();
+        let flag = |key: &str, default: bool| match get(key)
+            .map(|v| v.trim().to_ascii_lowercase())
+            .as_deref()
+        {
+            Some("1" | "true" | "yes" | "on") => true,
+            Some("0" | "false" | "no" | "off") => false,
+            _ => default,
+        };
+        let int = |key: &str, default: i64, lo: i64, hi: i64| {
+            get(key)
+                .and_then(|v| v.trim().parse::<i64>().ok())
+                .unwrap_or(default)
+                .clamp(lo, hi)
+        };
+        CallsServerConfig {
+            group_calls_enabled: flag(
+                "SECRETLY_KEYS_CALLS_GROUP_CALLS_ENABLED",
+                d.group_calls_enabled,
+            ),
+            e2ee_create_percent: int(
+                "SECRETLY_KEYS_CALLS_E2EE_CREATE_PERCENT",
+                d.e2ee_create_percent,
+                0,
+                100,
+            ),
+            e2ee_required: flag("SECRETLY_KEYS_CALLS_E2EE_REQUIRED", d.e2ee_required),
+            max_participants_e2ee: int(
+                "SECRETLY_KEYS_CALLS_MAX_PARTICIPANTS_E2EE",
+                d.max_participants_e2ee,
+                2,
+                50,
+            ),
+            key_switch_delay_ms: int(
+                "SECRETLY_KEYS_CALLS_KEY_SWITCH_DELAY_MS",
+                d.key_switch_delay_ms,
+                500,
+                5000,
+            ),
+            join_ratchet: flag("SECRETLY_KEYS_CALLS_JOIN_RATCHET", d.join_ratchet),
+        }
+    }
+}
+
+/// Источник блока `privacy` (Б2, выравнивание длины). Только из
+/// `SECRETLY_KEYS_PRIVACY_PAD_SEND_SHARE` (накладка `70-privacy.conf`); без
+/// переменной — 0, ничего не меняется. Опечатка — умолчание, число зажимается.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct PrivacyServerConfig {
+    pad_send_share: i64,
+}
+
+impl PrivacyServerConfig {
+    fn from_env() -> Self {
+        Self::from_lookup(|key| std::env::var(key).ok())
+    }
+
+    fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Self {
+        PrivacyServerConfig {
+            pad_send_share: get("SECRETLY_KEYS_PRIVACY_PAD_SEND_SHARE")
+                .and_then(|v| v.trim().parse::<i64>().ok())
+                .unwrap_or(0)
+                .clamp(0, 100),
+        }
+    }
+}
+
+/// Источник блока `media` (загрузка частями). Только из
+/// `SECRETLY_KEYS_MEDIA_RESUMABLE_UPLOAD_SHARE` (накладка `70-media.conf`); без
+/// переменной — 0, ничего не меняется. Опечатка — умолчание, число зажимается.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct MediaServerConfig {
+    resumable_upload_share: i64,
+}
+
+impl MediaServerConfig {
+    fn from_env() -> Self {
+        Self::from_lookup(|key| std::env::var(key).ok())
+    }
+
+    fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Self {
+        MediaServerConfig {
+            resumable_upload_share: get("SECRETLY_KEYS_MEDIA_RESUMABLE_UPLOAD_SHARE")
+                .and_then(|v| v.trim().parse::<i64>().ok())
+                .unwrap_or(0)
+                .clamp(0, 100),
+        }
+    }
+}
+
+/// Источник блока `stickers`. Только из `SECRETLY_KEYS_STICKERS_*` (накладка
+/// `70-stickers.conf`); без переменных — всё выключено. Опечатка — умолчание,
+/// доли зажимаются в 0..100.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct StickersServerConfig {
+    pack_access_percent: i64,
+    public_publish_percent: i64,
+    public_search_enabled: bool,
+}
+
+impl StickersServerConfig {
+    fn from_env() -> Self {
+        Self::from_lookup(|key| std::env::var(key).ok())
+    }
+
+    fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Self {
+        let percent = |key: &str| {
+            get(key)
+                .and_then(|v| v.trim().parse::<i64>().ok())
+                .unwrap_or(0)
+                .clamp(0, 100)
+        };
+        StickersServerConfig {
+            pack_access_percent: percent("SECRETLY_KEYS_STICKERS_PACK_ACCESS_PERCENT"),
+            public_publish_percent: percent("SECRETLY_KEYS_STICKERS_PUBLIC_PUBLISH_PERCENT"),
+            public_search_enabled: get("SECRETLY_KEYS_STICKERS_PUBLIC_SEARCH_ENABLED")
+                .map(|v| matches!(v.trim(), "1" | "true"))
+                .unwrap_or(false),
+        }
+    }
+}
+
+/// Источник блока `prekeys` (Б5). Только из `SECRETLY_KEYS_PREKEYS_*`
+/// (накладка `62-prekey-hygiene.conf`); без переменных — всё выключено,
+/// период ротации 7 дней. Опечатка — умолчание, числа зажимаются.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PrekeysServerConfig {
+    otk_hygiene_share: i64,
+    spk_rotate_share: i64,
+    spk_rotate_days: i64,
+    legacy_wire_reject_share: i64,
+}
+
+impl Default for PrekeysServerConfig {
+    fn default() -> Self {
+        PrekeysServerConfig {
+            otk_hygiene_share: 0,
+            spk_rotate_share: 0,
+            spk_rotate_days: 7,
+            legacy_wire_reject_share: 0,
+        }
+    }
+}
+
+impl PrekeysServerConfig {
+    fn from_env() -> Self {
+        Self::from_lookup(|key| std::env::var(key).ok())
+    }
+
+    fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Self {
+        let d = PrekeysServerConfig::default();
+        let num = |key: &str, dflt: i64, lo: i64, hi: i64| {
+            get(key)
+                .and_then(|v| v.trim().parse::<i64>().ok())
+                .unwrap_or(dflt)
+                .clamp(lo, hi)
+        };
+        PrekeysServerConfig {
+            otk_hygiene_share: num("SECRETLY_KEYS_PREKEYS_OTK_HYGIENE_SHARE", d.otk_hygiene_share, 0, 100),
+            spk_rotate_share: num("SECRETLY_KEYS_PREKEYS_SPK_ROTATE_SHARE", d.spk_rotate_share, 0, 100),
+            spk_rotate_days: num("SECRETLY_KEYS_PREKEYS_SPK_ROTATE_DAYS", d.spk_rotate_days, 1, 90),
+            legacy_wire_reject_share: num(
+                "SECRETLY_KEYS_PREKEYS_LEGACY_WIRE_REJECT_SHARE",
+                d.legacy_wire_reject_share,
+                0,
+                100,
+            ),
+        }
+    }
+}
+
+/// Источник блока `server_auth` (Б3) и выключатель подписи ответов. Только из
+/// `SECRETLY_KEYS_SERVER_AUTH_*` и `SECRETLY_KEYS_RESP_SIGNING` (накладка
+/// `64-server-auth.conf`). Без переменных — подпись ответов включена, отказ
+/// выключен, ключа реле нет. Опечатка — умолчание; ключ реле принимается
+/// только целиком (номер и 32 байта), иначе оба пусты.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ServerAuthServerConfig {
+    resp_signing_enabled: bool,
+    enforce_share: i64,
+    relay_kid: String,
+    relay_pub_b64: String,
+}
+
+impl Default for ServerAuthServerConfig {
+    fn default() -> Self {
+        ServerAuthServerConfig {
+            resp_signing_enabled: true,
+            enforce_share: 0,
+            relay_kid: String::new(),
+            relay_pub_b64: String::new(),
+        }
+    }
+}
+
+impl ServerAuthServerConfig {
+    fn from_env() -> Self {
+        Self::from_lookup(|key| std::env::var(key).ok())
+    }
+
+    fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Self {
+        let d = ServerAuthServerConfig::default();
+        let resp_signing_enabled = get("SECRETLY_KEYS_RESP_SIGNING")
+            .map(|v| !matches!(v.trim(), "0" | "false" | "off"))
+            .unwrap_or(d.resp_signing_enabled);
+        let enforce_share = get("SECRETLY_KEYS_SERVER_AUTH_ENFORCE_SHARE")
+            .and_then(|v| v.trim().parse::<i64>().ok())
+            .unwrap_or(d.enforce_share)
+            .clamp(0, 100);
+        let kid = get("SECRETLY_KEYS_SERVER_AUTH_RELAY_KID")
+            .map(|v| v.trim().to_string())
+            .filter(|v| (1..=16).contains(&v.len()) && v.bytes().all(|b| b.is_ascii_alphanumeric()))
+            .unwrap_or_default();
+        let pubk = get("SECRETLY_KEYS_SERVER_AUTH_RELAY_PUB_B64")
+            .map(|v| v.trim().to_string())
+            .filter(|v| b64_decoded_len_is(v, 32))
+            .unwrap_or_default();
+        let (relay_kid, relay_pub_b64) = if kid.is_empty() || pubk.is_empty() {
+            (String::new(), String::new())
+        } else {
+            (kid, pubk)
+        };
+        ServerAuthServerConfig { resp_signing_enabled, enforce_share, relay_kid, relay_pub_b64 }
+    }
+}
+
+/// Источник блока `disappearing` (ТЗ исчезающих сообщений, §2.5). Значения —
+/// только из переменных `SECRETLY_KEYS_DISAPPEARING_*` (накладка
+/// `70-disappearing.conf`), читаются один раз при запуске. Без переменных —
+/// умолчания, при которых выпущенные сборки ведут себя как раньше: отправка
+/// выключена, доля 0, сборка не задана; удаление включено.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct DisappearingServerConfig {
+    send_enabled: bool,
+    send_share: i64,
+    expire_enabled: bool,
+    min_build: i64,
+    custom_max_s: i64,
+}
+
+impl Default for DisappearingServerConfig {
+    fn default() -> Self {
+        DisappearingServerConfig {
+            send_enabled: false,
+            send_share: 0,
+            expire_enabled: true,
+            min_build: 0,
+            custom_max_s: 30 * 24 * 60 * 60,
+        }
+    }
+}
+
+impl DisappearingServerConfig {
+    fn from_env() -> Self {
+        Self::from_lookup(|key| std::env::var(key).ok())
+    }
+
+    /// Разбор без обращения к окружению процесса. Опечатка оператора не
+    /// меняет поведение: нечитаемое число и слово не «да»/«нет» дают
+    /// умолчание; числа зажимаются здесь, на сервере.
+    fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Self {
+        let d = DisappearingServerConfig::default();
+        let flag = |key: &str, default: bool| match get(key)
+            .map(|v| v.trim().to_ascii_lowercase())
+            .as_deref()
+        {
+            Some("1" | "true" | "yes" | "on") => true,
+            Some("0" | "false" | "no" | "off") => false,
+            _ => default,
+        };
+        let int = |key: &str, default: i64, lo: i64, hi: i64| {
+            get(key)
+                .and_then(|v| v.trim().parse::<i64>().ok())
+                .unwrap_or(default)
+                .clamp(lo, hi)
+        };
+        DisappearingServerConfig {
+            send_enabled: flag("SECRETLY_KEYS_DISAPPEARING_SEND_ENABLED", d.send_enabled),
+            send_share: int("SECRETLY_KEYS_DISAPPEARING_SEND_SHARE", d.send_share, 0, 100),
+            expire_enabled: flag(
+                "SECRETLY_KEYS_DISAPPEARING_EXPIRE_ENABLED",
+                d.expire_enabled,
+            ),
+            min_build: int(
+                "SECRETLY_KEYS_DISAPPEARING_MIN_BUILD",
+                d.min_build,
+                0,
+                100_000_000,
+            ),
+            custom_max_s: int(
+                "SECRETLY_KEYS_DISAPPEARING_CUSTOM_MAX_S",
+                d.custom_max_s,
+                30,
+                365 * 24 * 60 * 60,
+            ),
+        }
+    }
+}
+
 /// Server-side source for the additive Support block. Default OFF (fail-OFF):
 /// the feature ships dark until a human sets SECRETLY_SUPPORT_PUB_B64 (the
 /// X25519 public key from ops/support/gen_support_key.sh) and
@@ -1923,6 +2921,140 @@ fn load_config_signing_key() -> Option<SigningKey> {
         .ok()?;
     let seed: [u8; 32] = bytes.as_slice().try_into().ok()?;
     Some(SigningKey::from_bytes(&seed))
+}
+
+/// Э1: пути под блокировками. Накладка `75-transport.conf`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct TransportServerConfig {
+    enabled: bool,
+    report_enabled: bool,
+    tor_enabled: bool,
+    endpoints_file: String,
+}
+
+impl Default for TransportServerConfig {
+    fn default() -> Self {
+        TransportServerConfig {
+            enabled: true,
+            report_enabled: true,
+            tor_enabled: false,
+            endpoints_file: "/etc/secretly/transport_endpoints.json".to_string(),
+        }
+    }
+}
+
+impl TransportServerConfig {
+    fn from_env() -> Self {
+        Self::from_lookup(|key| std::env::var(key).ok())
+    }
+
+    fn from_lookup(get: impl Fn(&str) -> Option<String>) -> Self {
+        let d = Self::default();
+        let flag = |key: &str, default: bool| match get(key)
+            .map(|v| v.trim().to_ascii_lowercase())
+            .as_deref()
+        {
+            Some("1" | "true" | "yes" | "on") => true,
+            Some("0" | "false" | "no" | "off") => false,
+            _ => default,
+        };
+        TransportServerConfig {
+            enabled: flag("SECRETLY_KEYS_TRANSPORT_ENABLED", d.enabled),
+            report_enabled: flag("SECRETLY_KEYS_TRANSPORT_REPORT_ENABLED", d.report_enabled),
+            tor_enabled: flag("SECRETLY_KEYS_TRANSPORT_TOR_ENABLED", d.tor_enabled),
+            endpoints_file: get("SECRETLY_KEYS_TRANSPORT_ENDPOINTS_FILE")
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+                .unwrap_or(d.endpoints_file),
+        }
+    }
+}
+
+/// Список входов, подписанный при старте. Подпись — над сырыми байтами
+/// файла с контекстом `secretly-endpoints-v1\n` (см. крейт транспорта), тем
+/// же ключом, что подписывает конфиг: клиенту не нужен второй ключ.
+#[derive(Clone, Debug)]
+struct TransportEndpointsServed {
+    signed_json: String,
+    issued_at_ms: i64,
+    etag: String,
+}
+
+fn load_transport_endpoints(
+    cfg: &TransportServerConfig,
+    key: Option<&SigningKey>,
+) -> Option<TransportEndpointsServed> {
+    let raw = std::fs::read_to_string(&cfg.endpoints_file).ok()?;
+    sign_transport_endpoints(&raw, key?)
+}
+
+/// Контекст подписи списка входов. 🔴 Побайтово совпадает с
+/// `SIGNING_CONTEXT` в библиотеке SeyLock (`seylock::endpoints`, формат 1);
+/// клиент проверяет подпись над `контекст || сырые байты документа`.
+const TRANSPORT_ENDPOINTS_SIGNING_CONTEXT: &[u8] = b"secretly-endpoints-v1\n";
+
+fn sign_transport_endpoints(doc: &str, key: &SigningKey) -> Option<TransportEndpointsServed> {
+    let doc = doc.trim();
+    let value: serde_json::Value = match serde_json::from_str(doc) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!(error = %e, "transport endpoints file does not parse");
+            return None;
+        }
+    };
+    let version = value.get("v").and_then(|v| v.as_i64()).unwrap_or(0);
+    let issued_at_ms = value.get("issued_at_ms").and_then(|v| v.as_i64()).unwrap_or(0);
+    let paths = value.get("paths").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let has_logical = value
+        .get("logical")
+        .map(|l| l.get("keys").is_some() && l.get("relay").is_some())
+        .unwrap_or(false);
+    if version != 1 || paths == 0 || !has_logical || issued_at_ms <= 0 {
+        tracing::warn!("transport endpoints file: unsupported version, no paths or no logical hosts");
+        return None;
+    }
+    let mut message = Vec::with_capacity(TRANSPORT_ENDPOINTS_SIGNING_CONTEXT.len() + doc.len());
+    message.extend_from_slice(TRANSPORT_ENDPOINTS_SIGNING_CONTEXT);
+    message.extend_from_slice(doc.as_bytes());
+    let sig = key.sign(&message);
+    let signed_json = serde_json::json!({
+        "doc": doc,
+        "sig_b64": base64::engine::general_purpose::STANDARD.encode(sig.to_bytes()),
+    })
+    .to_string();
+    let etag = format!(
+        "\"{}\"",
+        base64::engine::general_purpose::STANDARD.encode(Sha256::digest(signed_json.as_bytes()))
+    );
+    Some(TransportEndpointsServed {
+        signed_json,
+        issued_at_ms,
+        etag,
+    })
+}
+
+/// GET /v1/transport/endpoints — подписанный список входов. Без подписи
+/// запроса: список публичный, его защищает подпись, а не доступ.
+async fn get_transport_endpoints(State(state): State<AppState>) -> impl IntoResponse {
+    let Some(served) = state.transport_endpoints.as_ref().as_ref() else {
+        return (
+            StatusCode::NOT_FOUND,
+            HeaderMap::new(),
+            Json(serde_json::json!({ "error": "no_endpoints" })).into_response(),
+        )
+            .into_response();
+    };
+    let mut headers = HeaderMap::new();
+    if let Ok(v) = served.etag.parse() {
+        headers.insert(axum::http::header::ETAG, v);
+    }
+    if let Ok(v) = "public, max-age=300".parse() {
+        headers.insert(axum::http::header::CACHE_CONTROL, v);
+    }
+    if let Ok(v) = "application/json".parse() {
+        headers.insert(axum::http::header::CONTENT_TYPE, v);
+    }
+    (StatusCode::OK, headers, served.signed_json.clone()).into_response()
 }
 
 #[derive(Clone)]
@@ -1978,6 +3110,67 @@ fn b64_decoded_len_is(b64: &str, expected_len: usize) -> bool {
     bytes.len() == expected_len
 }
 
+/// Ключ лимита по адресу (11.11.2026, подготовка к IPv6).
+///
+/// 🔴 IPv6-АДРЕС НЕЛЬЗЯ СЧИТАТЬ «ОДНИМ КЛИЕНТОМ». Абоненту выдают сеть /64, и
+/// внутри неё адрес можно менять хоть на каждом запросе. Лимит по полному
+/// адресу тогда не ограничивает никого, а таблица корзин растёт без предела —
+/// с каждым новым адресом. Поэтому IPv6 сводится к сети /64: так считают и
+/// крупные сервисы, и это то, что получает один абонент.
+///
+/// Адрес вида `::ffff:a.b.c.d` — тот же IPv4 в IPv6-обёртке: считаем его как
+/// IPv4, иначе один клиент получил бы две корзины.
+/// Сеть клиента для запирания подбора пароля копии (К4): IPv4 — /24,
+/// IPv6 — /48. Шире, чем у лимита запросов: так одному нападающему труднее
+/// размазать подбор по соседним адресам, а владелец в другой сети не задет.
+#[derive(Clone, Debug)]
+struct ClientNet(String);
+
+fn backup_lock_net(ip: std::net::IpAddr) -> String {
+    match rate_limit_key(ip) {
+        std::net::IpAddr::V4(v4) => {
+            let o = v4.octets();
+            format!("{}.{}.{}.0/24", o[0], o[1], o[2])
+        }
+        std::net::IpAddr::V6(v6) => {
+            let s = v6.segments();
+            format!("{:x}:{:x}:{:x}::/48", s[0], s[1], s[2])
+        }
+    }
+}
+
+fn rate_limit_key(ip: std::net::IpAddr) -> std::net::IpAddr {
+    match ip {
+        std::net::IpAddr::V4(_) => ip,
+        std::net::IpAddr::V6(v6) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return std::net::IpAddr::V4(v4);
+            }
+            let s = v6.segments();
+            std::net::IpAddr::V6(std::net::Ipv6Addr::new(s[0], s[1], s[2], s[3], 0, 0, 0, 0))
+        }
+    }
+}
+
+/// Раз в минуту убирает из лимита по адресу наполнившиеся корзины.
+///
+/// Без этого таблица только растёт: запись появляется на каждый новый адрес и
+/// не исчезает никогда. С IPv4 рост ограничен числом адресов у нападающего, с
+/// IPv6 — нет, поэтому чистка обязательна вместе с IPv6.
+fn spawn_ip_limiter_pruner(limiter: Arc<IpRateLimiter>) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tick.tick().await;
+            let removed = limiter.prune_idle(Instant::now());
+            if removed > 0 {
+                tracing::debug!(removed, "ip rate limiter pruned idle buckets");
+            }
+        }
+    });
+}
+
 #[derive(Clone)]
 struct IpRateLimiter {
     buckets: DashMap<std::net::IpAddr, TokenBucket>,
@@ -2002,10 +3195,13 @@ impl IpRateLimiter {
 
     fn allow(&self, ip: std::net::IpAddr) -> bool {
         let now = Instant::now();
-        let mut entry = self.buckets.entry(ip).or_insert(TokenBucket {
-            tokens: self.capacity,
-            last: now,
-        });
+        let mut entry = self
+            .buckets
+            .entry(rate_limit_key(ip))
+            .or_insert(TokenBucket {
+                tokens: self.capacity,
+                last: now,
+            });
 
         let elapsed = now.duration_since(entry.last).as_secs_f64();
         if elapsed > 0.0 {
@@ -2019,6 +3215,24 @@ impl IpRateLimiter {
         } else {
             false
         }
+    }
+
+    /// Убирает корзины, которые уже наполнились до краёв. Такая корзина ничем
+    /// не отличается от отсутствующей: следующий запрос с этого адреса заведёт
+    /// новую, тоже полную. Корзины, которые ещё не наполнились, остаются — иначе
+    /// чистка сбрасывала бы лимит тому, кто его исчерпал. Возвращает число убранных.
+    fn prune_idle(&self, now: Instant) -> usize {
+        if self.refill_per_sec <= 0.0 {
+            return 0;
+        }
+        let before = self.buckets.len();
+        let capacity = self.capacity;
+        let refill = self.refill_per_sec;
+        self.buckets.retain(|_, b| {
+            let refilled = b.tokens + now.saturating_duration_since(b.last).as_secs_f64() * refill;
+            refilled < capacity
+        });
+        before.saturating_sub(self.buckets.len())
     }
 }
 
@@ -2044,6 +3258,8 @@ async fn rate_limit(
     // and all traffic passes through a trusted reverse proxy.
     let ip = effective_client_ip(req.headers(), addr.ip(), trust_xff);
     if state.limiter.allow(ip) {
+        let mut req = req;
+        req.extensions_mut().insert(ClientNet(backup_lock_net(ip)));
         next.run(req).await
     } else {
         // 🔴 ОТКАЗ ПО ЛИМИТУ МОЛЧАЛ (24.08.2026).
@@ -2193,6 +3409,36 @@ struct BackupGetResponse {
     profile_id: String,
     payload: Option<String>,
     updated_at_ms: i64,
+    /// К4 (14.11.2026): почему копия не выдана — `wrong_password` или
+    /// `locked`. Старые клиенты поле не читают и видят «копии нет», как
+    /// раньше. `wrong_password` приходит и для профиля без копии: так ответ
+    /// не выдаёт, есть ли у человека копия.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
+    /// Для `locked`: когда можно попробовать снова (мс эпохи).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    retry_at_ms: Option<i64>,
+}
+
+impl BackupGetResponse {
+    fn miss(profile_id: String) -> Self {
+        Self {
+            exists: false,
+            profile_id,
+            payload: None,
+            updated_at_ms: 0,
+            reason: None,
+            retry_at_ms: None,
+        }
+    }
+
+    fn refused(profile_id: String, reason: &'static str, retry_at_ms: Option<i64>) -> Self {
+        Self {
+            reason: Some(reason),
+            retry_at_ms,
+            ..Self::miss(profile_id)
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -2559,7 +3805,20 @@ fn profile_meta_last_seen_ms(
 
 fn backup_access_require_enabled() -> bool {
     env::var("SECRETLY_KEYS_BACKUP_ACCESS_MODE")
-        .map(|v| v.eq_ignore_ascii_case("require"))
+        .map(|v| v.eq_ignore_ascii_case("require") || v.eq_ignore_ascii_case("strict"))
+        .unwrap_or(false)
+}
+
+/// К5 (14.11.2026): режим `strict` — копию без опоры токена (её залила сборка,
+/// не умевшая токен) тоже не отдавать постороннему, только подписанному
+/// устройству профиля. Иначе её шифртекст получает любой, кто знает
+/// profile_id, и подбирает пароль у себя. Включать, когда число таких копий
+/// (запрос в `ops/vps/units/secretly-keys.service.d/35-backup-access.conf`)
+/// станет нулём или почти нулём: владелец такой копии на новом устройстве её
+/// не получит.
+fn backup_access_strict_enabled() -> bool {
+    env::var("SECRETLY_KEYS_BACKUP_ACCESS_MODE")
+        .map(|v| v.eq_ignore_ascii_case("strict"))
         .unwrap_or(false)
 }
 
@@ -3236,6 +4495,12 @@ struct PublishKeysRequest {
     account_identity_pub_b64: Option<String>,
     #[serde(default)]
     device_cert_b64: Option<String>,
+    /// Б5 (24.10.2026): number of the signed prekey. Outside the signature for
+    /// the same reason as the two above: it only tells a receiver which of its
+    /// keys to try first, and the handshake signature (С-2) binds the number to
+    /// the key anyway. Absent or out of range — 1, as every older build means.
+    #[serde(default)]
+    signed_prekey_id: Option<i64>,
 }
 
 /// 🔴 ОТКАЗ ОБЯЗАН НАЗЫВАТЬ ПРИЧИНУ.
@@ -3254,11 +4519,26 @@ struct PublishKeysResponse {
     ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     reason: Option<&'static str>,
+    /// Б5 (24.10.2026): one-time prekeys of this device still on offer, and the
+    /// lowest number among them. Optional — builds that read only `ok` ignore it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    otk_remaining: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    otk_min_remaining_id: Option<i64>,
 }
 
 impl PublishKeysResponse {
     fn ok() -> Self {
-        Self { ok: true, reason: None }
+        Self { ok: true, reason: None, otk_remaining: None, otk_min_remaining_id: None }
+    }
+
+    fn ok_with_otk_stats(stats: Option<(i64, Option<i64>)>) -> Self {
+        let mut r = Self::ok();
+        if let Some((remaining, min_id)) = stats {
+            r.otk_remaining = Some(remaining);
+            r.otk_min_remaining_id = min_id;
+        }
+        r
     }
 
     /// Отказ с причиной: она же уходит в журнал сервера вместе с отпечатком
@@ -3271,7 +4551,7 @@ impl PublishKeysResponse {
             device = %short_id(device_id),
             "publish_keys refused"
         );
-        Self { ok: false, reason: Some(reason) }
+        Self { ok: false, reason: Some(reason), otk_remaining: None, otk_min_remaining_id: None }
     }
 }
 
@@ -3606,6 +4886,82 @@ fn backup_set_message_v2(
     .into_bytes()
 }
 
+fn backup_inflight_budget() -> &'static tokio::sync::Semaphore {
+    static BUDGET: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
+    BUDGET.get_or_init(|| {
+        let mb = env::var("SECRETLY_KEYS_BACKUP_INFLIGHT_MAX_MB")
+            .ok()
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .unwrap_or(KEYS_BACKUP_INFLIGHT_DEFAULT_MB)
+            // Одна заливка предельного размера обязана проходить всегда.
+            .max(KEYS_BACKUP_MAX_BODY_BYTES.div_ceil(KEYS_BACKUP_MIB));
+        tokio::sync::Semaphore::new(mb)
+    })
+}
+
+/// Допуск заливки архива ДО чтения тела (11.11.2026).
+///
+/// Отказы те же, что дал бы сам обработчик: 413 по объявленной длине (как
+/// `DefaultBodyLimit`), `ok:false` без секрета профиля (как
+/// `profile_secret_mismatch`). Новое только 503 при исчерпанном бюджете —
+/// у клиента это обычная ошибка заливки, локально ничего не трогается.
+fn backup_set_admit<'a>(
+    headers: &HeaderMap,
+    budget: &'a tokio::sync::Semaphore,
+) -> Result<tokio::sync::SemaphorePermit<'a>, axum::response::Response> {
+    let declared = headers
+        .get(axum::http::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.trim().parse::<u64>().ok());
+    if declared.is_some_and(|len| len > KEYS_BACKUP_MAX_BODY_BYTES as u64) {
+        return Err((StatusCode::PAYLOAD_TOO_LARGE, "backup too large").into_response());
+    }
+    // Секрет профиля без профиля не сверить (profile_id в теле), но в строгом
+    // режиме без правильного по форме секрета обработчик отказал бы всё равно.
+    if require_profile_secret_enabled() && !allow_legacy_profiles_without_secret() {
+        let well_formed = header_str(headers, "x-secretly-profile-secret-b64")
+            .and_then(|v| {
+                base64::engine::general_purpose::STANDARD
+                    .decode(v.trim().as_bytes())
+                    .ok()
+            })
+            .is_some_and(|b| b.len() == 32);
+        if !well_formed {
+            tracing::warn!("backup_set rejected before body reason=profile_secret_missing");
+            return Err(Json(BackupSetResponse { ok: false }).into_response());
+        }
+    }
+    // Без Content-Length (chunked) — резерв по максимуму.
+    let units = declared
+        .map(|len| (len as usize).div_ceil(KEYS_BACKUP_MIB).max(1))
+        .unwrap_or(KEYS_BACKUP_MAX_BODY_BYTES.div_ceil(KEYS_BACKUP_MIB));
+    budget.try_acquire_many(units as u32).map_err(|_| {
+        tracing::warn!(
+            "backup_set rejected before body reason=inflight_budget_exhausted reserve_mb={} free_mb={}",
+            units,
+            budget.available_permits()
+        );
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            [(axum::http::header::RETRY_AFTER, "30")],
+            "backup uploads busy, retry later",
+        )
+            .into_response()
+    })
+}
+
+async fn backup_set_admission(
+    req: Request<Body>,
+    next: middleware::Next,
+) -> axum::response::Response {
+    // Разрешение держится, пока обработчик не закончит: тело в памяти до конца.
+    let _permit = match backup_set_admit(req.headers(), backup_inflight_budget()) {
+        Ok(permit) => permit,
+        Err(resp) => return resp,
+    };
+    next.run(req).await
+}
+
 async fn backup_set(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -3820,17 +5176,16 @@ async fn backup_challenge(
 
 async fn backup_get(
     State(state): State<AppState>,
+    net: Option<Extension<ClientNet>>,
     headers: HeaderMap,
     Path(profile_id): Path<String>,
 ) -> Json<BackupGetResponse> {
     if !is_valid_id(&profile_id, 128) {
-        return Json(BackupGetResponse {
-            exists: false,
-            profile_id,
-            payload: None,
-            updated_at_ms: 0,
-        });
+        return Json(BackupGetResponse::miss(profile_id));
     }
+    let net = net
+        .map(|Extension(ClientNet(n))| n)
+        .unwrap_or_else(|| "unknown".to_string());
 
     let has_auth_headers = has_backup_get_auth_headers(&headers);
     // Э-0 (25.08.2026), SEC-01. Поведение на этом этапе НЕ меняется — меняется
@@ -3861,12 +5216,7 @@ async fn backup_get(
                 profile_id = %profile_id,
                 "backup_get rejected: device auth failed"
             );
-            return Json(BackupGetResponse {
-                exists: false,
-                profile_id,
-                payload: None,
-                updated_at_ms: 0,
-            });
+            return Json(BackupGetResponse::miss(profile_id));
         }
         authorized = true;
     }
@@ -3910,34 +5260,47 @@ async fn backup_get(
             profile_id = %profile_id,
             "backup_get rejected: access token required for this profile"
         );
-        return Json(BackupGetResponse {
-            exists: false,
-            profile_id,
-            payload: None,
-            updated_at_ms: 0,
-        });
+        return Json(BackupGetResponse::miss(profile_id));
+    }
+    // К5: в строгом режиме копия без опоры не уходит постороннему вовсе —
+    // ответ тот же, что для профиля без копии.
+    if backup_access_strict_enabled() && stored_verifier.is_none() && !authorized {
+        tracing::warn!(
+            profile_id = %profile_id,
+            "backup_get rejected: strict mode, backup has no access verifier"
+        );
+        return Json(BackupGetResponse::refused(profile_id, "wrong_password", None));
     }
 
     // 🔴 Запирание по ПРОФИЛЮ, а не по адресу. Лимит по IP обходится сменой
     // адреса, а подбор токена — это подбор пароля архива: он обязан упираться
     // в стену независимо от того, откуда идут запросы.
+    //
+    // К4 (14.11.2026): запирается сеть подбирающего, а весь профиль — только
+    // после двухсот неудач (см. `backup_access_profile_lock_deadline_ms`).
     if stored_verifier.is_some() && !authorized {
-        let locked_until = state
+        let net_locked = state
+            .store
+            .backup_access_net_lock_until_ms(&profile_id, &net)
+            .await
+            .unwrap_or(0);
+        let profile_locked = state
             .store
             .backup_access_lock_until_ms(&profile_id)
             .await
             .unwrap_or(0);
+        let locked_until = net_locked.max(profile_locked);
         if locked_until > now_ms() {
             tracing::warn!(
                 profile_id = %profile_id,
-                "backup_get rejected: profile locked after failed access attempts"
+                whole_profile = profile_locked > now_ms(),
+                "backup_get rejected: locked after failed access attempts"
             );
-            return Json(BackupGetResponse {
-                exists: false,
+            return Json(BackupGetResponse::refused(
                 profile_id,
-                payload: None,
-                updated_at_ms: 0,
-            });
+                "locked",
+                Some(locked_until),
+            ));
         }
     }
 
@@ -3955,21 +5318,27 @@ async fn backup_get(
             if ok {
                 let _ = state.store.backup_access_note_success(&profile_id).await;
             } else {
+                let now = now_ms();
+                let (net_attempts, net_lock) = state
+                    .store
+                    .backup_access_net_note_failure(&profile_id, &net, now)
+                    .await
+                    .unwrap_or((0, 0));
                 let attempts = state
                     .store
-                    .backup_access_note_failure(&profile_id, now_ms())
+                    .backup_access_note_failure(&profile_id, now)
                     .await
                     .unwrap_or(0);
                 tracing::warn!(
                     profile_id = %profile_id,
                     attempts = attempts,
+                    net_attempts = net_attempts,
                     "backup_get rejected: backup access token mismatch"
                 );
-                return Json(BackupGetResponse {
-                    exists: false,
-                    profile_id,
-                    payload: None,
-                    updated_at_ms: 0,
+                return Json(if net_lock > now {
+                    BackupGetResponse::refused(profile_id, "locked", Some(net_lock))
+                } else {
+                    BackupGetResponse::refused(profile_id, "wrong_password", None)
                 });
             }
         }
@@ -3996,6 +5365,8 @@ async fn backup_get(
             profile_id,
             payload: Some(payload),
             updated_at_ms: updated,
+            reason: None,
+            retry_at_ms: None,
         });
     }
 
@@ -4004,12 +5375,59 @@ async fn backup_get(
         authorized = authorized,
         "backup_get miss"
     );
-    Json(BackupGetResponse {
-        exists: false,
-        profile_id,
-        payload: None,
-        updated_at_ms: 0,
-    })
+    // Пароль предъявлен, а копии нет — ответ как при неверном пароле: иначе
+    // по нему было бы видно, есть ли у профиля копия.
+    if !presented.is_empty() && !authorized {
+        return Json(BackupGetResponse::refused(profile_id, "wrong_password", None));
+    }
+    Json(BackupGetResponse::miss(profile_id))
+}
+
+fn keys_backup_delete_message(
+    requester_device_id: &str,
+    profile_id: &str,
+    ts_ms: i64,
+    nonce_b64: &str,
+) -> Vec<u8> {
+    format!(
+        "SECRETLY-BACKUP-DELETE-V1\nrequester_device_id={}\nprofile_id={}\nts_ms={}\nnonce_b64={}\n",
+        requester_device_id, profile_id, ts_ms, nonce_b64
+    )
+    .into_bytes()
+}
+
+#[derive(Serialize)]
+struct BackupDeleteResponse {
+    ok: bool,
+    deleted: bool,
+}
+
+/// К8 (14.11.2026): владелец удаляет копию профиля с сервера. Только
+/// подписанное устройство того же профиля (и секрет профиля, где он
+/// требуется) — как для заливки копии.
+async fn backup_delete(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(profile_id): Path<String>,
+) -> Result<Json<BackupDeleteResponse>, (StatusCode, String)> {
+    if !is_valid_id(&profile_id, 128) {
+        return Err((StatusCode::BAD_REQUEST, "invalid profile_id".into()));
+    }
+    let ts_ms = header_str(&headers, "x-secretly-ts-ms")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0);
+    let nonce_b64 = header_str(&headers, "x-secretly-nonce-b64").unwrap_or("");
+    let req_did = header_str(&headers, "x-secretly-device-id").unwrap_or("");
+    let msg = keys_backup_delete_message(req_did, &profile_id, ts_ms, nonce_b64);
+    verify_requester_device_auth(&state, &headers, msg, true, Some(&profile_id)).await?;
+    require_profile_secret(&state, &headers, &profile_id).await?;
+    let deleted = state
+        .store
+        .backup_delete(&profile_id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    tracing::info!(profile_id = %profile_id, deleted = deleted, "backup_delete");
+    Ok(Json(BackupDeleteResponse { ok: true, deleted }))
 }
 
 async fn profile_meta_get(
@@ -5776,14 +7194,19 @@ async fn publish_keys(
         }
     }
 
+    let signed_prekey_id = req
+        .signed_prekey_id
+        .filter(|id| (1..=i64::from(i32::MAX)).contains(id))
+        .unwrap_or_else(store::default_signed_prekey_id);
     let ok = state
         .store
-        .publish_key_bundle(
+        .publish_key_bundle_with_spk_id(
             &req.profile_id,
             &req.device_id,
             &req.identity_key_pub_b64,
             &req.signed_prekey_pub_b64,
             &req.signed_prekey_sig_b64,
+            signed_prekey_id,
             req.one_time_prekeys,
             now_ms(),
             account_identity_pub,
@@ -5798,7 +7221,8 @@ async fn publish_keys(
             .await;
     }
     if ok {
-        Json(PublishKeysResponse::ok())
+        let stats = state.store.one_time_prekey_stats(&req.device_id).await.ok();
+        Json(PublishKeysResponse::ok_with_otk_stats(stats))
     } else {
         Json(PublishKeysResponse::refused(
             "store rejected bundle",
@@ -6270,7 +7694,17 @@ async fn main() {
     let addr: SocketAddr = (ip, port).into();
 
     let db_path = env::var("SECRETLY_KEYS_DB").unwrap_or_else(|_| "keys.db".into());
+    let nonce_journal = nonce_persist::nonce_file_path("SECRETLY_KEYS_NONCE_FILE", &db_path);
     let store = KeysStore::open(db_path).await.expect("open keys store");
+    let used_nonces: Arc<DashMap<String, i64>> = Arc::new(DashMap::new());
+    let restored = nonce_persist::load(&nonce_journal, now_ms(), &used_nonces);
+    tracing::info!(count = restored, "nonce journal restored");
+    nonce_persist::spawn_flusher(nonce_journal, used_nonces.clone(), now_ms);
+    // К5: число копий без опоры токена НЕ считается при старте (15.11.2026).
+    // Запрос читает всю таблицу копий (6 ГБ на проде, 5 с на прогретом кеше,
+    // дольше на холодном), а keys всё это время не слушал порт. Считать
+    // вручную, когда решается вопрос о `strict`, — см.
+    // [`KeysStore::backup_count_without_verifier`].
 
     // Basic anti-abuse: per-IP token bucket.
     // Default: 30 req burst, ~1 req/sec sustained.
@@ -6283,6 +7717,7 @@ async fn main() {
         .and_then(|v| v.parse::<f64>().ok())
         .unwrap_or(1.0);
     let limiter = Arc::new(IpRateLimiter::new(cap, refill_per_sec));
+    spawn_ip_limiter_pruner(limiter.clone());
     let deployment_id = optional_string_env("SECRETLY_KEYS_DEPLOYMENT_ID").unwrap_or_default();
     let release_channel = optional_string_env("SECRETLY_KEYS_RELEASE_CHANNEL").unwrap_or_default();
     let service_started_at_ms = now_ms();
@@ -6305,11 +7740,21 @@ async fn main() {
         .timeout(std::time::Duration::from_secs(20))
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
+    let transport_cfg = TransportServerConfig::from_env();
+    let transport_endpoints =
+        load_transport_endpoints(&transport_cfg, config_signing_key.as_ref());
+    match transport_endpoints.as_ref() {
+        Some(e) => tracing::info!(
+            issued_at_ms = e.issued_at_ms,
+            "transport endpoints list loaded and signed"
+        ),
+        None => tracing::info!("transport endpoints list absent"),
+    }
     let state = AppState {
         store: Arc::new(store),
         limiter,
         challenges: Arc::new(DashMap::new()),
-        used_nonces: Arc::new(DashMap::new()),
+        used_nonces,
         device_seen_stamps: Arc::new(DashMap::new()),
         internal_key: Arc::new(env::var("SECRETLY_INTERNAL_KEY").unwrap_or_default()),
         deployment_id: Arc::new(deployment_id),
@@ -6322,6 +7767,15 @@ async fn main() {
         rooms2: Arc::new(Rooms2Config::from_env()),
         handshake: Arc::new(HandshakeServerConfig::from_env()),
         multidevice: Arc::new(MultideviceServerConfig::from_env()),
+        calls: Arc::new(CallsServerConfig::from_env()),
+        disappearing: Arc::new(DisappearingServerConfig::from_env()),
+        privacy: Arc::new(PrivacyServerConfig::from_env()),
+        media: Arc::new(MediaServerConfig::from_env()),
+        stickers: Arc::new(StickersServerConfig::from_env()),
+        prekeys: Arc::new(PrekeysServerConfig::from_env()),
+        server_auth: Arc::new(ServerAuthServerConfig::from_env()),
+        transport: Arc::new(transport_cfg),
+        transport_endpoints: Arc::new(transport_endpoints),
         update: Arc::new(UpdateServerConfig::from_env()),
         support: Arc::new(SupportServerConfig::from_env()),
         config_signing_key: Arc::new(config_signing_key),
@@ -6335,6 +7789,7 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health))
         .route("/v1/config", get(get_config))
+        .route("/v1/transport/endpoints", get(get_transport_endpoints))
         .route("/v1/profile/create", post(create_profile))
         .route("/v1/profile/search", get(profile_search))
         .route(
@@ -6363,9 +7818,12 @@ async fn main() {
         // this route only (route layer is innermost, so it wins for this path).
         .route(
             "/v1/backup/set",
-            post(backup_set).layer(DefaultBodyLimit::max(KEYS_BACKUP_MAX_BODY_BYTES)),
+            post(backup_set)
+                .layer(DefaultBodyLimit::max(KEYS_BACKUP_MAX_BODY_BYTES))
+                .layer(middleware::from_fn(backup_set_admission)),
         )
         .route("/v1/backup/{profile_id}", get(backup_get))
+        .route("/v1/backup/{profile_id}/delete", post(backup_delete))
         .route(
             "/v1/backup/{profile_id}/challenge",
             get(backup_challenge),
@@ -6386,6 +7844,10 @@ async fn main() {
         .route("/internal/profile/{profile_id}/addressable", get(internal_addressable))
         .layer(DefaultBodyLimit::max(KEYS_HTTP_BODY_LIMIT_BYTES))
         .layer(middleware::from_fn_with_state(state.clone(), rate_limit))
+        // Б3: подпись ответов — СНАРУЖИ ограничителя частоты, чтобы и его 429
+        // приходил подписанным: иначе при включённом отказе перегрузка
+        // выглядела бы как подмена (Э2).
+        .layer(middleware::from_fn_with_state(state.clone(), sign_responses))
         .with_state(state);
 
     tracing::info!(%addr, "starting keys service");
@@ -6432,7 +7894,79 @@ async fn run_inactive_profile_cleanup_loop(state: AppState) {
 }
 
 #[cfg(test)]
+mod handshake_auth2_tests {
+    use super::*;
+
+    #[test]
+    fn handshake_auth2_message_is_frozen() {
+        // Тот же текст проверяет Dart `handshakeAuth2SigningMessage`.
+        let p = HandshakeAuth2Payload { require_all: true, issued_at_ms: 1_700_000_000_123 };
+        assert_eq!(
+            handshake_auth2_signing_message(&p),
+            "secretly-handshake-auth2-v1|true|1700000000123"
+        );
+        assert!(!HandshakeServerConfig::default().hs_auth_require_all);
+    }
+}
+
+#[cfg(test)]
 mod tests {
+
+    #[test]
+    fn ip_limiter_counts_an_ipv6_slash64_as_one_client() {
+        let limiter = IpRateLimiter::new(2, 0.0);
+        let a: std::net::IpAddr = "2001:db8:1:2::1".parse().unwrap();
+        let b: std::net::IpAddr = "2001:db8:1:2:ffff:0:0:7".parse().unwrap();
+        let other: std::net::IpAddr = "2001:db8:1:3::1".parse().unwrap();
+        assert!(limiter.allow(a));
+        assert!(limiter.allow(b));
+        assert!(
+            !limiter.allow(a),
+            "a third request from the same /64 must hit the limit"
+        );
+        assert!(limiter.allow(other), "a different /64 has its own bucket");
+    }
+
+    #[test]
+    fn ip_limiter_treats_ipv4_mapped_ipv6_as_ipv4() {
+        let limiter = IpRateLimiter::new(1, 0.0);
+        let v4: std::net::IpAddr = "203.0.113.7".parse().unwrap();
+        let mapped: std::net::IpAddr = "::ffff:203.0.113.7".parse().unwrap();
+        assert!(limiter.allow(v4));
+        assert!(!limiter.allow(mapped));
+    }
+
+    #[test]
+    fn ip_limiter_keeps_ipv4_addresses_separate() {
+        let limiter = IpRateLimiter::new(1, 0.0);
+        assert!(limiter.allow("203.0.113.7".parse().unwrap()));
+        assert!(limiter.allow("203.0.113.8".parse().unwrap()));
+        assert!(!limiter.allow("203.0.113.7".parse().unwrap()));
+    }
+
+    #[test]
+    fn ip_limiter_prune_drops_only_refilled_buckets() {
+        let limiter = IpRateLimiter::new(2, 1.0);
+        let busy: std::net::IpAddr = "203.0.113.7".parse().unwrap();
+        let idle: std::net::IpAddr = "2001:db8::1".parse().unwrap();
+        assert!(limiter.allow(busy));
+        assert!(limiter.allow(busy));
+        assert!(limiter.allow(idle));
+        let later = Instant::now() + std::time::Duration::from_millis(1500);
+        // Через 1,5 с: у idle 1 + 1,5 ≥ 2 — полна, убираем; у busy 0 + 1,5 < 2 — остаётся.
+        assert_eq!(limiter.prune_idle(later), 1);
+        assert!(limiter.buckets.contains_key(&rate_limit_key(busy)));
+        assert!(!limiter.buckets.contains_key(&rate_limit_key(idle)));
+    }
+
+    #[test]
+    fn ip_limiter_prune_keeps_everything_without_refill() {
+        let limiter = IpRateLimiter::new(1, 0.0);
+        assert!(limiter.allow("203.0.113.7".parse().unwrap()));
+        let later = Instant::now() + std::time::Duration::from_secs(3600);
+        assert_eq!(limiter.prune_idle(later), 0);
+        assert!(!limiter.allow("203.0.113.7".parse().unwrap()));
+    }
 
     /// SEC-07: настройка `nobody` действительно прячет фотографию.
     #[test]
@@ -6620,6 +8154,15 @@ mod tests {
             rooms2: Arc::new(Rooms2Config::default()),
             handshake: Arc::new(HandshakeServerConfig::default()),
             multidevice: Arc::new(MultideviceServerConfig::default()),
+            calls: Arc::new(CallsServerConfig::default()),
+            disappearing: Arc::new(DisappearingServerConfig::default()),
+            privacy: Arc::new(PrivacyServerConfig::default()),
+            media: Arc::new(MediaServerConfig::default()),
+            stickers: Arc::new(StickersServerConfig::default()),
+            prekeys: Arc::new(PrekeysServerConfig::default()),
+            server_auth: Arc::new(ServerAuthServerConfig::default()),
+            transport: Arc::new(TransportServerConfig::default()),
+            transport_endpoints: Arc::new(None),
             update: Arc::new(UpdateServerConfig::default()),
             support: Arc::new(SupportServerConfig::default()),
             config_signing_key: Arc::new(None),
@@ -6757,6 +8300,134 @@ mod tests {
         }
     }
 
+    /// Э1: строка подписи блока transport заморожена — её побайтово повторяет Dart.
+    #[test]
+    fn transport_signing_message_is_byte_stable() {
+        let p = TransportPayload {
+            enabled: true,
+            report_enabled: false,
+            tor_enabled: false,
+            endpoints_version: 1700000000000,
+            issued_at_ms: 42,
+        };
+        assert_eq!(
+            transport_signing_message(&p),
+            "secretly-transport-v1|true|false|false|1700000000000|42"
+        );
+        let env = TransportServerConfig::from_lookup(|k| match k {
+            "SECRETLY_KEYS_TRANSPORT_ENABLED" => Some("off".into()),
+            "SECRETLY_KEYS_TRANSPORT_TOR_ENABLED" => Some("1".into()),
+            "SECRETLY_KEYS_TRANSPORT_ENDPOINTS_FILE" => Some("  ".into()),
+            _ => None,
+        });
+        assert!(!env.enabled);
+        assert!(env.tor_enabled);
+        assert!(env.report_enabled, "умолчание — включены (решение §4 ТЗ)");
+        assert_eq!(env.endpoints_file, "/etc/secretly/transport_endpoints.json");
+    }
+
+    /// Э1: блок transport подписан тем же ключом, версия списка — из файла,
+    /// и выключатель меняет ETag.
+    #[tokio::test]
+    async fn config_serves_signed_transport_block() {
+        let (mut state, _dir) = test_app_state().await;
+        let sk = SigningKey::from_bytes(&[7u8; 32]);
+        let vk = sk.verifying_key();
+        state.config_signing_key = Arc::new(Some(sk.clone()));
+        let doc = r#"{"v":1,"issued_at_ms":123456,"expires_at_ms":9999999999999,"logical":{"keys":"https://keys.example","relay":"https://relay.example"},"paths":[{"kind":"direct"}]}"#;
+        state.transport_endpoints = Arc::new(sign_transport_endpoints(doc, &sk));
+        let response = get_config(State(state.clone())).await.into_response();
+        let etag_on = response
+            .headers()
+            .get(axum::http::header::ETAG)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let t = &v["transport"];
+        assert_eq!(t["enabled"], true);
+        assert_eq!(t["endpoints_version"], 123456);
+        let msg = format!(
+            "secretly-transport-v1|{}|{}|{}|{}|{}",
+            t["enabled"], t["report_enabled"], t["tor_enabled"], t["endpoints_version"], t["issued_at_ms"]
+        );
+        let sig = base64::engine::general_purpose::STANDARD
+            .decode(v["transport_signature"].as_str().unwrap())
+            .unwrap();
+        ed25519_dalek::Verifier::verify(&vk, msg.as_bytes(), &Signature::from_slice(&sig).unwrap())
+            .expect("подпись блока transport");
+
+        state.transport = Arc::new(TransportServerConfig {
+            enabled: false,
+            ..TransportServerConfig::default()
+        });
+        let response = get_config(State(state.clone())).await.into_response();
+        let etag_off = response
+            .headers()
+            .get(axum::http::header::ETAG)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert_ne!(etag_on, etag_off, "выключатель обязан менять ETag");
+    }
+
+    /// Э1: список из файла отдаётся подписанным, и клиентская проверка из
+    /// крейта транспорта его принимает; без файла — 404.
+    #[tokio::test]
+    async fn transport_endpoints_are_signed_from_file() {
+        let (mut state, dir) = test_app_state().await;
+        let sk = SigningKey::from_bytes(&[9u8; 32]);
+        let vk_b64 = base64::engine::general_purpose::STANDARD.encode(sk.verifying_key().to_bytes());
+        let response = get_transport_endpoints(State(state.clone())).await.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let path = dir.path().join("endpoints.json");
+        std::fs::write(
+            &path,
+            r#"{"v":1,"issued_at_ms":555,"expires_at_ms":9999999999999,"logical":{"keys":"https://keys.example","relay":"https://relay.example"},"paths":[{"kind":"direct"},{"kind":"ip","ip":"203.0.113.5"}]}"#,
+        )
+        .unwrap();
+        let cfg = TransportServerConfig {
+            endpoints_file: path.to_string_lossy().to_string(),
+            ..TransportServerConfig::default()
+        };
+        state.transport_endpoints = Arc::new(load_transport_endpoints(&cfg, Some(&sk)));
+        let response = get_transport_endpoints(State(state.clone())).await.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().get(axum::http::header::ETAG).is_some());
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let signed = String::from_utf8(body.to_vec()).unwrap();
+        // Проверяем так, как это делает клиент: контекст || сырой документ.
+        let envelope: serde_json::Value = serde_json::from_str(&signed).unwrap();
+        let doc = envelope["doc"].as_str().unwrap();
+        let sig = base64::engine::general_purpose::STANDARD
+            .decode(envelope["sig_b64"].as_str().unwrap())
+            .unwrap();
+        let mut message = TRANSPORT_ENDPOINTS_SIGNING_CONTEXT.to_vec();
+        message.extend_from_slice(doc.as_bytes());
+        ed25519_dalek::Verifier::verify(
+            &sk.verifying_key(),
+            &message,
+            &Signature::from_slice(&sig).unwrap(),
+        )
+        .expect("подпись над контекстом и сырым документом");
+        let _ = vk_b64;
+        assert_eq!(TRANSPORT_ENDPOINTS_SIGNING_CONTEXT, b"secretly-endpoints-v1\n");
+        let list: serde_json::Value = serde_json::from_str(doc).unwrap();
+        assert_eq!(list["issued_at_ms"], 555);
+        assert_eq!(list["paths"].as_array().unwrap().len(), 2);
+        // Чужой ключ — отказ.
+        let other = SigningKey::from_bytes(&[1u8; 32]).verifying_key();
+        assert!(ed25519_dalek::Verifier::verify(&other, &message, &Signature::from_slice(&sig).unwrap()).is_err());
+        // Файл с мусором не подписывается.
+        assert!(sign_transport_endpoints("{\"v\":2}", &sk).is_none());
+        // Без ключа — ничего.
+        assert!(load_transport_endpoints(&cfg, None).is_none());
+    }
+
     /// Блок отдаётся со своей подписью, по умолчанию тёмный, и смена любого
     /// поля меняет ETag — иначе откат упирался бы в кэш.
     #[tokio::test]
@@ -6815,6 +8486,993 @@ mod tests {
         assert!(vk.verify_strict(msg.as_bytes(), &sig).is_ok());
         // Соседние блоки на месте.
         assert!(!v["handshake_signature"].as_str().unwrap().is_empty());
+        assert!(!v["handshake_auth_signature"].as_str().unwrap().is_empty());
+    }
+
+    /// Блок `privacy`: подпись побайтово, зажим опечаток, выдача с подписью и
+    /// сменой ETag, накладка с умолчаниями.
+    #[test]
+    fn privacy_signing_message_is_byte_stable_and_config_clamps() {
+        let p = PrivacyPayload {
+            pad_send_share: 10,
+            issued_at_ms: 1_760_000_000_123,
+        };
+        assert_eq!(
+            privacy_signing_message(&p),
+            "secretly-privacy-v1|10|1760000000123"
+        );
+        assert_eq!(
+            PrivacyServerConfig::from_lookup(|_| None),
+            PrivacyServerConfig::default()
+        );
+        let get = |v: &'static str| {
+            move |k: &str| (k == "SECRETLY_KEYS_PRIVACY_PAD_SEND_SHARE").then(|| v.to_string())
+        };
+        assert_eq!(PrivacyServerConfig::from_lookup(get("150")).pad_send_share, 100);
+        assert_eq!(PrivacyServerConfig::from_lookup(get("-3")).pad_send_share, 0);
+        assert_eq!(PrivacyServerConfig::from_lookup(get("ten")).pad_send_share, 0);
+        assert_eq!(PrivacyServerConfig::from_lookup(get(" 25 ")).pad_send_share, 25);
+    }
+
+    /// Блок `media`: подпись побайтово, зажим опечаток.
+    #[test]
+    fn media_signing_message_is_byte_stable_and_config_clamps() {
+        let p = MediaPayload {
+            resumable_upload_share: 10,
+            issued_at_ms: 1_760_000_000_123,
+        };
+        assert_eq!(media_signing_message(&p), "secretly-media-v1|10|1760000000123");
+        assert_eq!(
+            MediaServerConfig::from_lookup(|_| None),
+            MediaServerConfig::default()
+        );
+        let get = |v: &'static str| {
+            move |k: &str| {
+                (k == "SECRETLY_KEYS_MEDIA_RESUMABLE_UPLOAD_SHARE").then(|| v.to_string())
+            }
+        };
+        assert_eq!(MediaServerConfig::from_lookup(get("150")).resumable_upload_share, 100);
+        assert_eq!(MediaServerConfig::from_lookup(get("-3")).resumable_upload_share, 0);
+        assert_eq!(MediaServerConfig::from_lookup(get("ten")).resumable_upload_share, 0);
+        assert_eq!(MediaServerConfig::from_lookup(get(" 25 ")).resumable_upload_share, 25);
+    }
+
+    #[test]
+    fn media_drop_in_names_only_known_variables() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../ops/vps/units/secretly-keys.service.d/70-media.conf"
+        );
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let env: std::collections::HashMap<String, String> = text
+            .lines()
+            .map(str::trim)
+            .filter_map(|l| l.strip_prefix("Environment="))
+            .filter_map(|kv| kv.split_once('='))
+            .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+            .collect();
+        assert_eq!(
+            env.keys().cloned().collect::<Vec<_>>(),
+            vec!["SECRETLY_KEYS_MEDIA_RESUMABLE_UPLOAD_SHARE".to_string()]
+        );
+        assert_eq!(
+            MediaServerConfig::from_lookup(|k| env.get(k).cloned()),
+            MediaServerConfig::default()
+        );
+    }
+
+    #[test]
+    fn privacy_drop_in_names_only_known_variables() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../ops/vps/units/secretly-keys.service.d/70-privacy.conf"
+        );
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let env: std::collections::HashMap<String, String> = text
+            .lines()
+            .map(str::trim)
+            .filter_map(|l| l.strip_prefix("Environment="))
+            .filter_map(|kv| kv.split_once('='))
+            .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+            .collect();
+        assert_eq!(
+            env.keys().cloned().collect::<Vec<_>>(),
+            vec!["SECRETLY_KEYS_PRIVACY_PAD_SEND_SHARE".to_string()]
+        );
+        assert_eq!(
+            PrivacyServerConfig::from_lookup(|k| env.get(k).cloned()),
+            PrivacyServerConfig::default()
+        );
+    }
+
+    // ── Б3 (25.10.2026): подпись ответов и блок server_auth ──────────────────
+
+    #[test]
+    fn resp_signing_message_is_byte_stable() {
+        assert_eq!(
+            resp_signing_message("cfg1", "GET", "/v1/keys/bundle/p?x=1", "bm9uY2U=", 42, 200, "aGFzaA=="),
+            "SECRETLY-RESP-V1\nkid=cfg1\nmethod=GET\npath=/v1/keys/bundle/p?x=1\nnonce=bm9uY2U=\nts_ms=42\nstatus=200\nbody_sha256_b64=aGFzaA==\n"
+        );
+    }
+
+    /// Тот же вектор закреплён в Dart (`server_auth_b3_test.dart`): ключ из
+    /// 32 байт 13, ответ `{"ok":true}`. Подпись Ed25519 детерминирована.
+    #[test]
+    fn resp_signature_cross_language_vector() {
+        let sk = SigningKey::from_bytes(&[13u8; 32]);
+        let hash = base64::engine::general_purpose::STANDARD.encode(Sha256::digest(br#"{"ok":true}"#));
+        let msg = resp_signing_message("cfg1", "GET", "/v1/profile/search?query=al+ice&limit=5", "AAAAAAAAAAAAAAAAAAAAAA==", 1760000000123, 200, &hash);
+        let sig = base64::engine::general_purpose::STANDARD.encode(sk.sign(msg.as_bytes()).to_bytes());
+        assert_eq!(base64::engine::general_purpose::STANDARD.encode(sk.verifying_key().to_bytes()), "kaKKC3Q4FZOk2UaVeSCJJq/IrYLIg5t2RDWbnrqaSzo=");
+        assert_eq!(sig, "1a4S5zmdkXoR720SaCm0ibXR4cVe6TfpFHGEcgOW1fC1OuFN6q2UB0cOzs9fMAFpGjwcOcWZtSjwD99BnRYRAg==");
+    }
+
+    #[test]
+    fn resp_signed_routes_are_exactly_the_key_decisions() {
+        let get = Method::GET;
+        for path in [
+            "/v1/keys/bundle/p1",
+            "/v1/device/d1/bundle",
+            "/v1/device/d1/identity",
+            "/v1/device/d1",
+            "/v1/profile/p1/devices",
+            "/v1/profile/p1/own_devices",
+            "/v1/profile/search",
+        ] {
+            assert!(resp_signed_route(&get, path), "{path}");
+        }
+        for path in [
+            "/v1/config",
+            "/v1/device/challenge",
+            "/v1/device/self_status",
+            "/v1/profile/p1",
+            "/v1/profile/p1/meta",
+            "/v1/keys/bundle/",
+            "/health",
+        ] {
+            assert!(!resp_signed_route(&get, path), "{path}");
+        }
+        assert!(!resp_signed_route(&Method::POST, "/v1/keys/bundle/p1"));
+        assert!(resp_nonce_ok("AAAAAAAAAAAAAAAAAAAAAA=="));
+        assert!(!resp_nonce_ok("short"));
+        assert!(!resp_nonce_ok("bad nonce with spaces"));
+        assert!(!resp_nonce_ok(&"A".repeat(65)));
+    }
+
+    #[tokio::test]
+    async fn signed_bundle_response_verifies_and_body_is_unchanged() {
+        fn bundle() -> axum::response::Response {
+            Json(FetchBundleResponse {
+                devices: vec![store::DeviceKeyBundle {
+                    device_id: "b3p_phone".into(),
+                    identity_key_pub_b64: "aWs=".into(),
+                    signed_prekey_pub_b64: "c3Br".into(),
+                    signed_prekey_sig_b64: "c2ln".into(),
+                    one_time_prekey: None,
+                    account_identity_pub_b64: None,
+                    device_cert_b64: None,
+                    signed_prekey_id: 1,
+                }],
+            })
+            .into_response()
+        }
+        let plain = to_bytes(bundle().into_body(), usize::MAX).await.unwrap();
+
+        let sk = SigningKey::from_bytes(&[13u8; 32]);
+        let vk = sk.verifying_key();
+        let path = "/v1/keys/bundle/b3p";
+        let signed = sign_response(Some(&sk), "GET", path, "bm9uY2Vub25jZQ==", 1234, bundle()).await;
+        assert_eq!(signed.status(), StatusCode::OK);
+        assert_eq!(signed.headers()[axum::http::header::CACHE_CONTROL], "no-store");
+        let header = signed.headers()[RESP_SIG_HEADER].to_str().unwrap().to_string();
+        let body = to_bytes(signed.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(body, plain, "тело не меняется");
+
+        let fields: std::collections::HashMap<&str, &str> = header
+            .split(';')
+            .skip(1)
+            .filter_map(|kv| kv.split_once('='))
+            .collect();
+        assert!(header.starts_with("v1;"));
+        assert_eq!(fields["kid"], "cfg1");
+        assert_eq!(fields["ts"], "1234");
+        let sig_b64 = &header[header.find("sig=").unwrap() + 4..];
+        let sig = ed25519_dalek::Signature::from_slice(
+            &base64::engine::general_purpose::STANDARD.decode(sig_b64).unwrap(),
+        )
+        .unwrap();
+        let hash = base64::engine::general_purpose::STANDARD.encode(Sha256::digest(&body));
+        let msg = resp_signing_message("cfg1", "GET", path, "bm9uY2Vub25jZQ==", 1234, 200, &hash);
+        assert!(vk.verify_strict(msg.as_bytes(), &sig).is_ok());
+        // Ответ про другой профиль или на другой nonce — не сходится.
+        let other = resp_signing_message("cfg1", "GET", "/v1/keys/bundle/b3q", "bm9uY2Vub25jZQ==", 1234, 200, &hash);
+        assert!(vk.verify_strict(other.as_bytes(), &sig).is_err());
+        let replay = resp_signing_message("cfg1", "GET", path, "b3RoZXJub25jZQ==", 1234, 200, &hash);
+        assert!(vk.verify_strict(replay.as_bytes(), &sig).is_err());
+    }
+
+    #[tokio::test]
+    async fn unsigned_cases_pass_through_untouched() {
+        let sk = SigningKey::from_bytes(&[13u8; 32]);
+        // 5xx — как есть.
+        let r = sign_response(Some(&sk), "GET", "/v1/keys/bundle/x", "bm9uY2Vub25jZQ==", 1,
+            (StatusCode::INTERNAL_SERVER_ERROR, "boom").into_response()).await;
+        assert!(r.headers().get(RESP_SIG_HEADER).is_none());
+        // 404 подписывается: «нет такого профиля» — тоже решение.
+        let r = sign_response(Some(&sk), "GET", "/v1/keys/bundle/x", "bm9uY2Vub25jZQ==", 1,
+            (StatusCode::NOT_FOUND, "nope").into_response()).await;
+        assert!(r.headers().get(RESP_SIG_HEADER).is_some());
+        // Без ключа (dev) — как есть.
+        let r = sign_response(None, "GET", "/v1/keys/bundle/x", "bm9uY2Vub25jZQ==", 1,
+            (StatusCode::OK, "ok").into_response()).await;
+        assert!(r.headers().get(RESP_SIG_HEADER).is_none());
+    }
+
+    #[test]
+    fn server_auth_signing_message_is_byte_stable_and_config_clamps() {
+        let p = ServerAuthPayload {
+            enforce_share: 5,
+            relay_kid: "relay1".into(),
+            relay_pub_b64: "AAAA".into(),
+            issued_at_ms: 1_760_000_000_123,
+        };
+        assert_eq!(server_auth_signing_message(&p), "secretly-server-auth-v1|5|relay1|AAAA|1760000000123");
+        assert_eq!(ServerAuthServerConfig::from_lookup(|_| None), ServerAuthServerConfig::default());
+        assert!(ServerAuthServerConfig::default().resp_signing_enabled);
+        let pubk = base64::engine::general_purpose::STANDARD.encode([7u8; 32]);
+        let env = |pairs: Vec<(&'static str, String)>| {
+            move |k: &str| pairs.iter().find(|(n, _)| *n == k).map(|(_, v)| v.clone())
+        };
+        let c = ServerAuthServerConfig::from_lookup(env(vec![
+            ("SECRETLY_KEYS_RESP_SIGNING", "0".into()),
+            ("SECRETLY_KEYS_SERVER_AUTH_ENFORCE_SHARE", "150".into()),
+            ("SECRETLY_KEYS_SERVER_AUTH_RELAY_KID", "relay1".into()),
+            ("SECRETLY_KEYS_SERVER_AUTH_RELAY_PUB_B64", pubk.clone()),
+        ]));
+        assert!(!c.resp_signing_enabled);
+        assert_eq!(c.enforce_share, 100);
+        assert_eq!((c.relay_kid.as_str(), c.relay_pub_b64.as_str()), ("relay1", pubk.as_str()));
+        // Половина ключа реле — ни одной.
+        let c = ServerAuthServerConfig::from_lookup(env(vec![
+            ("SECRETLY_KEYS_SERVER_AUTH_RELAY_KID", "relay1".into()),
+            ("SECRETLY_KEYS_SERVER_AUTH_RELAY_PUB_B64", "short".into()),
+        ]));
+        assert_eq!((c.relay_kid.as_str(), c.relay_pub_b64.as_str()), ("", ""));
+    }
+
+    #[test]
+    fn server_auth_drop_in_names_only_known_variables() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../ops/vps/units/secretly-keys.service.d/64-server-auth.conf"
+        );
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let env: std::collections::HashMap<String, String> = text
+            .lines()
+            .map(str::trim)
+            .filter_map(|l| l.strip_prefix("Environment="))
+            .filter_map(|kv| kv.split_once('='))
+            .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+            .collect();
+        let mut keys = env.keys().cloned().collect::<Vec<_>>();
+        keys.sort();
+        assert_eq!(
+            keys,
+            vec![
+                "SECRETLY_KEYS_RESP_SIGNING".to_string(),
+                "SECRETLY_KEYS_SERVER_AUTH_ENFORCE_SHARE".to_string(),
+                "SECRETLY_KEYS_SERVER_AUTH_RELAY_KID".to_string(),
+                "SECRETLY_KEYS_SERVER_AUTH_RELAY_PUB_B64".to_string(),
+            ]
+        );
+        assert_eq!(
+            ServerAuthServerConfig::from_lookup(|k| env.get(k).cloned()),
+            ServerAuthServerConfig::default()
+        );
+    }
+
+    #[tokio::test]
+    async fn config_serves_signed_server_auth_block() {
+        let (mut state, _dir) = test_app_state().await;
+        let sk = SigningKey::from_bytes(&[14u8; 32]);
+        let vk = sk.verifying_key();
+        state.config_signing_key = Arc::new(Some(sk));
+        async fn fetch(state: &AppState) -> (serde_json::Value, String) {
+            let response = get_config(State(state.clone())).await.into_response();
+            let etag = response.headers().get(axum::http::header::ETAG).unwrap().to_str().unwrap().to_string();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (serde_json::from_slice(&body).unwrap(), etag)
+        }
+        let (dflt, dflt_etag) = fetch(&state).await;
+        assert_eq!(dflt["server_auth"]["enforce_share"], serde_json::json!(0));
+        let issued = dflt["server_auth"]["issued_at_ms"].as_i64().unwrap();
+        let sig = ed25519_dalek::Signature::from_slice(
+            &base64::engine::general_purpose::STANDARD
+                .decode(dflt["server_auth_signature"].as_str().unwrap())
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(vk
+            .verify_strict(format!("secretly-server-auth-v1|0|||{issued}").as_bytes(), &sig)
+            .is_ok());
+        state.server_auth = Arc::new(ServerAuthServerConfig { enforce_share: 5, ..ServerAuthServerConfig::default() });
+        let (v, etag) = fetch(&state).await;
+        assert_ne!(etag, dflt_etag);
+        assert_eq!(v["server_auth"]["enforce_share"], serde_json::json!(5));
+        // Э2: подпись ответов выключена — отказ у клиентов снимается.
+        state.server_auth = Arc::new(ServerAuthServerConfig {
+            enforce_share: 5,
+            resp_signing_enabled: false,
+            ..ServerAuthServerConfig::default()
+        });
+        let (v, _) = fetch(&state).await;
+        assert_eq!(v["server_auth"]["enforce_share"], serde_json::json!(0));
+    }
+
+    /// Блок `prekeys` (Б5): подпись побайтово, зажим опечаток, накладка с
+    /// умолчаниями, выдача с подписью и сменой ETag.
+    #[test]
+    fn prekeys_signing_message_is_byte_stable_and_config_clamps() {
+        let p = PrekeysPayload {
+            otk_hygiene_share: 10,
+            spk_rotate_share: 0,
+            spk_rotate_days: 7,
+            legacy_wire_reject_share: 0,
+            issued_at_ms: 1_760_000_000_123,
+        };
+        assert_eq!(
+            prekeys_signing_message(&p),
+            "secretly-prekeys-v1|10|0|7|0|1760000000123"
+        );
+        assert_eq!(
+            PrekeysServerConfig::from_lookup(|_| None),
+            PrekeysServerConfig::default()
+        );
+        let one = |key: &'static str, v: &'static str| {
+            move |k: &str| (k == key).then(|| v.to_string())
+        };
+        assert_eq!(
+            PrekeysServerConfig::from_lookup(one("SECRETLY_KEYS_PREKEYS_OTK_HYGIENE_SHARE", "150"))
+                .otk_hygiene_share,
+            100
+        );
+        assert_eq!(
+            PrekeysServerConfig::from_lookup(one("SECRETLY_KEYS_PREKEYS_SPK_ROTATE_DAYS", "0"))
+                .spk_rotate_days,
+            1
+        );
+        assert_eq!(
+            PrekeysServerConfig::from_lookup(one("SECRETLY_KEYS_PREKEYS_SPK_ROTATE_DAYS", "seven"))
+                .spk_rotate_days,
+            7
+        );
+        assert_eq!(
+            PrekeysServerConfig::from_lookup(one("SECRETLY_KEYS_PREKEYS_LEGACY_WIRE_REJECT_SHARE", " 5 "))
+                .legacy_wire_reject_share,
+            5
+        );
+    }
+
+    #[test]
+    fn prekeys_drop_in_names_only_known_variables() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../ops/vps/units/secretly-keys.service.d/62-prekey-hygiene.conf"
+        );
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let env: std::collections::HashMap<String, String> = text
+            .lines()
+            .map(str::trim)
+            .filter_map(|l| l.strip_prefix("Environment="))
+            .filter_map(|kv| kv.split_once('='))
+            .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+            .collect();
+        let mut keys = env.keys().cloned().collect::<Vec<_>>();
+        keys.sort();
+        assert_eq!(
+            keys,
+            vec![
+                "SECRETLY_KEYS_PREKEYS_LEGACY_WIRE_REJECT_SHARE".to_string(),
+                "SECRETLY_KEYS_PREKEYS_OTK_HYGIENE_SHARE".to_string(),
+                "SECRETLY_KEYS_PREKEYS_SPK_ROTATE_DAYS".to_string(),
+                "SECRETLY_KEYS_PREKEYS_SPK_ROTATE_SHARE".to_string(),
+            ]
+        );
+        assert_eq!(
+            PrekeysServerConfig::from_lookup(|k| env.get(k).cloned()),
+            PrekeysServerConfig::default()
+        );
+    }
+
+    #[tokio::test]
+    async fn config_serves_signed_prekeys_block() {
+        let (mut state, _dir) = test_app_state().await;
+        let sk = SigningKey::from_bytes(&[12u8; 32]);
+        let vk = sk.verifying_key();
+        state.config_signing_key = Arc::new(Some(sk));
+        async fn fetch(state: &AppState) -> (serde_json::Value, String) {
+            let response = get_config(State(state.clone())).await.into_response();
+            let etag = response
+                .headers()
+                .get(axum::http::header::ETAG)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (serde_json::from_slice(&body).unwrap(), etag)
+        }
+        let (dflt, dflt_etag) = fetch(&state).await;
+        assert_eq!(dflt["prekeys"]["otk_hygiene_share"], serde_json::json!(0));
+        assert_eq!(dflt["prekeys"]["spk_rotate_days"], serde_json::json!(7));
+        let issued = dflt["prekeys"]["issued_at_ms"].as_i64().unwrap();
+        let sig_bytes = base64::engine::general_purpose::STANDARD
+            .decode(dflt["prekeys_signature"].as_str().unwrap())
+            .unwrap();
+        let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).unwrap();
+        assert!(vk
+            .verify_strict(format!("secretly-prekeys-v1|0|0|7|0|{issued}").as_bytes(), &sig)
+            .is_ok());
+        state.prekeys = Arc::new(PrekeysServerConfig {
+            otk_hygiene_share: 10,
+            ..PrekeysServerConfig::default()
+        });
+        let (v, etag) = fetch(&state).await;
+        assert_ne!(etag, dflt_etag);
+        assert_eq!(v["prekeys"]["otk_hygiene_share"], serde_json::json!(10));
+    }
+
+    #[tokio::test]
+    async fn config_serves_signed_privacy_block() {
+        let (mut state, _dir) = test_app_state().await;
+        let sk = SigningKey::from_bytes(&[11u8; 32]);
+        let vk = sk.verifying_key();
+        state.config_signing_key = Arc::new(Some(sk));
+        async fn fetch(state: &AppState) -> (serde_json::Value, String) {
+            let response = get_config(State(state.clone())).await.into_response();
+            let etag = response
+                .headers()
+                .get(axum::http::header::ETAG)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (serde_json::from_slice(&body).unwrap(), etag)
+        }
+        let (dflt, dflt_etag) = fetch(&state).await;
+        assert_eq!(dflt["privacy"]["pad_send_share"], serde_json::json!(0));
+        let issued = dflt["privacy"]["issued_at_ms"].as_i64().unwrap();
+        let sig_bytes = base64::engine::general_purpose::STANDARD
+            .decode(dflt["privacy_signature"].as_str().unwrap())
+            .unwrap();
+        let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).unwrap();
+        assert!(
+            vk.verify_strict(format!("secretly-privacy-v1|0|{issued}").as_bytes(), &sig)
+                .is_ok()
+        );
+        state.privacy = Arc::new(PrivacyServerConfig { pad_send_share: 10 });
+        let (v, etag) = fetch(&state).await;
+        assert_ne!(etag, dflt_etag);
+        assert_eq!(v["privacy"]["pad_send_share"], serde_json::json!(10));
+        assert!(!v["disappearing_signature"].as_str().unwrap().is_empty());
+    }
+
+    /// Блок `stickers`: подпись побайтово, зажим опечаток.
+    #[test]
+    fn stickers_signing_message_is_byte_stable_and_config_clamps() {
+        let p = StickersPayload {
+            pack_access_percent: 10,
+            public_publish_percent: 0,
+            public_search_enabled: false,
+            issued_at_ms: 1_760_000_000_123,
+        };
+        assert_eq!(
+            stickers_signing_message(&p),
+            "secretly-stickers-v1|10|0|false|1760000000123"
+        );
+        assert_eq!(
+            StickersServerConfig::from_lookup(|_| None),
+            StickersServerConfig::default()
+        );
+        let get = |k0: &'static str, v: &'static str| move |k: &str| (k == k0).then(|| v.to_string());
+        let pa = "SECRETLY_KEYS_STICKERS_PACK_ACCESS_PERCENT";
+        assert_eq!(StickersServerConfig::from_lookup(get(pa, "150")).pack_access_percent, 100);
+        assert_eq!(StickersServerConfig::from_lookup(get(pa, "-3")).pack_access_percent, 0);
+        assert_eq!(StickersServerConfig::from_lookup(get(pa, "ten")).pack_access_percent, 0);
+        assert_eq!(StickersServerConfig::from_lookup(get(pa, " 25 ")).pack_access_percent, 25);
+        let se = "SECRETLY_KEYS_STICKERS_PUBLIC_SEARCH_ENABLED";
+        assert!(StickersServerConfig::from_lookup(get(se, "1")).public_search_enabled);
+        assert!(!StickersServerConfig::from_lookup(get(se, "yes")).public_search_enabled);
+    }
+
+    #[test]
+    fn stickers_drop_in_names_only_known_variables() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../ops/vps/units/secretly-keys.service.d/70-stickers.conf"
+        );
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let env: std::collections::HashMap<String, String> = text
+            .lines()
+            .map(str::trim)
+            .filter_map(|l| l.strip_prefix("Environment="))
+            .filter_map(|kv| kv.split_once('='))
+            .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+            .collect();
+        let mut keys = env.keys().cloned().collect::<Vec<_>>();
+        keys.sort();
+        assert_eq!(
+            keys,
+            vec![
+                "SECRETLY_KEYS_STICKERS_PACK_ACCESS_PERCENT".to_string(),
+                "SECRETLY_KEYS_STICKERS_PUBLIC_PUBLISH_PERCENT".to_string(),
+                "SECRETLY_KEYS_STICKERS_PUBLIC_SEARCH_ENABLED".to_string(),
+            ]
+        );
+        assert_eq!(
+            StickersServerConfig::from_lookup(|k| env.get(k).cloned()),
+            StickersServerConfig::default()
+        );
+    }
+
+    #[tokio::test]
+    async fn config_serves_signed_stickers_block() {
+        let (mut state, _dir) = test_app_state().await;
+        let sk = SigningKey::from_bytes(&[12u8; 32]);
+        let vk = sk.verifying_key();
+        state.config_signing_key = Arc::new(Some(sk));
+        async fn fetch(state: &AppState) -> (serde_json::Value, String) {
+            let response = get_config(State(state.clone())).await.into_response();
+            let etag = response
+                .headers()
+                .get(axum::http::header::ETAG)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (serde_json::from_slice(&body).unwrap(), etag)
+        }
+        let (dflt, dflt_etag) = fetch(&state).await;
+        assert_eq!(dflt["stickers"]["pack_access_percent"], serde_json::json!(0));
+        let issued = dflt["stickers"]["issued_at_ms"].as_i64().unwrap();
+        let sig_bytes = base64::engine::general_purpose::STANDARD
+            .decode(dflt["stickers_signature"].as_str().unwrap())
+            .unwrap();
+        let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).unwrap();
+        assert!(
+            vk.verify_strict(
+                format!("secretly-stickers-v1|0|0|false|{issued}").as_bytes(),
+                &sig
+            )
+            .is_ok()
+        );
+        state.stickers = Arc::new(StickersServerConfig {
+            pack_access_percent: 10,
+            ..StickersServerConfig::default()
+        });
+        let (v, etag) = fetch(&state).await;
+        assert_ne!(etag, dflt_etag);
+        assert_eq!(v["stickers"]["pack_access_percent"], serde_json::json!(10));
+        assert!(!v["privacy_signature"].as_str().unwrap().is_empty());
+    }
+
+    const DISAPPEARING_ENV_KEYS: [&str; 5] = [
+        "SECRETLY_KEYS_DISAPPEARING_SEND_ENABLED",
+        "SECRETLY_KEYS_DISAPPEARING_SEND_SHARE",
+        "SECRETLY_KEYS_DISAPPEARING_EXPIRE_ENABLED",
+        "SECRETLY_KEYS_DISAPPEARING_MIN_BUILD",
+        "SECRETLY_KEYS_DISAPPEARING_CUSTOM_MAX_S",
+    ];
+
+    /// Подписываемое сообщение `disappearing` — договор с Dart
+    /// `disappearingSigningMessage`. Расхождение не падает громко: подпись
+    /// перестаёт сходиться у всех, и блок молча становится «непроверенным».
+    #[test]
+    fn disappearing_signing_message_is_byte_stable() {
+        let p = DisappearingPayload {
+            send_enabled: true,
+            send_share: 10,
+            expire_enabled: true,
+            min_build: 660,
+            custom_max_s: 2_592_000,
+            issued_at_ms: 1_760_000_000_123,
+        };
+        assert_eq!(
+            disappearing_signing_message(&p),
+            "secretly-disappearing-v1|true|10|true|660|2592000|1760000000123"
+        );
+        let off = DisappearingPayload {
+            send_enabled: false,
+            expire_enabled: false,
+            issued_at_ms: 0,
+            ..p
+        };
+        assert_eq!(
+            disappearing_signing_message(&off),
+            "secretly-disappearing-v1|false|10|false|660|2592000|0"
+        );
+    }
+
+    /// Без переменных — умолчания, при которых выпущенные сборки ведут себя
+    /// как раньше: отправка выключена, удаление включено; опечатки оператора
+    /// зажимаются или дают умолчание.
+    #[test]
+    fn disappearing_config_defaults_and_clamps_operator_typos() {
+        let d = DisappearingServerConfig::from_lookup(|_| None);
+        assert_eq!(d, DisappearingServerConfig::default());
+        assert_eq!(
+            d,
+            DisappearingServerConfig {
+                send_enabled: false,
+                send_share: 0,
+                expire_enabled: true,
+                min_build: 0,
+                custom_max_s: 2_592_000,
+            }
+        );
+        let values = [" TRUE ", "150", "off", "660", "5"];
+        let env: std::collections::HashMap<&str, &str> =
+            DISAPPEARING_ENV_KEYS.into_iter().zip(values).collect();
+        let c = DisappearingServerConfig::from_lookup(|k| env.get(k).map(|v| v.to_string()));
+        assert_eq!(
+            c,
+            DisappearingServerConfig {
+                send_enabled: true,
+                send_share: 100,
+                expire_enabled: false,
+                min_build: 660,
+                custom_max_s: 30,
+            }
+        );
+        let typos = ["maybe", "-5", "yep", "-1", "ten"];
+        let env: std::collections::HashMap<&str, &str> =
+            DISAPPEARING_ENV_KEYS.into_iter().zip(typos).collect();
+        let c = DisappearingServerConfig::from_lookup(|k| env.get(k).map(|v| v.to_string()));
+        assert_eq!(
+            c,
+            DisappearingServerConfig {
+                send_enabled: false,
+                send_share: 0,
+                expire_enabled: true,
+                min_build: 0,
+                custom_max_s: 2_592_000,
+            }
+        );
+    }
+
+    /// Накладка `70-disappearing.conf` называет только те переменные, которые
+    /// сервер читает, и ровно с умолчаниями. В публичной выкладке каталога
+    /// `ops/` нет — тогда проверять нечего.
+    #[test]
+    fn disappearing_drop_in_names_only_known_variables() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../ops/vps/units/secretly-keys.service.d/70-disappearing.conf"
+        );
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let mut named = Vec::new();
+        for line in text.lines().map(str::trim) {
+            let Some(rest) = line.strip_prefix("Environment=") else {
+                continue;
+            };
+            let key = rest.split('=').next().unwrap_or("").trim();
+            assert!(
+                DISAPPEARING_ENV_KEYS.contains(&key),
+                "неизвестная переменная {key}"
+            );
+            named.push(key.to_string());
+        }
+        for key in DISAPPEARING_ENV_KEYS {
+            assert!(named.iter().any(|n| n == key), "накладка не называет {key}");
+        }
+        let env: std::collections::HashMap<String, String> = text
+            .lines()
+            .map(str::trim)
+            .filter_map(|l| l.strip_prefix("Environment="))
+            .filter_map(|kv| kv.split_once('='))
+            .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+            .collect();
+        assert_eq!(
+            DisappearingServerConfig::from_lookup(|k| env.get(k).cloned()),
+            DisappearingServerConfig::default()
+        );
+    }
+
+    /// Блок `disappearing` отдаётся со своей подписью, подпись сходится с
+    /// каноническим сообщением, и смена любого поля меняет ETag.
+    #[tokio::test]
+    async fn config_serves_signed_disappearing_block() {
+        let (mut state, _dir) = test_app_state().await;
+        let sk = SigningKey::from_bytes(&[9u8; 32]);
+        let vk = sk.verifying_key();
+        state.config_signing_key = Arc::new(Some(sk));
+
+        async fn fetch(state: &AppState) -> (serde_json::Value, String) {
+            let response = get_config(State(state.clone())).await.into_response();
+            assert_eq!(response.status(), StatusCode::OK);
+            let etag = response
+                .headers()
+                .get(axum::http::header::ETAG)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (serde_json::from_slice(&body).unwrap(), etag)
+        }
+        fn verify(vk: &ed25519_dalek::VerifyingKey, v: &serde_json::Value, msg: &str) {
+            let sig_bytes = base64::engine::general_purpose::STANDARD
+                .decode(v["disappearing_signature"].as_str().unwrap())
+                .unwrap();
+            let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).unwrap();
+            assert!(vk.verify_strict(msg.as_bytes(), &sig).is_ok());
+        }
+
+        let (dflt, dflt_etag) = fetch(&state).await;
+        assert_eq!(dflt["disappearing"]["send_enabled"], serde_json::json!(false));
+        assert_eq!(dflt["disappearing"]["send_share"], serde_json::json!(0));
+        assert_eq!(dflt["disappearing"]["expire_enabled"], serde_json::json!(true));
+        assert_eq!(dflt["disappearing"]["min_build"], serde_json::json!(0));
+        assert_eq!(
+            dflt["disappearing"]["custom_max_s"],
+            serde_json::json!(2_592_000)
+        );
+        let issued = dflt["disappearing"]["issued_at_ms"].as_i64().unwrap();
+        assert_eq!(issued, dflt["calls"]["issued_at_ms"].as_i64().unwrap());
+        verify(
+            &vk,
+            &dflt,
+            &format!("secretly-disappearing-v1|false|0|true|0|2592000|{issued}"),
+        );
+        // Соседние блоки на месте.
+        assert!(!dflt["calls_signature"].as_str().unwrap().is_empty());
+        assert!(!dflt["transport_signature"].as_str().unwrap().is_empty());
+
+        let base = DisappearingServerConfig::default();
+        let variants = [
+            DisappearingServerConfig { send_enabled: true, ..base },
+            DisappearingServerConfig { send_share: 10, ..base },
+            DisappearingServerConfig { expire_enabled: false, ..base },
+            DisappearingServerConfig { min_build: 660, ..base },
+            DisappearingServerConfig { custom_max_s: 86_400, ..base },
+        ];
+        for variant in variants {
+            state.disappearing = Arc::new(variant);
+            let (v, etag) = fetch(&state).await;
+            assert_ne!(etag, dflt_etag, "смена блока обязана менять ETag: {variant:?}");
+            let issued = v["disappearing"]["issued_at_ms"].as_i64().unwrap();
+            verify(
+                &vk,
+                &v,
+                &format!(
+                    "secretly-disappearing-v1|{}|{}|{}|{}|{}|{issued}",
+                    variant.send_enabled,
+                    variant.send_share,
+                    variant.expire_enabled,
+                    variant.min_build,
+                    variant.custom_max_s,
+                ),
+            );
+        }
+    }
+
+    const CALLS_ENV_KEYS: [&str; 6] = [
+        "SECRETLY_KEYS_CALLS_GROUP_CALLS_ENABLED",
+        "SECRETLY_KEYS_CALLS_E2EE_CREATE_PERCENT",
+        "SECRETLY_KEYS_CALLS_E2EE_REQUIRED",
+        "SECRETLY_KEYS_CALLS_MAX_PARTICIPANTS_E2EE",
+        "SECRETLY_KEYS_CALLS_KEY_SWITCH_DELAY_MS",
+        "SECRETLY_KEYS_CALLS_JOIN_RATCHET",
+    ];
+
+    /// Подписываемое сообщение `calls` — договор с Dart `callsSigningMessage`.
+    /// Расхождение не падает громко: подпись перестаёт сходиться у всех, и
+    /// блок молча становится «непроверенным».
+    #[test]
+    fn calls_signing_message_is_byte_stable() {
+        let p = CallsPayload {
+            group_calls_enabled: true,
+            e2ee_create_percent: 25,
+            e2ee_required: false,
+            max_participants_e2ee: 20,
+            key_switch_delay_ms: 2000,
+            join_ratchet: true,
+            issued_at_ms: 1_760_000_000_123,
+        };
+        assert_eq!(
+            calls_signing_message(&p),
+            "secretly-calls-v1|true|25|false|20|2000|true|1760000000123"
+        );
+        let off = CallsPayload {
+            group_calls_enabled: false,
+            e2ee_required: true,
+            join_ratchet: false,
+            issued_at_ms: 0,
+            ..p
+        };
+        assert_eq!(
+            calls_signing_message(&off),
+            "secretly-calls-v1|false|25|true|20|2000|false|0"
+        );
+    }
+
+    /// Без переменных — умолчания, при которых выпущенные сборки ведут себя
+    /// как раньше; опечатки оператора зажимаются или дают умолчание.
+    #[test]
+    fn calls_config_defaults_and_clamps_operator_typos() {
+        let d = CallsServerConfig::from_lookup(|_| None);
+        assert_eq!(d, CallsServerConfig::default());
+        assert_eq!(
+            d,
+            CallsServerConfig {
+                group_calls_enabled: true,
+                e2ee_create_percent: 0,
+                e2ee_required: false,
+                max_participants_e2ee: 20,
+                key_switch_delay_ms: 2000,
+                join_ratchet: false,
+            }
+        );
+        let values = ["0", "110", " TRUE ", "51", "100", "on"];
+        let env: std::collections::HashMap<&str, &str> =
+            CALLS_ENV_KEYS.into_iter().zip(values).collect();
+        let c = CallsServerConfig::from_lookup(|k| env.get(k).map(|v| v.to_string()));
+        assert_eq!(
+            c,
+            CallsServerConfig {
+                group_calls_enabled: false,
+                e2ee_create_percent: 100,
+                e2ee_required: true,
+                max_participants_e2ee: 50,
+                key_switch_delay_ms: 500,
+                join_ratchet: true,
+            }
+        );
+        let typos = ["maybe", "-5", "yep", "1", "999999", "ten"];
+        let env: std::collections::HashMap<&str, &str> =
+            CALLS_ENV_KEYS.into_iter().zip(typos).collect();
+        let c = CallsServerConfig::from_lookup(|k| env.get(k).map(|v| v.to_string()));
+        assert_eq!(
+            c,
+            CallsServerConfig {
+                group_calls_enabled: true,
+                e2ee_create_percent: 0,
+                e2ee_required: false,
+                max_participants_e2ee: 2,
+                key_switch_delay_ms: 5000,
+                join_ratchet: false,
+            }
+        );
+    }
+
+    /// Накладка `70-calls.conf` называет только те переменные, которые сервер
+    /// читает: опечатка в имени молча оставила бы умолчание. В публичной
+    /// выкладке каталога `ops/` нет — тогда проверять нечего.
+    #[test]
+    fn calls_drop_in_names_only_known_variables() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../ops/vps/units/secretly-keys.service.d/70-calls.conf"
+        );
+        let Ok(text) = std::fs::read_to_string(path) else {
+            return;
+        };
+        let mut named = Vec::new();
+        for line in text.lines().map(str::trim) {
+            let Some(rest) = line.strip_prefix("Environment=") else {
+                continue;
+            };
+            let key = rest.split('=').next().unwrap_or("").trim();
+            assert!(CALLS_ENV_KEYS.contains(&key), "неизвестная переменная {key}");
+            named.push(key.to_string());
+        }
+        for key in CALLS_ENV_KEYS {
+            assert!(named.iter().any(|n| n == key), "накладка не называет {key}");
+        }
+        // Значения в накладке — ровно умолчания: включение накладки как есть
+        // ничего не меняет.
+        let env: std::collections::HashMap<String, String> = text
+            .lines()
+            .map(str::trim)
+            .filter_map(|l| l.strip_prefix("Environment="))
+            .filter_map(|kv| kv.split_once('='))
+            .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+            .collect();
+        assert_eq!(
+            CallsServerConfig::from_lookup(|k| env.get(k).cloned()),
+            CallsServerConfig::default()
+        );
+    }
+
+    /// Блок `calls` отдаётся со своей подписью, подпись сходится с
+    /// каноническим сообщением, и смена любого поля меняет ETag.
+    #[tokio::test]
+    async fn config_serves_signed_calls_block() {
+        let (mut state, _dir) = test_app_state().await;
+        let sk = SigningKey::from_bytes(&[7u8; 32]);
+        let vk = sk.verifying_key();
+        state.config_signing_key = Arc::new(Some(sk));
+
+        async fn fetch(state: &AppState) -> (serde_json::Value, String) {
+            let response = get_config(State(state.clone())).await.into_response();
+            assert_eq!(response.status(), StatusCode::OK);
+            let etag = response
+                .headers()
+                .get(axum::http::header::ETAG)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (serde_json::from_slice(&body).unwrap(), etag)
+        }
+        fn verify(vk: &ed25519_dalek::VerifyingKey, v: &serde_json::Value, msg: &str) {
+            let sig_bytes = base64::engine::general_purpose::STANDARD
+                .decode(v["calls_signature"].as_str().unwrap())
+                .unwrap();
+            let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).unwrap();
+            assert!(vk.verify_strict(msg.as_bytes(), &sig).is_ok());
+        }
+
+        let (dflt, dflt_etag) = fetch(&state).await;
+        assert_eq!(dflt["calls"]["group_calls_enabled"], serde_json::json!(true));
+        assert_eq!(dflt["calls"]["e2ee_create_percent"], serde_json::json!(0));
+        assert_eq!(dflt["calls"]["e2ee_required"], serde_json::json!(false));
+        assert_eq!(dflt["calls"]["max_participants_e2ee"], serde_json::json!(20));
+        assert_eq!(dflt["calls"]["key_switch_delay_ms"], serde_json::json!(2000));
+        assert_eq!(dflt["calls"]["join_ratchet"], serde_json::json!(false));
+        let issued = dflt["calls"]["issued_at_ms"].as_i64().unwrap();
+        verify(
+            &vk,
+            &dflt,
+            &format!("secretly-calls-v1|true|0|false|20|2000|false|{issued}"),
+        );
+
+        let base = CallsServerConfig::default();
+        let variants = [
+            CallsServerConfig { group_calls_enabled: false, ..base },
+            CallsServerConfig { e2ee_create_percent: 10, ..base },
+            CallsServerConfig { e2ee_required: true, ..base },
+            CallsServerConfig { max_participants_e2ee: 30, ..base },
+            CallsServerConfig { key_switch_delay_ms: 1500, ..base },
+            CallsServerConfig { join_ratchet: true, ..base },
+        ];
+        for variant in variants {
+            state.calls = Arc::new(variant);
+            let (v, etag) = fetch(&state).await;
+            assert_ne!(etag, dflt_etag, "смена блока обязана менять ETag: {variant:?}");
+            let issued = v["calls"]["issued_at_ms"].as_i64().unwrap();
+            verify(
+                &vk,
+                &v,
+                &format!(
+                    "secretly-calls-v1|{}|{}|{}|{}|{}|{}|{issued}",
+                    variant.group_calls_enabled,
+                    variant.e2ee_create_percent,
+                    variant.e2ee_required,
+                    variant.max_participants_e2ee,
+                    variant.key_switch_delay_ms,
+                    variant.join_ratchet,
+                ),
+            );
+        }
+        // Соседние блоки на месте.
+        let (v, _) = fetch(&state).await;
+        assert!(!v["multidevice_signature"].as_str().unwrap().is_empty());
         assert!(!v["handshake_auth_signature"].as_str().unwrap().is_empty());
     }
 
@@ -9013,6 +11671,115 @@ mod tests {
             .unwrap());
     }
 
+    // ── Б5 (24.10.2026): номер и дата подписанного предключа ─────────────────
+
+    #[tokio::test]
+    async fn b5_old_publisher_keeps_number_one_and_byte_identical_bundle() {
+        let (state, _dir) = test_app_state().await;
+        let now = now_ms();
+        let k = SigningKey::from_bytes(&[120; 32]);
+        state.store.insert_profile("b5a", now, None).await.unwrap();
+        p5_device(&state, "b5a", "b5a_phone", &k, "mobile", now).await;
+        p1_publish(&state, "b5a", "b5a_phone", &k, now, 2).await;
+
+        let (_, bundle) = state.store.fetch_bundle_for_device("b5a_phone").await.unwrap().unwrap();
+        assert_eq!(bundle.signed_prekey_id, 1);
+        let json = serde_json::to_value(&bundle).unwrap();
+        assert!(json.get("signed_prekey_id").is_none(), "номер 1 не попадает в ответ: {json}");
+        assert_eq!(state.store.one_time_prekey_stats("b5a_phone").await.unwrap(), (1, Some(2)));
+    }
+
+    #[tokio::test]
+    async fn b5_number_is_stored_and_served() {
+        let (state, _dir) = test_app_state().await;
+        let now = now_ms();
+        let k = SigningKey::from_bytes(&[121; 32]);
+        state.store.insert_profile("b5b", now, None).await.unwrap();
+        p5_device(&state, "b5b", "b5b_phone", &k, "mobile", now).await;
+        assert!(state
+            .store
+            .publish_key_bundle_with_spk_id("b5b", "b5b_phone", &p5_pub(&k), "spk7", "sig", 7, vec![], now, None, None)
+            .await
+            .unwrap());
+        let (_, bundle) = state.store.fetch_bundle_for_device("b5b_phone").await.unwrap().unwrap();
+        assert_eq!(bundle.signed_prekey_id, 7);
+        assert_eq!(serde_json::to_value(&bundle).unwrap()["signed_prekey_id"], 7);
+        let profile = state.store.fetch_bundles_for_profile("b5b").await.unwrap();
+        assert_eq!(profile[0].signed_prekey_id, 7);
+        assert_eq!(state.store.one_time_prekey_stats("b5b_phone").await.unwrap(), (0, None));
+    }
+
+    #[tokio::test]
+    async fn b5_spk_date_moves_only_when_the_key_changes() {
+        let (state, _dir) = test_app_state().await;
+        let day = 24 * 60 * 60 * 1000;
+        let t0 = now_ms() - 20 * day;
+        let k = SigningKey::from_bytes(&[122; 32]);
+        state.store.insert_profile("b5c", t0, None).await.unwrap();
+        p5_device(&state, "b5c", "b5c_phone", &k, "mobile", t0).await;
+        let publish = |spk: &'static str, id: i64, at: i64| {
+            let state = state.clone();
+            let pubk = p5_pub(&k);
+            async move {
+                assert!(state
+                    .store
+                    .publish_key_bundle_with_spk_id("b5c", "b5c_phone", &pubk, spk, "sig", id, vec![], at, None, None)
+                    .await
+                    .unwrap());
+            }
+        };
+        publish("spk-a", 1, t0).await;
+        assert_eq!(state.store.signed_prekey_created_ms("b5c_phone").await.unwrap(), Some(t0));
+        // Переопубликация того же ключа — дата прежняя.
+        publish("spk-a", 1, t0 + day).await;
+        assert_eq!(state.store.signed_prekey_created_ms("b5c_phone").await.unwrap(), Some(t0));
+        // Новый ключ — новая дата.
+        publish("spk-b", 2, t0 + 7 * day).await;
+        assert_eq!(state.store.signed_prekey_created_ms("b5c_phone").await.unwrap(), Some(t0 + 7 * day));
+        // Строка до Б5 (даты нет) при том же ключе получает возраст устройства.
+        state.store.clear_signed_prekey_created_ms("b5c_phone").await.unwrap();
+        publish("spk-b", 2, t0 + 8 * day).await;
+        let created = state.store.signed_prekey_created_ms("b5c_phone").await.unwrap();
+        assert!(created.is_some() && created.unwrap() <= t0 + day, "возраст устройства, а не время публикации: {created:?}");
+    }
+
+    #[tokio::test]
+    async fn b5_pool_keeps_the_newest_200() {
+        let (state, _dir) = test_app_state().await;
+        let now = now_ms();
+        let k = SigningKey::from_bytes(&[123; 32]);
+        state.store.insert_profile("b5d", now, None).await.unwrap();
+        p5_device(&state, "b5d", "b5d_phone", &k, "mobile", now).await;
+        for round in 0..11i64 {
+            let prekeys = (0..20)
+                .map(|i| store::OneTimePrekey {
+                    prekey_id: round * 20 + i + 1,
+                    prekey_pub_b64: format!("otk-{round}-{i}"),
+                })
+                .collect();
+            assert!(state
+                .store
+                .publish_key_bundle("b5d", "b5d_phone", &p5_pub(&k), "spk", "sig", prekeys, now + round, None, None)
+                .await
+                .unwrap());
+        }
+        // 220 выдано, 200 на предложении; ушли 20 самых старых (номера 1..20).
+        assert_eq!(state.store.one_time_prekey_stats("b5d_phone").await.unwrap(), (200, Some(21)));
+    }
+
+    #[test]
+    fn b5_publish_response_stays_byte_identical_without_stats() {
+        assert_eq!(serde_json::to_string(&PublishKeysResponse::ok()).unwrap(), r#"{"ok":true}"#);
+        assert_eq!(
+            serde_json::to_string(&PublishKeysResponse::ok_with_otk_stats(Some((3, Some(41))))).unwrap(),
+            r#"{"ok":true,"otk_remaining":3,"otk_min_remaining_id":41}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&PublishKeysResponse::ok_with_otk_stats(Some((0, None)))).unwrap(),
+            r#"{"ok":true,"otk_remaining":0}"#
+        );
+    }
+
     #[tokio::test]
     async fn addressable_is_the_roster_with_a_bundle() {
         let (state, _dir) = test_app_state().await;
@@ -10379,6 +13146,60 @@ mod tests {
         assert!(second_response.ok);
     }
 
+    fn backup_admit_headers(content_length: Option<u64>, with_secret: bool) -> HeaderMap {
+        let mut headers = if with_secret {
+            profile_secret_headers(&base64::engine::general_purpose::STANDARD.encode([9u8; 32]))
+        } else {
+            HeaderMap::new()
+        };
+        if let Some(len) = content_length {
+            headers.insert(
+                axum::http::header::CONTENT_LENGTH,
+                HeaderValue::from_str(&len.to_string()).unwrap(),
+            );
+        }
+        headers
+    }
+
+    #[test]
+    fn backup_set_admit_reserves_memory_budget_and_returns_503_when_full() {
+        let budget = tokio::sync::Semaphore::new(250);
+        let big = KEYS_BACKUP_MAX_BODY_BYTES as u64;
+        let first = backup_set_admit(&backup_admit_headers(Some(big), true), &budget)
+            .expect("one max-size upload fits");
+        let busy = backup_set_admit(&backup_admit_headers(Some(big), true), &budget)
+            .expect_err("second max-size upload must wait");
+        assert_eq!(busy.status(), StatusCode::SERVICE_UNAVAILABLE);
+        // Обычная копия в десятки МБ проходит рядом с большой.
+        let small = backup_set_admit(&backup_admit_headers(Some(42 * 1024 * 1024), true), &budget)
+            .expect("42 MB upload fits beside");
+        drop(first);
+        drop(small);
+        assert!(backup_set_admit(&backup_admit_headers(Some(big), true), &budget).is_ok());
+        // Без Content-Length резерв по максимуму.
+        let chunked = backup_set_admit(&backup_admit_headers(None, true), &budget).unwrap();
+        assert_eq!(budget.available_permits(), 250 - KEYS_BACKUP_MAX_BODY_BYTES.div_ceil(KEYS_BACKUP_MIB));
+        drop(chunked);
+    }
+
+    #[test]
+    fn backup_set_admit_rejects_oversize_and_missing_secret_before_body() {
+        let budget = tokio::sync::Semaphore::new(250);
+        let too_big = backup_set_admit(
+            &backup_admit_headers(Some(KEYS_BACKUP_MAX_BODY_BYTES as u64 + 1), true),
+            &budget,
+        )
+        .expect_err("declared oversize must be refused");
+        assert_eq!(too_big.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        if require_profile_secret_enabled() && !allow_legacy_profiles_without_secret() {
+            // Тот же ответ, что дал бы обработчик: 200 и ok:false.
+            let no_secret = backup_set_admit(&backup_admit_headers(Some(1024), false), &budget)
+                .expect_err("missing secret must be refused");
+            assert_eq!(no_secret.status(), StatusCode::OK);
+        }
+        assert_eq!(budget.available_permits(), 250);
+    }
+
     #[tokio::test]
     async fn backup_set_stores_payload_for_valid_same_profile_device_and_secret() {
         let (state, _dir) = test_app_state().await;
@@ -10636,6 +13457,7 @@ mod tests {
             signature_b64: None,
             account_identity_pub_b64: aik.map(str::to_string),
             device_cert_b64: cert.map(str::to_string),
+            signed_prekey_id: None,
         };
         // 🔴 Подпись считается по ФИКСИРОВАННОМУ списку полей и новые НЕ
         // покрывает. Тест это и закрепляет: подпись остаётся верной, что бы мы
@@ -10776,6 +13598,7 @@ mod tests {
                     signature_b64: None,
                     account_identity_pub_b64: Some(aik),
                     device_cert_b64: Some(cert),
+                    signed_prekey_id: None,
                 };
                 req.signature_b64 = Some(publish_keys_signature_b64(&device_key, &req));
                 publish_keys(State(state), profile_secret_headers(&secret_b64), Json(req))
@@ -10853,6 +13676,7 @@ mod tests {
             signature_b64: None,
             account_identity_pub_b64: None,
             device_cert_b64: None,
+            signed_prekey_id: None,
         };
         req.signature_b64 = Some(publish_keys_signature_b64(&device_key, &req));
 
@@ -10949,6 +13773,7 @@ mod tests {
             signature_b64: None,
             account_identity_pub_b64: None,
             device_cert_b64: None,
+            signed_prekey_id: None,
         };
         req.signature_b64 = Some(publish_keys_signature_b64(&wrong_key, &req));
 
@@ -11091,6 +13916,7 @@ mod tests {
             signature_b64: None,
             account_identity_pub_b64: None,
             device_cert_b64: None,
+            signed_prekey_id: None,
         };
         req.signature_b64 = Some(publish_keys_signature_b64(&device_key, &req));
 
@@ -11109,6 +13935,7 @@ mod tests {
                 signature_b64: req.signature_b64.clone(),
                 account_identity_pub_b64: None,
                 device_cert_b64: None,
+                signed_prekey_id: None,
             }),
         )
         .await
@@ -11159,7 +13986,7 @@ mod tests {
             },
         );
 
-        let response = backup_get(State(state), headers, Path(profile_id.to_string()))
+        let response = backup_get(State(state), None, headers, Path(profile_id.to_string()))
             .await
             .0;
         assert!(!response.exists);
@@ -11348,6 +14175,7 @@ mod tests {
 
         let response = backup_get(
             State(state),
+            None,
             access_headers(token),
             Path(profile_id.to_string()),
         )
@@ -11374,6 +14202,7 @@ mod tests {
 
         let response = backup_get(
             State(state),
+            None,
             access_headers(b"guessed-wrong"),
             Path(profile_id.to_string()),
         )
@@ -11381,6 +14210,136 @@ mod tests {
         .0;
         assert!(!response.exists, "неверный токен открыл чужой архив");
         assert!(response.payload.is_none());
+    }
+
+    fn net(n: &str) -> Option<Extension<ClientNet>> {
+        Some(Extension(ClientNet(n.to_string())))
+    }
+
+    #[tokio::test]
+    async fn backup_get_says_wrong_password_and_locks_only_the_guessing_network() {
+        // К4 (14.11.2026): подбор из одной сети не запирает владельца в другой.
+        let (state, _dir) = test_app_state().await;
+        let profile_id = "profile_access_net_1";
+        state
+            .store
+            .backup_set(profile_id, "payload", "sha", now_ms())
+            .await
+            .unwrap();
+        state
+            .store
+            .backup_access_set(profile_id, "salt-b64", &verifier_for(b"correct"))
+            .await
+            .unwrap();
+
+        let first = backup_get(
+            State(state.clone()),
+            net("203.0.113.0/24"),
+            access_headers(b"wrong"),
+            Path(profile_id.to_string()),
+        )
+        .await
+        .0;
+        assert!(!first.exists);
+        assert_eq!(first.reason, Some("wrong_password"));
+
+        for _ in 0..12 {
+            let _ = backup_get(
+                State(state.clone()),
+                net("203.0.113.0/24"),
+                access_headers(b"wrong"),
+                Path(profile_id.to_string()),
+            )
+            .await;
+        }
+        let locked = backup_get(
+            State(state.clone()),
+            net("203.0.113.0/24"),
+            access_headers(b"correct"),
+            Path(profile_id.to_string()),
+        )
+        .await
+        .0;
+        assert!(!locked.exists, "запертая сеть подобрала пароль");
+        assert_eq!(locked.reason, Some("locked"));
+        assert!(locked.retry_at_ms.unwrap_or(0) > now_ms());
+
+        let owner = backup_get(
+            State(state.clone()),
+            net("198.51.100.0/24"),
+            access_headers(b"correct"),
+            Path(profile_id.to_string()),
+        )
+        .await
+        .0;
+        assert!(owner.exists, "чужой подбор запер владельца в другой сети");
+        assert_eq!(owner.reason, None);
+    }
+
+    #[tokio::test]
+    async fn backup_get_wrong_password_for_profile_without_backup() {
+        // Ответ не выдаёт, есть ли у профиля копия.
+        let (state, _dir) = test_app_state().await;
+        let response = backup_get(
+            State(state),
+            net("203.0.113.0/24"),
+            access_headers(b"anything"),
+            Path("profile_without_backup_1".to_string()),
+        )
+        .await
+        .0;
+        assert!(!response.exists);
+        assert_eq!(response.reason, Some("wrong_password"));
+    }
+
+    #[test]
+    fn backup_lock_net_groups_neighbours() {
+        assert_eq!(
+            backup_lock_net("203.0.113.77".parse().unwrap()),
+            "203.0.113.0/24"
+        );
+        assert_eq!(
+            backup_lock_net("2001:db8:1:2:3::9".parse().unwrap()),
+            "2001:db8:1::/48"
+        );
+        assert_eq!(
+            backup_lock_net("::ffff:203.0.113.5".parse().unwrap()),
+            "203.0.113.0/24"
+        );
+    }
+
+    #[test]
+    fn whole_profile_lock_needs_two_hundred_failures() {
+        use crate::store::backup_access_profile_lock_deadline_ms;
+        const NOW: i64 = 1_000_000;
+        assert_eq!(backup_access_profile_lock_deadline_ms(199, NOW), 0);
+        assert_eq!(backup_access_profile_lock_deadline_ms(200, NOW), NOW + 60_000);
+        assert_eq!(
+            backup_access_profile_lock_deadline_ms(i64::MAX, NOW),
+            NOW + 60 * 60 * 1000
+        );
+    }
+
+    #[tokio::test]
+    async fn backup_delete_requires_a_signed_device_of_the_profile() {
+        let (state, _dir) = test_app_state().await;
+        let profile_id = "profile_delete_1";
+        state
+            .store
+            .backup_set(profile_id, "payload", "sha", now_ms())
+            .await
+            .unwrap();
+        let refused = backup_delete(
+            State(state.clone()),
+            HeaderMap::new(),
+            Path(profile_id.to_string()),
+        )
+        .await;
+        assert!(refused.is_err(), "копию удалили без подписи");
+        assert!(state.store.backup_get(profile_id).await.unwrap().is_some());
+        assert!(state.store.backup_delete(profile_id).await.unwrap());
+        assert!(state.store.backup_get(profile_id).await.unwrap().is_none());
+        assert!(!state.store.backup_delete(profile_id).await.unwrap());
     }
 
     #[tokio::test]
@@ -11401,7 +14360,7 @@ mod tests {
             .await
             .unwrap();
 
-        let response = backup_get(State(state), HeaderMap::new(), Path(profile_id.to_string()))
+        let response = backup_get(State(state), None, HeaderMap::new(), Path(profile_id.to_string()))
             .await
             .0;
         assert!(response.exists, "старый клиент потерял доступ к архиву на Э-1");
@@ -11463,7 +14422,7 @@ mod tests {
             .await
             .unwrap();
 
-        let response = backup_get(State(state), HeaderMap::new(), Path(profile_id.to_string()))
+        let response = backup_get(State(state), None, HeaderMap::new(), Path(profile_id.to_string()))
             .await
             .0;
         assert!(response.exists);
@@ -11496,7 +14455,7 @@ mod tests {
             },
         );
 
-        let response = backup_get(State(state), headers, Path(profile_id.to_string()))
+        let response = backup_get(State(state), None, headers, Path(profile_id.to_string()))
             .await
             .0;
         assert!(response.exists);

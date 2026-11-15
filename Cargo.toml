@@ -1,5 +1,7 @@
 [workspace]
 resolver = "2"
+# Крейт транспорта самодостаточен (см. его Cargo.toml) и собирается cargokit.
+exclude = ["apps/flutter/secretly_app/third_party/secretly_transport_ffi/rust"]
 members = [
   "core/rust/secretly_core",
   "server/keys",

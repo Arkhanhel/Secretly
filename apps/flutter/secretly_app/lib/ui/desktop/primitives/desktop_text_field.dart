@@ -97,9 +97,21 @@ class _DesktopTextFieldState extends State<DesktopTextField> {
     final border = _focused ? c.accentPrimary : c.borderSubtle;
     final glass = widget.glass;
     final field = AnimatedContainer(
-      duration: DMotion.fast,
+      duration: DMotion.of(context, DMotion.base),
+      curve: DMotion.standard,
       decoration: BoxDecoration(
         color: glass ? Colors.transparent : c.elevated,
+        // Кольцо фокуса — мягкий ореол цвета акцента снаружи рамки
+        // (05.10.2026): поле «загорается», а не просто меняет цвет черты.
+        // Тенью, а не рамкой: размеры поля не меняются, соседи не дёргаются.
+        boxShadow: _focused
+            ? <BoxShadow>[
+                BoxShadow(
+                  color: c.accentPrimary.withValues(alpha: glass ? 0.14 : 0.18),
+                  spreadRadius: 3,
+                ),
+              ]
+            : const <BoxShadow>[],
         borderRadius: BorderRadius.circular(glass ? _kGlassRadius : DRadii.sm),
         border: Border.all(
           color: glass

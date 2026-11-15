@@ -301,6 +301,60 @@
   "uploadCanceled": "Upload canceled",
   "attachmentFinalizeTimeout": "Network is unstable: upload finished, but send confirmation timed out. Try again.",
   "attachmentTransferUnavailable": "Couldn't transfer the attachment right now. Check internet/server and try again.",
+  "startupRetry": "Retry",
+  "@startupRetry": {"description": "Button on the startup error screen."},
+  "onboardingBackupLater": "Backup isn't on yet — your profile is still being created. Turn it on later in Settings.",
+  "@onboardingBackupLater": {"description": "Onboarding: backup deferred because the profile is not created yet (Play review 7.11)."},
+  "keepMediaTitle": "Keep media on this device",
+  "@keepMediaTitle": {"description": "Storage settings (media audit П4)."},
+  "keepMediaForever": "Forever",
+  "@keepMediaForever": {"description": "Storage settings (media audit П4)."},
+  "keepMediaMonth": "1 month",
+  "@keepMediaMonth": {"description": "Storage settings (media audit П4)."},
+  "keepMediaWeek": "1 week",
+  "@keepMediaWeek": {"description": "Storage settings (media audit П4)."},
+  "keepMediaHint": "Downloaded photos, videos and files older than this are removed from the phone. Messages stay; media no longer on the server (older than 7 days) and media you sent are removed for good.",
+  "@keepMediaHint": {"description": "Storage settings (media audit П4)."},
+  "chatMediaTitle": "Media by chat",
+  "@chatMediaTitle": {"description": "Storage settings (media audit П4)."},
+  "chatMediaShow": "Count by chat",
+  "@chatMediaShow": {"description": "Storage settings (media audit П4)."},
+  "chatMediaFilesCount": "{count} files",
+  "@chatMediaFilesCount": {"description": "Storage: files of a chat (media audit П4).", "placeholders": {"count": {"type": "int"}}},
+  "chatMediaDeleteTitle": "Delete this chat's media?",
+  "@chatMediaDeleteTitle": {"description": "Storage settings (media audit П4)."},
+  "chatMediaDeleteBody": "Downloaded photos, videos and files of this chat will be removed from the phone; messages stay. Anything still on the server (up to 7 days) can be downloaded again; the rest — what you sent and older media — is removed for good.",
+  "@chatMediaDeleteBody": {"description": "Storage settings (media audit П4)."},
+  "chatMediaDeleteConfirm": "Delete",
+  "@chatMediaDeleteConfirm": {"description": "Storage settings (media audit П4)."},
+  "chatMediaEmpty": "No downloaded media in chats",
+  "@chatMediaEmpty": {"description": "Storage settings (media audit П4)."},
+  "galleryShowMore": "Show more ({count} left)",
+  "@galleryShowMore": {"description": "Shared media gallery: reveal older items (media audit П8).", "placeholders": {"count": {"type": "int"}}},
+  "autoDownloadCellularTitle": "Auto-download on mobile data",
+  "@autoDownloadCellularTitle": {"description": "Storage settings: cellular auto-download (media audit П1)."},
+  "autoDownloadEverything": "Everything",
+  "@autoDownloadEverything": {"description": "Storage settings: cellular auto-download (media audit П1)."},
+  "autoDownloadUpTo15Mb": "Photos, videos and files up to 15 MB",
+  "@autoDownloadUpTo15Mb": {"description": "Storage settings: cellular auto-download (media audit П1)."},
+  "autoDownloadPhotosOnly": "Photos only",
+  "@autoDownloadPhotosOnly": {"description": "Storage settings: cellular auto-download (media audit П1)."},
+  "autoDownloadNothing": "Nothing but voice messages",
+  "@autoDownloadNothing": {"description": "Storage settings: cellular auto-download (media audit П1)."},
+  "autoDownloadHint": "Everything downloads on Wi-Fi. Anything postponed downloads once you're on Wi-Fi or when you open it. Files are kept on the server for 7 days.",
+  "@autoDownloadHint": {"description": "Storage settings: cellular auto-download (media audit П1)."},
+  "uploadNotSentTapToRetry": "Not sent — tap to retry",
+  "@uploadNotSentTapToRetry": {"description": "Pending upload that failed on network/server (media audit О2)."},
+  "uploadRetry": "Retry",
+  "@uploadRetry": {"description": "Retry a failed upload."},
+  "attachmentExpiredOnServer": "The file is no longer on the server: it is kept for 7 days.",
+  "@attachmentExpiredOnServer": {"description": "Tooltip on media whose blob expired on the relay (media audit П7)."},
+  "attachmentServerRejectedSize": "The file is too large for the server. Send a smaller one or split it.",
+  "@attachmentServerRejectedSize": {"description": "Upload refused by the server (media audit О11)."},
+  "attachmentServerStorageFull": "The server is low on space right now. Try again later.",
+  "@attachmentServerStorageFull": {"description": "Upload refused by the server (media audit О11)."},
+  "attachmentUploadQuotaExceeded": "You've reached the file storage limit. Files are kept for 7 days — try again later.",
+  "@attachmentUploadQuotaExceeded": {"description": "Upload refused by the server (media audit О11)."},
   "attachmentSendUnavailable": "Attachment sending is not ready yet. Try again.",
   "attachmentContactSyncPending": "Waiting for contact identity sync. Ask the contact to send one more message and try again.",
   "attachmentContactBlocked": "This contact is blocked.",
@@ -471,15 +525,15 @@
   "repeat": "Repeat",
   "onboardingBackTooltip": "Back",
   "onboardingWelcomeTitle": "Welcome!",
-  "onboardingWelcomeSubtitle": "A next-generation messenger.\nComplete privacy. No compromises.",
+  "onboardingWelcomeSubtitle": "A next-generation messenger.\nPrivacy by design.",
   "onboardingCreateAccount": "Create new account",
   "onboardingAlreadyHaveAccount": "Already have an account",
   "onboardingFeatureE2eTitle": "E2E encryption",
   "onboardingFeatureE2eBody": "Messages are encrypted on your device. Only you have the keys.",
-  "onboardingFeaturePrivacyTitle": "Full anonymity",
+  "onboardingFeaturePrivacyTitle": "No personal data",
   "onboardingFeaturePrivacyBody": "No phone number. No link to personal data.",
-  "onboardingFeatureRelayTitle": "No middlemen",
-  "onboardingFeatureRelayBody": "The relay server does not store messages. It only passes them through.",
+  "onboardingFeatureRelayTitle": "Server can't read",
+  "onboardingFeatureRelayBody": "The server only passes on encrypted messages and deletes them after delivery.",
   "onboardingProfileTitle": "Your profile",
   "onboardingProfileSubtitle": "How other users will see you",
   "onboardingProfileNameSection": "Profile name",
@@ -1425,7 +1479,11 @@
   "desktopWallAnimShortTap": "On click",
   "desktopWallAnimShortOff": "Off",
   "desktopAppearanceGoLive": "Choose {link} to set up the animation.",
-  "@desktopAppearanceGoLive": {"placeholders": {"link": {}}},
+  "@desktopAppearanceGoLive": {
+    "placeholders": {
+      "link": {}
+    }
+  },
   "desktopAppearanceGoLiveLink": "live wallpaper",
   "desktopAppearanceShape": "Shape",
   "desktopAppearanceShapeSharp": "Sharp",
@@ -1438,9 +1496,17 @@
   "desktopAppearanceSummaryLight": "light scheme",
   "desktopAppearanceSummarySystem": "system scheme",
   "desktopAppearanceSummaryBubbles": "bubbles “{name}”",
-  "@desktopAppearanceSummaryBubbles": {"placeholders": {"name": {}}},
+  "@desktopAppearanceSummaryBubbles": {
+    "placeholders": {
+      "name": {}
+    }
+  },
   "desktopAppearanceSummaryText": "text {size}",
-  "@desktopAppearanceSummaryText": {"placeholders": {"size": {}}},
+  "@desktopAppearanceSummaryText": {
+    "placeholders": {
+      "size": {}
+    }
+  },
   "desktopAppearancePreview": "Preview",
   "desktopAppearancePreviewReplay": "Reopen",
   "desktopAppearancePreviewReplayHint": "Reopen the chat to see the animation",
@@ -1449,7 +1515,11 @@
   "desktopAppearancePreviewChat": "Design team",
   "desktopAppearancePreviewMembers": "5 members, 3 online",
   "desktopAppearancePreviewTyping": "{name} is typing…",
-  "@desktopAppearancePreviewTyping": {"placeholders": {"name": {}}},
+  "@desktopAppearancePreviewTyping": {
+    "placeholders": {
+      "name": {}
+    }
+  },
   "desktopAppearancePreviewAnna": "Anna",
   "desktopAppearancePreviewMax": "Max",
   "desktopAppearancePreviewLiza": "Lisa",
@@ -1523,7 +1593,7 @@
   "desktopPrivacyEverybody": "Everybody",
   "desktopPrivacyContacts": "Contacts",
   "desktopPrivacyEncryption": "Encryption",
-  "desktopPrivacyEncryptionHint": "Messages, files and one-to-one calls are end-to-end encrypted; the keys live only on your devices. Group calls are encrypted only in transit for now.",
+  "desktopPrivacyEncryptionHint": "Messages, files and one-to-one calls are end-to-end encrypted; the keys live only on your devices. End-to-end encryption for group calls is rolling out gradually: a lock in the call shows it is on; without it, the call is encrypted only in transit.",
   "desktopPrivacyE2eeActive": "End-to-end encryption is active",
   "desktopPrivacyWhoSees": "Who sees",
   "desktopPrivacyWhoSeesHint": "The same visibility settings as on your phone. “Contacts” is applied by the app; the server enforces only “Nobody”.",
@@ -1751,7 +1821,7 @@
   "desktopDangerAction": "Delete the account",
   "desktopDangerIrreversible": "This is irreversible. All your data, the message history and the keys will be deleted. There is no way back.",
   "desktopSecurityE2ee": "End-to-end encryption",
-  "desktopSecurityE2eeHint": "Messages, files and one-to-one calls are encrypted on your device, and the keys never leave your devices. The server can't read the content but does see service data, such as who writes to whom and when. Group calls are encrypted only in transit for now.",
+  "desktopSecurityE2eeHint": "Messages, files and one-to-one calls are encrypted on your device, and the keys never leave your devices. The server can't read the content but does see service data, such as who writes to whom and when. End-to-end encryption for group calls is rolling out gradually: a lock in the call shows it is on; without it, the call is encrypted only in transit.",
   "desktopSecurityVerifiedDevices": "Verified devices",
   "desktopSecurityVerifiedHint": "While this is on, messages are not sent to the other person’s unconfirmed devices. It guards against substitution, but a message may not arrive until they confirm a new device. One-to-one chats only: it does not apply to groups.",
   "desktopSecurityOnlyVerified": "Verified devices only",
@@ -2175,7 +2245,13 @@
   "desktopRoomInviteWithHistory": "with history",
   "desktopRoomInviteWithoutHistory": "without history",
   "desktopRoomInviteInvitedBy": "Invited by {name}",
-  "@desktopRoomInviteInvitedBy": {"placeholders": {"name": {"type": "String"}}},
+  "@desktopRoomInviteInvitedBy": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "desktopRoomInviteHistoryOn": "History for new members is enabled",
   "desktopRoomInviteHistoryOff": "History for new members is disabled",
   "desktopRoomInviteJoin": "Join room",
@@ -2183,7 +2259,13 @@
   "desktopRoomInviteOpenRequest": "Open request",
   "desktopRoomInviteOpenRoom": "Open room",
   "desktopRoomInviteReplyQuote": "Invite to «{title}»",
-  "@desktopRoomInviteReplyQuote": {"placeholders": {"title": {"type": "String"}}},
+  "@desktopRoomInviteReplyQuote": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
   "desktopRoomSound": "Sound",
   "desktopRoomTabInfo": "Info",
   "desktopRoomTabMembers": "Members",
@@ -2372,6 +2454,7 @@
   "desktopProfileEmojiStatus": "Emoji status",
   "desktopProfileClearStatus": "Clear the status",
   "desktopProfileEmojiStatusPremiumOnly": "Emoji status is part of Premium; you can subscribe in the app on your phone",
+  "desktopProfileCosmeticPremiumOnly": "This frame or cover is part of Premium; you can subscribe in the app on your phone",
   "desktopProfileApplyFailed": "Could not apply: {error}",
   "desktopProfileAvatarFrame": "Avatar frame",
   "desktopProfileCover": "Profile cover",
@@ -2408,7 +2491,13 @@
   "desktopRoomPhotoUpdated": "Group photo updated",
   "desktopRoomPhotoRemoved": "Group photo removed",
   "desktopRoomPhotoFailed": "Could not change the group photo: {error}",
-  "@desktopRoomPhotoFailed": {"placeholders": {"error": {"type": "String"}}},
+  "@desktopRoomPhotoFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "desktopProfileAccount": "Account",
   "desktopProfileRecovery": "Recovery",
   "desktopProfileRecoveryHint": "This computer is linked to the phone and keeps no recovery phrase of its own: the backup and the recovery kit bring the account back.",
@@ -3157,7 +3246,13 @@
   "desktopMediaCheck": "Test",
   "desktopMediaCheckStop": "Stop",
   "desktopMicTestRecording": "Recording — speak… {seconds} s",
-  "@desktopMicTestRecording": {"placeholders": {"seconds": {"type": "int"}}},
+  "@desktopMicTestRecording": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
   "desktopMicTestPlaying": "Playing the recording…",
   "desktopMediaPlaybackFailed": "Couldn’t play the sound.",
   "desktopMediaPlaybackSystemOnly": "The sound played on the system default device: the selected one couldn’t be opened for the check.",
@@ -3412,5 +3507,1548 @@
   "desktopSoundNameSwitch": "Switch",
   "desktopSoundNameMelody": "Melody",
   "desktopSoundNamePulse": "Pulse",
-  "desktopSoundNameDefault": "Default"
+  "desktopSoundNameDefault": "Default",
+  "roomCallE2eeOn": "End-to-end encrypted",
+  "roomCallE2eeOnHint": "Only participants can hear and see this call — not our server.",
+  "roomCallE2eeConnecting": "Setting up encryption…",
+  "roomCallE2eeFailed": "Couldn't turn on encryption. This device can't join the call.",
+  "roomCallE2eeUnsupported": "Encrypted group calls aren't available on this device yet.",
+  "roomCallE2eeWaitingKey": "Waiting for key",
+  "roomCallE2eeFailing": "Can't decrypt — they may have an older version",
+  "roomCallE2eeUnknownParticipants": "Unknown participants not heard: {count}",
+  "@roomCallE2eeUnknownParticipants": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "roomCallOpenBanner": "Not end-to-end encrypted — our server can see and hear this call",
+  "roomCallJoinOpenTitle": "Join a call without encryption?",
+  "roomCallJoinOpenBody": "This call isn't end-to-end encrypted: it was started in an older version of Secretly. Our server can see and hear it.",
+  "roomCallJoinOpenAction": "Join anyway",
+  "roomCallStartChoiceTitle": "Start an encrypted call?",
+  "roomCallStartChoiceBody": "Older version of Secretly — won't be able to join: {names}.",
+  "@roomCallStartChoiceBody": {
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "roomCallStartChoiceNotify": "Tell them in the chat to update",
+  "roomCallStartEncrypted": "Start encrypted",
+  "roomCallStartOpen": "Start without encryption",
+  "roomCallUpdateNotice": "An encrypted call is in progress. Update Secretly to join.",
+  "roomCallE2eeScreenShareIos": "Screen sharing from iPhone isn't available in encrypted calls yet",
+  "roomCallFull": "The encrypted call is full",
+  "roomPrivateTopicNew": "New topic",
+  "roomPrivateTopicOpen": "Open",
+  "roomPrivateTopicOpenHint": "Everyone in the room sees it",
+  "roomPrivateTopicClosed": "Private",
+  "roomPrivateTopicClosedHint": "Invited people only. Others won't know it exists",
+  "roomPrivateTopicTitleHint": "Topic name",
+  "roomPrivateTopicMembers": "Who to invite",
+  "roomPrivateTopicOnlyYou": "Just you for now — you can add people later",
+  "roomPrivateTopicCreate": "Create",
+  "roomPrivateTopicFailed": "Couldn't create the private topic",
+  "roomPrivateTopicLimit": "Private topic limit reached: {count}",
+  "@roomPrivateTopicLimit": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "roomPrivateTopicLabel": "Private topic",
+  "roomPrivateTopicInRoom": "Private topic · {room}",
+  "@roomPrivateTopicInRoom": {
+    "placeholders": {
+      "room": {
+        "type": "String"
+      }
+    }
+  },
+  "roomPrivateTopicAllowMembers": "Create private topics",
+  "spaceGateEnterCode": "Enter your code",
+  "@spaceGateEnterCode": {
+    "description": "Space gate screen: prompt above the code field"
+  },
+  "spaceGateWrongCode": "That code did not match. Try again.",
+  "@spaceGateWrongCode": {
+    "description": "Space gate screen: the entered code was wrong"
+  },
+  "spaceGateWaitSeconds": "Wait {seconds} s",
+  "@spaceGateWaitSeconds": {
+    "description": "Space gate screen: lockout countdown, seconds remaining",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "spaceGateUnlock": "Unlock",
+  "@spaceGateUnlock": {
+    "description": "Space gate screen: button that submits the code"
+  },
+  "spaceGateUseBiometrics": "Use biometrics",
+  "@spaceGateUseBiometrics": {
+    "description": "Space gate screen: button that unlocks with biometrics"
+  },
+  "spaceGateBiometricReason": "Unlock Secretly",
+  "@spaceGateBiometricReason": {
+    "description": "Space gate screen: reason shown by the system biometric prompt"
+  },
+  "duressSetupTitle": "Duress code",
+  "@duressSetupTitle": {
+    "description": "Title of the screen where the duress code is set (not the real app password)"
+  },
+  "duressSetupDescription": "This code opens a separate, empty profile instead of yours. It must differ from your real code. Whoever watches you type it sees a freshly installed messenger.",
+  "@duressSetupDescription": {
+    "description": "Explanation on the duress-code setup screen"
+  },
+  "duressSectionTitle": "Duress code",
+  "@duressSectionTitle": {
+    "description": "Duress code section: title"
+  },
+  "duressSectionSubtitleSet": "Set. A second code opens a separate, empty profile.",
+  "@duressSectionSubtitleSet": {
+    "description": "Duress code section: subtitle when a duress code is configured"
+  },
+  "duressSectionSubtitleUnset": "A second code that opens a separate, empty profile instead of yours.",
+  "@duressSectionSubtitleUnset": {
+    "description": "Duress code section: subtitle when no duress code is configured"
+  },
+  "duressSectionChange": "Change",
+  "@duressSectionChange": {
+    "description": "Duress code section: button that changes the existing duress code"
+  },
+  "duressSectionSetUp": "Set up",
+  "@duressSectionSetUp": {
+    "description": "Duress code section: button that sets up a duress code"
+  },
+  "duressWipeMainTitle": "Erase the main profile when the code is entered",
+  "@duressWipeMainTitle": {
+    "description": "Duress code section: switch that erases the main profile when the duress code is entered"
+  },
+  "duressWipeMainSubtitle": "Irreversible. Recovery only from a recovery kit or a backup.",
+  "@duressWipeMainSubtitle": {
+    "description": "Duress code section: warning under the erase-main-profile switch"
+  },
+  "duressRemoveCode": "Remove the duress code",
+  "@duressRemoveCode": {
+    "description": "Duress code section: action that removes the duress code"
+  },
+  "duressWipeAfterAttemptsTitle": "Erase everything after {attempts} failed attempts",
+  "@duressWipeAfterAttemptsTitle": {
+    "description": "Duress code section: switch that erases everything after N failed unlock attempts",
+    "placeholders": {
+      "attempts": {
+        "type": "int"
+      }
+    }
+  },
+  "duressWipeAfterAttemptsSubtitle": "Both profiles and the lock itself. A delay already applies after 3 failed attempts.",
+  "@duressWipeAfterAttemptsSubtitle": {
+    "description": "Duress code section: explanation under the erase-after-failed-attempts switch"
+  },
+  "duressSectionFootnote": "Protects against a \"show me your phone\" check, not against device forensics. Biometrics always open the main profile. To return to it from the decoy, close the app and enter your real code.",
+  "@duressSectionFootnote": {
+    "description": "Duress code section: footnote on what the duress code does and does not protect against"
+  },
+  "duressSaveFailed": "Could not save.",
+  "@duressSaveFailed": {
+    "description": "Duress code section: generic error when a setting could not be saved"
+  },
+  "netSettingsImportNoNewMessages": "No new messages for this device.",
+  "@netSettingsImportNoNewMessages": {
+    "description": "Network screen: offline message file held nothing new for this device"
+  },
+  "netSettingsImportReceived": "Messages received: {count}",
+  "@netSettingsImportReceived": {
+    "description": "Network screen: how many messages an offline message file delivered",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "netSettingsImportNotEnvelopeFile": "This is not a Secretly message file, or it was altered.",
+  "@netSettingsImportNotEnvelopeFile": {
+    "description": "Network screen: the picked file is not a valid Secretly message file"
+  },
+  "netSettingsImportCouldNotOpen": "Could not open the file.",
+  "@netSettingsImportCouldNotOpen": {
+    "description": "Network screen: the picked message file could not be opened"
+  },
+  "netSettingsImportCouldNotRead": "Could not read the file. Open it in Secretly: Settings → Without internet → \"Open a message file\".",
+  "@netSettingsImportCouldNotRead": {
+    "description": "Network screen: the message file could not be read, with the in-app menu path to open it instead"
+  },
+  "netSettingsPathDirect": "Direct",
+  "@netSettingsPathDirect": {
+    "description": "Network screen: traffic goes straight to the servers"
+  },
+  "netSettingsPathFallback": "Via fallback address",
+  "@netSettingsPathFallback": {
+    "description": "Network screen: traffic goes through a fallback address"
+  },
+  "netSettingsPathMirror": "Via mirror",
+  "@netSettingsPathMirror": {
+    "description": "Network screen: traffic goes through a mirror"
+  },
+  "netSettingsPathCdn": "Via CDN",
+  "@netSettingsPathCdn": {
+    "description": "Network screen: traffic goes through a CDN"
+  },
+  "netSettingsPathProxy": "Via proxy",
+  "@netSettingsPathProxy": {
+    "description": "Network screen: traffic goes through a proxy"
+  },
+  "netSettingsPathSocks": "Via SOCKS",
+  "@netSettingsPathSocks": {
+    "description": "Network screen: traffic goes through a SOCKS proxy"
+  },
+  "netSettingsPathTor": "Via Tor",
+  "@netSettingsPathTor": {
+    "description": "Network screen: traffic goes through Tor"
+  },
+  "netSettingsProxyHostError": "Enter a host name, for example proxy.example.org",
+  "@netSettingsProxyHostError": {
+    "description": "Network screen: the proxy field needs a host name"
+  },
+  "netSettingsSocksAddressError": "Enter an address like 127.0.0.1:9050",
+  "@netSettingsSocksAddressError": {
+    "description": "Network screen: the SOCKS field needs a host:port address"
+  },
+  "netSettingsNoContactsYet": "No contacts yet.",
+  "@netSettingsNoContactsYet": {
+    "description": "Network screen: cannot build an offline message file without contacts"
+  },
+  "netSettingsPickRecipientTitle": "Who is the file for",
+  "@netSettingsPickRecipientTitle": {
+    "description": "Network screen: header of the sheet that picks who the offline file is for"
+  },
+  "netSettingsNothingToCarry": "Nothing to carry to this contact from the last week.",
+  "@netSettingsNothingToCarry": {
+    "description": "Network screen: no recent messages for the picked contact"
+  },
+  "netSettingsCouldNotCreateFile": "Could not create the file.",
+  "@netSettingsCouldNotCreateFile": {
+    "description": "Network screen: the offline message file could not be created"
+  },
+  "netSettingsTitle": "Network",
+  "@netSettingsTitle": {
+    "description": "Network screen: title"
+  },
+  "netSettingsPathToServersTitle": "Path to the servers",
+  "@netSettingsPathToServersTitle": {
+    "description": "Network screen: current path to the servers"
+  },
+  "netSettingsPathDirectOff": "Direct. Alternative paths are off or unavailable.",
+  "@netSettingsPathDirectOff": {
+    "description": "Network screen: path subtitle when alternative paths are off or unavailable"
+  },
+  "netSettingsTryAlternativeTitle": "Try alternative paths",
+  "@netSettingsTryAlternativeTitle": {
+    "description": "Network screen: switch that allows alternative paths"
+  },
+  "netSettingsTryAlternativeSubtitle": "When the direct path is blocked, the app tries fallback addresses, mirrors and proxies on its own. Content stays end-to-end encrypted.",
+  "@netSettingsTryAlternativeSubtitle": {
+    "description": "Network screen: what the alternative-paths switch does"
+  },
+  "netSettingsVolunteerProxyTitle": "Volunteer proxy",
+  "@netSettingsVolunteerProxyTitle": {
+    "description": "Network screen: volunteer proxy section"
+  },
+  "netSettingsVolunteerProxyDescription": "A link like secretly://proxy#host. The proxy owner cannot read your traffic, but can see that you use Secretly.",
+  "@netSettingsVolunteerProxyDescription": {
+    "description": "Network screen: what a volunteer proxy sees and does not see"
+  },
+  "netSettingsSocksTitle": "SOCKS5 (for example Tor via Orbot)",
+  "@netSettingsSocksTitle": {
+    "description": "Network screen: SOCKS5 proxy field label"
+  },
+  "netSettingsSendWithoutNetworkTitle": "Send without network",
+  "@netSettingsSendWithoutNetworkTitle": {
+    "description": "Network screen: action that exports messages to a file"
+  },
+  "netSettingsSendWithoutNetworkSubtitle": "A file with your encrypted messages to a contact from the last week. Pass it on any way — USB stick, Bluetooth, another messenger.",
+  "@netSettingsSendWithoutNetworkSubtitle": {
+    "description": "Network screen: what the offline export file contains"
+  },
+  "netSettingsOpenMessageFileTitle": "Open a message file",
+  "@netSettingsOpenMessageFileTitle": {
+    "description": "Network screen: action that imports messages from a file"
+  },
+  "netSettingsOpenMessageFileSubtitle": "A .secretly file from a contact. Messages for other devices and ones you already have are skipped.",
+  "@netSettingsOpenMessageFileSubtitle": {
+    "description": "Network screen: what the offline import accepts"
+  },
+  "netSettingsDeliveryReportsTitle": "Anonymous delivery reports",
+  "@netSettingsDeliveryReportsTitle": {
+    "description": "Network screen: switch for anonymous delivery reports"
+  },
+  "netSettingsDeliveryReportsSubtitle": "Once a day: platform, network type, which path worked and which failed, country from the system language. No identifiers, no addresses.",
+  "@netSettingsDeliveryReportsSubtitle": {
+    "description": "Network screen: what an anonymous delivery report contains"
+  },
+  "netSettingsOrbotTitle": "Route through Orbot (Tor)",
+  "@netSettingsOrbotTitle": {
+    "description": "Network screen: action that points the SOCKS proxy at Orbot"
+  },
+  "netSettingsOrbotSubtitle": "Fills in the SOCKS address of Orbot, 127.0.0.1:9050. Install Orbot and start it; Secretly cannot check whether it is running.",
+  "@netSettingsOrbotSubtitle": {
+    "description": "Network screen: what the Orbot action does and its limit"
+  },
+  "netSettingsOrbotDone": "SOCKS address set to Orbot. Start Orbot, then come back.",
+  "@netSettingsOrbotDone": {
+    "description": "Network screen: confirmation after the Orbot address was filled in"
+  },
+  "netSettingsTorTitle": "Tor as the last resort",
+  "@netSettingsTorTitle": {
+    "description": "Network screen: switch that allows Tor as the last resort"
+  },
+  "netSettingsTorSubtitle": "Slower and uses more battery; used only when everything else is blocked.",
+  "@netSettingsTorSubtitle": {
+    "description": "Network screen: cost of using Tor"
+  },
+  "socialRecoveryGuardiansTitle": "Guardians",
+  "@socialRecoveryGuardiansTitle": {
+    "description": "Social recovery: guardians section title"
+  },
+  "socialRecoveryEntryGuardiansSubtitle": "Friends who together can bring your profile back if your phone is lost. Alone, none of them can do anything.",
+  "@socialRecoveryEntryGuardiansSubtitle": {
+    "description": "Social recovery entry card: what guardians are"
+  },
+  "socialRecoveryHelpSomeoneTitle": "Help someone recover",
+  "@socialRecoveryHelpSomeoneTitle": {
+    "description": "Social recovery entry card: open the guardian helper screen"
+  },
+  "socialRecoveryHelpSomeoneSubtitle": "If you are someone's guardian.",
+  "@socialRecoveryHelpSomeoneSubtitle": {
+    "description": "Social recovery entry card: when the guardian helper screen is for you"
+  },
+  "socialRecoveryRecoverMineTitle": "Recover my profile",
+  "@socialRecoveryRecoverMineTitle": {
+    "description": "Social recovery entry card: start recovering your own profile"
+  },
+  "socialRecoveryRecoverMineSubtitle": "On a new phone, with the help of your guardians.",
+  "@socialRecoveryRecoverMineSubtitle": {
+    "description": "Social recovery entry card: when recovering your own profile applies"
+  },
+  "socialRecoveryNeedTwoGuardians": "Pick at least two guardians.",
+  "@socialRecoveryNeedTwoGuardians": {
+    "description": "Guardians setup: at least two guardians must be picked"
+  },
+  "socialRecoverySendSharesFailed": "Could not send the shares. Check your connection.",
+  "@socialRecoverySendSharesFailed": {
+    "description": "Guardians setup: the shares could not be sent"
+  },
+  "socialRecoveryOwnerIntro": "Your profile is split into parts between guardians. To bring it back you need as many of them as you choose. Pick people whose voice you know, and whose safety number you have verified.",
+  "@socialRecoveryOwnerIntro": {
+    "description": "Guardians setup: how splitting the profile between guardians works"
+  },
+  "socialRecoveryIsSetUp": "Recovery is set up",
+  "@socialRecoveryIsSetUp": {
+    "description": "Guardians setup: recovery is fully configured"
+  },
+  "socialRecoveryWaitingConfirmations": "Waiting for confirmations",
+  "@socialRecoveryWaitingConfirmations": {
+    "description": "Guardians setup: some guardians have not confirmed yet"
+  },
+  "socialRecoveryConfirmedProgress": "{accepted} of {total} confirmed. {threshold} needed to recover.",
+  "@socialRecoveryConfirmedProgress": {
+    "description": "Guardians setup: how many guardians confirmed and how many are needed",
+    "placeholders": {
+      "accepted": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "threshold": {
+        "type": "int"
+      }
+    }
+  },
+  "socialRecoveryGuardianHoldsPart": "Holds a part",
+  "@socialRecoveryGuardianHoldsPart": {
+    "description": "Guardians setup: this guardian holds a part of the profile"
+  },
+  "socialRecoveryGuardianNotSent": "Not sent",
+  "@socialRecoveryGuardianNotSent": {
+    "description": "Guardians setup: the part could not be delivered to this guardian"
+  },
+  "socialRecoveryGuardianSentWaiting": "Sent, waiting",
+  "@socialRecoveryGuardianSentWaiting": {
+    "description": "Guardians setup: the part was sent and the guardian has not confirmed yet"
+  },
+  "socialRecoveryPickContacts": "Pick 2 to {max} contacts",
+  "@socialRecoveryPickContacts": {
+    "description": "Guardians setup: how many contacts to pick as guardians",
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "socialRecoveryNoContactsYet": "No contacts yet.",
+  "@socialRecoveryNoContactsYet": {
+    "description": "Guardians setup: there are no contacts to pick from"
+  },
+  "socialRecoveryThresholdLabel": "Guardians needed to recover: {threshold} of {total}",
+  "@socialRecoveryThresholdLabel": {
+    "description": "Guardians setup: the chosen recovery threshold",
+    "placeholders": {
+      "threshold": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "socialRecoveryThresholdWarning": "This many guardians, acting together, could recover your profile without you. Avoid people who know each other too closely.",
+  "@socialRecoveryThresholdWarning": {
+    "description": "Guardians setup: colluding guardians could recover the profile without you"
+  },
+  "socialRecoverySendParts": "Send the parts",
+  "@socialRecoverySendParts": {
+    "description": "Guardians setup: send the profile parts to the picked guardians"
+  },
+  "socialRecoveryUpdateGuardians": "Update guardians",
+  "@socialRecoveryUpdateGuardians": {
+    "description": "Guardians setup: resend the parts after changing the guardian list"
+  },
+  "socialRecoveryTurnOff": "Turn recovery off",
+  "@socialRecoveryTurnOff": {
+    "description": "Guardians setup: disable social recovery entirely"
+  },
+  "socialRecoveryCodeScanTitle": "Recovery code",
+  "@socialRecoveryCodeScanTitle": {
+    "description": "Guardian helper: title of the QR scanner for a recovery code"
+  },
+  "socialRecoveryNotRecoveryCode": "This is not a recovery code.",
+  "@socialRecoveryNotRecoveryCode": {
+    "description": "Guardian helper: the scanned QR code is not a recovery code"
+  },
+  "socialRecoveryNoCodeInClipboard": "No recovery code in the clipboard.",
+  "@socialRecoveryNoCodeInClipboard": {
+    "description": "Guardian helper: the clipboard holds no recovery code"
+  },
+  "socialRecoverySendFailed": "Could not send. Check your connection.",
+  "@socialRecoverySendFailed": {
+    "description": "Guardian helper: the guardian part could not be sent"
+  },
+  "socialRecoveryHelpRecoverTitle": "Help recover",
+  "@socialRecoveryHelpRecoverTitle": {
+    "description": "Guardian helper screen: title"
+  },
+  "socialRecoveryNotGuardianYet": "You are not anyone's guardian yet. When someone picks you, their name appears here.",
+  "@socialRecoveryNotGuardianYet": {
+    "description": "Guardian helper: nobody has picked you as a guardian yet"
+  },
+  "socialRecoveryWhoAreYouHelping": "Who are you helping",
+  "@socialRecoveryWhoAreYouHelping": {
+    "description": "Guardian helper: pick whose recovery you are helping with"
+  },
+  "socialRecoveryThresholdOfGuardians": "{threshold} of {guardians} guardians needed",
+  "@socialRecoveryThresholdOfGuardians": {
+    "description": "Guardian helper: how many of this owner's guardians are needed",
+    "placeholders": {
+      "threshold": {
+        "type": "int"
+      },
+      "guardians": {
+        "type": "int"
+      }
+    }
+  },
+  "socialRecoveryScanCode": "Scan code",
+  "@socialRecoveryScanCode": {
+    "description": "Guardian helper: scan the owner's recovery QR code"
+  },
+  "socialRecoveryPasteCode": "Paste code",
+  "@socialRecoveryPasteCode": {
+    "description": "Guardian helper: paste the owner's recovery code from the clipboard"
+  },
+  "socialRecoveryCheckWordsByVoice": "Check the words by voice",
+  "@socialRecoveryCheckWordsByVoice": {
+    "description": "Guardian helper: header of the voice-verification warning"
+  },
+  "socialRecoveryCheckWordsExplanation": "Call the person or meet them. Ask them to read the words from their screen. If any word differs, or you are not sure it is them, do not send. This is how an attacker would take over someone's profile.",
+  "@socialRecoveryCheckWordsExplanation": {
+    "description": "Guardian helper: why the words must be read out by the owner in person"
+  },
+  "socialRecoveryHeardWordsConfirm": "I heard these words from this person",
+  "@socialRecoveryHeardWordsConfirm": {
+    "description": "Guardian helper: checkbox confirming the words were heard from the owner"
+  },
+  "socialRecoverySent": "Sent",
+  "@socialRecoverySent": {
+    "description": "Guardian helper: the guardian part has been sent"
+  },
+  "socialRecoverySendMyPart": "Send my part",
+  "@socialRecoverySendMyPart": {
+    "description": "Guardian helper: send your part of the owner's profile"
+  },
+  "socialRecoveryRecoverProfileTitle": "Recover profile",
+  "@socialRecoveryRecoverProfileTitle": {
+    "description": "Recovery request screen: title"
+  },
+  "socialRecoveryRecoverIntro": "This phone will replace the profile now open on it with your previous profile. Your guardians send their parts, and once there are enough, the app restarts with your profile.",
+  "@socialRecoveryRecoverIntro": {
+    "description": "Recovery request: what happens to the profile now open on this phone"
+  },
+  "socialRecoveryShowCodeToGuardians": "Show code to guardians",
+  "@socialRecoveryShowCodeToGuardians": {
+    "description": "Recovery request: show the recovery code to the guardians"
+  },
+  "socialRecoveryShowCodeHint": "Show the code to a guardian or send it as text, then read these words to them by voice.",
+  "@socialRecoveryShowCodeHint": {
+    "description": "Recovery request: how to pass the code and the words to a guardian"
+  },
+  "socialRecoveryCopyCode": "Copy code",
+  "@socialRecoveryCopyCode": {
+    "description": "Recovery request: copy the recovery code to the clipboard"
+  },
+  "socialRecoveryWaitingGuardians": "Waiting for guardians",
+  "@socialRecoveryWaitingGuardians": {
+    "description": "Recovery request: no guardian parts have arrived yet"
+  },
+  "socialRecoveryReceivedProgress": "{received} of {threshold} received",
+  "@socialRecoveryReceivedProgress": {
+    "description": "Recovery request: how many guardian parts arrived out of the threshold",
+    "placeholders": {
+      "received": {
+        "type": "int"
+      },
+      "threshold": {
+        "type": "int"
+      }
+    }
+  },
+  "socialRecoveryPartDidNotFit": "One part did not fit. Ask another guardian.",
+  "@socialRecoveryPartDidNotFit": {
+    "description": "Recovery request: one guardian part failed to authenticate"
+  },
+  "socialRecoveryAssembleFailed": "Could not assemble the profile ({error}).",
+  "@socialRecoveryAssembleFailed": {
+    "description": "Recovery request: the profile could not be reassembled, with the raw error code",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "socialRecoveryCancel": "Cancel",
+  "@socialRecoveryCancel": {
+    "description": "Recovery request: cancel the pending recovery"
+  },
+  "disappearingTitle": "Disappearing messages",
+  "@disappearingTitle": {
+    "description": "Title of the shared chat timer setting (messages vanish for everyone)"
+  },
+  "disappearingSubtitleOn": "{duration} · for everyone in the chat",
+  "@disappearingSubtitleOn": {
+    "description": "Subtitle when the shared timer is on",
+    "placeholders": {
+      "duration": {}
+    }
+  },
+  "disappearingDialogHint": "Messages are deleted from every participant's devices when the time runs out. This does not protect against screenshots or against devices with an old version of the app.",
+  "@disappearingDialogHint": {
+    "description": "Honest explanation in the timer picker"
+  },
+  "disappearingCustom": "Custom…",
+  "@disappearingCustom": {
+    "description": "Picker option to enter a custom duration"
+  },
+  "disappearingCustomTitle": "Custom time",
+  "@disappearingCustomTitle": {
+    "description": "Title of the custom duration dialog"
+  },
+  "disappearingCustomHint": "From {min} to {max}",
+  "@disappearingCustomHint": {
+    "description": "Allowed range in the custom duration dialog",
+    "placeholders": {
+      "min": {},
+      "max": {}
+    }
+  },
+  "disappearingUnitSeconds": "seconds",
+  "@disappearingUnitSeconds": {
+    "description": "Unit in the custom duration dialog"
+  },
+  "disappearingUnitMinutes": "minutes",
+  "@disappearingUnitMinutes": {
+    "description": "Unit in the custom duration dialog"
+  },
+  "disappearingUnitHours": "hours",
+  "@disappearingUnitHours": {
+    "description": "Unit in the custom duration dialog"
+  },
+  "disappearingUnitDays": "days",
+  "@disappearingUnitDays": {
+    "description": "Unit in the custom duration dialog"
+  },
+  "disappearingCustomInvalid": "Enter a number within the allowed range",
+  "@disappearingCustomInvalid": {
+    "description": "Validation error in the custom duration dialog"
+  },
+  "disappearingBannerOn": "Disappearing messages: {duration}",
+  "@disappearingBannerOn": {
+    "description": "Banner in a chat with the shared timer on",
+    "placeholders": {
+      "duration": {}
+    }
+  },
+  "disappearingPeerOutdated": "Your contact has an old version of the app — messages will not disappear on their side.",
+  "@disappearingPeerOutdated": {
+    "description": "Warning when a contact device does not understand the timer"
+  },
+  "disappearingOwnOutdated": "One of your devices has an old version of the app — messages will not disappear there.",
+  "@disappearingOwnOutdated": {
+    "description": "Warning when one of my own devices does not understand the timer"
+  },
+  "disappearingSupportUnknown": "Could not check your contact's app version.",
+  "@disappearingSupportUnknown": {
+    "description": "Warning when the relay could not tell whether the contact understands the timer"
+  },
+  "disappearingChipTooltip": "Disappearing messages — for everyone in the chat",
+  "@disappearingChipTooltip": {
+    "description": "Tooltip on the timer chip in the chat header"
+  },
+  "disappearingUpdated": "Disappearing messages timer changed",
+  "@disappearingUpdated": {
+    "description": "Toast after changing the shared timer"
+  },
+  "disappearingSetFailed": "Could not change the timer",
+  "@disappearingSetFailed": {
+    "description": "Error after a failed timer change"
+  },
+  "disappearingAdminOnly": "Only the owner and admins can change the timer",
+  "@disappearingAdminOnly": {
+    "description": "Hint when a room member without rights taps the shared timer"
+  },
+  "disappearingRoomOutdated": "Some members have an old version of the app — messages will not disappear for them.",
+  "@disappearingRoomOutdated": {
+    "description": "Warning in a room when some members do not understand the timer"
+  },
+  "disappearingQuoteGone": "Message disappeared",
+  "@disappearingQuoteGone": {
+    "description": "Quote placeholder when the replied-to message has disappeared by its timer"
+  },
+  "serverAuthAlertTitle": "Server response failed verification",
+  "@serverAuthAlertTitle": {
+    "description": "Б3: banner title when a server response failed signature verification (possible interception)"
+  },
+  "serverAuthAlertBody": "Someone between you and the Secretly server may be tampering with data. Your existing chats stay protected and keep working. New contacts and devices won’t be accepted until this clears. Try another network or a proxy.",
+  "@serverAuthAlertBody": {
+    "description": "Б3: banner body — what happened, what is still safe, what to do"
+  },
+  "serverAuthAlertDismiss": "Got it",
+  "@serverAuthAlertDismiss": {
+    "description": "Б3: button that hides the server verification banner"
+  },
+  "stickerPackAccessTitle": "Who can add this pack",
+  "@stickerPackAccessTitle": {
+    "description": "Heading above the open/closed choice when creating or editing an own sticker pack."
+  },
+  "stickerPackAccessOpen": "Open",
+  "@stickerPackAccessOpen": {
+    "description": "Sticker pack access mode: friends can add the pack (peer-to-peer, no server)."
+  },
+  "stickerPackAccessOpenHint": "People you send a sticker to can add the whole pack. It never goes to the server.",
+  "@stickerPackAccessOpenHint": {
+    "description": "One-line explanation under the Open option."
+  },
+  "stickerPackAccessClosed": "Closed",
+  "@stickerPackAccessClosed": {
+    "description": "Sticker pack access mode: only the author has the pack."
+  },
+  "stickerPackAccessClosedHint": "Only you have the pack. People will see the stickers you send them but can't add the pack. Stickers you send stay on their device anyway — this doesn't stop screenshots.",
+  "@stickerPackAccessClosedHint": {
+    "description": "Honest explanation under the Closed option: UI restriction, not cryptography."
+  },
+  "stickerPackClosedExistingNote": "Anyone who already added this pack keeps it.",
+  "@stickerPackClosedExistingNote": {
+    "description": "Shown when switching an existing pack to Closed."
+  },
+  "stickerPackClosedLabel": "Closed pack",
+  "@stickerPackClosedLabel": {
+    "description": "Subtitle on a recipient's pack sheet for a closed pack."
+  },
+  "stickerPackClosedNote": "The author doesn't allow adding this pack",
+  "@stickerPackClosedNote": {
+    "description": "Replaces the Add button on a closed pack."
+  },
+  "stickerCreateFromPhoto": "From photo",
+  "@stickerCreateFromPhoto": {
+    "description": "Sticker creation source: from a photo."
+  },
+  "stickerCreateTextOnly": "Text sticker",
+  "@stickerCreateTextOnly": {
+    "description": "Sticker creation source: text only."
+  },
+  "stickerCreateFailed": "Could not create sticker: {error}",
+  "@stickerCreateFailed": {
+    "description": "Error while creating a sticker.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "stickerPackMissingNote": "{count, plural, one{{count} more sticker didn't transfer — the author may be on an older app version} other{{count} more stickers didn't transfer — the author may be on an older app version}}",
+  "@stickerPackMissingNote": {
+    "description": "Recipient pack sheet: some stickers did not arrive.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "stickerAddedToPack": "Sticker added to the pack",
+  "@stickerAddedToPack": {
+    "description": "Snackbar after saving a sticker to a pack."
+  },
+  "stickerSaveFailed": "Couldn't save: {error}",
+  "@stickerSaveFailed": {
+    "description": "Error while saving a sticker.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "stickerFavoritesPackTitle": "Favorites",
+  "@stickerFavoritesPackTitle": {
+    "description": "Name of the own Favorites sticker pack."
+  },
+  "stickerAddedToFavorites": "Sticker added to favorites",
+  "@stickerAddedToFavorites": {
+    "description": "Snackbar after adding a sticker to Favorites."
+  },
+  "stickerAnimationUnavailable": "Animation isn't available on this device",
+  "@stickerAnimationUnavailable": {
+    "description": "Animated sticker could not be produced."
+  },
+  "stickerMotionPickTitle": "Choose a motion effect",
+  "@stickerMotionPickTitle": {
+    "description": "Title of the motion-effect picker."
+  },
+  "stickerMotionSlow": "Slow",
+  "@stickerMotionSlow": {
+    "description": "Motion speed."
+  },
+  "stickerMotionNormal": "Normal",
+  "@stickerMotionNormal": {
+    "description": "Motion speed."
+  },
+  "stickerMotionFast": "Fast",
+  "@stickerMotionFast": {
+    "description": "Motion speed."
+  },
+  "stickerMotionPulse": "Pulse",
+  "@stickerMotionPulse": {
+    "description": "Motion effect."
+  },
+  "stickerMotionBounce": "Bounce",
+  "@stickerMotionBounce": {
+    "description": "Motion effect."
+  },
+  "stickerMotionWobble": "Wobble",
+  "@stickerMotionWobble": {
+    "description": "Motion effect."
+  },
+  "stickerMotionTada": "Ta-da",
+  "@stickerMotionTada": {
+    "description": "Motion effect."
+  },
+  "stickerReadyTitle": "Your sticker",
+  "@stickerReadyTitle": {
+    "description": "Title of the finished-sticker screen."
+  },
+  "stickerPickEmojiHint": "Pick emoji that match this sticker",
+  "@stickerPickEmojiHint": {
+    "description": "Hint above emoji choices for a new sticker."
+  },
+  "stickerSend": "Send sticker",
+  "@stickerSend": {
+    "description": "Action on the finished-sticker screen."
+  },
+  "stickerAnimating": "Animating…",
+  "@stickerAnimating": {
+    "description": "Progress while the sticker is being animated."
+  },
+  "stickerChangeMotion": "Change motion",
+  "@stickerChangeMotion": {
+    "description": "Action: pick another motion effect."
+  },
+  "stickerAnimatePremium": "Animate · Premium",
+  "@stickerAnimatePremium": {
+    "description": "Action: animate the sticker (Premium)."
+  },
+  "stickerMakeFavorite": "Add to favorites",
+  "@stickerMakeFavorite": {
+    "description": "Action: save the sticker to Favorites."
+  },
+  "stickerAddToPack": "Add to pack",
+  "@stickerAddToPack": {
+    "description": "Action: save the sticker to a pack."
+  },
+  "stickerBack": "Back",
+  "@stickerBack": {
+    "description": "Back from the pack chooser."
+  },
+  "stickerNewPack": "New pack",
+  "@stickerNewPack": {
+    "description": "Create a new sticker pack."
+  },
+  "stickerNewPackHint": "Give the pack a name.",
+  "@stickerNewPackHint": {
+    "description": "Hint in the new-pack dialog."
+  },
+  "stickerCreate": "Create",
+  "@stickerCreate": {
+    "description": "Confirm button in the new-pack dialog."
+  },
+  "stickerEditorObjectNotFound": "No object found",
+  "@stickerEditorObjectNotFound": {
+    "description": "Sticker editor: cutout found nothing."
+  },
+  "stickerEditorPickObject": "Select an object",
+  "@stickerEditorPickObject": {
+    "description": "Sticker editor: nothing selected."
+  },
+  "stickerEditorText": "Text",
+  "@stickerEditorText": {
+    "description": "Sticker editor: text tool / text colour target."
+  },
+  "stickerEditorSelectObject": "Select the object",
+  "@stickerEditorSelectObject": {
+    "description": "Sticker editor title while selecting."
+  },
+  "stickerWord": "Sticker",
+  "@stickerWord": {
+    "description": "The word \"sticker\" (titles and previews)."
+  },
+  "stickerEditorUndo": "Undo",
+  "@stickerEditorUndo": {
+    "description": "Sticker editor tooltip."
+  },
+  "stickerEditorRedo": "Redo",
+  "@stickerEditorRedo": {
+    "description": "Sticker editor tooltip."
+  },
+  "stickerEditorDelete": "Delete",
+  "@stickerEditorDelete": {
+    "description": "Sticker editor tooltip."
+  },
+  "stickerEditorDone": "Done",
+  "@stickerEditorDone": {
+    "description": "Done (sticker editor and pack edit sheet)."
+  },
+  "stickerEditorBgNone": "No background",
+  "@stickerEditorBgNone": {
+    "description": "Text background style."
+  },
+  "stickerEditorBgSolid": "Fill",
+  "@stickerEditorBgSolid": {
+    "description": "Text background style."
+  },
+  "stickerEditorBgPill": "Label",
+  "@stickerEditorBgPill": {
+    "description": "Text background style."
+  },
+  "stickerEditorOutline": "Outline",
+  "@stickerEditorOutline": {
+    "description": "Sticker editor: outline tool."
+  },
+  "stickerEditorBackground": "Background",
+  "@stickerEditorBackground": {
+    "description": "Sticker editor: background tool / colour target."
+  },
+  "stickerEditorRecut": "Cut again",
+  "@stickerEditorRecut": {
+    "description": "Sticker editor: run cutout again."
+  },
+  "stickerEditorCut": "Cut out object",
+  "@stickerEditorCut": {
+    "description": "Sticker editor: cut out the object."
+  },
+  "stickerEditorDraw": "Draw",
+  "@stickerEditorDraw": {
+    "description": "Sticker editor tab."
+  },
+  "stickerEditorAdjust": "Adjust",
+  "@stickerEditorAdjust": {
+    "description": "Sticker editor tab."
+  },
+  "stickerEditorEmoji": "Emoji",
+  "@stickerEditorEmoji": {
+    "description": "Sticker editor tab."
+  },
+  "stickerEditorExposure": "Exposure",
+  "@stickerEditorExposure": {
+    "description": "Sticker editor adjustment."
+  },
+  "stickerEditorContrast": "Contrast",
+  "@stickerEditorContrast": {
+    "description": "Sticker editor adjustment."
+  },
+  "stickerEditorSaturation": "Saturation",
+  "@stickerEditorSaturation": {
+    "description": "Sticker editor adjustment."
+  },
+  "stickerEditorTapObjects": "Tap the objects to keep",
+  "@stickerEditorTapObjects": {
+    "description": "Sticker editor: several objects found."
+  },
+  "stickerEditorObjectSelected": "Object selected",
+  "@stickerEditorObjectSelected": {
+    "description": "Sticker editor: one object found."
+  },
+  "stickerPackInstallFailed": "Failed to install sticker pack: {error}",
+  "@stickerPackInstallFailed": {
+    "description": "Catalog pack install failed.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "stickerPackRemoveFailed": "Failed to remove sticker pack: {error}",
+  "@stickerPackRemoveFailed": {
+    "description": "Catalog pack removal failed.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "stickerPackRemoveTitle": "Remove sticker pack?",
+  "@stickerPackRemoveTitle": {
+    "description": "Confirm removing a catalog pack."
+  },
+  "stickerPackRemoveBody": "Pack \"{title}\" will stay in the catalog, but its local files will be removed.",
+  "@stickerPackRemoveBody": {
+    "description": "Body of the remove-pack dialog.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "stickerPackRemoveAction": "Remove",
+  "@stickerPackRemoveAction": {
+    "description": "Confirm button: remove pack."
+  },
+  "stickerPackRemovedSnack": "Removed \"{title}\" from this device.",
+  "@stickerPackRemovedSnack": {
+    "description": "Snackbar after removing a catalog pack.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "stickerPackEdit": "edit",
+  "@stickerPackEdit": {
+    "description": "Small \"edit\" link next to an own pack."
+  },
+  "stickerPackCoverUpdated": "Pack cover updated",
+  "@stickerPackCoverUpdated": {
+    "description": "Snackbar after changing a pack cover."
+  },
+  "stickerPackFull": "This pack already has {max} stickers — create a new one",
+  "@stickerPackFull": {
+    "description": "Adding a sticker to a pack that already has the maximum number.",
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsGroupProfile": "Profile",
+  "@settingsGroupProfile": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupRecovery": "Recovery",
+  "@settingsGroupRecovery": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsCaptionAccountRestore": "Your ID and backup are what bring your account back on a new phone. Write the ID down and keep it apart from the phone.",
+  "@settingsCaptionAccountRestore": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupLeave": "Log out and delete",
+  "@settingsGroupLeave": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsCaptionLeave": "Logging out erases data on this device only. Deleting erases the profile on the server too, and it cannot be brought back.",
+  "@settingsCaptionLeave": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupGeneral": "General",
+  "@settingsGroupGeneral": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupMessages": "Messages",
+  "@settingsGroupMessages": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsCaptionMessages": "Anyone holding your phone can see the message text and name in a notification.",
+  "@settingsCaptionMessages": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupCalls": "Calls",
+  "@settingsGroupCalls": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupInApp": "Inside the app",
+  "@settingsGroupInApp": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsCaptionInApp": "Sounds and vibration while Secretly is open.",
+  "@settingsCaptionInApp": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupNotificationLook": "How notifications look",
+  "@settingsGroupNotificationLook": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupBackground": "In the background",
+  "@settingsGroupBackground": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupQr": "QR code",
+  "@settingsGroupQr": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupPersonal": "Personal",
+  "@settingsGroupPersonal": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupWhoCan": "Who can see and contact you",
+  "@settingsGroupWhoCan": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupNewChats": "New chats",
+  "@settingsGroupNewChats": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupSearchBlocking": "Search and blocking",
+  "@settingsGroupSearchBlocking": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupPhoneContacts": "Phone contacts",
+  "@settingsGroupPhoneContacts": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupInactive": "If I’m away for a long time",
+  "@settingsGroupInactive": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsCaptionInactive": "If you don’t open Secretly for this long, the account is deleted automatically.",
+  "@settingsCaptionInactive": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupAppLanguage": "App language",
+  "@settingsGroupAppLanguage": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupTranslation": "Translation",
+  "@settingsGroupTranslation": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupStatus": "Status",
+  "@settingsGroupStatus": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupBlocked": "If Secretly is blocked",
+  "@settingsGroupBlocked": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsCaptionBlocked": "Usually nothing needs setting up. A proxy and Orbot are for when the alternative paths did not help.",
+  "@settingsCaptionBlocked": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupOwnProxy": "Your own proxy",
+  "@settingsGroupOwnProxy": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupOffline": "Without internet",
+  "@settingsGroupOffline": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsCaptionOffline": "This is a file, not a live connection: your contact reads the messages when they open the file.",
+  "@settingsCaptionOffline": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsGroupHelpDelivery": "Help improve delivery",
+  "@settingsGroupHelpDelivery": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowItWorksTitle": "How it works",
+  "@netHowItWorksTitle": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowItWorksSubtitle": "Getting around blocks and sending without internet, in plain words",
+  "@netHowItWorksSubtitle": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowStep1Title": "How a message gets there",
+  "@netHowStep1Title": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowStep1Body": "Your phone encrypts the message before sending. The server keeps it encrypted while your contact is offline and hands it over when they come online. The server cannot read it.",
+  "@netHowStep1Body": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowStep2Title": "If Secretly is blocked",
+  "@netHowStep2Title": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowStep2Body": "“Try alternative paths” is on by default. The app tries a spare address, a copy of the server (a “mirror”) and large delivery networks (“CDN”) that are hard to block entirely. The first connection may take longer than usual.",
+  "@netHowStep2Body": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowStep3Title": "If that did not help",
+  "@netHowStep3Title": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowStep3Body": "Ask someone you trust for a proxy link and paste it under “Volunteer proxy”. You can also install Orbot, the Tor network app. This is slower, and Orbot uses battery.",
+  "@netHowStep3Body": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowStep4Title": "No internet at all",
+  "@netHowStep4Title": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowStep4Body": "Tap “Send without network”, pick your contact and pass the file on any way you like: a USB stick, AirDrop, Bluetooth. They open it in Secretly. The file holds only messages you already wrote in the last week. There is no live connection over Bluetooth or through nearby phones yet.",
+  "@netHowStep4Body": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowStep5Title": "Calls",
+  "@netHowStep5Title": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowStep5Body": "In “Privacy” you can hide your address in calls: the call goes through our server and your contact does not see your IP address. The delay may grow a little.",
+  "@netHowStep5Body": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowStep6Title": "So messages are not late",
+  "@netHowStep6Title": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "netHowStep6Body": "The phone’s system may put Secretly to sleep, and then messages arrive only when you open the app. “Reliability” shows what gets in the way of delivery.",
+  "@netHowStep6Body": {
+    "description": "Settings redesign 2026-11: group header/caption on a phone settings page"
+  },
+  "settingsHelpGotIt": "Got it",
+  "@settingsHelpGotIt": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHelpTip": "Tip",
+  "@settingsHelpTip": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHelpButton": "Explanation",
+  "@settingsHelpButton": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubAccountGroup": "Account & protection",
+  "@settingsHubAccountGroup": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubTalkGroup": "Communication",
+  "@settingsHubTalkGroup": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubConnectionGroup": "Connection",
+  "@settingsHubConnectionGroup": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubPhoneGroup": "Phone",
+  "@settingsHubPhoneGroup": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubMoreGroup": "More",
+  "@settingsHubMoreGroup": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubAccountSub": "Name, Secretly ID, QR, backup",
+  "@settingsHubAccountSub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubPrivacySub": "Who sees you and can message you",
+  "@settingsHubPrivacySub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubSecuritySub": "App lock, personal chats",
+  "@settingsHubSecuritySub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubDevicesSub": "Where your account is open",
+  "@settingsHubDevicesSub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubNotificationsSub": "Messages, rooms, calls",
+  "@settingsHubNotificationsSub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubChatsSub": "Theme, wallpapers, bubbles, icon",
+  "@settingsHubChatsSub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubLanguageSub": "App language and translation",
+  "@settingsHubLanguageSub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubNetworkSub": "How Secretly reaches its servers",
+  "@settingsHubNetworkSub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubOfflineSub": "Pass messages on as a file",
+  "@settingsHubOfflineSub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubReliabilitySub": "What can delay delivery",
+  "@settingsHubReliabilitySub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubSystemSub": "Reset and service messages",
+  "@settingsHubSystemSub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubInviteSub": "Share a link",
+  "@settingsHubInviteSub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubDonateSub": "Help the project",
+  "@settingsHubDonateSub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubSupportSub": "Write to us",
+  "@settingsHubSupportSub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubPolicySub": "What is stored and where",
+  "@settingsHubPolicySub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHubAboutSub": "Version and licences",
+  "@settingsHubAboutSub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsIntroAccount": "How others see you and how not to lose access to your chats.",
+  "@settingsIntroAccount": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsIntroPrivacy": "Decide who sees your details and who can contact you.",
+  "@settingsIntroPrivacy": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsIntroSecurity": "Protection in case your phone ends up in someone else’s hands.",
+  "@settingsIntroSecurity": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsIntroNotifications": "What to tell you and how. Start with the main switch.",
+  "@settingsIntroNotifications": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsIntroLanguage": "The language Secretly speaks to you in.",
+  "@settingsIntroLanguage": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsIntroNetwork": "How Secretly connects to its servers. Usually nothing here needs changing.",
+  "@settingsIntroNetwork": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsIntroOffline": "With no internet at all, you can pass messages on as a file — on a USB stick, over Bluetooth or through another messenger.",
+  "@settingsIntroOffline": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsIntroReliability": "We check whether the system keeps messages and calls from arriving on time.",
+  "@settingsIntroReliability": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsIntroPower": "Turn effects off if your phone gets warm or drains fast.",
+  "@settingsIntroPower": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsIntroStorage": "How much space Secretly takes on your phone.",
+  "@settingsIntroStorage": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsIntroSystem": "Service actions. Use them only if something went wrong.",
+  "@settingsIntroSystem": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsGroupShare": "Share",
+  "@settingsGroupShare": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsGroupMedia": "Media",
+  "@settingsGroupMedia": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsGroupData": "Data",
+  "@settingsGroupData": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsGroupLock": "Lock",
+  "@settingsGroupLock": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsGroupManual": "Manual setup",
+  "@settingsGroupManual": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsHelpManual": "Only needed if the alternative paths did not help. Pick one way: a proxy from a volunteer you know, SOCKS5, or Tor via Orbot.",
+  "@settingsHelpManual": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsGroupConnection": "Connection",
+  "@settingsGroupConnection": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsGroupSend": "Send",
+  "@settingsGroupSend": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsGroupReceive": "Receive",
+  "@settingsGroupReceive": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsOpenPersonalChats": "Open personal chats",
+  "@settingsOpenPersonalChats": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "settingsOpenPersonalChatsSub": "Your hidden chat collection",
+  "@settingsOpenPersonalChatsSub": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "offlineStep1Title": "Create a file",
+  "@offlineStep1Title": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "offlineStep1Body": "Pick a contact — the file holds your encrypted messages to them from the past week.",
+  "@offlineStep1Body": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "offlineStep2Title": "Pass it on any way",
+  "@offlineStep2Title": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "offlineStep2Body": "USB stick, Bluetooth, AirDrop, another messenger. Only the recipient can read the messages.",
+  "@offlineStep2Body": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "offlineStep3Title": "Your contact opens the file",
+  "@offlineStep3Title": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "offlineStep3Body": "In Secretly: “Without internet” → “Open a message file”. The messages appear in the chat.",
+  "@offlineStep3Body": {
+    "description": "Settings redesign by the owner's mockup (2026-11): phone settings hub/page text"
+  },
+  "translateSameLanguage": "The message is already in this language",
+  "@translateSameLanguage": {
+    "description": "Message translator (2026-11): reason shown when a translation could not be shown"
+  },
+  "translateUndetected": "Couldn’t tell the language. Pick the source language in Settings → Language.",
+  "@translateUndetected": {
+    "description": "Message translator (2026-11): reason shown when a translation could not be shown"
+  },
+  "translateUnsupported": "The on-device translator doesn’t know this language yet",
+  "@translateUnsupported": {
+    "description": "Message translator (2026-11): reason shown when a translation could not be shown"
+  },
+  "translateDownloadFailed": "Couldn’t download the language pack. Check your connection and tap again.",
+  "@translateDownloadFailed": {
+    "description": "Message translator (2026-11): reason shown when a translation could not be shown"
+  },
+  "translateFailed": "Couldn’t translate. Tap again.",
+  "@translateFailed": {
+    "description": "Message translator (2026-11): reason shown when a translation could not be shown"
+  },
+  "translateNothing": "There’s nothing to translate here",
+  "@translateNothing": {
+    "description": "Message translator (2026-11): reason shown when a translation could not be shown"
+  },
+  "translateDownloading": "Downloading the language pack — only needed once",
+  "@translateDownloading": {
+    "description": "Message translator (2026-11): reason shown when a translation could not be shown"
+  },
+  "translateButtonTooltip": "Translate",
+  "@translateButtonTooltip": {
+    "description": "Message translator (2026-11): reason shown when a translation could not be shown"
+  },
+  "attachmentMetadataScrubFailed": "Couldn’t remove the location and phone details from this file, so it wasn’t sent. Try another photo or send it as a file.",
+  "@attachmentMetadataScrubFailed": {
+    "description": "Shown when a photo or video could not be cleaned of location/camera metadata, so it was not sent (privacy, TZ E1 phase 2)"
+  },
+  "backupServerWrongPassword": "Wrong password, or there’s no backup for this profile ID. Check the ID, keyboard layout and letter case.",
+  "@backupServerWrongPassword": {
+    "description": "Server backup restore: the password does not match (K4). Also shown when there is no backup, so the answer does not reveal whether one exists."
+  },
+  "backupServerLocked": "Too many wrong passwords from this network. Try again after {time} or from another network.",
+  "@backupServerLocked": {
+    "description": "Server backup restore: too many wrong passwords from this network; {time} is a local clock time like 14:30 (K4)",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "backupServerSection": "Backup on the server",
+  "@backupServerSection": {
+    "description": "Backup screen: section header for the copy stored on the server (K8)"
+  },
+  "backupServerDelete": "Delete backup from server",
+  "@backupServerDelete": {
+    "description": "Backup screen: action that deletes this profile's encrypted backup from the server (K8)"
+  },
+  "backupServerDeleteFooter": "The encrypted backup is removed from the server. Backups on this device and in files stay.",
+  "@backupServerDeleteFooter": {
+    "description": "Backup screen: footer under the delete-from-server action (K8)"
+  },
+  "backupServerDeleteConfirmTitle": "Delete the backup from the server?",
+  "@backupServerDeleteConfirmTitle": {
+    "description": "Confirm dialog title before deleting the server backup (K8)"
+  },
+  "backupServerDeleteConfirmBody": "You won’t be able to restore your chats from the server on a new phone. Automatic backup to the server will be turned off. This can’t be undone.",
+  "@backupServerDeleteConfirmBody": {
+    "description": "Confirm dialog body before deleting the server backup (K8)"
+  },
+  "backupServerDeleteConfirm": "Delete",
+  "@backupServerDeleteConfirm": {
+    "description": "Confirm button for deleting the server backup (K8)"
+  },
+  "backupServerDeleteDone": "Backup deleted from the server",
+  "@backupServerDeleteDone": {
+    "description": "Snackbar after the server backup was deleted (K8)"
+  },
+  "backupServerDeleteNone": "There was no backup on the server",
+  "@backupServerDeleteNone": {
+    "description": "Snackbar when there was no server backup to delete (K8)"
+  },
+  "backupServerDeleteFailed": "Couldn’t delete the backup. Check your connection and try again.",
+  "@backupServerDeleteFailed": {
+    "description": "Snackbar when deleting the server backup failed (K8)"
+  },
+  "backupAutoErrorNoPassword": "Automatic backup isn’t running: the backup password isn’t set. Set it — without a password the backup can’t be encrypted.",
+  "@backupAutoErrorNoPassword": {
+    "description": "Backup screen footer: automatic backup cannot run because its password is not set"
+  },
+  "backupAutoErrorWeakPassword": "Automatic backup isn’t running: the backup password no longer meets the requirements. Set a new one.",
+  "@backupAutoErrorWeakPassword": {
+    "description": "Backup screen footer: automatic backup stopped because the saved password no longer meets the policy"
+  },
+  "backupKeystoreUnreadable": "Couldn’t read the “{slot}” key from the phone’s protected storage, so the backup wasn’t created. Your chats on this phone are intact. Contact support — this can be fixed without losing data.",
+  "@backupKeystoreUnreadable": {
+    "description": "Backup failed because Android's protected key storage could not decrypt one of the app's keys (AEADBadTagException). {slot} is a technical slot name.",
+    "placeholders": {
+      "slot": {
+        "type": "String"
+      }
+    }
+  },
+  "stickerDeleteTitle": "Delete sticker?",
+  "@stickerDeleteTitle": {
+    "description": "Title of the dialog confirming removal of one sticker from the user's own pack."
+  },
+  "stickerDeleteBody": "The sticker will be removed from “{title}”. Stickers already sent in chats stay there.",
+  "@stickerDeleteBody": {
+    "description": "Body of the dialog confirming removal of one sticker. {title} is the pack name.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "stickerDeleteLastTitle": "Delete the whole pack?",
+  "@stickerDeleteLastTitle": {
+    "description": "Title of the dialog shown when the user deletes the LAST sticker of their pack, which deletes the whole pack."
+  },
+  "stickerDeleteLastBody": "This is the last sticker in “{title}”. Deleting it deletes the whole pack.",
+  "@stickerDeleteLastBody": {
+    "description": "Body of the dialog when deleting the last sticker deletes the pack. {title} is the pack name.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "stickerDeleteAction": "Delete",
+  "@stickerDeleteAction": {
+    "description": "Destructive button in the sticker delete dialogs."
+  },
+  "stickerPackSettings": "Pack settings",
+  "@stickerPackSettings": {
+    "description": "Tooltip of the small gear next to the user's own sticker pack title."
+  },
+  "stickerMore": "More",
+  "@stickerMore": {
+    "description": "Tooltip of the small ⋯ button (more actions) on a sticker or someone else's pack."
+  },
+  "stickerPackRemoveFromMine": "Remove from my packs",
+  "@stickerPackRemoveFromMine": {
+    "description": "Action: remove someone else's sticker pack from your own panel only."
+  },
+  "stickerPackRemoveFromMineBody": "“{title}” will disappear from your panel. The author and others keep it; you can add it again by tapping a sticker from it in a chat.",
+  "@stickerPackRemoveFromMineBody": {
+    "description": "Body of the dialog removing someone else's pack from your panel. {title} is the pack name.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "stickerPackDeleteWhole": "Delete pack",
+  "@stickerPackDeleteWhole": {
+    "description": "Menu action in the user's own pack: delete the whole pack."
+  },
+  "stickerPackDeleteWholeTitle": "Delete pack?",
+  "@stickerPackDeleteWholeTitle": {
+    "description": "Title of the dialog confirming deletion of the user's own whole pack."
+  },
+  "stickerPackDeleteWholeBody": "The pack “{title}” will be deleted from this device. Stickers already sent stay in chats.",
+  "@stickerPackDeleteWholeBody": {
+    "description": "Body of the dialog deleting the user's own pack. {title} is the pack name. Stickers already sent stay in chats.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "stickerMakeCover": "Make cover",
+  "@stickerMakeCover": {
+    "description": "Action: make this sticker the cover (icon) of its pack."
+  },
+  "stickerRemoveFromFavorites": "Remove from favorites",
+  "@stickerRemoveFromFavorites": {
+    "description": "Action: remove a sticker from the Favorites pack."
+  },
+  "stickerRemovedFromFavorites": "Removed from favorites",
+  "@stickerRemovedFromFavorites": {
+    "description": "Snack after removing a sticker from Favorites."
+  },
+  "stickerAddToThisPack": "Add to “{title}”",
+  "@stickerAddToThisPack": {
+    "description": "Primary action in the new-sticker preview when it was opened from a pack's + tile. {title} is the pack name.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "stickerAddSticker": "Add sticker",
+  "@stickerAddSticker": {
+    "description": "Tooltip of the + tile in a pack: add a new sticker to this pack."
+  }
 }

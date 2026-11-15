@@ -12,6 +12,12 @@ Changes made by the Secretly project:
 - `android/build.gradle` depends on `com.antonkarpenko:ffmpeg-kit-full:2.1.0`
   (LGPL) instead of `ffmpeg-kit-full-gpl:2.1.0`.
 - The `example/` app is not included.
+- `android/.../FFmpegKitFlutterPlugin.java` checks once whether the FFmpeg
+  native libraries are present (`isNativeAvailable`) before touching
+  `FFmpegKitConfig`, whose static initialiser loads them. The lightweight
+  Android build ships without those libraries; without this check the plugin
+  would throw while attaching to the activity and the app would not start.
+  Method calls then answer with the error `NATIVE_UNAVAILABLE`.
 
 macOS and Windows are unchanged: the desktop apps keep the GPL build of FFmpeg
 (distributed with its license text and source information).

@@ -21,7 +21,7 @@ import 'hover_listener.dart';
 ///
 /// Геометрия из макета: плашка с полем 3, радиус 9, сегмент высотой 22,
 /// выбранный залит белым с альфой .12, подпись 11/700.
-class DesktopSegmented<T> extends StatelessWidget {
+class DesktopSegmented<T> extends StatefulWidget {
   const DesktopSegmented({
     super.key,
     required this.values,
@@ -30,61 +30,133 @@ class DesktopSegmented<T> extends StatelessWidget {
     required this.onChanged,
   });
 
-  /// Значения по порядку слева направо.
   final List<T> values;
-
-  /// Подписи той же длины, что [values].
   final List<String> labels;
-
   final T value;
   final ValueChanged<T> onChanged;
 
   @override
+  State<DesktopSegmented<T>> createState() => _DesktopSegmentedState<T>();
+}
+
+/// 🔴 ВЫБОР ПЕРЕЕЗЖАЕТ, А НЕ ЗАГОРАЕТСЯ (05.10.2026, «плавно и дорого»).
+///
+/// Подложка выбранного значения — одна на весь переключатель и скользит к
+/// новому значению. Пока размеры сегментов не измерены (первый кадр),
+/// подложку рисует сам выбранный сегмент — без вспышки и без прыжка.
+class _DesktopSegmentedState<T> extends State<DesktopSegmented<T>> {
+  final GlobalKey _stackKey = GlobalKey();
+  List<GlobalKey> _keys = const <GlobalKey>[];
+  List<Rect>? _rects;
+
+  void _syncKeys() {
+    if (_keys.length != widget.values.length) {
+      _keys = List<GlobalKey>.generate(
+        widget.values.length,
+        (_) => GlobalKey(),
+      );
+      _rects = null;
+    }
+  }
+
+  void _measure(Duration _) {
+    if (!mounted) return;
+    final stack = _stackKey.currentContext?.findRenderObject() as RenderBox?;
+    if (stack == null || !stack.hasSize) return;
+    final rects = <Rect>[];
+    for (final k in _keys) {
+      final box = k.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) return;
+      final topLeft = box.localToGlobal(Offset.zero, ancestor: stack);
+      rects.add(topLeft & box.size);
+    }
+    final old = _rects;
+    var same = old != null && old.length == rects.length;
+    for (var i = 0; same && i < rects.length; i++) {
+      same = (old![i].left - rects[i].left).abs() < 0.5 &&
+          (old[i].width - rects[i].width).abs() < 0.5;
+    }
+    if (!same) setState(() => _rects = rects);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
-    assert(values.length == labels.length);
-    // 🔴 Тон — от схемы (30.09.2026, ТЗ §8): белые полупрозрачные подложки на
-    // светлой схеме не видны, и выбранный сегмент ничем не отличался.
+    assert(widget.values.length == widget.labels.length);
+    _syncKeys();
+    WidgetsBinding.instance.addPostFrameCallback(_measure);
     final ink = c.isDark ? Colors.white : Colors.black;
+    final activeFill = ink.withValues(alpha: c.isDark ? 0.12 : 0.10);
+    final activeIndex = widget.values.indexOf(widget.value);
+    final rects = _rects;
+    final pillRect =
+        rects != null && activeIndex >= 0 && activeIndex < rects.length
+        ? rects[activeIndex]
+        : null;
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: ink.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(9),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Stack(
+        key: _stackKey,
         children: [
-          for (var i = 0; i < values.length; i++)
-            HoverListener(
-              onTap: () => onChanged(values[i]),
-              cursor: SystemMouseCursors.click,
-              builder: (ctx, hovered, pressed) {
-                final active = values[i] == value;
-                return AnimatedContainer(
-                  duration: DMotion.fast,
-                  height: 22,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: active
-                        ? ink.withValues(alpha: c.isDark ? 0.12 : 0.10)
-                        : (hovered
-                              ? ink.withValues(alpha: 0.06)
-                              : Colors.transparent),
-                    borderRadius: BorderRadius.circular(7),
-                  ),
-                  child: Text(
-                    labels[i],
-                    style: DType.tiny.copyWith(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: active ? c.textPrimary : c.textSecondary,
-                    ),
-                  ),
-                );
-              },
+          if (pillRect != null)
+            AnimatedPositioned(
+              duration: DMotion.of(context, DMotion.glide),
+              curve: DMotion.glideCurve,
+              left: pillRect.left,
+              top: pillRect.top,
+              width: pillRect.width,
+              height: pillRect.height,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: activeFill,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+              ),
             ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < widget.values.length; i++)
+                HoverListener(
+                  key: _keys[i],
+                  onTap: () => widget.onChanged(widget.values[i]),
+                  cursor: SystemMouseCursors.click,
+                  builder: (ctx, hovered, pressed) {
+                    final active = widget.values[i] == widget.value;
+                    return AnimatedContainer(
+                      duration: DMotion.fast,
+                      height: 22,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: active
+                            ? (pillRect == null
+                                  ? activeFill
+                                  : Colors.transparent)
+                            : (hovered
+                                  ? ink.withValues(alpha: 0.06)
+                                  : Colors.transparent),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: AnimatedDefaultTextStyle(
+                        duration: DMotion.of(ctx, DMotion.base),
+                        curve: DMotion.standard,
+                        style: DType.tiny.copyWith(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: active ? c.textPrimary : c.textSecondary,
+                        ),
+                        child: Text(widget.labels[i]),
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
         ],
       ),
     );

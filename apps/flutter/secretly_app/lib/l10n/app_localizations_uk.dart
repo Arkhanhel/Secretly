@@ -718,6 +718,91 @@ class AppLocalizationsUk extends AppLocalizations {
   String get attachmentTransferUnavailable => 'Зараз не вдалося передати вкладення. Перевірте інтернет/сервер і спробуйте ще раз.';
 
   @override
+  String get startupRetry => 'Повторити';
+
+  @override
+  String get onboardingBackupLater => 'Резервну копію ще не ввімкнено — профіль ще створюється. Увімкніть її пізніше в Налаштуваннях.';
+
+  @override
+  String get keepMediaTitle => 'Зберігати медіа на пристрої';
+
+  @override
+  String get keepMediaForever => 'Завжди';
+
+  @override
+  String get keepMediaMonth => '1 місяць';
+
+  @override
+  String get keepMediaWeek => '1 тиждень';
+
+  @override
+  String get keepMediaHint => 'Завантажені фото, відео та файли, старші за строк, видаляються з телефона. Повідомлення лишаються; медіа, якого вже немає на сервері (старше 7 днів), і надіслані вами видаляться назавжди.';
+
+  @override
+  String get chatMediaTitle => 'Медіа за чатами';
+
+  @override
+  String get chatMediaShow => 'Порахувати за чатами';
+
+  @override
+  String chatMediaFilesCount(int count) {
+    return '$count файлів';
+  }
+
+  @override
+  String get chatMediaDeleteTitle => 'Видалити медіа чату?';
+
+  @override
+  String get chatMediaDeleteBody => 'Завантажені фото, відео та файли цього чату видаляться з телефона, повідомлення лишаться. Те, що ще є на сервері (до 7 днів), можна буде завантажити знову; решта — надіслане вами й старіше — видалиться назавжди.';
+
+  @override
+  String get chatMediaDeleteConfirm => 'Видалити';
+
+  @override
+  String get chatMediaEmpty => 'Завантажених медіа в чатах немає';
+
+  @override
+  String galleryShowMore(int count) {
+    return 'Показати ще (залишилось $count)';
+  }
+
+  @override
+  String get autoDownloadCellularTitle => 'Автозавантаження в мобільній мережі';
+
+  @override
+  String get autoDownloadEverything => 'Усе';
+
+  @override
+  String get autoDownloadUpTo15Mb => 'Фото, відео та файли до 15 МБ';
+
+  @override
+  String get autoDownloadPhotosOnly => 'Лише фото';
+
+  @override
+  String get autoDownloadNothing => 'Нічого, крім голосових';
+
+  @override
+  String get autoDownloadHint => 'Через Wi-Fi завантажується все. Відкладене завантажиться при підключенні до Wi-Fi або коли ви його відкриєте. Файли зберігаються на сервері 7 днів.';
+
+  @override
+  String get uploadNotSentTapToRetry => 'Не надіслано — торкніться, щоб повторити';
+
+  @override
+  String get uploadRetry => 'Повторити';
+
+  @override
+  String get attachmentExpiredOnServer => 'Файлу більше немає на сервері: він зберігається 7 днів.';
+
+  @override
+  String get attachmentServerRejectedSize => 'Файл завеликий для сервера. Надішліть менший файл або розділіть його.';
+
+  @override
+  String get attachmentServerStorageFull => 'На сервері зараз мало місця. Спробуйте пізніше.';
+
+  @override
+  String get attachmentUploadQuotaExceeded => 'Досягнуто межі обсягу файлів. Файли зберігаються 7 днів — спробуйте пізніше.';
+
+  @override
   String get attachmentSendUnavailable => 'Надсилання вкладень ще не готове. Спробуйте ще раз.';
 
   @override
@@ -1066,7 +1151,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onboardingWelcomeTitle => 'Вітаємо!';
 
   @override
-  String get onboardingWelcomeSubtitle => 'Месенджер нового покоління.\nПовна приватність. Без компромісів.';
+  String get onboardingWelcomeSubtitle => 'Месенджер нового покоління.\nПриватність за замовчуванням.';
 
   @override
   String get onboardingCreateAccount => 'Створити новий акаунт';
@@ -1081,16 +1166,16 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onboardingFeatureE2eBody => 'Повідомлення шифруються на вашому пристрої. Ключі є лише у вас.';
 
   @override
-  String get onboardingFeaturePrivacyTitle => 'Повна анонімність';
+  String get onboardingFeaturePrivacyTitle => 'Без особистих даних';
 
   @override
   String get onboardingFeaturePrivacyBody => 'Без номера телефону. Без прив’язки до особистих даних.';
 
   @override
-  String get onboardingFeatureRelayTitle => 'Без посередників';
+  String get onboardingFeatureRelayTitle => 'Сервер не читає';
 
   @override
-  String get onboardingFeatureRelayBody => 'Relay-сервер не зберігає повідомлення. Він лише передає їх.';
+  String get onboardingFeatureRelayBody => 'Сервер лише передає зашифровані повідомлення й видаляє їх після доставки.';
 
   @override
   String get onboardingProfileTitle => 'Ваш профіль';
@@ -3426,7 +3511,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopPrivacyEncryption => 'Шифрування';
 
   @override
-  String get desktopPrivacyEncryptionHint => 'Повідомлення, файли та дзвінки один на один захищено наскрізним шифруванням; ключі — лише на ваших пристроях. Групові дзвінки поки шифруються лише під час передавання.';
+  String get desktopPrivacyEncryptionHint => 'Повідомлення, файли та дзвінки один на один захищено наскрізним шифруванням; ключі — лише на ваших пристроях. Наскрізне шифрування групових дзвінків вмикається поступово: замок у дзвінку показує, що воно працює, а без нього дзвінок шифрується лише під час передавання.';
 
   @override
   String get desktopPrivacyE2eeActive => 'Наскрізне шифрування активне';
@@ -3847,7 +3932,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get desktopSecurityE2ee => 'Наскрізне шифрування';
 
   @override
-  String get desktopSecurityE2eeHint => 'Повідомлення, файли та дзвінки один на один шифруються на вашому пристрої, ключі не залишають ваші пристрої. Сервер не читає вміст, але бачить службові дані — наприклад, хто кому пише і коли. Групові дзвінки поки шифруються лише під час передавання.';
+  String get desktopSecurityE2eeHint => 'Повідомлення, файли та дзвінки один на один шифруються на вашому пристрої, ключі не залишають ваші пристрої. Сервер не читає вміст, але бачить службові дані — наприклад, хто кому пише і коли. Наскрізне шифрування групових дзвінків вмикається поступово: замок у дзвінку показує, що воно працює, а без нього дзвінок шифрується лише під час передавання.';
 
   @override
   String get desktopSecurityVerifiedDevices => 'Перевірені пристрої';
@@ -4932,6 +5017,9 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get desktopProfileEmojiStatusPremiumOnly => 'Емодзі-статус — у Premium; підписка оформлюється в застосунку на телефоні';
+
+  @override
+  String get desktopProfileCosmeticPremiumOnly => 'Ця рамка чи обкладинка — у Premium; підписка оформлюється в застосунку на телефоні';
 
   @override
   String desktopProfileApplyFailed(Object error) {
@@ -7042,4 +7130,1178 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get desktopSoundNameDefault => 'За замовчуванням';
+
+  @override
+  String get roomCallE2eeOn => 'Наскрізне шифрування';
+
+  @override
+  String get roomCallE2eeOnHint => 'Звук, відео та екран бачать лише учасники — наш сервер не бачить.';
+
+  @override
+  String get roomCallE2eeConnecting => 'Вмикаємо шифрування…';
+
+  @override
+  String get roomCallE2eeFailed => 'Не вдалося ввімкнути шифрування. З цього пристрою увійти не можна.';
+
+  @override
+  String get roomCallE2eeUnsupported => 'Захищені групові дзвінки поки недоступні на цьому пристрої.';
+
+  @override
+  String get roomCallE2eeWaitingKey => 'Чекаємо ключ';
+
+  @override
+  String get roomCallE2eeFailing => 'Не вдається розшифрувати — можливо, стара версія';
+
+  @override
+  String roomCallE2eeUnknownParticipants(int count) {
+    return 'Невідомих учасників не чути: $count';
+  }
+
+  @override
+  String get roomCallOpenBanner => 'Без наскрізного шифрування — сервер може бачити й чути дзвінок';
+
+  @override
+  String get roomCallJoinOpenTitle => 'Увійти в дзвінок без шифрування?';
+
+  @override
+  String get roomCallJoinOpenBody => 'Цей дзвінок без наскрізного шифрування: його почали в старій версії Secretly. Сервер може бачити й чути його.';
+
+  @override
+  String get roomCallJoinOpenAction => 'Все одно увійти';
+
+  @override
+  String get roomCallStartChoiceTitle => 'Почати захищений дзвінок?';
+
+  @override
+  String roomCallStartChoiceBody(String names) {
+    return 'Стара версія Secretly — не зможуть увійти: $names.';
+  }
+
+  @override
+  String get roomCallStartChoiceNotify => 'Написати в чат, що треба оновитися';
+
+  @override
+  String get roomCallStartEncrypted => 'Почати захищений';
+
+  @override
+  String get roomCallStartOpen => 'Почати без шифрування';
+
+  @override
+  String get roomCallUpdateNotice => 'Триває захищений дзвінок. Щоб увійти, оновіть Secretly.';
+
+  @override
+  String get roomCallE2eeScreenShareIos => 'Показ екрана з iPhone у захищеному дзвінку поки недоступний';
+
+  @override
+  String get roomCallFull => 'У захищеному дзвінку немає місць';
+
+  @override
+  String get roomPrivateTopicNew => 'Нова тема';
+
+  @override
+  String get roomPrivateTopicOpen => 'Відкрита';
+
+  @override
+  String get roomPrivateTopicOpenHint => 'Бачать усі учасники кімнати';
+
+  @override
+  String get roomPrivateTopicClosed => 'Закрита';
+
+  @override
+  String get roomPrivateTopicClosedHint => 'Лише запрошені. Інші не дізнаються про неї';
+
+  @override
+  String get roomPrivateTopicTitleHint => 'Назва теми';
+
+  @override
+  String get roomPrivateTopicMembers => 'Кого запросити';
+
+  @override
+  String get roomPrivateTopicOnlyYou => 'Поки лише ви — людей можна додати потім';
+
+  @override
+  String get roomPrivateTopicCreate => 'Створити';
+
+  @override
+  String get roomPrivateTopicFailed => 'Не вдалося створити закриту тему';
+
+  @override
+  String roomPrivateTopicLimit(int count) {
+    return 'Досягнуто межі закритих тем: $count';
+  }
+
+  @override
+  String get roomPrivateTopicLabel => 'Закрита тема';
+
+  @override
+  String roomPrivateTopicInRoom(String room) {
+    return 'Закрита тема · $room';
+  }
+
+  @override
+  String get roomPrivateTopicAllowMembers => 'Створювати закриті теми';
+
+  @override
+  String get spaceGateEnterCode => 'Введіть код';
+
+  @override
+  String get spaceGateWrongCode => 'Код не підходить. Спробуйте ще раз.';
+
+  @override
+  String spaceGateWaitSeconds(int seconds) {
+    return 'Почекайте $seconds с';
+  }
+
+  @override
+  String get spaceGateUnlock => 'Відкрити';
+
+  @override
+  String get spaceGateUseBiometrics => 'Біометрія';
+
+  @override
+  String get spaceGateBiometricReason => 'Розблокуйте Secretly';
+
+  @override
+  String get duressSetupTitle => 'Код примусу';
+
+  @override
+  String get duressSetupDescription => 'Цей код відкриває окремий порожній профіль замість вашого. Він має відрізнятися від справжнього коду. Хто побачить, як ви його вводите, побачить щойно встановлений месенджер.';
+
+  @override
+  String get duressSectionTitle => 'Код примусу';
+
+  @override
+  String get duressSectionSubtitleSet => 'Налаштовано. Другий код відкриває окремий порожній профіль.';
+
+  @override
+  String get duressSectionSubtitleUnset => 'Другий код, який відкриває окремий порожній профіль замість вашого.';
+
+  @override
+  String get duressSectionChange => 'Змінити';
+
+  @override
+  String get duressSectionSetUp => 'Задати';
+
+  @override
+  String get duressWipeMainTitle => 'Стирати основний профіль під час введення коду';
+
+  @override
+  String get duressWipeMainSubtitle => 'Необоротно. Відновлення — лише з Recovery Kit або резервної копії.';
+
+  @override
+  String get duressRemoveCode => 'Вилучити код примусу';
+
+  @override
+  String duressWipeAfterAttemptsTitle(int attempts) {
+    return 'Стирати все після $attempts невірних спроб';
+  }
+
+  @override
+  String get duressWipeAfterAttemptsSubtitle => 'Обидва профілі й сам замок. Після 3 невірних спроб уже діє затримка.';
+
+  @override
+  String get duressSectionFootnote => 'Захищає під час огляду «покажи телефон», але не під час експертизи пристрою. Біометрія завжди відкриває основний профіль. Щоб повернутися до нього з приманки, закрийте застосунок і введіть справжній код.';
+
+  @override
+  String get duressSaveFailed => 'Не вдалося зберегти налаштування.';
+
+  @override
+  String get netSettingsImportNoNewMessages => 'Нових повідомлень для цього пристрою немає.';
+
+  @override
+  String netSettingsImportReceived(int count) {
+    return 'Отримано повідомлень: $count';
+  }
+
+  @override
+  String get netSettingsImportNotEnvelopeFile => 'Це не файл повідомлень Secretly або він змінений.';
+
+  @override
+  String get netSettingsImportCouldNotOpen => 'Не вдалося відкрити файл.';
+
+  @override
+  String get netSettingsImportCouldNotRead => 'Не вдалося прочитати файл. Відкрийте його в Secretly: Налаштування → Без інтернету → «Відкрити файл повідомлень».';
+
+  @override
+  String get netSettingsPathDirect => 'Напряму';
+
+  @override
+  String get netSettingsPathFallback => 'За резервною адресою';
+
+  @override
+  String get netSettingsPathMirror => 'Через дзеркало';
+
+  @override
+  String get netSettingsPathCdn => 'Через CDN';
+
+  @override
+  String get netSettingsPathProxy => 'Через проксі';
+
+  @override
+  String get netSettingsPathSocks => 'Через SOCKS';
+
+  @override
+  String get netSettingsPathTor => 'Через Tor';
+
+  @override
+  String get netSettingsProxyHostError => 'Потрібне ім’я сервера, наприклад proxy.example.org';
+
+  @override
+  String get netSettingsSocksAddressError => 'Потрібна адреса вигляду 127.0.0.1:9050';
+
+  @override
+  String get netSettingsNoContactsYet => 'Контактів поки немає.';
+
+  @override
+  String get netSettingsPickRecipientTitle => 'Кому файл';
+
+  @override
+  String get netSettingsNothingToCarry => 'За тиждень цьому співрозмовнику нічого переносити.';
+
+  @override
+  String get netSettingsCouldNotCreateFile => 'Не вдалося створити файл.';
+
+  @override
+  String get netSettingsTitle => 'Мережа';
+
+  @override
+  String get netSettingsPathToServersTitle => 'Шлях до серверів';
+
+  @override
+  String get netSettingsPathDirectOff => 'Напряму. Обхідні шляхи вимкнені або недоступні.';
+
+  @override
+  String get netSettingsTryAlternativeTitle => 'Шукати обхідні шляхи';
+
+  @override
+  String get netSettingsTryAlternativeSubtitle => 'Коли прямий шлях закритий, застосунок сам пробує резервні адреси, дзеркала та проксі. Вміст і далі шифрується наскрізно.';
+
+  @override
+  String get netSettingsVolunteerProxyTitle => 'Проксі волонтера';
+
+  @override
+  String get netSettingsVolunteerProxyDescription => 'Посилання вигляду secretly://proxy#host. Власник проксі не бачить вмісту, але бачить, що ви користуєтеся Secretly.';
+
+  @override
+  String get netSettingsSocksTitle => 'SOCKS5 (наприклад, Tor через Orbot)';
+
+  @override
+  String get netSettingsSendWithoutNetworkTitle => 'Надіслати без мережі';
+
+  @override
+  String get netSettingsSendWithoutNetworkSubtitle => 'Файл з вашими зашифрованими повідомленнями співрозмовнику за тиждень. Передайте його будь-як — флешкою, Bluetooth, іншим месенджером.';
+
+  @override
+  String get netSettingsOpenMessageFileTitle => 'Відкрити файл повідомлень';
+
+  @override
+  String get netSettingsOpenMessageFileSubtitle => 'Файл .secretly від співрозмовника. Чужі та вже отримані повідомлення пропускаються.';
+
+  @override
+  String get netSettingsDeliveryReportsTitle => 'Знеособлені звіти про доставку';
+
+  @override
+  String get netSettingsDeliveryReportsSubtitle => 'Раз на добу: платформа, тип мережі, яким шляхом дійшло і які шляхи не працювали, країна за мовою системи. Без ідентифікаторів і адрес.';
+
+  @override
+  String get netSettingsOrbotTitle => 'Через Orbot (Tor)';
+
+  @override
+  String get netSettingsOrbotSubtitle => 'Підставить адресу SOCKS для Orbot — 127.0.0.1:9050. Установіть Orbot і запустіть його; перевірити, чи він працює, Secretly не може.';
+
+  @override
+  String get netSettingsOrbotDone => 'Адресу SOCKS виставлено на Orbot. Запустіть Orbot і повернїться.';
+
+  @override
+  String get netSettingsTorTitle => 'Tor як останній шлях';
+
+  @override
+  String get netSettingsTorSubtitle => 'Повільніше й витрачає батарею; увімкнеться лише тоді, коли все інше закрито.';
+
+  @override
+  String get socialRecoveryGuardiansTitle => 'Хранителі';
+
+  @override
+  String get socialRecoveryEntryGuardiansSubtitle => 'Друзі, які разом допоможуть повернути ваш профіль, якщо телефон втрачено. Поодинці вони не можуть нічого.';
+
+  @override
+  String get socialRecoveryHelpSomeoneTitle => 'Допомогти відновити';
+
+  @override
+  String get socialRecoveryHelpSomeoneSubtitle => 'Якщо ви чийсь хранитель.';
+
+  @override
+  String get socialRecoveryRecoverMineTitle => 'Відновити свій профіль';
+
+  @override
+  String get socialRecoveryRecoverMineSubtitle => 'На новому телефоні — за допомогою ваших хранителів.';
+
+  @override
+  String get socialRecoveryNeedTwoGuardians => 'Потрібно щонайменше двох хранителів.';
+
+  @override
+  String get socialRecoverySendSharesFailed => 'Не вдалося розіслати частки. Перевірте зв’язок.';
+
+  @override
+  String get socialRecoveryOwnerIntro => 'Ваш профіль ділиться на частини між хранителями. Щоб повернути його, потрібно стільки з них, скільки ви виберете. Вибирайте людей, яких ви впізнаєте за голосом і з якими ви звірили код безпеки.';
+
+  @override
+  String get socialRecoveryIsSetUp => 'Відновлення налаштовано';
+
+  @override
+  String get socialRecoveryWaitingConfirmations => 'Чекаємо підтверджень';
+
+  @override
+  String socialRecoveryConfirmedProgress(int accepted, int total, int threshold) {
+    return 'Підтвердили $accepted з $total. Потрібно $threshold для відновлення.';
+  }
+
+  @override
+  String get socialRecoveryGuardianHoldsPart => 'Зберігає частину';
+
+  @override
+  String get socialRecoveryGuardianNotSent => 'Не надіслано';
+
+  @override
+  String get socialRecoveryGuardianSentWaiting => 'Надіслано, чекаємо';
+
+  @override
+  String socialRecoveryPickContacts(int max) {
+    return 'Виберіть від 2 до $max контактів';
+  }
+
+  @override
+  String get socialRecoveryNoContactsYet => 'Контактів поки немає.';
+
+  @override
+  String socialRecoveryThresholdLabel(int threshold, int total) {
+    return 'Скільки хранителів потрібно для відновлення: $threshold з $total';
+  }
+
+  @override
+  String get socialRecoveryThresholdWarning => 'Стільки хранителів, змовившись, можуть відновити ваш профіль і без вас. Не вибирайте людей, які знають одне одного занадто добре.';
+
+  @override
+  String get socialRecoverySendParts => 'Розіслати частини';
+
+  @override
+  String get socialRecoveryUpdateGuardians => 'Оновити хранителів';
+
+  @override
+  String get socialRecoveryTurnOff => 'Вимкнути відновлення';
+
+  @override
+  String get socialRecoveryCodeScanTitle => 'Код відновлення';
+
+  @override
+  String get socialRecoveryNotRecoveryCode => 'Це не код відновлення.';
+
+  @override
+  String get socialRecoveryNoCodeInClipboard => 'У буфері немає коду відновлення.';
+
+  @override
+  String get socialRecoverySendFailed => 'Не вдалося надіслати. Перевірте зв’язок.';
+
+  @override
+  String get socialRecoveryHelpRecoverTitle => 'Допомогти відновити';
+
+  @override
+  String get socialRecoveryNotGuardianYet => 'Ви поки що нічий хранитель. Коли хтось вибере вас, тут з’явиться його ім’я.';
+
+  @override
+  String get socialRecoveryWhoAreYouHelping => 'Кому допомагаєте';
+
+  @override
+  String socialRecoveryThresholdOfGuardians(int threshold, int guardians) {
+    return 'Потрібно $threshold з $guardians хранителів';
+  }
+
+  @override
+  String get socialRecoveryScanCode => 'Сканувати код';
+
+  @override
+  String get socialRecoveryPasteCode => 'Вставити код';
+
+  @override
+  String get socialRecoveryCheckWordsByVoice => 'Звірте слова голосом';
+
+  @override
+  String get socialRecoveryCheckWordsExplanation => 'Зателефонуйте людині або зустріньтеся особисто. Попросіть прочитати слова з її екрана. Якщо хоч одне не збігається або ви не впевнені, що це вона, — не надсилайте. Саме так зловмисник може отримати чужий профіль.';
+
+  @override
+  String get socialRecoveryHeardWordsConfirm => 'Я почув ці слова від цієї людини';
+
+  @override
+  String get socialRecoverySent => 'Надіслано';
+
+  @override
+  String get socialRecoverySendMyPart => 'Надіслати свою частину';
+
+  @override
+  String get socialRecoveryRecoverProfileTitle => 'Відновити профіль';
+
+  @override
+  String get socialRecoveryRecoverIntro => 'Цей телефон замінить профіль, який зараз на ньому відкритий, вашим попереднім профілем. Хранителі надішлють свої частини, і щойно їх буде достатньо, застосунок перезапуститься вже з вашим профілем.';
+
+  @override
+  String get socialRecoveryShowCodeToGuardians => 'Показати код хранителям';
+
+  @override
+  String get socialRecoveryShowCodeHint => 'Покажіть код хранителю або надішліть текстом, а потім прочитайте йому ці слова голосом.';
+
+  @override
+  String get socialRecoveryCopyCode => 'Скопіювати код';
+
+  @override
+  String get socialRecoveryWaitingGuardians => 'Чекаємо хранителів';
+
+  @override
+  String socialRecoveryReceivedProgress(int received, int threshold) {
+    return 'Отримано $received з $threshold';
+  }
+
+  @override
+  String get socialRecoveryPartDidNotFit => 'Одна з частин не підійшла. Попросіть іншого хранителя.';
+
+  @override
+  String socialRecoveryAssembleFailed(String error) {
+    return 'Не вдалося зібрати профіль ($error).';
+  }
+
+  @override
+  String get socialRecoveryCancel => 'Скасувати';
+
+  @override
+  String get disappearingTitle => 'Зникаючі повідомлення';
+
+  @override
+  String disappearingSubtitleOn(Object duration) {
+    return '$duration · у всіх учасників';
+  }
+
+  @override
+  String get disappearingDialogHint => 'Повідомлення видаляються з пристроїв усіх учасників, коли спливає строк. Це не захищає від знімків екрана та від пристроїв зі старою версією застосунку.';
+
+  @override
+  String get disappearingCustom => 'Свій строк…';
+
+  @override
+  String get disappearingCustomTitle => 'Свій строк';
+
+  @override
+  String disappearingCustomHint(Object min, Object max) {
+    return 'Від $min до $max';
+  }
+
+  @override
+  String get disappearingUnitSeconds => 'секунд';
+
+  @override
+  String get disappearingUnitMinutes => 'хвилин';
+
+  @override
+  String get disappearingUnitHours => 'годин';
+
+  @override
+  String get disappearingUnitDays => 'днів';
+
+  @override
+  String get disappearingCustomInvalid => 'Введіть число в допустимих межах';
+
+  @override
+  String disappearingBannerOn(Object duration) {
+    return 'Зникаючі повідомлення: $duration';
+  }
+
+  @override
+  String get disappearingPeerOutdated => 'У співрозмовника стара версія застосунку — у нього повідомлення не зникнуть.';
+
+  @override
+  String get disappearingOwnOutdated => 'На одному з ваших пристроїв стара версія застосунку — там повідомлення не зникнуть.';
+
+  @override
+  String get disappearingSupportUnknown => 'Не вдалося перевірити версію застосунку співрозмовника.';
+
+  @override
+  String get disappearingChipTooltip => 'Зникаючі повідомлення — у всіх учасників';
+
+  @override
+  String get disappearingUpdated => 'Таймер зникаючих повідомлень змінено';
+
+  @override
+  String get disappearingSetFailed => 'Не вдалося змінити таймер';
+
+  @override
+  String get disappearingAdminOnly => 'Змінювати таймер можуть власник і адміністратори';
+
+  @override
+  String get disappearingRoomOutdated => 'У частини учасників стара версія застосунку — у них повідомлення не зникнуть.';
+
+  @override
+  String get disappearingQuoteGone => 'Повідомлення зникло';
+
+  @override
+  String get serverAuthAlertTitle => 'Відповідь сервера не пройшла перевірку';
+
+  @override
+  String get serverAuthAlertBody => 'Схоже, хтось між вами та сервером Secretly підміняє дані. Відкриті чати захищені й продовжують працювати. Нові контакти й пристрої не приймаються, доки це не мине. Спробуйте іншу мережу або проксі.';
+
+  @override
+  String get serverAuthAlertDismiss => 'Зрозуміло';
+
+  @override
+  String get stickerPackAccessTitle => 'Хто може додати набір';
+
+  @override
+  String get stickerPackAccessOpen => 'Відкритий';
+
+  @override
+  String get stickerPackAccessOpenHint => 'Той, кому ви надішлете стікер, зможе додати собі весь набір. На сервер набір не потрапляє.';
+
+  @override
+  String get stickerPackAccessClosed => 'Закритий';
+
+  @override
+  String get stickerPackAccessClosedHint => 'Набір буде лише у вас. Співрозмовники побачать надіслані стікери, але не зможуть додати набір. Надіслані стікери все одно залишаються на їхньому пристрої — знімку екрана це не завадить.';
+
+  @override
+  String get stickerPackClosedExistingNote => 'У тих, хто вже додав набір, він залишиться.';
+
+  @override
+  String get stickerPackClosedLabel => 'Закритий набір';
+
+  @override
+  String get stickerPackClosedNote => 'Автор не дозволив додавати цей набір';
+
+  @override
+  String get stickerCreateFromPhoto => 'З фото';
+
+  @override
+  String get stickerCreateTextOnly => 'Текстовий стікер';
+
+  @override
+  String stickerCreateFailed(String error) {
+    return 'Не вдалося створити стікер: $error';
+  }
+
+  @override
+  String stickerPackMissingNote(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Ще $count стікера не передалося — можливо, в автора стара версія застосунку',
+      many: 'Ще $count стікерів не передалося — можливо, в автора стара версія застосунку',
+      few: 'Ще $count стікери не передалися — можливо, в автора стара версія застосунку',
+      one: 'Ще $count стікер не передався — можливо, в автора стара версія застосунку',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get stickerAddedToPack => 'Стікер додано до набору';
+
+  @override
+  String stickerSaveFailed(String error) {
+    return 'Не вдалося зберегти: $error';
+  }
+
+  @override
+  String get stickerFavoritesPackTitle => 'Обране';
+
+  @override
+  String get stickerAddedToFavorites => 'Стікер додано в обране';
+
+  @override
+  String get stickerAnimationUnavailable => 'Анімація недоступна на цьому пристрої';
+
+  @override
+  String get stickerMotionPickTitle => 'Оберіть ефект руху';
+
+  @override
+  String get stickerMotionSlow => 'Повільно';
+
+  @override
+  String get stickerMotionNormal => 'Звичайно';
+
+  @override
+  String get stickerMotionFast => 'Швидко';
+
+  @override
+  String get stickerMotionPulse => 'Пульс';
+
+  @override
+  String get stickerMotionBounce => 'Стрибок';
+
+  @override
+  String get stickerMotionWobble => 'Хитання';
+
+  @override
+  String get stickerMotionTada => 'Та-да';
+
+  @override
+  String get stickerReadyTitle => 'Готовий стікер';
+
+  @override
+  String get stickerPickEmojiHint => 'Оберіть емодзі, що відповідають стікеру';
+
+  @override
+  String get stickerSend => 'Надіслати стікер';
+
+  @override
+  String get stickerAnimating => 'Оживляємо…';
+
+  @override
+  String get stickerChangeMotion => 'Змінити рух';
+
+  @override
+  String get stickerAnimatePremium => 'Оживити · Premium';
+
+  @override
+  String get stickerMakeFavorite => 'Додати в обране';
+
+  @override
+  String get stickerAddToPack => 'Додати до набору';
+
+  @override
+  String get stickerBack => 'Назад';
+
+  @override
+  String get stickerNewPack => 'Новий набір';
+
+  @override
+  String get stickerNewPackHint => 'Придумайте назву для набору.';
+
+  @override
+  String get stickerCreate => 'Створити';
+
+  @override
+  String get stickerEditorObjectNotFound => 'Об\'єкт не розпізнано';
+
+  @override
+  String get stickerEditorPickObject => 'Оберіть об\'єкт';
+
+  @override
+  String get stickerEditorText => 'Текст';
+
+  @override
+  String get stickerEditorSelectObject => 'Виділіть об\'єкт';
+
+  @override
+  String get stickerWord => 'Стікер';
+
+  @override
+  String get stickerEditorUndo => 'Скасувати';
+
+  @override
+  String get stickerEditorRedo => 'Повернути';
+
+  @override
+  String get stickerEditorDelete => 'Видалити';
+
+  @override
+  String get stickerEditorDone => 'Готово';
+
+  @override
+  String get stickerEditorBgNone => 'Без фону';
+
+  @override
+  String get stickerEditorBgSolid => 'Заливка';
+
+  @override
+  String get stickerEditorBgPill => 'Плашка';
+
+  @override
+  String get stickerEditorOutline => 'Контур';
+
+  @override
+  String get stickerEditorBackground => 'Фон';
+
+  @override
+  String get stickerEditorRecut => 'Вирізати знову';
+
+  @override
+  String get stickerEditorCut => 'Вирізати об\'єкт';
+
+  @override
+  String get stickerEditorDraw => 'Малюнок';
+
+  @override
+  String get stickerEditorAdjust => 'Корекція';
+
+  @override
+  String get stickerEditorEmoji => 'Емодзі';
+
+  @override
+  String get stickerEditorExposure => 'Експозиція';
+
+  @override
+  String get stickerEditorContrast => 'Контраст';
+
+  @override
+  String get stickerEditorSaturation => 'Насиченість';
+
+  @override
+  String get stickerEditorTapObjects => 'Натисніть на об\'єкти, які залишити';
+
+  @override
+  String get stickerEditorObjectSelected => 'Об\'єкт виділено';
+
+  @override
+  String stickerPackInstallFailed(String error) {
+    return 'Не вдалося встановити стікерпак: $error';
+  }
+
+  @override
+  String stickerPackRemoveFailed(String error) {
+    return 'Не вдалося видалити стікерпак: $error';
+  }
+
+  @override
+  String get stickerPackRemoveTitle => 'Видалити стікерпак?';
+
+  @override
+  String stickerPackRemoveBody(String title) {
+    return 'Пак \"$title\" залишиться в каталозі, але локальні файли буде видалено.';
+  }
+
+  @override
+  String get stickerPackRemoveAction => 'Видалити';
+
+  @override
+  String stickerPackRemovedSnack(String title) {
+    return 'Стікерпак \"$title\" видалено з пристрою.';
+  }
+
+  @override
+  String get stickerPackEdit => 'змінити';
+
+  @override
+  String get stickerPackCoverUpdated => 'Обкладинку набору оновлено';
+
+  @override
+  String stickerPackFull(int max) {
+    return 'У наборі вже $max стікерів — створіть новий';
+  }
+
+  @override
+  String get settingsGroupProfile => 'Профіль';
+
+  @override
+  String get settingsGroupRecovery => 'Відновлення';
+
+  @override
+  String get settingsCaptionAccountRestore => 'ID і резервна копія потрібні, щоб повернути акаунт на новому телефоні. Запишіть ID і зберігайте його окремо від телефона.';
+
+  @override
+  String get settingsGroupLeave => 'Вихід і видалення';
+
+  @override
+  String get settingsCaptionLeave => 'Вихід стирає дані лише на цьому пристрої. Видалення стирає профіль і на сервері — повернути його буде неможливо.';
+
+  @override
+  String get settingsGroupGeneral => 'Головне';
+
+  @override
+  String get settingsGroupMessages => 'Повідомлення';
+
+  @override
+  String get settingsCaptionMessages => 'Текст та ім’я в сповіщенні може побачити будь-хто, у кого в руках ваш телефон.';
+
+  @override
+  String get settingsGroupCalls => 'Дзвінки';
+
+  @override
+  String get settingsGroupInApp => 'Усередині застосунку';
+
+  @override
+  String get settingsCaptionInApp => 'Звуки й вібрація, поки Secretly відкритий.';
+
+  @override
+  String get settingsGroupNotificationLook => 'Який вигляд має сповіщення';
+
+  @override
+  String get settingsGroupBackground => 'Робота у фоні';
+
+  @override
+  String get settingsGroupQr => 'QR-код';
+
+  @override
+  String get settingsGroupPersonal => 'Особисте';
+
+  @override
+  String get settingsGroupWhoCan => 'Хто бачить і хто може писати';
+
+  @override
+  String get settingsGroupNewChats => 'Нові чати';
+
+  @override
+  String get settingsGroupSearchBlocking => 'Пошук і блокування';
+
+  @override
+  String get settingsGroupPhoneContacts => 'Контакти телефона';
+
+  @override
+  String get settingsGroupInactive => 'Якщо мене довго немає';
+
+  @override
+  String get settingsCaptionInactive => 'Якщо ви стільки часу не заходите в Secretly, акаунт видалиться сам.';
+
+  @override
+  String get settingsGroupAppLanguage => 'Мова застосунку';
+
+  @override
+  String get settingsGroupTranslation => 'Переклад';
+
+  @override
+  String get settingsGroupStatus => 'Стан';
+
+  @override
+  String get settingsGroupBlocked => 'Якщо Secretly заблоковано';
+
+  @override
+  String get settingsCaptionBlocked => 'Зазвичай нічого налаштовувати не треба. Проксі та Orbot — на випадок, якщо обхідні шляхи не допомогли.';
+
+  @override
+  String get settingsGroupOwnProxy => 'Власний проксі';
+
+  @override
+  String get settingsGroupOffline => 'Без інтернету';
+
+  @override
+  String get settingsCaptionOffline => 'Це файл, а не живий зв’язок: співрозмовник прочитає повідомлення, коли відкриє файл.';
+
+  @override
+  String get settingsGroupHelpDelivery => 'Допомогти покращити доставку';
+
+  @override
+  String get netHowItWorksTitle => 'Як це працює';
+
+  @override
+  String get netHowItWorksSubtitle => 'Простими словами: обхід блокувань і зв’язок без інтернету';
+
+  @override
+  String get netHowStep1Title => 'Як повідомлення доходить';
+
+  @override
+  String get netHowStep1Body => 'Телефон шифрує повідомлення до надсилання. Сервер зберігає його зашифрованим, поки співрозмовник не в мережі, і віддає, коли той з’явиться. Прочитати повідомлення сервер не може.';
+
+  @override
+  String get netHowStep2Title => 'Якщо Secretly заблоковано';
+
+  @override
+  String get netHowStep2Body => '«Шукати обхідні шляхи» увімкнено від початку. Застосунок сам пробує запасну адресу, копію сервера («дзеркало») і великі мережі доставки («CDN»), які важко заблокувати повністю. Перше підключення може тривати довше.';
+
+  @override
+  String get netHowStep3Title => 'Якщо й це не допомогло';
+
+  @override
+  String get netHowStep3Body => 'Попросіть у людини, якій довіряєте, посилання на проксі й вставте його в «Проксі волонтера». Можна встановити Orbot — застосунок мережі Tor. Це повільніше, і Orbot витрачає батарею.';
+
+  @override
+  String get netHowStep4Title => 'Зовсім без інтернету';
+
+  @override
+  String get netHowStep4Body => 'Натисніть «Надіслати без мережі», виберіть співрозмовника й передайте файл будь-яким способом: флешкою, AirDrop, Bluetooth. Він відкриє його в Secretly. У файл потрапляють лише вже написані повідомлення за останній тиждень. Живого зв’язку через Bluetooth або сусідні телефони поки немає.';
+
+  @override
+  String get netHowStep5Title => 'Дзвінки';
+
+  @override
+  String get netHowStep5Body => 'У «Приватності» можна приховати свою адресу в дзвінках: дзвінок піде через наш сервер, і співрозмовник не побачить вашу IP-адресу. Затримка може трохи зрости.';
+
+  @override
+  String get netHowStep6Title => 'Щоб повідомлення не запізнювалися';
+
+  @override
+  String get netHowStep6Body => 'Система телефона може «приспати» Secretly, і тоді повідомлення прийдуть, лише коли ви відкриєте застосунок. Що заважає доставці, видно в розділі «Надійність».';
+
+  @override
+  String get settingsHelpGotIt => 'Зрозуміло';
+
+  @override
+  String get settingsHelpTip => 'Порада';
+
+  @override
+  String get settingsHelpButton => 'Пояснення';
+
+  @override
+  String get settingsHubAccountGroup => 'Акаунт і захист';
+
+  @override
+  String get settingsHubTalkGroup => 'Спілкування';
+
+  @override
+  String get settingsHubConnectionGroup => 'Зв’язок';
+
+  @override
+  String get settingsHubPhoneGroup => 'Телефон';
+
+  @override
+  String get settingsHubMoreGroup => 'Ще';
+
+  @override
+  String get settingsHubAccountSub => 'Ім’я, Secretly ID, QR, резервна копія';
+
+  @override
+  String get settingsHubPrivacySub => 'Хто бачить вас і може написати';
+
+  @override
+  String get settingsHubSecuritySub => 'Блокування застосунку, особисті чати';
+
+  @override
+  String get settingsHubDevicesSub => 'Де відкрито ваш акаунт';
+
+  @override
+  String get settingsHubNotificationsSub => 'Повідомлення, кімнати, дзвінки';
+
+  @override
+  String get settingsHubChatsSub => 'Тема, фони, бульбашки, іконка';
+
+  @override
+  String get settingsHubLanguageSub => 'Мова застосунку і переклад';
+
+  @override
+  String get settingsHubNetworkSub => 'Як Secretly дістається серверів';
+
+  @override
+  String get settingsHubOfflineSub => 'Передати повідомлення файлом';
+
+  @override
+  String get settingsHubReliabilitySub => 'Що може затримувати доставлення';
+
+  @override
+  String get settingsHubSystemSub => 'Скидання і службові повідомлення';
+
+  @override
+  String get settingsHubInviteSub => 'Поділитися посиланням';
+
+  @override
+  String get settingsHubDonateSub => 'Допомогти проєкту';
+
+  @override
+  String get settingsHubSupportSub => 'Написати нам';
+
+  @override
+  String get settingsHubPolicySub => 'Що зберігається і де';
+
+  @override
+  String get settingsHubAboutSub => 'Версія і ліцензії';
+
+  @override
+  String get settingsIntroAccount => 'Як вас бачать інші і як не втратити доступ до листування.';
+
+  @override
+  String get settingsIntroPrivacy => 'Вирішіть, хто бачить ваші дані і хто може з вами зв’язатися.';
+
+  @override
+  String get settingsIntroSecurity => 'Захист від сторонніх, якщо телефон потрапив у чужі руки.';
+
+  @override
+  String get settingsIntroNotifications => 'Що і як вам повідомляти. Почніть із головного перемикача.';
+
+  @override
+  String get settingsIntroLanguage => 'Якою мовою з вами говорить Secretly.';
+
+  @override
+  String get settingsIntroNetwork => 'Як Secretly з’єднується із серверами. Зазвичай тут нічого не треба змінювати.';
+
+  @override
+  String get settingsIntroOffline => 'Якщо інтернету немає зовсім, повідомлення можна передати файлом — флешкою, через Bluetooth або інший месенджер.';
+
+  @override
+  String get settingsIntroReliability => 'Перевіряємо, чи не заважає система отримувати повідомлення і дзвінки вчасно.';
+
+  @override
+  String get settingsIntroPower => 'Вимкніть ефекти, якщо телефон гріється чи швидко сідає.';
+
+  @override
+  String get settingsIntroStorage => 'Скільки місця займає Secretly на телефоні.';
+
+  @override
+  String get settingsIntroSystem => 'Службові дії. Користуйтеся, лише якщо щось пішло не так.';
+
+  @override
+  String get settingsGroupShare => 'Поділитися';
+
+  @override
+  String get settingsGroupMedia => 'Медіа';
+
+  @override
+  String get settingsGroupData => 'Дані';
+
+  @override
+  String get settingsGroupLock => 'Блокування';
+
+  @override
+  String get settingsGroupManual => 'Ручне налаштування';
+
+  @override
+  String get settingsHelpManual => 'Потрібне, лише якщо обхідні шляхи не допомогли. Оберіть один спосіб: проксі від знайомого волонтера, SOCKS5 або Tor через Orbot.';
+
+  @override
+  String get settingsGroupConnection => 'З’єднання';
+
+  @override
+  String get settingsGroupSend => 'Надіслати';
+
+  @override
+  String get settingsGroupReceive => 'Отримати';
+
+  @override
+  String get settingsOpenPersonalChats => 'Відкрити особисті чати';
+
+  @override
+  String get settingsOpenPersonalChatsSub => 'Ваша прихована добірка чатів';
+
+  @override
+  String get offlineStep1Title => 'Створіть файл';
+
+  @override
+  String get offlineStep1Body => 'Оберіть співрозмовника — у файл потраплять ваші зашифровані повідомлення йому за останній тиждень.';
+
+  @override
+  String get offlineStep2Title => 'Передайте будь-яким способом';
+
+  @override
+  String get offlineStep2Body => 'Флешка, Bluetooth, AirDrop, інший месенджер. Прочитати повідомлення зможе лише одержувач.';
+
+  @override
+  String get offlineStep3Title => 'Співрозмовник відкриває файл';
+
+  @override
+  String get offlineStep3Body => 'У Secretly: «Без інтернету» → «Відкрити файл повідомлень». Повідомлення з’являться в чаті.';
+
+  @override
+  String get translateSameLanguage => 'Повідомлення вже цією мовою';
+
+  @override
+  String get translateUndetected => 'Не вдалося визначити мову. Оберіть мову оригіналу в Налаштуваннях → Мова.';
+
+  @override
+  String get translateUnsupported => 'Цієї мови перекладач на телефоні поки не знає';
+
+  @override
+  String get translateDownloadFailed => 'Не вдалося завантажити мовний пакет. Перевірте інтернет і натисніть ще раз.';
+
+  @override
+  String get translateFailed => 'Не вдалося перекласти. Натисніть ще раз.';
+
+  @override
+  String get translateNothing => 'Тут нічого перекладати';
+
+  @override
+  String get translateDownloading => 'Завантажуємо мовний пакет — це потрібно один раз';
+
+  @override
+  String get translateButtonTooltip => 'Перекласти';
+
+  @override
+  String get attachmentMetadataScrubFailed => 'Не вдалося прибрати з файлу місце зйомки й дані телефона, тому його не надіслано. Спробуйте інший знімок або надішліть його як файл.';
+
+  @override
+  String get backupServerWrongPassword => 'Пароль не підходить або копії з таким номером профілю немає. Перевірте номер, розкладку й регістр літер.';
+
+  @override
+  String backupServerLocked(String time) {
+    return 'Забагато неправильних паролів із цієї мережі. Спробуйте після $time або з іншої мережі.';
+  }
+
+  @override
+  String get backupServerSection => 'Копія на сервері';
+
+  @override
+  String get backupServerDelete => 'Видалити копію з сервера';
+
+  @override
+  String get backupServerDeleteFooter => 'Зашифрована копія зникне із сервера. Копії на цьому пристрої та у файлах залишаться.';
+
+  @override
+  String get backupServerDeleteConfirmTitle => 'Видалити копію з сервера?';
+
+  @override
+  String get backupServerDeleteConfirmBody => 'Відновити листування із сервера на новому телефоні буде неможливо. Автокопія на сервер вимкнеться. Скасувати це не можна.';
+
+  @override
+  String get backupServerDeleteConfirm => 'Видалити';
+
+  @override
+  String get backupServerDeleteDone => 'Копію видалено із сервера';
+
+  @override
+  String get backupServerDeleteNone => 'На сервері копії не було';
+
+  @override
+  String get backupServerDeleteFailed => 'Не вдалося видалити копію. Перевірте інтернет і спробуйте ще раз.';
+
+  @override
+  String get backupAutoErrorNoPassword => 'Автокопія не створюється: не задано пароль копії. Задайте його — без пароля копію нічим зашифрувати.';
+
+  @override
+  String get backupAutoErrorWeakPassword => 'Автокопія не створюється: пароль копії більше не відповідає вимогам. Задайте новий.';
+
+  @override
+  String backupKeystoreUnreadable(String slot) {
+    return 'Не вдається прочитати ключ «$slot» із захищеного сховища телефона, тому копію не створено. Листування на телефоні ціле. Напишіть у підтримку — це виправляється без втрати даних.';
+  }
+
+  @override
+  String get stickerDeleteTitle => 'Видалити стікер?';
+
+  @override
+  String stickerDeleteBody(String title) {
+    return 'Стікер зникне з набору «$title». Уже надіслані в листування залишаться.';
+  }
+
+  @override
+  String get stickerDeleteLastTitle => 'Видалити весь набір?';
+
+  @override
+  String stickerDeleteLastBody(String title) {
+    return 'Це останній стікер у «$title». Разом із ним видалиться весь набір.';
+  }
+
+  @override
+  String get stickerDeleteAction => 'Видалити';
+
+  @override
+  String get stickerPackSettings => 'Налаштування набору';
+
+  @override
+  String get stickerMore => 'Ще';
+
+  @override
+  String get stickerPackRemoveFromMine => 'Прибрати з моїх наборів';
+
+  @override
+  String stickerPackRemoveFromMineBody(String title) {
+    return '«$title» зникне з вашої панелі. В автора та інших набір залишиться — додати його знову можна, натиснувши на стікер із нього в листуванні.';
+  }
+
+  @override
+  String get stickerPackDeleteWhole => 'Видалити набір';
+
+  @override
+  String get stickerPackDeleteWholeTitle => 'Видалити набір?';
+
+  @override
+  String stickerPackDeleteWholeBody(String title) {
+    return 'Набір «$title» буде видалено з цього пристрою. Уже надіслані стікери залишаться в листуванні.';
+  }
+
+  @override
+  String get stickerMakeCover => 'Зробити обкладинкою';
+
+  @override
+  String get stickerRemoveFromFavorites => 'Прибрати з обраного';
+
+  @override
+  String get stickerRemovedFromFavorites => 'Стікер прибрано з обраного';
+
+  @override
+  String stickerAddToThisPack(String title) {
+    return 'Додати до «$title»';
+  }
+
+  @override
+  String get stickerAddSticker => 'Додати стікер';
 }

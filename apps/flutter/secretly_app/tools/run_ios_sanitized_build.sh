@@ -45,6 +45,7 @@ copy_dir() {
     --exclude '.symlinks/' \
     --exclude '.gradle/' \
     --exclude '.cxx/' \
+    --exclude 'target/' \
     --exclude '*.hprof' \
     --exclude '*.hprof.*' \
     --exclude '.java_pid*' \
@@ -79,6 +80,9 @@ refresh_ios_sources() {
   # sanitized mirror or release IPAs would omit it (background fetch on iOS).
   if [ -d "$app_dir/ios/SecretlyNSE" ]; then
     copy_dir "$app_dir/ios/SecretlyNSE" "$mirror_dir/ios/SecretlyNSE"
+  fi
+  if [ -d "$app_dir/ios/SecretlyShare" ]; then
+    copy_dir "$app_dir/ios/SecretlyShare" "$mirror_dir/ios/SecretlyShare"
   fi
   copy_dir "$app_dir/ios/Flutter" "$mirror_dir/ios/Flutter"
   if [ -d "$app_dir/ios/RunnerTests" ]; then

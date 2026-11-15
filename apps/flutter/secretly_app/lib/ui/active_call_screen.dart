@@ -115,13 +115,28 @@ class _ActiveCallScreenState extends State<ActiveCallScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(widget.callManager.onAppResumedDuringCall());
+      return;
+    }
     if (state != AppLifecycleState.inactive &&
         state != AppLifecycleState.paused) {
       return;
     }
     final callState = widget.callManager.state.value;
     if (!callState.isActive || !callState.isVideo) return;
-    unawaited(NativePictureInPicture.enter());
+    // 🔴 13.11.2026: просить окно отсюда — ТОЛЬКО на iPhone. Android входит в
+    // окно сам (Android 12+ — `setAutoEnterEnabled`, старее — по жесту
+    // «домой» в `onUserLeaveHint`). А `inactive` Android даёт и при
+    // РАЗВОРАЧИВАНИИ окна нажатием: просьба срабатывала снова, звонок
+    // сворачивался обратно — экран дёргался и перестраивался, самопросмотр
+    // пропадал (проверка 13.11, Android + iPhone).
+    if (Platform.isIOS) {
+      unawaited(NativePictureInPicture.enter());
+    }
+    if (state == AppLifecycleState.paused) {
+      unawaited(widget.callManager.onAppBackgroundedDuringCall());
+    }
   }
 
   /// 🔴 ОБЫЧНОЕ НАЖАТИЕ ВСЕГДА ПЕРЕКЛЮЧАЕТ ГРОМКУЮ (12.08.2026).
@@ -1073,10 +1088,21 @@ class _BottomControls extends StatelessWidget {
                     active: !state.isMuted,
                     onTap: () => callManager.toggleMute(),
                   ),
+                  // 🔴 15.11.2026: после обновления LiveKit (13.10) на Android
+                  // список маршрутов приходит пустым, и маршрут остаётся «не
+                  // выбран» — звук переключался запасным путём, а кнопка не
+                  // менялась. Без выбранного маршрута — вид по [state.isSpeaker],
+                  // как в созвоне комнаты.
                   _ControlButton(
-                    icon: _audioRouteIcon(routeState.selectedRouteKind),
+                    icon: routeState.selectedRoute == null
+                        ? (state.isSpeaker
+                              ? _audioRouteIcon(CallAudioRouteKind.speaker)
+                              : _audioRouteIcon(CallAudioRouteKind.earpiece))
+                        : _audioRouteIcon(routeState.selectedRouteKind),
                     label: l10n.callControlSpeaker,
-                    active: routeState.isSpeakerSelected,
+                    active: routeState.selectedRoute == null
+                        ? state.isSpeaker
+                        : routeState.isSpeakerSelected,
                     onTap: onAudioRoutePrimaryTap,
                     onLongPress: onAudioRouteLongPress,
                   ),

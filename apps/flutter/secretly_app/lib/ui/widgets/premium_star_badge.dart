@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 /// next to a PAID (Premium/Teams) feature so free users can see it requires
 /// Premium BEFORE they tap it.
 ///
-/// SECURITY (TZ Appendix B / CLAUDE.md HARD RULE): only ever attach this to a
+/// SECURITY (TZ Appendix B, hard rule): only ever attach this to a
 /// monetizable feature. NEVER to a security feature — E2EE, disappearing
 /// messages, screenshot/screen-record protection, PIN/biometric unlock,
 /// recovery kit, or contact verification. Those are free forever and must not

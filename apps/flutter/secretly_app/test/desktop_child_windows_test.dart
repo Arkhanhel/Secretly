@@ -113,6 +113,31 @@ void main() {
       expect(windows.supportedCached, isTrue);
     });
 
+    // 🔴 05.10.2026: «семантику» на macOS включают не только диктор, но и
+    // программы с доступом к «Универсальному доступу». Тогда звонки молча
+    // шли в главное окно. Запрет — только при настоящем VoiceOver.
+    test('семантика включена, а VoiceOver нет — свои окна можно', () async {
+      DesktopChildWindows.debugOperatingSystem = 'macos';
+      mockNative(
+        (call) =>
+            call.method == 'isScreenReaderRunning' ? false : nativeOpens(call),
+      );
+      binding.platformDispatcher.semanticsEnabledTestValue = true;
+      final windows = DesktopChildWindows.instance;
+      expect(await windows.isSupported(), isTrue);
+      expect(windows.supportedCached, isTrue);
+    });
+
+    test('VoiceOver работает — своих окон нет', () async {
+      DesktopChildWindows.debugOperatingSystem = 'macos';
+      mockNative(
+        (call) =>
+            call.method == 'isScreenReaderRunning' ? true : nativeOpens(call),
+      );
+      binding.platformDispatcher.semanticsEnabledTestValue = true;
+      expect(await DesktopChildWindows.instance.isSupported(), isFalse);
+    });
+
     test('Windows разводит семантику по видам — диктор окнам не мешает', () async {
       DesktopChildWindows.debugOperatingSystem = 'windows';
       mockNative(nativeOpens);

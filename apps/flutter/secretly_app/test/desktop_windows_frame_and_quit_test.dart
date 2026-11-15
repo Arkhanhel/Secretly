@@ -266,6 +266,51 @@ void main() {
           isFalse,
           reason: 'мигание: об обрыве сообщили, хотя он уже кончился',
         );
+        expect(
+          seen,
+          isEmpty,
+          reason: 'мигание: «Синхронизировано» на время перекрасилось '
+              'в «Синхронизация…» (05.10)',
+        );
+        expect(status.value.phase, DesktopSyncPhase.online);
+      });
+    });
+
+    test('🔴 запуск: череда повторных заходов не трогает «Синхронизировано»',
+        () {
+      fakeAsync((async) {
+        start();
+        relay.add(true);
+        async.elapse(const Duration(seconds: 4));
+        expect(status.value.phase, DesktopSyncPhase.online);
+
+        final seen = <DesktopSyncPhase>[];
+        status.addListener(() => seen.add(status.value.phase));
+        for (var i = 0; i < 6; i++) {
+          relay.add(false);
+          async.elapse(const Duration(milliseconds: 200));
+          relay.add(true);
+          async.elapse(const Duration(milliseconds: 700));
+          // «Подключено» без обрыва тоже бывает — и тоже не новость.
+          relay.add(true);
+          async.elapse(const Duration(milliseconds: 100));
+        }
+        async.elapse(const Duration(seconds: 4));
+        expect(seen, isEmpty);
+        expect(status.value.phase, DesktopSyncPhase.online);
+      });
+    });
+
+    test('короткий обрыв во время «Синхронизации…» её не подвешивает', () {
+      fakeAsync((async) {
+        start();
+        relay.add(true);
+        async.elapse(const Duration(seconds: 1));
+        expect(status.value.phase, DesktopSyncPhase.syncing);
+        relay.add(false);
+        async.elapse(const Duration(milliseconds: 300));
+        relay.add(true);
+        async.elapse(const Duration(seconds: 4));
         expect(status.value.phase, DesktopSyncPhase.online);
       });
     });

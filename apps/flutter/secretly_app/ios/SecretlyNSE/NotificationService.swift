@@ -24,10 +24,19 @@
 //  storage's internal keychain layout.
 
 import CryptoKit
+import Security
 import UserNotifications
 
 private let kAppGroup = "group.com.secretly.messenger"
+/// Б1 (23.10.2026): where the app keeps the identity seed for this extension —
+/// the keychain, shared through the App Group access group. Must match
+/// `NseIdentityKeychain` in Runner/AppDelegate.swift.
+private let kIdentityKeychainService = "com.secretly.messenger.nse.identity"
 private let kStagedInboxFile = "nse_staged_inbox.jsonl"
+/// Б1 (24.10.2026): what the last wake did — read with `devicectl` from the App
+/// Group when a background push "came but nothing was fetched". Status codes
+/// and counts only: never the seed, ids, URLs or ciphertext.
+private let kLastRunKey = "nse_last_run"
 
 // Поправка часов (17.09.2026). Зеркало Dart `ServerClock` +
 // `sendSignedWithClockRetry`: сервер отвергает метку, разошедшуюся с его
@@ -46,6 +55,16 @@ class NotificationService: UNNotificationServiceExtension {
   var bestAttemptContent: UNMutableNotificationContent?
   private let deliverLock = NSLock()
   private var delivered = false
+  private var lastRun: [String: Any] = [:]
+
+  /// Merges [fields] into this wake's record and writes it to the App Group.
+  private func noteRun(_ fields: [String: Any]) {
+    deliverLock.lock()
+    lastRun.merge(fields) { _, new in new }
+    let snapshot = lastRun
+    deliverLock.unlock()
+    UserDefaults(suiteName: kAppGroup)?.set(snapshot, forKey: kLastRunKey)
+  }
 
   /// Баннер отдаётся системе ровно один раз — и при истечении времени, и при
   /// позднем ответе сервера (повтор после отказа по времени делает поздний
@@ -94,16 +113,57 @@ class NotificationService: UNNotificationServiceExtension {
     }
   }
 
+  // MARK: - Identity seed (Б1)
+
+  /// Keychain first (bound to THIS device id — a seed left by an earlier
+  /// device id is never used), the App-Group defaults second: that copy only
+  /// exists until the updated app has run once, or if its keychain write
+  /// failed.
+  private func loadIdentitySeedB64(deviceId: String, defaults: UserDefaults?)
+    -> String?
+  {
+    let query: [String: Any] = [
+      kSecClass as String: kSecClassGenericPassword,
+      kSecAttrService as String: kIdentityKeychainService,
+      kSecAttrAccessGroup as String: kAppGroup,
+      kSecAttrAccount as String: deviceId,
+      kSecReturnData as String: true,
+      kSecMatchLimit as String: kSecMatchLimitOne,
+    ]
+    var out: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &out)
+    if status == errSecSuccess,
+      let data = out as? Data,
+      let seed = String(data: data, encoding: .utf8),
+      !seed.isEmpty
+    {
+      noteRun(["seed": "keychain", "keychain_status": Int(status)])
+      return seed
+    }
+    let fallback = defaults?.string(forKey: "nse_identity_seed_b64")
+    noteRun([
+      "seed": (fallback?.isEmpty == false) ? "defaults" : "none",
+      "keychain_status": Int(status),
+    ])
+    return fallback
+  }
+
   // MARK: - Fetch + stage
 
   private func fetchAndStage(completion: @escaping (Int) -> Void) {
     let defaults = UserDefaults(suiteName: kAppGroup)
+    noteRun([
+      "at_ms": Int(Date().timeIntervalSince1970 * 1000),
+      "build": Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "",
+      "stage": "config",
+    ])
     guard
       let deviceId = defaults?.string(forKey: "nse_device_id"),
       let profileId = defaults?.string(forKey: "nse_profile_id"),
       let baseUrl = defaults?.string(forKey: "nse_base_url"),
-      let seedB64 = defaults?.string(forKey: "nse_identity_seed_b64"),
-      !deviceId.isEmpty, !profileId.isEmpty, !baseUrl.isEmpty, !seedB64.isEmpty,
+      !deviceId.isEmpty, !profileId.isEmpty, !baseUrl.isEmpty,
+      let seedB64 = loadIdentitySeedB64(deviceId: deviceId, defaults: defaults),
+      !seedB64.isEmpty,
       let seed = Data(base64Encoded: seedB64),
       let signingKey = try? Curve25519.Signing.PrivateKey(rawRepresentation: seed),
       let base = URL(string: baseUrl)
@@ -191,11 +251,17 @@ class NotificationService: UNNotificationServiceExtension {
       req.setValue(build, forHTTPHeaderField: "x-secretly-client-build")
     }
 
-    let task = URLSession.shared.dataTask(with: req) { [weak self] data, resp, _ in
+    noteRun(["stage": "request"])
+    let task = URLSession.shared.dataTask(with: req) { [weak self] data, resp, error in
       guard let self = self, let http = resp as? HTTPURLResponse else {
+        self?.noteRun([
+          "stage": "network",
+          "error": (error as NSError?).map { "\($0.domain) \($0.code)" } ?? "no response",
+        ])
         completion(0)
         return
       }
+      self.noteRun(["stage": "response", "http": http.statusCode])
       // Отказ по времени: запоминаем поправку из `Date` и повторяем один раз.
       if http.statusCode == 401, mayRetry,
         Date().timeIntervalSince(startedAt) < kRetryOnlyWithinSec,
@@ -224,6 +290,7 @@ class NotificationService: UNNotificationServiceExtension {
         return
       }
       let staged = self.stage(items: items, appGroup: kAppGroup)
+      self.noteRun(["stage": "done", "items": items.count, "staged": staged])
       completion(staged)
     }
     task.resume()

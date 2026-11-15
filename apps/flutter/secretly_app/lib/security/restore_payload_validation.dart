@@ -44,6 +44,16 @@ void validateServerBindingValue({
   );
 }
 
+/// Проверка снимка базы из копии.
+///
+/// 🔴 13.11.2026: незнакомая таблица или столбец больше НЕ отвергают копию
+/// целиком. Это копия более новой версии приложения (новый столбец, новая
+/// таблица), и раньше такая копия не восстанавливалась на более старой сборке
+/// вовсе — человек терял историю из-за одного лишнего поля. Теперь незнакомое
+/// пропускается здесь и отбрасывается перед импортом
+/// ([sanitizeSafeBackupDbSnapshot]): в базу по-прежнему попадают только
+/// известные столбцы известных таблиц. Строгими остаются форма снимка и
+/// значения известных столбцов.
 void validateSafeBackupDbSnapshot({
   required String payloadName,
   required Map<String, Object?>? dbSnapshot,
@@ -54,25 +64,46 @@ void validateSafeBackupDbSnapshot({
   for (final entry in dbSnapshot.entries) {
     final table = entry.key.trim();
     final rows = entry.value;
-    final allowedColumns = kSafeBackupSnapshotColumnsByTable[table];
-    if (table.isEmpty || allowedColumns == null || rows is! List) {
+    if (table.isEmpty || rows is! List) {
       throw StateError('$payloadName invalid db_snapshot');
     }
+    final allowedColumns = kSafeBackupSnapshotColumnsByTable[table];
     for (final row in rows) {
       if (row is! Map) {
         throw StateError('$payloadName invalid db_snapshot');
       }
+      if (allowedColumns == null) continue; // таблица новой версии
       for (final cell in row.entries) {
         final column = cell.key.toString().trim();
-        if (column.isEmpty || !allowedColumns.contains(column)) {
-          throw StateError('$payloadName invalid db_snapshot');
-        }
+        if (!allowedColumns.contains(column)) continue; // столбец новой версии
         if (!isValidSafeBackupSnapshotScalar(cell.value)) {
           throw StateError('$payloadName invalid db_snapshot');
         }
       }
     }
   }
+}
+
+/// Только известное этой сборке: незнакомые таблицы и столбцы (копия более
+/// новой версии) отбрасываются. Вызывать после [validateSafeBackupDbSnapshot]
+/// и перед импортом в базу.
+Map<String, List<Map<String, Object?>>> sanitizeSafeBackupDbSnapshot(
+  Map<String, List<Map<String, Object?>>> snapshot,
+) {
+  final out = <String, List<Map<String, Object?>>>{};
+  snapshot.forEach((rawTable, rows) {
+    final table = rawTable.trim();
+    final allowed = kSafeBackupSnapshotColumnsByTable[table];
+    if (allowed == null) return;
+    out[table] = [
+      for (final row in rows)
+        <String, Object?>{
+          for (final cell in row.entries)
+            if (allowed.contains(cell.key.trim())) cell.key.trim(): cell.value,
+        },
+    ];
+  });
+  return out;
 }
 
 void validateSafeBackupFiles({

@@ -54,6 +54,15 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
+    # Xcode 27 (06.10.2026) принимает MACOSX_DEPLOYMENT_TARGET только от 12.0;
+    # часть подов объявляет 10.15 и сборка падает. Приложение и так требует
+    # 13.0 (platform выше) — поднимаем поды до того же минимума.
+    target.build_configurations.each do |config|
+      current = config.build_settings['MACOSX_DEPLOYMENT_TARGET']
+      if current.nil? || Gem::Version.new(current) < Gem::Version.new('13.0')
+        config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '13.0'
+      end
+    end
   end
 
   Dir.glob(File.join(__dir__, 'Pods', 'Target Support Files', 'audiotags', 'audiotags.*.xcconfig')).each do |xcconfig_path|

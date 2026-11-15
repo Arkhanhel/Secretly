@@ -94,7 +94,8 @@ class _SnackbarLayerState extends State<_SnackbarLayer>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
-    duration: DMotion.medium,
+    duration: DMotion.slow,
+    reverseDuration: DMotion.base,
   );
 
   @override
@@ -147,11 +148,12 @@ class _SnackbarLayerState extends State<_SnackbarLayer>
       child: AnimatedBuilder(
         animation: _c,
         builder: (ctx, _) {
-          final t = DMotion.easeOutCubic.transform(_c.value);
+          // Выезжает справа и мягко садится, уходит быстрее (05.10.2026).
+          final t = DMotion.eased(_c);
           return Opacity(
-            opacity: _c.value,
+            opacity: Curves.easeOut.transform(_c.value),
             child: Transform.translate(
-              offset: Offset((1 - t) * 24, 0),
+              offset: Offset((1 - t) * 28, 0),
               child: Material(
                 color: Colors.transparent,
                 child: Container(

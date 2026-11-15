@@ -24,6 +24,7 @@ import '../primitives/context_menu.dart';
 import '../primitives/desktop_text_field.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../primitives/hover_listener.dart';
+import '../primitives/motion_widgets.dart';
 import 'chat_category_bar.dart';
 import 'mute_choice.dart';
 
@@ -662,7 +663,18 @@ class _ChatListPanelState extends State<ChatListPanel> {
             child: BackdropGroup(
               child: Stack(
                 children: [
-                  Positioned.fill(child: _list(c, visible, entries)),
+                  // Папка сменилась — список «через затухание» и с начала
+                  // (05.10.2026): прежний гаснет, новый проявляется.
+                  Positioned.fill(
+                    child: DPageSwitcher(
+                      child: KeyedSubtree(
+                        key: ValueKey<String>(
+                          'folder:${widget.selectedCategoryId}',
+                        ),
+                        child: _list(c, visible, entries),
+                      ),
+                    ),
+                  ),
                   Positioned(
                     left: 0,
                     right: 0,
@@ -1306,10 +1318,21 @@ class _ChatRow extends StatelessWidget {
                                   ),
                                 ),
                               ),
-                              if (item.unread > 0) ...[
-                                const SizedBox(width: 6),
-                                _unreadBadge(c),
-                              ],
+                              // Счётчик всплывает и уходит, превью рядом
+                              // сдвигается плавно (05.10.2026).
+                              DPopSwitcher(
+                                animateSize: true,
+                                alignment: Alignment.centerRight,
+                                child: item.unread > 0
+                                    ? Padding(
+                                        key: const ValueKey<String>('unread'),
+                                        padding: const EdgeInsets.only(left: 6),
+                                        child: _unreadBadge(c),
+                                      )
+                                    : const SizedBox.shrink(
+                                        key: ValueKey<String>('none'),
+                                      ),
+                              ),
                             ],
                           ),
                         ],
@@ -1562,8 +1585,9 @@ Widget _chatUnreadBadgeVisual(
         color: Colors.white,
         borderRadius: BorderRadius.circular(9),
       ),
-      child: Text(
+      child: DMorphText(
         txt,
+        alignment: Alignment.center,
         style: DType.tiny.copyWith(
           fontSize: 11,
           // Цветом заливки строки: он и читается на белом не хуже, чем
@@ -1588,8 +1612,9 @@ Widget _chatUnreadBadgeVisual(
         color: Colors.white.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(9),
       ),
-      child: Text(
+      child: DMorphText(
         txt,
+        alignment: Alignment.center,
         style: DType.tiny.copyWith(
           fontSize: 11,
           color: c.textSecondary,
@@ -1623,8 +1648,9 @@ Widget _chatUnreadBadgeVisual(
       // «7» с «12» выглядят одним знаком, а не двумя разными.
       borderRadius: BorderRadius.circular(9),
     ),
-    child: Text(
+    child: DMorphText(
       txt,
+      alignment: Alignment.center,
       style: const TextStyle(
         fontFamily: DType.family,
         fontSize: 10.5,
@@ -1667,7 +1693,7 @@ class _HeaderButton extends StatelessWidget {
                 : Offset.zero;
             onTap(at);
           },
-          builder: (ctx, hovered, pressed) => AnimatedContainer(
+          builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: AnimatedContainer(
             duration: DMotion.fast,
             // Круглые 34 — в размер поиска рядом (28.09.2026).
             width: 34,
@@ -1695,7 +1721,7 @@ class _HeaderButton extends StatelessWidget {
               size: 17,
               color: accent ? Colors.white : c.textSecondary,
             ),
-          ),
+          )),
         ),
       ),
     );

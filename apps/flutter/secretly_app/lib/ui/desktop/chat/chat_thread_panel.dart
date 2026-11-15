@@ -27,11 +27,13 @@ import '../primitives/avatar.dart';
 import '../primitives/context_menu.dart';
 import '../primitives/desktop_button.dart';
 import '../primitives/hover_listener.dart';
+import '../primitives/motion_widgets.dart';
 import 'chat_list_panel.dart' show ChatKind, unreadColorFor;
 import '../primitives/verified_badge.dart';
 import '../../widgets/telegram_wallpaper.dart'
     show ChatWallpaperAnimMode, TelegramWallpaperState;
 import '../../../links/link_preview_draft.dart';
+import '../../disappearing_messages_ui.dart' show formatDisappearDuration;
 import '../../../models/link_preview_v1.dart';
 import 'attachments_drop_zone.dart';
 import 'composer.dart';
@@ -62,6 +64,7 @@ class ChatHeader {
     this.verified = false,
     this.muted = false,
     this.disappearingSeconds,
+    this.sharedDisappearingSeconds,
     this.avatarPath,
     this.frameId,
     this.emojiStatus,
@@ -98,6 +101,11 @@ class ChatHeader {
   /// the header shows a timer chip. Security feature: always surfaced, never
   /// gated.
   final int? disappearingSeconds;
+
+  /// Общий таймер чата — исчезают у всех участников (ТЗ 22.10.2026). Свой
+  /// значок, отдельный от локального автоудаления: это разные обещания.
+  /// `null` — флаг сервера закрыт или таймера нет.
+  final int? sharedDisappearingSeconds;
 }
 
 /// Callback used when the user picks a reaction emoji for a particular
@@ -177,6 +185,7 @@ class ChatThreadPanel extends StatefulWidget {
     this.wallpaperId,
     this.topicsStrip,
     this.callBanner,
+    this.disappearingBanner,
     this.pinnedPayloadEventId,
     this.onTogglePinMessage,
     this.composerTopicTitle,
@@ -363,6 +372,11 @@ class ChatThreadPanel extends StatefulWidget {
   /// Панель её не строит и о созвонах не знает: живое состояние читает секция
   /// чатов, у которой есть контроллер. Здесь только место в разметке.
   final Widget? callBanner;
+
+  /// Плашка исчезающих сообщений: предупреждение, что у собеседника или на
+  /// моём устройстве старая версия и там сообщения не исчезнут (ТЗ
+  /// 22.10.2026, §2.4). `null` — предупреждать не о чем.
+  final Widget? disappearingBanner;
 
   /// Логический идентификатор закреплённого в комнате сообщения.
   ///
@@ -1036,6 +1050,42 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
   /// Id последнего сообщения при прошлой сверке — см. волну в didUpdateWidget.
   String? _lastNewestId;
 
+  /// Когда пришло сообщение, пришедшее при открытой переписке (05.10.2026):
+  /// такие строки ВЪЕЗЖАЮТ снизу, а лента над ними плавно поднимается.
+  /// Подгрузка истории и первая загрузка сюда не попадают.
+  final Map<String, int> _arrivedAtMs = <String, int>{};
+
+  /// Сколько длится «только что пришло»: строку, построенную позже (человек
+  /// долистал до неё), анимировать уже незачем.
+  static const int _kArrivalWindowMs = 1200;
+
+  void _markArrivals(String? previousNewestId) {
+    // Лента была пуста — это первая загрузка, а не «пришло».
+    if (previousNewestId == null) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _arrivedAtMs.removeWhere((_, at) => now - at > 5000);
+    final fresh = <String>[];
+    for (var i = widget.messages.length - 1; i >= 0; i--) {
+      final id = widget.messages[i].id;
+      if (id == previousNewestId) {
+        for (final f in fresh) {
+          _arrivedAtMs[f] = now;
+        }
+        return;
+      }
+      // Больше шести сразу — это досинхронизация пачкой, а не разговор:
+      // въезд пачки только мешал бы читать.
+      if (fresh.length >= 6) return;
+      fresh.add(id);
+    }
+  }
+
+  bool _justArrived(String id) {
+    final at = _arrivedAtMs[id];
+    if (at == null) return false;
+    return DateTime.now().millisecondsSinceEpoch - at < _kArrivalWindowMs;
+  }
+
   /// Unread count latched when this conversation opened. Latched rather than
   /// read live so the divider stays put while you read past it.
   int _openedUnread = 0;
@@ -1187,6 +1237,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
       // Reading `.first` here took the direction from the conversation's very
       // OLDEST message, so the wave ran the wrong way about half the time.
       final newest = widget.messages.last;
+      _markArrivals(_lastNewestId);
       _conductWallpaper(incoming: !newest.isSelf);
       // Своё сообщение — один шаг узора, как на телефоне (`_sendInner`):
       // обои откликаются на отправку в любом режиме, кроме «Выкл.».
@@ -1590,7 +1641,12 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                     // способ это задать: `Scrollbar` отступа не принимает.
                     // Поэтому же рядом выключено поведение по умолчанию, иначе
                     // полос стало бы две.
-                    ScrollConfiguration(
+                    // Открытая переписка проявляется и мягко поднимается на
+                    // место (05.10.2026). Только лента: обои и поле ввода
+                    // стоят — окно не мигает при переходе между чатами.
+                    DAppear(
+                      offset: const Offset(0, 12),
+                      child: ScrollConfiguration(
                       behavior: ScrollConfiguration.of(
                         context,
                       ).copyWith(scrollbars: false),
@@ -1975,26 +2031,34 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                             _openedUnread > 0 &&
                             msgIdx == firstUnreadIdx &&
                             !m.isSelf;
-                        if (!showDate && !showUnread) return row;
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (showDate)
-                              _DateSeparator(
-                                timestampMs: m.timestampMs,
-                                palette: c,
-                              ),
-                            if (showUnread)
-                              _UnreadSeparator(
-                                palette: c,
-                                count: _openedUnread,
-                              ),
-                            row,
-                          ],
+                        final Widget item = (!showDate && !showUnread)
+                            ? row
+                            : Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (showDate)
+                                    _DateSeparator(
+                                      timestampMs: m.timestampMs,
+                                      palette: c,
+                                    ),
+                                  if (showUnread)
+                                    _UnreadSeparator(
+                                      palette: c,
+                                      count: _openedUnread,
+                                    ),
+                                  row,
+                                ],
+                              );
+                        return _ArrivalIn(
+                          key: ValueKey('in_${m.id}'),
+                          animate: _justArrived(m.id),
+                          fromSelf: m.isSelf,
+                          child: item,
                         );
                       },
                         )),
                       ),
+                    ),
                     ),
                     // 🔴 ЗАТЕНЕНИЕ К НИЖНЕЙ ГРАНИЦЕ. Лежит НАД сообщениями и
                     // ПОД полем ввода: сообщение, уходящее вниз, не
@@ -2051,8 +2115,12 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                 // 🔴 28.09.2026: островки компактнее — 6 сверху вместо 8, край
                 // 12 у шапки, поля ввода и полос под шапкой.
                 padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
-                child: _selecting
+                // Шапка ↔ полоса выбора перетекают друг в друга (05.10.2026).
+                child: DSwapSwitcher(
+                  offset: 0.3,
+                  child: _selecting
                 ? _SelectionBar(
+                  key: const ValueKey<String>('selection'),
                   count: _selected.length,
                   onCancel: _clearSelection,
                   onCopy: _copySelected,
@@ -2067,6 +2135,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                       : () => _runOnSelected(widget.onDeleteMessages!),
                 )
                 : _Header(
+                  key: const ValueKey<String>('header'),
                   header: widget.header,
                   isDirect: widget.isDirect,
                   onCall: widget.onCall,
@@ -2076,6 +2145,7 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                   detailsOpen: widget.detailsOpen,
                   onHeaderMenu: widget.onHeaderMenu,
                 ),
+                ),
               ),
               if (widget.topicsStrip != null)
                 Padding(
@@ -2084,9 +2154,21 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                 ),
               // Под разделителем, а не над: плашка относится к переписке, а не к
               // шапке, и подниматься вместе с темами ей незачем.
-              if (widget.callBanner != null) widget.callBanner!,
-              if (_pinnedMessage != null)
-                _PinnedBar(
+              // Плашки под шапкой раскрываются и сворачиваются, лента
+              // уступает им место плавно (05.10.2026).
+              DExpand(
+                open: widget.callBanner != null,
+                child: widget.callBanner ?? const SizedBox.shrink(),
+              ),
+              DExpand(
+                open: widget.disappearingBanner != null,
+                child: widget.disappearingBanner ?? const SizedBox.shrink(),
+              ),
+              DExpand(
+                open: _pinnedMessage != null,
+                child: _pinnedMessage == null
+                    ? const SizedBox.shrink()
+                    : _PinnedBar(
                   message: _pinnedMessage!,
                   onTap: () => _jumpToReply(widget.pinnedPayloadEventId!),
                   onUnpin: widget.onTogglePinMessage == null
@@ -2096,9 +2178,10 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                           false,
                         ),
                 ),
+              ),
               AnimatedSize(
-                duration: DMotion.fast,
-                curve: DMotion.easeOutCubic,
+                duration: DMotion.medium,
+                curve: DMotion.standard,
                 alignment: Alignment.topCenter,
                 child: widget.searchOpen
                     ? _SearchBanner(
@@ -2323,8 +2406,27 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
       right: DSpace.l,
       // Над полем ввода, а не под ним: поле теперь плавает поверх ленты.
       bottom: _composerHeight + DSpace.s,
-      child: AnimatedOpacity(
-        duration: DMotion.fast,
+      // Кнопка «вниз» выныривает снизу и вырастает, а прячется быстрее,
+      // чем появлялась (05.10.2026).
+      child: AnimatedSlide(
+        offset: _scrolledUp ? Offset.zero : const Offset(0, 0.5),
+        duration: DMotion.of(
+          context,
+          _scrolledUp ? DMotion.medium : DMotion.popOut,
+        ),
+        curve: _scrolledUp ? DMotion.decelerate : DMotion.accelerate,
+        child: AnimatedScale(
+        scale: _scrolledUp ? 1.0 : 0.6,
+        duration: DMotion.of(
+          context,
+          _scrolledUp ? DMotion.medium : DMotion.popOut,
+        ),
+        curve: _scrolledUp ? DMotion.decelerate : DMotion.accelerate,
+        child: AnimatedOpacity(
+        duration: DMotion.of(
+          context,
+          _scrolledUp ? DMotion.base : DMotion.popOut,
+        ),
         opacity: _scrolledUp ? 1.0 : 0.0,
         child: IgnorePointer(
           ignoring: !_scrolledUp,
@@ -2338,19 +2440,25 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
                          label: AppLocalizations.of(context)!.desktopThreadScrollToBottom,
                          child: HoverListener(
                     onTap: () => _toBottom(),
-                    builder: (ctx, hovered, pressed) => Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: hovered ? c.elevated : c.chatList,
-                        borderRadius: BorderRadius.circular(DRadii.pill),
-                        border: Border.all(color: c.borderSubtle),
-                        boxShadow: DShadows.card,
-                      ),
-                      child: Icon(
-                        FluentIcons.arrow_down_24_regular,
-                        size: 18,
-                        color: c.textPrimary,
+                    builder: (ctx, hovered, pressed) => DPressScale(
+                      pressed: pressed,
+                      scale: 0.9,
+                      child: AnimatedContainer(
+                        duration: DMotion.fast,
+                        curve: DMotion.standard,
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: hovered ? c.elevated : c.chatList,
+                          borderRadius: BorderRadius.circular(DRadii.pill),
+                          border: Border.all(color: c.borderSubtle),
+                          boxShadow: DShadows.card,
+                        ),
+                        child: Icon(
+                          FluentIcons.arrow_down_24_regular,
+                          size: 18,
+                          color: c.textPrimary,
+                        ),
                       ),
                     ),
                   ),
@@ -2393,6 +2501,8 @@ class _ChatThreadPanelState extends State<ChatThreadPanel> {
             ],
           ),
         ),
+      ),
+      ),
       ),
     );
   }
@@ -2836,6 +2946,7 @@ String _formatDisappear(int s, AppLocalizations l10n) {
 /// начинается и заканчивается.
 class _SelectionBar extends StatelessWidget {
   const _SelectionBar({
+    super.key,
     required this.count,
     required this.onCancel,
     required this.onCopy,
@@ -2874,8 +2985,9 @@ class _SelectionBar extends StatelessWidget {
             onPressed: onCancel,
           ),
           const SizedBox(width: DSpace.s),
+          // Число выбранного перекатывается, а не подменяется (05.10.2026).
           Expanded(
-            child: Text(
+            child: DMorphText(
               l10n.desktopThreadSelected(count),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -3010,6 +3122,7 @@ class _SelectableRow extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   const _Header({
+    super.key,
     required this.header,
     required this.isDirect,
     required this.onCall,
@@ -3058,7 +3171,12 @@ class _Header extends StatelessWidget {
           // он занимает оставшееся место и обрезает имя многоточием, а нажатие
           // (открыть сведения) по-прежнему только по самому блоку.
           Expanded(
-            child: Align(
+            child: DAppear(
+              // Новая переписка — портрет и имя проявляются со сдвигом
+              // слева, стекло и кнопки шапки стоят (05.10.2026).
+              duration: DMotion.medium,
+              offset: const Offset(-8, 0),
+              child: Align(
               alignment: Alignment.centerLeft,
               child: HoverListener(
             onTap: onToggleDetails,
@@ -3164,8 +3282,41 @@ class _Header extends StatelessWidget {
             ),
           ),
             ),
+            ),
           ),
           const SizedBox(width: DSpace.s),
+          if ((header.sharedDisappearingSeconds ?? 0) > 0) ...[
+            Tooltip(
+              message: l10n.disappearingChipTooltip,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: c.elevated,
+                  borderRadius: BorderRadius.circular(DRadii.pill),
+                  border: Border.all(color: c.accentPrimary),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      FluentIcons.timer_24_filled,
+                      size: 13,
+                      color: c.accentPrimary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      formatDisappearDuration(
+                        header.sharedDisappearingSeconds!,
+                        l10n,
+                      ),
+                      style: DType.caption.copyWith(color: c.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: DSpace.s),
+          ],
           if ((header.disappearingSeconds ?? 0) > 0) ...[
             Tooltip(
               message: l10n.desktopThreadDisappearingOn,
@@ -3338,17 +3489,17 @@ class _MeasuredComposer extends StatefulWidget {
 }
 
 class _MeasuredComposerState extends State<_MeasuredComposer> {
-  final GlobalKey _key = GlobalKey();
-
-  void _report() {
-    final box = _key.currentContext?.findRenderObject();
-    if (box is RenderBox && box.hasSize) widget.onHeight(box.size.height);
-  }
-
+  // 🔴 Меряем на КАЖДОЙ раскладке, а не на перестройке (05.10.2026). Поле
+  // ввода теперь растёт плавно (карточка ответа и ссылки раскрываются,
+  // полоса записи перетекает), и в этих кадрах его родитель не
+  // перестраивается: высота, снятая после перестройки, оставалась
+  // начальной — и последнее сообщение уходило под выросшее поле.
   @override
   Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) => _report());
-    return KeyedSubtree(key: _key, child: widget.child);
+    return DesktopSizeReporter(
+      onSize: (size) => widget.onHeight(size.height),
+      child: widget.child,
+    );
   }
 }
 
@@ -4041,6 +4192,90 @@ class _Dot extends StatelessWidget {
       decoration: BoxDecoration(
         color: c.textSecondary.withValues(alpha: opacity),
         shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+/// Строка ленты, которая ВЪЕЗЖАЕТ, если сообщение пришло при открытой
+/// переписке (05.10.2026, «всё плавным и дорогим»).
+///
+/// Место под строкой раскрывается снизу вверх — лента над ней поднимается
+/// плавно, а не прыгает на высоту сообщения; сам пузырь проявляется и
+/// садится из чуть уменьшенного со стороны автора: своё — справа, чужое —
+/// слева. Обёртка стоит у ВСЕХ строк (иначе её появление пересоздавало бы
+/// пузырь), а анимирует только при создании и только пришедшее.
+class _ArrivalIn extends StatefulWidget {
+  const _ArrivalIn({
+    super.key,
+    required this.animate,
+    required this.fromSelf,
+    required this.child,
+  });
+
+  final bool animate;
+  final bool fromSelf;
+  final Widget child;
+
+  @override
+  State<_ArrivalIn> createState() => _ArrivalInState();
+}
+
+class _ArrivalInState extends State<_ArrivalIn>
+    with SingleTickerProviderStateMixin {
+  AnimationController? _c;
+  CurvedAnimation? _size;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_c != null || !widget.animate || DMotion.reduced(context)) return;
+    // Обёртка остаётся и после въезда: снять её значило бы пересоздать
+    // пузырь под ней (картинки, выделение текста). В покое она ничего не
+    // стоит, а таких строк — только пришедшие при открытой переписке.
+    final c = AnimationController(vsync: this, duration: DMotion.xslow);
+    _c = c;
+    _size = CurvedAnimation(parent: c, curve: DMotion.standard);
+    c.forward();
+  }
+
+  @override
+  void dispose() {
+    _size?.dispose();
+    _c?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _c;
+    final size = _size;
+    if (c == null || size == null) return widget.child;
+    final origin = widget.fromSelf
+        ? Alignment.bottomRight
+        : Alignment.bottomLeft;
+    return SizeTransition(
+      sizeFactor: size,
+      axisAlignment: 1,
+      child: AnimatedBuilder(
+        animation: c,
+        child: widget.child,
+        builder: (context, child) {
+          // Строение одно и то же до и после въезда — иначе пузырь под
+          // обёрткой пересоздавался бы в последнем кадре.
+          final t = DMotion.decelerate.transform(c.value);
+          return Opacity(
+            opacity: Curves.easeOut.transform((c.value * 1.7).clamp(0.0, 1.0)),
+            child: Transform.translate(
+              offset: Offset(0, 14 * (1 - t)),
+              child: Transform.scale(
+                scale: 0.94 + 0.06 * t,
+                alignment: origin,
+                child: child,
+              ),
+            ),
+          );
+        },
       ),
     );
   }

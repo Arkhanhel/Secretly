@@ -96,6 +96,13 @@ SetupIconFile=..\runner\resources\app_icon.ico
 WizardSmallImageFile=wizard_small_58.png,wizard_small_77.png,wizard_small_97.png,wizard_small_116.png,wizard_small_124.png,wizard_small_143.png,wizard_small_159.png
 #endif
 UninstallDisplayIcon={app}\{#AppExe}
+; 🔴 Кэш значков Explorer (05.10.2026, владелец: «на Windows иконка не чёрная,
+; как на macOS»). Знак сменили на чёрный в 29.09, а 635 ставил бирюзовый по тому
+; же пути {app}\Secretly.exe — Explorer держит старый рисунок для ярлыков, «Пуска»
+; и закреплённой кнопки на панели задач, пока его не попросят перечитать.
+; ChangesAssociations — Setup в конце шлёт SHChangeNotify(SHCNE_ASSOCCHANGED),
+; ie4uinit -show в [Run] — сбрасывает кэш значков пользователя (Windows 10/11).
+ChangesAssociations=yes
 UninstallDisplayName={#AppName}
 CloseApplications=force
 RestartApplications=no
@@ -140,6 +147,9 @@ Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"; AppUserModelID: 
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Run]
+; Сначала — перечитать значки (см. ChangesAssociations): и при обычной
+; установке, и при тихом обновлении из приложения.
+Filename: "{sys}\ie4uinit.exe"; Parameters: "-show"; Flags: runhidden skipifdoesntexist runasoriginaluser
 ; Обычная установка: галочка «Запустить Secretly» на последней странице.
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 ; Тихое обновление из приложения: /LAUNCH=1 — снова открыть после установки.

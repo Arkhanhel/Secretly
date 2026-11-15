@@ -203,13 +203,16 @@ void SecretlyChildWindow::MakeNotificationPopup() {
 }
 
 void SecretlyChildWindow::PlaceAtCorner(int slot, int margin_dip,
-                                        int gap_dip) {
+                                        int gap_dip, bool own_monitor) {
   HWND handle = GetHandle();
   if (!handle) return;
   MONITORINFO mi = {};
   mi.cbSize = sizeof(mi);
   const POINT origin = {0, 0};
-  ::GetMonitorInfo(::MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY), &mi);
+  const HMONITOR monitor =
+      own_monitor ? ::MonitorFromWindow(handle, MONITOR_DEFAULTTONEAREST)
+                  : ::MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY);
+  ::GetMonitorInfo(monitor, &mi);
   RECT self = {};
   ::GetWindowRect(handle, &self);
   const int w = self.right - self.left;
@@ -498,7 +501,8 @@ void ChildWindowHost::HandleMethodCall(
   } else if (method == "setTopmost") {
     window.SetTopmost(BoolArg(*args, "on"));
   } else if (method == "placeAtCorner") {
-    window.PlaceAtCorner(static_cast<int>(IntArg(*args, "slot")), 16, 10);
+    window.PlaceAtCorner(static_cast<int>(IntArg(*args, "slot")), 16, 10,
+                         BoolArg(*args, "ownMonitor"));
   } else if (method == "setFullScreen") {
     window.SetFullScreen(BoolArg(*args, "on"));
   } else if (method == "minimize") {

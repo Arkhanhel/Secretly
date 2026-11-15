@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/push/background_inbox_fetcher.dart';
 import 'package:secretly_app/storage/app_db.dart';
@@ -136,5 +138,64 @@ void main() {
       isTrue,
     );
     await db.close();
+  });
+
+  // 🔴 07.10.2026: групповой звонок без звука на Xiaomi. Фоновый проход по пушу
+  // взял аренду, упёрся в бюджет, и система остановила его, не дав отпустить.
+  // Главный изолят две минуты ждал по три секунды перед каждым входящим —
+  // ключи звонка стояли в очереди, собеседников не было слышно.
+  test('🔴 живой главный изолят забирает зависшую аренду фона', () async {
+    final db = await AppDb.openForTesting();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    expect(
+      await db.acquireDecryptLease(
+        holder: 'bg-inbox',
+        nowMs: now,
+        ttlMs: 20000,
+      ),
+      isTrue,
+    );
+    await db.forceDecryptLease(holder: 'main', nowMs: now + 3000, ttlMs: 30000);
+    expect(
+      await db.acquireDecryptLease(
+        holder: 'main',
+        nowMs: now + 4000,
+        ttlMs: 30000,
+      ),
+      isTrue,
+      reason: 'пульс продлевает её как свою',
+    );
+    // Опоздавший фоновый проход чужую аренду не отпустит.
+    await db.releaseDecryptLease('bg-inbox');
+    expect(
+      await db.acquireDecryptLease(
+        holder: 'bg-inbox',
+        nowMs: now + 5000,
+        ttlMs: 20000,
+      ),
+      isFalse,
+    );
+    await db.close();
+  });
+
+  test('🔴 после ожидания главный забирает аренду, а не ждёт снова', () {
+    final src = File('lib/app/app_controller.dart').readAsStringSync();
+    final at = src.indexOf('Future<void> _ensureForegroundRatchetLease() async {');
+    final body = src.substring(at, at + 2600);
+    final contended = body.indexOf("'fg_lease_contended'");
+    final force = body.indexOf('db.forceDecryptLease(');
+    expect(force, greaterThan(0));
+    expect(force, lessThan(contended));
+    expect(body.contains('_foregroundLeaseUntilMs = now + _decryptLeaseTtlMs;'),
+        isTrue);
+  });
+
+  test('🔴 аренда фона не переживает его бюджет надолго', () {
+    final src = File('lib/push/background_decrypt.dart').readAsStringSync();
+    final m = RegExp(r'_leaseTtlMs = (\d+) \* 1000;').firstMatch(src);
+    expect(m, isNotNull);
+    final seconds = int.parse(m!.group(1)!);
+    // Бюджет прохода — 12 с; аренда — с запасом, но не минуты.
+    expect(seconds, inInclusiveRange(12, 30));
   });
 }

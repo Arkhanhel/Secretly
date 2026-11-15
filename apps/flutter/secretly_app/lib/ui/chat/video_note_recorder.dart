@@ -13,6 +13,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../build_variant.dart';
 import '../wave1_l10n.dart';
 import '../widgets/frosted_header_island.dart';
 import '../../media/h264_encoder.dart';
@@ -20,14 +21,33 @@ import '../../media/h264_encoder.dart';
 /// Result of a finished video-note recording (квадратик). Returned by
 /// [showVideoNoteRecorder] when the user releases / sends a valid take.
 class VideoNoteRecorderResult {
-  const VideoNoteRecorderResult({required this.filePath, required this.durationMs});
+  const VideoNoteRecorderResult({
+    required this.filePath,
+    required this.durationMs,
+    this.prepare,
+    this.firstSegmentIsFront = false,
+  });
+
+  /// Первый кусок снят фронтальной камерой — для кадра в пузыре очереди.
+  final bool firstSegmentIsFront;
 
   /// Temp `.mp4` path (path_provider temp dir). Caller is responsible for
   /// uploading/deleting it.
+  ///
+  /// With [prepare] set, this is the FIRST raw segment — good enough for the
+  /// pending bubble's poster while the final file is being made.
   final String filePath;
 
   /// Playback length in milliseconds (used for the bubble + payload).
   final int durationMs;
+
+  /// Скорость отправки кружка (15.11.2026, владелец: «после зелёной стрелки
+  /// несколько секунд ничего не происходит»). Склейка/зеркалирование кадров
+  /// (ffmpeg) больше не держит экран записи: экран закрывается сразу, а эта
+  /// функция делает итоговый файл уже в очереди отправки, пока в чате виден
+  /// пузырь с кольцом. Возвращает путь итогового `.mp4` (сырые куски удаляет
+  /// сама) или `null`, если не вышло ничего.
+  final Future<String?> Function()? prepare;
 }
 
 /// One captured lens-session clip plus the lens it came from. `isFront` decides
@@ -117,6 +137,14 @@ Future<VideoNoteRecorderResult?> showVideoNoteRecorder(
   BuildContext context, {
   VideoNoteRecorderController? controller,
 }) {
+  // 🔴 Облегчённая сборка: видеокружки собирает FFmpeg (склейка отрывков,
+  // квадратная обрезка, перекодирование), которого в пакете нет. Окно не
+  // открывается вовсе — вызывающий понимает это как «съёмку отменили».
+  // Вторая заслонка стоит в чате, у перехода в видеорежим,
+  // так что кнопка кружка там и не появляется.
+  if (!kVideoToolsAvailable) {
+    return Future<VideoNoteRecorderResult?>.value(null);
+  }
   final completer = Completer<VideoNoteRecorderResult?>();
   final overlay = Overlay.of(context, rootOverlay: true);
   late OverlayEntry entry;
@@ -148,7 +176,7 @@ class _VideoNoteRecorderOverlay extends StatefulWidget {
 }
 
 class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   static const Duration _maxDuration = Duration(seconds: 60);
   static const Duration _minDuration = Duration(milliseconds: 600);
   static const double _cancelThresholdPx = 110;
@@ -216,11 +244,26 @@ class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
       vsync: this,
       duration: const Duration(milliseconds: 1100),
     )..repeat();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_boot());
+  }
+
+  // 🔴 Play Vitals п. 1/12 (15.11.2026): свернули посреди записи кружка —
+  // запись отменяется чисто (камеру Android у фонового приложения всё равно
+  // отбирает, и запись оборвалась бы без остановки), а кадры камеры перестают
+  // идти в движок, который может быть уже отсоединён от окна.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      unawaited(_cancelAndClose());
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.controller?._detach(this);
     _ticker?.cancel();
     _maxTimer?.cancel();
@@ -711,6 +754,27 @@ class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
       return;
     }
 
+    // Скорость (15.11.2026): итоговый файл делаем НЕ здесь — экран записи
+    // закрывается сразу, склейка идёт в очереди отправки (см.
+    // [VideoNoteRecorderResult.prepare]). Куски забираем у экрана, чтобы его
+    // `dispose` их не удалил.
+    final segments = List<_VideoSegment>.of(_segments);
+    _segments.clear();
+    _resolve(
+      VideoNoteRecorderResult(
+        filePath: segments.first.path,
+        durationMs: elapsed.inMilliseconds,
+        prepare: () => produceVideoNoteFile(segments),
+        firstSegmentIsFront: segments.first.isFront,
+      ),
+    );
+  }
+
+  /// Итоговый файл кружка из кусков записи (прежняя логика конца записи,
+  /// без изменений; вызывается из очереди отправки).
+  static Future<String?> produceVideoNoteFile(
+    List<_VideoSegment> segments,
+  ) async {
     // Single segment (no lens switch):
     //  * BACK  → use it directly (fast copy). CameraX/AVFoundation already
     //    embed the correct rotation matrix, so the bubble's cover-crop shows a
@@ -725,42 +789,32 @@ class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
     // `-c copy` demuxer can't be used (front/back differ in resolution /
     // orientation and need the mirror), so the filter re-encodes.
     String? produced;
-    if (_segments.length == 1) {
-      final only = _segments.first;
+    if (segments.length == 1) {
+      final only = segments.first;
       produced = only.isFront
           ? await _encodeSquareSingle(only)
           : await _persistSingleSegment(only.path);
     } else {
-      produced = await _concatSegments(_segments);
+      produced = await _concatSegments(segments);
     }
 
     // Clean up all the raw segment temp files now that we have the output
     // (the output lives under a different name). Skip deleting the file we are
     // about to return, just in case the single-segment path reused it.
-    for (final seg in _segments) {
+    for (final seg in segments) {
       if (produced == null || p.normalize(seg.path) != p.normalize(produced)) {
         await _deleteIfAny(seg.path);
       }
     }
-    _segments.clear();
 
-    if (produced == null || produced.isEmpty) {
-      _resolve(null);
-      return;
-    }
-
-    _resolve(
-      VideoNoteRecorderResult(
-        filePath: produced,
-        durationMs: elapsed.inMilliseconds,
-      ),
-    );
+    if (produced == null || produced.isEmpty) return null;
+    return produced;
   }
 
   /// Copies a single recorded segment into the app temp dir under a stable
   /// `video_note_*.mp4` name so the caller can move/upload it. Returns the
   /// destination path (or the original on copy failure).
-  Future<String> _persistSingleSegment(String path) async {
+  static Future<String> _persistSingleSegment(String path) async {
     try {
       final dir = await getTemporaryDirectory();
       final dest = p.join(
@@ -795,7 +849,7 @@ class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
   /// the old chain probed the *un-rotated* stored dimensions and letterboxed
   /// onto a non-square canvas. FRONT footage is recorded NON-mirrored, so we
   /// `hflip` it first to match the mirrored selfie preview the user saw.
-  String _squareVideoChain(_VideoSegment seg) {
+  static String _squareVideoChain(_VideoSegment seg) {
     final flip = seg.isFront ? 'hflip,' : '';
     return '${flip}crop=min(iw\\,ih):min(iw\\,ih),'
         'scale=$_kSquareEdge:$_kSquareEdge,setsar=1,fps=30';
@@ -805,7 +859,7 @@ class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
   /// the raw front clip is not mirrored and a plain copy can't fix that, so it
   /// must go through the square + `hflip` chain). Returns the output path, or
   /// falls back to a plain copy on failure so the user still gets the clip.
-  Future<String?> _encodeSquareSingle(_VideoSegment seg) async {
+  static Future<String?> _encodeSquareSingle(_VideoSegment seg) async {
     final dir = await getTemporaryDirectory();
     final out = p.join(
       dir.path,
@@ -838,7 +892,7 @@ class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
   /// segments), then the streams are joined. The concat filter re-encodes, so
   /// mismatched inputs join cleanly (unlike `-c copy`). Returns the output mp4
   /// path, or null on failure.
-  Future<String?> _concatSegments(List<_VideoSegment> segments) async {
+  static Future<String?> _concatSegments(List<_VideoSegment> segments) async {
     if (segments.isEmpty) return null;
     if (segments.length == 1) {
       final only = segments.first;
@@ -902,7 +956,7 @@ class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
         : _persistSingleSegment(first.path);
   }
 
-  Future<void> _deleteIfAny(String? path) async {
+  static Future<void> _deleteIfAny(String? path) async {
     if (path == null || path.isEmpty) return;
     try {
       final f = File(path);
@@ -930,7 +984,6 @@ class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
     final square = (size * 0.74).clamp(220.0, 360.0);
     final controller = _camera;
     final hasPreview = controller != null && controller.value.isInitialized;
-    final showGlow = _isFront && hasPreview;
     // FRONT-camera "flash": phones have no front torch LED, so light the entire
     // area AROUND the square preview with opaque bright white to illuminate the
     // face. Only meaningful on the front lens with a live preview.
@@ -948,27 +1001,9 @@ class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
             duration: const Duration(milliseconds: 160),
             color: frontFlash ? const Color(0xFFFFFFFF) : const Color(0xE6000000),
           ),
-          // Front-camera selfie glow: a big soft white radial behind the square.
-          // Suppressed while the full white surround is active (it would be
-          // invisible on white and just waste a layer).
-          if (showGlow && !frontFlash)
-            Center(
-              child: Container(
-                width: square * 2.0,
-                height: square * 2.0,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      Colors.white.withValues(alpha: 0.92),
-                      Colors.white.withValues(alpha: 0.34),
-                      Colors.white.withValues(alpha: 0.0),
-                    ],
-                    stops: const [0.0, 0.55, 1.0],
-                  ),
-                ),
-              ),
-            ),
+          // Светлого ореола вокруг кружка у фронтальной камеры больше нет
+          // (15.11.2026, владелец: «светлый блюр нужно убрать»). Подсветка
+          // лица — по кнопке-лампочке: белый фон вокруг кружка (выше).
           // The rounded-square camera preview, center-cropped to 1:1.
           Center(
             child: _SquarePreview(
@@ -1040,20 +1075,22 @@ class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
               ),
             ),
           ),
-          // Left island controls: switch camera + torch.
+          // Поворот камеры и подсветка — ПОД кружком, по центру (15.11.2026,
+          // владелец: «перенести под кружочек, а не слева — для удобства»):
+          // большой палец достаёт до них, не отрываясь от записи.
           Positioned(
-            left: 16,
-            top: 0,
-            bottom: 0,
+            left: 0,
+            right: 0,
+            top: media.size.height / 2 + square / 2 + 22,
             child: Center(
-              child: Column(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _IslandIconButton(
                     icon: Icons.cameraswitch_rounded,
                     onTap: _cameras.length >= 2 ? _flipCamera : null,
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(width: 28),
                   // Flash button — ALWAYS tappable when a preview is live:
                   //  * BACK lens  → real hardware torch (flash_on/flash_off).
                   //  * FRONT lens → white-surround "flash" (no LED): a distinct

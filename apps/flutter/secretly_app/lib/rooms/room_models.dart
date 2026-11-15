@@ -207,6 +207,9 @@ class RoomSettings {
     required this.chatHistoryVisible,
     required this.membershipVersion,
     required this.stateVersion,
+    this.parentRoomId,
+    this.roomKind = kRoomKindRoom,
+    this.allowMembersCreateTopics = false,
   });
 
   factory RoomSettings.defaults({
@@ -264,6 +267,19 @@ class RoomSettings {
   final int membershipVersion;
   final int stateVersion;
 
+  /// Закрытая ветка (06.10.2026, docs/TZ_ROOM_PRIVATE_TOPICS_2026-10-06.md):
+  /// отдельная комната со своим составом и ключом, привязанная к основной.
+  /// Пусто у обычной комнаты.
+  final String? parentRoomId;
+  final String roomKind;
+
+  /// Могут ли участники создавать закрытые ветки (решение Р-2: по умолчанию
+  /// — только владелец и админы).
+  final bool allowMembersCreateTopics;
+
+  bool get isPrivateTopic =>
+      roomKind == kRoomKindTopic && (parentRoomId ?? '').trim().isNotEmpty;
+
   RoomSettings copyWith({
     String? ownerProfileId,
     String? avatarPath,
@@ -291,6 +307,9 @@ class RoomSettings {
     bool? chatHistoryVisible,
     int? membershipVersion,
     int? stateVersion,
+    String? parentRoomId,
+    String? roomKind,
+    bool? allowMembersCreateTopics,
   }) {
     final nextAvatarPath = clearAvatar
         ? avatarPath
@@ -325,9 +344,32 @@ class RoomSettings {
       chatHistoryVisible: chatHistoryVisible ?? this.chatHistoryVisible,
       membershipVersion: membershipVersion ?? this.membershipVersion,
       stateVersion: stateVersion ?? this.stateVersion,
+      parentRoomId: parentRoomId ?? this.parentRoomId,
+      roomKind: roomKind ?? this.roomKind,
+      allowMembersCreateTopics:
+          allowMembersCreateTopics ?? this.allowMembersCreateTopics,
     );
   }
 }
+
+const String kRoomKindRoom = 'room';
+const String kRoomKindTopic = 'topic';
+
+/// Закрытая ветка комнаты, как её видит полоса тем.
+class RoomPrivateTopic {
+  const RoomPrivateTopic({
+    required this.roomId,
+    required this.title,
+    this.unreadCount = 0,
+  });
+
+  final String roomId;
+  final String title;
+  final int unreadCount;
+}
+
+/// Не больше стольких закрытых веток в комнате (решение владельца Р-4).
+const int kRoomPrivateTopicsMax = 20;
 
 class RoomMember {
   const RoomMember({
@@ -722,8 +764,11 @@ RoomPolicyState evaluateRoomPolicyState({
         isMember &&
         (effectiveRole == RoomMemberRole.owner ||
             effectiveRole == RoomMemberRole.admin),
+    // У закрытой ветки ссылок-приглашений нет (сервер отвечает
+    // topic_no_invite_links): людей в неё зовут поимённо из основной комнаты.
     canManageInviteLinks:
         isMember &&
+        !settings.isPrivateTopic &&
         (effectiveRole == RoomMemberRole.owner ||
             effectiveRole == RoomMemberRole.admin),
     canApproveJoinRequests: isMember && effectiveRole.canModerateMembers,

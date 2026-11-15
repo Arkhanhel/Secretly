@@ -2,20 +2,27 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../app/app_controller.dart';
+import '../build_variant.dart';
 import '../billing/show_paywall.dart';
 import '../entitlements/cosmetic_catalog.dart';
 import 'cover_crop_screen.dart';
 import 'paywall_screen.dart' show PaywallTrigger;
 import 'premium/cosmetic_animation_scope.dart';
 import 'premium/cosmetics_catalog.dart';
+import 'premium/live_frames.dart';
+import 'premium/live_covers.dart' show isLiveCoverId;
+import 'premium/profile_fx.dart'
+    show CoverPokeScope, CoverPokes, precacheProfileFxAssets;
 import 'wave1_l10n.dart';
 import 'widgets/framed_avatar.dart';
 import 'widgets/frosted_top_bar.dart';
@@ -47,33 +54,62 @@ class ProfileCosmeticsScreen extends StatefulWidget {
 class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
   late int _tab = widget.initialTab.clamp(0, 1); // 0 = frames, 1 = covers
 
+  /// Касания портрета в превью уходят живой обложке (см. [CoverPokes]).
+  final CoverPokes _coverPokes = CoverPokes();
+
+  /// Растёт при каждом выборе живой обложки — превью на секунду показывает
+  /// подсказку «нажмите», чтобы было видно, что обложка отвечает на касание.
+  int _coverHint = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Знак обложки «Наши иконки» — до того, как плитки нарисуются неподвижно.
+    precacheProfileFxAssets();
+  }
+
+  @override
+  void dispose() {
+    _coverPokes.dispose();
+    super.dispose();
+  }
+
   AppController get _c => widget.controller;
 
-  // All catalog ids are premium (no free ids), so the unlock decision is the
-  // same for every id — probe with any id.
+  // Весь ли Premium открыт. 'x' нет ни в одном бесплатном наборе, поэтому
+  // проверка отвечает именно на вопрос «оплачено ли».
   bool get _premiumUnlocked =>
       isCosmeticAllowed(_c.entitlementStateNow, CosmeticKind.avatarFrame, 'x');
 
+  // 🔴 13.11.2026: часть рамок и обложек бесплатна — замок решается по id.
+  bool _frameAllowed(String id) =>
+      isCosmeticAllowed(_c.entitlementStateNow, CosmeticKind.avatarFrame, id);
+  bool _coverAllowed(String id) =>
+      isCosmeticAllowed(_c.entitlementStateNow, CosmeticKind.profileCover, id);
+
   Future<void> _selectFrame(String? id) async {
-    if (id != null && !_premiumUnlocked) {
+    if (id != null && !_frameAllowed(id)) {
       await showPaywall(context, PaywallTrigger.cosmetic);
       if (!mounted) return;
       setState(() {});
-      if (!_premiumUnlocked) return; // user didn't purchase
+      if (!_frameAllowed(id)) return; // user didn't purchase
     }
     await _c.setMyFrame(id);
     if (mounted) setState(() {});
   }
 
   Future<void> _selectCover(String? id) async {
-    if (id != null && !_premiumUnlocked) {
+    if (id != null && !_coverAllowed(id)) {
       await showPaywall(context, PaywallTrigger.cosmetic);
       if (!mounted) return;
       setState(() {});
-      if (!_premiumUnlocked) return;
+      if (!_coverAllowed(id)) return;
     }
     await _c.setMyCover(id);
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {
+      if (isLiveCoverId(id)) _coverHint++;
+    });
   }
 
   Future<void> _addCustomCover() async {
@@ -123,6 +159,9 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
               ),
               onTap: () => Navigator.pop(ctx, 'photo'),
             ),
+            // Облегчённая сборка: видео-обложка держится на FFmpeg (короткая
+            // петля + кадр для собеседников) — возможность не предлагаем.
+            if (kVideoToolsAvailable)
             ListTile(
               leading:
                   const Icon(Icons.movie_creation_rounded, color: Colors.white),
@@ -189,6 +228,7 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
   bool _busyVideo = false;
 
   Future<void> _addVideoCover() async {
+    if (!kVideoToolsAvailable) return;
     if (_busyVideo) return;
     if (!_premiumUnlocked) {
       await showPaywall(context, PaywallTrigger.cosmetic);
@@ -299,6 +339,8 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
               children: [
                 const SizedBox(height: 8),
                 _LivePreview(
+                  pokes: _coverPokes,
+                  hintToken: _coverHint,
                   controller: _c,
                   frameId: _c.myFrameId,
                   coverId: _c.myCoverId,
@@ -344,14 +386,14 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
                 child: Text(
                   wave1Text(
                     context,
-                    ru: 'Рамки и обложки — премиум-функция. Откройте, чтобы выбрать.',
-                    en: 'Frames and covers are a premium feature. Unlock to choose one.',
-                    uk: 'Рамки та обкладинки — преміум-функція. Розблокуйте, щоб обрати.',
-                    es: 'Los marcos y portadas son una función premium. Desbloquéala para elegir.',
-                    pt: 'Molduras e capas são uma funcionalidade premium. Desbloqueie para escolher.',
-                    ptBr: 'Molduras e capas são um recurso premium. Desbloqueie para escolher.',
-                    fr: 'Les cadres et couvertures sont une fonction premium. Débloquez-les pour en choisir.',
-                    de: 'Rahmen und Titelbilder sind eine Premium-Funktion. Schalte sie frei, um eine auszuwählen.',
+                    ru: 'Часть рамок и обложек бесплатна. Остальные откроет Premium.',
+                    en: 'Some frames and covers are free. Premium unlocks the rest.',
+                    uk: 'Частина рамок і обкладинок безкоштовна. Решту відкриє Premium.',
+                    es: 'Algunos marcos y portadas son gratis. Premium desbloquea el resto.',
+                    pt: 'Algumas molduras e capas são gratuitas. O Premium desbloqueia as restantes.',
+                    ptBr: 'Algumas molduras e capas são gratuitas. O Premium libera o resto.',
+                    fr: 'Certains cadres et couvertures sont gratuits. Premium débloque le reste.',
+                    de: 'Einige Rahmen und Titelbilder sind kostenlos. Premium schaltet den Rest frei.',
                   ),
                   style: const TextStyle(fontSize: 13.5, height: 1.25),
                 ),
@@ -412,7 +454,8 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
           frameId: f.id,
           label: f.nameLocalized(context),
           selected: current == f.id,
-          locked: !unlocked,
+          exclusive: f.exclusive,
+          locked: !unlocked && !_frameAllowed(f.id),
           onTap: () => _selectFrame(f.id),
         );
       },
@@ -462,7 +505,8 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
           coverId: cover.id,
           label: cover.nameLocalized(context),
           selected: current == cover.id,
-          locked: !unlocked,
+          exclusive: cover.exclusive,
+          locked: !unlocked && !_coverAllowed(cover.id),
           onTap: () => _selectCover(cover.id),
         );
       },
@@ -473,6 +517,8 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
 /// Big "how others see you" preview: cover banner + framed avatar + name.
 class _LivePreview extends StatelessWidget {
   const _LivePreview({
+    required this.pokes,
+    required this.hintToken,
     required this.controller,
     required this.frameId,
     required this.coverId,
@@ -480,19 +526,21 @@ class _LivePreview extends StatelessWidget {
     this.coverVideoPath,
   });
 
+  final CoverPokes pokes;
+  final int hintToken;
   final AppController controller;
   final String? frameId;
   final String? coverId;
   final String? coverImagePath;
   final String? coverVideoPath;
 
+  static const double _height = 200;
+  static const double _avatar = 104;
+  // Портрет, отступ и строка имени стоят столбиком по центру превью.
+  static const double _nameLine = 22;
+
   @override
   Widget build(BuildContext context) {
-    final cover = coverWidgetFor(
-      coverId,
-      customImagePath: coverImagePath,
-      customVideoPath: coverVideoPath,
-    );
     final name = controller.myNickname.trim().isNotEmpty
         ? controller.myNickname.trim()
         : 'Secretly';
@@ -501,9 +549,35 @@ class _LivePreview extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(22),
         child: SizedBox(
-          height: 200,
+          height: _height,
           width: double.infinity,
-          child: Stack(
+          child: LayoutBuilder(
+            builder: (context, box) {
+              // 🔴 Сцены вокруг портрета (затмение, круги, прожектор) должны
+              // знать, где он стоит, — как на странице профиля. Без этого
+              // они рисовались по умолчанию, мимо рамки.
+              final column = _avatar + 10 + _nameLine;
+              final cy = (_height - column) / 2 + _avatar / 2;
+              final cover = coverWidgetFor(
+                coverId,
+                customImagePath: coverImagePath,
+                customVideoPath: coverVideoPath,
+                avatarCenter: Offset(0.5, cy / _height),
+                avatarRadius: _avatar / 2 / box.maxWidth,
+              );
+              return CoverPokeScope(
+                pokes: pokes,
+                child: _previewStack(context, cover, name),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _previewStack(BuildContext context, Widget? cover, String name) {
+    return Stack(
             fit: StackFit.expand,
             children: [
               if (cover != null)
@@ -537,27 +611,277 @@ class _LivePreview extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    FramedAvatar(
-                      size: 104,
+                    LiveFramePressHost(
                       frameId: frameId,
-                      avatarPath: controller.myAvatarPath,
-                      fallbackSeed: controller.profileId,
-                      fallbackName: name,
+                      child: _DraggablePortrait(
+                        child: FramedAvatar(
+                          size: 104,
+                          frameId: frameId,
+                          avatarPath: controller.myAvatarPath,
+                          fallbackSeed: controller.profileId,
+                          fallbackName: name,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Text(
                       name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
+                        shadows: [
+                          Shadow(
+                            color: Color.fromRGBO(0, 0, 0, 0.75),
+                            offset: Offset(0, 1),
+                            blurRadius: 6,
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
+              // Подсказка «нажмите» — секунду после выбора живой обложки.
+              if (hintToken > 0)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: _TapHint(key: ValueKey(hintToken)),
+                  ),
+                ),
             ],
+          );
+  }
+}
+
+/// Полупрозрачный палец на обложке: появляется, «нажимает» и гаснет за
+/// ~1,3 с. Только подсказка — касания проходят насквозь.
+class _TapHint extends StatefulWidget {
+  const _TapHint({super.key});
+
+  @override
+  State<_TapHint> createState() => _TapHintState();
+}
+
+class _TapHintState extends State<_TapHint>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _a = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1300),
+  )..forward();
+
+  @override
+  void dispose() {
+    _a.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _a,
+      builder: (context, _) {
+        final t = _a.value;
+        // Появление 0–15 %, держится, гаснет 75–100 %.
+        final opacity = t < 0.15
+            ? t / 0.15
+            : t > 0.75
+            ? (1 - t) / 0.25
+            : 1.0;
+        // «Нажатие» в середине: палец чуть уменьшается, от него идёт круг.
+        final press = ((t - 0.3) / 0.25).clamp(0.0, 1.0);
+        final scale = 1 - 0.12 * math.sin(press * math.pi);
+        return Align(
+          alignment: const Alignment(0.66, -0.15),
+          child: Opacity(
+            opacity: opacity.clamp(0.0, 1.0) * 0.8,
+            child: SizedBox(
+              width: 72,
+              height: 72,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (press > 0 && press < 1)
+                    Container(
+                      width: 30 + 40 * press,
+                      height: 30 + 40 * press,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(
+                            alpha: 0.7 * (1 - press),
+                          ),
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                  Transform.scale(
+                    scale: scale,
+                    child: const Icon(
+                      Icons.touch_app_rounded,
+                      size: 44,
+                      color: Colors.white,
+                      shadows: [
+                        Shadow(color: Color(0x99000000), blurRadius: 10),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
+        );
+      },
+    );
+  }
+}
+
+/// Портрет превью, который можно потянуть пальцем (дизайн 13.11.2026).
+///
+/// Цель смещения — смещение пальца × 0.6, не дальше ±30 точек; пружина
+/// k = 420, c = 30 пока тянут и k = 240, c = 9 на возврате; нажатие сжимает
+/// портрет до 0.93 (k = 300, c = 12) и будит рамку. Скорость портрета уходит
+/// рамке через [LiveFrameWindScope] — огонь, дым и стая отстают от движения.
+///
+/// Тикер работает, только пока пружины не улеглись: в покое превью не тратит
+/// ни кадра.
+class _DraggablePortrait extends StatefulWidget {
+  const _DraggablePortrait({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_DraggablePortrait> createState() => _DraggablePortraitState();
+}
+
+class _DraggablePortraitState extends State<_DraggablePortrait>
+    with SingleTickerProviderStateMixin {
+  // Создаётся сразу, а не лениво: ленивый тикер, ни разу не тронутый,
+  // рождался бы в dispose() — на уже отцепленном элементе (assert во Flutter).
+  late final Ticker _ticker;
+  final ValueNotifier<Offset> _velocity = ValueNotifier<Offset>(Offset.zero);
+  Duration _last = Duration.zero;
+  bool _dragging = false;
+  bool _down = false;
+  Offset _start = Offset.zero;
+  // Пружины: смещение по x/y и масштаб.
+  double _x = 0, _y = 0, _vx = 0, _vy = 0, _tx = 0, _ty = 0;
+  double _s = 1, _vs = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker(_onTick);
+  }
+
+  void _kick() {
+    if (!_ticker.isActive) {
+      _last = Duration.zero;
+      _ticker.start();
+    }
+  }
+
+  void _onTick(Duration elapsed) {
+    var dt = (elapsed - _last).inMicroseconds / 1e6;
+    _last = elapsed;
+    if (dt <= 0) return;
+    if (dt > 1 / 30) dt = 1 / 30;
+    final k = _dragging ? 420.0 : 240.0, c = _dragging ? 30.0 : 9.0;
+    _vx += (-k * (_x - _tx) - c * _vx) * dt;
+    _vy += (-k * (_y - _ty) - c * _vy) * dt;
+    _x += _vx * dt;
+    _y += _vy * dt;
+    final ts = _down ? 0.93 : 1.0;
+    _vs += (-300 * (_s - ts) - 12 * _vs) * dt;
+    _s += _vs * dt;
+    _velocity.value = Offset(_vx, _vy);
+    final settled = !_dragging &&
+        !_down &&
+        (_x.abs() + _y.abs()) < 0.05 &&
+        (_vx.abs() + _vy.abs()) < 0.5 &&
+        (_s - 1).abs() < 0.001 &&
+        _vs.abs() < 0.01;
+    if (settled) {
+      _x = _y = _vx = _vy = _vs = 0;
+      _s = 1;
+      _velocity.value = Offset.zero;
+      _ticker.stop();
+    }
+    setState(() {});
+  }
+
+  void _press() {
+    final press = LiveFramePressScope.controllerOf(context);
+    if (press != null) press.value = true;
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    _velocity.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) {
+        _down = true;
+        _kick();
+      },
+      onTapUp: (d) {
+        _down = false;
+        _press();
+        // Касание портрета будит и обложку — как на странице профиля, где
+        // сцена отвечает вокруг рамки.
+        CoverPokeScope.of(context)?.poke(d.globalPosition);
+        _kick();
+      },
+      onTapCancel: () {
+        _down = false;
+        _kick();
+      },
+      onPanStart: reduce
+          ? null
+          : (d) {
+              _dragging = true;
+              _down = true;
+              _start = d.localPosition;
+              _press();
+              _kick();
+            },
+      onPanUpdate: reduce
+          ? null
+          : (d) {
+              final delta = (d.localPosition - _start) * 0.6;
+              _tx = delta.dx.clamp(-30.0, 30.0);
+              _ty = delta.dy.clamp(-30.0, 30.0);
+            },
+      onPanEnd: reduce
+          ? null
+          : (_) {
+              _dragging = false;
+              _down = false;
+              _tx = _ty = 0;
+              _kick();
+            },
+      onPanCancel: reduce
+          ? null
+          : () {
+              _dragging = false;
+              _down = false;
+              _tx = _ty = 0;
+              _kick();
+            },
+      child: LiveFrameWindScope(
+        velocity: _velocity,
+        child: Transform.translate(
+          offset: Offset(_x, _y),
+          child: Transform.scale(scale: _s, child: widget.child),
         ),
       ),
     );
@@ -654,6 +978,7 @@ class _FrameTile extends StatelessWidget {
     required this.selected,
     required this.locked,
     required this.onTap,
+    this.exclusive = false,
   });
 
   final AppController controller;
@@ -663,11 +988,17 @@ class _FrameTile extends StatelessWidget {
   final bool locked;
   final VoidCallback onTap;
 
+  /// Предмет эксклюзивной коллекции — значок слева сверху.
+  final bool exclusive;
+
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        // Плитка обрезает эффект по своему радиусу: пламя, стая и крылья
+        // феникса выходят за портрет и не должны лезть на соседей.
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: selected ? 0.10 : 0.04),
           borderRadius: BorderRadius.circular(16),
@@ -714,6 +1045,8 @@ class _FrameTile extends StatelessWidget {
                       color: Colors.white38,
                     ),
                   ),
+                if (exclusive)
+                  const Positioned(left: 0, top: 0, child: _CollectionBadge()),
                 if (locked) const _LockBadge(),
                 if (selected) const _CheckBadge(),
               ],
@@ -727,6 +1060,13 @@ class _FrameTile extends StatelessWidget {
                 color: selected ? Colors.white : Colors.white70,
                 fontSize: 11.5,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                shadows: const [
+                  Shadow(
+                    color: Color.fromRGBO(0, 0, 0, 0.9),
+                    offset: Offset(0, 1),
+                    blurRadius: 4,
+                  ),
+                ],
               ),
             ),
           ],
@@ -913,6 +1253,7 @@ class _CoverTile extends StatelessWidget {
     required this.selected,
     required this.locked,
     required this.onTap,
+    this.exclusive = false,
   });
 
   final String? coverId;
@@ -920,6 +1261,9 @@ class _CoverTile extends StatelessWidget {
   final bool selected;
   final bool locked;
   final VoidCallback onTap;
+
+  /// Предмет эксклюзивной коллекции — значок слева сверху.
+  final bool exclusive;
 
   @override
   Widget build(BuildContext context) {
@@ -992,12 +1336,33 @@ class _CoverTile extends StatelessWidget {
                     color: Colors.white38,
                   ),
                 ),
+              if (exclusive)
+                const Positioned(left: 10, top: 10, child: _CollectionBadge()),
               if (locked) const _LockBadge(),
               if (selected) const _CheckBadge(),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Значок эксклюзивной коллекции (13.11.2026). Пометка новинки, не замок.
+class _CollectionBadge extends StatelessWidget {
+  const _CollectionBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 20,
+      height: 20,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.45),
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(Icons.auto_awesome, size: 13, color: kPremiumGold),
     );
   }
 }

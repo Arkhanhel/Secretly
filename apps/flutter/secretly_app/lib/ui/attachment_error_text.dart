@@ -44,6 +44,14 @@ String attachmentErrorText(AppLocalizations l10n, Object error) {
       return l10n.contactNotVerified;
     case AttachmentFailureCode.noDeliverableTargetDevices:
       return l10n.attachmentNoDeliverableDevices;
+    case AttachmentFailureCode.metadataScrubFailed:
+      return l10n.attachmentMetadataScrubFailed;
+    case AttachmentFailureCode.serverRejectedSize:
+      return l10n.attachmentServerRejectedSize;
+    case AttachmentFailureCode.serverStorageFull:
+      return l10n.attachmentServerStorageFull;
+    case AttachmentFailureCode.uploadQuotaExceeded:
+      return l10n.attachmentUploadQuotaExceeded;
     case AttachmentFailureCode.generic:
       return l10n.attachmentActionGeneric;
   }

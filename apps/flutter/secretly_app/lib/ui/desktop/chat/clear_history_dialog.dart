@@ -5,6 +5,7 @@ import '../../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 import '../design/tokens.dart';
+import '../primitives/desktop_dialog.dart' show showDesktopDialog;
 
 /// Подтверждение очистки/удаления с возможностью сделать то же у собеседника.
 ///
@@ -31,7 +32,7 @@ Future<({bool alsoForPeer})?> confirmClearWithPeer(
   String? forAllHint,
 }) {
   var alsoForPeer = false;
-    return showDialog<({bool alsoForPeer})>(
+    return showDesktopDialog<({bool alsoForPeer})>(
       context: context,
       builder: (ctx) {
         final l10n = AppLocalizations.of(ctx)!;

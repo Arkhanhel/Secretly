@@ -9,6 +9,7 @@ import '../design/tokens.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../primitives/hover_listener.dart';
 import '../services/desktop_notification_service.dart';
+import '../primitives/motion_widgets.dart';
 
 /// «Не беспокоить» в шапке окна.
 ///
@@ -63,7 +64,7 @@ class _DesktopDndButtonState extends State<DesktopDndButton> {
         onTap: () async {
           await svc.setDoNotDisturb(!off);
         },
-        builder: (ctx, hovered, pressed) => AnimatedContainer(
+        builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: AnimatedContainer(
           duration: DMotion.fast,
           width: 30,
           height: 30,
@@ -74,7 +75,7 @@ class _DesktopDndButtonState extends State<DesktopDndButton> {
                 : (hovered ? c.hover : Colors.transparent),
             borderRadius: BorderRadius.circular(9),
           ),
-          child: Icon(
+          child: DMorphIcon(
             off
                 ? FluentIcons.alert_off_24_regular
                 : FluentIcons.alert_24_regular,
@@ -82,8 +83,9 @@ class _DesktopDndButtonState extends State<DesktopDndButton> {
             // Выключенные уведомления — состояние, о котором надо помнить:
             // человек перестаёт получать сообщения и должен видеть причину.
             color: off ? c.warning : c.textSecondary,
+            style: DMorphStyle.spin,
           ),
-        ),
+        )),
       ),
     );
   }

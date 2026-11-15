@@ -10,6 +10,7 @@ import '../design/tokens.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../primitives/avatar.dart';
 import '../primitives/hover_listener.dart';
+import '../primitives/motion_widgets.dart';
 
 enum DesktopSection { chats, rooms, calls, contacts }
 
@@ -162,13 +163,12 @@ class DesktopSidebar extends StatelessWidget {
       child: Column(
         children: [
           const SizedBox(height: 12),
-          for (final t in _itemsFor(l10n))
-            _SidebarTab(
-              spec: t,
-              active: active == t.id,
-              unread: unreadByTab[t.id] ?? 0,
-              onTap: () => onSelect(t.id),
-            ),
+          _RailTabs(
+            items: _itemsFor(l10n),
+            active: active,
+            unreadByTab: unreadByTab,
+            onSelect: onSelect,
+          ),
           if (spaces.isNotEmpty || onAddFavourite != null) ...[
             // Черта отделяет разделы приложения от избранных переписок: выше
             // «куда пойти», ниже «к кому». Без неё плитки читаются как ещё
@@ -364,6 +364,174 @@ class _TabSpec {
   final ChatKind unreadKind;
 }
 
+/// Разделы рейки и общая для них отметка выбора.
+///
+/// 🔴 ОТМЕТКА ВЫБОРА ОДНА И ПЕРЕЕЗЖАЕТ (05.10.2026, владелец: «всё плавным…
+/// где возможно — трансформация кнопок одна в другую»). Раньше у каждой
+/// плитки была своя заливка: при смене раздела старая гасла, новая
+/// загоралась, а полоска у края перескакивала. Теперь залитая плитка со
+/// свечением и полоска у края — ОДНА деталь, которая скользит к новому
+/// разделу. В пути она «жидкая»: передний край идёт впереди заднего, плитка
+/// вытягивается и на месте собирается обратно — без перелёта и отскока.
+class _RailTabs extends StatelessWidget {
+  const _RailTabs({
+    required this.items,
+    required this.active,
+    required this.unreadByTab,
+    required this.onSelect,
+  });
+
+  final List<_TabSpec> items;
+  final DesktopSection active;
+  final Map<DesktopSection, int> unreadByTab;
+  final ValueChanged<DesktopSection> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final index = items.indexWhere((t) => t.id == active);
+    return SizedBox(
+      width: kRailWidth,
+      height: items.length * kRailStep,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          _RailSelection(index: index),
+          Column(
+            children: [
+              for (final t in items)
+                _SidebarTab(
+                  spec: t,
+                  active: active == t.id,
+                  unread: unreadByTab[t.id] ?? 0,
+                  onTap: () => onSelect(t.id),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Скользящая отметка выбора рейки: залитая плитка и полоска у края.
+class _RailSelection extends StatefulWidget {
+  const _RailSelection({required this.index});
+
+  /// Выбранный раздел; −1 — ни один (отметка гаснет на месте).
+  final int index;
+
+  @override
+  State<_RailSelection> createState() => _RailSelectionState();
+}
+
+class _RailSelectionState extends State<_RailSelection>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: DMotion.glide,
+    value: 1,
+  );
+  late int _from = widget.index;
+  late int _to = widget.index;
+
+  // Передний край приходит раньше заднего — плитка в пути вытягивается.
+  static const Interval _lead = Interval(0, 0.78, curve: DMotion.glideCurve);
+  static const Interval _trail = Interval(0.12, 1, curve: DMotion.glideCurve);
+
+  @override
+  void didUpdateWidget(_RailSelection old) {
+    super.didUpdateWidget(old);
+    if (widget.index == _to) return;
+    if (widget.index < 0 || _to < 0) {
+      // Отметка появляется или гаснет на месте — не едет из ниоткуда.
+      _from = widget.index < 0 ? _to : widget.index;
+      _to = widget.index;
+      _c.value = 1;
+      return;
+    }
+    // Новый выбор посреди пути — едем от того места, где отметка сейчас.
+    _from = _to;
+    _to = widget.index;
+    _c.duration = DMotion.of(context, DMotion.glide);
+    _c.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    const inset = (kRailStep - kRailTileSize) / 2;
+    return AnimatedOpacity(
+      opacity: widget.index < 0 ? 0 : 1,
+      duration: DMotion.of(context, DMotion.base),
+      curve: DMotion.standard,
+      child: AnimatedBuilder(
+        animation: _c,
+        builder: (context, _) {
+          final from = (_from < 0 ? 0 : _from) * kRailStep;
+          final to = (_to < 0 ? 0 : _to) * kRailStep;
+          final down = to >= from;
+          final t = _c.value;
+          final lead = _lead.transform(t);
+          final trail = _trail.transform(t);
+          // Верхний и нижний края — каждый своим ходом.
+          final top = from + (to - from) * (down ? trail : lead);
+          final bottom = from + (to - from) * (down ? lead : trail) + kRailStep;
+          final tileTop = top + inset;
+          final tileHeight = (bottom - top) - inset * 2;
+          final barHeight = 18 + (tileHeight - kRailTileSize).clamp(0.0, 60.0);
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned(
+                left: (kRailWidth - kRailTileSize) / 2,
+                top: tileTop,
+                width: kRailTileSize,
+                height: tileHeight,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [c.accentPrimary, c.accentPrimaryAlt],
+                    ),
+                    borderRadius: BorderRadius.circular(kRailTileRadius),
+                    // Свечение активной плитки из макета
+                    // (0 10px 24px rgba(76,141,246,.3)) — выбранное
+                    // отделяется светом, а не рамкой.
+                    boxShadow: DShadows.glowRailActive(c),
+                  ),
+                ),
+              ),
+              // Полоска у левого края рейки: 4×18, скруглена только справа —
+              // она вырастает из края окна, а не висит отдельно.
+              Positioned(
+                left: 0,
+                top: tileTop + tileHeight / 2 - barHeight / 2,
+                width: 4,
+                height: barHeight,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.horizontal(
+                      right: Radius.circular(4),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _SidebarTab extends StatelessWidget {
   const _SidebarTab({
     required this.spec,
@@ -375,7 +543,6 @@ class _SidebarTab extends StatelessWidget {
   final bool active;
   final int unread;
   final VoidCallback onTap;
-
   @override
   Widget build(BuildContext context) {
     final c = DColors.of(context);
@@ -385,13 +552,8 @@ class _SidebarTab extends StatelessWidget {
       child: HoverListener(
         onTap: onTap,
         builder: (ctx, hovered, pressed) {
-          // 🔴 Выбранный раздел — ЗАЛИТАЯ ПЛИТКА **И** ПОЛОСКА У КРАЯ.
-          //
-          // Раньше здесь стояло «или-или»: полоска отмечает раздел, но не
-          // называет его выбранным, поэтому выбрали заливку. Сверка с
-          // исходником показала, что в артборде 1a у активного раздела есть
-          // И то, И другое — заливка градиентом со свечением и белая полоска
-          // 4×18 у левого края рейки.
+          // 🔴 Выбранный раздел — ЗАЛИТАЯ ПЛИТКА **И** ПОЛОСКА У КРАЯ (обе
+          // рисует общая отметка [_RailSelection], которая переезжает).
           //
           // Они не спорят, а отвечают на разные вопросы: заливка — «этот
           // раздел выбран», полоска у САМОГО края — «выбранное вот на этой
@@ -404,33 +566,26 @@ class _SidebarTab extends StatelessWidget {
               children: [
                 AnimatedContainer(
                   duration: DMotion.fast,
+                  curve: DMotion.standard,
                   width: kRailTileSize,
                   height: kRailTileSize,
                   decoration: BoxDecoration(
-                    gradient: active
-                        ? LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [c.accentPrimary, c.accentPrimaryAlt],
-                          )
-                        : null,
                     color: active
-                        ? null
+                        ? Colors.transparent
                         : (pressed
                               ? c.pressed
                               : (hovered ? c.hover : Colors.transparent)),
                     borderRadius: BorderRadius.circular(kRailTileRadius),
-                    // Свечение активной плитки из макета
-                    // (0 10px 24px rgba(76,141,246,.3)) — тем же приёмом, что
-                    // у своего пузыря: выбранное отделяется светом, а не
-                    // рамкой.
-                    boxShadow: active ? DShadows.glowRailActive(c) : null,
                   ),
                   child: Center(
-                    child: AnimatedScale(
-                      duration: DMotion.fast,
-                      scale: pressed ? 0.92 : (hovered ? 1.06 : 1.0),
-                      child: Icon(
+                    child: DPressScale(
+                      pressed: pressed,
+                      hovered: hovered,
+                      scale: 0.9,
+                      hoverScale: 1.06,
+                      // Контур ↔ залитый значок перетекают друг в друга, а
+                      // цвет белеет вместе с приходом отметки.
+                      child: DMorphIcon(
                         active ? spec.iconFilled : spec.iconRegular,
                         // Выбранный значок на точку крупнее (макет): вес ему
                         // даёт не только заливка под ним.
@@ -439,39 +594,30 @@ class _SidebarTab extends StatelessWidget {
                         // тоном текста: рейка темнее всего окна, и #93A1B3 на
                         // ней выходил ярче, чем нужно. См. `railIconIdle`.
                         color: active ? Colors.white : c.railIconIdle,
+                        style: DMorphStyle.fade,
                       ),
                     ),
                   ),
                 ),
-                // Полоска у левого края рейки: 4×18, скруглена только
-                // справа — она вырастает из края окна, а не висит отдельно.
-                if (active)
-                  Positioned(
-                    left: 0,
-                    child: Container(
-                      width: 4,
-                      height: 18,
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.horizontal(
-                          right: Radius.circular(4),
-                        ),
-                      ),
-                    ),
+                Positioned(
+                  // · Бейдж ВЫЛЕТАЕТ за угол плитки (макет), а не сидит на
+                  // ней: на плитке он накрывает значок раздела, ради
+                  // которого плитка и существует. Всплывает и уходит
+                  // плавно, число перекатывается (05.10.2026).
+                  right: (kRailWidth - kRailTileSize) / 2 - 5,
+                  top: (kRailStep - kRailTileSize) / 2 - 4,
+                  child: DPopSwitcher(
+                    alignment: Alignment.topRight,
+                    child: unread > 0
+                        ? _UnreadBadge(
+                            key: const ValueKey<String>('unread'),
+                            count: unread,
+                            kind: spec.unreadKind,
+                            rail: true,
+                          )
+                        : const SizedBox.shrink(key: ValueKey<String>('none')),
                   ),
-                if (unread > 0)
-                  Positioned(
-                    // · Бейдж ВЫЛЕТАЕТ за угол плитки (макет), а не сидит на
-                    // ней: на плитке он накрывает значок раздела, ради
-                    // которого плитка и существует.
-                    right: (kRailWidth - kRailTileSize) / 2 - 5,
-                    top: (kRailStep - kRailTileSize) / 2 - 4,
-                    child: _UnreadBadge(
-                      count: unread,
-                      kind: spec.unreadKind,
-                      rail: true,
-                    ),
-                  ),
+                ),
               ],
             ),
           );
@@ -755,6 +901,7 @@ class _ProfileTile extends StatelessWidget {
 
 class _UnreadBadge extends StatelessWidget {
   const _UnreadBadge({
+    super.key,
     required this.count,
     required this.kind,
     this.rail = false,
@@ -804,8 +951,9 @@ class _UnreadBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(DRadii.md),
         border: Border.all(color: c.sidebar, width: 2.5),
       ),
-      child: Text(
+      child: DMorphText(
         count > 99 ? '99+' : '$count',
+        alignment: Alignment.center,
         style: const TextStyle(
           fontFamily: DType.family,
           fontSize: 10,

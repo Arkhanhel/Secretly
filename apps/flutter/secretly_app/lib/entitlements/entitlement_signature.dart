@@ -9,7 +9,7 @@
 // `server/keys/src/main.rs`). The server signs a fixed pipe-joined string
 // (NOT JSON) precisely so the client can avoid JSON key-ordering pitfalls.
 //
-// FAIL-OPEN contract (CLAUDE.md: billing fails OPEN, security fails CLOSED):
+// FAIL-OPEN contract (monetization rule: billing fails OPEN, security fails CLOSED):
 // these verifiers only ever return a *boolean*. They never lock anyone out —
 // the caller (EntitlementRepository) decides what an unverifiable result means,
 // and in every case the fallback is the fully-open state (full access). A
@@ -19,6 +19,7 @@
 import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import 'entitlement_models.dart';
 
@@ -38,6 +39,56 @@ const String kConfigPublicKeyB64 =
 /// as untrusted and the caller drops to the fully-open state (full access),
 /// never a lockout.
 bool get configSignatureEnforced => kConfigPublicKeyB64.isNotEmpty;
+
+/// Следующий ключ подписи конфигурации (15.11.2026, план П3, шаг В).
+///
+/// Открытый ключ зашит одной строкой, поэтому сменить ключ на сервере
+/// одномоментно нельзя: все выпущенные сборки перестали бы верить
+/// конфигурации. Смена идёт в два шага: сначала выпуск, который знает и
+/// нынешний ключ, и следующий; когда таких сборок большинство — сервер
+/// подписывает следующим. Пока здесь пусто, поведение прежнее побайтово.
+///   `--dart-define=SECRETLY_CONFIG_PUBLIC_KEY_NEXT_B64=<base64>`
+const String kConfigPublicKeyNextB64 = String.fromEnvironment(
+  'SECRETLY_CONFIG_PUBLIC_KEY_NEXT_B64',
+  defaultValue: '',
+);
+
+/// Подпись конфигурации: нынешним ключом, а если не сошлась — следующим
+/// ([kConfigPublicKeyNextB64]). Без нынешнего ключа не проверяет ничего —
+/// включение проверки по-прежнему решает [configSignatureEnforced].
+Future<bool> verifyConfigEd25519B64({
+  required String signatureB64,
+  required List<int> message,
+}) =>
+    verifyWithConfigKeys(
+      currentKeyB64: kConfigPublicKeyB64,
+      nextKeyB64: kConfigPublicKeyNextB64,
+      signatureB64: signatureB64,
+      message: message,
+    );
+
+/// То же, что [verifyConfigEd25519B64], с ключами параметрами — для проверок.
+@visibleForTesting
+Future<bool> verifyWithConfigKeys({
+  required String currentKeyB64,
+  required String nextKeyB64,
+  required String signatureB64,
+  required List<int> message,
+}) async {
+  if (await verifyEd25519B64(
+    publicKeyB64: currentKeyB64,
+    signatureB64: signatureB64,
+    message: message,
+  )) {
+    return true;
+  }
+  if (currentKeyB64.isEmpty || nextKeyB64.isEmpty) return false;
+  return verifyEd25519B64(
+    publicKeyB64: nextKeyB64,
+    signatureB64: signatureB64,
+    message: message,
+  );
+}
 
 String _ms(int? v) => v == null ? 'null' : v.toString();
 String _bool(bool v) => v ? 'true' : 'false';
@@ -136,6 +187,42 @@ String handshakeAuthSigningMessage({
       '$issuedAtMs';
 }
 
+/// Зеркало Rust `handshake_auth2_signing_message` (v1): блок
+/// `handshake_auth2`, флаг-день С-2 (Э4, 14.11.2026). Заморожено.
+String handshakeAuth2SigningMessage({
+  required bool requireAll,
+  required int issuedAtMs,
+}) {
+  return 'secretly-handshake-auth2-v1|'
+      '${_bool(requireAll)}|'
+      '$issuedAtMs';
+}
+
+/// Флаг-день С-2: `true` — неподписанное рукопожатие отвергается от любого
+/// устройства с известным ключом; `false` — только от доказавших подпись,
+/// как с 1.8.58; `null` — блока нет или подпись не сошлась: вызывающий
+/// ничего не меняет.
+Future<bool?> verifiedHandshakeAuthRequireAll(
+  Map<String, dynamic> configResponse,
+) async {
+  final sig = (configResponse['handshake_auth2_signature'] as String?) ?? '';
+  if (kConfigPublicKeyB64.isEmpty || sig.isEmpty) return null;
+  final payload = configResponse['handshake_auth2'];
+  if (payload is! Map) return null;
+  final requireAll = payload['require_all'] == true;
+  final message = utf8.encode(
+    handshakeAuth2SigningMessage(
+      requireAll: requireAll,
+      issuedAtMs: _int(payload['issued_at_ms']),
+    ),
+  );
+  final ok = await verifyConfigEd25519B64(
+    signatureB64: sig,
+    message: message,
+  );
+  return ok ? requireAll : null;
+}
+
 /// Mirrors Rust `support_signing_message` (v1). A SEPARATE signed block for the
 /// same reason as identity/reliability: `secretly-config-v2` is frozen forever.
 /// Carries the SUPPORT X25519 public key (recipient for in-app support tickets)
@@ -219,8 +306,7 @@ Future<bool> verifyEntitlementSignature(Map<String, dynamic> json) async {
       issuedAtMs: (json['issued_at_ms'] as num?)?.toInt() ?? 0,
     ),
   );
-  return verifyEd25519B64(
-    publicKeyB64: kConfigPublicKeyB64,
+  return verifyConfigEd25519B64(
     signatureB64: sig,
     message: message,
   );
@@ -264,8 +350,7 @@ Future<bool> verifyConfigSignature(Map<String, dynamic> configResponse) async {
       issuedAtMs: _int(payload['issued_at_ms']),
     ),
   );
-  return verifyEd25519B64(
-    publicKeyB64: kConfigPublicKeyB64,
+  return verifyConfigEd25519B64(
     signatureB64: sig,
     message: message,
   );
@@ -293,8 +378,7 @@ Future<bool> verifyReliabilitySignature(
       issuedAtMs: _int(payload['issued_at_ms']),
     ),
   );
-  return verifyEd25519B64(
-    publicKeyB64: kConfigPublicKeyB64,
+  return verifyConfigEd25519B64(
     signatureB64: sig,
     message: message,
   );
@@ -320,8 +404,7 @@ Future<bool> verifyIdentitySignature(
       issuedAtMs: _int(payload['issued_at_ms']),
     ),
   );
-  return verifyEd25519B64(
-    publicKeyB64: kConfigPublicKeyB64,
+  return verifyConfigEd25519B64(
     signatureB64: sig,
     message: message,
   );
@@ -359,8 +442,7 @@ Future<bool> verifyUpdateSignature(Map<String, dynamic> configResponse) async {
       issuedAtMs: _int(payload['issued_at_ms']),
     ),
   );
-  return verifyEd25519B64(
-    publicKeyB64: kConfigPublicKeyB64,
+  return verifyConfigEd25519B64(
     signatureB64: sig,
     message: message,
   );
@@ -383,8 +465,7 @@ Future<bool> verifyHandshakeSignature(
       issuedAtMs: _int(payload['issued_at_ms']),
     ),
   );
-  return verifyEd25519B64(
-    publicKeyB64: kConfigPublicKeyB64,
+  return verifyConfigEd25519B64(
     signatureB64: sig,
     message: message,
   );
@@ -410,8 +491,7 @@ Future<bool?> verifiedHandshakeAuthEnforceDisabled(
       issuedAtMs: _int(payload['issued_at_ms']),
     ),
   );
-  final ok = await verifyEd25519B64(
-    publicKeyB64: kConfigPublicKeyB64,
+  final ok = await verifyConfigEd25519B64(
     signatureB64: sig,
     message: message,
   );
@@ -467,8 +547,249 @@ Future<bool> verifyMultideviceSignature(
       issuedAtMs: _int(payload['issued_at_ms']),
     ),
   );
-  return verifyEd25519B64(
-    publicKeyB64: kConfigPublicKeyB64,
+  return verifyConfigEd25519B64(
+    signatureB64: sig,
+    message: message,
+  );
+}
+
+/// Зеркало Rust `calls_signing_message` (v1): блок `calls`, ТЗ E2EE созвонов
+/// (06.10.2026). ЗАМОРОЖЕНО: новое поле — только новым блоком `calls2`.
+String callsSigningMessage({
+  required bool groupCallsEnabled,
+  required int e2eeCreatePercent,
+  required bool e2eeRequired,
+  required int maxParticipantsE2ee,
+  required int keySwitchDelayMs,
+  required bool joinRatchet,
+  required int issuedAtMs,
+}) {
+  return 'secretly-calls-v1|'
+      '${_bool(groupCallsEnabled)}|'
+      '$e2eeCreatePercent|'
+      '${_bool(e2eeRequired)}|'
+      '$maxParticipantsE2ee|'
+      '$keySwitchDelayMs|'
+      '${_bool(joinRatchet)}|'
+      '$issuedAtMs';
+}
+
+/// Проверяет блок `calls` по СЫРЫМ значениям сервера; зажим — потом, в
+/// `CallFlags.fromConfigResponse`. При false вызывающий берёт
+/// `CallFlags.defaults`.
+Future<bool> verifyCallsSignature(Map<String, dynamic> configResponse) async {
+  final sig = (configResponse['calls_signature'] as String?) ?? '';
+  if (kConfigPublicKeyB64.isEmpty || sig.isEmpty) return false;
+  final payload = configResponse['calls'];
+  if (payload is! Map) return false;
+  final message = utf8.encode(
+    callsSigningMessage(
+      groupCallsEnabled: payload['group_calls_enabled'] == true,
+      e2eeCreatePercent: _int(payload['e2ee_create_percent']),
+      e2eeRequired: payload['e2ee_required'] == true,
+      maxParticipantsE2ee: _int(payload['max_participants_e2ee']),
+      keySwitchDelayMs: _int(payload['key_switch_delay_ms']),
+      joinRatchet: payload['join_ratchet'] == true,
+      issuedAtMs: _int(payload['issued_at_ms']),
+    ),
+  );
+  return verifyConfigEd25519B64(
+    signatureB64: sig,
+    message: message,
+  );
+}
+
+/// Зеркало Rust `privacy_signing_message` (v1), блок `privacy` (Б2,
+/// 23.10.2026). Заморожено.
+String privacySigningMessage({
+  required int padSendShare,
+  required int issuedAtMs,
+}) {
+  return 'secretly-privacy-v1|$padSendShare|$issuedAtMs';
+}
+
+Future<bool> verifyPrivacySignature(Map<String, dynamic> configResponse) async {
+  final sig = (configResponse['privacy_signature'] as String?) ?? '';
+  if (kConfigPublicKeyB64.isEmpty || sig.isEmpty) return false;
+  final payload = configResponse['privacy'];
+  if (payload is! Map) return false;
+  final message = utf8.encode(
+    privacySigningMessage(
+      padSendShare: _int(payload['pad_send_share']),
+      issuedAtMs: _int(payload['issued_at_ms']),
+    ),
+  );
+  return verifyConfigEd25519B64(
+    signatureB64: sig,
+    message: message,
+  );
+}
+
+/// Зеркало Rust `media_signing_message` (v1), блок `media` (загрузка
+/// частями, 15.11.2026). Заморожено: новое поле — только блоком `media2`.
+String mediaSigningMessage({
+  required int resumableUploadShare,
+  required int issuedAtMs,
+}) {
+  return 'secretly-media-v1|$resumableUploadShare|$issuedAtMs';
+}
+
+Future<bool> verifyMediaSignature(Map<String, dynamic> configResponse) async {
+  final sig = (configResponse['media_signature'] as String?) ?? '';
+  if (kConfigPublicKeyB64.isEmpty || sig.isEmpty) return false;
+  final payload = configResponse['media'];
+  if (payload is! Map) return false;
+  final message = utf8.encode(
+    mediaSigningMessage(
+      resumableUploadShare: _int(payload['resumable_upload_share']),
+      issuedAtMs: _int(payload['issued_at_ms']),
+    ),
+  );
+  return verifyConfigEd25519B64(
+    signatureB64: sig,
+    message: message,
+  );
+}
+
+/// Зеркало Rust `stickers_signing_message` (v1), блок `stickers` (наборы
+/// стикеров, 14.11.2026). Заморожено: новое поле — только блоком `stickers2`.
+/// Логическое поле — как его печатает Rust: `true` / `false`.
+String stickersSigningMessage({
+  required int packAccessPercent,
+  required int publicPublishPercent,
+  required bool publicSearchEnabled,
+  required int issuedAtMs,
+}) {
+  return 'secretly-stickers-v1|$packAccessPercent|$publicPublishPercent|'
+      '${publicSearchEnabled ? 'true' : 'false'}|$issuedAtMs';
+}
+
+Future<bool> verifyStickersSignature(Map<String, dynamic> configResponse) async {
+  final sig = (configResponse['stickers_signature'] as String?) ?? '';
+  if (kConfigPublicKeyB64.isEmpty || sig.isEmpty) return false;
+  final payload = configResponse['stickers'];
+  if (payload is! Map) return false;
+  final message = utf8.encode(
+    stickersSigningMessage(
+      packAccessPercent: _int(payload['pack_access_percent']),
+      publicPublishPercent: _int(payload['public_publish_percent']),
+      publicSearchEnabled: payload['public_search_enabled'] == true,
+      issuedAtMs: _int(payload['issued_at_ms']),
+    ),
+  );
+  return verifyConfigEd25519B64(
+    signatureB64: sig,
+    message: message,
+  );
+}
+
+/// Зеркало Rust `server_auth_signing_message` (v1), блок `server_auth` (Б3,
+/// 25.10.2026). Заморожено.
+String serverAuthSigningMessage({
+  required int enforceShare,
+  required String relayKid,
+  required String relayPubB64,
+  required int issuedAtMs,
+}) {
+  return 'secretly-server-auth-v1|$enforceShare|$relayKid|$relayPubB64|'
+      '$issuedAtMs';
+}
+
+Future<bool> verifyServerAuthSignature(
+  Map<String, dynamic> configResponse,
+) async {
+  final sig = (configResponse['server_auth_signature'] as String?) ?? '';
+  if (kConfigPublicKeyB64.isEmpty || sig.isEmpty) return false;
+  final payload = configResponse['server_auth'];
+  if (payload is! Map) return false;
+  final message = utf8.encode(
+    serverAuthSigningMessage(
+      enforceShare: _int(payload['enforce_share']),
+      relayKid: (payload['relay_kid'] as String?) ?? '',
+      relayPubB64: (payload['relay_pub_b64'] as String?) ?? '',
+      issuedAtMs: _int(payload['issued_at_ms']),
+    ),
+  );
+  return verifyConfigEd25519B64(
+    signatureB64: sig,
+    message: message,
+  );
+}
+
+/// Зеркало Rust `prekeys_signing_message` (v1), блок `prekeys` (Б5,
+/// 24.10.2026). Заморожено.
+String prekeysSigningMessage({
+  required int otkHygieneShare,
+  required int spkRotateShare,
+  required int spkRotateDays,
+  required int legacyWireRejectShare,
+  required int issuedAtMs,
+}) {
+  return 'secretly-prekeys-v1|$otkHygieneShare|$spkRotateShare|'
+      '$spkRotateDays|$legacyWireRejectShare|$issuedAtMs';
+}
+
+Future<bool> verifyPrekeysSignature(Map<String, dynamic> configResponse) async {
+  final sig = (configResponse['prekeys_signature'] as String?) ?? '';
+  if (kConfigPublicKeyB64.isEmpty || sig.isEmpty) return false;
+  final payload = configResponse['prekeys'];
+  if (payload is! Map) return false;
+  final message = utf8.encode(
+    prekeysSigningMessage(
+      otkHygieneShare: _int(payload['otk_hygiene_share']),
+      spkRotateShare: _int(payload['spk_rotate_share']),
+      spkRotateDays: _int(payload['spk_rotate_days']),
+      legacyWireRejectShare: _int(payload['legacy_wire_reject_share']),
+      issuedAtMs: _int(payload['issued_at_ms']),
+    ),
+  );
+  return verifyConfigEd25519B64(
+    signatureB64: sig,
+    message: message,
+  );
+}
+
+/// Зеркало Rust `disappearing_signing_message` (v1), блок `disappearing`
+/// (23.10.2026, ТЗ исчезающих сообщений §2.5). Заморожено: договор с
+/// сервером побайтово.
+String disappearingSigningMessage({
+  required bool sendEnabled,
+  required int sendShare,
+  required bool expireEnabled,
+  required int minBuild,
+  required int customMaxS,
+  required int issuedAtMs,
+}) {
+  return 'secretly-disappearing-v1|'
+      '${_bool(sendEnabled)}|'
+      '$sendShare|'
+      '${_bool(expireEnabled)}|'
+      '$minBuild|'
+      '$customMaxS|'
+      '$issuedAtMs';
+}
+
+/// Проверяет блок `disappearing` по СЫРЫМ значениям сервера; зажим — потом,
+/// в `DisappearingFlags.fromConfigResponse`. При false вызывающий берёт
+/// `DisappearingFlags.defaults`.
+Future<bool> verifyDisappearingSignature(
+  Map<String, dynamic> configResponse,
+) async {
+  final sig = (configResponse['disappearing_signature'] as String?) ?? '';
+  if (kConfigPublicKeyB64.isEmpty || sig.isEmpty) return false;
+  final payload = configResponse['disappearing'];
+  if (payload is! Map) return false;
+  final message = utf8.encode(
+    disappearingSigningMessage(
+      sendEnabled: payload['send_enabled'] == true,
+      sendShare: _int(payload['send_share']),
+      expireEnabled: payload['expire_enabled'] == true,
+      minBuild: _int(payload['min_build']),
+      customMaxS: _int(payload['custom_max_s']),
+      issuedAtMs: _int(payload['issued_at_ms']),
+    ),
+  );
+  return verifyConfigEd25519B64(
     signatureB64: sig,
     message: message,
   );
@@ -501,8 +822,7 @@ Future<bool> verifyRooms2Signature(Map<String, dynamic> configResponse) async {
       issuedAtMs: _int(payload['issued_at_ms']),
     ),
   );
-  return verifyEd25519B64(
-    publicKeyB64: kConfigPublicKeyB64,
+  return verifyConfigEd25519B64(
     signatureB64: sig,
     message: message,
   );
@@ -519,8 +839,7 @@ Future<bool> verifyRoomsSignature(Map<String, dynamic> configResponse) async {
       issuedAtMs: _int(payload['issued_at_ms']),
     ),
   );
-  return verifyEd25519B64(
-    publicKeyB64: kConfigPublicKeyB64,
+  return verifyConfigEd25519B64(
     signatureB64: sig,
     message: message,
   );
@@ -544,8 +863,46 @@ Future<bool> verifySupportSignature(
       issuedAtMs: _int(payload['issued_at_ms']),
     ),
   );
-  return verifyEd25519B64(
-    publicKeyB64: kConfigPublicKeyB64,
+  return verifyConfigEd25519B64(
+    signatureB64: sig,
+    message: message,
+  );
+}
+
+/// Строка подписи блока `transport` (Э1). 🔴 Побайтово совпадает с
+/// `transport_signing_message` в `server/keys/src/main.rs`.
+String transportSigningMessage({
+  required bool enabled,
+  required bool reportEnabled,
+  required bool torEnabled,
+  required int endpointsVersion,
+  required int issuedAtMs,
+}) {
+  return 'secretly-transport-v1|'
+      '${_bool(enabled)}|'
+      '${_bool(reportEnabled)}|'
+      '${_bool(torEnabled)}|'
+      '$endpointsVersion|'
+      '$issuedAtMs';
+}
+
+Future<bool> verifyTransportSignature(
+  Map<String, dynamic> configResponse,
+) async {
+  final sig = (configResponse['transport_signature'] as String?) ?? '';
+  if (kConfigPublicKeyB64.isEmpty || sig.isEmpty) return false;
+  final payload = configResponse['transport'];
+  if (payload is! Map) return false;
+  final message = utf8.encode(
+    transportSigningMessage(
+      enabled: payload['enabled'] == true,
+      reportEnabled: payload['report_enabled'] == true,
+      torEnabled: payload['tor_enabled'] == true,
+      endpointsVersion: _int(payload['endpoints_version']),
+      issuedAtMs: _int(payload['issued_at_ms']),
+    ),
+  );
+  return verifyConfigEd25519B64(
     signatureB64: sig,
     message: message,
   );

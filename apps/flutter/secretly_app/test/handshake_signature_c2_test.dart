@@ -8,6 +8,7 @@ import 'package:cryptography/cryptography.dart';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:secretly_app/entitlements/entitlement_signature.dart';
 
 import 'package:secretly_app/ratchet/handshake_signature.dart';
 import 'package:secretly_app/ratchet/session_manager_v3.dart';
@@ -358,6 +359,60 @@ void main() {
     } finally {
       await w.close();
     }
+  });
+
+  test(
+      'Т-4б ⚑ флаг-день (Э4): неподписанное рукопожатие от устройства с '
+      'известным ключом отвергается и без доказанной подписи', () async {
+    final w = await _World.create();
+    try {
+      await w.converse(aSigns: false);
+      await w.bDb.localKvSet(AppDb.kvHandshakeAuthRequireAll, '1');
+      final forged = await w.forge();
+      await expectLater(
+        _dec(w.b, selfProfileId: 'Bprof', selfDeviceId: 'Bdev', wire: forged),
+        throwsA(isA<HandshakeAuthRejectedException>()),
+      );
+      expect(await w.bDb.localKvCounterGet('hs_auth.rejected'), 1);
+    } finally {
+      await w.close();
+    }
+  });
+
+  test('Т-4д выключатель отказов снимает и флаг-день', () async {
+    final w = await _World.create();
+    try {
+      await w.converse(aSigns: false);
+      await w.bDb.localKvSet(AppDb.kvHandshakeAuthRequireAll, '1');
+      await w.bDb.localKvSet(AppDb.kvHandshakeAuthEnforceDisabled, '1');
+      final forged = await w.forge();
+      expect(
+          await _dec(w.b,
+              selfProfileId: 'Bprof', selfDeviceId: 'Bdev', wire: forged),
+          'forged');
+      expect(await w.bDb.localKvCounterGet('hs_auth.rejected'), 0);
+    } finally {
+      await w.close();
+    }
+  });
+
+  test('Т-4в флаг-день: подписанное рукопожатие принимается как обычно',
+      () async {
+    final w = await _World.create();
+    try {
+      await w.bDb.localKvSet(AppDb.kvHandshakeAuthRequireAll, '1');
+      await w.converse(aSigns: true);
+      expect(await w.bDb.localKvCounterGet('hs_auth.rejected'), 0);
+    } finally {
+      await w.close();
+    }
+  });
+
+  test('Т-4г подписываемый текст флага-дня совпадает с сервером', () {
+    expect(
+      handshakeAuth2SigningMessage(requireAll: true, issuedAtMs: 1700000000123),
+      'secretly-handshake-auth2-v1|true|1700000000123',
+    );
   });
 
   test('Т-5 повтор рукопожатия (Ш-4) несёт ту же подпись и принимается',

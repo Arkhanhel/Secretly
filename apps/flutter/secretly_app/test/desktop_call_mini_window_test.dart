@@ -280,7 +280,10 @@ void main() {
       // Свернуть — значит свернуть: окно уходит, созвон остаётся.
       final i = win.indexOf('void _minimize() {');
       expect(i, greaterThan(0));
-      final body = win.substring(i, i + 200);
+      // 05.10.2026: в своём окне ОС «Свернуть» ужимает окно до мини-окна ОС
+      // (ветка `onMinimize` впереди), иначе — прежний путь ниже.
+      final body = win.substring(i, i + 600);
+      expect(body.contains('widget.onMinimize'), isTrue);
       expect(body.contains('roomWindowClosed(this)'), isTrue);
       // 29.09.2026 (Р1): окно уходит `_closeWindow` — маршрут `maybePop`, а
       // своё окно ОС закрывает хозяин ([DesktopRoomCallWindows]).
@@ -350,7 +353,11 @@ void main() {
     expect(chip.contains('this.secure = true'), isFalse);
     final host = File('lib/ui/desktop/calls/call_mini_host.dart')
         .readAsStringSync();
-    expect(host.contains('DesktopCallMiniChip(label: status, secure: false)'), isTrue);
+    // 06.10.2026 (ТЗ E2EE созвонов): замок группового созвона — только от
+    // состояния шифрования, никогда безусловно.
+    expect(host.contains('DesktopCallMiniChip(label: status, secure: true)'), isFalse);
+    expect(host.contains('media is RoomCallE2eeStatusSource'), isTrue);
+    expect(host.contains('?.secure ??'), isTrue);
   });
 
   testWidgets('чип без secure не рисует замок', (tester) async {

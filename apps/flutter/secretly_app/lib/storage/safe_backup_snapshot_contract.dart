@@ -85,6 +85,11 @@ const Map<String, Set<String>> kSafeBackupSnapshotColumnsByTable =
         'cover_id',
         'frame_id',
         'name_emoji',
+        // Закрытые ветки (06.10.2026): после восстановления ветка остаётся
+        // внутри своей комнаты, а не всплывает отдельным чатом.
+        'parent_room_id',
+        'room_kind',
+        'allow_members_create_topics',
         'reactions_mode',
         'allow_text',
         'allow_media',
@@ -240,6 +245,20 @@ const Map<String, Set<String>> kSafeBackupSnapshotExcludedColumnsByTable =
         'blob_access_token_b64',
         'blob_expires_at_ms',
       },
+      // 🔴 Исчезающие сообщения (ТЗ 22.10.2026, 23.10). Два довода сразу.
+      //
+      // 1. Совместимость. Экспорт пишет КАЖДЫЙ столбец, в том числе пустой, а
+      //    проверка при восстановлении (`validateSafeBackupDbSnapshot`)
+      //    отвергает копию целиком, если видит столбец не из своего списка.
+      //    Разрешить эти столбцы — значит сделать любую копию новой сборки
+      //    невосстановимой на выпущенных (в App Store раздаётся старая).
+      // 2. Обещание. Сообщения со сроком в копию не едут вовсе (строки
+      //    отсеивает `exportTables`), как у Signal: исчезающее не должно
+      //    переживать восстановление. Таймер чата — тоже: после
+      //    восстановления он выключен, пока собеседник или своё устройство не
+      //    пришлют его снова.
+      'conversations': <String>{'disappear_seconds'},
+      'events': <String>{'disappear_seconds', 'expires_at_ms'},
     };
 
 bool isValidSafeBackupSnapshotScalar(Object? value) {

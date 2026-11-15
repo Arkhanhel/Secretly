@@ -10,6 +10,7 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import '../../design/tokens.dart';
 import '../../primitives/avatar.dart';
 import '../../../widgets/broken_media_box.dart';
+import '../../primitives/desktop_dialog.dart' show showDesktopDialog;
 
 /// Full-screen modal preview of a conversation's avatar.
 /// - If [imagePath] is set and the file exists -> renders the image.
@@ -22,7 +23,7 @@ Future<void> showAvatarPreviewDialog(
   String? imagePath,
   AvatarShape shape = AvatarShape.round,
 }) {
-  return showDialog<void>(
+  return showDesktopDialog<void>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.88),
     builder: (dialogCtx) {

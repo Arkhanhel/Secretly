@@ -83,6 +83,7 @@ copy_dir() {
     --exclude 'build/' \
     --exclude '.gradle/' \
     --exclude '.cxx/' \
+    --exclude 'target/' \
     --exclude '*.hprof' \
     --exclude '*.hprof.*' \
     --exclude '.java_pid*' \
@@ -117,7 +118,14 @@ if [ "$clean" -eq 1 ]; then
 fi
 mkdir -p "$mirror_dir"
 
-# Keep generated native build output out of the mirror. These directories can
+# Keep generated native build output out of the mirror. The transport
+# plugin's build dir must go too: cargokit drops each build into jniLibs/ and
+# never removes libraries with an older name, and Gradle packages whatever is
+# there. After the 15.10.2026 rename to SeyLock, a stale
+# libsecretly_transport.so rode along in the APK next to libseylock.so.
+# third_party may be a link to the real tree, so this clears the real dir;
+# it is build output and cargokit rebuilds it.
+# These directories can
 # contain gigabytes of stale CMake/Gradle state (for example audiotags .cxx
 # Debug trees) and walking them over File Provider backed paths makes release
 # builds look frozen before compilation even starts.
@@ -139,7 +147,8 @@ rm -rf \
   "$mirror_dir/android/.java_pid"* \
   "$mirror_dir/third_party/audiotags/android/.cxx" \
   "$mirror_dir/third_party/audiotags/android/build" \
-  "$mirror_dir/third_party/audiotags/rust_builder/android/build"
+  "$mirror_dir/third_party/audiotags/rust_builder/android/build" \
+  "$mirror_dir/third_party/secretly_transport_ffi/android/build"
 
 rsync_args=(
   -a --delete
@@ -245,6 +254,37 @@ else
   fi
 fi
 printf 'Sanitized Flutter mirror synced.\n'
+
+# 🔴 ПЕРЕЧЕНЬ УКРАШЕНИЙ ДОЕЗЖАЕТ ВСЕГДА, И ЭТО НЕ ПРО ОБЛЕГЧЁННУЮ СБОРКУ.
+#
+# Копия не пересинхронизирует каталог assets, если он в ней уже есть (это
+# экономит десятки мегабайт на каждой сборке). Поэтому НОВЫЙ файл ассетов в
+# копию не попадает, а pubspec на него уже ссылается — и сборка падает с
+# «asset does not exist», одинаково у полной и у облегчённой. Перечень
+# украшений как раз такой новый файл, и он обязан совпадать с файлами, по
+# которым собран. Копируем его поимённо: несколько десятков килобайт.
+if [ -f "$app_dir/assets/on_demand_manifest.json" ] && [ ! -L "$mirror_dir/assets" ]; then
+  mkdir -p "$mirror_dir/assets"
+  cp -f "$app_dir/assets/on_demand_manifest.json" \
+    "$mirror_dir/assets/on_demand_manifest.json"
+fi
+
+# Украшения по требованию (Э7): облегчённая сборка не кладёт в пакет значки
+# профиля и обои — приложение возьмёт их по мере надобности и проверит по
+# отпечатку из подписанного пакета.
+#
+# 🔴 ПРАВИТСЯ ТОЛЬКО ПЕРЕЧЕНЬ В КОПИИ, ФАЙЛЫ НЕ УДАЛЯЮТСЯ. Каталог assets
+# может быть вложен в копию символической ссылкой (SECRETLY_SANITIZED_LINK_ASSETS),
+# и удаление «в копии» снесло бы исходники.
+if [ "${SECRETLY_ON_DEMAND_ASSETS:-0}" = "1" ]; then
+  on_demand_tool="$app_dir/../../../tools/build_on_demand_assets.py"
+  if [ ! -f "$on_demand_tool" ]; then
+    echo "error: не найден $on_demand_tool" >&2
+    exit 1
+  fi
+  (cd "$app_dir/../../.." && python3 "tools/build_on_demand_assets.py" \
+    --strip-pubspec "$mirror_dir/pubspec.yaml") || exit 1
+fi
 
 if command -v xattr >/dev/null 2>&1; then
   xattr -cr "$mirror_dir" 2>/dev/null || true

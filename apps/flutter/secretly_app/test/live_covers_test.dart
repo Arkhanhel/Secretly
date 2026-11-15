@@ -8,25 +8,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/ui/premium/cosmetics_catalog.dart';
 import 'package:secretly_app/ui/premium/live_covers.dart';
+import 'art_assets_availability.dart';
 
 void main() {
   test('набор перенесён, идентификаторы не столкнулись ни с чем', () {
-    expect(kLiveCoverIds.length, 24);
+    // 24 сцены набора + 16 переделанных старых под прежними id + 10 из
+    // эксклюзивной коллекции (13.11.2026). «Чёрная дыра» — шейдер, не сцена.
+    expect(kLiveCoverIds.length, 50);
     final all = kAllProfileCovers.map((c) => c.id).toList();
     expect(all.toSet().length, all.length);
-    expect(all.length, kProfileCovers.length + 24);
+    expect(all.toSet(), {...kLiveCoverIds, 'blackhole'});
+    expect(kCollectionProfileCovers, hasLength(10));
     for (final id in kLiveCoverIds) {
       expect(coverById(id), isNotNull, reason: 'обложка $id не рисуется');
     }
-    // 🔴 Имена рамок и обложек живут в ОДНОЙ таблице переводов: одинаковый
-    // ключ дал бы обложке чужое имя. Четыре сцены набора не перенесены
-    // намеренно — они у нас уже есть своей реализацией.
-    final frames = kAllAvatarFrames.map((f) => f.id).toSet();
-    for (final id in kLiveCoverIds) {
-      expect(frames.contains(id), isFalse, reason: '$id: рамка и обложка');
-    }
-    for (final taken in const ['fireflies', 'fireworks', 'galaxy', 'blackhole']) {
-      expect(kLiveCoverIds.contains(taken), isFalse, reason: '$taken подменён');
+    expect(kLiveCoverIds.contains('blackhole'), isFalse,
+        reason: 'чёрная дыра — шейдер, подменять нельзя');
+    // 🔴 Имена рамок и обложек живут в ОДНОЙ таблице переводов. Совпасть id
+    // могут только у одного мотива («Мишки», «Радуга», «Поток») — тогда и
+    // русское имя одно, иначе обложка получила бы чужой перевод.
+    final framesRu = {for (final f in kAllAvatarFrames) f.id: f.nameRu};
+    for (final c in kAllProfileCovers) {
+      final fr = framesRu[c.id];
+      if (fr != null) {
+        expect(fr, c.nameRu, reason: '${c.id}: рамка и обложка с разными именами');
+      }
     }
   });
 
@@ -51,7 +57,7 @@ void main() {
           ),
         ),
       );
-      for (final c in kLivingProfileCovers) {
+      for (final c in kAllProfileCovers) {
         expect(c.nameLocalized(ctx).trim(), isNotEmpty, reason: '${c.id}/$tag');
       }
     }
@@ -76,7 +82,10 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
       expect(tester.takeException(), isNull, reason: '$id упала на снятии');
     }
-  });
+  },
+      // Публичная копия без настоящих картинок (см. art_assets_availability).
+      skip: artAssetsArePlaceholders,
+    );
 
   testWidgets('выключенный тикер останавливает сцену', (tester) async {
     await tester.pumpWidget(

@@ -188,6 +188,13 @@ class DesktopSyncStatusController extends ChangeNotifier
     if (connected) {
       _cancelDropTimers();
       _everConnected = true;
+      // 🔴 Уже «Синхронизировано» — так и остаётся (05.10.2026, владелец:
+      // «если закрыть приложение и открыть заново, иконка „Синхронизировано“
+      // мигает»). Обрыв, которого человек не увидел (выдержка [kDropGrace]),
+      // и повторное «подключено» без обрыва — не повод снова писать
+      // «Синхронизация…»: на запуске повторных заходов несколько подряд, и
+      // зелёная плашка каждый раз перекрашивалась на три секунды.
+      if (_value.phase == DesktopSyncPhase.online) return;
       _set(DesktopSyncPhase.syncing);
       _scheduleSettleIfNeeded();
       return;

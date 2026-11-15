@@ -12,6 +12,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:whisper_cpp_flutter_plus/whisper_cpp_flutter_plus.dart';
 
+import '../../build_variant.dart';
+
 /// On-device voice-message transcription (premium feature #5, Phase 2).
 ///
 /// Uses the Whisper "base" model (multilingual, ~140 MB) running fully on the
@@ -146,6 +148,7 @@ class VoiceTranscriptionService {
   /// требуется совпадение суммы; для уже скачанных старым кодом файлов она
   /// считается ОДИН раз и запоминается отметкой рядом.
   Future<bool> isModelReady() async {
+    if (!kVoiceTranscriptionAvailable) return false;
     final f = await _modelFile();
     if (!f.existsSync()) return false;
     final stamp = File('${f.path}$_verifiedStampSuffix');
@@ -166,6 +169,9 @@ class VoiceTranscriptionService {
   /// [downloadProgress]. Returns true once the model is present. Concurrent
   /// callers coalesce onto the single in-flight download.
   Future<bool> ensureModel() async {
+    // 🔴 В облегчённой сборке скачивание даже не предлагается: 141 МБ модели
+    // без нативного разборщика — потраченный трафик и место впустую.
+    if (!kVoiceTranscriptionAvailable) return false;
     if (await isModelReady()) return true;
     if (_downloading) {
       while (_downloading) {
@@ -275,6 +281,7 @@ class VoiceTranscriptionService {
   /// natively without blocking Dart), so this only moves the one-time download
   /// off the critical path.
   Future<void> warmUp() async {
+    if (!kVoiceTranscriptionAvailable) return;
     try {
       if (await isModelReady()) return;
       await ensureModel();
@@ -302,6 +309,19 @@ class VoiceTranscriptionService {
     return null;
   }
 
+  /// Удаляет сохранённую расшифровку [eventId], если она есть. Зовётся при
+  /// истечении исчезающего сообщения (ТЗ 22.10.2026): текст голосового не
+  /// должен пережить само голосовое. Не создаёт каталог, если его нет.
+  Future<void> deleteCachedTranscript(String eventId) async {
+    try {
+      final base = await getApplicationSupportDirectory();
+      final f = File(
+        '${base.path}/voice_transcripts/${_cacheKey(eventId)}.txt',
+      );
+      if (f.existsSync()) await f.delete();
+    } catch (_) {}
+  }
+
   Future<void> _cacheTranscript(String eventId, String text) async {
     try {
       final f = File(
@@ -314,6 +334,7 @@ class VoiceTranscriptionService {
   /// Converts [audioPath] to a 16 kHz mono PCM WAV — the format whisper.cpp
   /// expects. Returns the WAV path or null on failure.
   Future<String?> _toWav(String audioPath) async {
+    if (!kVideoToolsAvailable) return null; // перегон делает FFmpeg
     final out = '$audioPath.stt16k.wav';
     try {
       if (File(out).existsSync()) File(out).deleteSync();
@@ -338,8 +359,11 @@ class VoiceTranscriptionService {
     required String audioPath,
     String? language,
   }) async {
+    // Кэш отдаём и в облегчённой сборке: расшифровки, сделанные до перехода на
+    // неё, остаются на диске и читаются без плагина.
     final cached = await cachedTranscript(eventId);
     if (cached != null) return cached;
+    if (!kVoiceTranscriptionAvailable) return null;
     if (!File(audioPath).existsSync()) return null;
     if (!await ensureModel()) return null;
     String? wav;

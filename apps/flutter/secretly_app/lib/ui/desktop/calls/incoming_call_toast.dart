@@ -290,18 +290,31 @@ class _AnimatedEnter extends StatefulWidget {
 }
 
 class _AnimatedEnterState extends State<_AnimatedEnter> with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl = AnimationController(vsync: this, duration: DMotion.medium)..forward();
+  // Выезжает и мягко садится, без отскока (05.10.2026): звонок — не игрушка,
+  // подпрыгивание читалось несерьёзно.
+  late final AnimationController _ctrl = AnimationController(vsync: this, duration: DMotion.slow)..forward();
+  late final CurvedAnimation _fade =
+      CurvedAnimation(parent: _ctrl, curve: const Interval(0, 0.6, curve: Curves.easeOut));
+  late final CurvedAnimation _move = CurvedAnimation(parent: _ctrl, curve: DMotion.decelerate);
+
   @override
   void dispose() {
+    _fade.dispose();
+    _move.dispose();
     _ctrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final fade = CurvedAnimation(parent: _ctrl, curve: DMotion.easeOutCubic);
-    final slide = Tween(begin: const Offset(0.15, -0.1), end: Offset.zero)
-        .animate(CurvedAnimation(parent: _ctrl, curve: DMotion.easeOutBack));
-    return FadeTransition(opacity: fade, child: SlideTransition(position: slide, child: widget.child));
+    final slide = Tween(begin: const Offset(0.12, -0.06), end: Offset.zero).animate(_move);
+    final scale = Tween<double>(begin: 0.96, end: 1).animate(_move);
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: slide,
+        child: ScaleTransition(scale: scale, alignment: Alignment.topRight, child: widget.child),
+      ),
+    );
   }
 }

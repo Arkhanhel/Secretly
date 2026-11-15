@@ -29,6 +29,7 @@ import '../services/desktop_file_probe.dart';
 import '../services/desktop_ui_prefs.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../primitives/hover_listener.dart';
+import '../primitives/motion_widgets.dart';
 import 'link_preview_card.dart';
 import 'media_albums.dart';
 import 'media_group_layout.dart' show mediaGroupSize;
@@ -39,6 +40,7 @@ import 'message_rich_text.dart';
 import 'noto_emoji_lottie.dart';
 import 'screen_gradient.dart';
 import 'voice_waveform.dart';
+import 'disappearing_banner.dart' show DesktopDisappearMark;
 
 enum DeliveryStatus { sending, scheduled, sent, delivered, read, failed }
 
@@ -231,6 +233,7 @@ class MessageAttachment {
     this.waveform,
     this.loading = false,
     this.failed = false,
+    this.gone = false,
     this.width,
     this.height,
     this.thumbnail,
@@ -279,6 +282,11 @@ class MessageAttachment {
   /// True if decryption / download failed. Bubble shows a retry hint.
   final bool failed;
 
+  /// П7 (разбор медиа 15.11.2026): файла больше нет на сервере (срок
+  /// хранения истёк) — повторять нечего, пузырь показывает «недоступно»
+  /// вместо кнопки повтора. Имеет смысл только вместе с [failed].
+  final bool gone;
+
   /// Размеры снимка в пикселях — от ОТПРАВИТЕЛЯ. По ним место под снимок
   /// занимается сразу, до загрузки: лента не прыгает, когда картинка
   /// приходит.
@@ -319,6 +327,7 @@ class MessageAttachment {
     String? filePath,
     bool? loading,
     bool? failed,
+    bool? gone,
     int? durationMs,
     double? downloadProgress,
     bool clearDownloadProgress = false,
@@ -337,6 +346,7 @@ class MessageAttachment {
       waveform: waveform,
       loading: loading ?? this.loading,
       failed: failed ?? this.failed,
+      gone: gone ?? this.gone,
       width: width,
       height: height,
       thumbnail: thumbnail,
@@ -361,9 +371,15 @@ class DesktopStickerPackRef {
     required this.originPid,
     this.title = '',
     this.stickerCount,
+    this.closed = false,
   });
 
   final String packId;
+
+  /// Автор пометил набор закрытым (ТЗ 14.11.2026): окно покажет замок вместо
+  /// «Добавить». Подсказка интерфейсу — сам набор автор не отдаст в любом
+  /// случае.
+  final bool closed;
 
   /// Профиль автора набора: у него и спрашиваем остальные стикеры. Пусто —
   /// спросить не у кого (группа без отметки об авторе).
@@ -407,6 +423,8 @@ class MessageData {
     this.ownLinkPreviewTarget,
     this.mediaGroupId,
     this.albumItems,
+    this.disappearing = false,
+    this.expiresAtMs,
   });
 
   final String id;
@@ -553,6 +571,11 @@ class MessageData {
   /// относятся ко всем её сообщениям.
   final List<MessageData>? albumItems;
 
+  /// Исчезающее сообщение (ТЗ 22.10.2026): у него есть срок; [expiresAtMs] —
+  /// когда удалится (у непрочитанного входящего — `null`, отсчёт ещё не шёл).
+  final bool disappearing;
+  final int? expiresAtMs;
+
   /// Все сообщения строки: у альбома — его снимки, у обычной — она сама.
   List<MessageData> get expanded => albumItems ?? <MessageData>[this];
 
@@ -613,6 +636,8 @@ class MessageData {
     Uri? ownLinkPreviewTarget,
     String? mediaGroupId,
     List<MessageData>? albumItems,
+    bool? disappearing,
+    int? expiresAtMs,
   }) {
     return MessageData(
       id: id ?? this.id,
@@ -648,6 +673,8 @@ class MessageData {
       ownLinkPreviewTarget: ownLinkPreviewTarget ?? this.ownLinkPreviewTarget,
       mediaGroupId: mediaGroupId ?? this.mediaGroupId,
       albumItems: albumItems ?? this.albumItems,
+      disappearing: disappearing ?? this.disappearing,
+      expiresAtMs: expiresAtMs ?? this.expiresAtMs,
     );
   }
 }
@@ -1052,7 +1079,13 @@ class _MessageBubbleState extends State<MessageBubble> {
     final bar = MouseRegion(
       onEnter: (_) => _onBarHoverChange(true),
       onExit: (_) => _onBarHoverChange(false),
-      child: _hoverActions(c, isSelf),
+      // Полоса действий не включается, а всплывает над пузырём (05.10.2026).
+      child: DAppear(
+        duration: DMotion.popIn,
+        offset: const Offset(0, 4),
+        fromScale: 0.94,
+        child: _hoverActions(c, isSelf),
+      ),
     );
     // Своё сообщение прижимаем ПРАВЫМ краем: ширина строки зависит от того,
     // есть ли у комнаты ветки, и считать её заранее нечем.
@@ -1925,6 +1958,8 @@ class _MessageBubbleState extends State<MessageBubble> {
         edited: m.edited,
         isSelf: isSelf,
         delivery: m.delivery,
+        disappearing: m.disappearing,
+        expiresAtMs: m.expiresAtMs,
       ),
     );
   }
@@ -2717,6 +2752,16 @@ class _MessageBubbleState extends State<MessageBubble> {
     );
   }
 
+  /// Исчезающее сообщение (ТЗ 22.10.2026): значок таймера в подвале, в
+  /// последний час — обратный отсчёт. Пусто у сообщения без срока.
+  List<Widget> _disappearMarkFor(MessageData m, Color color) =>
+      m.disappearing
+      ? <Widget>[
+          const SizedBox(width: 4),
+          DesktopDisappearMark(expiresAtMs: m.expiresAtMs, color: color),
+        ]
+      : const <Widget>[];
+
   /// Подпись времени без выравнивания и без слота реакций — для случая, когда
   /// она лежит поверх текста.
   Widget _metaInline(DColorSet c, bool isSelf, Color fgSoft) {
@@ -2729,6 +2774,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           const SizedBox(width: 6),
           Text(l10n.desktopBubbleEdited, style: DType.tiny.copyWith(color: fgSoft)),
         ],
+        ..._disappearMarkFor(m, fgSoft),
         if (isSelf) ...[
           const SizedBox(width: 4),
           _deliveryIcon(m.delivery, isSelf, c),
@@ -2753,6 +2799,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           const SizedBox(width: 6),
           Text(l10n.desktopBubbleEdited, style: DType.tiny.copyWith(color: fgSoft)),
         ],
+        ..._disappearMarkFor(m, fgSoft),
         if (isSelf) ...[
           const SizedBox(width: 4),
           _deliveryIcon(m.delivery, isSelf, c),
@@ -3569,12 +3616,16 @@ class _MetaPill extends StatelessWidget {
     required this.edited,
     required this.isSelf,
     required this.delivery,
+    this.disappearing = false,
+    this.expiresAtMs,
   });
 
   final String time;
   final bool edited;
   final bool isSelf;
   final DeliveryStatus delivery;
+  final bool disappearing;
+  final int? expiresAtMs;
 
   @override
   Widget build(BuildContext context) {
@@ -3608,6 +3659,10 @@ class _MetaPill extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
+          ],
+          if (disappearing) ...[
+            const SizedBox(width: 4),
+            DesktopDisappearMark(expiresAtMs: expiresAtMs, color: fg),
           ],
           if (isSelf) ...[
             const SizedBox(width: 4),
@@ -3683,7 +3738,7 @@ class _VoicePlayButtonState extends State<_VoicePlayButton> {
                       valueColor: AlwaysStoppedAnimation(widget.iconColor),
                     ),
                   )
-                : Icon(
+                : DMorphIcon(
                     widget.isPlaying
                         ? FluentIcons.pause_24_filled
                         : FluentIcons.play_24_filled,

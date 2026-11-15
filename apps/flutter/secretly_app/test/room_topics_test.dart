@@ -424,4 +424,142 @@ void main() {
       expect(body.contains("ru: 'Имя или Secretly ID'"), isTrue);
     });
   });
+
+  // 🔴 Жалоба владельца 06.10.2026: темы не доходили до участников, а
+  // сообщения из тем у них лежали в «Основе». Список уходил одним скрытым
+  // сообщением «отправил и забыл».
+  group('🔴 список тем доходит до всех', () {
+    bool decide({
+      bool hasTopics = true,
+      bool authoredHere = true,
+      int nowMs = 100 * 3600 * 1000,
+      String listHash = 'A',
+      String sentHash = 'A',
+      int sentAtMs = 99 * 3600 * 1000,
+      bool sentPartially = false,
+      String membersKey = 'm1',
+      String sentMembersKey = 'm1',
+    }) => shouldResendRoomTopics(
+      hasTopics: hasTopics,
+      authoredHere: authoredHere,
+      nowMs: nowMs,
+      listHash: listHash,
+      sentHash: sentHash,
+      sentAtMs: sentAtMs,
+      sentPartially: sentPartially,
+      membersKey: membersKey,
+      sentMembersKey: sentMembersKey,
+    );
+
+    test('недавно и всем дошло — не повторяем', () {
+      expect(decide(), isFalse);
+    });
+
+    test('ни разу не дошло — повторяем', () {
+      expect(decide(sentAtMs: 0), isTrue);
+    });
+
+    test('список правили после рассылки — повторяем', () {
+      expect(decide(sentHash: 'old'), isTrue);
+    });
+
+    test('сменился состав комнаты — новичкам повторяем', () {
+      expect(decide(sentMembersKey: 'm0'), isTrue);
+    });
+
+    test('дошло не всем — повтор через 15 минут, а не через 6 часов', () {
+      final now = 100 * 3600 * 1000;
+      expect(
+        decide(nowMs: now, sentAtMs: now - 14 * 60 * 1000, sentPartially: true),
+        isFalse,
+      );
+      expect(
+        decide(nowMs: now, sentAtMs: now - 16 * 60 * 1000, sentPartially: true),
+        isTrue,
+      );
+      expect(decide(nowMs: now, sentAtMs: now - 16 * 60 * 1000), isFalse);
+      expect(decide(nowMs: now, sentAtMs: now - 6 * 3600 * 1000), isTrue);
+    });
+
+    test('🔴 чужой список не повторяем: он мог устареть', () {
+      expect(decide(authoredHere: false, sentAtMs: 0), isFalse);
+    });
+
+    test('тем нет — повторять нечего', () {
+      expect(decide(hasTopics: false, sentAtMs: 0), isFalse);
+    });
+
+    test('ревизия едет в команде и переживает разбор', () {
+      final text = buildTopicsSyncCommand(
+        const <RoomTopicRef>[RoomTopicRef(id: 't', title: 'релиз')],
+        revision: 1234,
+      );
+      final parsed = parseTopicsSyncCommand(text)!;
+      expect(parsed.revision, 1234);
+      // Свежесть — по ревизии, а не по времени повторного сообщения.
+      expect(parsed.freshnessMs(999999), 1234);
+    });
+
+    test('🔴 команда старой сборки — по времени сообщения, как раньше', () {
+      final text = buildTopicsSyncCommand(
+        const <RoomTopicRef>[RoomTopicRef(id: 't', title: 'релиз')],
+      );
+      expect(text.contains('rev'), isFalse);
+      final parsed = parseTopicsSyncCommand(text)!;
+      expect(parsed.revision, 0);
+      expect(parsed.freshnessMs(5555), 5555);
+    });
+
+    group('где это включено', () {
+      final ctrl = File('lib/app/app_controller.dart').readAsStringSync();
+      final mobile = File('lib/ui/chat_screen.dart').readAsStringSync();
+      final desktop = File(
+        'lib/ui/desktop/app/desktop_chats_section.dart',
+      ).readAsStringSync();
+
+      test('каждая отправка в тему сперва проверяет список', () {
+        for (final name in const [
+          'sendGroupMessage',
+          'sendGroupPoll',
+          'sendGroupEvent',
+          'sendGroupSticker',
+          'sendGroupAttachmentFile',
+          'sendGroupAttachmentFiles',
+        ]) {
+          final at = ctrl.indexOf(RegExp('  Future<[^\\n]*> $name\\(\\{'));
+          expect(at, greaterThan(0), reason: name);
+          final body = ctrl.substring(at, at + 1600);
+          expect(
+            body.contains('unawaited(_maybeResendRoomTopics(groupId, topicId));'),
+            isTrue,
+            reason: name,
+          );
+        }
+      });
+
+      test('приём кладёт список в базу сразу, без открытого экрана', () {
+        final at = ctrl.indexOf('isTopicsSyncCommandText(bodyText)');
+        expect(at, greaterThan(0));
+        expect(
+          ctrl.indexOf('_adoptInboundRoomTopics(', at),
+          greaterThan(at),
+        );
+      });
+
+      test('рассылка помечает автора до отправки и несёт ревизию', () {
+        final at = ctrl.indexOf('Future<void> broadcastRoomTopics(');
+        final body = ctrl.substring(at, ctrl.indexOf('static const String _kvRoomTopicsAuthorPrefix', at));
+        final author = body.indexOf('_kvRoomTopicsAuthorPrefix');
+        final send = body.indexOf('_sendRoomTopicsCommand(');
+        expect(author, greaterThan(0));
+        expect(send, greaterThan(author));
+        expect(body.contains('revision: revision'), isTrue);
+      });
+
+      test('экраны сравнивают свежесть по ревизии', () {
+        expect(mobile.contains('command.freshnessMs('), isTrue);
+        expect(desktop.contains('parsed.freshnessMs('), isTrue);
+      });
+    });
+  });
 }

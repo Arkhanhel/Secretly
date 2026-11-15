@@ -17,6 +17,7 @@ import '../diagnostics/diag_log.dart';
 import '../push/push_wake_service.dart';
 import '../ui/app_asset_paths.dart';
 import '../transport/relay_client.dart';
+import '../transport/server_clock.dart';
 import '../transport/native_network_path.dart';
 import 'call_audio_route.dart';
 import 'call_failure.dart';
@@ -25,6 +26,7 @@ import 'call_event.dart';
 import 'call_journal.dart';
 import 'call_log.dart';
 import 'call_state.dart';
+import 'livekit_audio_session_guard.dart';
 import 'call_state_machine.dart';
 import 'webrtc_call_session.dart';
 
@@ -45,7 +47,12 @@ class CallManager {
   CallManager({required this.controller, bool? bindPeerDevice})
       : _bindPeerDevice = bindPeerDevice ?? _isDesktopCallPlatform() {
     _audioRouteController.state.addListener(_handleAudioRouteStateChanged);
+    // iPhone: LiveKit не должен трогать звуковую сессию личного звонка
+    // (громкая связь, 15.11.2026) — см. [LiveKitAudioSessionGuard].
+    state.addListener(() => _liveKitAudioGuard.onCallState(state.value));
   }
+
+  final LiveKitAudioSessionGuard _liveKitAudioGuard = LiveKitAudioSessionGuard();
 
   // ─────────────────────────────────────────────────────────────────────
   // 🔴 ПК: ЗВОНОК — ЭТО ДВА УСТРОЙСТВА, А НЕ ДВА ПРОФИЛЯ (28.09.2026).
@@ -120,6 +127,34 @@ class CallManager {
     if (current.isEmpty || signalCallId.trim() != current) return false;
     if (action == 'invite') return false;
     return from != bound;
+  }
+
+  /// 🔴 Сигнал по ТЕКУЩЕМУ звонку от чужого профиля (11.11.2026).
+  ///
+  /// `callId` и `attemptId` реле видит открыто, а приём `answer`/`ice`/
+  /// `hangup`/`decline` раньше сверял только их. Любой контакт с попарной
+  /// сессией мог прислать `hangup` по чужому звонку и оборвать разговор.
+  /// Правило для всех платформ: по текущему звонку принимаются сигналы только
+  /// от собеседника или от моего же профиля (мои другие устройства).
+  /// Профиль отправителя берётся из расшифрованной сессии, а не из сообщения.
+  /// Пустой профиль отправителя или собеседника — не судим (как раньше).
+  @visibleForTesting
+  static bool shouldIgnoreSignalFromForeignProfile({
+    required String currentCallId,
+    required String currentPeerProfileId,
+    required String selfProfileId,
+    required String signalCallId,
+    required String signalFromProfileId,
+  }) {
+    final current = currentCallId.trim();
+    if (current.isEmpty || signalCallId.trim() != current) return false;
+    final peer = currentPeerProfileId.trim();
+    final from = signalFromProfileId.trim();
+    if (peer.isEmpty || from.isEmpty) return false;
+    if (from == peer) return false;
+    final self = selfProfileId.trim();
+    if (self.isNotEmpty && from == self) return false;
+    return true;
   }
 
   static const String _incomingRingtoneAsset =
@@ -412,6 +447,15 @@ class CallManager {
 
   /// Global instance — set from main.dart after creation.
   static CallManager? instance;
+
+  /// 🔴 ГРУППОВОЙ ЗВОНОК ДЕРЖИТ ТУ ЖЕ СЛУЖБУ (06.10.2026).
+  ///
+  /// Служба переднего плана на Android одна: без неё при погашенном экране
+  /// Android 14 отбирает у приложения микрофон. Групповой звонок включает её
+  /// с id `room:…`, и «Завершить» из её уведомления приходит сюда — его
+  /// отдаём менеджеру групповых звонков, а не личному звонку.
+  static const String roomCallForegroundIdPrefix = 'room:';
+  static Future<void> Function(String callId)? roomCallNotificationHangup;
 
   static bool shouldIgnoreIncomingOffer({
     required CallPhase phase,
@@ -1397,7 +1441,7 @@ class CallManager {
         'CallManager',
         '[OP] event=call_signal_buffer_drain count=${buffered.length}',
       );
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final nowMs = ServerClock.instance.nowMs();
       for (final sig in buffered) {
         final ageMs = nowMs - sig.createdAtMs;
         // 🔴 AGE MAY ONLY SILENCE A SIGNAL THAT STARTS OR ADVANCES A CALL —
@@ -1457,7 +1501,7 @@ class CallManager {
     try {
       final events = await controller.drainPersistedCallSignals();
       if (events.isEmpty) return;
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final nowMs = ServerClock.instance.nowMs();
       for (final sig in events) {
         final ageMs = nowMs - sig.createdAtMs;
         // 🔴 ВОЗРАСТ ГЛУШИТ ТОЛЬКО ТО, ЧТО НАЧИНАЕТ ИЛИ ПРОДВИГАЕТ ЗВОНОК, И
@@ -3238,6 +3282,40 @@ class CallManager {
     state.value = s.copyWith(isCameraOff: next);
   }
 
+  // 🔴 iPhone: КАМЕРА ПРИ СВЁРНУТОМ ВИДЕОЗВОНКЕ (13.11.2026, Т10).
+  //
+  // Свернул видеозвонок — iOS отключает приложению камеру, и у собеседника
+  // застывал последний кадр (проверка на iPhone с iOS 27 + Android). Теперь
+  // при уходе в фон видеодорожка выключается так же, как кнопкой «камера»
+  // (у собеседника — чёрный кадр, а не застывший), при возврате — включается,
+  // если её выключили именно мы. Кнопку человека не трогаем: выключенная им
+  // камера так и остаётся выключенной. Android не затронут — там окно PiP
+  // держит камеру.
+  bool _cameraPausedForBackground = false;
+
+  Future<void> onAppBackgroundedDuringCall() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    final s = state.value;
+    if (!s.isActive || !s.isVideo || s.isCameraOff) return;
+    final session = _session;
+    if (session == null || !session.hasLocalVideoTrack) return;
+    await session.setVideoEnabled(false);
+    _cameraPausedForBackground = true;
+    callOpLog('CallManager', 'camera_paused_for_background');
+  }
+
+  Future<void> onAppResumedDuringCall() async {
+    if (!_cameraPausedForBackground) return;
+    _cameraPausedForBackground = false;
+    final s = state.value;
+    final session = _session;
+    if (session == null || !s.isActive || !s.isVideo || s.isCameraOff) {
+      return;
+    }
+    await session.setVideoEnabled(true);
+    callOpLog('CallManager', 'camera_resumed_from_background');
+  }
+
   Future<void> switchCamera() async {
     final s = state.value;
     if (!s.isVideo) return;
@@ -3403,6 +3481,25 @@ class CallManager {
       return;
     }
 
+    if (shouldIgnoreSignalFromForeignProfile(
+      currentCallId: s.callId,
+      currentPeerProfileId: s.peerProfileId,
+      selfProfileId: controller.profileId,
+      signalCallId: sig.callId,
+      signalFromProfileId: sig.fromProfileId,
+    )) {
+      callOpLog(
+        'CallManager',
+        'signal_from_foreign_profile_ignored',
+        fields: <String, Object?>{
+          'action': sig.action,
+          'callId': sig.callId,
+          'phase': s.phase,
+        },
+      );
+      return;
+    }
+
     switch (sig.action) {
       case 'invite':
         if (s.phase == CallPhase.ringingOutgoing &&
@@ -3512,7 +3609,7 @@ class CallManager {
         // Guard: drop stale invites (relay can re-deliver up to 90s; ring
         // timeout is 45s, so anything older is a ghost call).
         final inviteAgeMs =
-            DateTime.now().millisecondsSinceEpoch - sig.createdAtMs;
+            ServerClock.instance.nowMs() - sig.createdAtMs;
         if (inviteAgeMs > 45000) {
           callLog(
             'CallManager',
@@ -3649,7 +3746,7 @@ class CallManager {
           // Guard: same stale-age check as invite — offer-before-invite must
           // not create ghost incoming UX for delayed/replayed offers.
           final offerAgeMs =
-              DateTime.now().millisecondsSinceEpoch - sig.createdAtMs;
+              ServerClock.instance.nowMs() - sig.createdAtMs;
           if (offerAgeMs > 45000) {
             callLog(
               'CallManager',
@@ -6845,6 +6942,14 @@ class CallManager {
     final callAttemptId = (map['callAttemptId'] as String?)?.trim() ?? callId;
     final current = state.value;
     if (action.isEmpty || callId.isEmpty) return;
+    if (callId.startsWith(roomCallForegroundIdPrefix)) {
+      if (action == 'hangup') {
+        unawaited(
+          roomCallNotificationHangup?.call(callId) ?? Future<void>.value(),
+        );
+      }
+      return;
+    }
     if (!shouldAcceptNativeCallAction(
       currentCallId: current.callId,
       currentCallAttemptId: current.callAttemptId,

@@ -40,6 +40,8 @@ import 'widgets/avatar_initials.dart';
 import 'widgets/frosted_header_island.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'widgets/broken_media_box.dart';
+import 'disappearing_messages_ui.dart';
+import '../messages/disappearing_flags.dart' show DisappearingPeerSupport;
 
 class ContactDetailsScreen extends StatefulWidget {
   const ContactDetailsScreen({
@@ -1282,8 +1284,27 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
     final aboutText = await widget.controller.cachedProfileBio(
       widget.peerProfileId,
     );
+    // Исчезающие (ТЗ 22.10.2026): видимость решает флаг сервера; без него
+    // ни пункта, ни переименования соседнего.
+    final disappearConvoId =
+        (convo?.convoId ?? widget.convoId ?? widget.peerProfileId);
+    var disappearingVisible = false;
+    int? disappearSeconds;
+    try {
+      disappearingVisible = await widget.controller
+          .disappearingVisibleForConvo(disappearConvoId);
+      if (disappearingVisible) {
+        disappearSeconds = await widget.controller.getChatDisappearSeconds(
+          disappearConvoId,
+        );
+      }
+    } catch (_) {
+      disappearingVisible = false;
+    }
 
     return _ContactDetailsVm(
+      disappearingVisible: disappearingVisible,
+      disappearSeconds: disappearSeconds,
       profileId: widget.peerProfileId,
       title: title,
       avatarPath: avatarPath,
@@ -1716,11 +1737,29 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                           icon: AppIcons.reply,
                           title: l10n.contactDetailsShareContact,
                         ),
+                        // Исчезающие у всех участников (ТЗ 22.10.2026) —
+                        // только при открытом флаге сервера; без него меню
+                        // ровно прежнее.
+                        if (vm.disappearingVisible)
+                          _menuItem(
+                            context,
+                            value: 'disappearing',
+                            icon: AppIcons.timer,
+                            title: l10n.disappearingTitle,
+                            trailing: const Icon(
+                              AppIcons.chevronRight,
+                              size: 20,
+                            ),
+                          ),
                         _menuItem(
                           context,
                           value: 'autodelete',
                           icon: AppIcons.timer,
-                          title: l10n.contactDetailsAutoDelete,
+                          // Локальная уборка называется честно всегда —
+                          // «на моих устройствах» (14.11.2026): у собеседника
+                          // она ничего не удаляет, и «Автоудаление» без
+                          // уточнения обещало больше, чем делает.
+                          title: l10n.desktopContactDisappearing,
                           trailing: const Icon(AppIcons.chevronRight, size: 20),
                         ),
                         _menuItem(
@@ -1766,6 +1805,9 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
     switch (selected) {
       case 'share':
         await _openContactShareSheet(vm);
+        return;
+      case 'disappearing':
+        await _showDisappearingDialog(vm);
         return;
       case 'autodelete':
         await _showAutoDeleteDialog(vm);
@@ -1916,7 +1958,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
       context: context,
       builder: (context) {
         return SimpleDialog(
-          title: Text(l10n.contactDetailsAutoDelete),
+          title: Text(l10n.desktopContactDisappearing),
           children: [
             for (final opt in options)
               ListTile(
@@ -1938,6 +1980,47 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
       convoId: vm.resolvedConvoId,
       autoDeleteSeconds: selected,
     );
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  /// Общий таймер чата (ТЗ 22.10.2026, шаг 3).
+  Future<void> _showDisappearingDialog(_ContactDetailsVm vm) async {
+    final l10n = context.l10n;
+    // Проверка версий — до выбора (§2.4): человек решает, зная, что у
+    // собеседника может не исчезнуть. Ответ реле кэшируется на час.
+    DisappearingPeerSupport? support;
+    try {
+      support = await widget.controller.disappearingPeerSupport(
+        vm.resolvedConvoId,
+      );
+    } catch (_) {
+      support = DisappearingPeerSupport.unknown;
+    }
+    if (!mounted) return;
+    final choice = await showDisappearingTimerPicker(
+      context,
+      current: vm.disappearSeconds,
+      customMinSeconds: widget.controller.disappearCustomMinSeconds,
+      customMaxSeconds: widget.controller.disappearCustomMaxSeconds,
+      warning: disappearingSupportWarning(support, l10n),
+    );
+    if (choice == null || choice.seconds == vm.disappearSeconds) return;
+    try {
+      await widget.controller.setChatDisappearSeconds(
+        convoId: vm.resolvedConvoId,
+        seconds: choice.seconds,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(l10n.disappearingUpdated)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(
+        context,
+      )?.showSnackBar(SnackBar(content: Text(l10n.disappearingSetFailed)));
+    }
     if (!mounted) return;
     setState(() {});
   }
@@ -1964,6 +2047,8 @@ class _ContactDetailsVm {
     this.coverImagePath,
     this.emojiStatus,
     this.premiumBadge = false,
+    this.disappearingVisible = false,
+    this.disappearSeconds,
   });
 
   final String profileId;
@@ -1978,6 +2063,11 @@ class _ContactDetailsVm {
   final String usernameText;
   final String resolvedConvoId;
   final int? autoDeleteSeconds;
+
+  /// Исчезающие у всех участников (ТЗ 22.10.2026): показывать ли пункт и
+  /// текущий общий таймер.
+  final bool disappearingVisible;
+  final int? disappearSeconds;
   final String? emoji;
   final bool isFavoritesConvo;
 

@@ -4,12 +4,16 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter/widgets.dart';
 
 import '../app/app_controller.dart';
 import '../calls/call_audio_route.dart';
+import '../calls/call_manager.dart' show CallManager;
 import '../calls/call_log.dart';
 import '../transport/relay_client.dart';
+import 'call_e2ee/app_room_call_key_transport.dart';
+import 'room_call_capture_intent.dart';
 import 'room_call_media_controller.dart';
 import 'room_call_media_state.dart';
 import 'room_call_state.dart';
@@ -20,7 +24,13 @@ class RoomCallManager {
     RoomCallMediaControllerFactory? mediaControllerFactory,
   }) : mediaControllerFactory =
            mediaControllerFactory ??
-           const DefaultRoomCallMediaControllerFactory() {
+           DefaultRoomCallMediaControllerFactory(
+             // Ключи зашифрованного созвона — по попарным сессиям (ТЗ E2EE).
+             e2eeTransport: AppRoomCallKeyTransport(controller),
+             e2eeKeySwitchDelayMs: () => controller.callFlags.keySwitchDelayMs,
+             // Э5: групповой созвон под цензурой.
+             stealthPlan: controller.roomCallStealthPlan,
+           ) {
     _audioRouteController.state.addListener(_handleAudioRouteStateChanged);
   }
 
@@ -60,6 +70,7 @@ class RoomCallManager {
       _audioRouteController.state;
 
   void start() {
+    CallManager.roomCallNotificationHangup = _leaveFromNotification;
     if (_started) {
       return;
     }
@@ -98,6 +109,15 @@ class RoomCallManager {
     _audioRouteController.state.removeListener(_handleAudioRouteStateChanged);
     await _audioRouteController.dispose();
     state.dispose();
+    if (_foregroundCallKey.isNotEmpty &&
+        defaultTargetPlatform == TargetPlatform.android &&
+        !(CallManager.instance?.state.value.isActive ?? false)) {
+      _foregroundCallKey = '';
+      await _invokeCallUi('stopCallForegroundService');
+    }
+    if (CallManager.roomCallNotificationHangup == _leaveFromNotification) {
+      CallManager.roomCallNotificationHangup = null;
+    }
     if (identical(instance, this)) {
       instance = null;
     }
@@ -534,7 +554,14 @@ class RoomCallManager {
           : routeState.isSpeakerSelected;
       await _mediaController!.setSpeakerEnabled(seedSpeaker);
     }
-    await _mediaController!.syncSession(session: session);
+    // 🔴 ЗР-10 (ТЗ E2EE созвонов): медиа включает только то, что человек
+    // включил сам. Реле может выключить (модерация), но не включить.
+    await _mediaController!.syncSession(
+      session: applyRoomCallCaptureIntent(
+        session,
+        controller.roomCallCaptureIntent(session.roomId),
+      ),
+    );
     await _syncAudioRoutesForCurrentRoom(
       reason: 'room_media_session_ready',
       reapplyCurrentRoute: true,
@@ -613,6 +640,88 @@ class RoomCallManager {
   void _setState(RoomCallRuntimeState nextState) {
     state.value = nextState;
     _scheduleMediaRefresh();
+    _syncCallForegroundService(nextState);
+  }
+
+  // ── Служба переднего плана на Android (06.10.2026) ──────────────────────
+  //
+  // 🔴 Без неё Android 14 при погашенном экране или свёрнутом приложении
+  // отбирает микрофон: в групповом звонке человека перестают слышать, хотя
+  // звонок на экране идёт. Личный звонок держит службу давно
+  // (`CallManager._startCallForegroundService`); групповой берёт ту же, с id
+  // `room:<комната>:<звонок>`. Пока идёт личный звонок, службу не трогаем —
+  // она его.
+
+  static const MethodChannel _callUiChannel = MethodChannel('secretly/call_ui');
+  String _foregroundCallKey = '';
+  bool _foregroundCallVideo = false;
+
+  void _syncCallForegroundService(RoomCallRuntimeState s) {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    final inCall =
+        (s.phase == RoomCallRuntimePhase.bootstrapping ||
+            s.phase == RoomCallRuntimePhase.bootstrapReady) &&
+        s.roomId.isNotEmpty &&
+        s.callId.isNotEmpty;
+    final key = inCall
+        ? '${CallManager.roomCallForegroundIdPrefix}${s.roomId}:${s.callId}'
+        : '';
+    // Вид звонка узнаём из сессии реле, уже после подключения: уведомление
+    // обновляется и тогда.
+    final isVideo = s.session?.mediaType == 'video';
+    if (key == _foregroundCallKey &&
+        (key.isEmpty || isVideo == _foregroundCallVideo)) {
+      return;
+    }
+    final wasRunning = _foregroundCallKey.isNotEmpty;
+    _foregroundCallKey = key;
+    _foregroundCallVideo = isVideo;
+    if (CallManager.instance?.state.value.isActive ?? false) return;
+    if (key.isEmpty) {
+      if (wasRunning) {
+        unawaited(_invokeCallUi('stopCallForegroundService'));
+      }
+      return;
+    }
+    final title =
+        controller.conversationIncludingTopics(s.roomId)?.title.trim() ?? '';
+    unawaited(
+      _invokeCallUi('startCallForegroundService', <String, Object?>{
+        'callId': key,
+        'callAttemptId': key,
+        'peerName': title,
+        'isVideo': isVideo,
+      }),
+    );
+  }
+
+  Future<void> _invokeCallUi(String method, [Object? args]) async {
+    try {
+      await _callUiChannel.invokeMethod(method, args);
+    } catch (_) {
+      // Служба — подстраховка: без неё звонок идёт, как шёл раньше.
+    }
+  }
+
+  /// «Завершить» из уведомления службы — выход из группового звонка.
+  Future<void> _leaveFromNotification(String key) async {
+    final rest = key.substring(CallManager.roomCallForegroundIdPrefix.length);
+    final sep = rest.lastIndexOf(':');
+    if (sep <= 0 || sep >= rest.length - 1) return;
+    final roomId = rest.substring(0, sep);
+    final callId = rest.substring(sep + 1);
+    try {
+      final result = await controller.leaveRelayRoomCall(
+        roomId: roomId,
+        callId: callId,
+      );
+      if (result != null) {
+        await clearIfMatches(roomId: roomId, callId: callId);
+      }
+    } catch (_) {
+      // Не вышли — звонок продолжается, служба поднимется со следующим
+      // состоянием.
+    }
   }
 
   void _scheduleMediaRefresh() {

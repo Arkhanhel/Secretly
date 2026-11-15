@@ -10,6 +10,7 @@ import 'package:workmanager/workmanager.dart';
 import '../diagnostics/diag_log.dart';
 import '../security/auth_signer.dart';
 import '../security/device_keys.dart';
+import '../security/profile_space.dart';
 import '../security/secure_secrets.dart';
 import '../storage/app_db.dart';
 import '../transport/relay_protocol.dart' show isOnlineOnlyOutboxRow;
@@ -138,6 +139,8 @@ class BackgroundWorker {
   /// The whole task body, exposed for the headless entry point. Never throws.
   static Future<bool> _run() async {
     try {
+      // Фон работает с тем же профилем, что открыт в приложении (Э2).
+      await ProfileSpaceRuntime.enterStoredForIsolate();
       final prefs = await SharedPreferences.getInstance();
       try {
         await prefs.reload();
@@ -185,7 +188,9 @@ class BackgroundWorker {
       deviceId: deviceId,
     );
 
-    final db = await AppDb.open(passphrase: dbPass);
+    // Своё соединение: `close()` в конце не должен закрыть базу основному
+    // приложению, если оно живо (см. [AppDb.open]).
+    final db = await AppDb.open(passphrase: dbPass, shared: false);
     final client = createResilientHttpClient();
     var sent = 0;
     try {

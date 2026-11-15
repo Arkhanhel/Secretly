@@ -22,6 +22,8 @@ import 'safe_backup_file_io.dart';
 import 'security_lock_flow.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_top_bar.dart';
+import 'backup_refusal_text.dart';
+import 'backup_error_text.dart';
 
 class SafeBackupScreen extends StatefulWidget {
   const SafeBackupScreen({super.key, required this.controller});
@@ -566,8 +568,9 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
         context,
         _label(
           context,
-          ru: 'Не удалось экспортировать резервную копию: $e',
-          en: 'Backup export failed: $e',
+          ru: 'Не удалось экспортировать резервную копию: '
+              '${backupErrorText(context.l10n, e)}',
+          en: 'Backup export failed: ${backupErrorText(context.l10n, e)}',
         ),
       );
     }
@@ -714,7 +717,9 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SecretlySnackBar(
           content: Text(
-            context.l10n.safeBackupUploadFailedWithError(e.toString()),
+            context.l10n.safeBackupUploadFailedWithError(
+              backupErrorText(context.l10n, e),
+            ),
           ),
         ),
       );
@@ -1204,13 +1209,88 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
               color: cs.onSurface.withValues(alpha: 0.5),
             ),
           ),
+          // 14.11.2026: «Копия не создаётся» без пароля не говорило, что
+          // делать. Если причина — пароль, кнопка ведёт прямо к нему.
+          if (health == SafeBackupHealth.failing &&
+              _isPasswordAutoError(controller.safeBackupLastAutoError)) ...[
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () => _editAutoPassword(context),
+              child: Text(context.l10n.desktopBackupSetPassword),
+            ),
+          ],
         ],
       ),
     );
   }
 
+  /// Причины сбоя автокопии, которые контроллер пишет по-английски (те же
+  /// строки, что сверяет ПК, `kDesktopBackupNoPasswordError`).
+  static const String _autoErrNoPassword = 'Auto-backup password is not set';
+  static const String _autoErrWeakPassword =
+      'Auto-backup password does not meet the current policy';
+
+  static bool _isPasswordAutoError(String raw) =>
+      raw == _autoErrNoPassword || raw == _autoErrWeakPassword;
+
+  /// Причина сбоя на языке человека; незнакомая — как есть.
+  static String _autoErrorText(BuildContext context, String raw) =>
+      switch (raw) {
+        _autoErrNoPassword => context.l10n.backupAutoErrorNoPassword,
+        _autoErrWeakPassword => context.l10n.backupAutoErrorWeakPassword,
+        _ => backupErrorText(context.l10n, raw),
+      };
+
   /// Replaces the two separate "upload to server" / "save on device" switches
   /// with one row, because they are one decision.
+  /// К8: удалить копию с сервера — после подтверждения; автокопия на сервер
+  /// выключается, иначе следующая же положила бы копию обратно.
+  Future<void> _deleteServerBackupFlow(BuildContext context) async {
+    final l10n = context.l10n;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.backupServerDeleteConfirmTitle),
+        content: Text(l10n.backupServerDeleteConfirmBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(MaterialLocalizations.of(ctx).cancelButtonLabel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            child: Text(l10n.backupServerDeleteConfirm),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    String message;
+    try {
+      if (controller.safeBackupAutoServerEnabled) {
+        await controller.setSafeBackupAutoServerEnabled(false);
+      }
+      if (!context.mounted) return;
+      final deleted = await _withProgressDialog(
+        context,
+        () => controller.deleteServerBackup(),
+      );
+      message = deleted
+          ? l10n.backupServerDeleteDone
+          : l10n.backupServerDeleteNone;
+    } catch (_) {
+      message = l10n.backupServerDeleteFailed;
+    }
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SecretlySnackBar(content: Text(message)));
+    if (mounted) setState(() {});
+  }
+
   String _destinationLabel(BuildContext context) {
     final server = controller.safeBackupAutoServerEnabled;
     final device = controller.safeBackupAutoDeviceEnabled;
@@ -1306,6 +1386,9 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
 
     final pw = await _promptPasswordConfirm(context);
     if (pw == null) return false;
+    // Сохранение пароля само запускает автокопию; если она успеет первой с
+    // этим же паролем, перезаливка ниже дождётся её и не повторит загрузку.
+    final passwordSetAtMs = DateTime.now().millisecondsSinceEpoch;
     await controller.setSafeBackupAutoPassword(pw);
     _passwordSet = true;
     if (!context.mounted) return true;
@@ -1323,13 +1406,18 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
       try {
         await _withProgressDialog(
           context,
-          () => controller.uploadSafeBackupToServer(password: pw),
+          () => controller.uploadSafeBackupToServer(
+            password: pw,
+            skipIfStartedSinceMs: passwordSetAtMs,
+          ),
         );
       } catch (e) {
         if (!context.mounted) return true;
         _showSnack(
           context,
-          context.l10n.safeBackupUploadFailedWithError(e.toString()),
+          context.l10n.safeBackupUploadFailedWithError(
+              backupErrorText(context.l10n, e),
+            ),
         );
       }
     }
@@ -1433,7 +1521,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
               _footer(
                 context,
                 lastErr.isNotEmpty
-                    ? lastErr
+                    ? _autoErrorText(context, lastErr)
                     : context.l10n.backupAutoFooter,
               ),
 
@@ -1493,6 +1581,21 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
                 context,
                 context.l10n.backupKeyFooter,
               ),
+
+              _sectionHeader(context, context.l10n.backupServerSection),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _group(context, [
+                  _row(
+                    context,
+                    title: context.l10n.backupServerDelete,
+                    titleColor: cs.error,
+                    chevron: false,
+                    onTap: () => _deleteServerBackupFlow(context),
+                  ),
+                ]),
+              ),
+              _footer(context, context.l10n.backupServerDeleteFooter),
             ],
           );
         },
@@ -1795,9 +1898,18 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     );
     if (!exists || payload == null || payload.trim().isEmpty) {
       if (!context.mounted) return false;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SecretlySnackBar(content: Text(l10n.safeBackupNotFound)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SecretlySnackBar(
+          content: Text(
+            serverBackupRefusalText(
+              context,
+              l10n,
+              controller.lastServerBackupRefusal,
+              fallback: l10n.safeBackupNotFound,
+            ),
+          ),
+        ),
+      );
       return false;
     }
 

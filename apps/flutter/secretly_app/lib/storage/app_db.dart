@@ -223,7 +223,7 @@ class AppDb {
     _db = reopened._db;
   }
 
-  static const _schemaVersion = 68;
+  static const _schemaVersion = 69;
 
   static String _escapeSqlString(String s) {
     // Minimal SQL string literal escaping for PRAGMA key.
@@ -1739,6 +1739,85 @@ CREATE TABLE IF NOT EXISTS contact_verification (
         }
       }
 
+      if (oldVersion < 69) {
+        // Исчезающие сообщения у всех участников (ТЗ 22.10.2026, §2.1).
+        // Только добавления с NULL: откат на старую сборку читает базу как
+        // раньше. `_ensureColumnExists` идемпотентна — повторный проход
+        // (прерванное обновление, восстановленный файл) ничего не ломает.
+        //
+        // 🔴 Падение в цепочке миграций — это база, которая не открывается,
+        // то есть потеря переписки. Поэтому каждая колонка — в своём try, а
+        // таблица проверяется заранее: на базе без неё колонку просто не
+        // добавляем, и её долечит `_ensureCriticalTables` при открытии.
+        Future<bool> hasTable(String name) async => (await db.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name=?;",
+          [name],
+        )).isNotEmpty;
+        for (final (table, column, alterSql) in const [
+          (
+            'conversations',
+            'disappear_seconds',
+            'ALTER TABLE conversations ADD COLUMN disappear_seconds INTEGER;',
+          ),
+          (
+            'events',
+            'disappear_seconds',
+            'ALTER TABLE events ADD COLUMN disappear_seconds INTEGER;',
+          ),
+          (
+            'events',
+            'expires_at_ms',
+            'ALTER TABLE events ADD COLUMN expires_at_ms INTEGER;',
+          ),
+        ]) {
+          try {
+            if (!await hasTable(table)) continue;
+            await _ensureColumnExists(
+              db,
+              table: table,
+              column: column,
+              alterSql: alterSql,
+            );
+          } catch (_) {
+            // См. выше: не валим цепочку из-за необязательной колонки.
+          }
+        }
+        // Отметки «исчезло» — чтобы цитата на исчезнувшее говорила об этом, а
+        // не пропадала молча (как у Signal). Только для этой установки: в
+        // резервную копию таблица не входит.
+        try {
+          await db.execute('''
+CREATE TABLE IF NOT EXISTS disappeared_events (
+  payload_event_id TEXT PRIMARY KEY,
+  convo_id TEXT NOT NULL,
+  disappeared_at_ms INTEGER NOT NULL
+);
+''');
+          await db.execute(
+            'CREATE INDEX IF NOT EXISTS disappeared_events_convo_idx ON disappeared_events(convo_id);',
+          );
+        } catch (_) {
+          // Не условие открытия.
+        }
+        try {
+          if (await hasTable('events')) {
+            await db.execute(
+              'CREATE INDEX IF NOT EXISTS events_expires_idx ON events(expires_at_ms);',
+            );
+            // Откат на сборку до 69 и обратно: старая сборка ставила
+            // `read_at_ms`, но отсчёт не запускала. Один проход по таблице
+            // запускает его у таких строк; на первом обновлении строк со
+            // сроком ещё нет, и проход ничего не меняет.
+            await db.rawUpdate(
+              'UPDATE events SET expires_at_ms = read_at_ms + disappear_seconds * 1000 '
+              'WHERE expires_at_ms IS NULL AND disappear_seconds IS NOT NULL '
+              'AND disappear_seconds > 0 AND read_at_ms IS NOT NULL AND read_at_ms > 0',
+            );
+          }
+        } catch (_) {
+          // Индекс и пересчёт — не условие открытия.
+        }
+      }
       if (oldVersion < 68) {
         // 🔴 ЧИСТКА ДУБЛЕЙ ОТ СИНХРОНИЗАЦИИ ИСТОРИИ (24.09.2026).
         //
@@ -1909,7 +1988,23 @@ CREATE TABLE IF NOT EXISTS contact_verification (
   /// [schemaVersionOnDisk] to catch a device that never finished migrating.
   static int get expectedSchemaVersion => _schemaVersion;
 
-  static Future<AppDb> open({required String passphrase}) async {
+  /// [shared] — общее соединение процесса (sqflite `singleInstance`).
+  ///
+  /// 🔴 ВРЕМЕННЫЕ ОТКРЫТИЯ — СО СВОИМ СОЕДИНЕНИЕМ (06.10.2026).
+  ///
+  /// На Android общее соединение по одному пути одно на ВСЕ движки Flutter
+  /// процесса. Фоновая выборка пушей открывала базу, делала своё и
+  /// закрывала — и закрывала тем самым соединение основного приложения:
+  /// на Xiaomi при запуске 648 сыпались `DatabaseException(database_closed)`
+  /// из созвона комнаты и отправки (outbox), пока сторож не переоткрыл базу.
+  /// Кто открывает базу ненадолго и потом закрывает (фоновые проходы,
+  /// разовые записи при восстановлении), передаёт `shared: false`: его
+  /// `close()` закрывает только его соединение. База — WAL с ожиданием
+  /// блокировки, несколько соединений ей не мешают.
+  static Future<AppDb> open({
+    required String passphrase,
+    bool shared = true,
+  }) async {
     final dir = await databaseDirectory();
     final dbPath = p.join(dir.path, 'secretly.db');
 
@@ -1982,6 +2077,7 @@ CREATE TABLE IF NOT EXISTS contact_verification (
           onUpgrade: options.onUpgrade,
           onDowngrade: options.onDowngrade,
           onOpen: options.onOpen,
+          singleInstance: shared,
         );
       } catch (e) {
         final msg = e.toString().toLowerCase();
@@ -2078,6 +2174,7 @@ CREATE TABLE IF NOT EXISTS contact_verification (
         onCreate: baseCreate,
         onUpgrade: baseUpgrade,
         onOpen: baseOpen,
+        singleInstance: shared,
       );
 
       try {
@@ -2419,6 +2516,9 @@ CREATE TABLE IF NOT EXISTS local_kv (
   /// Пишет приложение, читает менеджер сессий, в том числе фоновый.
   static const String kvHandshakeAuthEnforceDisabled =
       'hs_auth.enforce_disabled';
+
+  /// Флаг-день С-2 (Э4) из подписанного `/v1/config` (`'1'` — включён).
+  static const String kvHandshakeAuthRequireAll = 'hs_auth.require_all';
 
   /// Закреплённые ключи личности устройства по всем профилям, без повторов.
   /// Больше одного — расхождение: одно устройство под разными ключами.
@@ -2997,6 +3097,29 @@ CREATE TABLE IF NOT EXISTS local_kv (
     });
   }
 
+  /// Забрать аренду безусловно — только для живого главного изолята, который
+  /// уже отождал её честно (см. `AppController._ensureForegroundRatchetLease`).
+  ///
+  /// 🔴 ЗАЧЕМ (07.10.2026, групповой звонок без звука на Xiaomi). Фоновый
+  /// проход по пушу взял аренду, упёрся в свой бюджет, и система остановила
+  /// его движок, не дав отпустить. Главный изолят не мог её вернуть до конца
+  /// срока и ждал по три секунды перед КАЖДЫМ входящим — ключи звонка шли
+  /// минутами. Отпускание держателем по-прежнему снимает только свою запись,
+  /// поэтому опоздавший фоновый проход чужую аренду не освободит.
+  Future<void> forceDecryptLease({
+    required String holder,
+    required int nowMs,
+    required int ttlMs,
+  }) async {
+    if (holder.isEmpty || holder.contains('|')) return;
+    await _ensureLocalKvTable();
+    await _db.rawInsert(
+      'INSERT INTO local_kv(k, v) VALUES(?, ?) '
+      'ON CONFLICT(k) DO UPDATE SET v = excluded.v',
+      [_decryptLeaseKey, '$holder|${nowMs + ttlMs}'],
+    );
+  }
+
   /// Release the lease, but only if [holder] still owns it — a stale releaser
   /// (its lease already expired and re-taken by someone else) must not free the
   /// new owner's lease.
@@ -3363,6 +3486,13 @@ CREATE TABLE IF NOT EXISTS local_kv (
       'cover_id': 'ALTER TABLE group_settings ADD COLUMN cover_id TEXT;',
       'frame_id': 'ALTER TABLE group_settings ADD COLUMN frame_id TEXT;',
       'name_emoji': 'ALTER TABLE group_settings ADD COLUMN name_emoji TEXT;',
+      // Закрытые ветки (06.10.2026): связь с основной комнатой и вид комнаты.
+      'parent_room_id':
+          'ALTER TABLE group_settings ADD COLUMN parent_room_id TEXT;',
+      'room_kind':
+          "ALTER TABLE group_settings ADD COLUMN room_kind TEXT NOT NULL DEFAULT 'room';",
+      'allow_members_create_topics':
+          'ALTER TABLE group_settings ADD COLUMN allow_members_create_topics INTEGER NOT NULL DEFAULT 0;',
     };
     try {
       for (final entry in columns.entries) {
@@ -3373,6 +3503,9 @@ CREATE TABLE IF NOT EXISTS local_kv (
           alterSql: entry.value,
         );
       }
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS group_settings_parent_idx ON group_settings(parent_room_id);',
+      );
     } catch (_) {
       // Best-effort — never block DB open on a self-heal.
     }
@@ -3467,7 +3600,9 @@ CREATE TABLE IF NOT EXISTS events (
   local_state TEXT NOT NULL DEFAULT 'received',
   payload_event_id TEXT,
   read_at_ms INTEGER,
-  scheduled_at_ms INTEGER
+  scheduled_at_ms INTEGER,
+  disappear_seconds INTEGER,
+  expires_at_ms INTEGER
 );
 ''');
 
@@ -3689,6 +3824,7 @@ CREATE TABLE IF NOT EXISTS conversations (
   muted_mentions_only INTEGER NOT NULL DEFAULT 0,
   archived_at_ms INTEGER,
   auto_delete_seconds INTEGER,
+  disappear_seconds INTEGER,
   last_event_at_ms INTEGER NOT NULL,
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL
@@ -4153,6 +4289,19 @@ CREATE TABLE IF NOT EXISTS call_journal (
       'CREATE INDEX IF NOT EXISTS events_convo_read_idx ON events(convo_id, read_at_ms);',
     );
     await db.execute(
+      'CREATE INDEX IF NOT EXISTS events_expires_idx ON events(expires_at_ms);',
+    );
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS disappeared_events (
+  payload_event_id TEXT PRIMARY KEY,
+  convo_id TEXT NOT NULL,
+  disappeared_at_ms INTEGER NOT NULL
+);
+''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS disappeared_events_convo_idx ON disappeared_events(convo_id);',
+    );
+    await db.execute(
       'CREATE INDEX IF NOT EXISTS inbox_seen_seen_at_idx ON inbox_seen(seen_at_ms);',
     );
     await db.execute(
@@ -4598,6 +4747,20 @@ CREATE TABLE IF NOT EXISTS room_outbound_resends (
   PRIMARY KEY(payload_event_id, member_profile_id)
 );
 ''');
+    // К-3 v2 (06.10.2026): для повтора храним ЗАПЕЧАТАННЫЙ провод сообщения
+    // (шифротекст под ключом комнаты), а не открытый конверт.
+    await db.execute('''
+CREATE TABLE IF NOT EXISTS room_outbound_wires (
+  payload_event_id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL,
+  epoch INTEGER NOT NULL,
+  wire_b64 TEXT NOT NULL,
+  created_at_ms INTEGER NOT NULL
+);
+''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS room_outbound_wires_room_idx ON room_outbound_wires(room_id, created_at_ms);',
+    );
   }
 
   static Future<void> _ensureCriticalTables(Database db) async {
@@ -4615,7 +4778,9 @@ CREATE TABLE IF NOT EXISTS events (
   local_state TEXT NOT NULL DEFAULT 'received',
   payload_event_id TEXT,
   read_at_ms INTEGER,
-  scheduled_at_ms INTEGER
+  scheduled_at_ms INTEGER,
+  disappear_seconds INTEGER,
+  expires_at_ms INTEGER
 );
 ''');
     await _ensureColumnExists(
@@ -4624,6 +4789,60 @@ CREATE TABLE IF NOT EXISTS events (
       column: 'scheduled_at_ms',
       alterSql: 'ALTER TABLE events ADD COLUMN scheduled_at_ms INTEGER;',
     );
+    // Исчезающие сообщения (ТЗ 22.10.2026): те же три колонки лечатся на
+    // каждом открытии — по той же причине, что `scheduled_at_ms` выше.
+    // 🔴 Каждая — в своём try: `conversations` здесь не создаётся, и на
+    // повреждённой базе без неё ALTER бросит «no such table». Целитель не
+    // имеет права быть тем, что не даёт открыть базу (см. `healColumn` ниже).
+    for (final (table, column, alterSql) in const [
+      (
+        'events',
+        'disappear_seconds',
+        'ALTER TABLE events ADD COLUMN disappear_seconds INTEGER;',
+      ),
+      (
+        'events',
+        'expires_at_ms',
+        'ALTER TABLE events ADD COLUMN expires_at_ms INTEGER;',
+      ),
+      (
+        'conversations',
+        'disappear_seconds',
+        'ALTER TABLE conversations ADD COLUMN disappear_seconds INTEGER;',
+      ),
+    ]) {
+      try {
+        await _ensureColumnExists(
+          db,
+          table: table,
+          column: column,
+          alterSql: alterSql,
+        );
+      } catch (_) {
+        // Таблицы нет или она не читается — у этого открытия беды крупнее.
+      }
+    }
+    try {
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS events_expires_idx ON events(expires_at_ms);',
+      );
+    } catch (_) {
+      // Индекс — ускорение, не условие открытия.
+    }
+    try {
+      await db.execute('''
+CREATE TABLE IF NOT EXISTS disappeared_events (
+  payload_event_id TEXT PRIMARY KEY,
+  convo_id TEXT NOT NULL,
+  disappeared_at_ms INTEGER NOT NULL
+);
+''');
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS disappeared_events_convo_idx ON disappeared_events(convo_id);',
+      );
+    } catch (_) {
+      // Отметки «исчезло» — подсказка цитате, не условие открытия.
+    }
 
     // Э-4 Ш-1: the handshake columns are healed on EVERY open, not only by the
     // v61 migration.
@@ -5064,6 +5283,32 @@ CREATE TABLE IF NOT EXISTS group_settings (
       table: 'group_settings',
       column: 'name_emoji',
       alterSql: 'ALTER TABLE group_settings ADD COLUMN name_emoji TEXT;',
+    );
+    // Закрытые ветки (06.10.2026): связь с основной комнатой и вид комнаты.
+    // Здесь, а не только в самовосстановлении: этот путь проходят все
+    // открытия базы, в том числе свежие установки.
+    await _ensureColumnExists(
+      db,
+      table: 'group_settings',
+      column: 'parent_room_id',
+      alterSql: 'ALTER TABLE group_settings ADD COLUMN parent_room_id TEXT;',
+    );
+    await _ensureColumnExists(
+      db,
+      table: 'group_settings',
+      column: 'room_kind',
+      alterSql:
+          "ALTER TABLE group_settings ADD COLUMN room_kind TEXT NOT NULL DEFAULT 'room';",
+    );
+    await _ensureColumnExists(
+      db,
+      table: 'group_settings',
+      column: 'allow_members_create_topics',
+      alterSql:
+          'ALTER TABLE group_settings ADD COLUMN allow_members_create_topics INTEGER NOT NULL DEFAULT 0;',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS group_settings_parent_idx ON group_settings(parent_room_id);',
     );
     await db.execute('''
 CREATE TABLE IF NOT EXISTS group_memberships (
@@ -6189,7 +6434,6 @@ WHERE peer_device_id = ?
 
     int? verifiedAtMs;
     int? approvedAtMs;
-    var shouldResetSessions = false;
     var identityRotated = false;
     if (existing.isNotEmpty) {
       verifiedAtMs = (existing.first['verified_at_ms'] as num?)?.toInt();
@@ -6230,11 +6474,13 @@ WHERE peer_device_id = ?
         identityRotated = true;
       }
 
-      final prevSignedPrekey =
-          existing.first['signed_prekey_pub_b64'] as String?;
-      if (prevSignedPrekey != null && prevSignedPrekey != signedPrekeyPubB64) {
-        shouldResetSessions = true;
-      }
+      // Б5 Э3 (24.10.2026): a new signed prekey under the SAME identity is a
+      // rotation, not a new device, and must not touch the live session — the
+      // SPK only seeds the NEXT handshake. Until Б5 the SPK never changed
+      // without the identity changing too (both live in one record), so this
+      // branch reset nothing in practice; with weekly rotation it would drop
+      // every session with a rotating device every week. A changed identity
+      // still resets everything above.
     }
 
     await _db.insert('contact_devices', {
@@ -6248,11 +6494,6 @@ WHERE peer_device_id = ?
       'approved_at_ms': approvedAtMs,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
 
-    if (shouldResetSessions) {
-      await sessionDelete(deviceId);
-      await _archiveSessionV3BeforeDelete(deviceId);
-      await sessionV3Delete(deviceId);
-    }
     return (
       identityRotated: identityRotated,
       insertedNewDevice: existing.isEmpty,
@@ -6529,50 +6770,9 @@ WHERE peer_device_id = ?
     await _db.delete('room_outbound_resends');
   }
 
-  Future<void> roomOutboundEnvelopePut({
-    required String payloadEventId,
-    required String roomId,
-    required String envelope,
-    required int createdAtMs,
-  }) async {
-    if (payloadEventId.trim().isEmpty || envelope.isEmpty) return;
-    try {
-      await _db.insert('room_outbound_envelopes', {
-        'payload_event_id': payloadEventId.trim(),
-        'room_id': roomId,
-        'envelope': envelope,
-        'created_at_ms': createdAtMs,
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
-    } catch (_) {
-      // Не повод ронять отправку: без конверта просто не будет повтора.
-    }
-  }
 
-  Future<String?> roomOutboundEnvelopeGet(String payloadEventId) async {
-    final rows = await _db.query(
-      'room_outbound_envelopes',
-      columns: ['envelope'],
-      where: 'payload_event_id = ?',
-      whereArgs: [payloadEventId],
-      limit: 1,
-    );
-    return rows.isEmpty ? null : rows.first['envelope'] as String?;
-  }
 
   /// К-3: повторяли ли [payloadEventId] участнику [memberProfileId].
-  Future<bool> roomOutboundWasResent({
-    required String payloadEventId,
-    required String memberProfileId,
-  }) async {
-    final rows = await _db.query(
-      'room_outbound_resends',
-      columns: ['resent_at_ms'],
-      where: 'payload_event_id = ? AND member_profile_id = ?',
-      whereArgs: [payloadEventId, memberProfileId],
-      limit: 1,
-    );
-    return rows.isNotEmpty;
-  }
 
   Future<void> roomOutboundMarkResent({
     required String payloadEventId,
@@ -6587,7 +6787,123 @@ WHERE peer_device_id = ?
   }
 
   /// Конверты старше срока жизни очереди реле больше никому не помогут.
+  Future<void> roomOutboundWirePut({
+    required String payloadEventId,
+    required String roomId,
+    required int epoch,
+    required String wireB64,
+    required int createdAtMs,
+  }) async {
+    await _db.insert('room_outbound_wires', {
+      'payload_event_id': payloadEventId,
+      'room_id': roomId,
+      'epoch': epoch,
+      'wire_b64': wireB64,
+      'created_at_ms': createdAtMs,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<({String roomId, int epoch, String wireB64})?> roomOutboundWireGet(
+    String payloadEventId,
+  ) async {
+    final rows = await _db.query(
+      'room_outbound_wires',
+      columns: const ['room_id', 'epoch', 'wire_b64'],
+      where: 'payload_event_id = ?',
+      whereArgs: [payloadEventId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    return (
+      roomId: (row['room_id'] as String?) ?? '',
+      epoch: (row['epoch'] as num?)?.toInt() ?? 0,
+      wireB64: (row['wire_b64'] as String?) ?? '',
+    );
+  }
+
+  /// Сообщение удалили — его провод и отметки повтора уходят сразу.
+  Future<void> roomOutboundWiresDelete(Iterable<String> payloadEventIds) async {
+    final ids = payloadEventIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toList(growable: false);
+    if (ids.isEmpty) return;
+    final marks = List.filled(ids.length, '?').join(',');
+    try {
+      await _db.delete(
+        'room_outbound_wires',
+        where: 'payload_event_id IN ($marks)',
+        whereArgs: ids,
+      );
+      await _db.delete(
+        'room_outbound_resends',
+        where: 'payload_event_id IN ($marks)',
+        whereArgs: ids,
+      );
+    } catch (_) {}
+  }
+
+  /// К-3 v2: мои сообщения комнаты, на которые у [readerProfileId] нет
+  /// квитанции, — только те, что есть что повторить (провод сохранён), что
+  /// отправлены не раньше [notBeforeMs] (вступление участника и окно
+  /// повтора) и что ему ещё не повторялись. Уже повторённые отсекаются ДО
+  /// предела: иначе они навсегда занимали бы окно, и до новых пропусков
+  /// очередь не доходила.
+  Future<List<Map<String, Object?>>> roomSendsOwedTo({
+    required String roomId,
+    required String readerProfileId,
+    required String senderDeviceId,
+    required int stuckBeforeMs,
+    required int notBeforeMs,
+    int limit = 10,
+  }) async {
+    return _db.rawQuery(
+      "SELECT e.payload_event_id, e.created_at_ms FROM events e "
+      "JOIN room_outbound_wires w ON w.payload_event_id = e.payload_event_id "
+      "WHERE e.convo_id = ? AND e.sender_device_id = ? "
+      "AND e.created_at_ms >= ? "
+      "AND COALESCE(e.scheduled_at_ms, e.created_at_ms) < ? "
+      "AND NOT EXISTS ("
+      "  SELECT 1 FROM room_message_receipts r "
+      "  WHERE r.payload_event_id = e.payload_event_id "
+      "  AND r.reader_profile_id = ?"
+      ") "
+      "AND NOT EXISTS ("
+      "  SELECT 1 FROM room_outbound_resends s "
+      "  WHERE s.payload_event_id = e.payload_event_id "
+      "  AND s.member_profile_id = ?"
+      ") "
+      "ORDER BY e.created_at_ms ASC, e.rowid ASC LIMIT ?",
+      [
+        roomId,
+        senderDeviceId,
+        notBeforeMs,
+        stuckBeforeMs,
+        readerProfileId,
+        readerProfileId,
+        limit,
+      ],
+    );
+  }
+
   Future<void> roomOutboundPrune({required int olderThanMs}) async {
+    // К-3 v2: провода — старше окна и те, чьего сообщения больше нет
+    // (удалено у себя, исчезло по таймеру, ушла комната).
+    try {
+      await _db.delete(
+        'room_outbound_resends',
+        where:
+            'payload_event_id IN (SELECT payload_event_id FROM room_outbound_wires WHERE created_at_ms < ?)',
+        whereArgs: [olderThanMs],
+      );
+      await _db.delete(
+        'room_outbound_wires',
+        where:
+            'created_at_ms < ? OR NOT EXISTS (SELECT 1 FROM events e WHERE e.payload_event_id = room_outbound_wires.payload_event_id)',
+        whereArgs: [olderThanMs],
+      );
+    } catch (_) {}
     try {
       await _db.delete(
         'room_outbound_resends',
@@ -7806,13 +8122,24 @@ ORDER BY c.created_at_ms ASC
     required String title,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    final existing = await _db.query(
+    // 🔴 Беседа уже есть — меняется ТОЛЬКО то, за что отвечает эта функция:
+    // вид, название, отметка обновления. Раньше строка перезаписывалась
+    // целиком (REPLACE) на каждой отправке в комнату и сбрасывала «без звука»
+    // (вместе со сроком и режимом «только упоминания»), закреп, архив и
+    // таймер исчезающих (23.10.2026). Новый столбец таблицы теперь
+    // переживает этот вызов сам — без ручного переноса.
+    final updated = await _db.update(
       'conversations',
-      columns: ['created_at_ms', 'last_event_at_ms', 'auto_delete_seconds'],
+      {
+        'kind': 'group',
+        'peer_profile_id': null,
+        'title': title,
+        'updated_at_ms': now,
+      },
       where: 'convo_id = ?',
       whereArgs: [groupId],
-      limit: 1,
     );
+    if (updated > 0) return;
     await _db.insert('conversations', {
       'convo_id': groupId,
       'kind': 'group',
@@ -7821,18 +8148,13 @@ ORDER BY c.created_at_ms ASC
       'pinned_at_ms': null,
       'muted': 0,
       'archived_at_ms': null,
-      'auto_delete_seconds': existing.isNotEmpty
-          ? existing.first['auto_delete_seconds']
-          : null,
-      'last_event_at_ms': existing.isNotEmpty
-          ? existing.first['last_event_at_ms']
-          : now,
-      'created_at_ms': existing.isNotEmpty
-          ? existing.first['created_at_ms']
-          : now,
+      'auto_delete_seconds': null,
+      'last_event_at_ms': now,
+      'created_at_ms': now,
       'updated_at_ms': now,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
+
 
   Future<void> groupMembersReplace({
     required String groupId,
@@ -8138,11 +8460,18 @@ ORDER BY c.created_at_ms ASC
     }
     final existing = await _db.query(
       'sticker_packs',
-      columns: ['installed', 'installed_at_ms'],
+      columns: ['installed', 'installed_at_ms', 'share_mode'],
       where: 'pack_id = ? AND pack_version = ?',
       whereArgs: [normalizedPackId, packVersion],
       limit: 1,
     );
+    // 🔴 РЕЖИМ ДОСТУПА ПЕРЕНОСИТСЯ (14.11.2026). Запись ниже — `REPLACE`, то
+    // есть строка пишется заново целиком, и всё, что не перечислено, получает
+    // умолчание столбца. Режим набора здесь не перечислялся, поэтому каждый
+    // новый стикер в закрытом наборе молча делал бы его снова открытым.
+    final existingShareMode = existing.isEmpty
+        ? null
+        : existing.first['share_mode'] as String?;
     final installed = existing.isEmpty
         ? 0
         : (((existing.first['installed'] as num?)?.toInt() ?? 0) > 0 ? 1 : 0);
@@ -8167,6 +8496,8 @@ ORDER BY c.created_at_ms ASC
       'sticker_count': stickerCount < 0 ? 0 : stickerCount,
       'updated_at_ms': updatedAtMs,
       'installed_at_ms': installedAtMs,
+      if (existingShareMode != null && existingShareMode.isNotEmpty)
+        'share_mode': existingShareMode,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
@@ -9100,6 +9431,17 @@ ORDER BY c.created_at_ms ASC
 
   /// Number of groups OWNED by [ownerProfileId] (monetization §C-3 group cap).
   Future<int> groupOwnedCount(String ownerProfileId) async {
+    // 🔴 Закрытые ветки (06.10.2026) — части комнаты, а не новые комнаты:
+    // в предел бесплатного тарифа они не входят. Колонки ещё нет — прежний
+    // подсчёт.
+    try {
+      final rows = await _db.rawQuery(
+        "SELECT COUNT(*) AS n FROM group_settings WHERE owner_profile_id = ? "
+        "AND COALESCE(room_kind, 'room') != 'topic'",
+        [ownerProfileId],
+      );
+      return (rows.isEmpty ? 0 : (rows.first['n'] as num?)?.toInt()) ?? 0;
+    } catch (_) {}
     final rows = await _db.rawQuery(
       'SELECT COUNT(*) AS n FROM group_settings WHERE owner_profile_id = ?',
       [ownerProfileId],
@@ -9108,7 +9450,18 @@ ORDER BY c.created_at_ms ASC
   }
 
   /// Number of groups [profileId] is an ACTIVE member of (includes owned).
+  /// Закрытые ветки не считаются: это части комнат.
   Future<int> groupJoinedActiveCount(String profileId) async {
+    try {
+      final rows = await _db.rawQuery(
+        "SELECT COUNT(*) AS n FROM group_memberships m "
+        "LEFT JOIN group_settings s ON s.group_id = m.group_id "
+        "WHERE m.profile_id = ? AND m.status = 'active' "
+        "AND COALESCE(s.room_kind, 'room') != 'topic'",
+        [profileId],
+      );
+      return (rows.isEmpty ? 0 : (rows.first['n'] as num?)?.toInt()) ?? 0;
+    } catch (_) {}
     final rows = await _db.rawQuery(
       "SELECT COUNT(*) AS n FROM group_memberships "
       "WHERE profile_id = ? AND status = 'active'",
@@ -9139,6 +9492,12 @@ ORDER BY c.created_at_ms ASC
     required bool chatHistoryVisible,
     required int membershipVersion,
     required int stateVersion,
+    // Закрытые ветки: `null` — оставить как было. Запись идёт через REPLACE
+    // всеми колонками, и вызов, который о ветках не знает, иначе стёр бы
+    // связь с основной комнатой.
+    String? parentRoomId,
+    String? roomKind,
+    bool? allowMembersCreateTopics,
   }) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final existing = await groupSettingsGet(groupId);
@@ -9164,9 +9523,58 @@ ORDER BY c.created_at_ms ASC
       'chat_history_visible': chatHistoryVisible ? 1 : 0,
       'membership_version': membershipVersion < 0 ? 0 : membershipVersion,
       'state_version': stateVersion < 0 ? 0 : stateVersion,
+      'parent_room_id': parentRoomId ?? existing?['parent_room_id'],
+      'room_kind': roomKind ?? existing?['room_kind'] ?? 'room',
+      'allow_members_create_topics': allowMembersCreateTopics == null
+          ? (existing?['allow_members_create_topics'] ?? 0)
+          : (allowMembersCreateTopics ? 1 : 0),
       'created_at_ms': existing != null ? existing['created_at_ms'] : now,
       'updated_at_ms': now,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Закрытые ветки комнаты, известные этому устройству (по связи с
+  /// основной). Устройство знает только ветки, в которых состоит.
+  Future<List<String>> groupSettingsChildRoomIds(String parentRoomId) async {
+    final cleaned = parentRoomId.trim();
+    if (cleaned.isEmpty) return const <String>[];
+    try {
+      final rows = await _db.query(
+        'group_settings',
+        columns: const <String>['group_id'],
+        where: "parent_room_id = ? AND room_kind = 'topic'",
+        whereArgs: <Object?>[cleaned],
+        orderBy: 'created_at_ms ASC',
+      );
+      return rows
+          .map((row) => ((row['group_id'] as String?) ?? '').trim())
+          .where((id) => id.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      // Колонки ещё нет (самовосстановление не прошло) — веток нет.
+      return const <String>[];
+    }
+  }
+
+  /// Все закрытые ветки этого устройства: «ветка → основная комната». Для
+  /// списка чатов — ветки в нём не показываются отдельно.
+  Future<Map<String, String>> groupSettingsTopicParents() async {
+    try {
+      final rows = await _db.query(
+        'group_settings',
+        columns: const <String>['group_id', 'parent_room_id'],
+        where: "room_kind = 'topic' AND parent_room_id IS NOT NULL",
+      );
+      return <String, String>{
+        for (final row in rows)
+          if (((row['group_id'] as String?) ?? '').trim().isNotEmpty &&
+              ((row['parent_room_id'] as String?) ?? '').trim().isNotEmpty)
+            ((row['group_id'] as String?) ?? '').trim():
+                ((row['parent_room_id'] as String?) ?? '').trim(),
+      };
+    } catch (_) {
+      return const <String, String>{};
+    }
   }
 
   Future<RoomCallStateRecord?> roomCallSnapshotGet(String groupId) async {
@@ -10695,6 +11103,13 @@ ORDER BY c.created_at_ms ASC
     // When set, the row is inserted already-read (read_at_ms). Used for my own
     // messages that arrive from another device so they never count as unread.
     int? readAtMs,
+    // Исчезающие сообщения (ТЗ 22.10.2026, §2.1). [disappearSeconds] — срок
+    // из самого сообщения (`exp`); [expiresAtMs] — момент удаления, когда он
+    // уже известен (своя копия: от отправки). У входящего без прочтения
+    // остаётся NULL и выставляется при прочтении
+    // ([armDisappearingExpiryForEvents]).
+    int? disappearSeconds,
+    int? expiresAtMs,
   }) async {
     await _db.insert('events', {
       'event_id': eventId,
@@ -10708,7 +11123,174 @@ ORDER BY c.created_at_ms ASC
       'payload_event_id': payloadEventId,
       'read_at_ms': readAtMs,
       'scheduled_at_ms': scheduledAtMs,
+      if (disappearSeconds != null && disappearSeconds > 0)
+        'disappear_seconds': disappearSeconds,
+      if (expiresAtMs != null && expiresAtMs > 0) 'expires_at_ms': expiresAtMs,
     }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  // ── Исчезающие сообщения (ТЗ 22.10.2026) ───────────────────────────────
+
+  /// Общий таймер чата [convoId]; `null` — выключен. Отдельно от
+  /// `auto_delete_seconds` (локальная уборка «на моих устройствах»), которое
+  /// не трогается.
+  Future<void> convoSetDisappearSeconds({
+    required String convoId,
+    required int? disappearSeconds,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await _db.update(
+      'conversations',
+      {
+        'disappear_seconds': (disappearSeconds != null && disappearSeconds > 0)
+            ? disappearSeconds
+            : null,
+        'updated_at_ms': now,
+      },
+      where: 'convo_id = ?',
+      whereArgs: [convoId],
+    );
+  }
+
+  /// Запускает отсчёт у прочитанных строк: `expires_at_ms = read_at_ms +
+  /// disappear_seconds·1000` там, где срок есть, прочтение есть, а отсчёт ещё
+  /// не шёл. Своё время, не чужое: `read_at_ms` ставится этим устройством
+  /// или приходит зеркалом с другого своего.
+  ///
+  /// Возвращает число строк, у которых отсчёт только что начался.
+  Future<int> armDisappearingExpiryForEvents(List<String> eventIds) async {
+    if (eventIds.isEmpty) return 0;
+    var armed = 0;
+    for (final chunk in AppDb.chunkIds(eventIds)) {
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      armed += await _db.rawUpdate(
+        'UPDATE events SET expires_at_ms = read_at_ms + disappear_seconds * 1000 '
+        'WHERE event_id IN ($placeholders) AND expires_at_ms IS NULL '
+        'AND disappear_seconds IS NOT NULL AND disappear_seconds > 0 '
+        'AND read_at_ms IS NOT NULL AND read_at_ms > 0',
+        chunk,
+      );
+    }
+    return armed;
+  }
+
+  /// То же для всей беседы [convoId] — после прочтения «до водораздела».
+  Future<int> armDisappearingExpiryForConvo(String convoId) async {
+    if (convoId.trim().isEmpty) return 0;
+    return _db.rawUpdate(
+      'UPDATE events SET expires_at_ms = read_at_ms + disappear_seconds * 1000 '
+      'WHERE convo_id = ? AND expires_at_ms IS NULL '
+      'AND disappear_seconds IS NOT NULL AND disappear_seconds > 0 '
+      'AND read_at_ms IS NOT NULL AND read_at_ms > 0',
+      [convoId],
+    );
+  }
+
+  /// Строки, чей срок истёк к [nowMs], старые первыми. Содержимое нужно
+  /// вызывающему, чтобы найти файлы вложений до удаления строки.
+  Future<List<Map<String, Object?>>> listExpiredEvents({
+    required int nowMs,
+    int limit = 500,
+  }) {
+    return _db.query(
+      'events',
+      columns: const [
+        'event_id',
+        'convo_id',
+        'type',
+        'sender_device_id',
+        'created_at_ms',
+        'ciphertext_b64',
+        'local_ciphertext_b64',
+        'payload_event_id',
+        'expires_at_ms',
+      ],
+      where: 'expires_at_ms IS NOT NULL AND expires_at_ms <= ?',
+      whereArgs: [nowMs],
+      orderBy: 'expires_at_ms ASC',
+      limit: limit,
+    );
+  }
+
+  /// Вложения и стикеры со сроком — чтобы их файлы не уехали в резервную
+  /// копию и на привязываемый ПК (ТЗ 22.10.2026, шаг 3).
+  Future<List<Map<String, Object?>>> listDisappearingMediaEvents({
+    int limit = 20000,
+  }) {
+    return _db.query(
+      'events',
+      columns: const [
+        'event_id',
+        'type',
+        'ciphertext_b64',
+        'local_ciphertext_b64',
+      ],
+      where:
+          "disappear_seconds IS NOT NULL AND disappear_seconds > 0 "
+          "AND type IN ('att', 'sticker')",
+      limit: limit,
+    );
+  }
+
+  /// Запоминает, что сообщения исчезли по сроку: цитата на них покажет
+  /// «Сообщение исчезло». Без текста и без автора — только идентификатор.
+  Future<void> recordDisappearedPayloads(
+    List<({String payloadEventId, String convoId})> items, {
+    required int atMs,
+  }) async {
+    if (items.isEmpty) return;
+    try {
+      final batch = _db.batch();
+      for (final it in items) {
+        if (it.payloadEventId.trim().isEmpty) continue;
+        batch.insert('disappeared_events', {
+          'payload_event_id': it.payloadEventId.trim(),
+          'convo_id': it.convoId,
+          'disappeared_at_ms': atMs,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+      await batch.commit(noResult: true);
+    } catch (_) {
+      // Подсказка цитате — не повод ронять уборку.
+    }
+  }
+
+  Future<Set<String>> listDisappearedPayloadIds(String convoId) async {
+    try {
+      final rows = await _db.query(
+        'disappeared_events',
+        columns: const ['payload_event_id'],
+        where: 'convo_id = ?',
+        whereArgs: [convoId],
+      );
+      return rows
+          .map((r) => (r['payload_event_id'] as String?) ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+    } catch (_) {
+      return const <String>{};
+    }
+  }
+
+  Future<void> pruneDisappearedPayloads({required int olderThanMs}) async {
+    try {
+      await _db.delete(
+        'disappeared_events',
+        where: 'disappeared_at_ms < ?',
+        whereArgs: [olderThanMs],
+      );
+    } catch (_) {}
+  }
+
+  /// Ближайший момент истечения среди ещё живых строк; `null` — нечего ждать.
+  Future<int?> nextDisappearingExpiryMs() async {
+    final rows = await _db.rawQuery(
+      'SELECT MIN(expires_at_ms) AS next_ms FROM events WHERE expires_at_ms IS NOT NULL',
+    );
+    if (rows.isEmpty) return null;
+    final v = rows.first['next_ms'];
+    if (v is num && v > 0) return v.toInt();
+    return null;
   }
 
   Future<void> callJournalUpsert({required CallJournalEntry entry}) async {
@@ -11691,7 +12273,15 @@ HAVING COUNT(*) > 1;
       where.write(' AND ${senderFilter.sql}');
       args.addAll(senderFilter.args);
     }
-    return _db.rawUpdate('UPDATE events SET read_at_ms = ? WHERE $where', args);
+    final marked = await _db.rawUpdate(
+      'UPDATE events SET read_at_ms = ? WHERE $where',
+      args,
+    );
+    // Исчезающие: прочтение запускает отсчёт у строк со сроком (§2.1).
+    if (marked > 0) {
+      await armDisappearingExpiryForConvo(convoId);
+    }
+    return marked;
   }
 
   /// Время отправителя, до которого переписка [convoId] заведомо прочитана
@@ -11754,6 +12344,8 @@ HAVING COUNT(*) > 1;
         [readAtMs, ...chunk],
       );
     }
+    // Исчезающие: прочтение запускает отсчёт у строк со сроком (§2.1).
+    await armDisappearingExpiryForEvents(eventIds);
   }
 
   Future<({String payloadEventId, String senderDeviceId})?>
@@ -12552,6 +13144,48 @@ HAVING COUNT(*) > 1;
   }
 
   /// Провода, ещё не принятые реле: ждут отправки, повтора или уже в пути.
+  /// Э4а: конверты беседы для переноса файлом — недавние, кроме тех, что
+  /// уже не дойдут (отказ, истёк срок).
+  Future<List<({String msgId, String toDeviceId, String ciphertextB64})>>
+  outboxEnvelopesForConvo({
+    required String convoId,
+    required int sinceMs,
+    int limit = 500,
+  }) async {
+    final rows = await _db.query(
+      'outbox',
+      columns: ['msg_id', 'to_device_id', 'ciphertext_b64'],
+      where:
+          "convo_id = ? AND created_at_ms >= ? AND state != '${OutboxSendState.failed}' "
+          'AND (expires_at_ms IS NULL OR expires_at_ms = 0 OR expires_at_ms > ?)',
+      whereArgs: [convoId, sinceMs, DateTime.now().millisecondsSinceEpoch],
+      orderBy: 'created_at_ms ASC',
+      limit: limit,
+    );
+    return [
+      for (final r in rows)
+        (
+          msgId: (r['msg_id'] as String?) ?? '',
+          toDeviceId: (r['to_device_id'] as String?) ?? '',
+          ciphertextB64: (r['ciphertext_b64'] as String?) ?? '',
+        ),
+    ].where((e) => e.msgId.isNotEmpty && e.ciphertextB64.isNotEmpty).toList();
+  }
+
+  /// Ключ устройства контакта по его номеру (для проверки подписи файла).
+  Future<String?> contactDeviceIdentityKey(String deviceId) async {
+    final rows = await _db.query(
+      'contact_devices',
+      columns: ['identity_key_pub_b64'],
+      where: 'device_id = ?',
+      whereArgs: [deviceId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final v = (rows.first['identity_key_pub_b64'] as String?)?.trim();
+    return (v == null || v.isEmpty) ? null : v;
+  }
+
   Future<List<String>> outboxUnsentMsgIds() async {
     final rows = await _db.query(
       'outbox',
@@ -13359,7 +13993,16 @@ HAVING COUNT(*) > 1;
       if (allowedColumnsByTable != null && allowedColumns == null) {
         throw StateError('Unsupported snapshot table: $t');
       }
-      final rows = await _db.query(t);
+      // 🔴 Исчезающие сообщения (ТЗ 22.10.2026, 23.10): строки со сроком в
+      // копию не едут — исчезающее не должно переживать восстановление.
+      // Только для снимка резервной копии (есть контракт); прочие вызовы
+      // экспорта получают таблицу как есть.
+      final rows = (t == 'events' && allowedColumnsByTable != null)
+          ? await _db.query(
+              t,
+              where: 'disappear_seconds IS NULL OR disappear_seconds <= 0',
+            )
+          : await _db.query(t);
       // 🔴 Осознанно исключённые столбцы отбрасываются ДО проверки (09.08.2026).
       //
       // Проверка падает на столбце, которого нет в контракте, и это правильная

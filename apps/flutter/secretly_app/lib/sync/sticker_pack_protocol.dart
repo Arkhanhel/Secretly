@@ -43,6 +43,17 @@ const String kStickerPackRequestCmdPrefix = '__secretly_sticker_pack_req_v1__:';
 /// [StickerPackChunk].
 const String kStickerPackChunkCmdPrefix = '__secretly_sticker_pack_chunk_v1__:';
 
+/// Author → recipient: «набор закрыт» (ТЗ 14.11.2026). Carries an encoded
+/// [StickerPackDenied]. Старые сборки прячут любое незнакомое `__secretly_…`
+/// (`isHiddenMessageControlText`), поэтому отказ им не вредит.
+const String kStickerPackDeniedCmdPrefix =
+    '__secretly_sticker_pack_denied_v1__:';
+
+/// Сколько размытых превью закрытого набора отдаёт автор. Окно набора всё
+/// равно показывает не больше 16 пустых клеток, а одно превью — около
+/// килобайта, так что 20 штук укладываются в одно служебное сообщение.
+const int kStickerPackLockedPreviewMax = 20;
+
 /// Max stickers per chunk. 3 inline PNGs (~30 KB each → ~40 KB base64) ≈ 120 KB
 /// of JSON which, after ratchet + the relay's own base64 wrap, stays under the
 /// 256 KiB per-event cap with margin.
@@ -52,9 +63,15 @@ const int kStickerPackMaxStickersPerChunk = 3;
 /// lengths). The responder closes a chunk early once it crosses this.
 const int kStickerPackMaxInlineBytesPerChunk = 90 * 1024;
 
-/// Hard cap on chunks per logical request → ≈ 60 stickers. Bigger packs are
-/// truncated (the recipient still gets the first 60).
-const int kStickerPackMaxChunksPerRequest = 20;
+/// Предел стикеров в одном наборе (Э0, ТЗ 14.11.2026; ориентир — Telegram).
+/// Действует на добавление новых стикеров и на передачу набора; уже
+/// существующие наборы больше предела не обрезаются.
+const int kStickerPackMaxStickers = 120;
+
+/// Hard cap on chunks per logical request: 120 stickers / 3 per chunk.
+/// (До 14.11.2026 — 20 кусков, то есть 60 стикеров; больше обрезалось.)
+const int kStickerPackMaxChunksPerRequest =
+    kStickerPackMaxStickers ~/ kStickerPackMaxStickersPerChunk;
 
 /// Responder-side in-flight / rate cap per requester.
 const int kStickerPackMaxRequestsInFlight = 4;
@@ -255,6 +272,86 @@ class StickerPackChunk {
   }
 }
 
+/// Одно размытое превью закрытого набора.
+class StickerPackLockedPreview {
+  const StickerPackLockedPreview({
+    required this.stickerId,
+    required this.previewPngB64,
+  });
+
+  final String stickerId;
+
+  /// Крошечная (около 24 px) сильно размытая PNG, сделанная НА УСТРОЙСТВЕ
+  /// АВТОРА. Получатель не получает ничего, из чего можно собрать стикер.
+  final String previewPngB64;
+
+  Map<String, Object?> toJson() => {
+    'sticker_id': stickerId,
+    'preview_png_b64': previewPngB64,
+  };
+
+  static StickerPackLockedPreview? fromJson(Map<String, Object?> j) {
+    final id = j['sticker_id'];
+    final png = j['preview_png_b64'];
+    if (id is! String || id.isEmpty) return null;
+    if (png is! String || png.isEmpty) return null;
+    return StickerPackLockedPreview(stickerId: id, previewPngB64: png);
+  }
+}
+
+/// Отказ автора: набор закрыт. Вместо стикеров — их число и размытые превью.
+class StickerPackDenied {
+  const StickerPackDenied({
+    required this.requestId,
+    required this.packId,
+    required this.packTitle,
+    required this.totalCount,
+    required this.previews,
+  });
+
+  final String requestId;
+  final String packId;
+  final String packTitle;
+  final int totalCount;
+  final List<StickerPackLockedPreview> previews;
+
+  Map<String, Object?> toJson() => {
+    'requestId': requestId,
+    'packId': packId,
+    if (packTitle.isNotEmpty) 'packTitle': packTitle,
+    'totalCount': totalCount,
+    'previews': previews.map((p) => p.toJson()).toList(growable: false),
+  };
+
+  static StickerPackDenied? fromJson(Map<String, Object?> j) {
+    final id = j['requestId'];
+    final pack = j['packId'];
+    if (id is! String || id.isEmpty) return null;
+    if (pack is! String || pack.isEmpty) return null;
+    final rawTotal = j['totalCount'];
+    final previews = <StickerPackLockedPreview>[];
+    final rawList = j['previews'];
+    if (rawList is List) {
+      for (final e in rawList) {
+        if (previews.length >= kStickerPackLockedPreviewMax) break;
+        if (e is Map) {
+          final p = StickerPackLockedPreview.fromJson(
+            Map<String, Object?>.from(e),
+          );
+          if (p != null) previews.add(p);
+        }
+      }
+    }
+    return StickerPackDenied(
+      requestId: id,
+      packId: pack,
+      packTitle: (j['packTitle'] as String?) ?? '',
+      totalCount: rawTotal is num ? rawTotal.toInt().clamp(0, 10000) : 0,
+      previews: List.unmodifiable(previews),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Wire encode / decode — same dispatcher shape as peer_history_protocol.dart.
 // ---------------------------------------------------------------------------
@@ -279,10 +376,21 @@ StickerPackChunk? parseStickerPackChunk(String text) {
   return StickerPackChunk.fromJson(m);
 }
 
+String encodeStickerPackDenied(StickerPackDenied denied) =>
+    '$kStickerPackDeniedCmdPrefix'
+    '${base64Url.encode(utf8.encode(jsonEncode(denied.toJson())))}';
+
+StickerPackDenied? parseStickerPackDenied(String text) {
+  final m = _decode(text, kStickerPackDeniedCmdPrefix);
+  if (m == null) return null;
+  return StickerPackDenied.fromJson(m);
+}
+
 /// Cheap probe so the dispatcher routes to the right parser.
 bool isStickerPackCommand(String text) =>
     text.startsWith(kStickerPackRequestCmdPrefix) ||
-    text.startsWith(kStickerPackChunkCmdPrefix);
+    text.startsWith(kStickerPackChunkCmdPrefix) ||
+    text.startsWith(kStickerPackDeniedCmdPrefix);
 
 Map<String, Object?>? _decode(String text, String prefix) {
   if (!text.startsWith(prefix)) return null;

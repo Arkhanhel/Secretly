@@ -11,6 +11,14 @@ NEW_PATH=`echo $PATH | tr ":" "\n" | grep -v "Contents/Developer/" | tr "\n" ":"
 
 export PATH=${NEW_PATH%?} # remove trailing :
 
+# Xcode 27 (06.10.2026) принимает MACOSX_DEPLOYMENT_TARGET только от 12.0, а с
+# такой целью его линкер собирает proc-macro библиотеки хоста (futures_macro и
+# др.) так, что rustc их не видит: E0463 «can't find crate». Переменная
+# наследуется cargo и бьёт по сборке хоста. Без неё rustc берёт свой минимум
+# (11.0 для arm64); фреймворк пода всё равно линкует Xcode с целью приложения.
+# В iOS-сборке переменная касается только инструментов хоста.
+unset MACOSX_DEPLOYMENT_TARGET
+
 env
 
 # Platform name (macosx, iphoneos, iphonesimulator)

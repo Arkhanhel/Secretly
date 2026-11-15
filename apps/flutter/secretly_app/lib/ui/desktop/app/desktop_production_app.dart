@@ -7,6 +7,7 @@ import 'dart:io' show Platform;
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HardwareKeyboard, KeyEvent;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart';
 import 'package:window_manager/window_manager.dart';
@@ -35,6 +36,7 @@ import '../services/desktop_taskbar.dart';
 import 'desktop_child_window_app.dart';
 import '../primitives/avatar.dart';
 import '../chat/forward_target_dialog.dart';
+import '../chat/desktop_media_window.dart' show DesktopMediaWindow;
 import '../chat/details/details_drawer.dart';
 import '../chat/details/desktop_selection_store.dart';
 import '../design/material_theme.dart';
@@ -65,6 +67,13 @@ import '../../../security/app_security_manager.dart' show SecurityLockScope;
 import '../../security_lock_flow.dart' show AppSecurityLockOverlay;
 import '../services/desktop_dock_badge_service.dart';
 import '../services/desktop_notification_service.dart';
+import '../../chat_wallpapers.dart'
+    show
+        decodeAssetChatWallpaperId,
+        kDarkThemeStandardChatWallpaperAssetPath,
+        kLightThemeStandardChatWallpaperAssetPath,
+        normalizeChatWallpaperId,
+        themeStandardChatWallpaperId;
 import '../chat/desktop_wallpaper.dart' show desktopLegacyDefaultWallpaperId;
 import '../chat/desktop_wallpaper_picker.dart' show DesktopChatWallpapers;
 import '../services/desktop_call_devices.dart';
@@ -88,6 +97,7 @@ import 'desktop_offline_lock.dart';
 import 'desktop_room_limit_dialog.dart' show desktopMayJoinRoom;
 import '../chat/desktop_link_router.dart';
 import '../primitives/desktop_screen_window.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Top-level widget for the desktop production build.
 ///
@@ -577,6 +587,9 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
         _windowActivity.onHidden();
         _lockService.setWindowFocused(false);
       }
+      unawaited(_syncInitialWindowFocus());
+      HardwareKeyboard.instance.addHandler(_pokeDecorationsOnKey);
+      DesktopDecorationActivity.poke();
       // Микрофон, динамики и камера звонков — «как в системе» или выбор
       // человека, а не угадывание по названию (desktop_call_devices.dart).
       installDesktopCallDevices();
@@ -749,8 +762,31 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     } catch (_) {}
   }
 
+  /// События фокуса, пришедшие от окна. По ним начальная сверка понимает,
+  /// что окно уже само сказало правду и спрашивать поздно.
+  int _windowFocusEvents = 0;
+
+  /// 🔴 Окно, открытое БЕЗ фокуса, не присылает «blur» никогда (14.11.2026).
+  ///
+  /// Признак фокуса стартует с «да», и окно, запущенное, пока человек
+  /// работает в другом приложении (автозапуск, терминал, щелчок в Dock с
+  /// переключением обратно), считало себя активным до первого щелчка в нём:
+  /// украшения крутились и уведомления о текущем чате глушились. Спрашиваем
+  /// окно само — после того, как оно показано.
+  Future<void> _syncInitialWindowFocus() async {
+    await Future<void>.delayed(const Duration(seconds: 2));
+    final seen = _windowFocusEvents;
+    try {
+      final focused = await windowManager.isFocused();
+      if (!mounted || focused || _windowFocusEvents != seen) return;
+      onWindowBlur();
+    } catch (_) {}
+  }
+
   @override
   void onWindowFocus() {
+    _windowFocusEvents++;
+    DesktopDecorationActivity.poke();
     _notifService?.setWindowFocused(true);
     _lockService.setWindowFocused(true);
     _windowActivity.onShown();
@@ -766,6 +802,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
 
   @override
   void onWindowBlur() {
+    _windowFocusEvents++;
     _notifService?.setWindowFocused(false);
     _lockService.setWindowFocused(false);
     // Deliberately does NOT pause animations: the window is still on screen,
@@ -1490,6 +1527,38 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     } catch (_) {
       // Не вышло сейчас — попробуем при следующем запуске.
     }
+    await _migrateDesktopStandardWallpaperV2();
+  }
+
+  /// 🔴 ОДИН РАЗ: прежняя стандартная пара ПК → «Небо» / «Графит»
+  /// (05.10.2026, владелец: «по стандарту в светлой — „Небо“, в тёмной —
+  /// „Графит“»).
+  ///
+  /// «Ночной синий» и «Мята» стояли у тех, кто сам обои не выбирал: их ставил
+  /// контроллер как стандартные, «Ночной синий» — ещё и перенос 28.09 выше.
+  /// Им — новая стандартная картинка текущей темы; при смене темы она
+  /// меняется на свою пару (`desktopThemedChatWallpaperAssetPath`).
+  Future<void> _migrateDesktopStandardWallpaperV2() async {
+    const flag = 'desktop_wallpaper_standard_sky_graphite_v2';
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(flag) ?? false) return;
+      final current = decodeAssetChatWallpaperId(
+        normalizeChatWallpaperId(_controller.defaultChatWallpaperId),
+      );
+      const previous = <String>{
+        kDarkThemeStandardChatWallpaperAssetPath,
+        kLightThemeStandardChatWallpaperAssetPath,
+      };
+      if (current != null && previous.contains(current.trim())) {
+        await _controller.setDefaultChatWallpaperId(
+          themeStandardChatWallpaperId(darkMode: _controller.darkMode),
+        );
+      }
+      await prefs.setBool(flag, true);
+    } catch (_) {
+      // Не вышло сейчас — попробуем при следующем запуске.
+    }
   }
 
   Future<void> _showFromTray() async {
@@ -1602,6 +1671,23 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       ..locale = (() => _controller.appLocaleOverride)
       ..resolveLocale = _controller.resolveAppUiLocale;
     _notifService?.attachCallManager(cm);
+    // Свёрнутый созвон — мини-окно ОС (05.10.2026): его содержимое строит
+    // главное окно — только у него есть участники, имя комнаты и действия.
+    DesktopRoomCallWindows.buildMini = (ctx, roomId, title) =>
+        DesktopRoomCallMini(
+          windowed: true,
+          roomId: roomId,
+          title: title,
+          video: DesktopRoomCallMini.hasStage(),
+          selfProfileId: _controller.profileId,
+          loadMembers: _controller.listRoomMembersDetailed,
+          loadCall: _controller.getCachedRoomCall,
+          onToggleMic: _toggleRoomCallMic,
+          onToggleCamera: _toggleRoomCallCamera,
+          onLeave: _leaveRoomCall,
+          onExpand: () => unawaited(DesktopRoomCallWindows.expand()),
+        );
+    DesktopRoomCallWindows.isVideoNow = DesktopRoomCallMini.hasStage;
     // Комнатные созвоны — свой управляющий, ровно как на телефоне.
     final rcm = RoomCallManager(controller: _controller)..start();
     RoomCallManager.instance = rcm;
@@ -1749,6 +1835,9 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   ///
   /// Заперли — гасим окошки уведомлений Windows: они висят поверх всех окон
   /// с именем, текстом и кнопкой «Ответить», показанными ещё до замка.
+  /// Заперли — закрываем и окно просмотра фото, видео и файлов: оно своё окно
+  /// ОС, замок главного окна его не накрывает, и открытый документ остался
+  /// бы на экране (06.10.2026).
   /// Открыли — исполняем ссылку, пришедшую под замком ([_handleDeepLink]).
   void _afterLockChange() {
     final engaged = _anyLockEngaged;
@@ -1756,6 +1845,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     _lockWasEngaged = engaged;
     if (engaged) {
       unawaited(DesktopNotificationWindows.instance.dismissAll());
+      unawaited(DesktopMediaWindow.close());
       return;
     }
     final pending = _pendingDeepLink;
@@ -1879,6 +1969,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   /// тёмная, как у звонка.
   Widget _buildCallWindowApp(BuildContext _) {
     final cm = _callManager;
+    final mini = _callWindow?.mini;
     return DesktopChildWindowApp(
       locale: _controller.appLocaleOverride,
       resolveLocale: _controller.resolveAppUiLocale,
@@ -1886,10 +1977,37 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
           ? const SizedBox.shrink()
           : ValueListenableBuilder<CallState>(
               valueListenable: cm.state,
-              builder: (ctx, s, _) => s.phase == CallPhase.ringingIncoming
-                  ? _buildIncomingCallWindow(ctx, cm, s)
-                  : _buildCallWindowScreen(cm, s),
+              builder: (ctx, s, _) {
+                if (s.phase == CallPhase.ringingIncoming) {
+                  return _buildIncomingCallWindow(ctx, cm, s);
+                }
+                if (mini == null) return _buildCallWindowScreen(cm, s);
+                // Свёрнут — то же окно ОС показывает мини-звонок (05.10.2026).
+                return ValueListenableBuilder<bool>(
+                  valueListenable: mini,
+                  builder: (ctx, isMini, _) => isMini
+                      ? _buildCallWindowMini(cm, s)
+                      : _buildCallWindowScreen(cm, s),
+                );
+              },
             ),
+    );
+  }
+
+  /// Мини-звонок в своём окне ОС: перетаскивается за заголовок по всему
+  /// экрану и на другой монитор, двойной щелчок или «развернуть» — обратно.
+  Widget _buildCallWindowMini(CallManager cm, CallState s) {
+    final call = _directCall;
+    if (call == null || !s.isActive) {
+      return ColoredBox(color: kDColorsDark.bg);
+    }
+    return OneToOneCallMini(
+      call: call,
+      peerName: s.peerName.trim(),
+      peerImage: Avatar.fileImage(s.peerAvatarPath),
+      windowed: true,
+      onExpand: () => unawaited(_callWindow?.expand()),
+      onEnd: () => unawaited(cm.hangup()),
     );
   }
 
@@ -1939,6 +2057,8 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
       peerName: s.peerName.trim(),
       peerImage: Avatar.fileImage(s.peerAvatarPath),
       onEnd: () => unawaited(cm.hangup()),
+      // «Свернуть» — окно ОС ужимается до мини-окна в углу (05.10.2026).
+      onMinimize: () => unawaited(_callWindow?.minimize()),
       onOpenChat: peer.isEmpty
           ? null
           : () => unawaited(_openChatFromCallWindow(peer)),
@@ -2182,6 +2302,7 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
         windowManager.removeListener(this);
       } catch (_) {}
       _windowListenerAttached = false;
+      HardwareKeyboard.instance.removeHandler(_pokeDecorationsOnKey);
     }
     _winSaveDebounce?.cancel();
     _bootSlowTimer?.cancel();
@@ -2397,11 +2518,30 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
   /// поэтому тик `changed` о нём ничего не знает и корень надо подписать
   /// отдельно. Подписка стоит НАД всем деревом: цвет меняет палитру целиком,
   /// а не один экран настроек.
+  ///
+  /// Над всем деревом же — слушатель действий человека: по ним украшения
+  /// движутся, а в простое замирают ([DesktopDecorationActivity]).
   @override
-  Widget build(BuildContext context) => ValueListenableBuilder<int>(
-    valueListenable: DesktopUiPrefs.customAccentArgb,
-    builder: (ctx, _, __) => _buildApp(ctx),
+  Widget build(BuildContext context) => Listener(
+    behavior: HitTestBehavior.translucent,
+    onPointerDown: _pokeDecorations,
+    onPointerMove: _pokeDecorations,
+    onPointerHover: _pokeDecorations,
+    onPointerSignal: _pokeDecorations,
+    onPointerPanZoomUpdate: _pokeDecorations,
+    child: ValueListenableBuilder<int>(
+      valueListenable: DesktopUiPrefs.customAccentArgb,
+      builder: (ctx, _, __) => _buildApp(ctx),
+    ),
   );
+
+  static void _pokeDecorations(PointerEvent _) =>
+      DesktopDecorationActivity.poke();
+
+  static bool _pokeDecorationsOnKey(KeyEvent _) {
+    DesktopDecorationActivity.poke();
+    return false; // клавиша идёт дальше как обычно
+  }
 
   Widget _buildApp(BuildContext context) {
     // 🔴 «АВТО» — СХЕМА ПО СИСТЕМНОЙ, И СЛЕДИТ ЗА НЕЙ ОКНО.
@@ -2770,9 +2910,36 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     // сообщает. `TickerMode` стоит всегда, меняется только флаг — оболочка
     // не пересоздаётся и ничего не теряет.
     final covered = modal != null || callOverlay != null;
-    final children = <Widget>[TickerMode(enabled: !covered, child: shell)];
-    if (modal != null) children.add(modal);
-    if (callOverlay != null) children.add(callOverlay);
+    final children = <Widget>[
+      TickerMode(enabled: !covered, child: shell),
+      // 🔴 Настройки и звонок внутри окна ПРОЯВЛЯЮТСЯ и уходят, а не
+      // включаются (05.10.2026, «плавность открытий»). Слои стоят всегда —
+      // меняется только их содержимое, оболочка под ними не пересоздаётся.
+      Positioned.fill(
+        child: DPageSwitcher(
+          fromScale: 0.98,
+          alignment: Alignment.center,
+          child: modal == null
+              ? const SizedBox.shrink(key: ValueKey<String>('no-modal'))
+              : KeyedSubtree(
+                  key: ValueKey<Type>(modal.runtimeType),
+                  child: modal,
+                ),
+        ),
+      ),
+      Positioned.fill(
+        child: DPageSwitcher(
+          fromScale: 0.98,
+          alignment: Alignment.center,
+          child: callOverlay == null
+              ? const SizedBox.shrink(key: ValueKey<String>('no-call'))
+              : KeyedSubtree(
+                  key: const ValueKey<String>('call'),
+                  child: callOverlay,
+                ),
+        ),
+      ),
+    ];
     // Мини-окна свёрнутых звонков — поверх всего окна, но ПОД замками: запертое
     // приложение не должно показывать, с кем идёт разговор.
     children.add(Positioned.fill(child: _buildCallMiniHost()));
@@ -2903,19 +3070,19 @@ class _DesktopProductionAppState extends State<DesktopProductionApp>
     final presence = DesktopCallPresence.instance;
     if (presence.directMinimized.value) return null;
     final peer = s.peerProfileId.trim();
-    return Positioned.fill(
-      child: OneToOneCallScreen(
-        call: call,
-        // Пустое имя экран звонка подпишет сам — без сырого profile_id.
-        peerName: s.peerName.trim(),
-        // FIX (2026-07-13, call avatar): the shared CallState now carries the
-        // peer photo (resolved via the chat resolver in call_manager), so wire
-        // it into the desktop call screen instead of showing initials only.
-        peerImage: Avatar.fileImage(s.peerAvatarPath),
-        onEnd: () => unawaited(cm.hangup()),
-        onMinimize: presence.minimizeDirect,
-        onOpenChat: peer.isEmpty ? null : () => _openDirectCallChat(peer),
-      ),
+    // Место во весь слой задаёт корень (слой с переходом, 05.10.2026) —
+    // своё `Positioned` внутри перехода было бы ошибкой разметки.
+    return OneToOneCallScreen(
+      call: call,
+      // Пустое имя экран звонка подпишет сам — без сырого profile_id.
+      peerName: s.peerName.trim(),
+      // FIX (2026-07-13, call avatar): the shared CallState now carries the
+      // peer photo (resolved via the chat resolver in call_manager), so wire
+      // it into the desktop call screen instead of showing initials only.
+      peerImage: Avatar.fileImage(s.peerAvatarPath),
+      onEnd: () => unawaited(cm.hangup()),
+      onMinimize: presence.minimizeDirect,
+      onOpenChat: peer.isEmpty ? null : () => _openDirectCallChat(peer),
     );
   }
 

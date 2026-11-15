@@ -75,6 +75,7 @@ import '../calls/call_journal.dart';
 import '../calls/call_log.dart';
 import '../calls/call_state.dart';
 import '../diagnostics/diag_log.dart';
+import '../diagnostics/notif_tap_trail.dart';
 import '../diagnostics/identity_journal.dart';
 import '../entitlements/cosmetic_catalog.dart';
 import '../entitlements/entitlement_adapters.dart';
@@ -88,13 +89,33 @@ import '../calls/call_signal_transport.dart';
 import '../attachments/attachment_service.dart';
 import '../cosmetics/cosmetics_catalog_service.dart';
 import '../attachments/attachment_failure.dart'
-    show AttachmentFailure, AttachmentFailureCode, describeAttachmentFailure;
+    show
+        AttachmentFailure,
+        AttachmentFailureCode,
+        classifyAttachmentFailure,
+        describeAttachmentFailure;
 import 'pending_attachment_upload.dart';
-import '../media/image_metadata.dart';
+import 'upload_background_task.dart';
+import '../media/media_metadata_scrub.dart';
 import '../media/video_compressor.dart';
 import '../l10n/app_localizations.dart';
 import '../crypto/support_seal.dart';
 import '../messages/room_flags.dart' show Rooms2Flags;
+import '../messages/call_flags.dart';
+import '../messages/disappearing_flags.dart';
+import '../messages/privacy_flags.dart';
+import '../stickers/sticker_flags.dart';
+import '../stickers/sticker_pack_lock.dart';
+import '../stickers/sticker_share_mode.dart';
+import '../messages/prekey_flags.dart';
+import '../messages/server_auth_flags.dart';
+import '../transport/response_signature.dart';
+import '../ratchet/payload_padding.dart';
+import '../rooms/call_e2ee/call_e2ee_protocol.dart';
+import '../rooms/call_e2ee/call_key_transport.dart';
+import '../rooms/call_e2ee/room_call_join_plan.dart';
+import '../rooms/room_call_stealth.dart';
+import '../rooms/room_call_capture_intent.dart';
 import '../messages/multidevice_flags.dart';
 import '../ratchet/ratchet_skip_limits.dart';
 import '../transport/relay_protocol.dart'
@@ -122,15 +143,20 @@ import '../security/app_security_manager.dart';
 import '../security/secure_secrets.dart';
 import '../security/backup_password_policy.dart';
 import '../security/recovery_kit.dart';
+import '../security/social_recovery.dart';
 import '../gifs/gif_recents.dart';
 import '../security/restore_error_classification.dart'
     show describeEncryptedRestoreError;
 import '../security/restore_payload_validation.dart'
-    show normalizeSafeBackupRelativePath, validateSafeBackupDbSnapshot;
+    show
+        normalizeSafeBackupRelativePath,
+        sanitizeSafeBackupDbSnapshot,
+        validateSafeBackupDbSnapshot;
 import '../security/keychain_migration.dart';
 import '../security/safe_backup.dart';
 import '../security/safe_backup_prefs.dart';
 import '../security/safe_backup_regression_guard.dart';
+import '../security/safe_backup_upload_gate.dart';
 import '../stickers/sticker_catalog.dart';
 import '../rooms/room_raw_wire.dart';
 import '../rooms/room_call_media_signal_codec.dart';
@@ -143,6 +169,11 @@ import '../rooms/room_models.dart';
 import '../rooms/room_policy_failure.dart';
 import '../rooms/room_system_event_text.dart';
 import '../storage/app_db.dart';
+import '../storage/attachment_cache_location.dart';
+import '../attachments/auto_download_policy.dart';
+import '../attachments/media_flags.dart';
+import '../build_variant.dart' show kVideoToolsAvailable;
+import '../media/video_thumbnail_cache.dart';
 import '../storage/safe_backup_snapshot_contract.dart';
 import '../sync/peer_history_protocol.dart';
 import '../sync/sticker_pack_protocol.dart';
@@ -151,6 +182,12 @@ import '../transport/attested_senders.dart';
 import '../transport/keys_client.dart';
 import '../transport/native_network_path.dart';
 import '../transport/server_clock.dart';
+import '../transport/resilient_http_client.dart';
+import '../messages/transport_flags.dart';
+import '../transport/envelope_file.dart';
+import '../transport/transport_core.dart';
+import '../transport/transport_paths.dart';
+import '../transport/transport_report.dart';
 import '../transport/relay_client.dart';
 import '../transport/sticker_catalog_client.dart';
 import '../transport/service_health_status.dart';
@@ -160,6 +197,7 @@ import '../ui/app_asset_paths.dart';
 import '../ui/widgets/island_backdrop.dart';
 import '../ui/widgets/attachment_actions.dart' show isVoiceAttachmentMime;
 import '../ui/chat_wallpapers.dart';
+import '../ui/voice/voice_transcription.dart' show VoiceTranscriptionService;
 import '../ui/premium/app_icon_picker.dart' show AppIconService;
 import '../ui/theme_presets.dart';
 import '../ui/wave1_l10n.dart';
@@ -981,6 +1019,13 @@ class AppController {
   // the embedded `targetDeviceId` against its own deviceId, and then calls
   // `resetProfileAndLocalData()` which triggers `restartRequested` and
   // returns the desktop to the QR/pairing flow.
+  // Э3 «социальное восстановление» (11.10.2026).
+  static const String _guardianShareCmdPrefix = '__secretly_guardian_share_v1__:';
+  static const String _guardianAckCmdPrefix = '__secretly_guardian_ack_v1__:';
+  static const String _guardianRevokeCmdPrefix =
+      '__secretly_guardian_revoke_v1__:';
+  static const String _guardianReleaseCmdPrefix =
+      '__secretly_guardian_release_v1__:';
   static const String _sessionRevokedCmdPrefix =
       '__secretly_session_revoked_v1__:';
   static const String desktopLinkQrType = desktop_link.desktopLinkQrType;
@@ -1846,6 +1891,9 @@ class AppController {
       'allow_missing_current_device_repair_once_v1';
   static const _prefsServerBindingKey = 'server_binding_v1';
   static const _prefsLastKeysPublishAtMsKey = 'last_keys_publish_at_ms_v1';
+  /// Б5 Э2: остаток OTK на keys после прошлой публикации (суффикс — номер
+  /// устройства).
+  static const _prefsKeysOtkRemainingKeyPrefix = 'keys_otk_remaining_v1_';
   static const _keysPublishRefreshIntervalMs = 12 * 60 * 60 * 1000;
   static const _prefsLastMetaPublishAtMsKey = 'last_meta_publish_at_ms_v1';
   static const _prefsLastMetaRefreshAtMsKey = 'last_meta_refresh_at_ms_v1';
@@ -1861,6 +1909,9 @@ class AppController {
   static const int _demoSeedVersion = 8;
   static const _prefsBlockUnverifiedKey = 'block_unverified_v1';
   static const _prefsScreenPrivacyKey = 'screen_privacy_v1';
+  static const _prefsCellularAutoDownloadKey = 'auto_download_cellular_v1';
+  static const _prefsFailedUploadsKey = 'failed_uploads_v1';
+  static const _prefsKeepMediaDaysKey = 'keep_media_days_v1';
   static const _prefsHideAddressInCallsKey = 'hide_address_in_calls_v1';
   static const _prefsDarkModeKey = 'dark_mode_v1';
   static const _prefsAppLocaleKey = 'app_locale_v1';
@@ -2010,6 +2061,9 @@ class AppController {
   static const _prefsSafeBackupLastDeviceSavedAtMsKey =
       'safe_backup_last_device_saved_at_ms_v1';
   static const _prefsPendingSafeImportKey = 'pending_safe_import_v1';
+  static const _prefsPendingSafeImportAttemptsKey =
+      'pending_safe_import_attempts_v1';
+  static const int _pendingSafeImportMaxAttempts = 3;
   static const _prefsDesktopLinkRequestsKey = 'desktop_link_requests_v1';
   static const _prefsDesktopAuthRequiredKey =
       'desktop_auth_required_after_logout_v1';
@@ -2277,7 +2331,22 @@ class AppController {
       await Future<void>.delayed(const Duration(milliseconds: 100));
       now = DateTime.now().millisecondsSinceEpoch;
     }
-    DiagLog.event('db', 'fg_lease_contended', const {});
+    // 🔴 ОТЖДАЛИ — ЗАБИРАЕМ (07.10.2026). Раньше здесь только писали в журнал
+    // и шли дальше БЕЗ аренды — а следующее входящее снова ждало три секунды,
+    // и так до конца срока чужой аренды. На Xiaomi это две минуты: фоновый
+    // проход оборвался по своему бюджету и не отпустил её, а ключи группового
+    // звонка стояли в очереди по три секунды на сообщение — собеседников не
+    // было слышно. Работали мы и раньше без аренды; теперь хотя бы не ждём
+    // перед каждым сообщением, а пульс продлевает её как свою.
+    try {
+      await db.forceDecryptLease(
+        holder: 'main',
+        nowMs: now,
+        ttlMs: _decryptLeaseTtlMs,
+      );
+      _foregroundLeaseUntilMs = now + _decryptLeaseTtlMs;
+    } catch (_) {}
+    DiagLog.event('db', 'fg_lease_contended', const {'taken_over': true});
   }
 
   /// Generate a fresh call identifier without sending any signal. Used when
@@ -2550,7 +2619,15 @@ class AppController {
   bool get myPremiumBadge => entitlementStateNow.tier.isPaid;
 
   String? _myFrameId;
-  String? get myFrameId => _cosmeticsUnlocked ? _myFrameId : null;
+  // 🔴 13.11.2026: часть рамок и обложек бесплатна (`kFreeAvatarFrameIds`,
+  // `kFreeProfileCoverIds`). Без проверки по id бесплатная рамка у бесплатного
+  // тарифа выбиралась бы — и тут же пропадала: геттер прятал всё разом.
+  String? get myFrameId =>
+      (_cosmeticsUnlocked ||
+          (_myFrameId != null &&
+              isCosmeticFree(CosmeticKind.avatarFrame, _myFrameId!)))
+      ? _myFrameId
+      : null;
 
   /// Premium emoji status (an emoji shown next to the name). Gated like other
   /// cosmetics — hidden/cleared on publish when premium access lapses.
@@ -2563,7 +2640,12 @@ class AppController {
       : null;
 
   String? _myCoverId;
-  String? get myCoverId => _cosmeticsUnlocked ? _myCoverId : null;
+  String? get myCoverId =>
+      (_cosmeticsUnlocked ||
+          (_myCoverId != null &&
+              isCosmeticFree(CosmeticKind.profileCover, _myCoverId!)))
+      ? _myCoverId
+      : null;
 
   /// Local path to a user-picked custom cover image (when [_myCoverId] == 'custom').
   String? _myCoverImagePath;
@@ -2761,6 +2843,10 @@ class AppController {
   bool _safeBackupIncludeMedia = false;
   int _safeBackupAutoIntervalMin = 24 * 60;
   bool _safeBackupAutoInFlight = false;
+
+  /// Загрузки копии на сервер — строго по одной, повтор свежей пропускается
+  /// (14.11.2026, см. [SafeBackupUploadGate]).
+  final SafeBackupUploadGate _serverBackupUploadGate = SafeBackupUploadGate();
   bool _appHapticsEnabled = true;
 
   /// Pending "jump to this message" request — see [requestChatFocus].
@@ -2893,7 +2979,12 @@ class AppController {
   // (which floods in the instant we resume — setAppInForeground flips the flag
   // BEFORE kicking the catch-up pump) doesn't pop one banner per caught-up
   // message. 0 = never resumed this session.
-  int _foregroundSinceMs = 0;
+  // 13.11.2026 (Т10, iPhone): при холодном запуске окно тишины тоже взводится.
+  // `_appInForeground` с самого начала true, поэтому `setAppInForeground(true)`
+  // при запуске ничего не делал и окно не взводилось: открыл приложение
+  // нажатием на системное уведомление — и сразу то же сообщение всплывало
+  // внутренним баннером со звуком. Время создания контроллера = время запуска.
+  int _foregroundSinceMs = DateTime.now().millisecondsSinceEpoch;
   // In-app banner is for messages that arrive WHILE you're using the app. A
   // message caught up from the backlog is not "live": suppress its banner if it
   // landed inside the post-resume grace, or if the message itself is older than
@@ -3731,6 +3822,90 @@ class AppController {
   /// принимаются и пишутся в журнал: поведение по ним включают П-1…П-5.
   MultideviceFlags _multideviceFlags = MultideviceFlags.defaults;
   MultideviceFlags get multideviceFlags => _multideviceFlags;
+
+  /// Блок `calls` (ТЗ E2EE созвонов, ЗВ-С6). Флаг-день «липкий»: однажды
+  /// увиденный подписанным, он хранится в базе и больше не опускается — даже
+  /// если потом придёт старый или неподписанный конфиг.
+  CallFlags _callFlags = CallFlags.defaults;
+  bool _callE2eeRequiredSticky = false;
+  bool _callE2eeRequiredStickyLoaded = false;
+  static const String _kvCallE2eeRequiredSeen = 'calls_e2ee_required_seen_v1';
+
+  CallFlags get callFlags => _callE2eeRequiredSticky && !_callFlags.e2eeRequired
+      ? _callFlags.copyWith(e2eeRequired: true)
+      : _callFlags;
+
+  @visibleForTesting
+  set callFlagsForTesting(CallFlags value) => _callFlags = value;
+
+  /// Блок `disappearing` (ТЗ исчезающих сообщений 22.10.2026, §2.5).
+  /// Непроверенный блок — умолчания: отправка выключена, удаление включено.
+  DisappearingFlags _disappearingFlags = DisappearingFlags.defaults;
+  DisappearingFlags get disappearingFlags => _disappearingFlags;
+
+  /// Блок `privacy` (Б2): выравнивание длины полезной нагрузки к
+  /// собеседнику. Непроверенный блок — доля 0, провод прежний.
+  /// Блок `media` (15.11.2026): доля устройств с отправкой частями.
+  MediaFlags _mediaFlags = MediaFlags.defaults;
+
+  @visibleForTesting
+  set mediaFlagsForTesting(MediaFlags value) => _mediaFlags = value;
+
+  bool get resumableUploadEnabled =>
+      _mediaFlags.resumableUploadFor((_deviceId ?? '').trim());
+
+  PrivacyFlags _privacyFlags = PrivacyFlags.defaults;
+
+  @visibleForTesting
+  set privacyFlagsForTesting(PrivacyFlags value) => _privacyFlags = value;
+
+  /// Блок `stickers`: показывать ли выбор «закрытый / открытый». Только
+  /// интерфейс — закрытость у автора проверяется всегда.
+  StickerFlags _stickerFlags = StickerFlags.defaults;
+  StickerFlags get stickerFlags => _stickerFlags;
+
+  @visibleForTesting
+  set stickerFlagsForTesting(StickerFlags value) => _stickerFlags = value;
+
+  /// Показан ли этому устройству выбор режима набора.
+  bool get stickerPackAccessUiEnabled =>
+      _stickerFlags.packAccessFor((_deviceId ?? '').trim());
+
+  /// Блок `prekeys` (Б5): гигиена предключей. Непроверенный — всё выключено.
+  PrekeyFlags _prekeyFlags = PrekeyFlags.defaults;
+
+  @visibleForTesting
+  set prekeyFlagsForTesting(PrekeyFlags value) => _prekeyFlags = value;
+
+  /// Блок `server_auth` (Б3): подпись ответов сервера. Непроверенный — отказа
+  /// нет; включённый отказ держит [ServerAuthEnforcement] (липкий).
+  ServerAuthFlags _serverAuthFlags = ServerAuthFlags.defaults;
+  ServerAuthFlags get serverAuthFlags => _serverAuthFlags;
+
+  /// Что уходит в шифрование к собеседнику: выровненная по корзине полезная
+  /// нагрузка, если профиль в доле, иначе — как есть.
+  @visibleForTesting
+  Uint8List wirePlaintextForTesting(Uint8List plaintext) =>
+      _wirePlaintext(plaintext);
+
+  Uint8List _wirePlaintext(Uint8List plaintext) {
+    if (!_privacyFlags.padAllowedFor((_profileId ?? '').trim())) {
+      return plaintext;
+    }
+    return padPayloadForWire(plaintext);
+  }
+
+  @visibleForTesting
+  set disappearingFlagsForTesting(DisappearingFlags value) {
+    _disappearingFlags = value;
+    _kickDisappearingSweep();
+  }
+
+  /// Таймер ближайшего истечения (§2.3): один выстрел, взводится заново
+  /// после каждой уборки, прочтения, приёма и возврата из фона.
+  Timer? _disappearingSweepTimer;
+  bool _disappearingSweepRunning = false;
+  static const Duration _disappearingSweepMaxDelay = Duration(minutes: 5);
 
   @visibleForTesting
   set multideviceFlagsForTesting(MultideviceFlags value) =>
@@ -4627,7 +4802,9 @@ class AppController {
       while (jobs.isNotEmpty) {
         final job = jobs.removeAt(0);
         try {
-          await job();
+          // О7: свернули приложение посреди загрузки — iPhone даёт ей
+          // дослать (обычно до ~30 с), а не замораживает сразу.
+          await UploadBackgroundTask.guard(job);
         } catch (_) {
           // Each job reports its own error via _attachmentUploadErrors; keep
           // draining the rest so one failure can't stall the queue.
@@ -4647,6 +4824,91 @@ class AppController {
     );
     _pokePendingUploads(pending.convoId);
     _enqueueUploadJob(pending.convoId, () => _runPendingPhotoUpload(pending));
+  }
+
+  /// О10 (разбор медиа 15.11.2026): кадр ролика → его пропорции и размытая
+  /// миниатюра до 32 точек, как у снимков. Так же делает ПК
+  /// (`OutgoingMediaPrep._prepareVideo`). Нет ffmpeg или кадр не вынулся —
+  /// `null`, ролик уходит как раньше.
+  Future<({int? width, int? height, String? thumbB64})?> _videoSendHints(
+    String path,
+  ) async {
+    if (!kVideoToolsAvailable) return null;
+    try {
+      final stat = await File(path).stat();
+      final thumb = await VideoThumbnailCache.forVideo(
+        key:
+            'send_${path.hashCode.toUnsigned(32)}_${stat.size}_'
+            '${stat.modified.millisecondsSinceEpoch}',
+        videoPath: path,
+      );
+      if (thumb == null) return null;
+      final bytes = await thumb.file.readAsBytes();
+      final dims = await _imagePixelDimsFromBytes(bytes, 'image/jpeg');
+      final tiny = await _buildAttachmentInlineThumbB64(bytes, 'image/jpeg');
+      return (width: dims?.width, height: dims?.height, thumbB64: tiny);
+    } catch (e) {
+      DiagLog.event('media', 'video_hints_failed', {
+        'reason': _classifyShortReason(e),
+      });
+      return null;
+    }
+  }
+
+  /// О2: растёт при каждой записи исходящего вложения в историю. Сбой ПОСЛЕ
+  /// записи (рассылка, подтверждение) оставляет в ленте само сообщение со
+  /// статусом «не отправлено» и его собственными повторами — пузырь с
+  /// повтором тогда отправил бы файл второй раз.
+  int _attachmentLocalInsertSeq = 0;
+
+  /// О2: повтор отправки, сорвавшейся по сети. Тот же пузырь, тот же файл.
+  /// `false` — такой несостоявшейся отправки нет (уже убрана или идёт).
+  bool retryPhotoUpload(String convoId, String id) {
+    final list = _pendingPhotosByConvo[convoId];
+    if (list == null) return false;
+    final i = list.indexWhere((p) => p.id == id);
+    if (i < 0) return false;
+    final pending = list[i];
+    if (!pending.failed || pending.cancelToken.isCanceled) return false;
+    pending
+      ..failedError = null
+      ..sentBytes = 0;
+    _pokePendingUploads(convoId);
+    unawaited(_persistFailedUploads());
+    _enqueueUploadJob(convoId, () => _runPendingPhotoUpload(pending));
+    return true;
+  }
+
+  /// О2: какие сбои оставляют пузырь с повтором. Отказы, которые повтор не
+  /// исправит, — нет: пузырь уходит, причину человек видит в сообщении.
+  @visibleForTesting
+  static bool pendingUploadFailureIsRetryable(Object error) {
+    switch (classifyAttachmentFailure(error)) {
+      case AttachmentFailureCode.serviceUnavailable:
+      case AttachmentFailureCode.uploadTimedOut:
+      case AttachmentFailureCode.transportUnavailable:
+      case AttachmentFailureCode.localUnavailable:
+      case AttachmentFailureCode.serverStorageFull:
+      case AttachmentFailureCode.noDeliverableTargetDevices:
+      case AttachmentFailureCode.recipientNoDevices:
+      case AttachmentFailureCode.contactSyncPending:
+      case AttachmentFailureCode.generic:
+        return true;
+      // Подтверждение не дождались, но сообщение уже записано и может
+      // уйти само — повтор дал бы второе.
+      case AttachmentFailureCode.finalizeTimedOut:
+      case AttachmentFailureCode.fileMissing:
+      case AttachmentFailureCode.tooLarge:
+      case AttachmentFailureCode.uploadCanceled:
+      case AttachmentFailureCode.transportBlocked:
+      case AttachmentFailureCode.contactBlocked:
+      case AttachmentFailureCode.recipientProfileNotFound:
+      case AttachmentFailureCode.contactUnverified:
+      case AttachmentFailureCode.metadataScrubFailed:
+      case AttachmentFailureCode.serverRejectedSize:
+      case AttachmentFailureCode.uploadQuotaExceeded:
+        return false;
+    }
   }
 
   /// Batch enqueue of independent photo/file uploads (gallery-as-files): the
@@ -4729,8 +4991,130 @@ class AppController {
   /// the bubble immediately. The worker's in-flight send, if any, unwinds via
   /// the cancel token and its removal becomes a no-op.
   void removePendingPhotoUpload(String convoId, String id) {
-    _pendingPhotosByConvo[convoId]?.removeWhere((x) => x.id == id);
+    final list = _pendingPhotosByConvo[convoId];
+    final wasFailed = list?.any((x) => x.id == id && x.failed) ?? false;
+    list?.removeWhere((x) => x.id == id);
     _pokePendingUploads(convoId);
+    if (wasFailed) unawaited(_persistFailedUploads());
+  }
+
+  /// О2: «не отправлено» переживает закрытие приложения. Хранится только
+  /// описание отправки и путь к файлу — ни ключей, ни содержимого, ни подписи
+  /// (отправки с подписью не сохраняются); запись привязана к профилю.
+  /// Пузырь возвращается, только если файл на месте.
+  Future<void> _persistFailedUploads() async {
+    try {
+      final prefs = _prefs ?? await SharedPreferences.getInstance();
+      _prefs = prefs;
+      final items = <Map<String, Object?>>[
+        for (final list in _pendingPhotosByConvo.values)
+          for (final u in list)
+            // Подпись — текст переписки: в открытые настройки она не
+            // пишется, поэтому отправка с подписью перезапуск не переживает.
+            if (u.failed &&
+                u.reuseBlobFrom == null &&
+                u.caption.trim().isEmpty &&
+                // Кружок без готового файла: после перезапуска сырой кусок
+                // ушёл бы без склейки и зеркала — такие не сохраняем.
+                (u.prepare == null || u.preparedPath != null))
+              failedUploadToJson(u),
+      ];
+      if (items.isEmpty) {
+        await prefs.remove(_prefsFailedUploadsKey);
+        return;
+      }
+      await prefs.setString(
+        _prefsFailedUploadsKey,
+        jsonEncode(<String, Object?>{'profile': _profileId, 'items': items}),
+      );
+    } catch (_) {
+      // Не сохранилось — пузырь просто не переживёт перезапуск, как раньше.
+    }
+  }
+
+  Future<void> _restoreFailedUploads(SharedPreferences prefs) async {
+    try {
+      final raw = prefs.getString(_prefsFailedUploadsKey);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map || decoded['profile'] != _profileId) {
+        await prefs.remove(_prefsFailedUploadsKey);
+        return;
+      }
+      final items = decoded['items'];
+      if (items is! List) return;
+      var restored = 0;
+      for (final item in items) {
+        if (item is! Map) continue;
+        final u = failedUploadFromJson(item);
+        if (u == null || !await File(u.filePath).exists()) continue;
+        u.failedError = AttachmentFailure(
+          AttachmentFailureCode.serviceUnavailable,
+        );
+        (_pendingPhotosByConvo[u.convoId] ??= <PendingPhotoUpload>[]).add(u);
+        restored++;
+      }
+      DiagLog.event('attachments', 'failed_uploads_restored', {
+        'n': restored,
+      });
+      if (restored != items.length) unawaited(_persistFailedUploads());
+    } catch (_) {
+      // Испорченная запись не должна мешать запуску.
+    }
+  }
+
+  @visibleForTesting
+  static Map<String, Object?> failedUploadToJson(PendingPhotoUpload u) => {
+    'id': u.id,
+    'path': u.preparedPath ?? u.filePath,
+    'mime': u.mime,
+    'caption': u.caption,
+    'total': u.totalBytes,
+    'convo': u.convoId,
+    'target': u.targetId,
+    'group': u.isGroup,
+    'topic': u.topicId,
+    'reply': u.replyToPayloadEventId,
+    'mgid': u.mediaGroupId,
+    'name': u.filename,
+    'asFile': u.asFile,
+    'mt': u.musicTitle,
+    'ma': u.musicArtist,
+    'wave': u.waveform,
+    'dur': u.durationMs,
+    'vnote': u.videoNote,
+  };
+
+  @visibleForTesting
+  static PendingPhotoUpload? failedUploadFromJson(Map<dynamic, dynamic> j) {
+    final id = j['id'];
+    final path = j['path'];
+    final convo = j['convo'];
+    if (id is! String || path is! String || convo is! String) return null;
+    String? str(String k) => j[k] is String ? j[k] as String : null;
+    final wave = j['wave'];
+    return PendingPhotoUpload(
+      id: id,
+      filePath: path,
+      mime: str('mime') ?? 'application/octet-stream',
+      caption: str('caption') ?? '',
+      totalBytes: j['total'] is num ? (j['total'] as num).toInt() : 0,
+      convoId: convo,
+      targetId: str('target') ?? '',
+      isGroup: j['group'] == true,
+      topicId: str('topic'),
+      replyToPayloadEventId: str('reply'),
+      mediaGroupId: str('mgid'),
+      filename: str('name'),
+      asFile: j['asFile'] == true,
+      musicTitle: str('mt'),
+      musicArtist: str('ma'),
+      waveform: wave is List
+          ? wave.whereType<num>().map((n) => n.toInt()).toList()
+          : null,
+      durationMs: j['dur'] is num ? (j['dur'] as num).toInt() : null,
+      videoNote: j['vnote'] == true,
+    );
   }
 
   void removePendingPhotoAlbumUpload(String convoId, String id) {
@@ -4797,6 +5181,7 @@ class AppController {
   }
 
   Future<void> _runPendingPhotoUpload(PendingPhotoUpload pending) async {
+    final insertSeqAtStart = _attachmentLocalInsertSeq;
     try {
       // Telegram-style: the caption rides INSIDE the same attachment bubble
       // (AttachmentEventV1.caption) instead of a separate trailing message.
@@ -4842,7 +5227,22 @@ class AppController {
       // capped-resolution H.264 before upload so a raw 4K/50Mbps capture isn't
       // sent at full bitrate — much faster on a slow uplink, ~same look. No-op
       // for photos, small clips, or videos sent AS FILES (keep those original).
-      var sendPath = pending.filePath;
+      var sendPath = pending.preparedPath ?? pending.filePath;
+      // Кружок (15.11.2026): итоговый файл делается здесь, пока в чате виден
+      // пузырь с кольцом, — экран записи уже закрыт.
+      final prepare = pending.prepare;
+      if (prepare != null && pending.preparedPath == null) {
+        final made = await prepare();
+        if (pending.cancelToken.isCanceled) {
+          _dropPendingPhoto(pending);
+          return;
+        }
+        if (made == null || made.isEmpty) {
+          throw AttachmentFailure(AttachmentFailureCode.fileMissing);
+        }
+        pending.preparedPath = made;
+        sendPath = made;
+      }
       if (isVideo && willCompress) {
         reportVideoFraction(0.01); // immediate activity, not a dead 0%
         sendPath = await VideoCompressor.compressForSend(
@@ -4858,10 +5258,15 @@ class AppController {
       // No wall-clock timeout: large media may upload for a while on a slow
       // link. Sends are serialized (single worker) so this never overlaps
       // another send; cancellation is explicit via cancelToken.
+      // О10: пропорции и размытый кадр ролика — получателю до загрузки.
+      final hints = isVideo ? await _videoSendHints(sendPath) : null;
       final payloadEventId = await (pending.isGroup
           ? sendGroupAttachmentFile(
               groupId: pending.convoId,
               filePath: sendPath,
+              width: hints?.width,
+              height: hints?.height,
+              thumbB64: hints?.thumbB64,
               mime: pending.mime,
               replyToPayloadEventId: pending.replyToPayloadEventId,
               mediaGroupId: pending.mediaGroupId,
@@ -4879,6 +5284,9 @@ class AppController {
           : sendAttachmentFile(
               peerProfileId: pending.targetId,
               filePath: sendPath,
+              width: hints?.width,
+              height: hints?.height,
+              thumbB64: hints?.thumbB64,
               mime: pending.mime,
               replyToPayloadEventId: pending.replyToPayloadEventId,
               mediaGroupId: pending.mediaGroupId,
@@ -4897,9 +5305,34 @@ class AppController {
       pending.payloadEventId = payloadEventId;
       await _waitForPendingUploadEventVisible(pending.convoId, payloadEventId);
       _dropPendingPhoto(pending);
+      if (pending.deleteFileAfterSend) {
+        try {
+          final f = File(sendPath);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
     } catch (e) {
-      _dropPendingPhoto(pending);
-      if (!_attachmentUploadErrors.isClosed) {
+      // О2 (разбор медиа 15.11.2026): сбой сети или сервера — пузырь
+      // остаётся «не отправлено» с повтором (раньше исчезал, и файл надо было
+      // выбирать заново). Отмена и отказы, которые повтор не исправит
+      // (велик, заблокирован, метаданные), — как раньше: пузырь уходит.
+      final messageRecorded = _attachmentLocalInsertSeq != insertSeqAtStart;
+      if (!pending.cancelToken.isCanceled &&
+          !messageRecorded &&
+          pendingUploadFailureIsRetryable(e)) {
+        pending
+          ..failedError = e
+          ..sentBytes = 0;
+        _pokePendingUploads(pending.convoId);
+        unawaited(_persistFailedUploads());
+      } else {
+        _dropPendingPhoto(pending);
+      }
+      // Отмена — решение человека, а не сбой (как у альбома и пачки).
+      final canceled =
+          pending.cancelToken.isCanceled ||
+          classifyAttachmentFailure(e) == AttachmentFailureCode.uploadCanceled;
+      if (!canceled && !_attachmentUploadErrors.isClosed) {
         _attachmentUploadErrors.add(
           AttachmentUploadErrorEvent(convoId: pending.convoId, error: e),
         );
@@ -4963,8 +5396,24 @@ class AppController {
             onProgress: (f) => reportItemFraction(i, compressWeight * f),
           );
         }
-        files.add(AttachmentFileSendRequest(filePath: path, mime: item.mime));
+        // О10: у ролика альбома — пропорции и размытый кадр.
+        final hints = VideoCompressor.isVideoMime(item.mime)
+            ? await _videoSendHints(path)
+            : null;
+        files.add(
+          AttachmentFileSendRequest(
+            filePath: path,
+            mime: item.mime,
+            width: hints?.width,
+            height: hints?.height,
+            thumbB64: hints?.thumbB64,
+          ),
+        );
       }
+      // О4: сбой одного снимка не срывает альбом — остальные уходят, а о
+      // пропущенных человеку сообщается после отправки.
+      final skipped = <Object>[];
+      void onItemFailed(int index, Object error) => skipped.add(error);
       final eventIds = await (album.isGroup
           ? sendGroupAttachmentFiles(
               groupId: album.convoId,
@@ -4974,6 +5423,7 @@ class AppController {
               cancelTokens: album.cancelTokens,
               caption: albumCaption,
               onUploadProgress: onProgress,
+              onItemFailed: onItemFailed,
               // 🔴 Тема, открытая при отправке (17.09.2026). Экран кладёт её в
               // альбом, а здесь она терялась — и альбом из темы уходил в
               // «Общий», хотя одиночный снимок из той же темы шёл куда надо.
@@ -4987,6 +5437,7 @@ class AppController {
               cancelTokens: album.cancelTokens,
               caption: albumCaption,
               onUploadProgress: onProgress,
+              onItemFailed: onItemFailed,
             ));
 
       album.payloadEventIds = eventIds;
@@ -4994,6 +5445,7 @@ class AppController {
         await _waitForPendingUploadEventVisible(album.convoId, eventId);
       }
       _dropPendingPhotoAlbum(album);
+      _reportSkippedAlbumItems(album.convoId, skipped);
     } catch (e) {
       _dropPendingPhotoAlbum(album);
       if (!_attachmentUploadErrors.isClosed) {
@@ -5079,6 +5531,9 @@ class AppController {
       }
       final caption = firstCaption.isEmpty ? null : firstCaption;
       final replyTo = batch.items.first.replyToPayloadEventId;
+      // О4: как у альбома — один сбойный файл не срывает пачку.
+      final skipped = <Object>[];
+      void onItemFailed(int index, Object error) => skipped.add(error);
       final eventIds = await (batch.isGroup
           ? sendGroupAttachmentFiles(
               groupId: batch.convoId,
@@ -5088,6 +5543,7 @@ class AppController {
               cancelTokens: batch.cancelTokens,
               caption: caption,
               onUploadProgress: onProgress,
+              onItemFailed: onItemFailed,
               topicId: batch.topicId,
             )
           : sendAttachmentFiles(
@@ -5098,6 +5554,7 @@ class AppController {
               cancelTokens: batch.cancelTokens,
               caption: caption,
               onUploadProgress: onProgress,
+              onItemFailed: onItemFailed,
             ));
 
       batch.payloadEventIds = eventIds;
@@ -5105,6 +5562,7 @@ class AppController {
         await _waitForPendingUploadEventVisible(batch.convoId, eventId);
       }
       _dropPendingAttachmentBatch(batch);
+      _reportSkippedAlbumItems(batch.convoId, skipped);
     } catch (e) {
       _dropPendingAttachmentBatch(batch);
       // Отмена — решение человека, а не сбой: сообщать о ней нечего.
@@ -5118,6 +5576,16 @@ class AppController {
         );
       }
     }
+  }
+
+  /// О4: часть альбома ушла, часть — нет. Сообщаем причину первого
+  /// пропущенного файла (её текст человек уже знает по одиночным отправкам);
+  /// ушедшие снимки он видит в чате сам.
+  void _reportSkippedAlbumItems(String convoId, List<Object> skipped) {
+    if (skipped.isEmpty || _attachmentUploadErrors.isClosed) return;
+    _attachmentUploadErrors.add(
+      AttachmentUploadErrorEvent(convoId: convoId, error: skipped.first),
+    );
   }
 
   Future<void> _runPendingAudioUpload(PendingAudioUpload pending) async {
@@ -5241,6 +5709,7 @@ class AppController {
   StreamSubscription<List<ConnectivityResult>>? _appConnectivitySub;
   StreamSubscription<dynamic>? _appNativeNetworkPathSub;
   String _appLastNetworkPathSignature = '';
+  String _appLastNetworkKind = 'other';
   List<ConnectivityResult> _appLastConnectivityResults =
       const <ConnectivityResult>[];
 
@@ -5606,6 +6075,8 @@ class AppController {
       unawaited(_publishPresenceHeartbeatBestEffort(force: true));
       unawaited(_syncProfileInactivityStatusBestEffort());
       refreshPushNotificationPolicy();
+      // Исчезающие: пока приложение спало, сроки могли истечь (§2.3).
+      unawaited(runDisappearingSweep());
       // Значок поддержки: ответ мог прийти, пока приложение было свёрнуто, а
       // 15-минутный сторож — слишком долгое ожидание для «мне только что
       // ответили». Возврат в приложение — самый естественный момент проверить.
@@ -5627,6 +6098,7 @@ class AppController {
         // while the WS reconnects, and the no-device retry force-re-resolves the
         // peer's CURRENT devices — instead of waiting for the ≤1-min watchdog.
         unawaited(_flushOutboundOnResume());
+        unawaited(_healTransportProxyOnResume());
       }
       DiagLog.event('lifecycle', 'foreground', const <String, Object?>{});
     } else {
@@ -5891,6 +6363,9 @@ class AppController {
   /// Register a callback invoked when the user taps a background notification.
   void setOnNotificationTap(void Function(String convoId) callback) {
     _onNotificationTap = callback;
+    unawaited(
+      NotifTapTrail.add('ui_handler_ready', _pendingNotificationTapConvoId),
+    );
     final bufferedConvoId = _pendingNotificationTapConvoId?.trim() ?? '';
     if (bufferedConvoId.isNotEmpty) {
       _pendingNotificationTapConvoId = null;
@@ -5905,24 +6380,35 @@ class AppController {
     }());
   }
 
+  @visibleForTesting
+  void debugEmitNotificationTap(String convoId) => _emitNotificationTap(convoId);
+
   void _emitNotificationTap(String? convoId) {
     final normalized = (convoId ?? '').trim();
     if (normalized.isEmpty) {
       return;
     }
+    final callback = _onNotificationTap;
+    if (callback == null) {
+      // 🔴 13.11.2026 (Т10, iPhone): отложенное нажатие НЕ отмечается как
+      // «последнее открытое». Раньше отметка ставилась до проверки, и когда
+      // экран через ~0,4 с забирал отложенный чат, защита от двойного нажатия
+      // (1,5 с) выбрасывала его как повтор: нажал на уведомление при
+      // закрытом приложении — открылся главный экран.
+      unawaited(NotifTapTrail.add('emit_buffered', normalized));
+      _pendingNotificationTapConvoId = normalized;
+      return;
+    }
     final now = DateTime.now().millisecondsSinceEpoch;
     if (_lastNotificationTapConvoId == normalized &&
         now - _lastNotificationTapAtMs < 1500) {
+      unawaited(NotifTapTrail.add('emit_dedup', normalized));
       return;
     }
     _lastNotificationTapConvoId = normalized;
     _lastNotificationTapAtMs = now;
-    final callback = _onNotificationTap;
-    if (callback != null) {
-      callback(normalized);
-      return;
-    }
-    _pendingNotificationTapConvoId = normalized;
+    unawaited(NotifTapTrail.add('emit_to_ui', normalized));
+    callback(normalized);
   }
 
   List<DarwinNotificationCategory> _buildDarwinNotificationCategories() {
@@ -8635,6 +9121,9 @@ class AppController {
   String? _profileId;
   String get profileId => _profileId ?? 'unknown';
 
+  /// Профиль уже создан на сервере (есть настоящий id), а не «unknown».
+  bool get hasServerProfile => (_profileId ?? '').trim().isNotEmpty;
+
   /// True when the device is running on an UNREGISTERED local-only profile
   /// (`LOCAL-<uuid>`) because keys-server registration failed. In this state the
   /// device cannot publish prekeys or use the relay mailbox → it is invisible to
@@ -10067,6 +10556,32 @@ class AppController {
       _applyHandshakeFlags(repo);
       await _applyHandshakeAuthSwitch(repo);
       _applyMultideviceFlags(repo);
+      await _applyCallFlags(repo);
+      _applyDisappearingFlags(repo);
+      if (repo.privacyFlagsResolved) _privacyFlags = repo.privacyFlags;
+      if (repo.mediaFlagsResolved) _mediaFlags = repo.mediaFlags;
+      if (repo.stickerFlagsResolved) _stickerFlags = repo.stickerFlags;
+      if (repo.prekeyFlagsResolved) _prekeyFlags = repo.prekeyFlags;
+      if (repo.serverAuthFlagsResolved) {
+        _serverAuthFlags = repo.serverAuthFlags;
+        // Б3 Э3: ключ подписи ответов реле — из проверенного блока.
+        RelayResponseKeys.set(
+          _serverAuthFlags.relayKid,
+          _serverAuthFlags.relayPubB64,
+        );
+        // Б3 Э2: липкий отказ меняет только проверенный блок и только при
+        // известном номере устройства (доля считается по нему).
+        final did = (_deviceId ?? '').trim();
+        if (repo.serverAuthBlockVerified && did.isNotEmpty) {
+          unawaited(
+            ServerAuthEnforcement.applyVerified(
+              _serverAuthFlags.enforceFor(did),
+            ),
+          );
+        }
+      }
+      await _applyTransportFlags(repo);
+      unawaited(_maybeSendTransportReport());
     } catch (_) {
       // best-effort; keep whatever state we already have
     }
@@ -10228,8 +10743,21 @@ class AppController {
   /// изоляте. Пишется только ПРОВЕРЕННОЕ значение; молчащий сервер ничего не
   /// меняет. Ошибка записи не должна ломать применение остальных флагов.
   Future<void> _applyHandshakeAuthSwitch(EntitlementRepository repo) async {
-    final disabled = repo.handshakeAuthEnforceDisabled;
     final db = _db;
+    // Э4: флаг-день — отдельным проверенным значением.
+    final requireAll = repo.handshakeAuthRequireAll;
+    if (requireAll != null && db != null) {
+      try {
+        final want = requireAll ? '1' : '0';
+        if (await db.localKvGet(AppDb.kvHandshakeAuthRequireAll) != want) {
+          await db.localKvSet(AppDb.kvHandshakeAuthRequireAll, want);
+          DiagLog.event('hs', 'require_all_applied', <String, Object?>{
+            'require_all': requireAll,
+          });
+        }
+      } catch (_) {}
+    }
+    final disabled = repo.handshakeAuthEnforceDisabled;
     if (disabled == null || db == null) return;
     try {
       final want = disabled ? '1' : '0';
@@ -10283,6 +10811,54 @@ class AppController {
     _multideviceFlags = next;
     DiagLog.event('multidevice', 'flags_applied', next.toLogFields());
     _ratchetV3?.setLiveSkipJump(_ratchetLiveSkipJump);
+  }
+
+  /// Блок `calls` (ТЗ E2EE созвонов). Сервер не ответил — остаётся прежнее;
+  /// ответил — его значение, а непроверенный блок уже превращён репозиторием
+  /// в значения «как было». Флаг-день запоминается навсегда (см.
+  /// [callFlags]).
+  Future<void> _applyCallFlags(EntitlementRepository repo) async {
+    await _loadCallE2eeRequiredSticky();
+    if (!repo.callFlagsResolved) return;
+    final next = repo.callFlags;
+    if (next.e2eeRequired && !_callE2eeRequiredSticky) {
+      _callE2eeRequiredSticky = true;
+      try {
+        await _db?.localKvSet(_kvCallE2eeRequiredSeen, '1');
+      } catch (_) {
+        // best-effort: в памяти флаг уже поднят
+      }
+    }
+    if (next == _callFlags) return;
+    _callFlags = next;
+    DiagLog.event('calls', 'flags_applied', callFlags.toLogFields());
+  }
+
+  /// Блок `disappearing` (ТЗ исчезающих сообщений, §2.5). Сервер не ответил —
+  /// остаётся прежнее; ответил — его значение, а непроверенный блок уже
+  /// превращён репозиторием в умолчания. Смена флага удаления переводзводит
+  /// уборку: включили обратно — отложенные истечения исполняются сразу.
+  void _applyDisappearingFlags(EntitlementRepository repo) {
+    if (!repo.disappearingFlagsResolved) return;
+    final next = repo.disappearingFlags;
+    if (next == _disappearingFlags) return;
+    _disappearingFlags = next;
+    DiagLog.event('disappearing', 'flags_applied', next.toLogFields());
+    _kickDisappearingSweep();
+  }
+
+  Future<void> _loadCallE2eeRequiredSticky() async {
+    if (_callE2eeRequiredStickyLoaded) return;
+    final db = _db;
+    if (db == null) return;
+    _callE2eeRequiredStickyLoaded = true;
+    try {
+      if (await db.localKvGet(_kvCallE2eeRequiredSeen) == '1') {
+        _callE2eeRequiredSticky = true;
+      }
+    } catch (_) {
+      // нет базы — нет и флаг-дня, как до этого блока
+    }
   }
 
   /// П-3: скачок ратчета живой сессии. Сервер молчит (поле 0) — встроенный:
@@ -10379,6 +10955,32 @@ class AppController {
       _applyHandshakeFlags(repo);
       await _applyHandshakeAuthSwitch(repo);
       _applyMultideviceFlags(repo);
+      await _applyCallFlags(repo);
+      _applyDisappearingFlags(repo);
+      if (repo.privacyFlagsResolved) _privacyFlags = repo.privacyFlags;
+      if (repo.mediaFlagsResolved) _mediaFlags = repo.mediaFlags;
+      if (repo.stickerFlagsResolved) _stickerFlags = repo.stickerFlags;
+      if (repo.prekeyFlagsResolved) _prekeyFlags = repo.prekeyFlags;
+      if (repo.serverAuthFlagsResolved) {
+        _serverAuthFlags = repo.serverAuthFlags;
+        // Б3 Э3: ключ подписи ответов реле — из проверенного блока.
+        RelayResponseKeys.set(
+          _serverAuthFlags.relayKid,
+          _serverAuthFlags.relayPubB64,
+        );
+        // Б3 Э2: липкий отказ меняет только проверенный блок и только при
+        // известном номере устройства (доля считается по нему).
+        final did = (_deviceId ?? '').trim();
+        if (repo.serverAuthBlockVerified && did.isNotEmpty) {
+          unawaited(
+            ServerAuthEnforcement.applyVerified(
+              _serverAuthFlags.enforceFor(did),
+            ),
+          );
+        }
+      }
+      await _applyTransportFlags(repo);
+      unawaited(_maybeSendTransportReport());
       // Paid-but-not-credited recovery: now that the entitlement repo + verifier
       // are ready, re-deliver any owned/unfinished purchase so a grant lost on a
       // previous launch (or dropped by the bootstrap race before the repo
@@ -11887,7 +12489,8 @@ class AppController {
   ) async {
     try {
       final dbPass = await SecureSecrets.create().requireExistingDbPassphrase();
-      final importDb = await AppDb.open(passphrase: dbPass);
+      // Своё соединение: закрытие ниже не тронет базу приложения.
+      final importDb = await AppDb.open(passphrase: dbPass, shared: false);
       try {
         await _applyPendingSafeImportPayload(db: importDb, json: pendingImport);
         return true;
@@ -11912,7 +12515,8 @@ class AppController {
 
     try {
       final dbPass = await SecureSecrets.create().requireExistingDbPassphrase();
-      final db = await AppDb.open(passphrase: dbPass);
+      // Своё соединение: закрытие ниже не тронет базу приложения.
+      final db = await AppDb.open(passphrase: dbPass, shared: false);
       try {
         for (final deviceId in ids) {
           await db.deviceProfileUpsert(deviceId: deviceId, profileId: pid);
@@ -12492,6 +13096,18 @@ class AppController {
         (results) => _onConnectivityResultsChanged(results),
         onError: (_) {},
       );
+      // П1: поток сообщает только перемены — какая сеть СЕЙЧАС, спрашиваем
+      // сами, иначе до первой перемены автозагрузка не знала бы о мобильной.
+      // Своё поле, а не общий обработчик: тот на первом же ответе дёргал бы
+      // переподключение к реле — лишнее действие при каждом запуске.
+      unawaited(
+        Connectivity()
+            .checkConnectivity()
+            .then((r) {
+              _autoDownloadNetwork ??= r;
+            })
+            .catchError((Object _) {}),
+      );
     } catch (_) {
       _appConnectivitySub = null;
     }
@@ -12521,6 +13137,9 @@ class AppController {
     final hasNetwork = normalized.isNotEmpty;
     final changed = !_listEquals(normalized, _appLastConnectivityResults);
     _appLastConnectivityResults = normalized;
+    // П1: ушли с мобильной сети — забираем отложенное.
+    _autoDownloadNetwork = normalized;
+    if (isCellularOnly(normalized) != true) _releaseDeferredAutoDownloads();
     if (_networkOnline != hasNetwork) {
       _networkOnline = hasNetwork;
       // Repaint the brand-logo fingerprint (calm online, pulses when offline).
@@ -12541,6 +13160,16 @@ class AppController {
     if (signature.isEmpty) return;
     final previous = _appLastNetworkPathSignature;
     _appLastNetworkPathSignature = signature;
+    final transports = event['transports'];
+    if (transports is List && transports.isNotEmpty) {
+      _appLastNetworkKind = TransportReport.netKindFrom(
+        transports.first?.toString(),
+      );
+    }
+    // Э1: библиотека транспорта помнит, какой путь дошёл на КАКОЙ сети.
+    if (previous != signature) {
+      TransportPaths.instance?.onNetworkChanged(signature);
+    }
     if (!available) return;
     if (previous.isEmpty || previous == signature) {
       return;
@@ -13027,6 +13656,16 @@ class AppController {
 
   bool _keysRecheckInFlight = false;
 
+  /// Сколько ждать настройки ключей при запуске (см. вызов): первый запуск
+  /// телефона — минута, иначе — 10 с.
+  @visibleForTesting
+  static Duration firstRunKeysSetupTimeout({
+    required bool hasProfile,
+    required bool desktop,
+  }) => !hasProfile && !desktop
+      ? const Duration(seconds: 60)
+      : const Duration(seconds: 10);
+
   /// Foreground-resume keys recovery (Tier-A reliability fix for the latched
   /// "Keys is offline" banner). Drops any stale (MIUI-frozen) keep-alive socket,
   /// re-checks keys health immediately, runs keys setup if it came back, and
@@ -13320,6 +13959,49 @@ class AppController {
     );
   }
 
+  /// К4: почему сервер не выдал копию в последний раз (см.
+  /// [KeysClient.lastBackupGetRefusal]).
+  ({String? reason, int? retryAtMs}) get lastServerBackupRefusal =>
+      _keys?.lastBackupGetRefusal ?? (reason: null, retryAtMs: null);
+
+  /// К8 (14.11.2026): удалить копию этого профиля с сервера. Локальные файлы
+  /// копий на устройстве не трогает. `true` — копия была и удалена.
+  Future<bool> deleteServerBackup() async {
+    _throwIfTransportBlocked();
+    final keys = _keys;
+    final pid = _profileId;
+    if (keys == null || pid == null || pid.isEmpty) {
+      throw StateError('state not ready');
+    }
+    final secret = await SecureSecrets.create().getProfileSecretB64(pid);
+    if (secret == null || secret.isEmpty) {
+      throw StateError('profile secret unavailable');
+    }
+    final auth = await _buildKeysAuthEnvelope(
+      buildMessage:
+          ({required requesterDeviceId, required tsMs, required nonceB64}) =>
+              AuthSigner.keysBackupDeleteMessage(
+                requesterDeviceId: requesterDeviceId,
+                profileId: pid,
+                tsMs: tsMs,
+                nonceB64: nonceB64,
+              ),
+    );
+    if (auth == null) {
+      throw StateError('keys device-auth not ready');
+    }
+    final deleted = await keys.backupDelete(
+      profileId: pid,
+      requesterDeviceId: auth.requesterDeviceId,
+      tsMs: auth.tsMs,
+      nonceB64: auth.nonceB64,
+      signatureB64: auth.signatureB64,
+      profileSecretB64: secret,
+    );
+    DiagLog.event('backup', 'server_backup_deleted', {'deleted': deleted});
+    return deleted;
+  }
+
   Future<(bool exists, String? payload, int updatedAtMs)> backupGetFromServer(
     String targetProfileId, {
     bool useDeviceAuth = true,
@@ -13513,11 +14195,17 @@ class AppController {
       );
       final created = await retry(() => keys.createProfile());
       _profileId = created.profileId;
-      await prefs.setString(_prefsProfileIdKey, _profileId!);
+      // 🔴 Play, отзыв 7.11.2026: сначала секрет, потом id. Было наоборот, и
+      // если Android убивал приложение между двумя записями (частое дело на
+      // слабых телефонах при долгой заставке), каждый следующий запуск падал
+      // на «Missing profile secret…» — без выхода. Теперь в худшем случае
+      // остаётся лишний секрет без id, а следующий запуск просто создаёт
+      // профиль заново.
       await secrets.setProfileSecretB64(
         profileId: _profileId!,
         secretB64: created.profileSecretB64,
       );
+      await prefs.setString(_prefsProfileIdKey, _profileId!);
       _debugRuntimeLog('Created server-backed profile');
     } else {
       final exists = await retry(() => keys.profileExists(_profileId!));
@@ -13560,6 +14248,14 @@ class AppController {
     String profileSecretB64 =
         (await secrets.getProfileSecretB64(_profileId!)) ?? '';
     if (profileSecretB64.isEmpty) {
+      // 15.11.2026: секрет есть, но хранилище его сейчас не отдаёт — совет
+      // «сбросить профиль» здесь уничтожил бы профиль. Ячейка цела, следующий
+      // запуск попробует снова.
+      if (SecureSecrets.unreadableSlots.contains('profile_secret')) {
+        throw StateError(
+          'The profile secret is saved on this device but cannot be read right now. Restart the app; do not reset the profile.',
+        );
+      }
       throw StateError(
         'Missing profile secret for this Secretly ID. Use Settings → Reset profile, then recreate.',
       );
@@ -13942,10 +14638,35 @@ class AppController {
     }
 
     if (!published || forcePublish) {
+      // Б5 Э2 (флаг `otk_hygiene_share`): пополнение по остатку на keys с
+      // прошлой публикации; без флага или без сведений — прежние 20.
+      final otkHygiene = _prekeyFlags.otkHygieneFor(_deviceId!);
+      final otkRemainingKey = '$_prefsKeysOtkRemainingKeyPrefix$_deviceId';
+      final allocateOtk =
+          otkHygiene ? otkTopUpCount(prefs.getInt(otkRemainingKey)) : 20;
+      // Б5 Э3 (флаг `spk_rotate_share`): новый подписанный предключ раз в
+      // `spk_rotate_days`; прежние хранятся, пока их могут назвать конверты в
+      // пути. Ротация — до сборки связки ниже, чтобы она ушла в эту же
+      // публикацию. Сбой ротации публикации не мешает.
+      if (_prekeyFlags.spkRotateFor(_deviceId!)) {
+        try {
+          final rotated = await deviceKeys.maintainSignedPrekey(
+            profileId: _profileId!,
+            deviceId: _deviceId!,
+            nowMs: DateTime.now().millisecondsSinceEpoch,
+            rotateEveryMs: _prekeyFlags.spkRotateDays * 24 * 60 * 60 * 1000,
+          );
+          if (rotated) DiagLog.event('keys', 'spk_rotated', <String, Object?>{});
+        } catch (e) {
+          DiagLog.event('keys', 'spk_rotate_failed', <String, Object?>{
+            'reason': e.runtimeType.toString(),
+          });
+        }
+      }
       final bundle = await deviceKeys.createOrLoadAndAllocateOtk(
         profileId: _profileId!,
         deviceId: _deviceId!,
-        allocateOneTimePrekeys: 20,
+        allocateOneTimePrekeys: allocateOtk,
       );
 
       final otkHashB64 = await AuthSigner.keysPublishMessageOtkHashB64(
@@ -14045,7 +14766,16 @@ class AppController {
           profileSecretB64: profileSecretB64,
           accountIdentityPubB64: publishAccountPubB64,
           deviceCertB64: publishDeviceCertB64,
+          signedPrekeyId: bundle.signedPrekeyId,
         );
+      });
+      // Б5 Э0 (24.10.2026): size of this device's key record and what keys
+      // reports left — the numbers the OTK hygiene stage is meant to move.
+      DiagLog.event('keys', 'prekey_state', <String, Object?>{
+        'material_bytes': bundle.materialBytes,
+        'otk_seeds': bundle.oneTimePrekeySeedCount,
+        'otk_remaining': keys.lastPublishOtkRemaining,
+        'spk_id': bundle.signedPrekeyId,
       });
       await prefs.setBool(publishedKey, ok);
       if (!ok) {
@@ -14053,6 +14783,31 @@ class AppController {
         throw StateError('publishKeys returned ok=false');
       }
       await prefs.setInt(_prefsLastKeysPublishAtMsKey, nowMs);
+      final otkRemaining = keys.lastPublishOtkRemaining;
+      if (otkRemaining != null) {
+        await prefs.setInt(otkRemainingKey, otkRemaining);
+      }
+      if (otkHygiene) {
+        // Б5 Э2: стирание закрытых половин OTK. Никогда не мешает публикации.
+        try {
+          final removed = await deviceKeys.pruneOneTimePrekeySeeds(
+            profileId: _profileId!,
+            deviceId: _deviceId!,
+            nowMs: DateTime.now().millisecondsSinceEpoch,
+            otkRemaining: otkRemaining,
+            minRemainingId: keys.lastPublishOtkMinRemainingId,
+          );
+          DiagLog.event('keys', 'otk_pruned', <String, Object?>{
+            'removed': removed,
+            'allocated': allocateOtk,
+            'otk_remaining': otkRemaining,
+          });
+        } catch (e) {
+          DiagLog.event('keys', 'otk_prune_failed', <String, Object?>{
+            'reason': e.runtimeType.toString(),
+          });
+        }
+      }
     }
 
     // ROOT FIX (one-way blackout): NOW that the current device (A2) is
@@ -15096,6 +15851,8 @@ class AppController {
     }
     await security.init(prefs: prefs);
     _startupMark('security');
+    _initTransportPaths(prefs);
+    _startupMark('transport');
     _loadDesktopLinkRequestsFromPrefs(prefs);
     await _initLocalNotifications();
     await _initNativeMediaControls();
@@ -15216,6 +15973,7 @@ class AppController {
     }
 
     _profileId = prefs.getString(_prefsProfileIdKey);
+    await _restoreFailedUploads(prefs);
     _desktopAuthRequired = _isDesktopOrWebPlatform
         ? (prefs.getBool(_prefsDesktopAuthRequiredKey) ?? false)
         : false;
@@ -15260,6 +16018,16 @@ class AppController {
     // приватности.
     unawaited(ScreenPrivacy.apply(enabled: _screenPrivacy));
     unawaited(_sweepStaleSendTempFiles());
+    // П2 (15.11.2026): медиа переписки на iPhone уезжают из «Документов»
+    // (их было видно в «Файлах» в обход замка). Без старой папки — ничего.
+    unawaited(migrateLegacyIosAttachmentCache());
+    _cellularAutoDownload = cellularAutoDownloadFromPref(
+      prefs.getString(_prefsCellularAutoDownloadKey),
+    );
+    _keepMediaDays = normalizeKeepMediaDays(
+      prefs.getInt(_prefsKeepMediaDaysKey),
+    );
+    if (_keepMediaDays > 0) unawaited(_sweepMediaOlderThanKeep());
     _darkMode = prefs.getBool(_prefsDarkModeKey) ?? true;
     _appLocalePreference = _normalizeAppLocalePreference(
       prefs.getString(_prefsAppLocaleKey),
@@ -15956,7 +16724,20 @@ class AppController {
                       ) ??
                       false,
                 ).timeout(
-                  const Duration(seconds: 10),
+                  // 🔴 Play, отзыв 7.11.2026 (Redmi A5: «не дало закончить
+                  // настройку»). При ПЕРВОМ запуске за эти секунды телефон
+                  // создаёт профиль, регистрирует устройство и публикует
+                  // ключи — несколько запросов подряд, на холодном радио MIUI
+                  // первый занимает до 24 с. 10 с обрывали создание, и
+                  // приложение оставалось без аккаунта («ID: unknown»). На
+                  // первом запуске ждём до минуты (идёт заставка); у кого
+                  // профиль уже есть — прежние 10 с, запуск не замедляется.
+                  firstRunKeysSetupTimeout(
+                    hasProfile: (prefs.getString(_prefsProfileIdKey) ?? '')
+                        .trim()
+                        .isNotEmpty,
+                    desktop: _isDesktopOrWebPlatform,
+                  ),
                   onTimeout: () => throw TimeoutException(
                     'keys setup timeout during startup',
                   ),
@@ -16887,11 +17668,36 @@ class AppController {
       return;
     }
 
+    // 🔴 13.11.2026: снимок истории больше не стирается после ПЕРВОЙ же
+    // неудачи. Раньше `finally` удалял его при любой ошибке, а вызывающий
+    // глотал исключение: человек видел «восстановлено» и пустые чаты, а
+    // повторить было не из чего. Теперь — до трёх попыток на трёх запусках
+    // (счётчик пишется ДО попытки, так что и падение приложения считается и
+    // не даёт зациклиться), потом снимок снимается с очереди с понятной
+    // причиной на экране копий. Копия на сервере при этом цела: автокопия не
+    // затрёт её меньшей историей (см. _firstAutoBackupOverwriteRefusal).
+    final attempts = (prefs.getInt(_prefsPendingSafeImportAttemptsKey) ?? 0) + 1;
+    await prefs.setInt(_prefsPendingSafeImportAttemptsKey, attempts);
     try {
       await _applyPendingSafeImportPayload(db: db, json: json);
-      _changed.add(null);
-    } finally {
       await prefs.remove(_prefsPendingSafeImportKey);
+      await prefs.remove(_prefsPendingSafeImportAttemptsKey);
+      _changed.add(null);
+    } catch (e) {
+      DiagLog.event('backup', 'pending_import_failed', {
+        'attempt': attempts,
+        'err': _shortErrorTag(e),
+      });
+      if (attempts >= _pendingSafeImportMaxAttempts) {
+        await prefs.remove(_prefsPendingSafeImportKey);
+        await prefs.remove(_prefsPendingSafeImportAttemptsKey);
+        await prefs.setString(
+          _prefsSafeBackupLastAutoErrorKey,
+          'История из резервной копии не восстановилась на этом устройстве. '
+          'Копия на сервере не тронута — восстановите её ещё раз.',
+        );
+        _changed.add(null);
+      }
     }
   }
 
@@ -17012,7 +17818,8 @@ class AppController {
       out[table] = rows;
     });
     validateSafeBackupDbSnapshot(payloadName: 'Safe backup', dbSnapshot: out);
-    return out;
+    // Копия более новой версии: незнакомые таблицы и столбцы — мимо базы.
+    return sanitizeSafeBackupDbSnapshot(out);
   }
 
   Map<String, String> _decodeSafeBackupFiles(Object? raw) {
@@ -17033,6 +17840,10 @@ class AppController {
     if (filesB64ByRelativePath.isEmpty) return;
     final docs = await getApplicationDocumentsDirectory();
     final docsPath = p.normalize(docs.path);
+    // П2 (15.11.2026): медиа переписки на iPhone — вне «Документов».
+    final attachmentsBasePath = p.normalize(
+      (await attachmentCacheParentDirectory()).path,
+    );
     for (final entry in filesB64ByRelativePath.entries) {
       final rel = normalizeSafeBackupRelativePath(entry.key);
       if (rel == null) {
@@ -17040,10 +17851,14 @@ class AppController {
       }
       try {
         final bytes = base64Decode(entry.value);
+        final basePath =
+            p.posix.split(rel).first == kAttachmentCacheDirName
+            ? attachmentsBasePath
+            : docsPath;
         final outPath = p.normalize(
-          p.joinAll(<String>[docsPath, ...p.posix.split(rel)]),
+          p.joinAll(<String>[basePath, ...p.posix.split(rel)]),
         );
-        if (!p.isWithin(docsPath, outPath)) {
+        if (!p.isWithin(basePath, outPath)) {
           continue;
         }
         final outFile = File(outPath);
@@ -17161,16 +17976,25 @@ class AppController {
     required String subDir,
     required Map<String, String> out,
     DesktopLinkMediaBudget? budget,
+    // Исчезающие (ТЗ 22.10.2026, шаг 3): файлы, чьё имя без расширения есть
+    // в наборе, не едут — это вложения сообщений со сроком.
+    Set<String> skipBasenamesWithoutExtension = const <String>{},
   }) async {
     final docs = Directory(docsPath);
     final dir = Directory(p.join(docs.path, subDir));
     if (!await dir.exists()) return;
+    bool skipped(String path) =>
+        skipBasenamesWithoutExtension.isNotEmpty &&
+        skipBasenamesWithoutExtension.contains(
+          p.basenameWithoutExtension(path),
+        );
     if (budget == null) {
       await for (final entity in dir.list(
         recursive: true,
         followLinks: false,
       )) {
         if (entity is! File) continue;
+        if (skipped(entity.path)) continue;
         await _safeBackupAddFileIfExists(
           docsPath: docsPath,
           absolutePath: entity.path,
@@ -17184,6 +18008,7 @@ class AppController {
     final files = <({String path, int modifiedMs})>[];
     await for (final entity in dir.list(recursive: true, followLinks: false)) {
       if (entity is! File) continue;
+      if (skipped(entity.path)) continue;
       try {
         final st = await entity.stat();
         files.add((
@@ -17228,6 +18053,9 @@ class AppController {
     final docs = await getApplicationDocumentsDirectory();
     final docsPath = p.normalize(docs.path);
     final out = <String, String>{};
+    // Исчезающие (ТЗ 22.10.2026, шаг 3): строки со сроком в снимок базы не
+    // едут (`exportTables`), значит и их файлы — тоже.
+    final disappearingBlobIds = await _disappearingMediaBlobIds();
 
     await _safeBackupAddFileIfExists(
       docsPath: docsPath,
@@ -17262,6 +18090,12 @@ class AppController {
       );
     }
 
+    // П2 (15.11.2026): на iPhone папка медиа — не в «Документах». Ключ в
+    // копии прежний («attachments/<файл>»): считаем его от её родителя,
+    // иначе файлы вне «Документов» молча выпали бы из копии.
+    final attachmentsBasePath = p.normalize(
+      (await attachmentCacheParentDirectory()).path,
+    );
     for (final sub in <String>[
       // B: с бюджетом переписка идёт последней — лицо профиля, аватары и
       // стикеры маленькие и незаменимые, а медиа переписки остаются на
@@ -17279,10 +18113,15 @@ class AppController {
       if (budget != null) 'attachments',
     ]) {
       await _safeBackupAddDirectoryFiles(
-        docsPath: docsPath,
+        docsPath: sub == kAttachmentCacheDirName
+            ? attachmentsBasePath
+            : docsPath,
         subDir: sub,
         out: out,
         budget: budget,
+        skipBasenamesWithoutExtension: sub == 'attachments'
+            ? disappearingBlobIds
+            : const <String>{},
       );
     }
 
@@ -17296,6 +18135,7 @@ class AppController {
       String profileSecretB64,
       String deviceKeysMaterialJson,
       String serverBinding,
+      String? accountIdentitySeedB64,
     })
   >
   _collectRestoreIdentityMaterial() async {
@@ -17311,12 +18151,50 @@ class AppController {
       throw StateError('missing profile secret');
     }
 
-    final deviceKeysMaterialJson = await DeviceKeys.create().exportMaterialJson(
-      profileId: pid,
-      deviceId: did,
-    );
+    // 14.11.2026 (Xiaomi владельца): чтение хранилища Android падало
+    // `AEADBadTagException`, и человек видел трассу Java без имени ключа.
+    // Теперь ошибка называет ячейку — `secure_storage_unreadable:<ячейка>` —
+    // и экран копий объясняет её словами.
+    final String? deviceKeysMaterialJson;
+    try {
+      deviceKeysMaterialJson = await DeviceKeys.create().exportMaterialJson(
+        profileId: pid,
+        deviceId: did,
+      );
+    } catch (e) {
+      DiagLog.event('backup', 'secret_unreadable', {
+        'slot': 'device_keys',
+        'reason': e.runtimeType.toString(),
+      });
+      throw StateError('$kSecureStorageUnreadable:device_keys');
+    }
     if (deviceKeysMaterialJson == null || deviceKeysMaterialJson.isEmpty) {
       throw StateError('missing device key material');
+    }
+
+    // 🔴 Сид ключа личности аккаунта (AIK) ОБЯЗАН ехать в наборе и в копии.
+    // До 10.10.2026 поле `account_identity_seed_b64` читалось при
+    // восстановлении, но здесь не заполнялось: после восстановления рождался
+    // новый AIK, и у всех собеседников «менялся номер безопасности», а
+    // закреплённый ими ключ расходился с настоящим. Отсутствие сида — норма
+    // только до первой публикации связки ключей (он создаётся там), поэтому
+    // `null` допустим, а не ошибка.
+    //
+    // Нечитаемый сид — то же, что отсутствующий (14.11.2026): копия без него
+    // всё равно сохраняет переписку, а отказ в копии из-за одной ячейки
+    // оставлял человека без истории вовсе. Восстановление тогда заведёт
+    // новый AIK — об этом пишет журнал.
+    String? accountIdentitySeedB64;
+    try {
+      accountIdentitySeedB64 = await AccountIdentity.create().loadSeedB64(
+        profileId: pid,
+      );
+    } catch (e) {
+      DiagLog.event('backup', 'secret_unreadable', {
+        'slot': 'account_identity_seed',
+        'reason': e.runtimeType.toString(),
+      });
+      accountIdentitySeedB64 = null;
     }
 
     return (
@@ -17325,7 +18203,21 @@ class AppController {
       profileSecretB64: profileSecretB64,
       deviceKeysMaterialJson: deviceKeysMaterialJson,
       serverBinding: (savedServerBinding ?? currentServerBinding).trim(),
+      accountIdentitySeedB64: accountIdentitySeedB64,
     );
+  }
+
+  /// Ключ локального шифрования для копии — с названной ячейкой при сбое.
+  Future<Uint8List> _requireCryptoKeyForBackup() async {
+    try {
+      return await SecureSecrets.create().requireExistingCryptoKey();
+    } catch (e) {
+      DiagLog.event('backup', 'secret_unreadable', {
+        'slot': 'content_key',
+        'reason': e.runtimeType.toString(),
+      });
+      throw StateError('$kSecureStorageUnreadable:content_key');
+    }
   }
 
   Future<RecoveryKitPlainV1> _collectRecoveryKitPlain() async {
@@ -17336,6 +18228,7 @@ class AppController {
       deviceId: identity.deviceId,
       deviceKeysMaterialJson: identity.deviceKeysMaterialJson,
       serverBinding: identity.serverBinding,
+      accountIdentitySeedB64: identity.accountIdentitySeedB64,
     );
     plain.validateRestorePayload();
     return plain;
@@ -17390,9 +18283,7 @@ class AppController {
         });
       }
     }
-    final cryptoKeyB64 = base64Encode(
-      await SecureSecrets.create().requireExistingCryptoKey(),
-    );
+    final cryptoKeyB64 = base64Encode(await _requireCryptoKeyForBackup());
     // Custom cover/avatar media files (stored at the docs root) whose bytes ride
     // the file blob so the look survives a restore. Only the existing ones are
     // added by the collector; missing paths are silently skipped.
@@ -17456,6 +18347,7 @@ class AppController {
       deviceKeysMaterialJson: identity.deviceKeysMaterialJson,
       cryptoKeyB64: cryptoKeyB64,
       serverBinding: identity.serverBinding,
+      accountIdentitySeedB64: identity.accountIdentitySeedB64,
       contacts: contacts
           .map(
             (c) => SafeBackupContactV1(
@@ -17972,9 +18864,36 @@ class AppController {
         return;
       }
 
+      // 🔴 Первая запись с этого устройства (13.11.2026): порога ещё нет —
+      // сверяемся с самой копией на сервере, иначе пустая история после
+      // восстановления личности ключом затрёт полную копию. Действует и
+      // для `force`: это толчок при включении автокопии, а не кнопка
+      // «сохранить сейчас» (ручное сохранение идёт другим путём).
+      if (_safeBackupAutoServerEnabled && previousEvents <= 0) {
+        final refusal = await _firstAutoBackupOverwriteRefusal(
+          profileId: pid,
+          password: pw,
+          nextEvents: nextEvents,
+        );
+        if (refusal != null) {
+          await prefs.setString(_prefsSafeBackupLastAutoErrorKey, refusal);
+          DiagLog.event('backup', 'auto_skipped_first_overwrite', {
+            'next': nextEvents,
+          });
+          _safeBackupAutoInFlight = false;
+          _changed.add(null);
+          return;
+        }
+      }
+
       var done = false;
       if (_safeBackupAutoServerEnabled) {
-        final ok = await uploadSafeBackupToServer(password: pw);
+        // Загрузка, начатая после этой попытки с тем же паролем (перезаливка
+        // при смене пароля), уже положила свежую копию — второй раз не нужно.
+        final ok = await uploadSafeBackupToServer(
+          password: pw,
+          skipIfStartedSinceMs: now,
+        );
         if (!ok) {
           throw StateError('Server backup upload returned false');
         }
@@ -17997,6 +18916,57 @@ class AppController {
       _safeBackupAutoInFlight = false;
       _changed.add(null);
     }
+  }
+
+  /// Проверка перед первой автокопией с устройства (см.
+  /// [SafeBackupRegressionGuard.firstOverwriteRefusal]). Копия читается с
+  /// сервера подписью устройства — пароль для этого не нужен, — а
+  /// расшифровывается паролем автокопии, чтобы посчитать в ней сообщения.
+  /// Сбой сети или сервера — отказ «попробуем позже»: копия на сервере при
+  /// этом остаётся нетронутой, а следующая попытка придёт по расписанию.
+  Future<String?> _firstAutoBackupOverwriteRefusal({
+    required String profileId,
+    required String password,
+    required int nextEvents,
+  }) async {
+    final bool exists;
+    final String? stored;
+    try {
+      final got = await backupGetFromServer(profileId, useDeviceAuth: true);
+      exists = got.$1;
+      stored = got.$2;
+    } catch (e) {
+      DiagLog.event('backup', 'first_overwrite_probe_failed', {
+        'err': _shortErrorTag(e),
+      });
+      return 'Автокопия отложена: не удалось проверить копию на сервере. '
+          'Повторим позже.';
+    }
+    if (!exists || stored == null || stored.trim().isEmpty) {
+      return SafeBackupRegressionGuard.firstOverwriteRefusal(
+        serverHasBackup: false,
+        openedWithThisPassword: false,
+        serverEvents: null,
+        nextEvents: nextEvents,
+      );
+    }
+    SafeBackupPlainV1? plain;
+    try {
+      plain = await SafeBackupV1.decryptFromPayload(
+        payload: stored,
+        password: password,
+      );
+    } catch (_) {
+      plain = null;
+    }
+    return SafeBackupRegressionGuard.firstOverwriteRefusal(
+      serverHasBackup: true,
+      openedWithThisPassword: plain != null,
+      serverEvents: SafeBackupRegressionGuard.eventsInSnapshot(
+        plain?.dbSnapshot,
+      ),
+      nextEvents: nextEvents,
+    );
   }
 
   /// Records how much history the freshly-stored backup holds.
@@ -18072,7 +19042,27 @@ class AppController {
     );
   }
 
-  Future<bool> uploadSafeBackupToServer({required String password}) async {
+  /// [skipIfStartedSinceMs]: не загружать, если после этого момента уже
+  /// началась и прошла загрузка с тем же паролем. Кнопка «создать копию» его
+  /// не передаёт и загружает всегда.
+  Future<bool> uploadSafeBackupToServer({
+    required String password,
+    int? skipIfStartedSinceMs,
+  }) async {
+    final ok = await _serverBackupUploadGate.run<bool>(
+      password: password,
+      skipIfStartedSinceMs: skipIfStartedSinceMs,
+      upload: () => _uploadSafeBackupToServerNow(password: password),
+      accepted: (ok) => ok,
+    );
+    if (ok == null) {
+      DiagLog.event('backup', 'upload_skipped_fresh', const {});
+      return true;
+    }
+    return ok;
+  }
+
+  Future<bool> _uploadSafeBackupToServerNow({required String password}) async {
     _throwIfTransportBlocked();
     final keys = _keys;
     final pid = _profileId;
@@ -18153,6 +19143,17 @@ class AppController {
   /// LOUD: it pre-checks the size cap, treats `ok:false` as an error, and
   /// verifies the stored bytes before claiming success.
   Future<SafeBackupUploadResult> uploadSafeBackupToServerVerified({
+    required String password,
+  }) async {
+    final result = await _serverBackupUploadGate.run<SafeBackupUploadResult>(
+      password: password,
+      upload: () => _uploadSafeBackupToServerVerifiedNow(password: password),
+      accepted: (_) => true,
+    );
+    return result!;
+  }
+
+  Future<SafeBackupUploadResult> _uploadSafeBackupToServerVerifiedNow({
     required String password,
   }) async {
     _throwIfTransportBlocked();
@@ -18637,6 +19638,8 @@ class AppController {
       if (restoredKit.dbSnapshot != null) 'db_snapshot': restoredKit.dbSnapshot,
     };
     await prefs.setString(_prefsPendingSafeImportKey, jsonEncode(pending));
+    // Новый снимок — новый счёт попыток.
+    await prefs.remove(_prefsPendingSafeImportAttemptsKey);
     final importedNow = await _tryApplyPendingSafeImportPayload(pending);
     if (importedNow) {
       await prefs.remove(_prefsPendingSafeImportKey);
@@ -18931,6 +19934,10 @@ class AppController {
     refreshPushNotificationPolicy();
   }
 
+  // 13.11.2026: время в сигналах звонка — по серверным часам
+  // (ServerClock), а не по часам телефона. Получатель отбрасывает приглашение
+  // старше 45 с; при сбитых на минуту часах звонящего звонок молча не
+  // проходил. Старые сборки шлют своё время — для них ничего не меняется.
   Future<String> sendCallInvite({
     required String peerProfileId,
     required bool video,
@@ -18967,7 +19974,7 @@ class AppController {
       'callAttemptId': callAttemptId,
       'media': video ? 'video' : 'audio',
       'screenShare': screenShare,
-      'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+      'createdAtMs': ServerClock.instance.nowMs(),
       'fromProfileId': _profileId,
       'fromDisplayName': _myNickname.trim().isEmpty ? null : _myNickname.trim(),
     };
@@ -19007,7 +20014,7 @@ class AppController {
       'action': 'decline',
       'callId': cid,
       'callAttemptId': (callAttemptId ?? cid).trim(),
-      'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+      'createdAtMs': ServerClock.instance.nowMs(),
     };
     await _sendCallSignalCommand(
       peerProfileId: pid,
@@ -19063,7 +20070,7 @@ class AppController {
         'action': 'hangup',
         'callId': cid,
         'callAttemptId': (callAttemptId ?? cid).trim(),
-        'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+        'createdAtMs': ServerClock.instance.nowMs(),
       },
       restrictToDeviceIds: others,
     );
@@ -19085,7 +20092,7 @@ class AppController {
       'action': 'hangup',
       'callId': cid,
       'callAttemptId': (callAttemptId ?? cid).trim(),
-      'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+      'createdAtMs': ServerClock.instance.nowMs(),
     };
     await _sendCallSignalCommand(
       peerProfileId: pid,
@@ -19115,7 +20122,7 @@ class AppController {
       'callAttemptId': (callAttemptId ?? cid).trim(),
       'media': video ? 'video' : 'audio',
       'sdp': cleanSdp,
-      'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+      'createdAtMs': ServerClock.instance.nowMs(),
     };
     await _sendCallSignalCommand(
       peerProfileId: pid,
@@ -19143,7 +20150,7 @@ class AppController {
       'callId': cid,
       'callAttemptId': (callAttemptId ?? cid).trim(),
       'sdp': cleanSdp,
-      'createdAtMs': DateTime.now().millisecondsSinceEpoch,
+      'createdAtMs': ServerClock.instance.nowMs(),
     };
     await _sendCallSignalCommand(
       peerProfileId: pid,
@@ -19364,6 +20371,403 @@ class AppController {
     );
   }
 
+  // ── Ключи зашифрованного созвона: приём и отправка (ТЗ E2EE, ЗР-3, ЗР-14) ──
+
+  final StreamController<InboundRoomCallKeyCommand> _roomCallKeyInbound =
+      StreamController<InboundRoomCallKeyCommand>.broadcast();
+
+  /// Команды, пришедшие раньше, чем созвон начал слушать: ключ собеседника
+  /// может обогнать подключение. Держим недолго и немного.
+  final List<InboundRoomCallKeyCommand> _roomCallKeyBuffer =
+      <InboundRoomCallKeyCommand>[];
+  static const int _roomCallKeyBufferMax = 64;
+  static const int _roomCallKeyBufferMaxAgeMs = 60 * 1000;
+
+  /// Команды ключей, пришедшие по попарным сессиям.
+  Stream<InboundRoomCallKeyCommand> get roomCallKeyCommands =>
+      _roomCallKeyInbound.stream;
+
+  void _deliverRoomCallKeyCommand(InboundRoomCallKeyCommand inbound) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _roomCallKeyBuffer.removeWhere(
+      (c) => now - c.receivedAtMs > _roomCallKeyBufferMaxAgeMs,
+    );
+    _roomCallKeyBuffer.add(inbound);
+    while (_roomCallKeyBuffer.length > _roomCallKeyBufferMax) {
+      _roomCallKeyBuffer.removeAt(0);
+    }
+    _roomCallKeyInbound.add(inbound);
+  }
+
+  /// Забрать из запаса команды созвона [callId] (не старше минуты).
+  List<InboundRoomCallKeyCommand> drainRoomCallKeyCommandBuffer({
+    required String callId,
+  }) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final cid = callId.trim();
+    final out = <InboundRoomCallKeyCommand>[];
+    _roomCallKeyBuffer.removeWhere((c) {
+      if (now - c.receivedAtMs > _roomCallKeyBufferMaxAgeMs) return true;
+      if (c.command.callId != cid) return false;
+      out.add(c);
+      return true;
+    });
+    return out;
+  }
+
+  /// Отправить команду ключа одному устройству ([ЗР-14]):
+  /// - адресно, по попарной сессии, срок 90 с;
+  /// - без `eventIdRef` (повтор по NACK невозможен), без
+  ///   `queueIfNoDevices` (открытый текст не ложится в базу);
+  /// - «только на связи» (П-4), если реле умеет и сессия с устройством уже
+  ///   подтверждена — иначе обычной посылкой с тем же коротким сроком.
+  Future<bool> sendRoomCallKeyCommand({
+    required String peerProfileId,
+    required String peerDeviceId,
+    required RoomCallKeyCommand command,
+  }) async {
+    final pid = peerProfileId.trim();
+    final dev = peerDeviceId.trim();
+    if (pid.isEmpty || dev.isEmpty) return false;
+    var onlineOnly = false;
+    if (_relayHealthStatus?.onlineOnly ?? false) {
+      try {
+        final row = await _db?.sessionV3Get(dev);
+        final pendingAt =
+            (row?['initiator_pending_at_ms'] as num?)?.toInt() ?? -1;
+        onlineOnly = row != null && pendingAt == 0;
+      } catch (_) {
+        onlineOnly = false;
+      }
+    }
+    try {
+      await sendControlMessage(
+        peerProfileId: pid,
+        controlText: RoomCallKeyCommandCodec.encode(command),
+        ttlSeconds: 90,
+        strict: true,
+        forceRelayFlush: true,
+        targetDeviceIds: <String>[dev],
+        transportHint: onlineOnly ? onlineOnlyTransportHint : null,
+      );
+      return true;
+    } catch (e) {
+      DiagLog.event('call_e2ee', 'key_send_failed', <String, Object?>{
+        'to_dev': DiagLog.pfx(dev),
+        'online_only': onlineOnly,
+      });
+      return false;
+    }
+  }
+
+  /// Что база знает об отправителе ключа: его ли это устройство и член ли он
+  /// комнаты.
+  Future<RoomCallKeyPeerFacts> roomCallKeyPeerFacts({
+    required String roomId,
+    required String profileId,
+    required String deviceId,
+  }) async {
+    final pid = profileId.trim();
+    final dev = deviceId.trim();
+    final selfPid = (_profileId ?? '').trim();
+    final selfDid = (_deviceId ?? '').trim();
+    var owns = false;
+    if (pid.isNotEmpty && dev.isNotEmpty && dev != selfDid) {
+      try {
+        final devices = await _listRecipientDevicesForSend(
+          peerProfileId: pid,
+          selfDeviceId: selfDid,
+        );
+        owns = devices.contains(dev);
+      } catch (_) {
+        owns = false;
+      }
+    }
+    var member = false;
+    if (pid.isNotEmpty) {
+      if (pid == selfPid) {
+        member = true;
+      } else {
+        try {
+          member = (await listGroupMembers(roomId.trim())).contains(pid);
+        } catch (_) {
+          member = false;
+        }
+      }
+    }
+    return RoomCallKeyPeerFacts(
+      deviceBelongsToProfile: owns,
+      activeRoomMember: member,
+    );
+  }
+
+  /// Активна ли у этого устройства раскатка зашифрованных созвонов: доля
+  /// блока `calls` (или флаг-день) и платформа умеет. Пока нет — интерфейс
+  /// созвонов не меняется ни в чём.
+  bool get roomCallE2eeRolloutActive =>
+      e2eeGroupCallsSupportedOnThisPlatform &&
+      callFlags.e2eeCreateFor((_deviceId ?? '').trim());
+
+  /// Что сделать перед входом в созвон комнаты (ТЗ E2EE созвонов, §7.3).
+  /// Сеть недоступна — план по последнему известному; настоящий контракт
+  /// всё равно сверит реле (отказ 409 с контрактом).
+  Future<RoomCallJoinPlan> planRoomCallJoin(String roomId) async {
+    final rid = roomId.trim();
+    final flags = callFlags;
+    final supported = e2eeGroupCallsSupportedOnThisPlatform;
+    if (!flags.groupCallsEnabled) {
+      return const RoomCallJoinPlan(
+        contract: kRoomMediaContractV1,
+        existingCall: false,
+        block: RoomCallJoinBlock.groupCallsDisabled,
+      );
+    }
+    final rolloutActive = roomCallE2eeRolloutActive;
+    if (!rolloutActive && !flags.e2eeRequired) {
+      // Раскатки у устройства нет: вход как раньше, без лишнего запроса.
+      // Идущий зашифрованный созвон всё равно откроется — реле ответит 409
+      // с настоящим контрактом, и вход повторится с ним.
+      final known = _roomCallContracts[rid]?.contract;
+      return RoomCallJoinPlan(
+        contract: known ?? kRoomMediaContractV1,
+        existingCall: known != null,
+      );
+    }
+    RelayRoomCallSnapshot? snapshot;
+    try {
+      snapshot = await fetchRelayRoomCall(roomId: rid);
+    } catch (_) {
+      snapshot = null;
+    }
+    final call = snapshot?.call;
+    if (snapshot != null && snapshot.exists && call != null && call.isActive) {
+      final contract = normalizeRoomMediaContract(call.mediaContract);
+      if (contract == kRoomMediaContractE2eeV1) {
+        return RoomCallJoinPlan(
+          contract: contract,
+          existingCall: true,
+          block: supported ? null : RoomCallJoinBlock.platformUnsupported,
+        );
+      }
+      if (flags.e2eeRequired) {
+        return const RoomCallJoinPlan(
+          contract: kRoomMediaContractV1,
+          existingCall: true,
+          block: RoomCallJoinBlock.e2eeRequired,
+        );
+      }
+      return RoomCallJoinPlan(
+        contract: kRoomMediaContractV1,
+        existingCall: true,
+        needsOpenJoinConsent: rolloutActive,
+      );
+    }
+    if (flags.e2eeRequired && !supported) {
+      return const RoomCallJoinPlan(
+        contract: kRoomMediaContractE2eeV1,
+        existingCall: false,
+        block: RoomCallJoinBlock.platformUnsupported,
+      );
+    }
+    if (!rolloutActive) {
+      return const RoomCallJoinPlan(
+        contract: kRoomMediaContractV1,
+        existingCall: false,
+      );
+    }
+    var withoutE2ee = const <String>[];
+    final relay = _relay;
+    if (relay != null) {
+      try {
+        final readiness = await relay.getRoomCallE2eeReadiness(roomId: rid);
+        final self = (_profileId ?? '').trim();
+        withoutE2ee = readiness.membersWithoutCapableDevice
+            .where((p) => p != self)
+            .toList(growable: false);
+      } catch (_) {
+        withoutE2ee = const <String>[];
+      }
+    }
+    return RoomCallJoinPlan(
+      contract: kRoomMediaContractE2eeV1,
+      existingCall: false,
+      membersWithoutE2ee: withoutE2ee,
+      offerOpenAlternative: !flags.e2eeRequired,
+    );
+  }
+
+  /// Сообщение в комнату для тех, кто на старой версии (§8.3): обычный текст
+  /// от создателя — старые сборки его видят.
+  Future<void> sendRoomCallUpdateNotice({
+    required String roomId,
+    required String text,
+  }) async {
+    final rid = roomId.trim();
+    final body = text.trim();
+    if (rid.isEmpty || body.isEmpty) return;
+    try {
+      await sendGroupMessage(groupId: rid, text: body);
+    } catch (e) {
+      callLog('AppCtrl', 'room call update notice failed: $e');
+    }
+  }
+
+  // ── Контракт медиа и желание захвата (ТЗ E2EE созвонов, ЗВ-С1, ЗР-10) ──
+
+  /// Контракт идущего созвона по комнате — из последнего снимка реле. Только
+  /// в памяти: после перезапуска узнаётся заново (снимок или отказ 409 с
+  /// настоящим контрактом).
+  final Map<String, ({String callId, String contract})> _roomCallContracts =
+      <String, ({String callId, String contract})>{};
+
+  /// Чего хочет человек по захвату в созвоне комнаты (ЗР-10).
+  final Map<String, RoomCallCaptureIntent> _roomCallCaptureIntents =
+      <String, RoomCallCaptureIntent>{};
+
+  /// Желание захвата для созвона комнаты; `null` — не записано (тогда медиа
+  /// идёт по снимку реле, как раньше).
+  RoomCallCaptureIntent? roomCallCaptureIntent(String roomId) =>
+      _roomCallCaptureIntents[roomId.trim()];
+
+  /// Контракт созвона [callId] комнаты [roomId], если он известен.
+  String? roomCallMediaContract(String roomId, String callId) {
+    final known = _roomCallContracts[roomId.trim()];
+    if (known == null || known.callId != callId.trim()) return null;
+    return known.contract;
+  }
+
+  /// Умеет ли эта платформа зашифрованные созвоны. FrameCryptor есть в
+  /// `flutter_webrtc` на Android, iOS, macOS и Windows; на остальных — нет,
+  /// и тогда в зашифрованный созвон не входим (закрытый отказ).
+  bool get e2eeGroupCallsSupportedOnThisPlatform {
+    if (kIsWeb) return false;
+    return Platform.isAndroid ||
+        Platform.isIOS ||
+        Platform.isMacOS ||
+        Platform.isWindows;
+  }
+
+  /// С каким контрактом входить в созвон комнаты. Идёт созвон — с его
+  /// контрактом. Новый — зашифрованный, если устройство в доле блока
+  /// `calls` (или настал флаг-день) и платформа умеет; иначе открытый, как
+  /// было всегда.
+  Future<String> _roomMediaContractForJoin(String roomId) async {
+    final cached = await getCachedRoomCall(roomId);
+    if (cached != null && cached.isActive) {
+      final known = roomCallMediaContract(roomId, cached.callId);
+      if (known != null) return known;
+    }
+    final flags = callFlags;
+    final wantsE2ee = flags.e2eeCreateFor((_deviceId ?? '').trim());
+    if (wantsE2ee && e2eeGroupCallsSupportedOnThisPlatform) {
+      return kRoomMediaContractE2eeV1;
+    }
+    return kRoomMediaContractV1;
+  }
+
+  /// Вход в созвон с контрактом. Отказ 409 «контракт не тот» с настоящим
+  /// контрактом созвона повторяется ОДИН раз — и только в сторону
+  /// шифрования: открытый созвон без согласия человека не открываем.
+  Future<RelayRoomCallMutationResult> _joinRoomCallWithContract({
+    required RelayClient relay,
+    required String roomId,
+    required String contract,
+    required String mediaType,
+    required bool supportsVideo,
+    required bool supportsScreenShare,
+    required bool muted,
+    required bool deafened,
+    required bool videoEnabled,
+    required bool screenShareEnabled,
+  }) async {
+    Future<RelayRoomCallMutationResult> attempt(String c) => relay.joinRoomCall(
+      roomId: roomId,
+      mediaType: mediaType,
+      supportsVideo: supportsVideo,
+      supportsScreenShare: supportsScreenShare,
+      muted: muted,
+      deafened: deafened,
+      videoEnabled: videoEnabled,
+      screenShareEnabled: screenShareEnabled,
+      mediaContract: c,
+    );
+    try {
+      return await attempt(contract);
+    } on RelayHttpException catch (e) {
+      final actual = roomCallContractFromMismatch(e);
+      if (actual == kRoomMediaContractE2eeV1 &&
+          contract != kRoomMediaContractE2eeV1 &&
+          e2eeGroupCallsSupportedOnThisPlatform) {
+        return attempt(actual!);
+      }
+      rethrow;
+    }
+  }
+
+  /// Запрос медиа созвона с его контрактом. Отказ 409 с настоящим
+  /// контрактом повторяется один раз: в зашифрованный — если платформа
+  /// умеет, в открытый — только если и мы считали созвон открытым.
+  Future<T> _withRoomCallContractRetry<T>({
+    required String roomId,
+    required String callId,
+    required Future<T> Function(String contract) run,
+  }) async {
+    final known = roomCallMediaContract(roomId, callId);
+    final contract = known ?? kRoomMediaContractV1;
+    try {
+      return await run(contract);
+    } on RelayHttpException catch (e) {
+      final actual = roomCallContractFromMismatch(e);
+      if (actual == null || actual == contract) rethrow;
+      if (actual == kRoomMediaContractE2eeV1 &&
+          !e2eeGroupCallsSupportedOnThisPlatform) {
+        rethrow;
+      }
+      if (actual == kRoomMediaContractV1 && known != kRoomMediaContractV1) {
+        rethrow;
+      }
+      _roomCallContracts[roomId] = (callId: callId, contract: actual);
+      return run(actual);
+    }
+  }
+
+  /// ЗР-10: из запроса «изменить своё состояние» в желание идут только поля,
+  /// которые запрос МЕНЯЕТ относительно текущего снимка.
+  Future<void> _recordRoomCallCaptureIntentFromUpdate({
+    required String roomId,
+    required String callId,
+    required bool muted,
+    required bool deafened,
+    required bool videoEnabled,
+    required bool screenShareEnabled,
+  }) async {
+    CachedRoomCallParticipant? self;
+    try {
+      final cached = await getCachedRoomCall(roomId);
+      if (cached != null && cached.callId == callId) {
+        self = cached.selfParticipant;
+      }
+    } catch (_) {
+      self = null;
+    }
+    _roomCallCaptureIntents[roomId] = RoomCallCaptureIntent.merge(
+      callId: callId,
+      previous: _roomCallCaptureIntents[roomId],
+      relayNow: self == null
+          ? null
+          : (
+              muted: self.muted,
+              deafened: self.deafened,
+              videoEnabled: self.videoEnabled,
+              screenShareEnabled: self.screenShareEnabled,
+            ),
+      muted: muted,
+      deafened: deafened,
+      videoEnabled: videoEnabled,
+      screenShareEnabled: screenShareEnabled,
+    );
+  }
+
   Future<void> _applyRelayRoomCallSnapshotBestEffort(
     RelayRoomCallSnapshot snapshot, {
     required String roomId,
@@ -19409,15 +20813,30 @@ class AppController {
     bool deafened = false,
     bool videoEnabled = false,
     bool screenShareEnabled = false,
+    // Контракт медиа (ТЗ E2EE созвонов, ЗВ-С1). `null` — решает контроллер:
+    // в идущий созвон — с его контрактом, новый — по блоку `calls`.
+    String? mediaContract,
   }) async {
     final relay = _relay;
     final cleanedRoomId = roomId.trim();
     if (relay == null || cleanedRoomId.isEmpty) {
       return null;
     }
+    // ЗР-10: желание человека записывается ДО запроса — снимок реле, который
+    // придёт в ответ, уже сверяется с ним.
+    _roomCallCaptureIntents[cleanedRoomId] = RoomCallCaptureIntent.fromJoin(
+      muted: muted,
+      deafened: deafened,
+      videoEnabled: videoEnabled,
+      screenShareEnabled: screenShareEnabled,
+    );
+    final contract =
+        mediaContract ?? await _roomMediaContractForJoin(cleanedRoomId);
     try {
-      final result = await relay.joinRoomCall(
+      final result = await _joinRoomCallWithContract(
+        relay: relay,
         roomId: cleanedRoomId,
+        contract: contract,
         mediaType: mediaType,
         supportsVideo: supportsVideo,
         supportsScreenShare: supportsScreenShare,
@@ -19426,6 +20845,12 @@ class AppController {
         videoEnabled: videoEnabled,
         screenShareEnabled: screenShareEnabled,
       );
+      final intent = _roomCallCaptureIntents[cleanedRoomId];
+      if (intent != null) {
+        _roomCallCaptureIntents[cleanedRoomId] = intent.withCallId(
+          result.call.callId,
+        );
+      }
       await _applyRelayRoomCallSnapshotBestEffort(
         result.snapshot,
         roomId: cleanedRoomId,
@@ -19464,6 +20889,14 @@ class AppController {
     if (relay == null || cleanedRoomId.isEmpty || cleanedCallId.isEmpty) {
       return null;
     }
+    await _recordRoomCallCaptureIntentFromUpdate(
+      roomId: cleanedRoomId,
+      callId: cleanedCallId,
+      muted: muted,
+      deafened: deafened,
+      videoEnabled: videoEnabled,
+      screenShareEnabled: screenShareEnabled,
+    );
     try {
       final result = await relay.updateOwnRoomCallParticipant(
         roomId: cleanedRoomId,
@@ -19632,9 +21065,14 @@ class AppController {
       return null;
     }
     try {
-      return await relay.getRoomCallMedia(
+      return await _withRoomCallContractRetry(
         roomId: cleanedRoomId,
         callId: cleanedCallId,
+        run: (contract) => relay.getRoomCallMedia(
+          roomId: cleanedRoomId,
+          callId: cleanedCallId,
+          mediaContract: contract,
+        ),
       );
     } catch (e) {
       callLog(
@@ -19660,13 +21098,18 @@ class AppController {
       return null;
     }
     try {
-      final session = await relay.joinRoomCallMedia(
+      final session = await _withRoomCallContractRetry(
         roomId: cleanedRoomId,
         callId: cleanedCallId,
-        publishAudio: publishAudio,
-        publishVideo: publishVideo,
-        publishScreenShare: publishScreenShare,
-        subscribeAll: subscribeAll,
+        run: (contract) => relay.joinRoomCallMedia(
+          roomId: cleanedRoomId,
+          callId: cleanedCallId,
+          publishAudio: publishAudio,
+          publishVideo: publishVideo,
+          publishScreenShare: publishScreenShare,
+          subscribeAll: subscribeAll,
+          mediaContract: contract,
+        ),
       );
       await _broadcastRoomCallMediaDescriptorHintToParticipantsBestEffort(
         session: session,
@@ -19694,7 +21137,67 @@ class AppController {
     bool forceRefresh = false,
   }) async {
     final raw = await _getCallIceConfigRaw(forceRefresh: forceRefresh);
-    return applyCallAddressPrivacy(raw, hideAddress: _hideAddressInCalls);
+    final privacy = applyCallAddressPrivacy(
+      raw,
+      hideAddress: _hideAddressInCalls,
+    );
+    return applyCallStealth(privacy, stealth: _callStealthActive);
+  }
+
+  /// Э5 для группового созвона: что отдать LiveKit, когда приложение дошло
+  /// до сервера обходным путём. `null` — ничего не менять.
+  ///
+  /// Снимок берётся через то же единственное горло, что и звонок один на
+  /// один, поэтому «скрыть адрес» и обходной путь учтены здесь автоматически.
+  Future<RoomCallStealthPlan?> roomCallStealthPlan() async {
+    if (!_callStealthActive) return null;
+    try {
+      final config = await getCallIceConfig();
+      return roomCallStealthPlanFor(stealth: true, config: config);
+    } catch (_) {
+      // Не смогли получить настройку — групповой созвон идёт как прежде.
+      return null;
+    }
+  }
+
+  /// Э5: звонок под цензурой. Когда приложение дошло до сервера обходным
+  /// путём (зеркало, CDN, прокси, SOCKS, Tor), прямое соединение и обычный
+  /// TURN по UDP почти наверняка закрыты или выдают нас — звонок идёт только
+  /// через сервер и, если сервер их дал, только через TURN по TLS на 443.
+  bool get _callStealthActive {
+    final kind = TransportPaths.instance?.status()?.currentKind;
+    return kind != null && kind != 'direct' && kind != 'ip';
+  }
+
+  /// Только поднимает защиту, как и [applyCallAddressPrivacy]. Если TURN по
+  /// TLS на 443 у сервера нет (нужен отдельный адрес — решение владельца),
+  /// остаётся «только через сервер» со всеми TURN: это хуже маскируется, но
+  /// звонок хотя бы возможен.
+  @visibleForTesting
+  static CallIceConfigSnapshot applyCallStealth(
+    CallIceConfigSnapshot config, {
+    required bool stealth,
+  }) {
+    if (!stealth) return config;
+    final tls443 = <CallIceServerConfig>[];
+    for (final server in config.iceServers) {
+      final urls = server.urls
+          .where(CallIceServerConfig.isTlsTurnOn443)
+          .toList(growable: false);
+      if (urls.isEmpty) continue;
+      tls443.add(
+        CallIceServerConfig(
+          urls: urls,
+          username: server.username,
+          credential: server.credential,
+        ),
+      );
+    }
+    return CallIceConfigSnapshot(
+      policy: CallNetworkPolicy.relayOnly,
+      iceServers: tls443.isNotEmpty ? tls443 : config.iceServers,
+      expiresAtMs: config.expiresAtMs,
+    );
   }
 
   /// Поднимает политику до «только через сервер», если человек этого попросил.
@@ -19761,7 +21264,18 @@ class AppController {
         _callIceConfigLastRefreshFailedAtMs =
             DateTime.now().millisecondsSinceEpoch;
         callLog('AppCtrl', 'relay ice config refresh failed: $e');
-        return _cachedCallIceConfig.pruneExpiredCredentials(nowMs: nowMs);
+        final cached = _cachedCallIceConfig.pruneExpiredCredentials(nowMs: nowMs);
+        if (e is ServerUnauthenticatedException) {
+          // Б3 Э2: ответ о серверах TURN подменён. Обычный откат — «прямое
+          // соединение с запасным STUN» — раскрыл бы адрес тому, кто подменяет.
+          // Только через TURN: звонок может не соединиться, адрес не уходит.
+          return CallIceConfigSnapshot(
+            policy: CallNetworkPolicy.relayOnly,
+            iceServers: cached.iceServers,
+            expiresAtMs: cached.expiresAtMs,
+          );
+        }
+        return cached;
       }
     }();
     _callIceConfigRefreshInFlight = refresh;
@@ -21766,7 +23280,10 @@ class AppController {
 
       await for (final entity in tmp.list(followLinks: false)) {
         final name = p.basename(entity.path);
-        if (name.startsWith('secretly_att_') || name.startsWith('sendstrip_')) {
+        if (name.startsWith('secretly_att_') ||
+            name.startsWith('sendstrip_') ||
+            // О6/П5: недокачанные куски прежних запусков.
+            name.startsWith('att_part_')) {
           await removeIfStale(entity);
         }
       }
@@ -23381,7 +24898,7 @@ class AppController {
     if (inFlight != null) {
       return inFlight;
     }
-    final future = _loadConversationsFromDb();
+    final future = _loadConversationsFromDb().then(_foldPrivateTopicsIntoRooms);
     _listConversationsInFlight = future;
     try {
       final conversations = await future;
@@ -23391,6 +24908,201 @@ class AppController {
     } finally {
       _listConversationsInFlight = null;
     }
+  }
+
+  /// 🔴 ЗАКРЫТЫЕ ВЕТКИ ЖИВУТ ВНУТРИ СВОЕЙ КОМНАТЫ (06.10.2026).
+  ///
+  /// Закрытая ветка — отдельная комната (docs/TZ_ROOM_PRIVATE_TOPICS_2026-10-06.md),
+  /// но в списке чатов её нет: её открывают из полосы тем комнаты. Её
+  /// непрочитанное прибавляется к комнате, а свежее сообщение в ветке
+  /// поднимает комнату вверх — иначе новое в закрытой теме было бы не видно.
+  ///
+  /// Если основной комнаты в списке нет (вышли из неё, а ветку ещё не
+  /// убрало), ветка остаётся отдельной строкой: потерять переписку хуже,
+  /// чем показать лишнюю строку.
+  Future<List<Conversation>> _foldPrivateTopicsIntoRooms(
+    List<Conversation> conversations,
+  ) async {
+    _lastUnfoldedConversations = conversations;
+    final db = _db;
+    if (db == null) return conversations;
+    final parents = await db.groupSettingsTopicParents();
+    if (parents.isEmpty) return conversations;
+    return foldPrivateTopicConversations(conversations, parents);
+  }
+
+  List<Conversation> _lastUnfoldedConversations = const <Conversation>[];
+
+  /// Беседа по id — в том числе закрытая ветка, которой нет в списке чатов.
+  /// Нужна компьютеру: открытый чат он ищет в списке, а ветки там нет.
+  Conversation? conversationIncludingTopics(String convoId) {
+    for (final c in _lastUnfoldedConversations) {
+      if (c.convoId == convoId) return c;
+    }
+    return null;
+  }
+
+  /// Мои закрытые ветки комнаты — для полосы тем. Устройство знает только
+  /// ветки, в которых состоит (остальные сервер ему не называет, Р-1).
+  Future<List<RoomPrivateTopic>> listRoomPrivateTopics(
+    String parentRoomId,
+  ) async {
+    final db = _db;
+    final did = _deviceId;
+    final me = profileId;
+    if (db == null || did == null || me.isEmpty) {
+      return const <RoomPrivateTopic>[];
+    }
+    final childIds = await db.groupSettingsChildRoomIds(parentRoomId);
+    if (childIds.isEmpty) return const <RoomPrivateTopic>[];
+    final mine = <String>[];
+    for (final id in childIds) {
+      final members = await listGroupMembers(id);
+      if (members.contains(me)) mine.add(id);
+    }
+    if (mine.isEmpty) return const <RoomPrivateTopic>[];
+    final unread = await db.countUnreadForConvos(
+      convoIds: mine,
+      selfDeviceId: did,
+      excludedSenderDeviceIds: _ownDeviceIdsForUnreadQueries(),
+    );
+    final out = <RoomPrivateTopic>[];
+    for (final id in mine) {
+      final convo = await db.convoGet(id);
+      final title = ((convo?['title'] as String?) ?? '').trim();
+      out.add(
+        RoomPrivateTopic(
+          roomId: id,
+          title: title.isEmpty ? 'Topic' : title,
+          unreadCount: unread[id] ?? 0,
+        ),
+      );
+    }
+    return out;
+  }
+
+  /// Создаёт закрытую ветку комнаты: отдельную комнату со своим составом и
+  /// ключом, привязанную к основной (docs/TZ_ROOM_PRIVATE_TOPICS_2026-10-06.md).
+  ///
+  /// 🔴 Состав — только из участников основной комнаты; сервер проверяет это
+  /// сам и сам же выводит человека из веток, когда он уходит из комнаты.
+  /// Закрытые ветки требуют реле: без него некому держать состав.
+  Future<String> createPrivateTopic({
+    required String parentRoomId,
+    required String title,
+    required List<String> memberProfileIds,
+  }) async {
+    final db = _db;
+    final relay = _relay;
+    if (db == null) throw StateError('Database is not ready');
+    final me = profileId;
+    if (me.isEmpty) throw StateError('Profile is not ready');
+    if (!_useAuthoritativeRoomRelay || relay == null) {
+      throw StateError('Private topics need the relay');
+    }
+    final parentId = parentRoomId.trim();
+    if (!await canCreatePrivateTopic(parentId)) {
+      throw StateError('topic_create_forbidden');
+    }
+    final parentMembers = (await listGroupMembers(parentId)).toSet();
+    final members = memberProfileIds
+        .map((m) => m.trim())
+        .where((m) => m.isNotEmpty && m != me && parentMembers.contains(m))
+        .toSet()
+        .toList(growable: false);
+    final cleanedTitle = title.trim().isEmpty ? 'Topic' : title.trim();
+    final roomId = 'group:${_uuid.v4().substring(0, 12)}';
+    final now = DateTime.now().millisecondsSinceEpoch;
+    try {
+      final created = await relay.createRoom(
+        roomId: roomId,
+        title: cleanedTitle,
+        parentRoomId: parentId,
+      );
+      for (final memberId in members) {
+        await relay.upsertRoomMembership(
+          roomId: roomId,
+          profileId: memberId,
+          status: RoomMembershipStatus.active.value,
+          role: RoomMemberRole.member.value,
+        );
+      }
+      final at = created.room.createdAtMs > 0 ? created.room.createdAtMs : now;
+      await _applyRelayRoomSnapshot(
+        room: created.room,
+        memberships: <String>[me, ...members]
+            .map(
+              (memberId) => RelayRoomMembership(
+                roomId: roomId,
+                profileId: memberId,
+                status: RoomMembershipStatus.active.value,
+                role: memberId == me
+                    ? RoomMemberRole.owner.value
+                    : RoomMemberRole.member.value,
+                sourceLinkId: null,
+                tag: null,
+                createdAtMs: at,
+                updatedAtMs: at,
+              ),
+            )
+            .toList(growable: false),
+        forceAuthoritative: true,
+      );
+      await _tryRefreshRoomFromRelayBestEffort(roomId);
+    } on RelayHttpException catch (e) {
+      await _tryRefreshRoomFromRelayBestEffort(roomId);
+      if (e.statusCode == 409 &&
+          (e.responseBody ?? '').contains('topic_limit')) {
+        throw const RoomPrivateTopicLimitException();
+      }
+      rethrow;
+    }
+    _listConversationsCache = null;
+    _changed.add(null);
+    await _broadcastAuthoritativeRoomSyncHint(roomId, skipProfileId: me);
+    return roomId;
+  }
+
+  /// Кого можно позвать в комнату. В закрытую ветку — только действующих
+  /// участников основной комнаты, в том числе тех, кого нет в контактах:
+  /// сервер иначе ответит `not_parent_member`.
+  Future<List<Contact>> listRoomAddCandidates(String groupId) async {
+    final contacts = await listContacts();
+    final settings = await getRoomSettings(groupId);
+    if (!settings.isPrivateTopic) return contacts;
+    final me = profileId;
+    final byId = <String, Contact>{for (final c in contacts) c.profileId: c};
+    final parentMembers = await listRoomMembersDetailed(
+      settings.parentRoomId!.trim(),
+    );
+    return <Contact>[
+      for (final m in parentMembers)
+        if (m.profileId != me)
+          byId[m.profileId] ??
+              Contact(
+                profileId: m.profileId,
+                displayName: m.displayName,
+                avatarPath: m.avatarPath,
+              ),
+    ];
+  }
+
+  /// Может ли этот профиль создать закрытую ветку в комнате (решение Р-2):
+  /// владелец и админы — всегда, остальные — если комната разрешила.
+  Future<bool> canCreatePrivateTopic(String roomId) async {
+    final settings = await getRoomSettings(roomId);
+    if (settings.isPrivateTopic) return false; // вложенность — один уровень
+    final policy = await getRoomPolicyState(roomId);
+    if (!policy.isMember) return false;
+    if (policy.role == RoomMemberRole.owner ||
+        policy.role == RoomMemberRole.admin) {
+      return true;
+    }
+    if (policy.role == RoomMemberRole.restricted ||
+        policy.role == RoomMemberRole.guest) {
+      return false;
+    }
+    return settings.allowMembersCreateTopics;
   }
 
   /// Сколько бесед показывать в списке.
@@ -23867,7 +25579,19 @@ class AppController {
           ((existing['chat_history_visible'] as num?)?.toInt() ?? 0) != 0,
       membershipVersion: (existing['membership_version'] as num?)?.toInt() ?? 0,
       stateVersion: (existing['state_version'] as num?)?.toInt() ?? 0,
+      parentRoomId: _nonEmptyOrNull(existing['parent_room_id'] as String?),
+      roomKind: existing['room_kind'] == kRoomKindTopic
+          ? kRoomKindTopic
+          : kRoomKindRoom,
+      allowMembersCreateTopics:
+          ((existing['allow_members_create_topics'] as num?)?.toInt() ?? 0) !=
+          0,
     );
+  }
+
+  static String? _nonEmptyOrNull(String? value) {
+    final cleaned = value?.trim() ?? '';
+    return cleaned.isEmpty ? null : cleaned;
   }
 
   RoomInviteLink _roomInviteLinkFromRelay(RelayRoomInviteLink link) {
@@ -23939,6 +25663,10 @@ class AppController {
       'slowModeSeconds': room.slowModeSeconds,
       'chatHistoryVisible': room.chatHistoryVisible,
       'pinnedMessageEventId': room.pinnedMessageId,
+      // Закрытые ветки (06.10.2026). Принимаются только из снимка реле.
+      'roomKind': room.kind,
+      'parentRoomId': room.parentRoomId,
+      'allowMembersCreateTopics': room.allowMembersCreateTopics,
       'membershipVersion': room.membershipVersion > 0
           ? room.membershipVersion
           : (normalizedMemberships.isNotEmpty ? 1 : 0),
@@ -24004,6 +25732,7 @@ class AppController {
       db: db,
       payload: payload,
       forceAuthoritative: forceAuthoritative,
+      fromRelay: true,
     );
   }
 
@@ -24485,10 +26214,15 @@ class AppController {
         call == null ||
         cleanedCallId.isEmpty ||
         !call.isActive) {
+      _roomCallContracts.remove(cleanedRoomId);
       await db.roomCallSnapshotDelete(cleanedRoomId);
       _changed.add(null);
       return;
     }
+    _roomCallContracts[cleanedRoomId] = (
+      callId: cleanedCallId,
+      contract: normalizeRoomMediaContract(call.mediaContract),
+    );
     await db.roomCallSnapshotReplace(
       groupId: cleanedRoomId,
       callId: cleanedCallId,
@@ -24550,7 +26284,10 @@ class AppController {
       return null;
     }
     try {
-      final snapshot = await relay.getRoomCall(roomId: cleanedRoomId);
+      final snapshot = await relay.getRoomCall(
+        roomId: cleanedRoomId,
+        mediaContract: kRoomMediaContractE2eeV1,
+      );
       if (!identical(_relay, relay)) {
         return snapshot;
       }
@@ -24662,6 +26399,9 @@ class AppController {
       chatHistoryVisible: settings.chatHistoryVisible,
       membershipVersion: settings.membershipVersion,
       stateVersion: settings.stateVersion,
+      parentRoomId: settings.parentRoomId,
+      roomKind: settings.roomKind,
+      allowMembersCreateTopics: settings.allowMembersCreateTopics,
     );
   }
 
@@ -25683,6 +27423,13 @@ class AppController {
           joinApprovalRequired: nextSettings.joinApprovalRequired,
           slowModeSeconds: nextSettings.slowModeSeconds,
           chatHistoryVisible: nextSettings.chatHistoryVisible,
+          // Флаг закрытых тем уходит, только когда его поменяли: иначе
+          // запрос и подпись прежние.
+          allowMembersCreateTopics:
+              nextSettings.allowMembersCreateTopics !=
+                  currentSettings.allowMembersCreateTopics
+              ? nextSettings.allowMembersCreateTopics
+              : null,
         );
         try {
           await _refreshRoomFromRelay(groupId);
@@ -27837,6 +29584,10 @@ class AppController {
     required AppDb db,
     required Map<String, Object?> payload,
     bool forceAuthoritative = false,
+    // 🔴 Снимок построен из ответа реле. Только такому верим в «эта комната
+    // — закрытая ветка такой-то»: снимок от участника мог бы подсунуть
+    // ложного родителя и спрятать чужую комнату из списка чатов.
+    bool fromRelay = false,
   }) async {
     final groupId = ((payload['groupId'] as String?) ?? '').trim();
     if (groupId.isEmpty) return;
@@ -28096,6 +29847,19 @@ class AppController {
         clearNameEmoji:
             payload.containsKey('nameEmoji') &&
             (((payload['nameEmoji'] as String?)?.trim().isEmpty ?? true)),
+        // Закрытые ветки: только от реле; ключа нет — как было.
+        parentRoomId: fromRelay && payload.containsKey('parentRoomId')
+            ? ((payload['parentRoomId'] as String?)?.trim() ?? '')
+            : null,
+        roomKind: fromRelay && payload.containsKey('roomKind')
+            ? (payload['roomKind'] == kRoomKindTopic
+                  ? kRoomKindTopic
+                  : kRoomKindRoom)
+            : null,
+        allowMembersCreateTopics:
+            fromRelay && payload.containsKey('allowMembersCreateTopics')
+            ? payload['allowMembersCreateTopics'] == true
+            : null,
         stateVersion: incomingStateVersion,
       );
     }
@@ -29347,6 +31111,11 @@ class AppController {
     // sleeping/offline sender still delivers to the room at T (parity with 1:1).
     int deliverAtMs = 0,
   }) async {
+    final controlTestSender = controlMessageSenderForTesting;
+    if (controlTestSender != null) {
+      await controlTestSender(peerProfileId, controlText);
+      return;
+    }
     final db = _db;
     final relay = _relay;
     final did = _deviceId;
@@ -29392,7 +31161,10 @@ class AppController {
           [MsgEventV1(eventId: _uuid.v4(), text: controlText)],
       // Возможности этой сборки: по ним собеседники решают, выдавать ли ей
       // ключ комнаты (выпущенным сборкам — нет).
-      caps: const <String>[E2ePayloadV1.capRoomKeyV2],
+      caps: const <String>[
+        E2ePayloadV1.capRoomKeyV2,
+        kRoomCallKeyCapability,
+      ],
     );
 
     // Durable per-recipient backstop, mirroring the proven 1:1 pending-no-device
@@ -29584,6 +31356,8 @@ class AppController {
     String? topicId,
     LinkPreviewV1? linkPreview,
   }) async {
+    // Список тем — раньше сообщения в тему (см. [shouldResendRoomTopics]).
+    unawaited(_maybeResendRoomTopics(groupId, topicId));
     final db = _db;
     final did = _deviceId;
     final crypto = _crypto;
@@ -29673,6 +31447,12 @@ class AppController {
     final msgEventId = _uuid.v4();
     final now = DateTime.now().millisecondsSinceEpoch;
     final normalizedTopicId = (topicId ?? '').trim().isEmpty ? null : topicId;
+    // Исчезающие (ТЗ 22.10.2026): провод уходит на реле сейчас, поэтому срок
+    // — по таймеру комнаты на момент планирования; своя копия считает от T.
+    final roomDisappear = isHiddenMessageControlText(text)
+        ? const <String, Object?>{}
+        : await _roomDisappearEnvelopeFields(groupId);
+    final roomExp = roomDisappear['exp'] as int?;
     // Room messages travel as a control envelope (built below with
     // createdAtMs=scheduledAtMs), NOT a per-peer E2ePayload — so recipients see
     // the scheduled time. Only the LOCAL history copy is a symmetric payload,
@@ -29688,6 +31468,7 @@ class AppController {
           mentions: mentions,
           topicId: normalizedTopicId,
           linkPreview: linkPreview,
+          exp: roomExp,
         ),
       ],
     );
@@ -29703,6 +31484,11 @@ class AppController {
       localState: MessageLocalState.scheduled,
       payloadEventId: msgEventId,
       scheduledAtMs: scheduledAtMs,
+      disappearSeconds: roomExp,
+      expiresAtMs: disappearExpiryFromSend(
+        seconds: roomExp,
+        createdAtMs: scheduledAtMs,
+      ),
     );
     await db.convoTouch(convoId: groupId, atMs: now);
     _changed.add(null);
@@ -29759,6 +31545,7 @@ class AppController {
               mentions.map((m) => m.toJson()).toList(growable: false),
         if (normalizedTopicId != null) 'topicId': normalizedTopicId,
         if (linkPreview != null) 'linkPreview': linkPreview.toJson(),
+        ...roomDisappear,
         'createdAtMs': scheduledAtMs,
         'memberProfileIds': members,
         'senderProfileId': senderPid,
@@ -29820,7 +31607,8 @@ class AppController {
     }
   }
 
-  Future<void> _dispatchGroupMessageNow({
+  /// Возвращает, скольким участникам рассылка не дошла (0 — дошла всем).
+  Future<int> _dispatchGroupMessageNow({
     required String groupId,
     required String text,
     String? replyToPayloadEventId,
@@ -29831,8 +31619,12 @@ class AppController {
     final db = _db;
     final did = _deviceId;
     final crypto = _crypto;
-    if (db == null || did == null || crypto == null) return;
+    if (db == null || did == null || crypto == null) return 0;
     await _ensureRoomActionAllowed(groupId, RoomAction.sendText);
+    // К-3 v2: удалённое «у всех» не повторяется — его провод стирается сразу.
+    if (isDeleteForAllCommandText(text)) {
+      await db.roomOutboundWiresDelete(parseDeleteForAllCommand(text));
+    }
 
     final group = await db.convoGet(groupId);
     final groupTitle = ((group?['title'] as String?) ?? 'Group').trim();
@@ -29856,6 +31648,12 @@ class AppController {
         admission?.admittedAtMs ?? DateTime.now().millisecondsSinceEpoch;
     final senderPid = profileId;
     final normalizedTopicId = (topicId ?? '').trim().isEmpty ? null : topicId;
+    // Исчезающие (ТЗ 22.10.2026): срок комнаты и её состояние таймера.
+    // Служебные тексты (темы, команда таймера, удаление у всех) — без срока.
+    final roomDisappear = isHiddenMessageControlText(text)
+        ? const <String, Object?>{}
+        : await _roomDisappearEnvelopeFields(groupId);
+    final roomExp = roomDisappear['exp'] as int?;
     final payload = E2ePayloadV1(
       senderDeviceId: did,
       createdAtMs: createdAt,
@@ -29867,6 +31665,7 @@ class AppController {
           mentions: mentions,
           topicId: normalizedTopicId,
           linkPreview: linkPreview,
+          exp: roomExp,
         ),
       ],
     );
@@ -29892,8 +31691,14 @@ class AppController {
       createdAtMs: createdAt,
       localState: 'pending',
       payloadEventId: msgEventId,
+      disappearSeconds: roomExp,
+      expiresAtMs: disappearExpiryFromSend(
+        seconds: roomExp,
+        createdAtMs: createdAt,
+      ),
     );
     await db.convoTouch(convoId: groupId, atMs: createdAt);
+    if (roomExp != null) _kickDisappearingSweep();
 
     var members = await listGroupMembers(groupId);
     var recipients = members
@@ -29930,6 +31735,7 @@ class AppController {
       if (normalizedTopicId != null) 'topicId': normalizedTopicId,
       // Превью в конверте комнаты: у комнаты по проводу едет только конверт.
       if (linkPreview != null) 'linkPreview': linkPreview.toJson(),
+      ...roomDisappear,
       'createdAtMs': createdAt,
       'memberProfileIds': members,
       'senderProfileId': senderPid,
@@ -29952,8 +31758,13 @@ class AppController {
 
     var delivered = 0;
     final failedRecipients = <String, Object>{};
-    // К-3: конверт — для повтора тому, у кого пропуск.
-    await _rememberRoomEnvelope(db: db, roomId: groupId, controlText: controlText);
+    // К-3 v2: запечатанный провод — для повтора тому, у кого пропуск.
+    await _rememberRoomWire(
+      db: db,
+      roomId: groupId,
+      controlText: controlText,
+      sealedEvents: roomWireEvents,
+    );
     // К-2: один запрос к реле для тех, кто умеет сырой провод.
     final rawRemaining = await _roomRawBroadcast(
       db: db,
@@ -30022,6 +31833,7 @@ class AppController {
     );
 
     _changed.add(null);
+    return failedRecipients.length;
   }
 
   /// Local-only demo room send. Mirrors the 1:1 demo path: the bubble shows
@@ -30178,6 +31990,8 @@ class AppController {
     bool anonymous = false,
     String? topicId,
   }) async {
+    // Список тем — раньше сообщения в тему (см. [shouldResendRoomTopics]).
+    unawaited(_maybeResendRoomTopics(groupId, topicId));
     final cleanedQuestion = question.trim();
     final cleanedOptions = options
         .map((option) => option.trim())
@@ -30253,6 +32067,8 @@ class AppController {
     String location = '',
     String? topicId,
   }) async {
+    // Список тем — раньше сообщения в тему (см. [shouldResendRoomTopics]).
+    unawaited(_maybeResendRoomTopics(groupId, topicId));
     final cleanedTitle = title.trim();
     if (cleanedTitle.isEmpty || startMs <= 0) {
       throw StateError('An event needs a title and a date.');
@@ -30422,17 +32238,174 @@ class AppController {
           ),
         )
         .toList(growable: false);
-    final commandText = buildTopicsSyncCommand(refs, baseMark: baseMark);
     // 🔴 Запоминаем ДО отправки: список тем — уже решение человека, и он не
     // должен зависеть от того, дошло ли сообщение до релея. Отметка времени
-    // местная: у рассылки она тоже местная (время создания сообщения).
+    // местная; она же — ревизия списка в команде.
+    final revision = DateTime.now().millisecondsSinceEpoch;
+    final commandText = buildTopicsSyncCommand(
+      refs,
+      baseMark: baseMark,
+      revision: revision,
+    );
     await rememberRoomTopics(
       groupId: groupId,
       topics: refs,
-      syncedAtMs: DateTime.now().millisecondsSinceEpoch,
+      syncedAtMs: revision,
       baseMark: baseMark,
     );
-    await sendGroupMessage(groupId: groupId, text: commandText);
+    // Автор — это устройство: только оно потом повторяет список
+    // ([shouldResendRoomTopics]). Не дошло сейчас — повторит при отправке в
+    // тему.
+    final listHash = _roomTopicsListHash(refs, baseMark);
+    await _db?.localKvSet('$_kvRoomTopicsAuthorPrefix$groupId', listHash);
+    await _sendRoomTopicsCommand(
+      groupId: groupId,
+      commandText: commandText,
+      listHash: listHash,
+    );
+  }
+
+  // ───────────── Список тем: повтор и приём (06.10.2026) ───────────────────
+
+  static const String _kvRoomTopicsAuthorPrefix = 'room_topics_author_v1:';
+  static const String _kvRoomTopicsSentPrefix = 'room_topics_sent_v1:';
+  final Set<String> _roomTopicsResendInFlight = <String>{};
+
+  /// Рассылает список и запоминает, когда, при каком составе и всем ли дошло.
+  Future<void> _sendRoomTopicsCommand({
+    required String groupId,
+    required String commandText,
+    required String listHash,
+  }) async {
+    final membersKey = await _roomTopicsMembersKey(groupId);
+    var failed = 0;
+    if (_isDemoConvoId(groupId)) {
+      await sendGroupMessage(groupId: groupId, text: commandText);
+    } else {
+      failed = await _dispatchGroupMessageNow(
+        groupId: groupId,
+        text: commandText,
+      );
+    }
+    await _db?.localKvSet(
+      '$_kvRoomTopicsSentPrefix$groupId',
+      jsonEncode(<String, Object?>{
+        'hash': listHash,
+        'at': DateTime.now().millisecondsSinceEpoch,
+        'partial': failed > 0,
+        'members': membersKey,
+      }),
+    );
+  }
+
+  /// Отпечаток списка тем по содержимому, без учёта порядка.
+  String _roomTopicsListHash(List<RoomTopicRef> topics, String baseMark) {
+    final sorted = List<RoomTopicRef>.from(topics)
+      ..sort((a, b) => a.id.compareTo(b.id));
+    final canonical = encodeRoomTopicsState(
+      RoomTopicsState(topics: sorted, baseMark: baseMark),
+    );
+    return crypto.sha256
+        .convert(utf8.encode(canonical))
+        .toString()
+        .substring(0, 24);
+  }
+
+  /// Состав комнаты одной строкой: сменился — список повторяется новичкам.
+  Future<String> _roomTopicsMembersKey(String groupId) async {
+    final members = (await listGroupMembers(groupId))
+        .map((m) => m.trim())
+        .where((m) => m.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return crypto.sha256
+        .convert(utf8.encode(members.join(',')))
+        .toString()
+        .substring(0, 16);
+  }
+
+  /// Повтор списка тем перед отправкой в тему. Ошибки глотаются: сообщение
+  /// человека важнее, а повтор попробует снова в следующий раз.
+  Future<void> _maybeResendRoomTopics(String groupId, String? topicId) async {
+    if ((topicId ?? '').trim().isEmpty) return;
+    final db = _db;
+    if (db == null || _isDemoConvoId(groupId)) return;
+    if (!_roomTopicsResendInFlight.add(groupId)) return;
+    try {
+      final stored = await loadRoomTopics(groupId);
+      final listHash = _roomTopicsListHash(stored.topics, stored.baseMark);
+      final authorMark = await db.localKvGet(
+        '$_kvRoomTopicsAuthorPrefix$groupId',
+      );
+      // Списки, созданные до этой правки, без отметки автора. Повторяет их
+      // только владелец комнаты: он один, и темы обычно ведёт он.
+      final authoredHere = authorMark == null
+          ? (await getRoomSettings(groupId)).ownerProfileId == profileId
+          : authorMark == listHash;
+      final sentRaw = await db.localKvGet('$_kvRoomTopicsSentPrefix$groupId');
+      final sent = sentRaw == null
+          ? const <String, Object?>{}
+          : (jsonDecode(sentRaw) as Map).cast<String, Object?>();
+      final membersKey = await _roomTopicsMembersKey(groupId);
+      final resend = shouldResendRoomTopics(
+        hasTopics: stored.topics.isNotEmpty,
+        authoredHere: authoredHere,
+        nowMs: DateTime.now().millisecondsSinceEpoch,
+        listHash: listHash,
+        sentHash: (sent['hash'] as String?) ?? '',
+        sentAtMs: (sent['at'] as num?)?.toInt() ?? 0,
+        sentPartially: sent['partial'] == true,
+        membersKey: membersKey,
+        sentMembersKey: (sent['members'] as String?) ?? '',
+      );
+      if (!resend) return;
+      DiagLog.event('room', 'topics_resend', {
+        'group': DiagLog.pfx(groupId),
+        'topics': stored.topics.length,
+      });
+      await _sendRoomTopicsCommand(
+        groupId: groupId,
+        // Ревизия — та, с которой список принят: повтор не моложе правки.
+        commandText: buildTopicsSyncCommand(
+          stored.topics,
+          baseMark: stored.baseMark,
+          revision: await roomTopicsSyncedAtMs(groupId),
+        ),
+        listHash: listHash,
+      );
+    } catch (e) {
+      DiagLog.event('room', 'topics_resend_failed', {
+        'group': DiagLog.pfx(groupId),
+        'reason': _classifyShortReason(e),
+      });
+    } finally {
+      _roomTopicsResendInFlight.remove(groupId);
+    }
+  }
+
+  /// Принимает пришедший список тем сразу, а не только с открытого экрана.
+  ///
+  /// Раньше список разбирал лишь экран комнаты — из последних двухсот событий
+  /// ленты. Кто не открыл комнату, пока команда была в окне, не получал её
+  /// никогда. Свежесть — как у экрана: по ревизии списка, а без неё — по
+  /// времени сообщения.
+  Future<void> _adoptInboundRoomTopics({
+    required String groupId,
+    required String text,
+    required int atMs,
+  }) async {
+    final command = parseTopicsSyncCommand(text);
+    if (command == null) return;
+    final freshAtMs = command.freshnessMs(atMs);
+    if (freshAtMs <= await roomTopicsSyncedAtMs(groupId)) return;
+    await rememberRoomTopics(
+      groupId: groupId,
+      topics: command.topics,
+      syncedAtMs: freshAtMs,
+      baseMark: command.baseMark,
+    );
+    _changed.add(null);
   }
 
   // In-flight guard so the recurring sweep does not double-dispatch the same
@@ -30609,6 +32582,11 @@ class AppController {
     final msgEventId = _uuid.v4();
     final now = DateTime.now().millisecondsSinceEpoch;
     final myPid = _profileId;
+    // Исчезающие (ТЗ 22.10.2026, шаг 3). Провод уходит на реле СЕЙЧАС
+    // (отложенная доставка держится сервером), поэтому срок берётся по
+    // таймеру чата на момент планирования. Своя копия начинает отсчёт с
+    // момента доставки, а не планирования.
+    final disappearExp = await _outgoingDisappearSeconds(peerProfileId);
 
     // Wire payload the RECIPIENT decrypts: stamped with the SCHEDULED time so
     // they see the intended moment.
@@ -30621,6 +32599,7 @@ class AppController {
           text: text,
           replyToEventId: replyToPayloadEventId,
           linkPreview: linkPreview,
+          exp: disappearExp,
         ),
       ],
     );
@@ -30635,6 +32614,7 @@ class AppController {
           text: text,
           replyToEventId: replyToPayloadEventId,
           linkPreview: linkPreview,
+          exp: disappearExp,
         ),
       ],
     );
@@ -30653,6 +32633,11 @@ class AppController {
         localState: MessageLocalState.scheduled,
         payloadEventId: msgEventId,
         scheduledAtMs: scheduledAtMs,
+        disappearSeconds: disappearExp,
+        expiresAtMs: disappearExpiryFromSend(
+          seconds: disappearExp,
+          createdAtMs: scheduledAtMs,
+        ),
       );
       await db.convoTouch(convoId: peerProfileId, atMs: now);
     });
@@ -30893,6 +32878,8 @@ class AppController {
     String? replyToPayloadEventId,
     String? topicId,
   }) async {
+    // Список тем — раньше сообщения в тему (см. [shouldResendRoomTopics]).
+    unawaited(_maybeResendRoomTopics(groupId, topicId));
     final db = _db;
     final did = _deviceId;
     final pid = _profileId;
@@ -30923,6 +32910,9 @@ class AppController {
     }
     final createdAt =
         admission?.admittedAtMs ?? DateTime.now().millisecondsSinceEpoch;
+    // Исчезающие (ТЗ 22.10.2026): срок комнаты и её состояние таймера.
+    final roomDisappear = await _roomDisappearEnvelopeFields(groupId);
+    final roomExp = roomDisappear['exp'] as int?;
     final payload = E2ePayloadV1(
       senderDeviceId: did,
       createdAtMs: createdAt,
@@ -30938,6 +32928,7 @@ class AppController {
           format: sticker.format.wireValue,
           replyToEventId: replyToPayloadEventId,
           topicId: normalizedTopicId,
+          exp: roomExp,
         ),
       ],
     );
@@ -30963,8 +32954,14 @@ class AppController {
       createdAtMs: createdAt,
       localState: 'pending',
       payloadEventId: msgEventId,
+      disappearSeconds: roomExp,
+      expiresAtMs: disappearExpiryFromSend(
+        seconds: roomExp,
+        createdAtMs: createdAt,
+      ),
     );
     await db.convoTouch(convoId: groupId, atMs: createdAt);
+    if (roomExp != null) _kickDisappearingSweep();
 
     // ── User-created sticker: ship its PIXELS to room members ───────────────
     // Catalog/bundled stickers need nothing — the recipient resolves them from
@@ -31132,8 +33129,11 @@ class AppController {
       if (sendPackMeta?.title != null) 'packTitle': sendPackMeta!.title,
       if (sendPackMeta != null) 'packStickerCount': sendPackMeta.stickers.length,
       if (sticker.packId.startsWith('user:')) 'packOriginPid': pid,
+      if (sendPackMeta?.isClosed ?? false)
+        'packAccess': StickerEventV1.packAccessClosed,
       'replyToPayloadEventId': replyToPayloadEventId,
       if (normalizedTopicId != null) 'topicId': normalizedTopicId,
+      ...roomDisappear,
       'createdAtMs': createdAt,
       'memberProfileIds': members,
       'senderProfileId': pid,
@@ -31154,8 +33154,13 @@ class AppController {
     );
 
     var delivered = 0;
-    // К-3: конверт — для повтора тому, у кого пропуск.
-    await _rememberRoomEnvelope(db: db, roomId: groupId, controlText: controlText);
+    // К-3 v2: запечатанный провод — для повтора тому, у кого пропуск.
+    await _rememberRoomWire(
+      db: db,
+      roomId: groupId,
+      controlText: controlText,
+      sealedEvents: roomWireEvents,
+    );
     // К-2: один запрос к реле для тех, кто умеет сырой провод.
     final rawRemaining = await _roomRawBroadcast(
       db: db,
@@ -31223,7 +33228,15 @@ class AppController {
     int? durationMs,
     String? musicTitle,
     String? musicArtist,
+    // О10 (разбор медиа 15.11.2026): пропорции и размытый кадр ролика от
+    // отправителя — у получателя до загрузки не серый прямоугольник. Снимок
+    // считает свои сам (по байтам), эти идут, когда своих нет.
+    int? width,
+    int? height,
+    String? thumbB64,
   }) async {
+    // Список тем — раньше сообщения в тему (см. [shouldResendRoomTopics]).
+    unawaited(_maybeResendRoomTopics(groupId, topicId));
     final normalizedTopicId = (topicId ?? '').trim().isEmpty ? null : topicId;
     final resolvedCaption = caption?.trim();
     final captionForPayload =
@@ -31248,16 +33261,31 @@ class AppController {
     }
     await _ensureRoomActionAllowed(groupId, RoomAction.sendMedia);
 
-    final file = File(filePath);
+    var file = File(filePath);
     if (!await file.exists()) {
       throw AttachmentFailure(AttachmentFailureCode.fileMissing);
     }
 
-    final size = await file.length();
+    var size = await file.length();
     // §C-3: entitlement-aware ceiling (was a hardcoded 25 MB constant, so a paid
     // tier could not send large attachments to GROUPS even though direct chats
     // could). Mirrors the direct-chat send path.
     _throwIfAttachmentTooLarge(size);
+    // ТЗ E1, фаза 2: метаданные снимка или ролика убираются до всего
+    // остального — дальше путь работает с очищенной копией.
+    {
+      final scrubbed = await _scrubOutgoingMedia(
+        file: file,
+        path: filePath,
+        mime: mime,
+        size: size,
+        filename: filename,
+      );
+      file = scrubbed.file;
+      filePath = scrubbed.path;
+      mime = scrubbed.mime;
+      size = scrubbed.size;
+    }
 
     try {
       _throwIfTransportBlocked();
@@ -31338,6 +33366,9 @@ class AppController {
               effectiveBytes,
               ttlSeconds: 7 * 24 * 60 * 60,
               mime: resolvedMime,
+              resumable: resumableUploadEnabled,
+              onUploadProgress: onUploadProgress,
+              cancelToken: cancelToken,
             )
             .timeout(
               _attachmentUploadTimeout,
@@ -31368,6 +33399,7 @@ class AppController {
               onUploadProgress: onUploadProgress,
               onStage: onStage,
               cancelToken: cancelToken,
+              resumable: resumableUploadEnabled,
             )
             .timeout(
               _attachmentUploadTimeout,
@@ -31417,6 +33449,9 @@ class AppController {
       _throwIfRoomMutationAuthoritativeRelayUnavailable();
     }
     final createdAt = admission?.admittedAtMs ?? now;
+    // Исчезающие (ТЗ 22.10.2026): срок комнаты и её состояние таймера.
+    final roomDisappear = await _roomDisappearEnvelopeFields(groupId);
+    final roomExp = roomDisappear['exp'] as int?;
     final payload = E2ePayloadV1(
       senderDeviceId: did,
       createdAtMs: createdAt,
@@ -31438,9 +33473,10 @@ class AppController {
           durationMs: durationMs,
           musicTitle: musicTitle,
           musicArtist: musicArtist,
-          width: bufferedImageDims?.width,
-          height: bufferedImageDims?.height,
-          thumbB64: inlineThumbB64,
+          width: bufferedImageDims?.width ?? width,
+          height: bufferedImageDims?.height ?? height,
+          thumbB64: inlineThumbB64 ?? thumbB64,
+          exp: roomExp,
         ),
       ],
     );
@@ -31457,6 +33493,7 @@ class AppController {
       convoTitle: groupTitle,
       previewText: _pushTransportPreviewForAttachment(uploaded.mime),
     );
+    _attachmentLocalInsertSeq++; // О2: сообщение уже в истории
     await db.insertEvent(
       eventId: localEventId,
       convoId: groupId,
@@ -31466,8 +33503,14 @@ class AppController {
       createdAtMs: createdAt,
       localState: 'pending',
       payloadEventId: msgEventId,
+      disappearSeconds: roomExp,
+      expiresAtMs: disappearExpiryFromSend(
+        seconds: roomExp,
+        createdAtMs: createdAt,
+      ),
     );
     await db.convoTouch(convoId: groupId, atMs: createdAt);
+    if (roomExp != null) _kickDisappearingSweep();
 
     var members = await listGroupMembers(groupId);
     var recipients = members
@@ -31500,6 +33543,7 @@ class AppController {
       'mime': uploaded.mime,
       'replyToPayloadEventId': replyToPayloadEventId,
       'mediaGroupId': mediaGroupId,
+      ...roomDisappear,
       if (waveform != null && waveform.isNotEmpty) 'waveform': waveform,
       if (normalizedTopicId != null) 'topicId': normalizedTopicId,
       if (captionForPayload != null) 'caption': captionForPayload,
@@ -31537,8 +33581,13 @@ class AppController {
     );
 
     var delivered = 0;
-    // К-3: конверт — для повтора тому, у кого пропуск.
-    await _rememberRoomEnvelope(db: db, roomId: groupId, controlText: controlText);
+    // К-3 v2: запечатанный провод — для повтора тому, у кого пропуск.
+    await _rememberRoomWire(
+      db: db,
+      roomId: groupId,
+      controlText: controlText,
+      sealedEvents: roomWireEvents,
+    );
     // К-2: один запрос к реле для тех, кто умеет сырой провод.
     final rawRemaining = await _roomRawBroadcast(
       db: db,
@@ -32393,6 +34442,1161 @@ class AppController {
         await _applyRoomHistoryVisibilityRetentionForConvo(convoId);
       }
     }
+    // Исчезающие: обслуживание списка — естественный момент для уборки (§2.3).
+    unawaited(runDisappearingSweep());
+  }
+
+  // ── Исчезающие сообщения (ТЗ 22.10.2026) ───────────────────────────────
+
+  /// Срок из входящего события: `exp` у текста, вложения и стикера; у
+  /// остальных видов срока нет.
+  static int? disappearSecondsOf(E2eEventV1? event) => switch (event) {
+    MsgEventV1(:final exp) => exp,
+    AttachmentEventV1(:final exp) => exp,
+    StickerEventV1(:final exp) => exp,
+    _ => null,
+  };
+
+  /// Момент удаления своей копии: от отправки (§2.1). Для входящего — `null`,
+  /// отсчёт пойдёт от прочтения.
+  static int? disappearExpiryFromSend({
+    required int? seconds,
+    required int createdAtMs,
+  }) {
+    if (seconds == null || seconds <= 0 || createdAtMs <= 0) return null;
+    return createdAtMs + seconds * 1000;
+  }
+
+  /// Взводит таймер на ближайшее истечение. Дёшево: один запрос `MIN`; зовётся
+  /// после приёма, прочтения, зеркала прочтения, возврата из фона и уборки.
+  void _kickDisappearingSweep() {
+    final db = _db;
+    if (db == null) return;
+    unawaited(() async {
+      int? nextMs;
+      try {
+        nextMs = await db.nextDisappearingExpiryMs();
+      } catch (_) {
+        return;
+      }
+      _disappearingSweepTimer?.cancel();
+      _disappearingSweepTimer = null;
+      if (nextMs == null) return;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      var delay = Duration(milliseconds: nextMs - now);
+      if (delay.isNegative) delay = Duration.zero;
+      if (delay > _disappearingSweepMaxDelay) delay = _disappearingSweepMaxDelay;
+      // Не раньше чем через секунду: приём пачки сообщений не должен
+      // дёргать уборку на каждое.
+      if (delay < const Duration(seconds: 1)) delay = const Duration(seconds: 1);
+      _disappearingSweepTimer = Timer(delay, () {
+        _disappearingSweepTimer = null;
+        unawaited(runDisappearingSweep());
+      });
+    }());
+  }
+
+  /// Удаляет всё, чей срок истёк: строки, реакции, ссылки исходящей очереди
+  /// (через [AppDb.deleteEventsByIds]) и файлы вложений. При
+  /// `expire_enabled=false` ничего не трогает — сроки остаются в базе и
+  /// исполнятся после включения (§2.5). Возвращает число удалённых строк.
+  Future<int> runDisappearingSweep() async {
+    final db = _db;
+    final crypto = _crypto;
+    if (db == null || crypto == null) return 0;
+    if (_disappearingSweepRunning) return 0;
+    _disappearingSweepRunning = true;
+    var deleted = 0;
+    try {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (!_disappearingFlags.expireEnabled) {
+        final due = await db.listExpiredEvents(nowMs: now, limit: 1);
+        if (due.isNotEmpty) {
+          DiagLog.event('disappearing', 'sweep_held_by_flag', {
+            'next_ms': (due.first['expires_at_ms'] as num?)?.toInt(),
+          });
+        }
+        return 0;
+      }
+      // Порциями: в активном чате с коротким сроком строк может быть много.
+      for (var round = 0; round < 20; round++) {
+        final rows = await db.listExpiredEvents(nowMs: now, limit: 500);
+        if (rows.isEmpty) break;
+        final ids = <String>[];
+        final convoIds = <String>{};
+        for (final row in rows) {
+          final eventId = ((row['event_id'] as String?) ?? '').trim();
+          if (eventId.isEmpty) continue;
+          ids.add(eventId);
+          final convoId = ((row['convo_id'] as String?) ?? '').trim();
+          if (convoId.isNotEmpty) convoIds.add(convoId);
+          // Файлы — до удаления строки: потом ссылку на блоб уже не найти.
+          try {
+            final event = await _firstEventFromRow(row, crypto);
+            await _deleteDisappearedAttachmentFiles(event);
+          } catch (_) {
+            // Файл — вторично; строка удаляется в любом случае.
+          }
+          // Расшифровка голосового живёт по ключу события (строки или
+          // полезной нагрузки — экран берёт второй): удаляем обе.
+          if (((row['type'] as String?) ?? '') == 'att') {
+            final payloadEventId =
+                ((row['payload_event_id'] as String?) ?? '').trim();
+            unawaited(
+              VoiceTranscriptionService.instance.deleteCachedTranscript(
+                eventId,
+              ),
+            );
+            if (payloadEventId.isNotEmpty) {
+              unawaited(
+                VoiceTranscriptionService.instance.deleteCachedTranscript(
+                  payloadEventId,
+                ),
+              );
+            }
+          }
+        }
+        if (ids.isEmpty) break;
+        // Отметки «исчезло» — до удаления: цитата на эти сообщения скажет
+        // об этом, а не пропадёт молча.
+        await db.recordDisappearedPayloads([
+          for (final row in rows)
+            if (((row['payload_event_id'] as String?) ?? '').trim().isNotEmpty)
+              (
+                payloadEventId: (row['payload_event_id'] as String).trim(),
+                convoId: ((row['convo_id'] as String?) ?? '').trim(),
+              ),
+        ], atMs: now);
+        await db.deleteEventsByIds(ids);
+        deleted += ids.length;
+        for (final convoId in convoIds) {
+          try {
+            await _nativeMsgNotifChannel.invokeMethod('cancel', <String, dynamic>{
+              'convoId': convoId,
+            });
+          } catch (_) {}
+        }
+        if (rows.length < 500) break;
+      }
+      // Отметки старше 90 дней цитате уже не нужны.
+      await db.pruneDisappearedPayloads(
+        olderThanMs: now - 90 * 24 * 60 * 60 * 1000,
+      );
+      if (deleted > 0) {
+        DiagLog.event('disappearing', 'expired_deleted', {'count': deleted});
+        if (!_changed.isClosed) _changed.add(null);
+      }
+    } catch (e) {
+      DiagLog.event('disappearing', 'sweep_failed', {'error': e.toString()});
+    } finally {
+      _disappearingSweepRunning = false;
+      _kickDisappearingSweep();
+    }
+    return deleted;
+  }
+
+  /// Сообщения чата [convoId], исчезнувшие по сроку, — для цитаты
+  /// «Сообщение исчезло».
+  Future<Set<String>> disappearedPayloadIds(String convoId) async {
+    final db = _db;
+    if (db == null) return const <String>{};
+    return db.listDisappearedPayloadIds(convoId.trim());
+  }
+
+  /// Первое событие строки `events`: локальная копия, иначе провод.
+  Future<E2eEventV1?> _firstEventFromRow(
+    Map<String, Object?> row,
+    CryptoProvider crypto,
+  ) async {
+    for (final key in const ['local_ciphertext_b64', 'ciphertext_b64']) {
+      final b64 = (row[key] as String?)?.trim() ?? '';
+      if (b64.isEmpty) continue;
+      try {
+        final plain = await crypto.decrypt(base64Decode(b64));
+        final payload = E2ePayloadV1.decode(plain);
+        if (payload.events.isNotEmpty) return payload.events.first;
+      } catch (_) {
+        // следующий источник
+      }
+    }
+    return null;
+  }
+
+  /// Блобы вложений и пользовательских стикеров у сообщений со сроком.
+  /// Ошибка чтения отдельной строки — пропуск, не отказ: в худшем случае файл
+  /// уедет в копию, но копия создастся.
+  Future<Set<String>> _disappearingMediaBlobIds() async {
+    final db = _db;
+    final crypto = _crypto;
+    if (db == null || crypto == null) return const <String>{};
+    final out = <String>{};
+    try {
+      final rows = await db.listDisappearingMediaEvents();
+      for (final row in rows) {
+        try {
+          final event = await _firstEventFromRow(row, crypto);
+          final blobId = switch (event) {
+            AttachmentEventV1(:final blobId) => blobId,
+            StickerEventV1(:final blobId) => blobId,
+            _ => null,
+          };
+          if (blobId != null && blobId.trim().isNotEmpty) {
+            out.add(blobId.trim());
+          }
+        } catch (_) {
+          // следующая строка
+        }
+      }
+    } catch (_) {
+      // Пустой набор — копия ведёт себя как раньше.
+    }
+    return out;
+  }
+
+  /// Локальный файл вложения или пользовательского стикера, если он есть.
+  Future<void> _deleteDisappearedAttachmentFiles(E2eEventV1? event) async {
+    final (String? blobId, String? mime) = switch (event) {
+      AttachmentEventV1(:final blobId, :final mime) => (blobId, mime),
+      StickerEventV1(:final blobId) => (blobId, 'image/png'),
+      _ => (null, null),
+    };
+    if (blobId == null || blobId.trim().isEmpty) return;
+    try {
+      final file = await _attachmentCacheFile(blobId: blobId, mime: mime);
+      await _deleteLocalFileIfExists(file.path);
+    } catch (_) {
+      // best-effort
+    }
+  }
+
+  /// Срок человеческим языком для системного события: «1 ч», «7 дн.».
+  String _disappearDurationLabel(int seconds) {
+    if (seconds % (24 * 60 * 60) == 0) {
+      final d = seconds ~/ (24 * 60 * 60);
+      return _localizedText(
+        ru: '$d дн.',
+        en: '$d d',
+        uk: '$d дн.',
+        es: '$d d',
+        pt: '$d d',
+        ptBr: '$d d',
+        fr: '$d j',
+        de: '$d T.',
+      );
+    }
+    if (seconds % 3600 == 0) {
+      final h = seconds ~/ 3600;
+      return _localizedText(
+        ru: '$h ч',
+        en: '$h h',
+        uk: '$h год',
+        es: '$h h',
+        pt: '$h h',
+        ptBr: '$h h',
+        fr: '$h h',
+        de: '$h Std.',
+      );
+    }
+    if (seconds % 60 == 0) {
+      final m = seconds ~/ 60;
+      return _localizedText(
+        ru: '$m мин',
+        en: '$m min',
+        uk: '$m хв',
+        es: '$m min',
+        pt: '$m min',
+        ptBr: '$m min',
+        fr: '$m min',
+        de: '$m Min.',
+      );
+    }
+    return _localizedText(
+      ru: '$seconds с',
+      en: '$seconds s',
+      uk: '$seconds с',
+      es: '$seconds s',
+      pt: '$seconds s',
+      ptBr: '$seconds s',
+      fr: '$seconds s',
+      de: '$seconds Sek.',
+    );
+  }
+
+  /// Системное событие в ленте о смене таймера (§2.1). Не считается
+  /// непрочитанным (`type: 'sys'`), не уведомляет. Идемпотентно по
+  /// [noticeKey] — повтор команды (повторная доставка) второй строки не даёт.
+  Future<void> _insertConvoTimerNotice({
+    required String convoId,
+    required int? seconds,
+    required bool byMe,
+    required String noticeKey,
+    required int atMs,
+    // Комната: имя администратора, сменившего таймер (иначе — «Собеседник»).
+    String? actorName,
+    // Таймер узнан из сообщения администратора, а не из команды смены —
+    // нейтральная формулировка без автора (новый участник, догнавший таймер).
+    bool adopted = false,
+  }) async {
+    final db = _db;
+    final did = _deviceId?.trim();
+    final crypto = _crypto;
+    if (db == null || did == null || did.isEmpty || crypto == null) return;
+    final localEventId = 'local:disappear:$convoId:$noticeKey';
+    try {
+      if (await db.eventGet(localEventId) != null) return;
+      final String text;
+      final name = (actorName ?? '').trim();
+      final label = (seconds != null && seconds > 0)
+          ? _disappearDurationLabel(seconds)
+          : '';
+      if (adopted) {
+        text = label.isEmpty
+            ? _localizedText(
+                ru: '⏱ Исчезающие сообщения в этом чате выключены.',
+                en: '⏱ Disappearing messages are off in this chat.',
+                uk: '⏱ Зникаючі повідомлення в цьому чаті вимкнено.',
+                es: '⏱ Los mensajes temporales están desactivados en este chat.',
+                pt: '⏱ As mensagens temporárias estão desativadas nesta conversa.',
+                ptBr: '⏱ As mensagens temporárias estão desativadas nesta conversa.',
+                fr: '⏱ Les messages éphémères sont désactivés dans cette discussion.',
+                de: '⏱ Verschwindende Nachrichten sind in diesem Chat aus.',
+              )
+            : _localizedText(
+                ru: '⏱ В этом чате включены исчезающие сообщения: $label.',
+                en: '⏱ Disappearing messages are on in this chat: $label.',
+                uk: '⏱ У цьому чаті ввімкнено зникаючі повідомлення: $label.',
+                es: '⏱ Los mensajes temporales están activados en este chat: $label.',
+                pt: '⏱ As mensagens temporárias estão ativadas nesta conversa: $label.',
+                ptBr: '⏱ As mensagens temporárias estão ativadas nesta conversa: $label.',
+                fr: '⏱ Les messages éphémères sont activés dans cette discussion : $label.',
+                de: '⏱ Verschwindende Nachrichten sind in diesem Chat an: $label.',
+              );
+      } else if (!byMe && name.isNotEmpty) {
+        text = label.isEmpty
+            ? _localizedText(
+                ru: '⏱ $name выключил(а) исчезающие сообщения.',
+                en: '⏱ $name turned off disappearing messages.',
+                uk: '⏱ $name вимкнув(-ла) зникаючі повідомлення.',
+                es: '⏱ $name desactivó los mensajes temporales.',
+                pt: '⏱ $name desativou as mensagens temporárias.',
+                ptBr: '⏱ $name desativou as mensagens temporárias.',
+                fr: '⏱ $name a désactivé les messages éphémères.',
+                de: '⏱ $name hat verschwindende Nachrichten ausgeschaltet.',
+              )
+            : _localizedText(
+                ru: '⏱ $name включил(а) исчезающие сообщения: $label.',
+                en: '⏱ $name turned on disappearing messages: $label.',
+                uk: '⏱ $name увімкнув(-ла) зникаючі повідомлення: $label.',
+                es: '⏱ $name activó los mensajes temporales: $label.',
+                pt: '⏱ $name ativou as mensagens temporárias: $label.',
+                ptBr: '⏱ $name ativou as mensagens temporárias: $label.',
+                fr: '⏱ $name a activé les messages éphémères : $label.',
+                de: '⏱ $name hat verschwindende Nachrichten eingeschaltet: $label.',
+              );
+      } else if (seconds == null || seconds <= 0) {
+        text = byMe
+            ? _localizedText(
+                ru: '⏱ Вы выключили исчезающие сообщения.',
+                en: '⏱ You turned off disappearing messages.',
+                uk: '⏱ Ви вимкнули зникаючі повідомлення.',
+                es: '⏱ Desactivaste los mensajes temporales.',
+                pt: '⏱ Desativou as mensagens temporárias.',
+                ptBr: '⏱ Você desativou as mensagens temporárias.',
+                fr: '⏱ Vous avez désactivé les messages éphémères.',
+                de: '⏱ Du hast verschwindende Nachrichten ausgeschaltet.',
+              )
+            : _localizedText(
+                ru: '⏱ Собеседник выключил исчезающие сообщения.',
+                en: '⏱ Your contact turned off disappearing messages.',
+                uk: '⏱ Співрозмовник вимкнув зникаючі повідомлення.',
+                es: '⏱ Tu contacto desactivó los mensajes temporales.',
+                pt: '⏱ O seu contacto desativou as mensagens temporárias.',
+                ptBr: '⏱ Seu contato desativou as mensagens temporárias.',
+                fr: '⏱ Votre contact a désactivé les messages éphémères.',
+                de: '⏱ Dein Kontakt hat verschwindende Nachrichten ausgeschaltet.',
+              );
+      } else {
+        final label = _disappearDurationLabel(seconds);
+        text = byMe
+            ? _localizedText(
+                ru: '⏱ Вы включили исчезающие сообщения: $label.',
+                en: '⏱ You turned on disappearing messages: $label.',
+                uk: '⏱ Ви увімкнули зникаючі повідомлення: $label.',
+                es: '⏱ Activaste los mensajes temporales: $label.',
+                pt: '⏱ Ativou as mensagens temporárias: $label.',
+                ptBr: '⏱ Você ativou as mensagens temporárias: $label.',
+                fr: '⏱ Vous avez activé les messages éphémères : $label.',
+                de: '⏱ Du hast verschwindende Nachrichten eingeschaltet: $label.',
+              )
+            : _localizedText(
+                ru: '⏱ Собеседник включил исчезающие сообщения: $label.',
+                en: '⏱ Your contact turned on disappearing messages: $label.',
+                uk: '⏱ Співрозмовник увімкнув зникаючі повідомлення: $label.',
+                es: '⏱ Tu contacto activó los mensajes temporales: $label.',
+                pt: '⏱ O seu contacto ativou as mensagens temporárias: $label.',
+                ptBr: '⏱ Seu contato ativou as mensagens temporárias: $label.',
+                fr: '⏱ Votre contact a activé les messages éphémères : $label.',
+                de: '⏱ Dein Kontakt hat verschwindende Nachrichten eingeschaltet: $label.',
+              );
+      }
+      final ev = SystemEventV1(eventId: _uuid.v4(), text: text);
+      final payload = E2ePayloadV1(
+        senderDeviceId: did,
+        createdAtMs: atMs,
+        events: <E2eEventV1>[ev],
+      );
+      final localCipher = base64Encode(await crypto.encrypt(payload.encode()));
+      await db.insertEvent(
+        eventId: localEventId,
+        convoId: convoId,
+        type: 'sys',
+        senderDeviceId: did,
+        ciphertextB64: localCipher,
+        createdAtMs: atMs,
+        localState: 'sent',
+        payloadEventId: ev.eventId,
+      );
+      await db.convoTouch(convoId: convoId, atMs: atMs);
+    } catch (_) {
+      // Заметка — вторична; таймер уже применён.
+    }
+  }
+
+  /// Применяет полученную команду смены таймера (§2.1, §2.4).
+  ///
+  /// В 1:1 чат у сторон называется по-разному: собеседник прислал свой
+  /// `convoId` (мой профиль), а у меня чат с ним лежит под ЕГО профилем.
+  /// Поэтому от собеседника команда применяется к чату `senderProfileId`, и
+  /// только если адресована мне; от своего устройства — к `cmd.convoId` как
+  /// есть. Команды для комнат от собеседников здесь не применяются: состав и
+  /// права комнаты идут отдельным путём (шаг 3 ТЗ).
+  Future<void> _applyConvoTimerCommand({
+    required ConvoTimerCommand cmd,
+    required bool senderIsOwn,
+    required String senderProfileId,
+    required int now,
+  }) async {
+    final db = _db;
+    if (db == null) return;
+    final myPid = (_profileId ?? '').trim();
+    final String targetConvoId;
+    if (senderIsOwn) {
+      targetConvoId = cmd.convoId;
+    } else {
+      final spid = senderProfileId.trim();
+      if (spid.isEmpty || cmd.convoId.startsWith('group:')) {
+        DiagLog.event('disappearing', 'timer_cmd_ignored', {
+          'reason': cmd.convoId.startsWith('group:') ? 'group' : 'no_sender',
+        });
+        return;
+      }
+      if (myPid.isNotEmpty && cmd.convoId != myPid) {
+        DiagLog.event('disappearing', 'timer_cmd_ignored', {
+          'reason': 'not_addressed_to_me',
+        });
+        return;
+      }
+      targetConvoId = spid;
+      await db.convoEnsure1to1(peerProfileId: targetConvoId);
+    }
+    final current = (await db.convoGet(targetConvoId))?['disappear_seconds'];
+    final currentSeconds = (current as num?)?.toInt();
+    final nextSeconds = (cmd.seconds != null && cmd.seconds! > 0)
+        ? cmd.seconds
+        : null;
+    // Поздняя смена побеждает: команда старше уже известной не применяется —
+    // иначе одновременные смены с двух сторон менялись бы местами.
+    final localAt = await _disappearSetAtMs(targetConvoId);
+    // Время из будущего не даёт смене «вечного первенства» (11.11.2026).
+    final cmdAt = trustedConvoTimerSetAtMs(cmd.setAtMs, now);
+    if (cmdAt > 0 && cmdAt < localAt) {
+      DiagLog.event('disappearing', 'timer_cmd_ignored', {'reason': 'stale'});
+      return;
+    }
+    await db.convoSetDisappearSeconds(
+      convoId: targetConvoId,
+      disappearSeconds: nextSeconds,
+    );
+    if (cmdAt > 0) {
+      await _rememberDisappearSetAt(targetConvoId, cmdAt);
+    }
+    if (currentSeconds != nextSeconds) {
+      final atMs = (cmd.setAtMs > 0 && cmd.setAtMs <= now)
+          ? cmd.setAtMs
+          : now;
+      await _insertConvoTimerNotice(
+        convoId: targetConvoId,
+        seconds: nextSeconds,
+        byMe: senderIsOwn,
+        noticeKey: '${cmd.setAtMs}:${nextSeconds ?? 0}',
+        atMs: atMs,
+      );
+    }
+    DiagLog.event('disappearing', 'timer_cmd_applied', {
+      'convo': DiagLog.pfx(targetConvoId),
+      'own': senderIsOwn,
+      'seconds': nextSeconds,
+    });
+    if (!_changed.isClosed) _changed.add(null);
+  }
+
+  // ── Исчезающие сообщения: включение и отправка (шаг 3) ─────────────────
+
+  /// Сроки на выбор (решение владельца 23.10): как у Signal. «Своё» — от
+  /// [DisappearingFlags.customMinS] до [disappearCustomMaxSeconds].
+  static const List<int> disappearPresetSeconds = <int>[
+    30,
+    5 * 60,
+    60 * 60,
+    8 * 60 * 60,
+    24 * 60 * 60,
+    7 * 24 * 60 * 60,
+    30 * 24 * 60 * 60,
+  ];
+
+  /// Срок жизни команды смены таймера в очереди реле — как у сообщения, а не
+  /// как у служебной команды (час): собеседник может быть офлайн неделю.
+  static const int _convoTimerCommandTtlSeconds = 7 * 24 * 60 * 60;
+
+  int get disappearCustomMinSeconds => DisappearingFlags.customMinS;
+  int get disappearCustomMaxSeconds => _disappearingFlags.customMaxS;
+
+  /// Глобальный выключатель отправки (§2.5): без него ни срок в сообщениях,
+  /// ни команды не уходят, а пункт в настройках скрыт.
+  bool get disappearingSendEnabled => _disappearingFlags.sendEnabled;
+
+  /// Может ли этот профиль ВКЛЮЧИТЬ таймер в чате, где его ещё нет: флаг и
+  /// доля по профилю. Доля решает только это — если таймер в чате уже
+  /// включён (собеседником или раньше), его видно и можно изменить при
+  /// открытом [disappearingSendEnabled], иначе сообщения исчезали бы только
+  /// в одну сторону.
+  bool get disappearingSendAvailable =>
+      _disappearingFlags.sendAllowedFor((_profileId ?? '').trim());
+
+  /// Можно ли вообще ставить таймер в чате [convoId]: только личный чат с
+  /// собеседником. Комнаты и темы — отдельный шаг (решение владельца о том,
+  /// где хранится таймер комнаты); «Избранное», заявки и демо — нет.
+  bool canSetDisappearingForConvo(String convoId) {
+    final cid = convoId.trim();
+    final myPid = (_profileId ?? '').trim();
+    if (cid.isEmpty || myPid.isEmpty || cid == myPid) return false;
+    if (cid.startsWith('group:') ||
+        cid.startsWith('dev:') ||
+        cid.startsWith('req:') ||
+        _isDemoConvoId(cid)) {
+      return false;
+    }
+    return true;
+  }
+
+  /// Общий таймер чата; `null` — выключен.
+  Future<int?> getChatDisappearSeconds(String convoId) async {
+    final db = _db;
+    if (db == null) return null;
+    try {
+      final secs = ((await db.convoGet(convoId.trim()))?['disappear_seconds']
+              as num?)
+          ?.toInt();
+      return (secs != null && secs > 0) ? secs : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Показывать ли в чате [convoId] пункт и значок исчезающих сообщений.
+  Future<bool> disappearingVisibleForConvo(String convoId) async {
+    if (!disappearingSendEnabled) return false;
+    if (!canSetDisappearingForConvo(convoId)) return false;
+    if (disappearingSendAvailable) return true;
+    return (await getChatDisappearSeconds(convoId)) != null;
+  }
+
+  @visibleForTesting
+  Future<int?> outgoingDisappearSecondsForTesting(String convoId) =>
+      _outgoingDisappearSeconds(convoId);
+
+  /// Срок, который получает ИСХОДЯЩЕЕ в чат [convoId] (§2.1, §2.5): таймер
+  /// чата при открытом глобальном выключателе отправки; иначе `null`, и
+  /// сообщение уходит ровно как раньше.
+  Future<int?> _outgoingDisappearSeconds(String convoId) async {
+    if (!disappearingSendEnabled) return null;
+    if (!canSetDisappearingForConvo(convoId)) return null;
+    return getChatDisappearSeconds(convoId);
+  }
+
+  /// Включает, меняет или выключает таймер чата [convoId] (§2.1).
+  ///
+  /// Порядок: значение и заметка в ленте — сразу; команда — собеседнику
+  /// (всем его устройствам, через очередь, неделю) и своим устройствам.
+  /// Старая сборка собеседника команду прячет (префикс `__secretly_`) и
+  /// сообщения не удаляет — об этом предупреждает плашка
+  /// ([disappearingPeerSupport]).
+  Future<void> setChatDisappearSeconds({
+    required String convoId,
+    required int? seconds,
+  }) async {
+    final db = _db;
+    if (db == null) return;
+    if (!disappearingSendEnabled) {
+      throw StateError('disappearing_unavailable');
+    }
+    final resolved =
+        await _normalizeDirectPeerProfileId(convoId.trim()) ?? convoId.trim();
+    if (!canSetDisappearingForConvo(resolved)) {
+      throw StateError('disappearing_unsupported_chat');
+    }
+    final current = await getChatDisappearSeconds(resolved);
+    // Включить впервые может только профиль в доле; изменить или выключить —
+    // любой, у кого таймер уже стоит (см. [disappearingSendAvailable]).
+    if (current == null && !disappearingSendAvailable) {
+      throw StateError('disappearing_unavailable');
+    }
+    int? next = (seconds != null && seconds > 0) ? seconds : null;
+    if (next != null) {
+      next = next.clamp(disappearCustomMinSeconds, disappearCustomMaxSeconds);
+    }
+    if (current == next) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.convoSetDisappearSeconds(convoId: resolved, disappearSeconds: next);
+    await _rememberDisappearSetAt(resolved, now);
+    await _insertConvoTimerNotice(
+      convoId: resolved,
+      seconds: next,
+      byMe: true,
+      noticeKey: '$now:${next ?? 0}',
+      atMs: now,
+    );
+    DiagLog.event('disappearing', 'timer_set', {
+      'convo': DiagLog.pfx(resolved),
+      'seconds': next,
+    });
+    if (!_changed.isClosed) _changed.add(null);
+    // В 1:1 `convoId` команды — профиль собеседника: для него это «мой
+    // профиль», для моих устройств — тот же чат. Один текст годится обоим.
+    final command = buildConvoTimerCommand(
+      convoId: resolved,
+      seconds: next,
+      setAtMs: now,
+    );
+    unawaited(() async {
+      try {
+        await sendControlMessage(
+          peerProfileId: resolved,
+          controlText: command,
+          strict: false,
+          queueIfNoDevices: true,
+          ttlSeconds: _convoTimerCommandTtlSeconds,
+        );
+      } catch (e) {
+        DiagLog.event('disappearing', 'timer_cmd_send_failed', {
+          'convo': DiagLog.pfx(resolved),
+          'err': _shortErrorTag(e),
+        });
+      }
+      try {
+        await _sendSelfMirrorControl(command);
+      } catch (_) {
+        // best-effort: своё устройство догонит по следующей команде
+      }
+      // §2.4: если кто-то из участников таймер не поймёт — сказать об этом в
+      // самой ленте, рядом с заметкой о включении. Телефону это заменяет
+      // постоянную плашку (раскладку его чата не трогаем).
+      if (next != null) {
+        try {
+          final support = await disappearingPeerSupport(resolved);
+          await _insertDisappearingSupportNotice(
+            convoId: resolved,
+            support: support,
+            noticeKey: '$now',
+          );
+        } catch (_) {
+          // Подсказка — вторична.
+        }
+      }
+    }());
+  }
+
+  /// Заметка в ленте о старой версии у собеседника или у меня (§2.4). Только
+  /// для «старой версии»: «не удалось проверить» в ленту не пишется, иначе
+  /// офлайн-реле засоряло бы переписку.
+  Future<void> _insertDisappearingSupportNotice({
+    required String convoId,
+    required DisappearingPeerSupport support,
+    required String noticeKey,
+    bool room = false,
+  }) async {
+    final db = _db;
+    final did = _deviceId?.trim();
+    final crypto = _crypto;
+    if (db == null || did == null || did.isEmpty || crypto == null) return;
+    final String text;
+    switch (support) {
+      case DisappearingPeerSupport.peerOutdated when room:
+        text = _localizedText(
+          ru: '⚠️ У части участников старая версия приложения — у них сообщения не исчезнут.',
+          en: '⚠️ Some members have an old version of the app — messages will not disappear for them.',
+          uk: '⚠️ У частини учасників стара версія застосунку — у них повідомлення не зникнуть.',
+          es: '⚠️ Algunos miembros tienen una versión antigua de la app: para ellos los mensajes no desaparecerán.',
+          pt: '⚠️ Alguns membros têm uma versão antiga da app — para eles as mensagens não vão desaparecer.',
+          ptBr: '⚠️ Alguns membros têm uma versão antiga do app — para eles as mensagens não vão desaparecer.',
+          fr: "⚠️ Certains membres utilisent une ancienne version de l'app : chez eux, les messages ne disparaîtront pas.",
+          de: '⚠️ Einige Mitglieder nutzen eine alte App-Version – bei ihnen verschwinden die Nachrichten nicht.',
+        );
+      case DisappearingPeerSupport.peerOutdated:
+        text = _localizedText(
+          ru: '⚠️ У собеседника старая версия приложения — у него сообщения не исчезнут.',
+          en: '⚠️ Your contact has an old version of the app — messages will not disappear on their side.',
+          uk: '⚠️ У співрозмовника стара версія застосунку — у нього повідомлення не зникнуть.',
+          es: '⚠️ Tu contacto tiene una versión antigua de la app: en su lado los mensajes no desaparecerán.',
+          pt: '⚠️ O seu contacto tem uma versão antiga da app — do lado dele as mensagens não vão desaparecer.',
+          ptBr: '⚠️ Seu contato tem uma versão antiga do app — do lado dele as mensagens não vão desaparecer.',
+          fr: "⚠️ Votre contact utilise une ancienne version de l'app : chez lui, les messages ne disparaîtront pas.",
+          de: '⚠️ Dein Kontakt nutzt eine alte App-Version – bei ihm verschwinden die Nachrichten nicht.',
+        );
+      case DisappearingPeerSupport.ownOutdated:
+        text = _localizedText(
+          ru: '⚠️ На одном из ваших устройств старая версия приложения — там сообщения не исчезнут.',
+          en: '⚠️ One of your devices has an old version of the app — messages will not disappear there.',
+          uk: '⚠️ На одному з ваших пристроїв стара версія застосунку — там повідомлення не зникнуть.',
+          es: '⚠️ Uno de tus dispositivos tiene una versión antigua de la app: allí los mensajes no desaparecerán.',
+          pt: '⚠️ Um dos seus dispositivos tem uma versão antiga da app — aí as mensagens não vão desaparecer.',
+          ptBr: '⚠️ Um dos seus dispositivos tem uma versão antiga do app — lá as mensagens não vão desaparecer.',
+          fr: "⚠️ L'un de vos appareils utilise une ancienne version de l'app : les messages n'y disparaîtront pas.",
+          de: '⚠️ Eines deiner Geräte nutzt eine alte App-Version – dort verschwinden die Nachrichten nicht.',
+        );
+      case DisappearingPeerSupport.supported:
+      case DisappearingPeerSupport.unknown:
+        return;
+    }
+    final localEventId = 'local:disappear-old:$convoId:$noticeKey';
+    try {
+      if (await db.eventGet(localEventId) != null) return;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final ev = SystemEventV1(eventId: _uuid.v4(), text: text);
+      final payload = E2ePayloadV1(
+        senderDeviceId: did,
+        createdAtMs: now,
+        events: <E2eEventV1>[ev],
+      );
+      final localCipher = base64Encode(await crypto.encrypt(payload.encode()));
+      await db.insertEvent(
+        eventId: localEventId,
+        convoId: convoId,
+        type: 'sys',
+        senderDeviceId: did,
+        ciphertextB64: localCipher,
+        createdAtMs: now,
+        localState: 'sent',
+        payloadEventId: ev.eventId,
+      );
+      await db.convoTouch(convoId: convoId, atMs: now);
+      if (!_changed.isClosed) _changed.add(null);
+    } catch (_) {
+      // Заметка — вторична.
+    }
+  }
+
+  // ── Исчезающие: «побеждает поздняя смена» (как у Signal) ──────────────
+  //
+  // Два администратора комнаты или двое в личном чате могут сменить таймер
+  // одновременно, и без метки времени их команды перетягивали бы значение
+  // туда-обратно. Метка смены хранится рядом (локальная таблица ключей),
+  // команда старше метки не применяется.
+
+  static const String _kvDisappearAtPrefix = 'disappear_at_v1:';
+
+  Future<int> _disappearSetAtMs(String convoId) async {
+    final db = _db;
+    if (db == null) return 0;
+    try {
+      final raw = await db.localKvGet('$_kvDisappearAtPrefix${convoId.trim()}');
+      // Метка, записанная до 11.11.2026, могла прийти «из будущего» —
+      // читаем её с тем же ограничением, что и новые смены.
+      return trustedConvoTimerSetAtMs(
+        int.tryParse((raw ?? '').trim()) ?? 0,
+        DateTime.now().millisecondsSinceEpoch,
+      );
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<void> _rememberDisappearSetAt(String convoId, int atMs) async {
+    try {
+      await _db?.localKvSet('$_kvDisappearAtPrefix${convoId.trim()}', '$atMs');
+    } catch (_) {
+      // best-effort: без метки команда просто не будет отброшена как старая
+    }
+  }
+
+  // ── Исчезающие в комнатах и закрытых темах ────────────────────────────
+  //
+  // Таймер комнаты — зашифрованное состояние, сервер о нём не знает:
+  // смена уходит участникам служебным сообщением комнаты со скрытым
+  // префиксом (как синхронизация тем; выпущенные сборки его не показывают),
+  // а сообщения администраторов несут текущее значение `dt`/`dtAt` — по ним
+  // таймер узнают новые участники. Менять и сообщать таймер могут только
+  // владелец и администраторы; получатель это проверяет сам. Удаление
+  // решает срок в КАЖДОМ сообщении (`exp`), так что отставший участник
+  // не может сорвать обещание другим.
+
+  bool canSetDisappearingForRoom(String groupId) {
+    final gid = groupId.trim();
+    return gid.startsWith('group:') && !_isDemoConvoId(gid);
+  }
+
+  /// Собственный таймер комнаты или темы; `null` — выключен или не задан.
+  Future<int?> getRoomDisappearSeconds(String groupId) =>
+      getChatDisappearSeconds(groupId);
+
+  /// Таймер, по которому живут исходящие в комнату: свой, а у закрытой темы
+  /// без своего — таймер родительской комнаты (решение владельца 23.10).
+  Future<int?> effectiveRoomDisappearSeconds(String groupId) async {
+    final gid = groupId.trim();
+    if (!canSetDisappearingForRoom(gid)) return null;
+    if (await _disappearSetAtMs(gid) > 0) return getChatDisappearSeconds(gid);
+    try {
+      final settings = await getRoomSettings(gid);
+      final parent = (settings.parentRoomId ?? '').trim();
+      if (settings.isPrivateTopic && parent.isNotEmpty && parent != gid) {
+        return getChatDisappearSeconds(parent);
+      }
+    } catch (_) {
+      // Нет настроек — нет и наследования.
+    }
+    return getChatDisappearSeconds(gid);
+  }
+
+  /// Наследует ли тема таймер родителя (своего значения не задавали).
+  Future<bool> roomDisappearInherited(String groupId) async {
+    final gid = groupId.trim();
+    if (await _disappearSetAtMs(gid) > 0) return false;
+    try {
+      final settings = await getRoomSettings(gid);
+      return settings.isPrivateTopic &&
+          (settings.parentRoomId ?? '').trim().isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> canManageRoomDisappearing(String groupId) async {
+    try {
+      final policy = await getRoomPolicyState(groupId);
+      return policy.canManageSettings;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Показывать ли в комнате пункт и значок: флаг открыт и либо профиль в
+  /// доле, либо таймер уже действует.
+  Future<bool> disappearingVisibleForRoom(String groupId) async {
+    if (!disappearingSendEnabled) return false;
+    if (!canSetDisappearingForRoom(groupId)) return false;
+    if (disappearingSendAvailable) return true;
+    return (await effectiveRoomDisappearSeconds(groupId)) != null;
+  }
+
+  /// Поля конверта сообщения комнаты: `exp` — срок этого сообщения;
+  /// `dt`/`dtAt` — собственное состояние таймера комнаты (0 — выключен),
+  /// только если его когда-либо меняли. Пусто — флаг закрыт или таймера
+  /// не было: конверт ровно прежний.
+  Future<Map<String, Object?>> _roomDisappearEnvelopeFields(
+    String groupId,
+  ) async {
+    if (!disappearingSendEnabled || !canSetDisappearingForRoom(groupId)) {
+      return const <String, Object?>{};
+    }
+    final out = <String, Object?>{};
+    final exp = await effectiveRoomDisappearSeconds(groupId);
+    if (exp != null && exp > 0) out['exp'] = exp;
+    final at = await _disappearSetAtMs(groupId);
+    if (at > 0) {
+      out['dt'] = (await getChatDisappearSeconds(groupId)) ?? 0;
+      out['dtAt'] = at;
+    }
+    return out;
+  }
+
+  /// Включает, меняет или выключает таймер комнаты или темы. Только владелец
+  /// и администраторы (`RoomAction.manageSettings`).
+  Future<void> setRoomDisappearSeconds({
+    required String groupId,
+    required int? seconds,
+  }) async {
+    final db = _db;
+    if (db == null) return;
+    final gid = groupId.trim();
+    if (!disappearingSendEnabled || !canSetDisappearingForRoom(gid)) {
+      throw StateError('disappearing_unavailable');
+    }
+    await _ensureRoomActionAllowed(gid, RoomAction.manageSettings);
+    final current = await getChatDisappearSeconds(gid);
+    if (current == null &&
+        (await effectiveRoomDisappearSeconds(gid)) == null &&
+        !disappearingSendAvailable) {
+      throw StateError('disappearing_unavailable');
+    }
+    int? next = (seconds != null && seconds > 0) ? seconds : null;
+    if (next != null) {
+      next = next.clamp(disappearCustomMinSeconds, disappearCustomMaxSeconds);
+    }
+    final hadOwn = await _disappearSetAtMs(gid) > 0;
+    if (hadOwn && current == next) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.convoSetDisappearSeconds(convoId: gid, disappearSeconds: next);
+    await _rememberDisappearSetAt(gid, now);
+    await _insertConvoTimerNotice(
+      convoId: gid,
+      seconds: next,
+      byMe: true,
+      noticeKey: '$now:${next ?? 0}',
+      atMs: now,
+    );
+    DiagLog.event('disappearing', 'room_timer_set', {
+      'room': DiagLog.pfx(gid),
+      'seconds': next,
+    });
+    if (!_changed.isClosed) _changed.add(null);
+    final command = buildConvoTimerCommand(
+      convoId: gid,
+      seconds: next,
+      setAtMs: now,
+    );
+    unawaited(() async {
+      try {
+        if (_isDemoConvoId(gid)) return;
+        await _dispatchGroupMessageNow(groupId: gid, text: command);
+      } catch (e) {
+        DiagLog.event('disappearing', 'room_timer_send_failed', {
+          'room': DiagLog.pfx(gid),
+          'err': _shortErrorTag(e),
+        });
+      }
+      if (next != null) {
+        try {
+          final support = await disappearingRoomSupport(gid);
+          await _insertDisappearingSupportNotice(
+            convoId: gid,
+            support: support,
+            noticeKey: '$now',
+            room: true,
+          );
+        } catch (_) {
+          // Подсказка — вторична.
+        }
+      }
+    }());
+  }
+
+  /// Может ли [senderProfileId] менять таймер комнаты: владелец или
+  /// администратор по МОЕМУ знанию о составе. Своё устройство — по моей роли.
+  Future<bool> _roomSenderCanManageDisappearing({
+    required String groupId,
+    required String senderProfileId,
+    required bool isOwn,
+  }) async {
+    final pid = isOwn ? profileId.trim() : senderProfileId.trim();
+    if (pid.isEmpty) return false;
+    try {
+      final role = await getRoomMemberRole(groupId, profileIdOverride: pid);
+      return role == RoomMemberRole.owner || role == RoomMemberRole.admin;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Применяет к комнате новое состояние таймера, если оно не старше
+  /// известного. Возвращает true, если значение поменялось.
+  Future<bool> _applyRoomTimerState({
+    required String groupId,
+    required int? seconds,
+    required int setAtMs,
+  }) async {
+    final db = _db;
+    if (db == null || setAtMs <= 0) return false;
+    // Время из будущего не даёт смене «вечного первенства» (11.11.2026).
+    final at = trustedConvoTimerSetAtMs(
+      setAtMs,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+    final localAt = await _disappearSetAtMs(groupId);
+    if (at < localAt) return false;
+    final current = await getChatDisappearSeconds(groupId);
+    final next = (seconds != null && seconds > 0) ? seconds : null;
+    if (at == localAt && current == next) return false;
+    await db.convoSetDisappearSeconds(convoId: groupId, disappearSeconds: next);
+    await _rememberDisappearSetAt(groupId, at);
+    return current != next;
+  }
+
+  /// Приём таймера в комнате: явная команда (с заметкой от имени автора) или
+  /// состояние `dt`/`dtAt` в обычном сообщении администратора (с нейтральной
+  /// заметкой, если значение у меня поменялось — так таймер узнают новые
+  /// участники). Чужое и неподтверждённое — молча мимо.
+  Future<void> _maybeApplyInboundRoomTimer({
+    required String groupId,
+    required String kind,
+    required String bodyText,
+    required Map<String, dynamic> groupCmd,
+    required String senderProfileId,
+    required bool isOwn,
+    required int atMs,
+  }) async {
+    if (!canSetDisappearingForRoom(groupId)) return;
+    final cmd = (kind == 'message' && isConvoTimerCommandText(bodyText))
+        ? parseConvoTimerCommand(bodyText)
+        : null;
+    final dtRaw = groupCmd['dt'];
+    final dtAtRaw = groupCmd['dtAt'];
+    final hasState = dtAtRaw is num && dtAtRaw > 0;
+    if (cmd == null && !hasState) return;
+    if (cmd != null && cmd.convoId != groupId) return;
+    if (!await _roomSenderCanManageDisappearing(
+      groupId: groupId,
+      senderProfileId: senderProfileId,
+      isOwn: isOwn,
+    )) {
+      DiagLog.event('disappearing', 'room_timer_ignored', {
+        'room': DiagLog.pfx(groupId),
+        'reason': 'not_admin',
+        'cmd': cmd != null,
+      });
+      return;
+    }
+    final int? seconds;
+    final int setAtMs;
+    if (cmd != null) {
+      seconds = cmd.seconds;
+      setAtMs = cmd.setAtMs > 0 ? cmd.setAtMs : atMs;
+    } else {
+      seconds = disappearSecondsFromJson(dtRaw);
+      setAtMs = (dtAtRaw as num).toInt();
+    }
+    final changed = await _applyRoomTimerState(
+      groupId: groupId,
+      seconds: seconds,
+      setAtMs: setAtMs,
+    );
+    if (!changed) return;
+    final senderName = ((groupCmd['senderName'] as String?) ?? '').trim();
+    await _insertConvoTimerNotice(
+      convoId: groupId,
+      seconds: seconds,
+      byMe: isOwn,
+      noticeKey: '$setAtMs:${seconds ?? 0}',
+      atMs: atMs,
+      actorName: (cmd != null && !isOwn && senderName.isNotEmpty)
+          ? senderName
+          : null,
+      adopted: cmd == null,
+    );
+    DiagLog.event('disappearing', 'room_timer_applied', {
+      'room': DiagLog.pfx(groupId),
+      'seconds': seconds,
+      'adopted': cmd == null,
+    });
+    _kickDisappearingSweep();
+    if (!_changed.isClosed) _changed.add(null);
+  }
+
+  /// Поймут ли таймер все активные участники комнаты (§2.4). Тот же кэш,
+  /// что у личных чатов, под ключом `room:<id>`.
+  Future<DisappearingPeerSupport> disappearingRoomSupport(
+    String groupId, {
+    bool force = false,
+  }) async {
+    final gid = groupId.trim();
+    final relay = _relay;
+    if (!canSetDisappearingForRoom(gid)) return DisappearingPeerSupport.unknown;
+    final minBuild = _disappearingFlags.minBuild;
+    if (minBuild <= 0) return DisappearingPeerSupport.peerOutdated;
+    final key = 'room:$gid';
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final cached = _disappearPeerSupportCache[key];
+    if (!force && cached != null) {
+      final ttl = cached.value == DisappearingPeerSupport.unknown
+          ? _disappearPeerSupportUnknownTtlMs
+          : _disappearPeerSupportTtlMs;
+      if (now - cached.atMs < ttl) return cached.value;
+    }
+    if (relay == null) return DisappearingPeerSupport.unknown;
+    final ok = await relay.fetchRoomMembersBuildAtLeast(
+      roomId: gid,
+      minBuild: minBuild,
+    );
+    final value = ok == null
+        ? DisappearingPeerSupport.unknown
+        : (ok
+              ? DisappearingPeerSupport.supported
+              : DisappearingPeerSupport.peerOutdated);
+    _disappearPeerSupportCache[key] = (atMs: now, value: value);
+    return value;
+  }
+
+  final Map<String, ({int atMs, DisappearingPeerSupport value})>
+  _disappearPeerSupportCache =
+      <String, ({int atMs, DisappearingPeerSupport value})>{};
+  static const int _disappearPeerSupportTtlMs = 60 * 60 * 1000;
+
+  /// «Не удалось проверить» тоже кэшируется, но коротко: плашка
+  /// перечитывается на каждое изменение в контроллере, и без кэша реле
+  /// получало бы запрос на каждое входящее сообщение.
+  static const int _disappearPeerSupportUnknownTtlMs = 2 * 60 * 1000;
+
+  /// Поймут ли таймер все устройства собеседника и мои собственные (§2.4).
+  ///
+  /// Спрашивает реле не чаще раза в час на профиль (§2.7) и кэширует ответ.
+  /// Без реле или без ответа — [DisappearingPeerSupport.unknown]: плашка
+  /// говорит «не удалось проверить», а не молчит. Сборка в конфиге не задана —
+  /// устройства считаются старыми (решение §2.5).
+  Future<DisappearingPeerSupport> disappearingPeerSupport(
+    String peerProfileId, {
+    bool force = false,
+  }) async {
+    final peer = peerProfileId.trim();
+    final myPid = (_profileId ?? '').trim();
+    final relay = _relay;
+    if (peer.isEmpty) return DisappearingPeerSupport.unknown;
+    final minBuild = _disappearingFlags.minBuild;
+    if (minBuild <= 0) return DisappearingPeerSupport.peerOutdated;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final cached = _disappearPeerSupportCache[peer];
+    if (!force && cached != null) {
+      final ttl = cached.value == DisappearingPeerSupport.unknown
+          ? _disappearPeerSupportUnknownTtlMs
+          : _disappearPeerSupportTtlMs;
+      if (now - cached.atMs < ttl) return cached.value;
+    }
+    if (relay == null) return DisappearingPeerSupport.unknown;
+    DisappearingPeerSupport value;
+    try {
+      final peerSnap = await relay.fetchActiveDevices(
+        peerProfileId: peer,
+        minBuild: minBuild,
+      );
+      final peerOk = peerSnap?.allBuildAtLeast;
+      if (peerOk == null) {
+        value = DisappearingPeerSupport.unknown;
+      } else if (!peerOk) {
+        value = DisappearingPeerSupport.peerOutdated;
+      } else if (myPid.isEmpty) {
+        value = DisappearingPeerSupport.supported;
+      } else {
+        final mine = await relay.fetchActiveDevices(
+          peerProfileId: myPid,
+          minBuild: minBuild,
+        );
+        value = (mine?.allBuildAtLeast == false)
+            ? DisappearingPeerSupport.ownOutdated
+            : DisappearingPeerSupport.supported;
+      }
+    } catch (_) {
+      value = DisappearingPeerSupport.unknown;
+    }
+    _disappearPeerSupportCache[peer] = (atMs: now, value: value);
+    return value;
   }
 
   Future<void> _applyConversationRetentionForConvos(
@@ -33274,6 +36478,7 @@ class AppController {
       await _flushPendingReceiptsBestEffort();
     }
     await db.markEventsReadByIds(eventIds, readAtMs: now);
+    _kickDisappearingSweep();
     if (!_transportBlocked) {
       _kickRelayOutbox(_relay);
     }
@@ -33675,7 +36880,11 @@ class AppController {
       devices = await _fetchBundleAuthed(peerProfileId);
     } catch (error) {
       throw describeContactActionFailure(
-        deviceStatusesError ?? error,
+        // Б3 Э2: отказ по подписи — главная причина, её видят сторож сверки и
+        // восстановление молчания (они не шлют сброс при подмене).
+        error is ServerUnauthenticatedException
+            ? error
+            : deviceStatusesError ?? error,
         fallbackCode: ContactActionFailureCode.serviceUnavailable,
       );
     }
@@ -34425,7 +37634,9 @@ class AppController {
       unawaited(() async {
         try {
           await refreshContactDevices(peerProfileId);
-        } catch (_) {
+        } catch (e) {
+          // Б3 Э2: см. сторож сверки — при отказе по подписи сброс не шлём.
+          if (_isServerUnauthenticated(e)) return;
           // identity-key rotation throws — sessions already wiped in
           // `contactDeviceUpsert`; the reset pings below will rebuild.
         }
@@ -34435,6 +37646,12 @@ class AppController {
       }());
     }
   }
+
+  /// Б3 Э2: ошибка — отказ по подписи ответа сервера (сам или обёрнутый в
+  /// [ContactActionFailure]).
+  static bool _isServerUnauthenticated(Object e) =>
+      e is ServerUnauthenticatedException ||
+      (e is ContactActionFailure && e.cause is ServerUnauthenticatedException);
 
   bool _mapsEqualIntInt(Map<String, int> a, Map<String, int> b) {
     if (a.length != b.length) return false;
@@ -34536,6 +37753,16 @@ class AppController {
         try {
           await refreshContactDevices(convoId);
         } catch (e) {
+          // Б3 Э2: ответ с ключами не прошёл проверку подписи. Сброс сессии
+          // удаляет живую сессию ДО получения нового пакета, а пакет как раз
+          // и не принимается — при долгой подмене это стёрло бы сессии со
+          // всеми контактами. Живые сессии подпись сервера не требуют.
+          if (_isServerUnauthenticated(e)) {
+            DiagLog.event('peer', 'bundle_reverify_unauthenticated', {
+              'peer': DiagLog.pfx(convoId),
+            });
+            return;
+          }
           // Identity-key change throws StateError — that path already
           // wiped sessions inside `contactDeviceUpsert`. Schedule a
           // reset ping to the affected devices so the peer rebuilds
@@ -34825,7 +38052,9 @@ class AppController {
     _recipientDevicesCacheByProfileId.remove(pid);
     try {
       await refreshContactDevices(pid);
-    } catch (_) {
+    } catch (e) {
+      // Б3 Э2: см. сторож сверки — при отказе по подписи сброс не шлём.
+      if (_isServerUnauthenticated(e)) return;
       // Identity-key rotation throws (sessions already wiped in
       // contactDeviceUpsert); the reset pings below rebuild the ratchet.
     }
@@ -35582,6 +38811,7 @@ class AppController {
           createdAtMs: payload.createdAtMs,
           replyToPayloadEventId: ev.replyToEventId,
           linkPreview: ev.linkPreview,
+          exp: ev.exp,
         );
       } else if (ev is AttachmentEventV1) {
         await _mirrorAttachmentToOwnDevices(
@@ -35602,6 +38832,7 @@ class AppController {
           waveform: ev.waveform,
           musicTitle: ev.musicTitle,
           musicArtist: ev.musicArtist,
+          exp: ev.exp,
         );
       } else if (ev is StickerEventV1) {
         await _mirrorStickerToOwnDevices(
@@ -35616,6 +38847,7 @@ class AppController {
           animated: ev.animated,
           format: ev.format,
           replyToPayloadEventId: ev.replyToEventId,
+          exp: ev.exp,
         );
       }
     } catch (_) {
@@ -36152,6 +39384,14 @@ class AppController {
             }
           }
           if (plainBytes == null || plainBytes.isEmpty) continue;
+          // Исчезающие (ТЗ 22.10.2026, §2.4): истёкшее не уезжает на другое
+          // устройство — ни через синхронизацию, ни через повтор.
+          final rowExpiresAtMs = (row['expires_at_ms'] as num?)?.toInt();
+          if (rowExpiresAtMs != null &&
+              rowExpiresAtMs > 0 &&
+              rowExpiresAtMs <= DateTime.now().millisecondsSinceEpoch) {
+            continue;
+          }
 
           outgoing.add(
             PeerHistoryChunkEvent(
@@ -36164,6 +39404,8 @@ class AppController {
               payloadEventId: (row['payload_event_id'] as String?)?.trim(),
               localState: (row['local_state'] as String?)?.trim(),
               readAtMs: (row['read_at_ms'] as num?)?.toInt(),
+              disappearSeconds: (row['disappear_seconds'] as num?)?.toInt(),
+              expiresAtMs: rowExpiresAtMs,
             ),
           );
           if (convoId.startsWith('group:')) {
@@ -36514,7 +39756,20 @@ class AppController {
               (ev.payloadEventId != null && ev.payloadEventId!.isNotEmpty)
               ? ev.payloadEventId
               : null,
+          // Исчезающие (ТЗ 22.10.2026, §2.4): срок и момент удаления с
+          // отвечающего устройства; без момента отсчёт пойдёт от прочтения
+          // (своя копия — от отправки).
+          disappearSeconds: ev.disappearSeconds,
+          expiresAtMs:
+              ev.expiresAtMs ??
+              (!isIncomingRow
+                  ? disappearExpiryFromSend(
+                      seconds: ev.disappearSeconds,
+                      createdAtMs: ev.createdAtMs,
+                    )
+                  : null),
         );
+        if (ev.disappearSeconds != null) _kickDisappearingSweep();
         await db.convoTouch(convoId: ev.convoId, atMs: ev.createdAtMs);
         inserted++;
       } catch (e) {
@@ -37496,6 +40751,8 @@ class AppController {
     required int createdAtMs,
     String? replyToPayloadEventId,
     LinkPreviewV1? linkPreview,
+    // Исчезающие (ТЗ 22.10.2026): тот же срок, что ушёл собеседнику.
+    int? exp,
   }) async {
     final pid = (_profileId ?? '').trim();
     final did = (_deviceId ?? '').trim();
@@ -37525,6 +40782,7 @@ class AppController {
       'createdAtMs': createdAtMs,
       // Своим устройствам — та же карточка, что ушла собеседнику.
       if (linkPreview != null) 'linkPreview': linkPreview.toJson(),
+      if (exp != null && exp > 0) 'exp': exp,
     };
     final cmd =
         '$_selfMirrorMsgCmdPrefix${base64Url.encode(utf8.encode(jsonEncode(payload)))}';
@@ -37616,6 +40874,8 @@ class AppController {
     List<int>? waveform,
     String? musicTitle,
     String? musicArtist,
+    // Исчезающие (ТЗ 22.10.2026): тот же срок, что ушёл собеседнику.
+    int? exp,
   }) async {
     final pid = (_profileId ?? '').trim();
     final did = (_deviceId ?? '').trim();
@@ -37637,6 +40897,7 @@ class AppController {
     if (ownTargets.isEmpty) return;
 
     final command = buildSelfMirrorAttachmentCommand(
+      exp: exp,
       convoId: normalizedConvoId,
       msgEventId: msgEventId,
       blobId: blobId,
@@ -37682,6 +40943,8 @@ class AppController {
     bool animated = false,
     String format = 'png',
     String? replyToPayloadEventId,
+    // Исчезающие (ТЗ 22.10.2026): тот же срок, что ушёл собеседнику.
+    int? exp,
   }) async {
     final pid = (_profileId ?? '').trim();
     final did = (_deviceId ?? '').trim();
@@ -37703,6 +40966,7 @@ class AppController {
     if (ownTargets.isEmpty) return;
 
     final command = buildSelfMirrorStickerCommand(
+      exp: exp,
       convoId: normalizedConvoId,
       msgEventId: msgEventId,
       packId: packId,
@@ -38503,6 +41767,8 @@ class AppController {
             localState: r['local_state'] as String? ?? 'received',
             payloadEventId: r['payload_event_id'] as String?,
             scheduledAtMs: (r['scheduled_at_ms'] as num?)?.toInt(),
+            disappearSeconds: (r['disappear_seconds'] as num?)?.toInt(),
+            expiresAtMs: (r['expires_at_ms'] as num?)?.toInt(),
           ),
         )
         .toList(growable: false);
@@ -38556,6 +41822,8 @@ class AppController {
             localState: r['local_state'] as String? ?? 'received',
             payloadEventId: r['payload_event_id'] as String?,
             scheduledAtMs: (r['scheduled_at_ms'] as num?)?.toInt(),
+            disappearSeconds: (r['disappear_seconds'] as num?)?.toInt(),
+            expiresAtMs: (r['expires_at_ms'] as num?)?.toInt(),
           ),
         )
         .toList(growable: false);
@@ -38584,6 +41852,8 @@ class AppController {
             senderDeviceId: r['sender_device_id'] as String,
             localState: r['local_state'] as String? ?? 'received',
             payloadEventId: r['payload_event_id'] as String?,
+            disappearSeconds: (r['disappear_seconds'] as num?)?.toInt(),
+            expiresAtMs: (r['expires_at_ms'] as num?)?.toInt(),
           ),
         )
         .toList(growable: false);
@@ -39149,6 +42419,7 @@ class AppController {
           tags: pack.tags,
           installed: pack.installed,
           origin: SecretlyStickerPackOrigin.remote,
+          shareMode: pack.shareMode,
           stickers: stickerRows
               .map(_remoteStickerDescriptorFromRow)
               .toList(growable: false),
@@ -39903,6 +43174,7 @@ class AppController {
   Future<File> downloadAndDecryptAttachmentToFile(
     AttachmentEventV1 a, {
     required File outputFile,
+    void Function(int received, int? total)? onProgress,
   }) async {
     final blob = _blob;
     final attachments = _attachments;
@@ -39922,12 +43194,19 @@ class AppController {
       '${outputFile.path}.${DateTime.now().microsecondsSinceEpoch}.tmp',
     );
     final tmpDir = await getTemporaryDirectory();
+    // О6/П5 (разбор медиа 15.11.2026): кусок шифротекста переживает обрыв —
+    // следующая попытка того же вложения докачивает с места обрыва (Range),
+    // а не с нуля. Имя постоянно для вложения и УНИКАЛЬНО для этого
+    // контроллера: фоновый (пуш) и основной не пишут в один файл; внутри
+    // контроллера одно вложение качается одним запросом
+    // ([ensureCachedAttachmentFile]).
     final ciphertextFile = File(
       p.join(
         tmpDir.path,
-        'att_cipher_${a.blobId}_${DateTime.now().microsecondsSinceEpoch}.bin',
+        'att_part_${_downloadPartToken}_${a.blobId}.bin',
       ),
     );
+    var downloaded = false;
     try {
       if (await tempOutput.exists()) {
         await tempOutput.delete();
@@ -39936,12 +43215,16 @@ class AppController {
         a.blobId,
         outputFile: ciphertextFile,
         accessTokenB64: accessTokenB64,
+        onProgress: onProgress,
+        resume: true,
       );
+      downloaded = true;
       await attachments.decryptDownloadedFileToFile(
         ciphertextFile,
         fileKeyB64: a.fileKeyB64,
         outputFile: tempOutput,
       );
+      await _noteAttachmentSizeMismatch(a, tempOutput);
       if (await outputFile.exists()) {
         await outputFile.delete();
       }
@@ -39955,13 +43238,54 @@ class AppController {
       } catch (_) {}
       rethrow;
     } finally {
-      try {
-        if (await ciphertextFile.exists()) {
-          await ciphertextFile.delete();
-        }
-      } catch (_) {}
+      // Скачали целиком (расшифровалось или нет — тот же шифротекст второй раз
+      // ничего не даст) — кусок больше не нужен. Оборвалось — оставляем для
+      // докачки; старые куски подбирает уборка временных файлов.
+      if (downloaded) {
+        try {
+          if (await ciphertextFile.exists()) {
+            await ciphertextFile.delete();
+          }
+        } catch (_) {}
+      }
     }
   }
+
+  /// П13 (разбор медиа 15.11.2026). Формат шифротекста частями не знает
+  /// «последней части»: файл, обрезанный по границе 64 КБ (сломанный или
+  /// злонамеренный сервер), расшифруется без ошибки, просто короче. Размер
+  /// от отправителя (`sizeBytes`) это видит — но старые сборки могли считать
+  /// его до очистки метаданных снимка, и отказ по нему сломал бы настоящие
+  /// фото. Поэтому пока — только замер: насколько часто и на сколько
+  /// расходится. Решение об отказе — по этим данным (или формат v2 с меткой
+  /// конца).
+  Future<void> _noteAttachmentSizeMismatch(
+    AttachmentEventV1 a,
+    File decrypted,
+  ) async {
+    final expected = a.sizeBytes;
+    if (expected <= 0) return;
+    try {
+      final actual = await decrypted.length();
+      if (actual == expected) return;
+      final delta = expected - actual;
+      DiagLog.event('media', 'attachment_size_mismatch', {
+        'mime': (a.mime ?? '').split('/').first,
+        'shorter': delta > 0,
+        // Ведро, а не точное число: точный размер файла в журнал не пишем.
+        'delta_kb_bucket': switch (delta.abs() ~/ 1024) {
+          < 16 => '<16',
+          < 64 => '16-64',
+          < 1024 => '64-1024',
+          _ => '>1024',
+        },
+        'chunk_aligned': delta > 0 && delta % (64 * 1024) == 0,
+      });
+    } catch (_) {}
+  }
+
+  /// О6/П5: метка этого контроллера в именах недокачанных кусков.
+  final String _downloadPartToken = const Uuid().v4().substring(0, 8);
 
   Future<String?> _resolveAttachmentAccessTokenB64(AttachmentEventV1 a) async {
     var accessTokenB64 = a.blobAccessTokenB64?.trim();
@@ -40051,9 +43375,24 @@ class AppController {
     final inflight = _attachmentFileDownloads[key];
     if (inflight != null) return inflight;
 
+    final progress = _attachmentDownloadProgress.putIfAbsent(
+      key,
+      () => ValueNotifier<double?>(null),
+    );
     final future = () async {
       final out = await _attachmentCacheFile(blobId: a.blobId, mime: a.mime);
-      final file = await downloadAndDecryptAttachmentToFile(a, outputFile: out);
+      final file = await downloadAndDecryptAttachmentToFile(
+        a,
+        outputFile: out,
+        onProgress: (received, total) {
+          // Длина шифротекста чуть больше файла; без длины от сервера —
+          // по размеру из сообщения. Шаг в 2 %, чтобы не дёргать ленту.
+          final whole = (total != null && total > 0) ? total : a.sizeBytes;
+          if (whole <= 0) return;
+          final next = ((received / whole).clamp(0.0, 1.0) * 50).floor() / 50;
+          if (progress.value != next) progress.value = next;
+        },
+      );
       unawaited(_pruneAttachmentCacheIfNeeded());
       return file;
     }();
@@ -40065,8 +43404,22 @@ class AppController {
       return await future;
     } finally {
       _attachmentFileDownloads.remove(key);
+      // Объект остаётся в карте: подписавшийся пузырь увидит и повтор.
+      progress.value = null;
     }
   }
+
+  /// П5 (разбор медиа 15.11.2026): ход скачивания вложения, 0…1, или `null`
+  /// — не качается. Слушатель, подписавшийся до начала скачивания, получает
+  /// тот же объект, что будет обновляться.
+  final Map<String, ValueNotifier<double?>> _attachmentDownloadProgress =
+      <String, ValueNotifier<double?>>{};
+
+  ValueListenable<double?> attachmentDownloadProgress(String blobId) =>
+      _attachmentDownloadProgress.putIfAbsent(
+        blobId.trim(),
+        () => ValueNotifier<double?>(null),
+      );
 
   /// Record inbound attachment metadata so received media is in the prune's
   /// protected set (see the attachment-cache prune). The 1:1 receive path
@@ -40109,11 +43462,190 @@ class AppController {
   /// deep-sleep backlog can't launch a download/decrypt storm on the just-woken
   /// flaky network.
   void _prefetchInboundAttachmentBlobs(E2ePayloadV1 payload) {
+    final onCellularOnly = isCellularOnly(_autoDownloadNetwork ?? const <ConnectivityResult>[]);
     for (final ev in payload.events) {
       if (ev is AttachmentEventV1 && ev.blobId.trim().isNotEmpty) {
-        _attachmentPrefetchQueue.add(ev);
+        // П1 (разбор медиа 15.11.2026): по выбору человека на мобильной сети
+        // часть файлов ждёт Wi-Fi или открытия. По умолчанию — всё, как было.
+        final allowed = autoDownloadAllows(
+          cellular: _cellularAutoDownload,
+          onCellularOnly: onCellularOnly,
+          mime: ev.mime,
+          sizeBytes: ev.sizeBytes,
+          isVoiceOrVideoNote:
+              ev.videoNote || (ev.waveform?.isNotEmpty ?? false),
+        );
+        if (allowed) {
+          _attachmentPrefetchQueue.add(ev);
+        } else if (_deferredAutoDownloads.length < 2000) {
+          _deferredAutoDownloads.add(ev);
+        }
       }
     }
+    _pumpAttachmentPrefetchQueue();
+  }
+
+  // ── П4 (разбор медиа 15.11.2026): память по чатам ─────────────────────
+
+  /// Сколько дней держать скачанные медиа на устройстве; 0 — всегда (по
+  /// умолчанию, как было). Считается от скачивания (время файла). Сообщения
+  /// не трогаются: снятое медиа пока живо на сервере (7 дней) скачается
+  /// снова, а старше — пропадёт. Выбор человека, предупреждение — в окне.
+  int _keepMediaDays = 0;
+  int get keepMediaDays => _keepMediaDays;
+
+  static const List<int> keepMediaDaysOptions = <int>[0, 30, 7];
+
+  @visibleForTesting
+  static int normalizeKeepMediaDays(int? raw) =>
+      keepMediaDaysOptions.contains(raw) ? raw! : 0;
+
+  Future<void> setKeepMediaDays(int days) async {
+    _keepMediaDays = normalizeKeepMediaDays(days);
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
+    await prefs.setInt(_prefsKeepMediaDaysKey, _keepMediaDays);
+    if (_keepMediaDays > 0) await _sweepMediaOlderThanKeep();
+  }
+
+  Future<void> _sweepMediaOlderThanKeep() async {
+    final days = _keepMediaDays;
+    if (days <= 0) return;
+    try {
+      final dir = await attachmentCacheDirectory();
+      if (!await dir.exists()) return;
+      final removed = await sweepFilesOlderThan(
+        dir,
+        DateTime.now().subtract(Duration(days: days)),
+      );
+      if (removed > 0) {
+        DiagLog.event('storage', 'keep_media_swept', {
+          'files': removed,
+          'days': days,
+        });
+        _changed.add(null);
+      }
+    } catch (_) {}
+  }
+
+  /// Удаляет файлы [dir] (без вложенных папок) старше [cutoff]. Число
+  /// удалённых.
+  @visibleForTesting
+  static Future<int> sweepFilesOlderThan(Directory dir, DateTime cutoff) async {
+    var removed = 0;
+    await for (final e in dir.list(followLinks: false)) {
+      if (e is! File) continue;
+      try {
+        if ((await e.stat()).modified.isBefore(cutoff)) {
+          await e.delete();
+          removed++;
+        }
+      } catch (_) {}
+    }
+    return removed;
+  }
+
+  /// Медиа каждого чата на этом устройстве, по убыванию объёма. Считается
+  /// по сообщениям-вложениям чата (до 5000 последних событий на чат).
+  Future<List<ChatMediaUsage>> chatMediaUsage() async {
+    final out = <ChatMediaUsage>[];
+    for (final convo in await listConversations()) {
+      var bytes = 0;
+      var files = 0;
+      for (final f in await _chatMediaFiles(convo.convoId)) {
+        try {
+          bytes += await f.length();
+          files++;
+        } catch (_) {}
+      }
+      if (files > 0) {
+        out.add(
+          ChatMediaUsage(
+            convoId: convo.convoId,
+            title: convo.title,
+            bytes: bytes,
+            files: files,
+          ),
+        );
+      }
+    }
+    out.sort((a, b) => b.bytes.compareTo(a.bytes));
+    return out;
+  }
+
+  /// Удаляет с устройства скачанные медиа чата; сообщения остаются. Сколько
+  /// байт освобождено.
+  Future<int> deleteChatMedia(String convoId) async {
+    var freed = 0;
+    for (final f in await _chatMediaFiles(convoId)) {
+      try {
+        final len = await f.length();
+        await f.delete();
+        freed += len;
+      } catch (_) {}
+    }
+    DiagLog.event('storage', 'chat_media_deleted', {
+      'freed_kb': (freed / 1024).round(),
+    });
+    _changed.add(null);
+    return freed;
+  }
+
+  Future<List<File>> _chatMediaFiles(String convoId) async {
+    final files = <File>[];
+    final seen = <String>{};
+    final events = await loadEventsAll(convoId, limit: 5000);
+    for (final event in events) {
+      if (event.type != 'att') continue;
+      try {
+        final payload = await payloadEventForChatEvent(event);
+        if (payload is! AttachmentEventV1) continue;
+        if (!seen.add(payload.blobId)) continue;
+        final f = await cachedAttachmentFile(payload);
+        if (f != null && await f.exists()) files.add(f);
+      } catch (_) {}
+    }
+    return files;
+  }
+
+  /// П1: какая сеть сейчас — для автозагрузки. `null` — ещё не знаем (=Wi-Fi).
+  List<ConnectivityResult>? _autoDownloadNetwork;
+
+  /// П1: выбор для мобильной сети. Wi-Fi и провод — всегда всё.
+  CellularAutoDownload _cellularAutoDownload = CellularAutoDownload.everything;
+  CellularAutoDownload get cellularAutoDownload => _cellularAutoDownload;
+
+  Future<void> setCellularAutoDownload(CellularAutoDownload value) async {
+    _cellularAutoDownload = value;
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
+    await prefs.setString(_prefsCellularAutoDownloadKey, value.name);
+    // Разрешили больше — отложенное, которое теперь проходит, забираем.
+    _releaseDeferredAutoDownloads();
+    _changed.add(null);
+  }
+
+  /// Отложенные на мобильной сети (в памяти: после перезапуска непрочитанное
+  /// скачается при открытии — как до 17.07, но с запасом в 7 дней).
+  final List<AttachmentEventV1> _deferredAutoDownloads = <AttachmentEventV1>[];
+
+  void _releaseDeferredAutoDownloads() {
+    if (_deferredAutoDownloads.isEmpty) return;
+    final onCellularOnly = isCellularOnly(_autoDownloadNetwork ?? const <ConnectivityResult>[]);
+    final keep = <AttachmentEventV1>[];
+    for (final ev in _deferredAutoDownloads) {
+      final allowed = autoDownloadAllows(
+        cellular: _cellularAutoDownload,
+        onCellularOnly: onCellularOnly,
+        mime: ev.mime,
+        sizeBytes: ev.sizeBytes,
+        isVoiceOrVideoNote: ev.videoNote || (ev.waveform?.isNotEmpty ?? false),
+      );
+      (allowed ? _attachmentPrefetchQueue : keep).add(ev);
+    }
+    _deferredAutoDownloads
+      ..clear()
+      ..addAll(keep);
     _pumpAttachmentPrefetchQueue();
   }
 
@@ -40305,13 +43837,17 @@ class AppController {
     required String blobId,
     String? mime,
   }) async {
-    final dir = await getApplicationDocumentsDirectory();
-    final attDir = Directory(p.join(dir.path, 'attachments'));
+    // П2 (15.11.2026): на iPhone — вне «Документов», см.
+    // attachment_cache_location.dart. Файл старого места забирается сразу.
+    final attDir = await attachmentCacheDirectory();
     if (!await attDir.exists()) {
       await attDir.create(recursive: true);
     }
     final ext = _extFromMime(mime);
-    return File(p.join(attDir.path, '$blobId$ext'));
+    return adoptLegacyAttachmentFile(
+      target: File(p.join(attDir.path, '$blobId$ext')),
+      legacyDir: await legacyAttachmentCacheDirectory(),
+    );
   }
 
   bool _attachmentCachePruneInFlight = false;
@@ -40319,6 +43855,12 @@ class AppController {
   Future<void> _clearLocalProfileMediaCaches() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
+      // П2: на iPhone кэш медиа живёт вне «Документов» — стираем и его.
+      final movedAttDir = await attachmentCacheDirectory();
+      if (movedAttDir.path != p.join(dir.path, kAttachmentCacheDirName) &&
+          await movedAttDir.exists()) {
+        await movedAttDir.delete(recursive: true);
+      }
       for (final sub in <String>[
         'attachments',
         'profile_media',
@@ -40395,8 +43937,7 @@ class AppController {
     try {
       final db = _db;
       if (db == null) return;
-      final dir = await getApplicationDocumentsDirectory();
-      final attDir = Directory(p.join(dir.path, 'attachments'));
+      final attDir = await attachmentCacheDirectory();
       if (!await attDir.exists()) return;
 
       // DATA-LOSS FIX (2026-07-17): chat media is NOT disposable cache. The
@@ -40891,6 +44432,19 @@ class AppController {
         height = decoded.height;
       }
     } catch (_) {}
+    // Предел набора (Э0): проверяется ДО записи файла. Тот же стикер (тот же
+    // хэш) в полный набор — не новый, его пропускаем: это повторное сохранение.
+    final existingInPack = await db.listStickerCatalogStickers(
+      packId: packId,
+      packVersion: 1,
+    );
+    if (!stickerPackCanAdd(
+      existingInPack.map((r) => r.stickerId),
+      stickerId,
+      max: kStickerPackMaxStickers,
+    )) {
+      throw const StickerPackFullException(kStickerPackMaxStickers);
+    }
     final cachedPath = await _cacheUserStickerLocally(
       stickerFile,
       stickerId,
@@ -40979,9 +44533,206 @@ class AppController {
   (int, int) stickerPackInstallProgress(String packId) =>
       (_stickerPackReceived[packId] ?? 0, _stickerPackExpected[packId] ?? 0);
 
+  /// Время последнего куска по каждому набору — для отсчёта тишины.
+  final Map<String, int> _stickerPackLastChunkAtMsByPack = <String, int>{};
+
+  static const Duration _stickerPackSilenceTimeout = Duration(seconds: 30);
+
+  void _scheduleStickerPackGiveUp(String packId) {
+    final requestedAtMs = DateTime.now().millisecondsSinceEpoch;
+    void check() {
+      if (!_stickerPackInFlight.contains(packId)) return;
+      final lastMs =
+          _stickerPackLastChunkAtMsByPack[packId] ?? requestedAtMs;
+      final idle = DateTime.now().millisecondsSinceEpoch -
+          (lastMs > requestedAtMs ? lastMs : requestedAtMs);
+      final left = _stickerPackSilenceTimeout.inMilliseconds - idle;
+      if (left > 0) {
+        Future.delayed(Duration(milliseconds: left), check);
+        return;
+      }
+      _stickerPackInFlight.remove(packId);
+      DiagLog.event('stickers', 'pack_req_timeout', {
+        'pack': DiagLog.pfx(packId),
+        'received': (_stickerPackReceived[packId] ?? 0).toString(),
+      });
+      if (!_changed.isClosed) _changed.add(null);
+    }
+
+    Future.delayed(_stickerPackSilenceTimeout, check);
+  }
+
   /// True while a fetch for [packId] is outstanding.
   bool stickerPackFetchInFlight(String packId) =>
       _stickerPackInFlight.contains(packId);
+
+  // ---- Закрытые наборы (ТЗ 14.11.2026, §4) --------------------------------
+
+  /// Наборы, на которые автор ответил «закрыт»: число и размытые превью.
+  /// Только в памяти — на диск ничего не пишется, это подсказка интерфейсу.
+  final Map<String, StickerPackLockedView> _stickerPackLocked =
+      <String, StickerPackLockedView>{};
+
+  /// Запросы превью закрытого набора в пути (отдельно от установки, чтобы
+  /// кнопка не показывала «Установка…»).
+  final Set<String> _stickerPackPreviewInFlight = <String>{};
+
+  /// Ответ автора «набор закрыт», если он был. `null` — не спрашивали или
+  /// автор отдал набор.
+  StickerPackLockedView? stickerPackLockedView(String packId) =>
+      _stickerPackLocked[packId.trim()];
+
+  /// Запросить у автора размытые превью закрытого набора. Сам набор автор не
+  /// отдаст в любом случае — проверка у него, а не здесь.
+  Future<void> requestPeerStickerPackPreviews({
+    required String packId,
+    required String originPid,
+  }) async {
+    final pid = packId.trim();
+    final origin = originPid.trim();
+    if (pid.isEmpty || origin.isEmpty) return;
+    if (origin == (_profileId ?? '').trim()) return;
+    if (_stickerPackLocked.containsKey(pid)) return;
+    if (!_stickerPackPreviewInFlight.add(pid)) return;
+    final req = StickerPackRequest(requestId: _uuid.v4(), packId: pid);
+    try {
+      await sendControlMessage(
+        peerProfileId: origin,
+        controlText: encodeStickerPackRequest(req),
+        strict: false,
+      );
+      Future.delayed(const Duration(seconds: 30), () {
+        _stickerPackPreviewInFlight.remove(pid);
+      });
+    } catch (e) {
+      _stickerPackPreviewInFlight.remove(pid);
+      callLog('AppCtrl', 'requestPeerStickerPackPreviews send failed: $e');
+    }
+  }
+
+  /// Получатель: автор ответил «набор закрыт». Принимается только на то, что
+  /// мы сами спрашивали, — иначе любой собеседник мог бы рисовать замки на
+  /// чужих наборах.
+  void _applyStickerPackDenied({
+    required StickerPackDenied denied,
+    required String fromProfileId,
+  }) {
+    final pid = denied.packId.trim();
+    if (fromProfileId.trim().isEmpty) return;
+    final asked =
+        _stickerPackInFlight.remove(pid) |
+        _stickerPackPreviewInFlight.remove(pid);
+    if (!asked) return;
+    final previews = <Uint8List>[];
+    for (final p in denied.previews) {
+      try {
+        final bytes = base64Decode(p.previewPngB64);
+        if (stickerPackBytesLookLikePng(bytes) && bytes.length <= 8 * 1024) {
+          previews.add(bytes);
+        }
+      } catch (_) {}
+    }
+    _stickerPackLocked[pid] = StickerPackLockedView(
+      title: denied.packTitle,
+      total: denied.totalCount,
+      previews: List<Uint8List>.unmodifiable(previews),
+    );
+    DiagLog.event('stickers', 'pack_denied', {
+      'pack': DiagLog.pfx(pid),
+      'previews': previews.length.toString(),
+    });
+    if (!_changed.isClosed) _changed.add(null);
+  }
+
+  /// Автор: ответить «набор закрыт» с размытыми превью. Сами стикеры не
+  /// уходят — ни пикселями, ни ссылками.
+  Future<void> _denyStickerPackRequest({
+    required StickerPackRequest request,
+    required SecretlyStickerPack pack,
+    required String requestingProfileId,
+    required String requestingDeviceId,
+  }) async {
+    final files = <Uint8List>[];
+    final ids = <String>[];
+    for (final s in pack.stickers) {
+      if (files.length >= kStickerPackLockedPreviewMax) break;
+      if (s.format == SecretlyStickerFormat.lottie) continue;
+      if (s.assetSource != SecretlyStickerAssetSource.file) continue;
+      try {
+        final f = File(s.assetPath);
+        if (!await f.exists()) continue;
+        files.add(await f.readAsBytes());
+        ids.add(s.stickerId);
+      } catch (_) {}
+    }
+    var built = const <Uint8List?>[];
+    if (files.isNotEmpty) {
+      try {
+        built = await compute(buildLockedStickerPreviewsBatch, files);
+      } catch (_) {
+        built = const <Uint8List?>[];
+      }
+    }
+    final previews = <StickerPackLockedPreview>[
+      for (var i = 0; i < built.length && i < ids.length; i++)
+        if (built[i] != null)
+          StickerPackLockedPreview(
+            stickerId: ids[i],
+            previewPngB64: base64Encode(built[i]!),
+          ),
+    ];
+    final denied = StickerPackDenied(
+      requestId: request.requestId,
+      packId: request.packId,
+      packTitle: pack.title,
+      totalCount: pack.stickers.length,
+      previews: previews,
+    );
+    try {
+      await sendControlMessage(
+        peerProfileId: requestingProfileId,
+        controlText: encodeStickerPackDenied(denied),
+        strict: false,
+        targetDeviceIds: requestingDeviceId.isNotEmpty
+            ? <String>[requestingDeviceId]
+            : null,
+      );
+      DiagLog.event('stickers', 'pack_denied_sent', {
+        'pack': DiagLog.pfx(request.packId),
+        'to': DiagLog.pfx(requestingProfileId),
+        'previews': previews.length.toString(),
+      });
+    } catch (e) {
+      callLog('AppCtrl', '_denyStickerPackRequest failed: $e');
+    }
+  }
+
+  /// Поменять режим своего набора. Только свои наборы (`user:<мой id>…`):
+  /// режим чужого установленного набора решает его автор, не мы.
+  Future<bool> setUserStickerPackShareMode({
+    required String packId,
+    required StickerShareMode mode,
+  }) async {
+    final db = _db;
+    final myPid = (_profileId ?? '').trim();
+    final pid = packId.trim();
+    if (db == null || myPid.isEmpty) return false;
+    if (!pid.startsWith('user:$myPid')) return false;
+    final pack = SecretlyStickerCatalog.pickerPackById(pid);
+    final ok = await db.stickerPackSetShareMode(
+      packId: pid,
+      packVersion: pack?.version ?? 1,
+      mode: mode,
+    );
+    if (!ok) return false;
+    await _loadStickerCatalogFromDb();
+    if (!_changed.isClosed) _changed.add(null);
+    DiagLog.event('stickers', 'pack_share_mode_set', {
+      'pack': DiagLog.pfx(pid),
+      'mode': mode.storageValue,
+    });
+    return true;
+  }
 
   /// Recipient → author: ask for the rest of [packId]. [originPid] is the author
   /// (the sender of the tapped sticker). Inline-PNG chunks come back over the
@@ -41010,17 +44761,11 @@ class AppController {
         'pack': DiagLog.pfx(packId),
         'origin': DiagLog.pfx(origin),
       });
-      // Give up after ~30s of silence (author offline / no inline-able stickers)
-      // so the sheet's button falls back to «Установить» instead of hanging.
-      Future.delayed(const Duration(seconds: 30), () {
-        if (_stickerPackInFlight.remove(packId)) {
-          DiagLog.event('stickers', 'pack_req_timeout', {
-            'pack': DiagLog.pfx(packId),
-            'received': (_stickerPackReceived[packId] ?? 0).toString(),
-          });
-          if (!_changed.isClosed) _changed.add(null);
-        }
-      });
+      // Give up after ~30s of SILENCE (author offline / no inline-able
+      // stickers) so the sheet's button falls back to «Добавить» instead of
+      // hanging. Э0: отсчёт от последнего куска, а не от запроса — набор в 120
+      // стикеров идёт дольше 30 секунд, и обрывать живую установку нельзя.
+      _scheduleStickerPackGiveUp(packId);
     } catch (e) {
       _stickerPackInFlight.remove(packId);
       callLog('AppCtrl', 'requestPeerStickerPack send failed: $e');
@@ -41047,79 +44792,53 @@ class AppController {
     if (now - last < 3000) return; // one answer / 3s / requester
     _stickerPackAnsweredAtMs[reqPid] = now;
 
-    final inlineables = <StickerPackChunkSticker>[];
-    for (final s in pack.stickers) {
-      final b64 = await _buildInlineStickerB64(s);
-      if (b64 == null || b64.isEmpty) {
-        // 🔴 РАНЬШЕ ЗДЕСЬ БЫЛО `continue`, и это был тихий дефект: вложить
-        // инлайном нельзя анимированные, Lottie и крупные, поэтому они МОЛЧА
-        // выбрасывались. Человек делился набором анимированных, получатель не
-        // получал ничего, и никто не узнавал почему.
-        //
-        // Теперь отдаём ссылку на шифртекст: для анимированного стикера она
-        // такая же маленькая, как для статичного. Кэш блоба (схема v66) делает
-        // это почти бесплатным, а при промахе выгружаем один раз и запоминаем.
-        final blob = await _stickerBlobForSharing(s);
-        if (blob == null) continue;
-        inlineables.add(
-          StickerPackChunkSticker(
-            stickerId: s.stickerId,
-            inlinePngB64: '',
-            format: s.format.wireValue,
-            animated: s.animated,
-            emojiHint: s.emojiHint,
-            label: s.label,
-            blobId: blob.blobId,
-            fileKeyB64: blob.fileKeyB64,
-            accessTokenB64: blob.accessTokenB64,
-            sizeBytes: s.sizeBytes,
-          ),
-        );
-        continue;
-      }
-      inlineables.add(
-        StickerPackChunkSticker(
-          stickerId: s.stickerId,
-          inlinePngB64: b64,
-          format: s.format.wireValue,
-          animated: s.animated,
-          emojiHint: s.emojiHint,
-          label: s.label,
-        ),
+    // 🔴 ЗАКРЫТЫЙ НАБОР НЕ ОТДАЁТСЯ (ТЗ 14.11.2026). Раньше здесь не было
+    // никакой проверки режима: любой собеседник, нажавший на стикер, получал
+    // набор целиком. Проверка не за флагом — откат флага прячет выбор режима,
+    // но не открывает то, что автор уже закрыл.
+    if (!stickerPackServesPeers(pack.shareMode)) {
+      await _denyStickerPackRequest(
+        request: request,
+        pack: pack,
+        requestingProfileId: reqPid,
+        requestingDeviceId: requestingDeviceId,
       );
+      return;
     }
-    if (inlineables.isEmpty) return;
-    final total = inlineables.length;
 
-    final chunks = <List<StickerPackChunkSticker>>[];
+    // 🔴 ПОЛНОЕ КАЧЕСТВО, НО СОВМЕСТИМО (Э0, 14.11.2026). Раньше статичный
+    // стикер крупнее 32 КБ уезжал только инлайном, ужатым до 192 px, и у
+    // получателя набор выглядел хуже, чем у автора. Теперь рядом с инлайном
+    // едет ссылка на полноразмерный зашифрованный файл: новые сборки берут её,
+    // а сборки до 08.08 (их разбор требует непустой инлайн) — инлайн, как и
+    // раньше.
+    //
+    // 🔴 ПОТОКОМ И С БЮДЖЕТОМ ВРЕМЕНИ. Старый получатель бросает запрос через 30 с
+    // после отправки, и всё, что пришло позже, теряется целиком. Поэтому куски
+    // уходят по мере готовности, а выгрузка полноразмерных копий статичных
+    // стикеров прекращается через [_stickerPackFullQualityBudget] — дальше
+    // только инлайн (если копия уже есть в кэше, она берётся без выгрузки).
+    final plan = pack.stickers
+        .take(kStickerPackMaxStickers)
+        .toList(growable: false);
+    final total = plan.length;
+    final startedAt = DateTime.now();
     var current = <StickerPackChunkSticker>[];
     var currentBytes = 0;
-    for (final s in inlineables) {
-      if (current.isNotEmpty &&
-          (current.length >= kStickerPackMaxStickersPerChunk ||
-              currentBytes + s.inlinePngB64.length >
-                  kStickerPackMaxInlineBytesPerChunk)) {
-        chunks.add(current);
-        current = <StickerPackChunkSticker>[];
-        currentBytes = 0;
-        if (chunks.length >= kStickerPackMaxChunksPerRequest) break;
-      }
-      current.add(s);
-      currentBytes += s.inlinePngB64.length;
-    }
-    if (current.isNotEmpty && chunks.length < kStickerPackMaxChunksPerRequest) {
-      chunks.add(current);
-    }
+    var seq = 0;
+    var sent = 0;
 
-    for (var i = 0; i < chunks.length; i++) {
+    Future<bool> flush({required bool done}) async {
+      if (current.isEmpty && !done) return true;
+      if (seq >= kStickerPackMaxChunksPerRequest) return false;
       final chunk = StickerPackChunk(
         requestId: request.requestId,
         packId: request.packId,
         packTitle: pack.title,
         totalCount: total,
-        seq: i,
-        done: i == chunks.length - 1,
-        stickers: chunks[i],
+        seq: seq,
+        done: done,
+        stickers: List<StickerPackChunkSticker>.unmodifiable(current),
       );
       try {
         await sendControlMessage(
@@ -41131,17 +44850,64 @@ class AppController {
               : null,
         );
       } catch (e) {
-        callLog('AppCtrl', '_respondToStickerPackRequest chunk $i failed: $e');
-        return;
+        callLog('AppCtrl', '_respondToStickerPackRequest chunk $seq failed: $e');
+        return false;
       }
+      sent += current.length;
+      seq++;
+      current = <StickerPackChunkSticker>[];
+      currentBytes = 0;
+      return true;
     }
+
+    for (var i = 0; i < plan.length; i++) {
+      final s = plan[i];
+      final inline = await _buildInlineStickerB64(s) ?? '';
+      final withinBudget =
+          DateTime.now().difference(startedAt) < _stickerPackFullQualityBudget;
+      // Анимированным и крупным ссылка нужна всегда — без неё их не передать.
+      // Статичным — пока есть время.
+      final blob = (inline.isEmpty || withinBudget)
+          ? await _stickerBlobForSharing(s)
+          : null;
+      if (inline.isEmpty && blob == null) continue;
+      final item = StickerPackChunkSticker(
+        stickerId: s.stickerId,
+        inlinePngB64: inline,
+        format: s.format.wireValue,
+        animated: s.animated,
+        emojiHint: s.emojiHint,
+        label: s.label,
+        blobId: blob?.blobId ?? '',
+        fileKeyB64: blob?.fileKeyB64 ?? '',
+        accessTokenB64: blob?.accessTokenB64 ?? '',
+        sizeBytes: blob != null ? s.sizeBytes : null,
+      );
+      if (current.isNotEmpty &&
+          (current.length >= kStickerPackMaxStickersPerChunk ||
+              currentBytes + inline.length >
+                  kStickerPackMaxInlineBytesPerChunk)) {
+        if (!await flush(done: false)) break;
+      }
+      current.add(item);
+      currentBytes += inline.length;
+    }
+    // Последний кусок несёт `done` — даже пустой: по нему получатель
+    // завершает установку.
+    await flush(done: true);
     DiagLog.event('stickers', 'pack_answered', {
       'pack': DiagLog.pfx(request.packId),
       'to': DiagLog.pfx(reqPid),
-      'count': total.toString(),
-      'chunks': chunks.length.toString(),
+      'count': sent.toString(),
+      'planned': total.toString(),
+      'chunks': seq.toString(),
     });
   }
+
+  /// Сколько автор тратит на выгрузку полноразмерных копий статичных
+  /// стикеров, прежде чем перейти на один инлайн. С запасом меньше 30 с, через
+  /// которые старая сборка получателя бросает запрос.
+  static const Duration _stickerPackFullQualityBudget = Duration(seconds: 12);
 
   /// Recipient side: apply one inline-PNG chunk of a pack we requested. Writes
   /// each sticker into the same durable cache [ensureUserStickerCached] reads,
@@ -41164,27 +44930,29 @@ class AppController {
         // в сообщении, сети не нужно). Ссылка на блоб — то, чем теперь приезжают
         // анимированные, Lottie и крупные стикеры: раньше они молча
         // выбрасывались на СТОРОНЕ ОТПРАВИТЕЛЯ, и набор доходил обрезанным.
-        Uint8List bytes;
-        if (s.hasInline) {
+        //
+        // Э0 (14.11.2026): если есть оба, первой берётся ссылка — это
+        // полноразмерный файл, а инлайн ужат до 192 px. Не скачалась ссылка
+        // (сеть режет загрузку файлов) — берётся инлайн, как раньше.
+        Uint8List? bytes;
+        var fromInline = false;
+        if (s.hasBlob) bytes = await _fetchSharedStickerBlob(s);
+        if ((bytes == null || bytes.isEmpty) && s.hasInline) {
           bytes = Uint8List.fromList(base64Decode(s.inlinePngB64));
-        } else if (s.hasBlob) {
-          final fetched = await _fetchSharedStickerBlob(s);
-          if (fetched == null) continue;
-          bytes = fetched;
-        } else {
-          continue;
+          fromInline = true;
         }
-        if (bytes.isEmpty) continue;
+        if (bytes == null || bytes.isEmpty) continue;
         // 🔴 Проверка «это PNG» применима ТОЛЬКО к инлайну. Через блоб приезжают
         // Lottie (JSON) и webp, и требовать от них подписи PNG значило бы
         // выбросить ровно то, ради чего блоб-путь и сделан.
-        if (s.hasInline &&
-            !stickerPackBytesLookLikePng(Uint8List.fromList(bytes))) {
+        if (fromInline && !stickerPackBytesLookLikePng(bytes)) {
           continue;
         }
-        final ext = s.format == 'lottie'
-            ? 'json'
-            : (s.format == 'webp' ? 'webp' : 'png');
+        final ext = fromInline
+            ? 'png'
+            : (s.format == 'lottie'
+                  ? 'json'
+                  : (s.format == 'webp' ? 'webp' : 'png'));
         final dest = File('${dir.path}/${s.stickerId}.$ext');
         await dest.writeAsBytes(bytes, flush: true);
         await db.upsertStickerPackSticker(
@@ -41194,8 +44962,8 @@ class AppController {
             stickerId: s.stickerId,
             fileName: '${s.stickerId}.$ext',
             localPath: dest.path,
-            format: s.format.isEmpty ? 'png' : s.format,
-            animated: s.animated,
+            format: fromInline ? 'png' : (s.format.isEmpty ? 'png' : s.format),
+            animated: !fromInline && s.animated,
             emojiHint: s.emojiHint,
             label: s.label,
             keywords: const <String>[],
@@ -41214,6 +44982,7 @@ class AppController {
       _stickerPackExpected[chunk.packId] = chunk.totalCount;
     }
     _stickerPackLastChunkAtMs = now;
+    _stickerPackLastChunkAtMsByPack[chunk.packId] = now;
 
     if (chunk.done) {
       final stickers = await db.listStickerCatalogStickers(
@@ -41255,6 +45024,60 @@ class AppController {
         .where((pack) => pack.id.startsWith('user:'))
         .toList(growable: false);
   }
+
+  /// Набор целиком — со ЗДЕШНЕГО устройства (15.11.2026, ТЗ панели стикеров).
+  ///
+  /// Свой набор — по явному «Удалить набор» с вопросом; чужой — «Убрать из
+  /// моих наборов» (у автора и у других он остаётся). Файлы стикеров не
+  /// трогаем: один и тот же стикер лежит в кеше одним файлом и может быть в
+  /// «Избранном» или другом наборе.
+  Future<void> deleteUserStickerPack(String packId) async {
+    final db = _db;
+    final id = packId.trim();
+    if (db == null || !id.startsWith('user:')) return;
+    await db.deleteStickerCatalogPack(packId: id, packVersion: 1);
+    DiagLog.event('stickers', 'pack_deleted', {
+      'own': id.startsWith('user:${_profileId ?? ''}:'),
+    });
+    await _loadStickerCatalogFromDb();
+    if (!_changed.isClosed) _changed.add(null);
+  }
+
+  String get _favoritesPackId => 'user:${_profileId ?? ''}:favorites';
+
+  /// Стикер уже в «Избранном».
+  bool isStickerFavorite(String stickerId) {
+    final pack = SecretlyStickerCatalog.pickerPacks
+        .where((p) => p.id == _favoritesPackId)
+        .firstOrNull;
+    return pack?.stickers.any((s) => s.stickerId == stickerId) ?? false;
+  }
+
+  /// «Сделать избранным» из панели: тот же путь, что у экрана нового стикера,
+  /// только файл берётся из кеша набора.
+  Future<void> addStickerToFavorites(
+    SecretlyStickerDescriptor sticker, {
+    required String favoritesTitle,
+  }) async {
+    final pid = (_profileId ?? '').trim();
+    if (pid.isEmpty) throw StateError('profile not ready');
+    // В панели у стикеров своих и поставленных наборов путь — файл в кеше.
+    final file = File(sticker.assetPath);
+    if (sticker.assetPath.isEmpty || !await file.exists()) {
+      throw StateError('sticker file unavailable');
+    }
+    await addStickerToUserPack(
+      stickerFile: file,
+      packId: _favoritesPackId,
+      packTitle: favoritesTitle,
+      emoji: sticker.emojiHint,
+      format: sticker.format,
+      animated: sticker.animated,
+    );
+  }
+
+  Future<void> removeStickerFromFavorites(String stickerId) =>
+      deleteUserStickerFromPack(packId: _favoritesPackId, stickerId: stickerId);
 
   /// Remove one sticker from a user pack («изменить»). Drops the pack entirely
   /// once it's empty. Refreshes the catalog + open UI.
@@ -41482,6 +45305,11 @@ class AppController {
     final sendPackTitle = sendPackMeta?.title;
     final sendPackCount = sendPackMeta?.stickers.length;
     final sendPackOriginPid = sticker.packId.startsWith('user:') ? pid : null;
+    // Закрытый набор помечается в самом стикере, чтобы новая сборка
+    // получателя сразу показала замок, а не кнопку «Добавить».
+    final sendPackAccess = (sendPackMeta?.isClosed ?? false)
+        ? StickerEventV1.packAccessClosed
+        : null;
     final payload = E2ePayloadV1(
       senderDeviceId: did,
       createdAtMs: now,
@@ -41650,6 +45478,8 @@ class AppController {
     // this very message stops targeting a stale/dead device_id. Fire-and-forget
     // and per-peer throttled — it never blocks or throws into the send.
     _maybeKickSilenceRecoveryBeforeSend(resolvedPeerProfileId);
+    // Исчезающие (ТЗ 22.10.2026, шаг 3): один срок на все варианты провода.
+    final disappearExp = await _outgoingDisappearSeconds(resolvedPeerProfileId);
 
     final directPayload = E2ePayloadV1(
       senderDeviceId: readyDid,
@@ -41673,6 +45503,7 @@ class AppController {
           sizeBytes: sticker.sizeBytes,
           width: sticker.width,
           height: sticker.height,
+          exp: disappearExp,
         ),
       ],
     );
@@ -41700,10 +45531,16 @@ class AppController {
         createdAtMs: now,
         localState: MessageLocalState.pending,
         payloadEventId: eventId,
+        disappearSeconds: disappearExp,
+        expiresAtMs: disappearExpiryFromSend(
+          seconds: disappearExp,
+          createdAtMs: now,
+        ),
       );
       await db.convoTouch(convoId: resolvedPeerProfileId, atMs: now);
     });
     _changed.add(null);
+    if (disappearExp != null) _kickDisappearingSweep();
 
     // Deferred blob upload: the mirror is on screen now (it renders from the
     // local cache). Upload the pixels so the recipient can fetch them — with a
@@ -41799,6 +45636,8 @@ class AppController {
               packTitle: sendPackTitle,
               packStickerCount: sendPackCount,
               packOriginPid: sendPackOriginPid,
+              packAccess: sendPackAccess,
+              exp: disappearExp,
             ),
           ],
         );
@@ -41826,6 +45665,8 @@ class AppController {
               packTitle: sendPackTitle,
               packStickerCount: sendPackCount,
               packOriginPid: sendPackOriginPid,
+              packAccess: sendPackAccess,
+              exp: disappearExp,
             ),
           ],
         );
@@ -41997,6 +45838,7 @@ class AppController {
           animated: sticker.animated,
           format: sticker.format.wireValue,
           replyToPayloadEventId: replyToPayloadEventId,
+          exp: disappearExp,
         ),
       );
       return eventId;
@@ -42265,6 +46107,9 @@ class AppController {
     }
 
     final eventId = _uuid.v4();
+    // Исчезающие (ТЗ 22.10.2026, шаг 3): срок таймера чата; без таймера или
+    // при закрытом флаге — `null`, и провод ровно прежний.
+    final disappearExp = await _outgoingDisappearSeconds(resolvedPeerProfileId);
 
     final payload = E2ePayloadV1(
       senderDeviceId: readyDid,
@@ -42275,6 +46120,7 @@ class AppController {
           text: text,
           replyToEventId: replyToPayloadEventId,
           linkPreview: outgoingPreview,
+          exp: disappearExp,
         ),
       ],
     );
@@ -42307,10 +46153,16 @@ class AppController {
             : MessageLocalState.pending,
         payloadEventId: eventId,
         scheduledAtMs: scheduledAtMs,
+        disappearSeconds: disappearExp,
+        expiresAtMs: disappearExpiryFromSend(
+          seconds: disappearExp,
+          createdAtMs: now,
+        ),
       );
       await db.convoTouch(convoId: resolvedPeerProfileId, atMs: now);
     });
     _changed.add(null);
+    if (disappearExp != null) _kickDisappearingSweep();
 
     try {
       // Fanout to all known devices of the peer profile.
@@ -42531,6 +46383,7 @@ class AppController {
           createdAtMs: payload.createdAtMs,
           replyToPayloadEventId: replyToPayloadEventId,
           linkPreview: outgoingPreview,
+          exp: disappearExp,
         ),
       );
     } catch (e) {
@@ -42817,9 +46670,28 @@ class AppController {
     int? width,
     int? height,
     String? thumbB64,
+    // 🔴 15.11.2026 (разбор медиа, О1): отмена из пузыря. Раньше короткий путь
+    // (фото и видео до 24 МБ) её не получал: пользователь жал ✕, пузырь
+    // исчезал, а фото всё равно доходило собеседнику.
+    BlobUploadCancelToken? cancelToken,
+    void Function(int sentBytes, int totalBytes)? onUploadProgress,
   }) async {
     // Keep bytes-based API for web/tests/small payloads.
     _throwIfAttachmentTooLarge(bytes.length);
+    if (cancelToken?.isCanceled == true) {
+      throw AttachmentFailure(AttachmentFailureCode.uploadCanceled);
+    }
+    // ТЗ E1, фаза 2: снимок, отданный байтами, чистится так же, как файл.
+    if (kStripImageMetadataOnSend &&
+        (mime ?? '').toLowerCase().startsWith('image/') &&
+        (filename == null || filename.trim().isEmpty)) {
+      final cleaned = scrubImageMetadata(bytes);
+      if (cleaned == null &&
+          imageFormatCarriesMetadata(sniffImageFormat(bytes))) {
+        throw AttachmentFailure(AttachmentFailureCode.metadataScrubFailed);
+      }
+      bytes = cleaned ?? bytes;
+    }
 
     final db = _db;
     final relay = _relay;
@@ -42964,7 +46836,14 @@ class AppController {
     late final EncryptedAttachment uploaded;
     try {
       uploaded = await attachments
-          .encryptAndUpload(bytes, ttlSeconds: 7 * 24 * 60 * 60, mime: mime)
+          .encryptAndUpload(
+            bytes,
+            ttlSeconds: 7 * 24 * 60 * 60,
+            mime: mime,
+            resumable: resumableUploadEnabled,
+            onUploadProgress: onUploadProgress,
+            cancelToken: cancelToken,
+          )
           .timeout(
             _attachmentUploadTimeout,
             onTimeout: () =>
@@ -42975,6 +46854,12 @@ class AppController {
         error,
         fallbackCode: AttachmentFailureCode.serviceUnavailable,
       );
+    }
+
+    // Отмена пришла, пока шла загрузка: на сервере остаётся лишь шифротекст
+    // без ключа (истечёт сам), сообщение не пишем и не рассылаем.
+    if (cancelToken?.isCanceled == true) {
+      throw AttachmentFailure(AttachmentFailureCode.uploadCanceled);
     }
 
     await db.attachmentUpsert(
@@ -42989,6 +46874,11 @@ class AppController {
     );
 
     final eventId = _uuid.v4();
+    // Исчезающие (ТЗ 22.10.2026, шаг 3). Явные адресаты — служебная передача
+    // своим устройствам (привязка ПК), не сообщение собеседнику: без срока.
+    final disappearExp = hasExplicitTargets
+        ? null
+        : await _outgoingDisappearSeconds(resolvedPeerProfileId);
     final payload = E2ePayloadV1(
       senderDeviceId: did,
       createdAtMs: now,
@@ -43010,6 +46900,7 @@ class AppController {
           width: width,
           height: height,
           thumbB64: thumbB64,
+          exp: disappearExp,
         ),
       ],
     );
@@ -43035,6 +46926,7 @@ class AppController {
       final localCipher = await crypto.encrypt(payload.encode());
       final localB64 = base64Encode(localCipher);
       localEventId = 'local:$eventId';
+      _attachmentLocalInsertSeq++; // О2: сообщение уже в истории
       await _retryDbBusy(() async {
         await db.insertEvent(
           eventId: localEventId!,
@@ -43045,10 +46937,16 @@ class AppController {
           createdAtMs: now,
           localState: 'pending',
           payloadEventId: eventId,
+          disappearSeconds: disappearExp,
+          expiresAtMs: disappearExpiryFromSend(
+            seconds: disappearExp,
+            createdAtMs: now,
+          ),
         );
         await db.convoTouch(convoId: resolvedPeerProfileId, atMs: now);
       });
       _changed.add(null);
+      if (disappearExp != null) _kickDisappearingSweep();
     }
 
     try {
@@ -43229,6 +47127,7 @@ class AppController {
             waveform: waveform,
             musicTitle: musicTitle,
             musicArtist: musicArtist,
+            exp: disappearExp,
           ),
         );
       }
@@ -43363,8 +47262,14 @@ class AppController {
     int? durationMs,
     String? musicTitle,
     String? musicArtist,
+    // О10 (разбор медиа 15.11.2026): пропорции и размытый кадр ролика от
+    // отправителя — у получателя до загрузки не серый прямоугольник. Снимок
+    // считает свои сам (по байтам), эти идут, когда своих нет.
+    int? width,
+    int? height,
+    String? thumbB64,
   }) async {
-    final file = File(filePath);
+    var file = File(filePath);
     if (!await file.exists()) {
       throw AttachmentFailure(AttachmentFailureCode.fileMissing);
     }
@@ -43378,8 +47283,23 @@ class AppController {
         : null;
 
     // Guardrail: keep MVP safe for both client and relay.
-    final size = await file.length();
+    var size = await file.length();
     _throwIfAttachmentTooLarge(size);
+    // ТЗ E1, фаза 2: см. [_scrubOutgoingMedia]. Чистим и при пересылке:
+    // полученный от старой сборки снимок мог прийти с геометкой отправителя.
+    {
+      final scrubbed = await _scrubOutgoingMedia(
+        file: file,
+        path: filePath,
+        mime: mime,
+        size: size,
+        filename: resolvedFilename,
+      );
+      file = scrubbed.file;
+      filePath = scrubbed.path;
+      mime = scrubbed.mime;
+      size = scrubbed.size;
+    }
 
     final resolvedMime = (mime != null && mime.trim().isNotEmpty)
         ? mime.trim()
@@ -43454,9 +47374,11 @@ class AppController {
         // the generic "Music / Unknown artist" once the upload settled.
         musicTitle: musicTitle,
         musicArtist: musicArtist,
-        width: bufferedImageDims?.width,
-        height: bufferedImageDims?.height,
-        thumbB64: inlineThumbB64,
+        width: bufferedImageDims?.width ?? width,
+        height: bufferedImageDims?.height ?? height,
+        thumbB64: inlineThumbB64 ?? thumbB64,
+        cancelToken: cancelToken,
+        onUploadProgress: onUploadProgress,
       );
     }
 
@@ -43542,6 +47464,9 @@ class AppController {
             durationMs: durationMs,
             musicTitle: musicTitle,
             musicArtist: musicArtist,
+            width: width,
+            height: height,
+            thumbB64: thumbB64,
           ),
         ],
       );
@@ -43610,6 +47535,7 @@ class AppController {
               onUploadProgress: onUploadProgress,
               onStage: onStage,
               cancelToken: cancelToken,
+              resumable: resumableUploadEnabled,
             )
             .timeout(
               _attachmentUploadTimeout,
@@ -43643,6 +47569,10 @@ class AppController {
     );
 
     final eventId = _uuid.v4();
+    // Исчезающие (ТЗ 22.10.2026, шаг 3); явные адресаты — служебная передача.
+    final disappearExp = hasExplicitTargets
+        ? null
+        : await _outgoingDisappearSeconds(resolvedPeerProfileId);
     final payload = E2ePayloadV1(
       senderDeviceId: did,
       createdAtMs: now,
@@ -43663,6 +47593,10 @@ class AppController {
           durationMs: durationMs,
           musicTitle: musicTitle,
           musicArtist: musicArtist,
+          width: width,
+          height: height,
+          thumbB64: thumbB64,
+          exp: disappearExp,
         ),
       ],
     );
@@ -43686,6 +47620,7 @@ class AppController {
       senderDisplayName: myNickname,
       previewText: _pushTransportPreviewForAttachment(uploaded.mime),
     );
+    _attachmentLocalInsertSeq++; // О2: сообщение уже в истории
     await db.insertEvent(
       eventId: localEventId,
       convoId: resolvedPeerProfileId,
@@ -43695,9 +47630,15 @@ class AppController {
       createdAtMs: now,
       localState: 'pending',
       payloadEventId: eventId,
+      disappearSeconds: disappearExp,
+      expiresAtMs: disappearExpiryFromSend(
+        seconds: disappearExp,
+        createdAtMs: now,
+      ),
     );
     await db.convoTouch(convoId: resolvedPeerProfileId, atMs: now);
     _changed.add(null);
+    if (disappearExp != null) _kickDisappearingSweep();
 
     Future<void> queueForNoDeviceRetry(String reason) async {
       // The blob is already uploaded (7-day TTL). Instead of marking the whole
@@ -43869,6 +47810,7 @@ class AppController {
             waveform: waveform,
             musicTitle: musicTitle,
             musicArtist: musicArtist,
+            exp: disappearExp,
           ),
         );
       }
@@ -43902,15 +47844,171 @@ class AppController {
   /// Best-effort by contract: ANY failure returns the ORIGINAL bytes —
   /// delivery always wins over metadata hygiene. JPEG only in this phase
   /// (Android camera default); HEIC/PNG/WebP are TZ E1 phase 2.
+  ///
+  /// С фазы 2 (14.11.2026) файл к этому месту уже очищен
+  /// [_scrubOutgoingMedia]; здесь — повтор той же очистки по байтам, который
+  /// для чистого снимка возвращает те же байты. Старая очистка библиотекой
+  /// `image` не используется: она теряла ICC перед EXIF и оставляла XMP.
   Uint8List _maybeStripJpegMetadata(Uint8List bytes, String mime) {
     if (!kStripImageMetadataOnSend) return bytes;
-    final m = mime.toLowerCase();
-    if (m != 'image/jpeg' && m != 'image/jpg') return bytes;
+    if (!mime.toLowerCase().startsWith('image/')) return bytes;
+    return scrubImageMetadata(bytes) ?? bytes;
+  }
+
+  /// Самый большой снимок, который очищается в памяти. Больше — отказ: такие
+  /// бывают только у панорам и сканов, и отправлять их с геометкой нельзя.
+  static const int _scrubImageMaxBytes = 128 * 1024 * 1024;
+
+  /// ТЗ E1, фаза 2 (14.11.2026): снимки и ролики уходят без метаданных.
+  ///
+  /// - Снимки (JPEG, PNG, WebP, GIF, HEIC/HEIF/AVIF) чистятся без
+  ///   перекодирования, см. `media_metadata_scrub.dart`. Не разобрался файл —
+  ///   перекодирование кадра (JPEG, у PNG/WebP — PNG). Не вышло и это —
+  ///   отправка останавливается с понятной причиной: исходные байты с
+  ///   геометкой больше не уходят никогда.
+  /// - Ролики MP4/MOV/3GP: блоки с местом съёмки и моделью телефона
+  ///   становятся `free` в копии файла. Другие контейнеры (WebM) — как есть.
+  /// - Файл «как документ» (есть [filename]) — оригинал по выбору человека,
+  ///   как в Telegram: там его и ждут без изменений.
+  ///
+  /// Получатель любой сборки открывает результат как обычный файл того же
+  /// формата. Выключатель — [kStripImageMetadataOnSend].
+  Future<({File file, String path, String? mime, int size})>
+  _scrubOutgoingMedia({
+    required File file,
+    required String path,
+    required String? mime,
+    required int size,
+    String? filename,
+  }) async {
+    final pass = (file: file, path: path, mime: mime, size: size);
+    if (!kStripImageMetadataOnSend) return pass;
+    if (filename != null && filename.trim().isNotEmpty) return pass;
+    final m = (mime ?? '').trim().toLowerCase();
+    final isImage = m.startsWith('image/');
+    final isVideo = m.startsWith('video/');
+    if (!isImage && !isVideo) return pass;
+    unawaited(_sweepOldScrubCopies());
+    if (isImage) {
+      if (size > _scrubImageMaxBytes) {
+        DiagLog.event('media', 'exif_strip_failed', const {'reason': 'size'});
+        throw AttachmentFailure(AttachmentFailureCode.metadataScrubFailed);
+      }
+      final bytes = await file.readAsBytes();
+      final format = sniffImageFormat(bytes);
+      Uint8List? cleaned = scrubImageMetadata(bytes);
+      var outMime = mime;
+      if (cleaned == null) {
+        final re = await _reencodeImageWithoutMetadata(bytes, format);
+        if (re != null) {
+          cleaned = re.bytes;
+          outMime = re.mime;
+        }
+      }
+      if (cleaned == null) {
+        if (!imageFormatCarriesMetadata(format)) return pass;
+        DiagLog.event('media', 'exif_strip_failed', {'format': format.name});
+        throw AttachmentFailure(AttachmentFailureCode.metadataScrubFailed);
+      }
+      if (identical(cleaned, bytes)) return pass;
+      final ext = outMime == mime
+          ? p.extension(path)
+          : (outMime == 'image/png' ? '.png' : '.jpg');
+      final out = await _scrubCopyFile(ext);
+      await out.writeAsBytes(cleaned, flush: true);
+      DiagLog.event('media', 'metadata_scrubbed', {
+        'format': format.name,
+        'reencoded': outMime != mime,
+      });
+      return (file: out, path: out.path, mime: outMime, size: cleaned.length);
+    }
+    // Ролик: читаются только заголовки блоков.
+    List<int>? patches;
+    final raf = await file.open();
     try {
-      return stripJpegMetadataKeepOrientation(bytes);
+      patches = await findVideoMetadataBoxes(raf);
+    } finally {
+      await raf.close();
+    }
+    if (patches == null || patches.isEmpty) return pass;
+    try {
+      final out = await file.copy((await _scrubCopyFile(p.extension(path))).path);
+      final w = await out.open(mode: FileMode.append);
+      try {
+        await applyVideoMetadataPatches(w, patches);
+      } finally {
+        await w.close();
+      }
+      DiagLog.event('media', 'metadata_scrubbed', {
+        'format': 'video',
+        'boxes': patches.length,
+      });
+      return (file: out, path: out.path, mime: mime, size: await out.length());
+    } catch (e) {
+      DiagLog.event('media', 'exif_strip_failed', {
+        'format': 'video',
+        'reason': _classifyShortReason(e),
+      });
+      throw AttachmentFailure(AttachmentFailureCode.metadataScrubFailed);
+    }
+  }
+
+  Future<File> _scrubCopyFile(String ext) async {
+    final tmp = await getTemporaryDirectory();
+    return File(p.join(tmp.path, 'sendstrip_${_uuid.v4()}$ext'));
+  }
+
+  /// Очищенные копии нужны только на время заливки (после неё байты лежат в
+  /// кэше вложений под blobId). Старше суток — удаляются.
+  bool _scrubSweepDone = false;
+  Future<void> _sweepOldScrubCopies() async {
+    if (_scrubSweepDone) return;
+    _scrubSweepDone = true;
+    try {
+      final tmp = await getTemporaryDirectory();
+      final cutoff = DateTime.now().subtract(const Duration(days: 1));
+      await for (final e in tmp.list(followLinks: false)) {
+        if (e is! File) continue;
+        if (!p.basename(e.path).startsWith('sendstrip_')) continue;
+        try {
+          if ((await e.lastModified()).isBefore(cutoff)) await e.delete();
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  /// Запасной путь очистки: кадр перерисовывается заново, метаданных в новом
+  /// файле нет вовсе. Поворот уже применён декодером. Анимацию GIF так не
+  /// сохранить — для него `null`.
+  Future<({Uint8List bytes, String mime})?> _reencodeImageWithoutMetadata(
+    Uint8List bytes,
+    ScrubImageFormat format,
+  ) async {
+    if (format == ScrubImageFormat.gif) return null;
+    ui.ImmutableBuffer? buffer;
+    ui.Codec? codec;
+    ui.Image? frame;
+    try {
+      buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
+      codec = await ui.instantiateImageCodecFromBuffer(buffer);
+      frame = (await codec.getNextFrame()).image;
+      final raw = await frame.toByteData(format: ui.ImageByteFormat.rawRgba);
+      if (raw == null) return null;
+      final png =
+          format == ScrubImageFormat.png || format == ScrubImageFormat.webp;
+      final encoded = await compute(_encodeScrubbedFrame, (
+        rgba: raw.buffer.asUint8List(),
+        width: frame.width,
+        height: frame.height,
+        png: png,
+      ));
+      return (bytes: encoded, mime: png ? 'image/png' : 'image/jpeg');
     } catch (_) {
-      DiagLog.event('media', 'exif_strip_failed', const {});
-      return bytes;
+      return null;
+    } finally {
+      _disposeQuietly(() => frame?.dispose());
+      _disposeQuietly(() => codec?.dispose());
+      _disposeQuietly(() => buffer?.dispose());
     }
   }
 
@@ -44035,7 +48133,7 @@ class AppController {
       }
       final sizeBytes = await file.length();
       _throwIfAttachmentTooLarge(sizeBytes);
-      final resolvedMime =
+      var resolvedMime =
           (request.mime != null && request.mime!.trim().isNotEmpty)
           ? request.mime!.trim()
           : 'application/octet-stream';
@@ -44057,32 +48155,32 @@ class AppController {
       ({int width, int height})? dims;
       String? thumbB64;
       final isImage = resolvedMime.toLowerCase().startsWith('image/');
-      if (isImage && sizeBytes <= _bufferedVisualAttachmentThresholdBytes) {
+      // ТЗ E1, фаза 2: снимки любого формата и ролики — без метаданных; при
+      // неудаче очистки отправка останавливается, исходник не уходит.
+      {
+        final scrubbed = await _scrubOutgoingMedia(
+          file: file,
+          path: path,
+          mime: resolvedMime,
+          size: sizeBytes,
+          filename: resolvedFileName.isEmpty ? null : resolvedFileName,
+        );
+        effectiveFile = scrubbed.file;
+        effectivePath = scrubbed.path;
+        effectiveSize = scrubbed.size;
+        resolvedMime = scrubbed.mime ?? resolvedMime;
+      }
+      if (isImage && effectiveSize <= _bufferedVisualAttachmentThresholdBytes) {
         try {
-          var bytes = await file.readAsBytes();
-          final stripped = _maybeStripJpegMetadata(bytes, resolvedMime);
-          if (!identical(stripped, bytes)) {
-            final tmp = await getTemporaryDirectory();
-            final scrubbed = File(
-              p.join(tmp.path, 'sendstrip_${_uuid.v4()}${p.extension(path)}'),
-            );
-            await scrubbed.writeAsBytes(stripped, flush: true);
-            effectiveFile = scrubbed;
-            effectivePath = scrubbed.path;
-            effectiveSize = stripped.length;
-            bytes = stripped;
-          }
+          final bytes = await effectiveFile.readAsBytes();
           dims = await _imagePixelDimsFromBytes(bytes, resolvedMime);
           thumbB64 = await _buildAttachmentInlineThumbB64(bytes, resolvedMime);
         } catch (_) {
-          effectiveFile = file;
-          effectivePath = path;
-          effectiveSize = sizeBytes;
-          dims = await _readImagePixelDims(file, resolvedMime);
+          dims = await _readImagePixelDims(effectiveFile, resolvedMime);
           thumbB64 = null;
         }
       } else {
-        dims = await _readImagePixelDims(file, resolvedMime);
+        dims = await _readImagePixelDims(effectiveFile, resolvedMime);
       }
       // Подсказки окна отправки (ролик: размеры и миниатюра по кадру) — только
       // там, где из самих байтов ничего не вышло.
@@ -44122,6 +48220,64 @@ class AppController {
       );
     }
     return validated;
+  }
+
+  /// О4 (разбор медиа 15.11.2026): загрузка одного файла альбома.
+  ///
+  /// Отмена → `null` (файл просто выпадает из альбома, как и было). Без
+  /// [onItemFailed] любой другой сбой пробрасывается — прежнее поведение для
+  /// тех, кто его ждёт («Поделиться» из других приложений). С ним: сбой сети
+  /// или сервера даёт ОДИН повтор через 1,5 с; не помогло, или сбой не
+  /// сетевой (файл велик, метаданные не снялись) — файл пропускается,
+  /// причина уходит в [onItemFailed], альбом продолжается.
+  @visibleForTesting
+  static Future<T?> uploadAlbumItem<T extends Object>({
+    required int index,
+    required Future<T> Function() upload,
+    BlobUploadCancelToken? cancelToken,
+    void Function(int index, Object error)? onItemFailed,
+    Duration retryDelay = const Duration(milliseconds: 1500),
+  }) async {
+    for (var attempt = 0; ; attempt++) {
+      try {
+        return await upload();
+      } catch (error) {
+        final code = classifyAttachmentFailure(error);
+        if (code == AttachmentFailureCode.uploadCanceled) return null;
+        if (onItemFailed == null) rethrow;
+        final retryable =
+            code == AttachmentFailureCode.serviceUnavailable ||
+            code == AttachmentFailureCode.uploadTimedOut ||
+            code == AttachmentFailureCode.serverStorageFull;
+        if (attempt == 0 && retryable) {
+          await Future<void>.delayed(retryDelay);
+          if (cancelToken?.isCanceled == true) return null;
+          continue;
+        }
+        DiagLog.event('attachments', 'album_item_skipped', {
+          'index': index,
+          'code': code.name,
+          'attempts': attempt + 1,
+        });
+        onItemFailed(index, error);
+        return null;
+      }
+    }
+  }
+
+  /// О1 (15.11.2026): фото альбома загружаются по одному, и ✕ на первом,
+  /// пока грузится пятое, приходил уже ПОСЛЕ его загрузки — оно уходило.
+  /// Перед рассылкой ещё раз смотрим отмену у каждого готового.
+  void _dropAlbumItemsCancelledAfterUpload(
+    List<_PreparedAttachmentUpload?> prepared,
+    List<BlobUploadCancelToken>? cancelTokens,
+  ) {
+    for (var i = 0; i < prepared.length; i++) {
+      if (prepared[i] != null &&
+          _cancelTokenAt(cancelTokens, i)?.isCanceled == true) {
+        prepared[i] = null;
+      }
+    }
   }
 
   BlobUploadCancelToken? _cancelTokenAt(
@@ -44166,6 +48322,9 @@ class AppController {
               bytes,
               ttlSeconds: 7 * 24 * 60 * 60,
               mime: input.mime,
+              resumable: resumableUploadEnabled,
+              onUploadProgress: onUploadProgress,
+              cancelToken: cancelToken,
             )
             .timeout(
               _attachmentUploadTimeout,
@@ -44177,6 +48336,10 @@ class AppController {
           error,
           fallbackCode: AttachmentFailureCode.serviceUnavailable,
         );
+      }
+      // О1 (15.11.2026): ✕ на фото альбома во время загрузки.
+      if (cancelToken?.isCanceled == true) {
+        throw AttachmentFailure(AttachmentFailureCode.uploadCanceled);
       }
       await _cacheAttachmentBytes(
         blobId: uploaded.blobId,
@@ -44199,6 +48362,7 @@ class AppController {
             onUploadProgress: onUploadProgress,
             onStage: onStage,
             cancelToken: cancelToken,
+            resumable: resumableUploadEnabled,
           )
           .timeout(
             _attachmentUploadTimeout,
@@ -44227,6 +48391,10 @@ class AppController {
     void Function(String stage)? onStage,
     void Function(int index, int sentBytes, int totalBytes)? onUploadProgress,
     List<BlobUploadCancelToken>? cancelTokens,
+    // О4 (разбор медиа 15.11.2026): задан — альбом терпит сбой отдельного
+    // файла (один повтор, затем файл пропускается и сообщается сюда), и
+    // остальное уходит. Не задан — как раньше: сбой любого срывает всё.
+    void Function(int index, Object error)? onItemFailed,
     String? caption,
   }) async {
     final validated = await _validateAttachmentFileRequests(files);
@@ -44363,15 +48531,23 @@ class AppController {
     // Nullable slots — a cancelled album item (per-photo ✕) leaves a null here
     // and is skipped downstream, so cancelling ONE photo never aborts the rest.
     final prepared = <_PreparedAttachmentUpload?>[];
+    Object? firstItemFailure;
+    void noteItemFailure(int index, Object error) {
+      firstItemFailure ??= error;
+      onItemFailed?.call(index, error);
+    }
     for (var index = 0; index < validated.length; index++) {
       final token = _cancelTokenAt(cancelTokens, index);
       if (token?.isCanceled == true) {
         prepared.add(null);
         continue;
       }
-      try {
-        prepared.add(
-          await _uploadValidatedAttachmentFile(
+      prepared.add(
+        await uploadAlbumItem<_PreparedAttachmentUpload>(
+          index: index,
+          cancelToken: token,
+          onItemFailed: onItemFailed == null ? null : noteItemFailure,
+          upload: () => _uploadValidatedAttachmentFile(
             input: validated[index],
             attachments: attachments,
             tempDir: tempDir,
@@ -44380,18 +48556,15 @@ class AppController {
             onUploadProgress: (sentBytes, totalBytes) =>
                 onUploadProgress?.call(index, sentBytes, totalBytes),
           ),
-        );
-      } on AttachmentFailure catch (e) {
-        // This one item was cancelled mid-upload — drop it, keep the album.
-        if (e.code == AttachmentFailureCode.uploadCanceled) {
-          prepared.add(null);
-          continue;
-        }
-        rethrow;
-      }
+        ),
+      );
     }
-    // Everything got cancelled → treat as a full-album cancel.
+    _dropAlbumItemsCancelledAfterUpload(prepared, cancelTokens);
+    // Everything got cancelled → treat as a full-album cancel; nothing left
+    // because every item FAILED (О4) → that failure, not a fake «cancel».
     if (prepared.every((p) => p == null)) {
+      final failure = firstItemFailure;
+      if (failure != null) throw failure;
       throw AttachmentFailure(AttachmentFailureCode.uploadCanceled);
     }
 
@@ -44401,6 +48574,8 @@ class AppController {
     final localEventIds = <String>[];
     final payloadBytesByEvent = <String, Uint8List>{};
     final transportMetaByEvent = <String, String?>{};
+    // Исчезающие (ТЗ 22.10.2026, шаг 3): один срок на весь альбом.
+    final disappearExp = await _outgoingDisappearSeconds(resolvedPeerProfileId);
 
     for (var index = 0; index < prepared.length; index++) {
       final item = prepared[index];
@@ -44440,6 +48615,7 @@ class AppController {
             durationMs: input.durationMs,
             musicTitle: input.musicTitle,
             musicArtist: input.musicArtist,
+            exp: disappearExp,
           ),
         ],
       );
@@ -44465,6 +48641,11 @@ class AppController {
         createdAtMs: createdAt,
         localState: 'pending',
         payloadEventId: eventId,
+        disappearSeconds: disappearExp,
+        expiresAtMs: disappearExpiryFromSend(
+          seconds: disappearExp,
+          createdAtMs: createdAt,
+        ),
       );
       eventIds.add(eventId);
       localEventIds.add(localEventId);
@@ -44615,9 +48796,11 @@ class AppController {
             durationMs: item.input.durationMs,
             musicTitle: item.input.musicTitle,
             musicArtist: item.input.musicArtist,
+            exp: disappearExp,
           ),
         );
       }
+      if (disappearExp != null) _kickDisappearingSweep();
       return eventIds;
     } catch (error) {
       for (final localEventId in localEventIds) {
@@ -44642,11 +48825,17 @@ class AppController {
     void Function(String stage)? onStage,
     void Function(int index, int sentBytes, int totalBytes)? onUploadProgress,
     List<BlobUploadCancelToken>? cancelTokens,
+    // О4 (разбор медиа 15.11.2026): задан — альбом терпит сбой отдельного
+    // файла (один повтор, затем файл пропускается и сообщается сюда), и
+    // остальное уходит. Не задан — как раньше: сбой любого срывает всё.
+    void Function(int index, Object error)? onItemFailed,
     String? caption,
     // Тема комнаты — как у одиночной отправки ([sendGroupAttachmentFile]):
     // альбом телефона и пачка компьютера уходят в открытую тему.
     String? topicId,
   }) async {
+    // Список тем — раньше сообщения в тему (см. [shouldResendRoomTopics]).
+    unawaited(_maybeResendRoomTopics(groupId, topicId));
     final normalizedTopicId = (topicId ?? '').trim().isEmpty
         ? null
         : topicId!.trim();
@@ -44700,15 +48889,23 @@ class AppController {
     // Nullable slots — a cancelled album item (per-photo ✕) leaves a null and is
     // skipped downstream, so cancelling ONE photo never aborts the rest.
     final prepared = <_PreparedAttachmentUpload?>[];
+    Object? firstItemFailure;
+    void noteItemFailure(int index, Object error) {
+      firstItemFailure ??= error;
+      onItemFailed?.call(index, error);
+    }
     for (var index = 0; index < validated.length; index++) {
       final token = _cancelTokenAt(cancelTokens, index);
       if (token?.isCanceled == true) {
         prepared.add(null);
         continue;
       }
-      try {
-        prepared.add(
-          await _uploadValidatedAttachmentFile(
+      prepared.add(
+        await uploadAlbumItem<_PreparedAttachmentUpload>(
+          index: index,
+          cancelToken: token,
+          onItemFailed: onItemFailed == null ? null : noteItemFailure,
+          upload: () => _uploadValidatedAttachmentFile(
             input: validated[index],
             attachments: attachments,
             tempDir: tempDir,
@@ -44717,16 +48914,13 @@ class AppController {
             onUploadProgress: (sentBytes, totalBytes) =>
                 onUploadProgress?.call(index, sentBytes, totalBytes),
           ),
-        );
-      } on AttachmentFailure catch (e) {
-        if (e.code == AttachmentFailureCode.uploadCanceled) {
-          prepared.add(null);
-          continue;
-        }
-        rethrow;
-      }
+        ),
+      );
     }
+    _dropAlbumItemsCancelledAfterUpload(prepared, cancelTokens);
     if (prepared.every((p) => p == null)) {
+      final failure = firstItemFailure;
+      if (failure != null) throw failure;
       throw AttachmentFailure(AttachmentFailureCode.uploadCanceled);
     }
 
@@ -44749,6 +48943,9 @@ class AppController {
     }
     final baseNow = DateTime.now().millisecondsSinceEpoch;
     final sends = <_PreparedGroupAttachmentSend>[];
+    // Исчезающие (ТЗ 22.10.2026): один срок на весь альбом.
+    final roomDisappear = await _roomDisappearEnvelopeFields(groupId);
+    final roomExp = roomDisappear['exp'] as int?;
 
     for (var index = 0; index < prepared.length; index++) {
       final item = prepared[index];
@@ -44799,6 +48996,7 @@ class AppController {
             durationMs: input.durationMs,
             musicTitle: input.musicTitle,
             musicArtist: input.musicArtist,
+            exp: roomExp,
           ),
         ],
       );
@@ -44824,7 +49022,13 @@ class AppController {
         createdAtMs: createdAt,
         localState: 'pending',
         payloadEventId: messageId,
+        disappearSeconds: roomExp,
+        expiresAtMs: disappearExpiryFromSend(
+          seconds: roomExp,
+          createdAtMs: createdAt,
+        ),
       );
+      if (roomExp != null) _kickDisappearingSweep();
       sends.add(
         _PreparedGroupAttachmentSend(
           messageId: messageId,
@@ -44833,6 +49037,7 @@ class AppController {
           envelope: <String, Object?>{
             'v': 1,
             'kind': 'attachment',
+            ...roomDisappear,
             'groupId': groupId,
             'groupTitle': groupTitle,
             'msgEventId': messageId,
@@ -44884,8 +49089,13 @@ class AppController {
         memberProfileIds: recipients,
       );
       var perSendDelivered = 0;
-      // К-3: конверт — для повтора тому, у кого пропуск.
-      await _rememberRoomEnvelope(db: db, roomId: groupId, controlText: controlText);
+      // К-3 v2: запечатанный провод — для повтора тому, у кого пропуск.
+      await _rememberRoomWire(
+        db: db,
+        roomId: groupId,
+        controlText: controlText,
+        sealedEvents: roomWireEvents,
+      );
       // К-2: один запрос к реле для тех, кто умеет сырой провод.
       final rawRemaining = await _roomRawBroadcast(
         db: db,
@@ -45076,6 +49286,7 @@ class AppController {
     }
 
     await db.markEventsReadByIds(eventIds, readAtMs: now);
+    _kickDisappearingSweep();
     final relay = _relay;
     if (!_transportBlocked) {
       _kickRelayOutbox(relay);
@@ -45339,6 +49550,17 @@ class AppController {
       // stored, exactly as the setter does.
       await _applyAutoDeleteRetentionForConvo(convoId);
     }
+    if (cmd.disappearSet) {
+      // Общий таймер чата, выставленный на другом своём устройстве (ТЗ
+      // 22.10.2026). Заметку в ленте ставит команда таймера, которая уходит и
+      // своим устройствам; зеркало состояния может прийти раньше неё или
+      // вместо неё (старый путь), поэтому здесь — только значение.
+      await db.convoSetDisappearSeconds(
+        convoId: convoId,
+        disappearSeconds: cmd.disappearSeconds,
+      );
+      _kickDisappearingSweep();
+    }
 
     if (touchedMute) refreshPushNotificationPolicy();
     DiagLog.event('selfsync', 'convo_state_applied', {
@@ -45348,6 +49570,7 @@ class AppController {
       'archived': cmd.archived,
       'personal': cmd.personal,
       'auto_delete_set': cmd.autoDeleteSet,
+      'disappear_set': cmd.disappearSet,
     });
     if (!_changed.isClosed) _changed.add(null);
   }
@@ -45626,6 +49849,7 @@ class AppController {
         return;
       }
       if (marked <= 0) return;
+      _kickDisappearingSweep();
       try {
         await _nativeMsgNotifChannel.invokeMethod('cancel', <String, dynamic>{
           'convoId': cmd.convoId,
@@ -45668,6 +49892,7 @@ class AppController {
           ? cmd.appliedAtMs
           : DateTime.now().millisecondsSinceEpoch,
     );
+    _kickDisappearingSweep();
     // The badge is gone; so should be the banner that announced it.
     try {
       await _nativeMsgNotifChannel.invokeMethod('cancel', <String, dynamic>{
@@ -48397,12 +52622,11 @@ class AppController {
       } catch (_) {
         // best-effort — retried on the next sweep tick
       }
-      if (!roomMissedResendEnabled) {
-        // К-3 выключен: конверты с открытым текстом хранить незачем.
-        try {
-          await db.roomOutboundEnvelopesClear();
-        } catch (_) {}
-      }
+      // К-3 v2 хранит только шифротекст: открытые конверты первой версии,
+      // если остались в базе, стираются.
+      try {
+        await db.roomOutboundEnvelopesClear();
+      } catch (_) {}
       List<Map<String, Object?>> senders;
       try {
         senders = await db.inboxQuarantineSendersWithOldest();
@@ -48661,7 +52885,10 @@ class AppController {
       );
       final box = await RoomKeyChain.encrypt(
         messageKey: slot.messageKey,
-        plaintext: Uint8List.fromList(inner.encode()),
+        // Б2: длина выравнивается и в рассылке комнаты по общему ключу —
+        // сервер иначе видел бы длину каждого сообщения комнаты до байта.
+        // Участники любых сборок читают выровненное как обычное.
+        plaintext: _wirePlaintext(Uint8List.fromList(inner.encode())),
         aad: slot.aad,
       );
       final sealedNonce = base64Decode(box.nonceB64);
@@ -48868,6 +53095,40 @@ class AppController {
 
   /// Hands the current room key to [devices], one pairwise envelope each, and
   /// records the delivery so it is not sent again for this generation.
+  /// Может ли этот профиль получить мой ключ комнаты по запросу `gkeyreq`:
+  /// мои же устройства — да, участник по моему списку состава — да, все
+  /// остальные — нет. Список состава — тот же, по которому идёт рассылка.
+  Future<bool> _roomKeyRequesterIsMemberOrSelf({
+    required AppDb db,
+    required String roomId,
+    required String requesterProfileId,
+  }) async {
+    final pid = requesterProfileId.trim();
+    final self = (_profileId ?? '').trim();
+    if (roomKeyRequesterAllowed(
+      requesterProfileId: pid,
+      selfProfileId: self,
+      memberProfileIds: const <String>[],
+    )) {
+      return true;
+    }
+    if (pid.isEmpty) return false;
+    try {
+      final rows = await db.groupMembersList(roomId);
+      return roomKeyRequesterAllowed(
+        requesterProfileId: pid,
+        selfProfileId: self,
+        memberProfileIds: rows.map(
+          (r) => (r['member_profile_id'] as String?) ?? '',
+        ),
+      );
+    } catch (_) {
+      // Не смогли прочитать состав — ключ не отдаём: отказ здесь ничего не
+      // ломает, участник получит ключ при следующей отправке.
+      return false;
+    }
+  }
+
   Future<void> _deliverRoomKeyTo({
     required AppDb db,
     required String roomId,
@@ -48948,6 +53209,21 @@ class AppController {
   /// Getting this backwards is expensive in both directions: acknowledging a
   /// wire we could still open loses the message permanently, while parking one
   /// we can never open replays it forever.
+  /// Правило ответа на `gkeyreq` (11.11.2026): ключ комнаты получает только
+  /// моё же устройство или участник по моему списку состава.
+  @visibleForTesting
+  static bool roomKeyRequesterAllowed({
+    required String requesterProfileId,
+    required String selfProfileId,
+    required Iterable<String> memberProfileIds,
+  }) {
+    final pid = requesterProfileId.trim();
+    if (pid.isEmpty) return false;
+    final self = selfProfileId.trim();
+    if (self.isNotEmpty && pid == self) return true;
+    return memberProfileIds.any((m) => m.trim() == pid);
+  }
+
   static bool roomWireShouldPark(RoomWireOutcome outcome) {
     switch (outcome) {
       // Recoverable — the key may still arrive (`gkeyreq` asks for it), so keep
@@ -49059,7 +53335,27 @@ class AppController {
           final pid = (senderProfileId ?? '').trim().isNotEmpty
               ? senderProfileId!.trim()
               : ((await db.deviceProfileCached(sdid))?.trim() ?? '');
-          if (pid.isNotEmpty) {
+          // 11.11.2026: ключ — только участнику комнаты или моему же
+          // устройству. Раньше его получал любой, у кого есть попарная сессия
+          // с автором: с включённой сырой рассылкой это позволило бы читать
+          // комнату, не появляясь в списке участников. Участник, которого
+          // нет в моём списке, потому что список ещё не обновился, ключ
+          // получит обычным путём — при следующей отправке после обновления
+          // состава (prepareSend раздаёт ключ всем, у кого его нет).
+          final requesterAllowed =
+              pid.isNotEmpty &&
+              await _roomKeyRequesterIsMemberOrSelf(
+                db: db,
+                roomId: event.roomId,
+                requesterProfileId: pid,
+              );
+          if (pid.isNotEmpty && !requesterAllowed) {
+            DiagLog.event('room_key', 'key_request_refused_not_member', {
+              'room': DiagLog.pfx(event.roomId),
+              'from': DiagLog.pfx(sdid),
+            });
+          }
+          if (requesterAllowed) {
             // Always the CURRENT generation, not the one they named: if we have
             // rotated since, the old one is exactly what they must not get.
             unawaited(
@@ -49540,6 +53836,15 @@ class AppController {
       allEvents.whereType<AttachmentEventV1>(),
     );
     for (final msgEvent in allEvents.whereType<MsgEventV1>()) {
+      // Э3: команды хранителей. Никогда не попадают в ленту.
+      if (msgEvent.text.startsWith('__secretly_guardian_')) {
+        await _handleGuardianCommand(
+          text: msgEvent.text,
+          senderProfileId: senderProfileId,
+        );
+        handledCommand = true;
+        continue;
+      }
       final editCmd = parseEditMessageCommand(msgEvent.text);
       if (editCmd != null) {
         await _applyMessageEditCommand(
@@ -49583,6 +53888,31 @@ class AppController {
         // отметки сообщение проваливалось в путь обычного: скрытой строкой в
         // чат с самим собой и вечным отчётом своему же устройству (очередь
         // отчётов росла без конца). Так же у папок и состояния чата ниже.
+        handledCommand = true;
+        continue;
+      }
+
+      // Исчезающие сообщения: смена таймера чата (ТЗ 22.10.2026, §2.1) — от
+      // собеседника в 1:1 или от своего устройства.
+      final timerCmd = parseConvoTimerCommand(msgEvent.text);
+      if (timerCmd != null) {
+        final myPid = (_profileId ?? '').trim();
+        final senderDid = (senderDeviceId ?? '').trim();
+        final senderIsOwn =
+            (senderDid.isNotEmpty && isOwnDeviceId(senderDid)) ||
+            ((senderProfileId ?? '').trim() == myPid && myPid.isNotEmpty);
+        DiagLog.event('disappearing', 'timer_cmd_received', {
+          'sender_own': senderIsOwn,
+          'sender_dev': DiagLog.pfx(senderDid),
+          'convo': DiagLog.pfx(timerCmd.convoId),
+          'seconds': timerCmd.seconds,
+        });
+        await _applyConvoTimerCommand(
+          cmd: timerCmd,
+          senderIsOwn: senderIsOwn,
+          senderProfileId: (senderProfileId ?? '').trim(),
+          now: now,
+        );
         handledCommand = true;
         continue;
       }
@@ -49819,8 +54149,18 @@ class AppController {
                 createdAtMs: mirroredCreatedAt,
                 localState: 'sent',
                 payloadEventId: msgEventId,
+                // Исчезающие: своя копия с другого устройства — тот же срок,
+                // отсчёт от отправки (§2.1).
+                disappearSeconds: disappearSecondsFromJson(selfMirrorCmd['exp']),
+                expiresAtMs: disappearExpiryFromSend(
+                  seconds: disappearSecondsFromJson(selfMirrorCmd['exp']),
+                  createdAtMs: mirroredCreatedAt,
+                ),
               );
               await db.convoTouch(convoId: convoId, atMs: mirroredCreatedAt);
+              if (disappearSecondsFromJson(selfMirrorCmd['exp']) != null) {
+                _kickDisappearingSweep();
+              }
               DiagLog.event('selfsync', 'text_applied', {
                 'convo': DiagLog.pfx(convoId),
                 'evt': DiagLog.pfx(msgEventId),
@@ -49922,6 +54262,12 @@ class AppController {
             chunk: packChunk,
             fromProfileId: fromPid,
           );
+          handledCommand = true;
+          continue;
+        }
+        final packDenied = parseStickerPackDenied(msgEvent.text);
+        if (packDenied != null) {
+          _applyStickerPackDenied(denied: packDenied, fromProfileId: fromPid);
           handledCommand = true;
           continue;
         }
@@ -50028,7 +54374,13 @@ class AppController {
                 createdAtMs: mirroredCreatedAt,
                 localState: 'sent',
                 payloadEventId: msgEventId,
+                disappearSeconds: selfMirrorAttCmd.exp,
+                expiresAtMs: disappearExpiryFromSend(
+                  seconds: selfMirrorAttCmd.exp,
+                  createdAtMs: mirroredCreatedAt,
+                ),
               );
+              if (selfMirrorAttCmd.exp != null) _kickDisappearingSweep();
               await db.convoTouch(convoId: convoId, atMs: mirroredCreatedAt);
             }
             _rememberOwnDeviceId(effectiveSenderDid);
@@ -50105,7 +54457,13 @@ class AppController {
                 createdAtMs: mirroredCreatedAt,
                 localState: 'sent',
                 payloadEventId: msgEventId,
+                disappearSeconds: selfMirrorStickerCmd.exp,
+                expiresAtMs: disappearExpiryFromSend(
+                  seconds: selfMirrorStickerCmd.exp,
+                  createdAtMs: mirroredCreatedAt,
+                ),
               );
+              if (selfMirrorStickerCmd.exp != null) _kickDisappearingSweep();
               await db.convoTouch(convoId: convoId, atMs: mirroredCreatedAt);
             }
             _rememberOwnDeviceId(effectiveSenderDid);
@@ -50356,6 +54714,39 @@ class AppController {
               createdAtMs: signalCreatedAtMs,
             ),
           );
+        }
+        handledCommand = true;
+        continue;
+      }
+
+      // ── Ключи зашифрованного созвона (ТЗ E2EE созвонов, §4.2–§4.3) ──
+      // Всегда «обработано»: ни ключ, ни его обломки не попадают в
+      // переписку, копии и синхронизацию своих устройств. Принимаются только
+      // по попарной сессии (не изнутри конверта ключа комнаты) и только от
+      // отправителя, которого подтвердило реле.
+      if (RoomCallKeyCommandCodec.isEncodedText(msgEvent.text)) {
+        final keyCmd = RoomCallKeyCommandCodec.decode(msgEvent.text);
+        final keySenderDevice = (senderDeviceId ?? '').trim();
+        final keySenderProfile = (senderProfileId ?? '').trim();
+        if (keyCmd != null &&
+            senderAttested &&
+            roomKeyWireDepth == 0 &&
+            keySenderDevice.isNotEmpty &&
+            keySenderProfile.isNotEmpty) {
+          _deliverRoomCallKeyCommand(
+            InboundRoomCallKeyCommand(
+              command: keyCmd,
+              senderProfileId: keySenderProfile,
+              senderDeviceId: keySenderDevice,
+              receivedAtMs: now,
+            ),
+          );
+        } else {
+          DiagLog.event('call_e2ee', 'key_cmd_dropped', <String, Object?>{
+            'parsed': keyCmd != null,
+            'attested': senderAttested,
+            'room_wire': roomKeyWireDepth,
+          });
         }
         handledCommand = true;
         continue;
@@ -50666,6 +55057,9 @@ class AppController {
         final stickerPackCount = (groupCmd['packStickerCount'] as num?)?.toInt();
         final stickerPackOriginPid = (groupCmd['packOriginPid'] as String?)
             ?.trim();
+        final stickerPackAccess = groupCmd['packAccess'] is String
+            ? (groupCmd['packAccess'] as String).trim()
+            : null;
         final shouldNotifyVisibleGroupMessage =
             kind == 'message' &&
             !isDeleteForAllCommandText(bodyText) &&
@@ -50698,6 +55092,32 @@ class AppController {
                 .map((row) => (row['member_profile_id'] as String?) ?? '')
                 .where((memberId) => memberId.isNotEmpty)
                 .toSet();
+            // 🔴 13.11.2026: отправитель не опознан (устройства нет в кэше, а
+            // спросить сервер ключей сейчас нельзя — фон, блокировка сети).
+            // Раньше проверка состава в этом случае просто пропускалась, и
+            // исключённый участник с нового устройства мог писать в комнату,
+            // в том числе служебными сообщениями. Теперь такое сообщение
+            // откладывается (как от ещё не подтверждённого участника):
+            // отложенный проход опознаёт профиль по устройству и применяет
+            // сообщение, только если отправитель — участник. Ничего не
+            // теряется, но и ничего не принимается вслепую.
+            if (senderProfile.isEmpty &&
+                !fromDeferredReplay &&
+                (senderDeviceId ?? '').trim().isNotEmpty) {
+              await _storeDeferredRoomInbound(
+                db: db,
+                groupId: groupId,
+                senderProfile: '',
+                senderDeviceId: senderDeviceId,
+                msgEventId: msgEventId,
+                commandText: msgEvent.text,
+                msgId: msgId,
+                ciphertextB64: ciphertextB64,
+                createdAtMs: groupCreatedAtMs,
+              );
+              handledCommand = true;
+              continue;
+            }
             if (senderProfile.isNotEmpty &&
                 !authoritativeMembers.contains(senderProfile)) {
               if (fromDeferredReplay) {
@@ -50873,6 +55293,11 @@ class AppController {
                               stickerPackOriginPid.isNotEmpty)
                           ? stickerPackOriginPid
                           : null,
+                      packAccess:
+                          (stickerPackAccess != null &&
+                              stickerPackAccess.isNotEmpty)
+                          ? stickerPackAccess
+                          : null,
                     ),
                   ],
                 )
@@ -50970,11 +55395,53 @@ class AppController {
               createdAtMs: groupCreatedAtMs,
               localState: inboundIsOwnSend ? 'sent' : 'received',
               payloadEventId: msgEventId,
+              // Исчезающие (ТЗ 22.10.2026): срок едет в команде комнаты как
+              // `exp`; старые сборки ключ пропускают.
+              disappearSeconds: kind == 'system'
+                  ? null
+                  : disappearSecondsFromJson(groupCmd['exp']),
+              expiresAtMs: (kind != 'system' && inboundIsOwnSend)
+                  ? disappearExpiryFromSend(
+                      seconds: disappearSecondsFromJson(groupCmd['exp']),
+                      createdAtMs: groupCreatedAtMs,
+                    )
+                  : null,
             );
+            if (kind != 'system' &&
+                disappearSecondsFromJson(groupCmd['exp']) != null) {
+              _kickDisappearingSweep();
+            }
             await db.convoTouch(
               convoId: groupId,
               atMs: DateTime.now().millisecondsSinceEpoch,
             );
+            // Исчезающие (ТЗ 22.10.2026): смена таймера комнаты или его
+            // состояние в сообщении администратора. Права проверяются там.
+            try {
+              await _maybeApplyInboundRoomTimer(
+                groupId: groupId,
+                kind: kind,
+                bodyText: bodyText,
+                groupCmd: groupCmd,
+                senderProfileId: senderProfile.isNotEmpty
+                    ? senderProfile
+                    : '',
+                isOwn: inboundIsOwnSend,
+                atMs: groupCreatedAtMs,
+              );
+            } catch (_) {
+              // Таймер — вторично; сообщение уже принято.
+            }
+            if (kind != 'attachment' &&
+                kind != 'sticker' &&
+                kind != 'system' &&
+                isTopicsSyncCommandText(bodyText)) {
+              await _adoptInboundRoomTopics(
+                groupId: groupId,
+                text: bodyText,
+                atMs: groupCreatedAtMs,
+              );
+            }
             // ROOM DELIVERED RECEIPT (2026-07-30). Until now a room emitted no
             // `delivered` receipt at all — only `read`, and only when the user
             // opened the room. Two things were broken by that:
@@ -51259,6 +55726,11 @@ class AppController {
     // `events` and is NOT deduped here — it applies normally. Scoped to a visible
     // peer message in the same convo so cross-convo self-mirrors and hidden
     // controls/edits are untouched.
+    // Исчезающие (ТЗ 22.10.2026): срок из первого события, если он есть.
+    final firstEventForExpiry = firstEvent;
+    final inboundDisappearSeconds = firstEventForExpiry is E2eEventV1
+        ? disappearSecondsOf(firstEventForExpiry)
+        : null;
     final dedupPayloadEventId = (payloadEventId ?? '').trim();
     if (firstEventIsVisibleMessage &&
         !inboundDirectIsOwnSend &&
@@ -51295,7 +55767,21 @@ class AppController {
       // mine) must never count as unread for me — insert it already-read.
       readAtMs: inboundDirectIsOwnSend ? now : null,
       payloadEventId: payloadEventId,
+      // Исчезающие (ТЗ 22.10.2026, §2.1): срок из сообщения; своя копия —
+      // отсчёт от отправки, чужая — от прочтения (ставится при прочтении).
+      disappearSeconds: firstEventIsVisibleMessage
+          ? inboundDisappearSeconds
+          : null,
+      expiresAtMs: (firstEventIsVisibleMessage && inboundDirectIsOwnSend)
+          ? disappearExpiryFromSend(
+              seconds: inboundDisappearSeconds,
+              createdAtMs: inboundCreatedAtMs,
+            )
+          : null,
     );
+    if (firstEventIsVisibleMessage && inboundDisappearSeconds != null) {
+      _kickDisappearingSweep();
+    }
     if (inboundDirectIsOwnSend) {
       DiagLog.event('selfsync', 'direct_raw_own_persisted_sent', {
         'convo': DiagLog.pfx(convoId),
@@ -51694,7 +56180,9 @@ class AppController {
         selfDeviceId: selfDeviceId,
         peerProfileId: peerProfileId,
         peerDeviceId: peerDeviceId,
-        plaintext: plaintext,
+        // Б2: выравнивание длины — здесь, в единственной точке шифрования к
+        // собеседнику. Своя копия в базе не выравнивается.
+        plaintext: _wirePlaintext(plaintext),
         forceSpkOnly: forceSpkOnly,
         // С-2: профиль нужен, чтобы прочитать ключ личности для подписи
         // рукопожатия. Ключ читается без создания: не тот профиль — просто
@@ -52960,30 +57448,51 @@ class AppController {
   /// from in their own 1:1 conversation has no aliveness evidence and is
   /// skipped. Per-member room evidence needs `room_message_receipts` and is the
   /// next step; skipping is the safe direction (no churn).
-  /// К-3 (17.09.2026): повторять ли пропущенные сообщения комнаты участнику.
+  /// К-3 v2 (06.10.2026): повтор пропущенных сообщений комнаты участнику.
   ///
-  /// 🔴 ВЫКЛЮЧЕНО (17.09.2026, ревью перед 601): окно повтора забивалось
-  /// старыми сообщениями, новичку уходили сообщения до его вступления, копия
-  /// могла уйти в сломанную сессию, а конверты с открытым текстом переживали
-  /// удаление. Включать только после переделки.
+  /// 🔴 ПЕРВАЯ ВЕРСИЯ (17.09) БЫЛА ВЫКЛЮЧЕНА НА РЕВЮ ПЕРЕД 601 — по четырём
+  /// причинам. Здесь каждая закрыта устройством, а не флажком:
+  ///
+  /// 1. «Окно повтора забивалось старыми сообщениями». Выбор брал десять
+  ///    самых старых должников и уже ПОТОМ отбрасывал повторённые — десять
+  ///    повторённых навсегда занимали окно. Теперь повторённые отсекает сам
+  ///    запрос, до предела ([AppDb.roomSendsOwedTo]), а окно ограничено
+  ///    сроком посылки на реле ([_roomMissedResendWindowMs]).
+  /// 2. «Новичку уходили сообщения до его вступления». Теперь участнику
+  ///    повторяется только отправленное ПОСЛЕ его вступления в комнату.
+  /// 3. «Копия могла уйти в сломанную сессию». Повтор шёл попарной сессией —
+  ///    той самой, из-за которой сообщение и не дошло. Теперь повторяется
+  ///    ЗАПЕЧАТАННЫЙ провод под ключом комнаты, через реле, только на
+  ///    устройства, подтвердившие сырой провод этого поколения: попарная
+  ///    сессия не участвует вовсе. Нет такого устройства — повтора нет.
+  /// 4. «Конверты с открытым текстом переживали удаление». Теперь хранится
+  ///    только шифротекст; удаление «у всех» стирает его сразу
+  ///    ([_dispatchGroupMessageNow]), удаление у себя и исчезающие
+  ///    сообщения — при ближайшем обходе ([AppDb.roomOutboundPrune]).
+  ///    Старые открытые конверты стираются на каждом обходе.
+  ///
+  /// Выключатель на сервере — тот же, что у рассылки сырым проводом
+  /// (`rooms2.raw_broadcast_enabled`): без неё повторить нечем.
   @visibleForTesting
-  static bool roomMissedResendEnabled = false;
+  static bool roomMissedResendEnabled = true;
 
   static const int _roomMissedResendPerMember = 10;
-  static const int _roomEnvelopeKeepMs = 7 * 24 * 60 * 60 * 1000;
 
-  /// Отправитель повтора в тестах (вместо `sendControlMessage`).
+  /// Окно повтора — срок жизни посылки на реле: что старше, не догоняем.
+  static const int _roomMissedResendWindowMs = 3 * 24 * 60 * 60 * 1000;
+
+  /// Отправитель повтора в тестах (вместо реле): участник и провод.
   @visibleForTesting
-  Future<void> Function(String memberProfileId, String envelope)?
+  Future<void> Function(String memberProfileId, String wireB64)?
   roomResendSenderForTesting;
 
-  Future<void> _rememberRoomEnvelope({
-    required AppDb db,
-    required String roomId,
-    required String controlText,
-  }) async {
-    if (!roomMissedResendEnabled) return;
-    if (!controlText.startsWith(_groupMsgCmdPrefix)) return;
+  bool get _roomMissedResendActive =>
+      roomMissedResendEnabled &&
+      (_rooms2Flags.rawBroadcastEnabled || roomResendSenderForTesting != null);
+
+  /// Номер сообщения из конверта комнаты (`msgEventId`), или null.
+  static String? _groupEnvelopeMsgEventId(String controlText) {
+    if (!controlText.startsWith(_groupMsgCmdPrefix)) return null;
     try {
       final decoded = jsonDecode(
         utf8.decode(
@@ -52991,21 +57500,59 @@ class AppController {
         ),
       );
       final id = decoded is Map ? (decoded['msgEventId'] as String?) : null;
-      if (id == null || id.trim().isEmpty) return;
-      await db.roomOutboundEnvelopePut(
-        payloadEventId: id.trim(),
-        roomId: roomId,
-        envelope: controlText,
-        createdAtMs: DateTime.now().millisecondsSinceEpoch,
-      );
+      final cleaned = id?.trim() ?? '';
+      return cleaned.isEmpty ? null : cleaned;
     } catch (_) {
-      // Без конверта не будет лишь повтора; отправка идёт своим путём.
+      return null;
     }
   }
 
-  /// К-3: участник жив, квитанции шлёт, а на мои сообщения — нет. Повторяем
-  /// ему именно тот конверт, что ушёл всем, по одному разу на сообщение.
-  /// Получатель повтор отсекает сам (номер сообщения — ключ записи).
+  /// Запоминает запечатанный провод сообщения — для повтора тому, у кого
+  /// пропуск. Не запечатано (общего ключа ещё нет) — повторять нечем.
+  Future<void> _rememberRoomWire({
+    required AppDb db,
+    required String roomId,
+    required String controlText,
+    required List<E2eEventV1>? sealedEvents,
+  }) async {
+    if (!roomMissedResendEnabled) return;
+    if (sealedEvents == null || sealedEvents.length != 1) return;
+    final sealed = sealedEvents.single;
+    if (sealed is! RoomMessageEventV1 || sealed.signature == null) return;
+    final id = _groupEnvelopeMsgEventId(controlText);
+    if (id == null) return;
+    try {
+      await db.roomOutboundWirePut(
+        payloadEventId: id,
+        roomId: roomId,
+        epoch: sealed.epoch,
+        wireB64: base64Encode(RoomRawWire.encode(sealed)),
+        createdAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
+    } catch (_) {
+      // Без провода не будет лишь повтора; отправка идёт своим путём.
+    }
+  }
+
+  /// Когда участник вступил в комнату (действующее членство), или null.
+  Future<int?> _roomMemberJoinedAtMs(String roomId, String profileId) async {
+    try {
+      for (final state in await listRoomMembershipStates(roomId)) {
+        if (state.profileId.trim() != profileId) continue;
+        if (RoomMembershipStatusX.fromValue(state.status) !=
+            RoomMembershipStatus.active) {
+          return null;
+        }
+        return state.createdAtMs;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// К-3 v2: участник жив, квитанции шлёт, а на мои сообщения — нет.
+  /// Повторяем ему запечатанный провод каждого пропущенного сообщения — по
+  /// одному разу. Получатель повтор отсекает сам (номер сообщения — ключ
+  /// записи).
   Future<int> _resendMissedRoomMessages({
     required AppDb db,
     required String roomId,
@@ -53013,57 +57560,90 @@ class AppController {
     required int stuckBeforeMs,
     required int nowMs,
   }) async {
-    if (!roomMissedResendEnabled) return 0;
+    if (!_roomMissedResendActive) return 0;
+    final joinedAtMs = await _roomMemberJoinedAtMs(roomId, memberProfileId);
+    if (joinedAtMs == null) return 0;
+    final windowStart = nowMs - _roomMissedResendWindowMs;
+    final notBeforeMs = joinedAtMs > windowStart ? joinedAtMs : windowStart;
     List<Map<String, Object?>> owed;
     try {
-      owed = await db.roomSendsMissingReceiptFrom(
+      owed = await db.roomSendsOwedTo(
         roomId: roomId,
         readerProfileId: memberProfileId,
         senderDeviceId: _deviceId ?? '',
         stuckBeforeMs: stuckBeforeMs,
+        notBeforeMs: notBeforeMs,
         limit: _roomMissedResendPerMember,
       );
     } catch (_) {
       return 0;
     }
+    if (owed.isEmpty) return 0;
+    final testSender = roomResendSenderForTesting;
+    final relay = _relay;
+    final myDid = (_deviceId ?? '').trim();
+    var memberDevices = const <String>[];
+    if (testSender == null) {
+      if (relay == null || myDid.isEmpty) return 0;
+      try {
+        memberDevices = (await _listRecipientDevicesForSend(
+          peerProfileId: memberProfileId,
+          selfDeviceId: myDid,
+        )).where((d) => d.isNotEmpty && d != myDid).toList(growable: false);
+      } catch (_) {
+        return 0;
+      }
+      if (memberDevices.isEmpty) return 0;
+    }
     var resent = 0;
+    var noKey = 0;
     for (final row in owed) {
       final payloadEventId = ((row['payload_event_id'] as String?) ?? '').trim();
       if (payloadEventId.isEmpty) continue;
-      if (await db.roomOutboundWasResent(
-        payloadEventId: payloadEventId,
-        memberProfileId: memberProfileId,
-      )) {
-        continue;
-      }
-      final envelope = await db.roomOutboundEnvelopeGet(payloadEventId);
-      if (envelope == null || envelope.isEmpty) continue;
+      final wire = await db.roomOutboundWireGet(payloadEventId);
+      if (wire == null || wire.wireB64.isEmpty) continue;
       try {
-        final sender = roomResendSenderForTesting;
-        if (sender != null) {
-          await sender(memberProfileId, envelope);
+        if (testSender != null) {
+          await testSender(memberProfileId, wire.wireB64);
+          resent++;
         } else {
-          await sendControlMessage(
-            peerProfileId: memberProfileId,
-            controlText: envelope,
-            queueIfNoDevices: true,
+          final ready = await db.roomKeyRawReadyDevices(
+            roomId: roomId,
+            epoch: wire.epoch,
           );
+          final targets = memberDevices
+              .where(ready.contains)
+              .toList(growable: false);
+          if (targets.isEmpty) {
+            // Ни одно устройство участника не держит ключ этого поколения:
+            // повторить нечем. Отмечаем, чтобы не занимать окно навсегда.
+            noKey++;
+          } else {
+            await relay!.broadcastRoomWire(
+              roomId: roomId,
+              msgId: _uuid.v4(),
+              ciphertextB64: wire.wireB64,
+              recipients: targets,
+              ttlSeconds: _outboxUserMessageTtlSeconds,
+            );
+            resent++;
+          }
         }
         await db.roomOutboundMarkResent(
           payloadEventId: payloadEventId,
           memberProfileId: memberProfileId,
           atMs: nowMs,
         );
-        resent++;
       } catch (_) {
         break;
       }
     }
-    if (resent > 0) {
+    if (resent > 0 || noKey > 0) {
       DiagLog.event('room', 'missed_resent', {
         'room': DiagLog.pfx(roomId),
         'peer': DiagLog.pfx(memberProfileId),
         'count': resent,
+        'no_key': noKey,
       });
     }
     return resent;
@@ -53074,19 +57654,16 @@ class AppController {
     required String roomId,
     required String memberProfileId,
     required int stuckBeforeMs,
+    int? nowMs,
   }) {
     return _resendMissedRoomMessages(
       db: _db!,
       roomId: roomId,
       memberProfileId: memberProfileId,
       stuckBeforeMs: stuckBeforeMs,
-      nowMs: DateTime.now().millisecondsSinceEpoch,
+      nowMs: nowMs ?? DateTime.now().millisecondsSinceEpoch,
     );
   }
-
-  @visibleForTesting
-  Future<void> rememberRoomEnvelopeForTesting(String roomId, String text) =>
-      _rememberRoomEnvelope(db: _db!, roomId: roomId, controlText: text);
 
   Future<void> _runRoomConvergenceBackstop() async {
     if (!roomConvergenceBackstopEnabled) return;
@@ -53101,7 +57678,7 @@ class AppController {
     _lastRoomConvergenceSweepAtMs = now;
     _roomConvergenceSweepRunning = true;
     try {
-      await db.roomOutboundPrune(olderThanMs: now - _roomEnvelopeKeepMs);
+      await db.roomOutboundPrune(olderThanMs: now - _roomMissedResendWindowMs);
       final stuckBefore = now - _senderConvergenceStuckMs;
       // Two candidate sets, deliberately different signals:
       //  * rooms whose messages NOBODY acknowledged (local_state still 'sent');
@@ -53948,6 +58525,17 @@ class AppController {
         });
         return false;
       }
+      // Исчезающие (ТЗ 22.10.2026, §2.4): истёкшее не повторяется, даже если
+      // уборка ещё не успела удалить строку.
+      final rowExpiresAtMs = (row?['expires_at_ms'] as num?)?.toInt();
+      if (rowExpiresAtMs != null &&
+          rowExpiresAtMs > 0 &&
+          rowExpiresAtMs <= DateTime.now().millisecondsSinceEpoch) {
+        DiagLog.event('send', 'nack_resend_skip_expired', {
+          'event': DiagLog.pfx(eventId),
+        });
+        return false;
+      }
     } catch (_) {
       // Unreadable row: fall through — the payload decrypt below fails anyway.
     }
@@ -54381,7 +58969,878 @@ class AppController {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Э3: социальное восстановление (хранители).
+  // ---------------------------------------------------------------------------
+
+  static const String _kvGuardiansSetup = 'social_recovery_guardians_v1';
+  static const String _kvHeldSharePrefix = 'guardian_share_v1:';
+  static const String _kvHeldShareIndex = 'guardian_share_index_v1';
+  static const String _kvRecoveryRequest = 'social_recovery_request_v1';
+  static const String _kvRecoveryReleases = 'social_recovery_releases_v1';
+  static const int _guardianMessageTtlSeconds = _outboxUserMessageTtlSeconds;
+
+  Future<Map<String, Object?>?> _kvJson(String key) async {
+    final raw = await _db?.localKvGet(key);
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final v = jsonDecode(raw);
+      return v is Map ? v.cast<String, Object?>() : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _kvSetJson(String key, Object? value) async {
+    await _db?.localKvSet(key, jsonEncode(value));
+  }
+
+  String _guardianCommand(String prefix, Map<String, Object?> payload) =>
+      '$prefix${base64Url.encode(utf8.encode(jsonEncode(payload)))}';
+
+  /// Текущая настройка хранителей владельца (`null` — не настроено).
+  Future<SocialRecoveryGuardiansState?> socialRecoveryGuardians() async {
+    final json = await _kvJson(_kvGuardiansSetup);
+    return json == null ? null : SocialRecoveryGuardiansState.fromJson(json);
+  }
+
+  /// Раздаёт доли выбранным хранителям. Прежние хранители, которых нет в
+  /// новом списке, получают отзыв; новая версия делает старые доли
+  /// бесполезными (ключ `K` новый).
+  Future<SocialRecoveryGuardiansState> setupSocialRecovery({
+    required List<String> guardianProfileIds,
+    required int threshold,
+  }) async {
+    final myPid = (_profileId ?? '').trim();
+    final ids = guardianProfileIds
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && e != myPid)
+        .toSet()
+        .toList(growable: false);
+    final previous = await socialRecoveryGuardians();
+    final version = (previous?.version ?? 0) + 1;
+    final kit = await _collectRecoveryKitPlain();
+    final autoPassword = await SecureSecrets.create().getSafeBackupAutoPassword(
+      myPid,
+    );
+    final setup = await SocialRecovery.createSetup(
+      kit: kit,
+      threshold: threshold,
+      guardians: ids.length,
+      version: version,
+      safeBackupAutoPassword: autoPassword,
+    );
+    final ownerName = myNickname.trim();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final entries = <SocialRecoveryGuardianEntry>[];
+    for (var i = 0; i < ids.length; i++) {
+      final share = GuardianShare(
+        ownerProfileId: myPid,
+        ownerName: ownerName,
+        version: version,
+        threshold: threshold,
+        guardians: ids.length,
+        shareB64: setup.sharesB64[i],
+        blobB64: setup.blobB64,
+        receivedAtMs: 0,
+      );
+      var sent = true;
+      try {
+        await sendControlMessage(
+          peerProfileId: ids[i],
+          controlText: _guardianCommand(_guardianShareCmdPrefix, share.toJson()),
+          ttlSeconds: _guardianMessageTtlSeconds,
+          strict: false,
+          queueIfNoDevices: true,
+        );
+      } catch (_) {
+        sent = false;
+      }
+      entries.add(
+        SocialRecoveryGuardianEntry(
+          profileId: ids[i],
+          status: sent ? 'sent' : 'failed',
+          updatedAtMs: now,
+        ),
+      );
+    }
+    for (final old in previous?.guardians ?? const <SocialRecoveryGuardianEntry>[]) {
+      if (ids.contains(old.profileId)) continue;
+      unawaited(_sendGuardianRevoke(old.profileId, version));
+    }
+    final state = SocialRecoveryGuardiansState(
+      version: version,
+      threshold: threshold,
+      guardians: entries,
+      updatedAtMs: now,
+    );
+    await _kvSetJson(_kvGuardiansSetup, state.toJson());
+    DiagLog.event('social_recovery', 'setup', {
+      'version': version,
+      't': threshold,
+      'n': ids.length,
+      'failed': entries.where((e) => e.status == 'failed').length,
+    });
+    _changed.add(null);
+    return state;
+  }
+
+  /// Снимает настройку: всем хранителям — отзыв, локально — забыть.
+  Future<void> clearSocialRecovery() async {
+    final previous = await socialRecoveryGuardians();
+    if (previous == null) return;
+    for (final g in previous.guardians) {
+      unawaited(_sendGuardianRevoke(g.profileId, previous.version + 1));
+    }
+    await _db?.localKvDelete(_kvGuardiansSetup);
+    _changed.add(null);
+  }
+
+  Future<void> _sendGuardianRevoke(String guardianProfileId, int version) async {
+    try {
+      await sendControlMessage(
+        peerProfileId: guardianProfileId,
+        controlText: _guardianCommand(_guardianRevokeCmdPrefix, <String, Object?>{
+          'owner_profile_id': (_profileId ?? '').trim(),
+          'version': version,
+        }),
+        ttlSeconds: _guardianMessageTtlSeconds,
+        strict: false,
+        queueIfNoDevices: true,
+      );
+    } catch (_) {}
+  }
+
+  /// Доли, которые я храню для других.
+  Future<List<GuardianShare>> heldGuardianShares() async {
+    final index = await _kvJson(_kvHeldShareIndex);
+    final owners = (index?['owners'] as List?)?.whereType<String>() ?? const [];
+    final out = <GuardianShare>[];
+    for (final owner in owners) {
+      final json = await _kvJson('$_kvHeldSharePrefix$owner');
+      final share = json == null ? null : GuardianShare.tryParse(json);
+      if (share != null) out.add(share);
+    }
+    out.sort((a, b) => b.receivedAtMs.compareTo(a.receivedAtMs));
+    return out;
+  }
+
+  Future<void> _setHeldShareOwners(Set<String> owners) =>
+      _kvSetJson(_kvHeldShareIndex, <String, Object?>{
+        'owners': (owners.toList()..sort()),
+      });
+
+  /// Хранитель отдаёт свою долю восстанавливающемуся устройству. Вызывается
+  /// ТОЛЬКО после того, как человек сверил проверочные слова.
+  Future<void> releaseGuardianShare({
+    required String ownerProfileId,
+    required RecoveryRequestCode request,
+  }) async {
+    final json = await _kvJson('$_kvHeldSharePrefix$ownerProfileId');
+    final share = json == null ? null : GuardianShare.tryParse(json);
+    if (share == null) {
+      throw StateError('no share for this person');
+    }
+    final release = GuardianRelease(
+      requestNonce: request.nonce,
+      ownerProfileId: share.ownerProfileId,
+      version: share.version,
+      threshold: share.threshold,
+      shareB64: share.shareB64,
+      blobB64: share.blobB64,
+    );
+    await sendControlMessage(
+      peerProfileId: request.profileId,
+      controlText: _guardianCommand(_guardianReleaseCmdPrefix, release.toJson()),
+      ttlSeconds: _guardianMessageTtlSeconds,
+      strict: true,
+      queueIfNoDevices: true,
+      forceRelayFlush: true,
+    );
+    DiagLog.event('social_recovery', 'released', {
+      'owner': DiagLog.pfx(ownerProfileId),
+      'to': DiagLog.pfx(request.profileId),
+    });
+  }
+
+  /// Новое устройство: код, который показывают хранителям. Повторный вызов
+  /// возвращает тот же код, пока запрос не завершён.
+  Future<RecoveryRequestCode> startSocialRecoveryRequest() async {
+    final myPid = (_profileId ?? '').trim();
+    if (myPid.isEmpty) throw StateError('state not ready');
+    final existing = await _kvJson(_kvRecoveryRequest);
+    if (existing != null && existing['profile_id'] == myPid) {
+      return RecoveryRequestCode(
+        profileId: myPid,
+        nonce: existing['nonce'] as String,
+      );
+    }
+    final code = RecoveryRequestCode.generate(myPid);
+    await _kvSetJson(_kvRecoveryRequest, <String, Object?>{
+      'profile_id': myPid,
+      'nonce': code.nonce,
+      'created_at_ms': DateTime.now().millisecondsSinceEpoch,
+    });
+    await _db?.localKvDelete(_kvRecoveryReleases);
+    return code;
+  }
+
+  Future<void> cancelSocialRecoveryRequest() async {
+    await _db?.localKvDelete(_kvRecoveryRequest);
+    await _db?.localKvDelete(_kvRecoveryReleases);
+    _changed.add(null);
+  }
+
+  /// Сколько долей уже пришло и сколько нужно (для экрана ожидания).
+  Future<({int received, int threshold})> socialRecoveryProgress() async {
+    final json = await _kvJson(_kvRecoveryReleases);
+    final list = (json?['releases'] as List?) ?? const [];
+    final releases = list
+        .whereType<Map>()
+        .map((m) => GuardianRelease.tryParse(m.cast<String, Object?>()))
+        .whereType<GuardianRelease>()
+        .toList();
+    final threshold = releases.isEmpty ? 0 : releases.first.threshold;
+    final indexes = releases
+        .map((r) {
+          try {
+            return base64Decode(r.shareB64).first;
+          } catch (_) {
+            return -1;
+          }
+        })
+        .where((i) => i > 0)
+        .toSet();
+    return (received: indexes.length, threshold: threshold);
+  }
+
+  Future<void> _handleGuardianCommand({
+    required String text,
+    required String? senderProfileId,
+  }) async {
+    final sender = (senderProfileId ?? '').trim();
+    final myPid = (_profileId ?? '').trim();
+    if (sender.isEmpty || myPid.isEmpty || sender == myPid) return;
+    Map<String, Object?>? payloadOf(String prefix) =>
+        _decodeCommandPayload(text, prefix);
+
+    final shareCmd = payloadOf(_guardianShareCmdPrefix);
+    if (shareCmd != null) {
+      final share = GuardianShare.tryParse(shareCmd);
+      // Долю принимаем только от её владельца.
+      if (share == null || share.ownerProfileId != sender) return;
+      final key = '$_kvHeldSharePrefix${share.ownerProfileId}';
+      final existing = await _kvJson(key);
+      final existingVersion = (existing?['version'] as num?)?.toInt() ?? 0;
+      if (share.version < existingVersion) return;
+      final stored = GuardianShare(
+        ownerProfileId: share.ownerProfileId,
+        ownerName: share.ownerName,
+        version: share.version,
+        threshold: share.threshold,
+        guardians: share.guardians,
+        shareB64: share.shareB64,
+        blobB64: share.blobB64,
+        receivedAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
+      await _kvSetJson(key, stored.toJson());
+      final owners = (await heldGuardianShares())
+          .map((s) => s.ownerProfileId)
+          .toSet()
+        ..add(share.ownerProfileId);
+      await _setHeldShareOwners(owners);
+      DiagLog.event('social_recovery', 'share_held', {
+        'owner': DiagLog.pfx(sender),
+        'version': share.version,
+      });
+      unawaited(() async {
+        try {
+          await sendControlMessage(
+            peerProfileId: sender,
+            controlText: _guardianCommand(_guardianAckCmdPrefix, <String, Object?>{
+              'owner_profile_id': sender,
+              'version': share.version,
+            }),
+            ttlSeconds: _guardianMessageTtlSeconds,
+            strict: false,
+            queueIfNoDevices: true,
+          );
+        } catch (_) {}
+      }());
+      _changed.add(null);
+      return;
+    }
+
+    final ackCmd = payloadOf(_guardianAckCmdPrefix);
+    if (ackCmd != null) {
+      final state = await socialRecoveryGuardians();
+      final version = (ackCmd['version'] as num?)?.toInt() ?? 0;
+      if (state == null || version != state.version) return;
+      var changed = false;
+      final updated = state.guardians.map((g) {
+        if (g.profileId != sender || g.status == 'accepted') return g;
+        changed = true;
+        return SocialRecoveryGuardianEntry(
+          profileId: g.profileId,
+          status: 'accepted',
+          updatedAtMs: DateTime.now().millisecondsSinceEpoch,
+        );
+      }).toList();
+      if (!changed) return;
+      await _kvSetJson(
+        _kvGuardiansSetup,
+        SocialRecoveryGuardiansState(
+          version: state.version,
+          threshold: state.threshold,
+          guardians: updated,
+          updatedAtMs: state.updatedAtMs,
+        ).toJson(),
+      );
+      _changed.add(null);
+      return;
+    }
+
+    final revokeCmd = payloadOf(_guardianRevokeCmdPrefix);
+    if (revokeCmd != null) {
+      if ((revokeCmd['owner_profile_id'] as String?)?.trim() != sender) return;
+      final key = '$_kvHeldSharePrefix$sender';
+      final existing = await _kvJson(key);
+      final existingVersion = (existing?['version'] as num?)?.toInt() ?? 0;
+      final version = (revokeCmd['version'] as num?)?.toInt() ?? 0;
+      if (existing == null || version < existingVersion) return;
+      await _db?.localKvDelete(key);
+      final owners = (await heldGuardianShares())
+          .map((s) => s.ownerProfileId)
+          .toSet()
+        ..remove(sender);
+      await _setHeldShareOwners(owners);
+      _changed.add(null);
+      return;
+    }
+
+    final releaseCmd = payloadOf(_guardianReleaseCmdPrefix);
+    if (releaseCmd != null) {
+      await _acceptGuardianRelease(releaseCmd);
+    }
+  }
+
+  Future<void> _acceptGuardianRelease(Map<String, Object?> json) async {
+    final release = GuardianRelease.tryParse(json);
+    final request = await _kvJson(_kvRecoveryRequest);
+    if (release == null || request == null) return;
+    if (request['nonce'] != release.requestNonce) return;
+    final stored = await _kvJson(_kvRecoveryReleases);
+    final list = <Map<String, Object?>>[
+      for (final m in (stored?['releases'] as List?) ?? const [])
+        if (m is Map) m.cast<String, Object?>(),
+    ];
+    // Доли одного набора: другой владелец или другая версия — новый набор
+    // вытесняет старый только если он новее.
+    final current = list
+        .map(GuardianRelease.tryParse)
+        .whereType<GuardianRelease>()
+        .toList();
+    if (current.isNotEmpty &&
+        (current.first.ownerProfileId != release.ownerProfileId ||
+            current.first.version != release.version)) {
+      if (release.version <= current.first.version) return;
+      list.clear();
+    }
+    list.removeWhere((m) => m['share_b64'] == release.shareB64);
+    list.add(release.toJson());
+    await _kvSetJson(_kvRecoveryReleases, <String, Object?>{'releases': list});
+    DiagLog.event('social_recovery', 'release_received', {
+      'count': list.length,
+      't': release.threshold,
+    });
+    _changed.add(null);
+    final releases = list
+        .map(GuardianRelease.tryParse)
+        .whereType<GuardianRelease>()
+        .toList();
+    final progress = await socialRecoveryProgress();
+    if (progress.received < release.threshold) return;
+    try {
+      final result = await SocialRecovery.recover(releases);
+      DiagLog.event('social_recovery', 'recovered', {
+        'owner': DiagLog.pfx(result.kit.profileId),
+      });
+      await _db?.localKvDelete(_kvRecoveryRequest);
+      await _db?.localKvDelete(_kvRecoveryReleases);
+      final restoreOverride = socialRecoveryRestoreForTesting;
+      if (restoreOverride != null) {
+        await restoreOverride(result.kit);
+      } else {
+        await restoreFromRecoveryKit(result.kit);
+      }
+      final pass = result.safeBackupAutoPassword;
+      if (pass != null && pass.isNotEmpty) {
+        await SecureSecrets.create().setSafeBackupAutoPassword(
+          profileId: result.kit.profileId,
+          password: pass,
+        );
+      }
+    } on SocialRecoveryException catch (e) {
+      DiagLog.event('social_recovery', 'recover_failed', {'code': e.code});
+      socialRecoveryLastError = e.code;
+      _changed.add(null);
+    }
+  }
+
+  /// Перехват отправки служебных сообщений в тестах (Э3).
+  @visibleForTesting
+  Future<void> Function(String peerProfileId, String controlText)?
+  controlMessageSenderForTesting;
+
+  /// Финальное восстановление в тестах (вместо стирания базы и перезапуска).
+  @visibleForTesting
+  Future<void> Function(RecoveryKitPlainV1 kit)? socialRecoveryRestoreForTesting;
+
+  /// Приём команды хранителя в обход расшифровки — для тестов.
+  @visibleForTesting
+  Future<void> handleGuardianCommandForTesting({
+    required String text,
+    required String senderProfileId,
+  }) => _handleGuardianCommand(text: text, senderProfileId: senderProfileId);
+
+  /// Код последней ошибки сборки (`auth_failed` — подменённая доля).
+  String? socialRecoveryLastError;
+
+  // ---------------------------------------------------------------------------
+  // Э4а: конверты файлом — доставка без сети.
+  // ---------------------------------------------------------------------------
+
+  static const int _offlineEnvelopeWindowMs = 7 * 24 * 60 * 60 * 1000;
+
+  /// Файл с конвертами для собеседника: всё, что за последнюю неделю ушло
+  /// или ждёт отправки в эту беседу. `null` — переносить нечего.
+  Future<List<int>?> exportOfflineEnvelopes(String peerProfileId) async {
+    final db = _db;
+    final pid = (_profileId ?? '').trim();
+    final did = (_deviceId ?? '').trim();
+    if (db == null || pid.isEmpty || did.isEmpty) {
+      throw StateError('state not ready');
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rows = await db.outboxEnvelopesForConvo(
+      convoId: peerProfileId.trim(),
+      sinceMs: now - _offlineEnvelopeWindowMs,
+      limit: EnvelopeFile.maxEnvelopes,
+    );
+    if (rows.isEmpty) return null;
+    final identity = await DeviceKeys.create().loadIdentityKeyPair(
+      profileId: pid,
+      deviceId: did,
+    );
+    final bytes = await EnvelopeFile.build(
+      fromDeviceId: did,
+      createdAtMs: now,
+      envelopes: [
+        for (final r in rows)
+          OfflineEnvelope(
+            msgId: r.msgId,
+            toDeviceId: r.toDeviceId,
+            ciphertextB64: r.ciphertextB64,
+          ),
+      ],
+      deviceIdentity: identity,
+    );
+    DiagLog.event('offline_file', 'exported', {'count': rows.length});
+    return bytes;
+  }
+
+  /// Принимает файл с конвертами. Возвращает, сколько новых конвертов
+  /// легло во входящие; адресованные не этому устройству и уже виденные
+  /// пропускаются.
+  Future<int> importOfflineEnvelopes(List<int> bytes) async {
+    final db = _db;
+    final myDid = (_deviceId ?? '').trim();
+    if (db == null || myDid.isEmpty) throw StateError('state not ready');
+    final head = await EnvelopeFile.parse(bytes);
+    final known = await db.contactDeviceIdentityKey(head.fromDeviceId);
+    final file = known == null
+        ? head
+        : await EnvelopeFile.parse(bytes, knownIdentityPubB64: known);
+    var imported = 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (final e in file.envelopes) {
+      if (e.toDeviceId != myDid) continue;
+      if (await db.inboxHasSeen(e.msgId)) continue;
+      await db.inboxQuarantineUpsert(
+        msgId: e.msgId,
+        // Не подтверждено реле: отправитель берётся только из провода.
+        attestedFromDeviceId: null,
+        senderDeviceId: null,
+        ciphertextB64: e.ciphertextB64,
+        nowMs: now,
+      );
+      imported++;
+    }
+    DiagLog.event('offline_file', 'imported', {
+      'count': imported,
+      'total': file.envelopes.length,
+      'sender_known': file.senderKeyKnown,
+    });
+    if (imported > 0) {
+      await _replayAllQuarantine();
+      _changed.add(null);
+    }
+    return imported;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Э1: пути к серверам под блокировками.
+  // ---------------------------------------------------------------------------
+
+  static const String _prefsTransportProxyDisabledKey =
+      'transport_proxy_disabled_v1';
+  static const String _prefsTransportEndpointsCacheKey =
+      'transport_endpoints_cache_v1';
+  static const String _prefsTransportPathMemoryKey =
+      'transport_path_memory_v1';
+  static const String _prefsTransportProxyHostKey = 'transport_proxy_host_v1';
+  static const String _prefsTransportSocksAddrKey = 'transport_socks_addr_v1';
+  static const String _prefsTransportTorAllowedKey = 'transport_tor_allowed_v1';
+  static const String _prefsTransportProxyPortKey = 'transport_proxy_port_v1';
+
+  // Настройки «Сеть» (Э1). Читаются с экрана и из ссылок.
+  bool get transportPathsEnabled =>
+      _prefs?.getBool(_prefsTransportProxyDisabledKey) != true;
+  String get transportProxyHost =>
+      _prefs?.getString(_prefsTransportProxyHostKey) ?? '';
+  int get transportProxyPort => _prefs?.getInt(_prefsTransportProxyPortKey) ?? 443;
+  String get transportSocksAddr =>
+      _prefs?.getString(_prefsTransportSocksAddrKey) ?? '';
+  bool get transportTorAllowed =>
+      _prefs?.getBool(_prefsTransportTorAllowedKey) ?? false;
+
+  /// Сервер разрешил предлагать встроенный Tor (сам путь — Э1б).
+  bool get transportTorOffered => _transportFlags.torEnabled;
+
+  Future<void> setTransportPathsEnabled(bool enabled) async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    if (enabled) {
+      await prefs.remove(_prefsTransportProxyDisabledKey);
+      if (TransportPaths.instance == null) _initTransportPaths(prefs);
+    } else {
+      await prefs.setBool(_prefsTransportProxyDisabledKey, true);
+      await _shutdownTransportPaths();
+    }
+    _changed.add(null);
+  }
+
+  /// Прокси волонтёра. Пустая строка — убрать.
+  Future<void> setTransportProxy({required String host, int port = 443}) async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    final clean = host.trim().toLowerCase();
+    if (clean.isEmpty) {
+      await prefs.remove(_prefsTransportProxyHostKey);
+      await prefs.remove(_prefsTransportProxyPortKey);
+    } else {
+      await prefs.setString(_prefsTransportProxyHostKey, clean);
+      await prefs.setInt(_prefsTransportProxyPortKey, port);
+    }
+    TransportPaths.instance?.setUserPaths(proxyHost: clean, proxyPort: port);
+    DiagLog.event('transport', 'proxy_set', {'has': clean.isNotEmpty});
+    _changed.add(null);
+  }
+
+  Future<void> setTransportSocks(String addr) async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    final clean = addr.trim();
+    if (clean.isEmpty) {
+      await prefs.remove(_prefsTransportSocksAddrKey);
+    } else {
+      await prefs.setString(_prefsTransportSocksAddrKey, clean);
+    }
+    TransportPaths.instance?.setUserPaths(socksAddr: clean);
+    _changed.add(null);
+  }
+
+  Future<void> setTransportTorAllowed(bool allowed) async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    await prefs.setBool(_prefsTransportTorAllowedKey, allowed);
+    TransportPaths.instance?.setAllowances(
+      tor: allowed && _transportFlags.torEnabled,
+    );
+    _changed.add(null);
+  }
+
+  /// Список входов из ссылки `secretly://endpoints#…`. Подпись проверяет
+  /// библиотека; принят — сохраняется между запусками.
+  Future<bool> applyTransportEndpointsLink(String signedJson) async {
+    final paths = TransportPaths.instance;
+    if (paths == null) return false;
+    // Нынешним ключом подписи конфигурации, а не сошлось — следующим
+    // (15.11.2026, см. [kConfigPublicKeyNextB64]).
+    final ok = paths.applySignedList(
+          signedJson: signedJson,
+          verifyingKeyB64: kConfigPublicKeyB64,
+          nowMs: ServerClock.instance.nowMs(),
+        ) ||
+        (kConfigPublicKeyNextB64.isNotEmpty &&
+            paths.applySignedList(
+              signedJson: signedJson,
+              verifyingKeyB64: kConfigPublicKeyNextB64,
+              nowMs: ServerClock.instance.nowMs(),
+            ));
+    if (ok) {
+      await _prefs?.setString(_prefsTransportEndpointsCacheKey, paths.listJson);
+    }
+    DiagLog.event('transport', 'endpoints_link', {'accepted': ok});
+    return ok;
+  }
+
+  /// Поднимает локальный прокси библиотеки транспорта. Любой сбой — работаем
+  /// напрямую, как до Э1; это не ошибка доставки.
+  void _initTransportPaths(SharedPreferences prefs) {
+    if (TransportPaths.instance != null) return;
+    if (prefs.getBool(_prefsTransportProxyDisabledKey) == true) return;
+    final core = TransportCore.tryLoad();
+    if (core == null) {
+      DiagLog.event('transport', 'core_unavailable', const {});
+      return;
+    }
+    try {
+      final keys = keysBaseUrl;
+      final relay = relayHttpBaseUrl;
+      final cached = (prefs.getString(_prefsTransportEndpointsCacheKey) ?? '')
+          .trim();
+      final list = cached.isNotEmpty
+          ? cached
+          : TransportPaths.bootstrapListJson(
+              keysBase: keys,
+              relayBase: relay,
+              ipByHost: httpDnsFallbacksFromEnv(),
+            );
+      final paths = TransportPaths(
+        core: core,
+        keysBase: keys,
+        relayBase: relay,
+        bootstrapListJson: list,
+        memoryJson: prefs.getString(_prefsTransportPathMemoryKey) ?? '',
+        networkId: _appLastNetworkPathSignature,
+        allowTor:
+            _transportFlags.torEnabled &&
+            (prefs.getBool(_prefsTransportTorAllowedKey) ?? false),
+        proxyHost: prefs.getString(_prefsTransportProxyHostKey) ?? '',
+        proxyPort: prefs.getInt(_prefsTransportProxyPortKey) ?? 443,
+        socksAddr: prefs.getString(_prefsTransportSocksAddrKey) ?? '',
+        // Только iOS закрывает сокеты приостановленного приложения.
+        healDeadListener: !kIsWeb && Platform.isIOS,
+      );
+      if (!paths.start()) {
+        DiagLog.event('transport', 'proxy_start_failed', const {});
+        return;
+      }
+      TransportPaths.instance = paths;
+      DiagLog.event('transport', 'proxy_started', {
+        'port': paths.port,
+        'version': core.version,
+      });
+    } catch (e) {
+      DiagLog.event('transport', 'proxy_init_error', {
+        'err': e.runtimeType.toString(),
+      });
+    }
+  }
+
+  /// Применяет блок `transport` из подписанного конфига: выключатель,
+  /// Tor и свежий список входов. Как и всё в Э1 — лучше работать напрямую,
+  /// чем упасть.
+  Future<void> _applyTransportFlags(EntitlementRepository repo) async {
+    if (!repo.transportFlagsResolved) return;
+    final flags = repo.transportFlags;
+    if (flags == _transportFlags) return;
+    _transportFlags = flags;
+    DiagLog.event('transport', 'flags_applied', flags.toLogFields());
+    final prefs = _prefs;
+    try {
+      if (!flags.enabled) {
+        await prefs?.setBool(_prefsTransportProxyDisabledKey, true);
+        await _shutdownTransportPaths();
+        return;
+      }
+      await prefs?.remove(_prefsTransportProxyDisabledKey);
+      if (TransportPaths.instance == null && prefs != null) {
+        _initTransportPaths(prefs);
+      }
+      final paths = TransportPaths.instance;
+      if (paths == null) return;
+      paths.setAllowances(
+        tor:
+            flags.torEnabled &&
+            (prefs?.getBool(_prefsTransportTorAllowedKey) ?? false),
+      );
+      if (flags.endpointsVersion > paths.issuedAtMs) {
+        await _refreshTransportEndpoints(paths);
+      }
+    } catch (e) {
+      DiagLog.event('transport', 'flags_apply_error', {
+        'err': e.runtimeType.toString(),
+      });
+    }
+  }
+
+  TransportFlags _transportFlags = TransportFlags.defaults;
+
+  static const String _prefsTransportReportDayKey = 'transport_report_day_v1';
+  static const String _prefsTransportReportOptOutKey =
+      'transport_report_optout_v1';
+
+  bool get transportReportsEnabled =>
+      _transportFlags.reportEnabled &&
+      _prefs?.getBool(_prefsTransportReportOptOutKey) != true;
+
+  /// Сервер вообще включил отчёты (иначе выключатель на экране не нужен).
+  bool get transportReportsOffered => _transportFlags.reportEnabled;
+
+  Future<void> setTransportReportsEnabled(bool enabled) async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    if (enabled) {
+      await prefs.remove(_prefsTransportReportOptOutKey);
+    } else {
+      await prefs.setBool(_prefsTransportReportOptOutKey, true);
+    }
+    _changed.add(null);
+  }
+
+  /// Собирает отчёт из состояния библиотеки; `null` — прокси не работает.
+  TransportReport? buildTransportReport({int? nowMs}) {
+    final paths = TransportPaths.instance;
+    final status = paths?.status();
+    if (paths == null || status == null) return null;
+    final now = nowMs ?? DateTime.now().millisecondsSinceEpoch;
+    final platform = kIsWeb
+        ? 'other'
+        : Platform.isAndroid
+        ? 'android'
+        : Platform.isIOS
+        ? 'ios'
+        : Platform.isMacOS
+        ? 'macos'
+        : Platform.isWindows
+        ? 'windows'
+        : Platform.isLinux
+        ? 'linux'
+        : 'other';
+    final list = paths.effectiveList();
+    return TransportReport(
+      build: int.tryParse(AppPackageInfo.buildNumberFromEnv) ?? 0,
+      platform: platform,
+      netKind: _appLastNetworkKind,
+      pathUsed: status.currentKind ?? 'direct',
+      pathsFailed: TransportReport.failedKindsFromMemory(
+        memoryJson: status.memoryJson,
+        networkId: status.networkId,
+        paths: (list['paths'] as List?) ?? const <Object?>[],
+        nowMs: now,
+      ),
+      countryHint: TransportReport.countryFromLocale(
+        PlatformDispatcher.instance.locale.countryCode,
+      ),
+    );
+  }
+
+  /// Раз в сутки, если разрешено сервером и не выключено человеком.
+  Future<void> _maybeSendTransportReport() async {
+    if (!transportReportsEnabled) return;
+    final prefs = _prefs;
+    final relay = _relay;
+    if (prefs == null || relay == null) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final day = TransportReport.dayIndex(now);
+    if ((prefs.getInt(_prefsTransportReportDayKey) ?? -1) >= day) return;
+    final report = buildTransportReport(nowMs: now);
+    if (report == null) return;
+    final ok = await relay.postTransportReport(report.toJson());
+    if (ok) {
+      await prefs.setInt(_prefsTransportReportDayKey, day);
+    }
+    DiagLog.event('transport', 'report_sent', {
+      'ok': ok,
+      'path': report.pathUsed,
+      'failed': report.pathsFailed.length,
+    });
+  }
+
+  Future<void> _refreshTransportEndpoints(TransportPaths paths) async {
+    final keys = _keys ?? KeysClient(baseUrl: keysBaseUrl);
+    final signed = await keys.getTransportEndpoints().timeout(
+      const Duration(seconds: 8),
+    );
+    if (signed == null || signed.isEmpty) return;
+    final ok = paths.applySignedList(
+          signedJson: signed,
+          verifyingKeyB64: kConfigPublicKeyB64,
+          nowMs: ServerClock.instance.nowMs(),
+        ) ||
+        (kConfigPublicKeyNextB64.isNotEmpty &&
+            paths.applySignedList(
+              signedJson: signed,
+              verifyingKeyB64: kConfigPublicKeyNextB64,
+              nowMs: ServerClock.instance.nowMs(),
+            ));
+    DiagLog.event('transport', 'endpoints_refresh', {
+      'accepted': ok,
+      'issued_at_ms': paths.issuedAtMs,
+    });
+    if (ok) {
+      await _prefs?.setString(_prefsTransportEndpointsCacheKey, paths.listJson);
+    }
+  }
+
+  /// Состояние путей — для экрана «Сеть» и диагностики.
+  TransportStatus? transportStatus() => TransportPaths.instance?.status();
+
+  /// 🔴 29.10.2026: после блокировки iPhone сокет прокси закрыт системой, и
+  /// выкачка при возврате (строками выше в [setAppInForeground]) упирается в
+  /// «Connection refused». Если прокси пришлось поднять заново — повторить
+  /// выкачку, отправку и подключение реле уже через новый порт.
+  Future<void> _healTransportProxyOnResume() async {
+    final paths = TransportPaths.instance;
+    if (paths == null) return;
+    final restarted = await paths.healIfDead();
+    if (!restarted) return;
+    DiagLog.event('transport', 'proxy_restarted', {
+      'active': paths.active,
+      'port': paths.port,
+    });
+    if (!_appInForeground || _transportBlocked) return;
+    unawaited(_applyBackgroundConnectionPolicy());
+    unawaited(triggerPushWakeSync());
+    unawaited(_recheckKeysHealthNow());
+    unawaited(_flushOutboundOnResume());
+  }
+
+  /// Останавливает прокси и сохраняет память путей, чтобы следующий запуск
+  /// начинал с того, что дошло в прошлый раз.
+  Future<void> _shutdownTransportPaths() async {
+    final paths = TransportPaths.instance;
+    if (paths == null) return;
+    TransportPaths.instance = null;
+    try {
+      final memory = paths.snapshotMemoryJson();
+      final prefs = _prefs ?? await SharedPreferences.getInstance();
+      if (memory != null && memory.isNotEmpty) {
+        await prefs.setString(_prefsTransportPathMemoryKey, memory);
+      }
+      await prefs.setString(_prefsTransportEndpointsCacheKey, paths.listJson);
+    } catch (_) {
+      // Память путей — удобство, не данные.
+    }
+    paths.stop();
+  }
+
   Future<void> dispose() async {
+    _disappearingSweepTimer?.cancel();
+    _disappearingSweepTimer = null;
+    await _shutdownTransportPaths();
     _pumpTimer?.cancel();
     _mainAliveHeartbeatTimer?.cancel();
     _desktopKeysPulseTimer?.cancel();
@@ -54452,6 +59911,8 @@ class AppController {
     await _db?.close();
     await _callSignals.close();
     await _roomCallMediaSignals.close();
+    await _roomCallKeyInbound.close();
+    _roomCallKeyBuffer.clear();
     await _relayConnectionChanges.close();
     await _peerHistoryChunks.close();
     await _ownDeviceActivity.close();
@@ -54980,6 +60441,24 @@ Map<String, Object?>? _parseRoomInviteCommand(String text) {
   return _decodeCommandPayload(text, AppController._roomInviteCmdPrefix);
 }
 
+/// Настоящий контракт созвона из отказа реле
+/// `409 room_call_contract_mismatch:<контракт>` (ТЗ E2EE созвонов, ЗВ-С1).
+@visibleForTesting
+String? roomCallContractFromMismatch(Object error) {
+  if (error is! RelayHttpException || error.statusCode != 409) return null;
+  final body = (error.responseBody ?? '').trim();
+  const marker = 'room_call_contract_mismatch:';
+  final at = body.indexOf(marker);
+  if (at < 0) return null;
+  final rest = body.substring(at + marker.length);
+  final match = RegExp(r'^[a-z0-9_]+').firstMatch(rest);
+  final value = match?.group(0) ?? '';
+  if (value == kRoomMediaContractV1 || value == kRoomMediaContractE2eeV1) {
+    return value;
+  }
+  return null;
+}
+
 Map<String, Object?>? _parseRoomCallMediaCommand(String text) {
   return RoomCallMediaSignalCommandCodec.decode(text);
 }
@@ -55098,6 +60577,8 @@ class ChatEvent {
     required this.localState,
     required this.payloadEventId,
     this.scheduledAtMs,
+    this.disappearSeconds,
+    this.expiresAtMs,
   });
 
   final String eventId;
@@ -55109,6 +60590,11 @@ class ChatEvent {
   final String localState;
   final String? payloadEventId;
   final int? scheduledAtMs;
+
+  /// Исчезающие сообщения (ТЗ 22.10.2026): срок и момент удаления. `null` —
+  /// без срока / отсчёт ещё не начался.
+  final int? disappearSeconds;
+  final int? expiresAtMs;
 }
 
 /// A single in-chat search match (one per occurrence). [text] is the full
@@ -55461,6 +60947,21 @@ class RoomInvitePreview {
 
 const int kPeerOnlineFreshMs = 90 * 1000;
 
+/// П4: сколько медиа чата лежит на устройстве.
+class ChatMediaUsage {
+  const ChatMediaUsage({
+    required this.convoId,
+    required this.title,
+    required this.bytes,
+    required this.files,
+  });
+
+  final String convoId;
+  final String title;
+  final int bytes;
+  final int files;
+}
+
 class Conversation {
   const Conversation({
     required this.convoId,
@@ -55519,6 +61020,79 @@ class Conversation {
     if (ts == null) return false;
     return DateTime.now().millisecondsSinceEpoch - ts < kPeerOnlineFreshMs;
   }
+}
+
+/// Сворачивает закрытые ветки в их комнаты — чистая функция ради тестов
+/// (см. `AppController._foldPrivateTopicsIntoRooms`). [topicParents] —
+/// «ветка → основная комната».
+List<Conversation> foldPrivateTopicConversations(
+  List<Conversation> conversations,
+  Map<String, String> topicParents,
+) {
+  if (topicParents.isEmpty) return conversations;
+  final byId = <String, Conversation>{
+    for (final c in conversations) c.convoId: c,
+  };
+  final extraUnread = <String, int>{};
+  final latestAt = <String, int>{};
+  var folded = false;
+  for (final c in conversations) {
+    final parent = topicParents[c.convoId];
+    if (parent == null || !byId.containsKey(parent)) continue;
+    folded = true;
+    extraUnread[parent] = (extraUnread[parent] ?? 0) + c.unreadCount;
+    if (c.lastEventAtMs > (latestAt[parent] ?? 0)) {
+      latestAt[parent] = c.lastEventAtMs;
+    }
+  }
+  if (!folded) return conversations;
+  // Список уже отсортирован (закреплённые, время, архив). Комната встаёт на
+  // самое раннее место среди себя и своих веток: свежая ветка поднимает её.
+  final out = <Conversation>[];
+  final emitted = <String>{};
+  for (final c in conversations) {
+    final parent = topicParents[c.convoId];
+    final roomId = parent != null && byId.containsKey(parent)
+        ? parent
+        : c.convoId;
+    if (!emitted.add(roomId)) continue;
+    final room = byId[roomId]!;
+    final add = extraUnread[roomId];
+    if (add == null) {
+      out.add(room);
+      continue;
+    }
+    final at = latestAt[roomId] ?? 0;
+    out.add(
+      Conversation(
+        convoId: room.convoId,
+        peerProfileId: room.peerProfileId,
+        title: room.title,
+        avatarPath: room.avatarPath,
+        lastEventAtMs: at > room.lastEventAtMs ? at : room.lastEventAtMs,
+        pinnedAtMs: room.pinnedAtMs,
+        muted: room.muted,
+        archivedAtMs: room.archivedAtMs,
+        autoDeleteSeconds: room.autoDeleteSeconds,
+        emoji: room.emoji,
+        unreadCount: room.unreadCount + add,
+        peerLastSeenAtMs: room.peerLastSeenAtMs,
+        frameId: room.frameId,
+        coverId: room.coverId,
+        emojiStatus: room.emojiStatus,
+        premiumBadge: room.premiumBadge,
+      ),
+    );
+  }
+  return out;
+}
+
+/// В комнате уже предельное число закрытых веток (Р-4).
+class RoomPrivateTopicLimitException implements Exception {
+  const RoomPrivateTopicLimitException();
+
+  @override
+  String toString() => 'topic_limit';
 }
 
 class RequestItem {
@@ -56157,6 +61731,24 @@ const bool kCoalesceChangedTicks = true;
 /// E1 kill-switch (TZ_RELIABILITY_UX_2026-07-18): `false` sends images with
 /// their original metadata (pre-2026-07-18 behaviour, EXIF GPS included).
 const bool kStripImageMetadataOnSend = true;
+
+/// Начало текста ошибки, когда ячейка защищённого хранилища не читается
+/// (`secure_storage_unreadable:<ячейка>`); экран копий переводит её.
+const String kSecureStorageUnreadable = 'secure_storage_unreadable';
+
+/// Перекодирование кадра для [AppController._reencodeImageWithoutMetadata] —
+/// в отдельном изоляте, чтобы не стоял интерфейс.
+Uint8List _encodeScrubbedFrame(
+  ({Uint8List rgba, int width, int height, bool png}) a,
+) {
+  final image = img.Image.fromBytes(
+    width: a.width,
+    height: a.height,
+    bytes: a.rgba.buffer,
+    numChannels: 4,
+  );
+  return a.png ? img.encodePng(image) : img.encodeJpg(image, quality: 92);
+}
 
 /// D1 (TZ_RELIABILITY_UX_2026-07-18): burst-coalescing wrapper around the
 /// app-wide `changed` StreamController.

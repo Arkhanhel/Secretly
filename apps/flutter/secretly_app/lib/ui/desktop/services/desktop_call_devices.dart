@@ -61,32 +61,50 @@ String? windowsDefaultAudioEndpointId({required bool capture}) {
   // S_OK/S_FALSE — надо снять своё; RPC_E_CHANGED_MODE — COM уже поднят в
   // другом режиме, работать можно, снимать нельзя.
   final balance = init == win.S_OK || init == win.S_FALSE;
-  final ppDevice = calloc<Pointer<win.COMObject>>();
+  // 🔴 ДЕРЖАТЕЛЬ, А НЕ САМ ОБЪЕКТ (05.10.2026, вылет в созвоне на Windows).
+  //
+  // Обёртки win32 (`IUnknown.ptr`) ждут адрес ячейки, в которую COM кладёт
+  // указатель на интерфейс, — так их создаёт и сам пакет
+  // (`COMObject.createFromID`: `calloc<COMObject>()` → `CoCreateInstance`).
+  // Раньше сюда шёл сам объект (`IMMDevice(ppDevice.value)`): обёртка брала
+  // таблицу методов на уровень глубже, `getId` читал адрес функции из
+  // машинного кода — и процесс падал с 0xC0000005, мимо любого try/catch.
+  // Код зовётся при входе в звонок (выбор динамиков), при смене устройства
+  // и при выборе микрофона.
+  //
+  // Освобождение — только вручную: [win.IUnknown] при создании вешает
+  // Finalizer, который сам зовёт Release и освобождает ячейку. Вместе с
+  // ручным `release()` это двойной Release и двойное освобождение — порча
+  // памяти, которая роняет процесс позже, при сборке мусора. Поэтому
+  // `detach()` сразу, а Release и освобождение ячеек — здесь, один раз.
+  final deviceHolder = calloc<win.COMObject>();
   final ppId = calloc<Pointer<Utf16>>();
   win.MMDeviceEnumerator? enumerator;
+  win.IMMDevice? device;
   try {
-    enumerator = win.MMDeviceEnumerator.createInstance();
+    enumerator = win.MMDeviceEnumerator.createInstance()..detach();
     final hr = enumerator.getDefaultAudioEndpoint(
       capture ? win.eCapture : win.eRender,
       win.eConsole,
-      ppDevice,
+      deviceHolder.cast(),
     );
-    if (win.FAILED(hr) || ppDevice.value == nullptr) return null;
-    final device = win.IMMDevice(ppDevice.value);
-    try {
-      if (win.FAILED(device.getId(ppId)) || ppId.value == nullptr) return null;
-      final id = ppId.value.toDartString();
-      win.CoTaskMemFree(ppId.value);
-      return id.isEmpty ? null : id;
-    } finally {
-      device.release();
-    }
+    if (win.FAILED(hr) || deviceHolder.ref.isNull) return null;
+    device = win.IMMDevice(deviceHolder)..detach();
+    if (win.FAILED(device.getId(ppId)) || ppId.value == nullptr) return null;
+    final id = ppId.value.toDartString();
+    win.CoTaskMemFree(ppId.value);
+    return id.isEmpty ? null : id;
   } catch (e) {
     callLog('DesktopAudio', 'default endpoint lookup failed: $e');
     return null;
   } finally {
-    enumerator?.release();
-    calloc.free(ppDevice);
+    device?.release();
+    final e = enumerator;
+    if (e != null) {
+      e.release();
+      calloc.free(e.ptr);
+    }
+    calloc.free(deviceHolder);
     calloc.free(ppId);
     if (balance) win.CoUninitialize();
   }

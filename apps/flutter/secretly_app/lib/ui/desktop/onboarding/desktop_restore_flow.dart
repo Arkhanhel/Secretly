@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
@@ -12,6 +13,7 @@ import '../primitives/desktop_dialog.dart';
 import '../primitives/desktop_text_field.dart';
 import '../primitives/hover_listener.dart';
 import 'desktop_auth_scaffold.dart';
+import '../../backup_refusal_text.dart';
 
 /// Восстановление аккаунта на компьютере.
 ///
@@ -112,7 +114,12 @@ class _DesktopRestoreFlowState extends State<DesktopRestoreFlow> {
       if (!exists || payload == null || payload.trim().isEmpty) {
         setState(() {
           _busy = false;
-          _error = l10n.desktopAuthBackupNotFound;
+          _error = serverBackupRefusalText(
+            context,
+            l10n,
+            ctrl.lastServerBackupRefusal,
+            fallback: l10n.desktopAuthBackupNotFound,
+          );
         });
         return;
       }
@@ -183,8 +190,28 @@ class _DesktopRestoreFlowState extends State<DesktopRestoreFlow> {
     return ok == true;
   }
 
+  /// Выбор способа ↔ форма — тем же сдвигом, что шаги входа (05.10.2026).
   @override
   Widget build(BuildContext context) {
+    final c = DColors.of(context);
+    return PageTransitionSwitcher(
+      duration: DMotion.of(context, DMotion.page),
+      reverse: _way == _RestoreWay.pick,
+      transitionBuilder: (child, primary, secondary) => SharedAxisTransition(
+        animation: primary,
+        secondaryAnimation: secondary,
+        transitionType: SharedAxisTransitionType.horizontal,
+        fillColor: c.bg,
+        child: child,
+      ),
+      child: KeyedSubtree(
+        key: ValueKey<_RestoreWay>(_way),
+        child: _page(context),
+      ),
+    );
+  }
+
+  Widget _page(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     switch (_way) {
       case _RestoreWay.pick:

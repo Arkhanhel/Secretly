@@ -14,6 +14,7 @@ import 'theme_presets.dart';
 import 'wave1_l10n.dart';
 import 'widgets/telegram_wallpaper.dart';
 import 'widgets/wallpaper_blur.dart';
+import '../assets/on_demand_asset_image.dart';
 
 export 'widgets/telegram_wallpaper.dart'
     show
@@ -94,7 +95,11 @@ class ChatWallpaperOption {
   ImageProvider<Object>? get imageProvider {
     final resolvedAssetPath = assetPath?.trim();
     if (resolvedAssetPath != null && resolvedAssetPath.isNotEmpty) {
-      return AssetImage(resolvedAssetPath);
+      // Украшения по требованию (Э7): в облегчённой сборке обоев в пакете
+      // нет, и байты придут с сервера под проверку отпечатка. В полной
+      // сборке и на компьютере это ровно `AssetImage`. Не загрузились — под
+      // ними остаётся ровный цвет темы.
+      return OnDemandAssetImage(resolvedAssetPath);
     }
     final resolvedFilePath = filePath?.trim();
     if (resolvedFilePath != null &&
@@ -231,10 +236,33 @@ String resolveEffectiveChatWallpaperId({
 
 String themeStandardChatWallpaperId({required bool darkMode}) {
   return encodeAssetChatWallpaperId(
-    darkMode
-        ? kDarkThemeStandardChatWallpaperAssetPath
-        : kLightThemeStandardChatWallpaperAssetPath,
+    standardChatWallpaperAssetPath(darkMode: darkMode),
   );
+}
+
+/// Стандартная пара обоев, заданная ПК вместо телефонной (05.10.2026).
+///
+/// Телефон её не задаёт и остаётся на своей паре — мята и «Ночной синий».
+({String light, String dark})? _standardChatWallpaperOverride;
+
+/// 🔴 ПК: стандартные обои — «Небо» в светлой теме и «Графит» в тёмной
+/// (владелец, 05.10.2026: «чтобы при переключении не было конфликта
+/// цветов»). Зовёт только `main_desktop.dart`, до создания контроллера:
+/// контроллер берёт стандартные обои при запуске и при смене темы.
+void overrideStandardChatWallpaperAssetPaths({
+  required String light,
+  required String dark,
+}) {
+  _standardChatWallpaperOverride = (light: light, dark: dark);
+}
+
+/// Картинка стандартных обоев для темы: пара ПК, если он её задал, иначе
+/// телефонная.
+String standardChatWallpaperAssetPath({required bool darkMode}) {
+  final override = _standardChatWallpaperOverride;
+  return darkMode
+      ? override?.dark ?? kDarkThemeStandardChatWallpaperAssetPath
+      : override?.light ?? kLightThemeStandardChatWallpaperAssetPath;
 }
 
 Color _mixColor(Color a, Color b, double t) => Color.lerp(a, b, t) ?? a;

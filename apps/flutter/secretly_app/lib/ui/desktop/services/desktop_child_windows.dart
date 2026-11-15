@@ -9,6 +9,8 @@ import 'package:flutter/semantics.dart' show SemanticsBinding;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../../diagnostics/diag_log.dart';
+
 /// Второе окно ОС, в котором рисует ТОТ ЖЕ движок (29.09.2026, Р1).
 ///
 /// 🔴 Жалоба владельца: «при нажатии на "позвонить" должно открываться
@@ -97,7 +99,10 @@ class DesktopChildWindows extends ChangeNotifier {
   /// [_awaitFrame]).
   @visibleForTesting
   static Duration frameTimeout = _kFrameTimeout;
-  static const Duration _kFrameTimeout = Duration(seconds: 3);
+  // 6 с, а не 3 (05.10.2026): на старте звонка главный изолят занят
+  // (камера, шифрование, сеть), и первый кадр второго окна на загруженной
+  // машине не всегда успевал — звонок тогда молча оставался в главном окне.
+  static const Duration _kFrameTimeout = Duration(seconds: 6);
 
   /// Меняется, когда свои окна становятся можно или нельзя открывать: на
   /// macOS — включили или выключили экранный диктор. Хозяин звонка по нему
@@ -128,12 +133,39 @@ class DesktopChildWindows extends ChangeNotifier {
   ///
   /// Флаг — СИСТЕМЫ, а не фреймворка: семантику фреймворка включают и
   /// отладочные инструменты, и сами тесты.
+  ///
+  /// 🔴 05.10.2026: запрет — только при НАСТОЯЩЕМ VoiceOver. «Семантику»
+  /// фреймворка на macOS включает не только диктор, но и любая программа,
+  /// трогающая «Универсальный доступ» (менеджеры окон, переключатели
+  /// раскладки, автоматизация), — и тогда звонки молча шли в главное окно
+  /// у людей без всякого диктора (жалоба владельца 05.10). Включена ли
+  /// семантика — только повод переспросить систему ([_refreshVoiceOver]).
   bool get _blockedByScreenReader =>
       _os == 'macos' &&
-      WidgetsBinding.instance.platformDispatcher.semanticsEnabled;
+      WidgetsBinding.instance.platformDispatcher.semanticsEnabled &&
+      _voiceOverRunning != false;
+
+  /// Работает ли VoiceOver, по ответу macOS; `null` — ещё не спрашивали
+  /// (тогда, как раньше, верим флагу семантики).
+  bool? _voiceOverRunning;
+
+  Future<void> _refreshVoiceOver() async {
+    if (_os != 'macos') return;
+    bool? running;
+    try {
+      running = await _channel.invokeMethod<bool>('isScreenReaderRunning');
+    } catch (_) {
+      running = null; // старый раннер не знает вопроса — правило прежнее
+    }
+    if (running == _voiceOverRunning) return;
+    _voiceOverRunning = running;
+    availability.value++;
+  }
 
   void _onSemanticsChanged() {
-    if (_os == 'macos') availability.value++;
+    if (_os != 'macos') return;
+    availability.value++;
+    unawaited(_refreshVoiceOver());
   }
 
   /// Вид окна [id] — для проверок и самотеста.
@@ -151,8 +183,18 @@ class DesktopChildWindows extends ChangeNotifier {
         } catch (_) {
           known = false;
         }
+        await _refreshVoiceOver();
       }
       _nativeSupported = known;
+      // Почему звонок и просмотр шли в главное окно — теперь видно в
+      // журнале (05.10.2026): раньше причина жила только в отладочном
+      // выводе, которого у выпускной сборки нет.
+      DiagLog.event('child_window', 'support', <String, Object?>{
+        'native': known,
+        'semantics':
+            WidgetsBinding.instance.platformDispatcher.semanticsEnabled,
+        'voiceover': _voiceOverRunning,
+      });
     }
     return known && !_blockedByScreenReader;
   }
@@ -192,13 +234,27 @@ class DesktopChildWindows extends ChangeNotifier {
       });
     } catch (e) {
       debugPrint('child window open failed: $e');
+      DiagLog.event('child_window', 'open_failed', <String, Object?>{
+        'id': id,
+        'error': e is PlatformException ? e.code : e.runtimeType.toString(),
+      });
       return false;
     }
-    if (viewId == null) return false;
+    if (viewId == null) {
+      DiagLog.event('child_window', 'open_failed', <String, Object?>{
+        'id': id,
+        'error': 'no_view',
+      });
+      return false;
+    }
     final view = await _waitForView(viewId);
     if (view == null || cancelled()) {
       if (view == null) {
         debugPrint('child window $viewId never reached the framework');
+        DiagLog.event('child_window', 'open_failed', <String, Object?>{
+          'id': id,
+          'error': 'view_not_in_framework',
+        });
       }
       await _invoke('close', <String, Object?>{'id': id});
       return false;
@@ -210,7 +266,14 @@ class DesktopChildWindows extends ChangeNotifier {
     // бы пустой прямоугольник.
     final painted = await _awaitFrame();
     if (!painted || cancelled()) {
-      if (!painted) debugPrint('child window $id got no frame in $frameTimeout');
+      if (!painted) {
+        debugPrint('child window $id got no frame in $frameTimeout');
+        DiagLog.event('child_window', 'open_failed', <String, Object?>{
+          'id': id,
+          'error': 'no_frame',
+          'timeout_ms': frameTimeout.inMilliseconds,
+        });
+      }
       if (identical(_open[id], opened)) {
         _open.remove(id);
         notifyListeners();
@@ -222,6 +285,7 @@ class DesktopChildWindows extends ChangeNotifier {
       return false;
     }
     await _invoke('show', <String, Object?>{'id': id});
+    DiagLog.event('child_window', 'opened', <String, Object?>{'id': id});
     return true;
   }
 
@@ -316,8 +380,14 @@ class DesktopChildWindows extends ChangeNotifier {
       _invoke('minimize', <String, Object?>{'id': id});
 
   /// Переставить окошко уведомления на другое место в углу.
-  Future<void> placeAtCorner(String id, int slot) =>
-      _invoke('placeAtCorner', <String, Object?>{'id': id, 'slot': slot});
+  /// [ownMonitor] — угол монитора, где стоит окно (свёрнутый звонок), а не
+  /// главного (окошки уведомлений). macOS всегда берёт экран окна.
+  Future<void> placeAtCorner(String id, int slot, {bool ownMonitor = false}) =>
+      _invoke('placeAtCorner', <String, Object?>{
+        'id': id,
+        'slot': slot,
+        if (ownMonitor) 'ownMonitor': true,
+      });
 
   /// Можно ли сейчас показывать свои окошки уведомлений (Windows).
   ///
@@ -396,6 +466,7 @@ class DesktopChildWindows extends ChangeNotifier {
     _queue.clear();
     _closeRequests.clear();
     _nativeSupported = null;
+    _voiceOverRunning = null;
     debugOperatingSystem = null;
     frameTimeout = _kFrameTimeout;
   }

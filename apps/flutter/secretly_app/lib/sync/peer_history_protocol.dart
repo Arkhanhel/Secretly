@@ -171,6 +171,8 @@ class PeerHistoryChunkEvent {
     this.payloadEventId,
     this.localState,
     this.readAtMs,
+    this.disappearSeconds,
+    this.expiresAtMs,
   });
 
   final String eventId;
@@ -179,6 +181,12 @@ class PeerHistoryChunkEvent {
   final String senderDeviceId;
   final int createdAtMs;
   final String payloadB64;
+
+  /// Исчезающие сообщения (ТЗ 22.10.2026, §2.4): срок из сообщения и момент
+  /// удаления на отвечающем устройстве. Необязательные: старая сборка их не
+  /// шлёт и, получив, пропускает. Истёкшие строки отвечающий не шлёт вовсе.
+  final int? disappearSeconds;
+  final int? expiresAtMs;
 
   /// Threading key for reactions / replies; mobile copies the value
   /// straight out of its own DB row.
@@ -207,6 +215,9 @@ class PeerHistoryChunkEvent {
         if (payloadEventId != null) 'payloadEventId': payloadEventId,
         if (localState != null) 'localState': localState,
         if (readAtMs != null) 'readAtMs': readAtMs,
+        if (disappearSeconds != null && disappearSeconds! > 0)
+          'disappearSeconds': disappearSeconds,
+        if (expiresAtMs != null && expiresAtMs! > 0) 'expiresAtMs': expiresAtMs,
       };
 
   static PeerHistoryChunkEvent? fromJson(Map<String, Object?> j) {
@@ -243,6 +254,8 @@ class PeerHistoryChunkEvent {
       localState:
           j['localState'] is String ? j['localState'] as String : null,
       readAtMs: _positiveIntOrNull(j['readAtMs']),
+      disappearSeconds: _positiveIntOrNull(j['disappearSeconds']),
+      expiresAtMs: _positiveIntOrNull(j['expiresAtMs']),
     );
   }
 }

@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -2048,6 +2049,132 @@ void main() {
         } finally {
           await manager.dispose();
         }
+      } finally {
+        await db.close();
+      }
+    });
+
+    // 🔴 06.10.2026: без службы переднего плана Android 14 при погашенном
+    // экране отбирает микрофон — в групповом звонке человека перестают
+    // слышать. Групповой звонок берёт ту же службу, что и личный.
+    test('RoomCallManager держит службу переднего плана на Android', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      const channel = MethodChannel('secretly/call_ui');
+      final uiCalls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            uiCalls.add(call);
+            return null;
+          });
+      addTearDown(() {
+        debugDefaultTargetPlatformOverride = null;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+      final controller = AppController();
+      final db = await AppDb.openForTesting();
+      final identityKeyPair = await Ed25519().newKeyPair();
+      final mediaFactory = _FakeRoomCallMediaControllerFactory();
+      final requests = <String>[];
+      final relay = await _buildRelayClient(
+        db: db,
+        httpClient: MockClient((request) async {
+          requests.add('${request.method} ${request.url.path}');
+          if (request.method == 'POST' &&
+              request.url.path ==
+                  '/v1/rooms/group%3Aalpha/call/call-1/media/join') {
+            final self = _roomCallMediaParticipantJson(
+              profileId: 'owner-1',
+              deviceId: 'owner-device',
+              isSelf: true,
+              supportsVideo: true,
+              supportsScreenShare: true,
+              videoEnabled: true,
+              publishAudio: true,
+              publishVideo: true,
+              publishScreenShare: false,
+            );
+            return http.Response(
+              _roomCallMediaJoinJson(
+                roomId: 'group:alpha',
+                callId: 'call-1',
+                participants: <Map<String, Object?>>[self],
+                mediaType: 'video',
+                stateVersion: 4,
+              ),
+              200,
+            );
+          }
+          return http.Response('not found', 404);
+        }),
+        identityKeyPair: identityKeyPair,
+      );
+
+      controller.seedRoomRuntimeForTesting(
+        db: db,
+        profileId: 'owner-1',
+        deviceId: 'owner-device',
+      );
+      controller.seedRelayRuntimeForTesting(relay: relay, relayOnline: true);
+
+      try {
+        await db.roomCallSnapshotReplace(
+          groupId: 'group:alpha',
+          callId: 'call-1',
+          state: 'active',
+          mediaType: 'video',
+          createdByProfileId: 'owner-1',
+          createdByDeviceId: 'owner-device',
+          stateVersion: 2,
+          startedAtMs: 1000,
+          updatedAtMs: 2000,
+          expiresAtMs: 9000,
+          participants: const <RoomCallParticipantStateRecord>[
+            (
+              profileId: 'owner-1',
+              deviceId: 'owner-device',
+              joinState: 'joined',
+              supportsVideo: true,
+              supportsScreenShare: true,
+              muted: false,
+              deafened: false,
+              videoEnabled: true,
+              screenShareEnabled: false,
+              speaking: false,
+              joinedAtMs: 1000,
+              leftAtMs: null,
+              updatedAtMs: 2000,
+            ),
+          ],
+        );
+
+        final manager = RoomCallManager(
+          controller: controller,
+          mediaControllerFactory: mediaFactory,
+        );
+        try {
+          await manager.restorePrimaryJoinedRoomCallForTesting();
+          final start = uiCalls
+              .where((c) => c.method == 'startCallForegroundService')
+              .toList();
+          // Сначала — при подключении, потом — когда стал известен вид звонка.
+          expect(start, isNotEmpty);
+          expect(start.length, lessThanOrEqualTo(2));
+          final args = start.last.arguments as Map;
+          expect(args['callId'], 'room:group:alpha:call-1');
+          expect(args['isVideo'], isTrue);
+          expect(
+            uiCalls.where((c) => c.method == 'stopCallForegroundService'),
+            isEmpty,
+          );
+        } finally {
+          await manager.dispose();
+        }
+        expect(
+          uiCalls.where((c) => c.method == 'stopCallForegroundService'),
+          hasLength(1),
+        );
       } finally {
         await db.close();
       }

@@ -11,6 +11,7 @@ import '../../../rooms/room_call_manager.dart';
 import '../design/tokens.dart';
 import '../primitives/hover_listener.dart';
 import 'call_peer_label.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Полоса идущего созвона — НАД ВСЕМ ОКНОМ, из любого раздела.
 ///
@@ -164,8 +165,18 @@ class _DesktopActiveCallBarState extends State<DesktopActiveCallBar> {
   Widget build(BuildContext context) {
     final direct = _directRow(context);
     final room = _roomRow(context);
-    if (direct == null) return room;
-    return Column(mainAxisSize: MainAxisSize.min, children: [direct, room]);
+    // Полосы идущего звонка выезжают сверху и уезжают обратно, окно под ними
+    // сдвигается плавно (05.10.2026).
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        DExpand(
+          open: direct != null,
+          child: direct ?? const SizedBox.shrink(),
+        ),
+        DExpand(open: _joinedRoomId != null, child: room),
+      ],
+    );
   }
 
   /// Строка звонка один на один. `null` — такого звонка нет или он ещё
@@ -371,20 +382,28 @@ class _BarIconButton extends StatelessWidget {
               : SystemMouseCursors.click,
           builder: (ctx, hovered, pressed) => Opacity(
             opacity: onTap == null ? 0.5 : 1,
-            child: Container(
-              width: solid ? 30 : 24,
-              height: 24,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: solid
-                    ? tone.withValues(alpha: hovered ? 1 : 0.88)
-                    : tone.withValues(alpha: hovered ? 0.30 : 0.18),
-                borderRadius: BorderRadius.circular(DRadii.r9),
-              ),
-              child: Icon(
-                icon,
-                size: 13,
-                color: solid ? Colors.white : tone,
+            child: DPressScale(
+              pressed: pressed && onTap != null,
+              scale: 0.88,
+              child: AnimatedContainer(
+                duration: DMotion.fast,
+                curve: DMotion.standard,
+                width: solid ? 30 : 24,
+                height: 24,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: solid
+                      ? tone.withValues(alpha: hovered ? 1 : 0.88)
+                      : tone.withValues(alpha: hovered ? 0.30 : 0.18),
+                  borderRadius: BorderRadius.circular(DRadii.r9),
+                ),
+                // Микрофон ↔ микрофон выключен — превращением (05.10.2026).
+                child: DMorphIcon(
+                  icon,
+                  size: 13,
+                  color: solid ? Colors.white : tone,
+                  style: DMorphStyle.spin,
+                ),
               ),
             ),
           ),

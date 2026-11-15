@@ -12,6 +12,7 @@ import '../../../l10n/app_localizations.dart';
 import '../design/tokens.dart';
 import '../primitives/desktop_tooltip.dart';
 import '../primitives/hover_listener.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Сочетание клавиш так, как его пишет своя система: «⌘D» на Mac и «Ctrl+D»
 /// на Windows.
@@ -173,8 +174,15 @@ class CallDockToggle extends StatelessWidget {
         child: HoverListener(
           onTap: enabled ? onTap : null,
           cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-          builder: (ctx, hovered, pressed) => AnimatedContainer(
-            duration: DMotion.fast,
+          // 🔴 Переключатель звонка — физический (05.10.2026): вжимается,
+          // значок «микрофон ↔ микрофон выключен» превращается с четвертью
+          // оборота, цвет (белый ↔ красный) перетекает вместе с подложкой.
+          builder: (ctx, hovered, pressed) => DPressScale(
+            pressed: pressed && enabled,
+            scale: 0.94,
+            child: AnimatedContainer(
+            duration: DMotion.of(ctx, DMotion.base),
+            curve: DMotion.standard,
             height: 40,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
@@ -186,7 +194,12 @@ class CallDockToggle extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, size: 18, color: tone),
+                  DMorphIcon(
+                    icon,
+                    size: 18,
+                    color: tone,
+                    style: DMorphStyle.spin,
+                  ),
                   const SizedBox(width: 7),
                   Text(
                     label,
@@ -201,6 +214,7 @@ class CallDockToggle extends StatelessWidget {
                 ],
               ),
             ),
+          ),
           ),
         ),
       ),
@@ -219,7 +233,7 @@ class CallDockToggle extends StatelessWidget {
               cursor: enabled
                   ? SystemMouseCursors.click
                   : SystemMouseCursors.basic,
-              builder: (ctx, hovered, pressed) => AnimatedContainer(
+              builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: AnimatedContainer(
                 duration: DMotion.fast,
                 width: 28,
                 height: 40,
@@ -238,7 +252,7 @@ class CallDockToggle extends StatelessWidget {
                     color: c.textSecondary,
                   ),
                 ),
-              ),
+              )),
             ),
           ),
         ),

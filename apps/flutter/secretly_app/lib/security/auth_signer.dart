@@ -357,6 +357,22 @@ class AuthSigner {
     );
   }
 
+  /// К8: удаление своей копии с сервера (`/v1/backup/{id}/delete`).
+  static List<int> keysBackupDeleteMessage({
+    required String requesterDeviceId,
+    required String profileId,
+    required int tsMs,
+    required String nonceB64,
+  }) {
+    return utf8.encode(
+      'SECRETLY-BACKUP-DELETE-V1\n'
+      'requester_device_id=$requesterDeviceId\n'
+      'profile_id=$profileId\n'
+      'ts_ms=$tsMs\n'
+      'nonce_b64=$nonceB64\n',
+    );
+  }
+
   static List<int> keysBackupGetMessage({
     required String requesterDeviceId,
     required String profileId,
@@ -808,6 +824,28 @@ class AuthSigner {
     );
   }
 
+  /// Создание закрытой ветки (06.10.2026): отдельная подпись, чтобы запрос
+  /// нельзя было повторить, срезав или подменив родителя. Формат — ровно
+  /// `http_room_create_topic_auth_message` реле.
+  static List<int> relayHttpRoomCreateTopicMessage({
+    required String deviceId,
+    required String roomId,
+    required String parentRoomId,
+    required String title,
+    required int tsMs,
+    required String nonceB64,
+  }) {
+    return utf8.encode(
+      'SECRETLY-RELAY-HTTP-ROOM-CREATE-TOPIC-V1\n'
+      'device_id=$deviceId\n'
+      'room_id=$roomId\n'
+      'parent_room_id=$parentRoomId\n'
+      'title=$title\n'
+      'ts_ms=$tsMs\n'
+      'nonce_b64=$nonceB64\n',
+    );
+  }
+
   static List<int> relayHttpRoomGetMessage({
     required String deviceId,
     required String roomId,
@@ -952,9 +990,13 @@ class AuthSigner {
     required bool chatHistoryVisible,
     required int tsMs,
     required String nonceB64,
+    // Закрытые темы (06.10.2026): флаг едет только вместе с V2 — без него
+    // подпись прежняя, байт в байт.
+    bool? allowMembersCreateTopics,
   }) {
+    final v2 = allowMembersCreateTopics != null;
     return utf8.encode(
-      'SECRETLY-RELAY-HTTP-ROOM-SETTINGS-UPDATE-V1\n'
+      '${v2 ? 'SECRETLY-RELAY-HTTP-ROOM-SETTINGS-UPDATE-V2' : 'SECRETLY-RELAY-HTTP-ROOM-SETTINGS-UPDATE-V1'}\n'
       'device_id=$deviceId\n'
       'room_id=$roomId\n'
       'reactions_mode=$reactionsMode\n'
@@ -967,6 +1009,7 @@ class AuthSigner {
       'join_approval_required=${joinApprovalRequired ? 1 : 0}\n'
       'slow_mode_seconds=$slowModeSeconds\n'
       'chat_history_visible=${chatHistoryVisible ? 1 : 0}\n'
+      '${v2 ? 'allow_members_create_topics=${allowMembersCreateTopics ? 1 : 0}\n' : ''}'
       'ts_ms=$tsMs\n'
       'nonce_b64=$nonceB64\n',
     );

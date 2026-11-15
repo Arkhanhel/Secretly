@@ -20,6 +20,7 @@
 		A10000000000000000000002 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000004 /* Localizable.strings */; };
 		D09E0EF9B62BF79F9F1016B2 /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7294EA7A4BE36F5BF6BFF8ED /* Pods_RunnerTests.framework */; };
 		E4F69A5A300A3BEC00AC4AE2 /* SecretlyNSE.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E4F69A53300A3BEC00AC4AE2 /* SecretlyNSE.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E4F69B5A300A3BEC00AC4AE2 /* SecretlyShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E4F69B53300A3BEC00AC4AE2 /* SecretlyShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F660620BE72ACEEF8BF87BF8 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 041BB89EBF1F86D90FF65651 /* Pods_Runner.framework */; };
 /* End PBXBuildFile section */
 
@@ -37,6 +38,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = E4F69A52300A3BEC00AC4AE2;
 			remoteInfo = SecretlyNSE;
+		};
+		E4F69B58300A3BEC00AC4AE2 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E4F69B52300A3BEC00AC4AE2;
+			remoteInfo = SecretlyShare;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -58,6 +66,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				E4F69A5A300A3BEC00AC4AE2 /* SecretlyNSE.appex in Embed Foundation Extensions */,
+				E4F69B5A300A3BEC00AC4AE2 /* SecretlyShare.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -108,6 +117,7 @@
 		A10000000000000000000028 /* de */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = de; path = de.lproj/Localizable.strings; sourceTree = "<group>"; };
 		E0E397DC45E322F423BABDAC /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
 		E4F69A53300A3BEC00AC4AE2 /* SecretlyNSE.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SecretlyNSE.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E4F69B53300A3BEC00AC4AE2 /* SecretlyShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SecretlyShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -117,6 +127,13 @@
 				Info.plist,
 			);
 			target = E4F69A52300A3BEC00AC4AE2 /* SecretlyNSE */;
+		};
+		E4F69B5F300A3BEC00AC4AE2 /* Exceptions for "SecretlyShare" folder in "SecretlyShare" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E4F69B52300A3BEC00AC4AE2 /* SecretlyShare */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -131,6 +148,18 @@
 			explicitFolders = (
 			);
 			path = SecretlyNSE;
+			sourceTree = "<group>";
+		};
+		E4F69B54300A3BEC00AC4AE2 /* SecretlyShare */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E4F69B5F300A3BEC00AC4AE2 /* Exceptions for "SecretlyShare" folder in "SecretlyShare" target */,
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = SecretlyShare;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -153,6 +182,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		E4F69A50300A3BEC00AC4AE2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E4F69B50300A3BEC00AC4AE2 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -197,6 +233,7 @@
 				9740EEB11CF90186004384FC /* Flutter */,
 				97C146F01CF9000F007C117D /* Runner */,
 				E4F69A54300A3BEC00AC4AE2 /* SecretlyNSE */,
+				E4F69B54300A3BEC00AC4AE2 /* SecretlyShare */,
 				97C146EF1CF9000F007C117D /* Products */,
 				331C8082294A63A400263BE5 /* RunnerTests */,
 				CFC7DF2F89C9D690CFA7675E /* Pods */,
@@ -210,6 +247,7 @@
 				97C146EE1CF9000F007C117D /* Runner.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
 				E4F69A53300A3BEC00AC4AE2 /* SecretlyNSE.appex */,
+				E4F69B53300A3BEC00AC4AE2 /* SecretlyShare.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -287,6 +325,7 @@
 			);
 			dependencies = (
 				E4F69A59300A3BEC00AC4AE2 /* PBXTargetDependency */,
+				E4F69B59300A3BEC00AC4AE2 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
@@ -313,6 +352,26 @@
 			productReference = E4F69A53300A3BEC00AC4AE2 /* SecretlyNSE.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		E4F69B52300A3BEC00AC4AE2 /* SecretlyShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E4F69B60300A3BEC00AC4AE2 /* Build configuration list for PBXNativeTarget "SecretlyShare" */;
+			buildPhases = (
+				E4F69B4F300A3BEC00AC4AE2 /* Sources */,
+				E4F69B50300A3BEC00AC4AE2 /* Frameworks */,
+				E4F69B51300A3BEC00AC4AE2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				E4F69B54300A3BEC00AC4AE2 /* SecretlyShare */,
+			);
+			name = SecretlyShare;
+			productName = SecretlyShare;
+			productReference = E4F69B53300A3BEC00AC4AE2 /* SecretlyShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -333,6 +392,9 @@
 						LastSwiftMigration = 1100;
 					};
 					E4F69A52300A3BEC00AC4AE2 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					E4F69B52300A3BEC00AC4AE2 = {
 						CreatedOnToolsVersion = 26.6;
 					};
 				};
@@ -360,6 +422,7 @@
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
 				E4F69A52300A3BEC00AC4AE2 /* SecretlyNSE */,
+				E4F69B52300A3BEC00AC4AE2 /* SecretlyShare */,
 			);
 		};
 /* End PBXProject section */
@@ -388,6 +451,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		E4F69A51300A3BEC00AC4AE2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E4F69B51300A3BEC00AC4AE2 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -533,6 +603,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E4F69B4F300A3BEC00AC4AE2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -545,6 +622,11 @@
 			isa = PBXTargetDependency;
 			target = E4F69A52300A3BEC00AC4AE2 /* SecretlyNSE */;
 			targetProxy = E4F69A58300A3BEC00AC4AE2 /* PBXContainerItemProxy */;
+		};
+		E4F69B59300A3BEC00AC4AE2 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E4F69B52300A3BEC00AC4AE2 /* SecretlyShare */;
+			targetProxy = E4F69B58300A3BEC00AC4AE2 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -928,6 +1010,50 @@
 			};
 			name = Debug;
 		};
+		E4F69B5C300A3BEC00AC4AE2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = SecretlyShare/SecretlyShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = 3HF84UAL32;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SecretlyShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Secretly;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.secretly.messenger.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		E4F69A5D300A3BEC00AC4AE2 /* Release */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
@@ -958,6 +1084,47 @@
 				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
 				MTL_FAST_MATH = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.secretly.messenger.SecretlyNSE;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		E4F69B5D300A3BEC00AC4AE2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = SecretlyShare/SecretlyShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = 3HF84UAL32;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SecretlyShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Secretly;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.secretly.messenger.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -1010,6 +1177,47 @@
 			};
 			name = Profile;
 		};
+		E4F69B5E300A3BEC00AC4AE2 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CODE_SIGN_ENTITLEMENTS = SecretlyShare/SecretlyShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
+				DEVELOPMENT_TEAM = 3HF84UAL32;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SecretlyShare/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Secretly;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = "$(FLUTTER_BUILD_NAME)";
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.secretly.messenger.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1049,6 +1257,16 @@
 				E4F69A5C300A3BEC00AC4AE2 /* Debug */,
 				E4F69A5D300A3BEC00AC4AE2 /* Release */,
 				E4F69A5E300A3BEC00AC4AE2 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E4F69B60300A3BEC00AC4AE2 /* Build configuration list for PBXNativeTarget "SecretlyShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E4F69B5C300A3BEC00AC4AE2 /* Debug */,
+				E4F69B5D300A3BEC00AC4AE2 /* Release */,
+				E4F69B5E300A3BEC00AC4AE2 /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -10,6 +10,8 @@ import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../build_variant.dart';
+
 /// Procedural "live sticker" motion effects applied to a static cutout. Kept
 /// transform-only (scale / rotate / translate) so every effect preserves the
 /// cutout's alpha and loops seamlessly — no per-pixel work, no external assets.
@@ -53,6 +55,9 @@ class StickerAnimationService {
     required StickerMotionEffect effect,
     double speed = 1.0,
   }) async {
+    // Облегчённая сборка: анимированный WebP печёт FFmpeg, которого нет.
+    // Вызывающий уже умеет оставить статичный стикер.
+    if (!kVideoToolsAvailable) return null;
     // Higher speed → higher playback fps → a shorter, snappier loop.
     final fps = (_fps * speed).round().clamp(8, 36);
     Directory? work;

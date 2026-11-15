@@ -6,9 +6,15 @@ import 'package:secretly_app/ui/secretly_snackbar.dart';
 
 import '../app/app_controller.dart';
 import '../security/app_security_manager.dart';
+import '../security/profile_space.dart';
+import 'security_duress_section.dart';
+import 'social_recovery_screen.dart';
 import 'animations/animations.dart';
+import 'app_asset_paths.dart';
 import 'l10n.dart';
+import 'personal_chats_screen.dart';
 import 'security_lock_flow.dart';
+import 'settings_group.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_top_bar.dart';
 
@@ -49,6 +55,9 @@ Future<void> openSecurityScopeSettings({
   );
 }
 
+/// Цвет раздела «Безопасность» — тот же, что у значка в главном списке.
+const Color _securityAmber = Color(0xFFE0A43A);
+
 class SecuritySettingsScreen extends StatelessWidget {
   const SecuritySettingsScreen({super.key, required this.controller});
 
@@ -77,6 +86,20 @@ class SecuritySettingsScreen extends StatelessWidget {
               body: ListView(
                 padding: EdgeInsets.fromLTRB(16, topPad, 16, bottomPad),
                 children: [
+                  SettingsPageIntro(
+                    icon: Image.asset(
+                      '${AppAssetPaths.settingsIconsDir}/privat/w11-block.png',
+                      color: _securityAmber,
+                      colorBlendMode: BlendMode.srcIn,
+                    ),
+                    color: _securityAmber,
+                    text: context.l10n.settingsIntroSecurity,
+                    inset: 4,
+                  ),
+                  SettingsGroupHeader(
+                    context.l10n.settingsGroupLock,
+                    inset: 16,
+                  ),
                   _SecuritySummaryCard(
                     title: _label(
                       context,
@@ -142,6 +165,42 @@ class SecuritySettingsScreen extends StatelessWidget {
                       scope: SecurityLockScope.personal,
                     ),
                   ),
+                  // Перенесено из «Медиа и профиль» (макет владельца,
+                  // 11.2026): вход в личную подборку стоит рядом с её
+                  // защитой. Поведение прежнее — сперва проверка блокировки.
+                  const SizedBox(height: 14),
+                  Card(
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
+                      leading: const Icon(Icons.folder_special_rounded),
+                      title: Text(context.l10n.settingsOpenPersonalChats),
+                      subtitle: Text(context.l10n.settingsOpenPersonalChatsSub),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () async {
+                        final unlocked = await ensureSecurityScopeUnlocked(
+                          context: context,
+                          controller: controller,
+                          scope: SecurityLockScope.personal,
+                        );
+                        if (!context.mounted || !unlocked) return;
+                        await Navigator.of(context).push(
+                          SecretlyPageRoute<void>(
+                            builder: (_) =>
+                                PersonalChatsScreen(controller: controller),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  // Э3: социальное восстановление. В пространстве обманки
+                  // не показывается — там нечего восстанавливать.
+                  if (ProfileSpaceRuntime.active == ProfileSpace.main) ...[
+                    SettingsGroupHeader(
+                      context.l10n.settingsGroupRecovery,
+                      inset: 16,
+                    ),
+                    SocialRecoveryEntryCard(controller: controller),
+                  ],
                 ],
               ),
             );
@@ -687,6 +746,20 @@ class _SecurityScopeDetailScreenState
                     ),
                     onTap: _saving ? null : _changeCredential,
                   ),
+                ),
+              ],
+              // Код принуждения (Э2): только основное пространство и только
+              // парольный замок приложения. В обманке раздела нет.
+              if (widget.scope == SecurityLockScope.app &&
+                  ProfileSpaceRuntime.active == ProfileSpace.main &&
+                  _manager.scopeConfig(widget.scope).isEnabled &&
+                  _manager.scopeConfig(widget.scope).method ==
+                      SecurityLockMethod.password) ...[
+                const SizedBox(height: 14),
+                SecurityDuressSection(
+                  manager: _manager,
+                  enabled: !_saving,
+                  onError: (message) => setState(() => _errorText = message),
                 ),
               ],
               if (_errorText.isNotEmpty) ...[

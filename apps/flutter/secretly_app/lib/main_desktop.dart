@@ -49,6 +49,7 @@
 library;
 
 import 'dart:async';
+import 'ui/premium/decoration_clock.dart';
 import 'ui/desktop/chat/attachment_save.dart' show clearAttachmentOpenCopies;
 import 'dart:io' show Platform, exit;
 
@@ -68,6 +69,9 @@ import 'ui/desktop/services/desktop_update_service.dart';
 import 'ui/desktop/app/desktop_production_app.dart';
 import 'ui/desktop/chat/chat_thread_panel.dart' show DesktopDraftStore;
 import 'ui/desktop/chat/recent_reactions_store.dart';
+import 'ui/desktop/primitives/motion_widgets.dart' show DPointerMemory;
+import 'ui/desktop/chat/desktop_wallpaper.dart'
+    show installDesktopStandardChatWallpapers;
 import 'ui/desktop/design/emoji_font.dart';
 import 'ui/desktop/services/desktop_login_item_windows.dart'
     show kDesktopMinimizedArg;
@@ -130,12 +134,20 @@ Future<void> main(List<String> args) async {
   // декодируются под размер на экране (`desktopAvatarImage`), так что запас
   // уходит на фото и медиа. Телефону здесь ничего не меняется — это вход ПК.
   PaintingBinding.instance.imageCache.maximumSizeBytes = 150 * 1024 * 1024;
+  // Украшения (живые рамки) шагают общими часами 30 раз в секунду, а не
+  // тикером на каждом обновлении экрана: тот держал окно в непрерывной
+  // перерисовке — четверть ядра в простое (14.11.2026, [DecorationClock]).
+  DecorationClock.interval = const Duration(milliseconds: 33);
   // 🔴 Ошибки — в журнал с первой строки (30.09.2026): до открытия файла
   // строки ждут в памяти, необработанные ошибки зон ловит
   // PlatformDispatcher.onError (см. [DesktopCrashLog]).
   DesktopDiagFileLog.captureEarly();
   DesktopCrashLog.install();
   _installDesktopErrorGuard();
+  // До создания контроллера: он берёт стандартные обои при запуске.
+  installDesktopStandardChatWallpapers();
+  // Окна просмотра раскрываются из места щелчка (05.10.2026).
+  DPointerMemory.install();
   // Лицензии вшитых шрифтов (OFL, Apache 2.0) обязаны ехать вместе с
   // дистрибутивом, а Flutter видит только пакеты из `pub`. На компьютере вызова
   // не было, и экран лицензий молчал о тринадцати семействах шрифтов

@@ -92,7 +92,7 @@ Widget buildDesktopChatWallpaper(
     // меняется на свою светлую пару и наоборот (28.09.2026).
     return _assetWallpaper(
       context,
-      themedChatWallpaperAssetPath(assetPath, darkMode: palette.isDark),
+      desktopThemedChatWallpaperAssetPath(assetPath, dark: palette.isDark),
       preview: preview,
     );
   }
@@ -143,12 +143,91 @@ Widget buildDesktopChatWallpaper(
     default:
       return _assetWallpaper(
         context,
-        palette.isDark
-            ? kDarkThemeStandardChatWallpaperAssetPath
-            : kLightThemeStandardChatWallpaperAssetPath,
+        standardChatWallpaperAssetPath(darkMode: palette.isDark),
         preview: preview,
       );
   }
+}
+
+/// «Небо» — стандартные обои ПК в светлой теме (05.10.2026).
+const String kDesktopLightStandardChatWallpaperAssetPath =
+    '${kLightThemeChatWallpaperAssetRoot}wallpaper_light_sky.jpg';
+
+/// «Графит» — стандартные обои ПК в тёмной теме (05.10.2026).
+const String kDesktopDarkStandardChatWallpaperAssetPath =
+    '${kBundledChatWallpaperAssetRoot}wallpaper_dark_graphite.jpg';
+
+/// 🔴 СТАНДАРТНЫЕ ОБОИ ПК — «НЕБО» И «ГРАФИТ» (05.10.2026, владелец: «по
+/// стандарту в светлой теме — светлые „Небо“, в тёмной — тёмные „Графит“,
+/// чтобы при переключении не было конфликта цветов»).
+///
+/// Подменяет стандартную пару общего кода ([standardChatWallpaperAssetPath]):
+/// её берут контроллер (запуск, смена темы, пока человек сам ничего не
+/// выбрал), набор «Классика» и «Сбросить». Телефон пару не подменяет.
+void installDesktopStandardChatWallpapers() {
+  overrideStandardChatWallpaperAssetPaths(
+    light: kDesktopLightStandardChatWallpaperAssetPath,
+    dark: kDesktopDarkStandardChatWallpaperAssetPath,
+  );
+}
+
+/// Пары картинок набора для смены темы на ПК, по цвету (05.10.2026).
+///
+/// У картинок набора нет «светлой копии» с тем же именем, как у secureN, —
+/// каждая нарисована для одной темы. Раньше они при смене темы не менялись
+/// вовсе: тёмный «Графит» оставался под светлыми пузырями, светлое «Небо» —
+/// под тёмными. Пара подобрана по цвету; «Небо ↔ Графит» — стандартная пара
+/// ПК, «Бирюза ↔ Мята» — пара набора «Лес» во «Внешнем виде».
+const Map<String, String> kDesktopWallpaperThemePairs = <String, String>{
+  // тёмная → светлая
+  'wallpaper_dark_graphite.jpg': 'wallpaper_light_sky.jpg',
+  'wallpaper_dark_navy.jpg': 'wallpaper_light_sky.jpg',
+  'wallpaper_dark_teal.jpg': 'wallpaper_light_mint.jpg',
+  'wallpaper_dark_plum.jpg': 'wallpaper_light_lavender.jpg',
+  'wallpaper_dark_wine.jpg': 'wallpaper_light_peach.jpg',
+  // светлая → тёмная
+  'wallpaper_light_sky.jpg': 'wallpaper_dark_graphite.jpg',
+  'wallpaper_light_mint.jpg': 'wallpaper_dark_teal.jpg',
+  'wallpaper_light_lavender.jpg': 'wallpaper_dark_plum.jpg',
+  'wallpaper_light_peach.jpg': 'wallpaper_dark_wine.jpg',
+  'wallpaper_light_sunset.jpg': 'wallpaper_dark_wine.jpg',
+};
+
+/// Картинка обоев [assetPath] под тему ПК.
+///
+/// Картинки с парой по имени (secureN, chat_default) меняются, как на
+/// телефоне. Картинка набора чужой темы рисуется своей парой по цвету
+/// ([kDesktopWallpaperThemePairs]); неизвестная — стандартной картинкой
+/// темы. Выбор человека не стирается: вернул тему — вернулась его картинка.
+String desktopThemedChatWallpaperAssetPath(
+  String assetPath, {
+  required bool dark,
+}) {
+  final path = assetPath.trim();
+  final slash = path.lastIndexOf('/');
+  final name = slash < 0 ? path : path.substring(slash + 1);
+  if (!kFeaturedChatWallpaperBasenames.contains(name)) {
+    return themedChatWallpaperAssetPath(path, darkMode: dark);
+  }
+  final lightPicture = isLightThemeChatWallpaperAssetPath(path);
+  if (lightPicture != dark) return path;
+  final pair = kDesktopWallpaperThemePairs[name];
+  if (pair == null) return standardChatWallpaperAssetPath(darkMode: dark);
+  return dark
+      ? '$kBundledChatWallpaperAssetRoot$pair'
+      : '$kLightThemeChatWallpaperAssetRoot$pair';
+}
+
+/// Идентификатор обоев [id] в том виде, в каком ПК их рисует в теме [dark]:
+/// для картинок — с заменой чужой темы ([desktopThemedChatWallpaperAssetPath]),
+/// остальные — как есть. Нужен сетке выбора, чтобы отмечать то, что видно.
+String desktopThemedChatWallpaperId(String id, {required bool dark}) {
+  final normalized = normalizeChatWallpaperId(id);
+  final assetPath = decodeAssetChatWallpaperId(normalized);
+  if (assetPath == null) return normalized;
+  return encodeAssetChatWallpaperId(
+    desktopThemedChatWallpaperAssetPath(assetPath, dark: dark),
+  );
 }
 
 /// Идентификатор, которым ПК подменяет свой прежний `default` (картинка

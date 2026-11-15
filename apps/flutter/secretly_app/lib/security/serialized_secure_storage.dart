@@ -15,6 +15,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// каждый секрет хранится отдельно, там очередь не нужна и не включается.
 ///
 /// Очередь общая для всех экземпляров: файл один на всё приложение.
+///
+/// 🔴 10.10.2026, пространство профиля (Э2). Через этот класс ходят все
+/// секреты приложения: пароль базы, ключ содержимого, секрет профиля, ключи
+/// устройства, ключ личности. Пространство обманки получает свои копии всех
+/// секретов одним [spacePrefix] здесь, а не правкой каждого ключа. Записи
+/// замка (PIN) и счётчик попыток остаются общими: их читает шлюз ДО выбора
+/// пространства, и именно по ним это пространство выбирается.
 class SerializedSecureStorage extends FlutterSecureStorage {
   const SerializedSecureStorage({
     super.iOptions,
@@ -26,6 +33,43 @@ class SerializedSecureStorage extends FlutterSecureStorage {
   });
 
   static Future<void> _tail = Future<void>.value();
+
+  /// Префикс ключей активного пространства профиля; пусто для `main`.
+  static String spacePrefix = '';
+
+  /// Ключи, общие для всех пространств (см. комментарий класса).
+  static const List<String> globalKeyPrefixes = <String>[
+    'secretly/app_lock_secret_v1',
+    'secretly/lock_attempts_v1',
+  ];
+
+  static bool isGlobalKey(String key) {
+    for (final prefix in globalKeyPrefixes) {
+      if (key == prefix || key.startsWith('$prefix/')) return true;
+    }
+    return false;
+  }
+
+  /// Ключ с учётом пространства.
+  static String scopedKey(String key) =>
+      spacePrefix.isEmpty || isGlobalKey(key) ? key : '$spacePrefix$key';
+
+  /// Стирает ключи ПО СЫРЫМ именам, минуя префикс пространства. Нужно
+  /// стиранию пространства, которое не является активным.
+  static Future<void> deleteRawKeysWhere(bool Function(String rawKey) test) {
+    const storage = SerializedSecureStorage();
+    return _queued(() async {
+      final all = await storage._readAllRaw();
+      for (final k in all.keys.toList(growable: false)) {
+        if (!test(k)) continue;
+        await storage._deleteRaw(k);
+      }
+    });
+  }
+
+  Future<Map<String, String>> _readAllRaw() => super.readAll();
+
+  Future<void> _deleteRaw(String rawKey) => super.delete(key: rawKey);
 
   /// Очередь нужна там, где хранилище — один файл на все секреты.
   static bool get serializes =>
@@ -51,7 +95,7 @@ class SerializedSecureStorage extends FlutterSecureStorage {
     WindowsOptions? wOptions,
   }) => _queued(
     () => super.write(
-      key: key,
+      key: scopedKey(key),
       value: value,
       iOptions: iOptions,
       aOptions: aOptions,
@@ -73,7 +117,7 @@ class SerializedSecureStorage extends FlutterSecureStorage {
     WindowsOptions? wOptions,
   }) => _queued(
     () => super.read(
-      key: key,
+      key: scopedKey(key),
       iOptions: iOptions,
       aOptions: aOptions,
       lOptions: lOptions,
@@ -94,7 +138,7 @@ class SerializedSecureStorage extends FlutterSecureStorage {
     WindowsOptions? wOptions,
   }) => _queued(
     () => super.containsKey(
-      key: key,
+      key: scopedKey(key),
       iOptions: iOptions,
       aOptions: aOptions,
       lOptions: lOptions,
@@ -115,7 +159,7 @@ class SerializedSecureStorage extends FlutterSecureStorage {
     WindowsOptions? wOptions,
   }) => _queued(
     () => super.delete(
-      key: key,
+      key: scopedKey(key),
       iOptions: iOptions,
       aOptions: aOptions,
       lOptions: lOptions,
@@ -125,6 +169,8 @@ class SerializedSecureStorage extends FlutterSecureStorage {
     ),
   );
 
+  /// В пространстве обманки видны только её ключи (без префикса в именах) и
+  /// общие; секреты настоящего профиля наружу не выдаются.
   @override
   Future<Map<String, String>> readAll({
     IOSOptions? iOptions,
@@ -133,17 +179,30 @@ class SerializedSecureStorage extends FlutterSecureStorage {
     WebOptions? webOptions,
     MacOsOptions? mOptions,
     WindowsOptions? wOptions,
-  }) => _queued(
-    () => super.readAll(
+  }) => _queued(() async {
+    final all = await super.readAll(
       iOptions: iOptions,
       aOptions: aOptions,
       lOptions: lOptions,
       webOptions: webOptions,
       mOptions: mOptions,
       wOptions: wOptions,
-    ),
-  );
+    );
+    final prefix = spacePrefix;
+    if (prefix.isEmpty) return all;
+    final out = <String, String>{};
+    all.forEach((k, v) {
+      if (k.startsWith(prefix)) {
+        out[k.substring(prefix.length)] = v;
+      } else if (isGlobalKey(k)) {
+        out[k] = v;
+      }
+    });
+    return out;
+  });
 
+  /// В пространстве обманки стираются только её ключи. Общие (замок) и ключи
+  /// настоящего профиля это не трогает.
   @override
   Future<void> deleteAll({
     IOSOptions? iOptions,
@@ -152,14 +211,39 @@ class SerializedSecureStorage extends FlutterSecureStorage {
     WebOptions? webOptions,
     MacOsOptions? mOptions,
     WindowsOptions? wOptions,
-  }) => _queued(
-    () => super.deleteAll(
+  }) => _queued(() async {
+    final prefix = spacePrefix;
+    if (prefix.isEmpty) {
+      await super.deleteAll(
+        iOptions: iOptions,
+        aOptions: aOptions,
+        lOptions: lOptions,
+        webOptions: webOptions,
+        mOptions: mOptions,
+        wOptions: wOptions,
+      );
+      return;
+    }
+    final all = await super.readAll(
       iOptions: iOptions,
       aOptions: aOptions,
       lOptions: lOptions,
       webOptions: webOptions,
       mOptions: mOptions,
       wOptions: wOptions,
-    ),
-  );
+    );
+    // Копия: реализация может отдать свою живую карту, а мы её меняем.
+    for (final k in all.keys.toList(growable: false)) {
+      if (!k.startsWith(prefix)) continue;
+      await super.delete(
+        key: k,
+        iOptions: iOptions,
+        aOptions: aOptions,
+        lOptions: lOptions,
+        webOptions: webOptions,
+        mOptions: mOptions,
+        wOptions: wOptions,
+      );
+    }
+  });
 }

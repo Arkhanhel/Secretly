@@ -266,7 +266,13 @@ class DesktopCallMiniCard extends StatelessWidget {
     required this.expandTooltip,
     required this.end,
     this.semanticLabel,
+    this.framed = true,
   });
+
+  /// Своя рамка, скругление и тень — у мини-окна ВНУТРИ приложения. В своём
+  /// окне ОС (05.10.2026) рамку рисует система, и карточка занимает окно
+  /// целиком.
+  final bool framed;
 
   /// Что на сцене: картинка или портрет с подписью.
   final Widget stage;
@@ -294,25 +300,29 @@ class DesktopCallMiniCard extends StatelessWidget {
       container: true,
       label: semanticLabel,
       child: Container(
-        decoration: const BoxDecoration(
-          color: kDesktopCallMiniStage,
-          borderRadius: BorderRadius.all(Radius.circular(DRadii.r16)),
-          boxShadow: [
-            BoxShadow(
-              color: Color(0x73000000),
-              blurRadius: 28,
-              offset: Offset(0, 12),
-            ),
-          ],
-        ),
+        decoration: framed
+            ? const BoxDecoration(
+                color: kDesktopCallMiniStage,
+                borderRadius: BorderRadius.all(Radius.circular(DRadii.r16)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x73000000),
+                    blurRadius: 28,
+                    offset: Offset(0, 12),
+                  ),
+                ],
+              )
+            : const BoxDecoration(color: kDesktopCallMiniStage),
         // Кромка рисуется ПОВЕРХ: рамка в `decoration` отнимает у содержимого
         // по точке с каждой стороны, и сцена с полосой кнопок в свою высоту
         // уже не помещались.
-        foregroundDecoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(DRadii.r16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
-        ),
-        clipBehavior: Clip.antiAlias,
+        foregroundDecoration: framed
+            ? BoxDecoration(
+                borderRadius: BorderRadius.circular(DRadii.r16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.09)),
+              )
+            : null,
+        clipBehavior: framed ? Clip.antiAlias : Clip.none,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

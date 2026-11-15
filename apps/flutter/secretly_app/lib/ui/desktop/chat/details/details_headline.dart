@@ -15,6 +15,7 @@ import '../../primitives/hover_listener.dart';
 import '../../primitives/verified_badge.dart';
 import '../../design/tokens.dart';
 import '../noto_emoji_lottie.dart' show DesktopStatusEmoji;
+import '../../primitives/motion_widgets.dart';
 
 /// Верх панели подробностей: обложка, аватар, имя, значки, присутствие.
 ///
@@ -463,7 +464,7 @@ class _CoverAction extends StatelessWidget {
     final tile = HoverListener(
       onTap: onPressed,
       cursor: SystemMouseCursors.click,
-      builder: (ctx, hovered, pressed) => Container(
+      builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: Container(
         width: 28,
         height: 28,
         decoration: BoxDecoration(
@@ -478,7 +479,7 @@ class _CoverAction extends StatelessWidget {
           size: 17,
           color: onCover ? Colors.white : c.textPrimary,
         ),
-      ),
+      )),
     );
     return DesktopTooltip(
       message: tooltip,

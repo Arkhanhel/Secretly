@@ -17,6 +17,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 
 part 'profile_fx/util.dart';
 part 'profile_fx/bridge.dart';
@@ -26,6 +27,10 @@ part 'profile_fx/frames/avatar_frame.dart';
 part 'profile_fx/frames/characters.dart';
 part 'profile_fx/frames/effects.dart';
 part 'profile_fx/frames/status.dart';
+part 'profile_fx/frames/classic.dart';
+part 'profile_fx/frames/collection.dart';
 part 'profile_fx/covers/profile_cover.dart';
 part 'profile_fx/covers/scenes.dart';
 part 'profile_fx/covers/showcase.dart';
+part 'profile_fx/covers/classic.dart';
+part 'profile_fx/covers/collection.dart';

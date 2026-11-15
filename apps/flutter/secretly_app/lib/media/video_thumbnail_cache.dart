@@ -11,6 +11,8 @@ import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../build_variant.dart';
+
 /// A still frame lifted out of a video, plus how long the video runs.
 class VideoThumbnail {
   const VideoThumbnail({required this.file, this.durationMs});
@@ -70,6 +72,9 @@ class VideoThumbnailCache {
     required String key,
     required String videoPath,
   }) {
+    // Облегчённая сборка: кадр вынимать нечем. Вызывающие уже умеют жить без
+    // миниатюры — плитка остаётся с заглушкой и кнопкой воспроизведения.
+    if (!kVideoToolsAvailable) return Future<VideoThumbnail?>.value(null);
     if (key.isEmpty || videoPath.isEmpty) {
       return Future<VideoThumbnail?>.value(null);
     }

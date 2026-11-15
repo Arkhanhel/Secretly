@@ -15,7 +15,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../attachments/auto_download_policy.dart';
 import '../app/app_controller.dart';
+import '../build_variant.dart';
 import '../calls/call_manager.dart';
 import '../reliability/delivery_reliability_service.dart';
 import 'delivery_reliability_screen.dart';
@@ -37,6 +39,7 @@ import 'app_asset_paths.dart';
 import 'chat_wallpapers.dart';
 import 'liquid_glass_flags.dart';
 import '../security/screen_privacy.dart';
+import '../translation/translation_service.dart';
 import 'l10n.dart';
 import 'theme_presets.dart';
 import 'premium/app_icon_picker.dart';
@@ -46,11 +49,12 @@ import 'my_secretly_id_screen.dart';
 import 'profile_screen.dart';
 import 'privacy_screen.dart';
 import 'safe_backup_screen.dart';
-import 'personal_chats_screen.dart';
+import 'network_settings_screen.dart';
 import 'security_settings_screen.dart';
 import 'security_lock_flow.dart';
 import 'diagnostics_screen.dart';
 import 'diagnostics_unlock.dart';
+import 'settings_group.dart';
 import 'settings_screen_l10n.dart';
 import 'share_utils.dart';
 import 'wave1_l10n.dart';
@@ -323,9 +327,28 @@ class _SettingsScreenState extends State<SettingsScreen>
     _refreshAndroidFullScreenIntentPermission();
   }
 
+  /// Растёт при каждом setState экрана настроек. Открытые страницы
+  /// разделов слушают его: раньше страница строилась один раз при открытии,
+  /// и переключатель в ней менялся только при следующей общей перерисовке
+  /// приложения — «включается через минуту» (переводчик, 14.11.2026).
+  final ValueNotifier<int> _pageTick = ValueNotifier<int>(0);
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _pageTick.value++;
+  }
+
+  /// Страница раздела, которая перестраивается вместе с экраном настроек.
+  Widget _live(WidgetBuilder builder) => ValueListenableBuilder<int>(
+    valueListenable: _pageTick,
+    builder: (ctx, _, __) => builder(ctx),
+  );
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _pageTick.dispose();
     super.dispose();
   }
 
@@ -451,6 +474,17 @@ class _SettingsScreenState extends State<SettingsScreen>
       case SafeBackupHealth.stale:
         return context.l10n.backupTileStale;
     }
+  }
+
+  // 1 месяц, 3 месяца, 6 месяцев, 12 месяцев, 24 месяца.
+  String _ruMonths(int n) {
+    final mod10 = n % 10;
+    final mod100 = n % 100;
+    if (mod10 == 1 && mod100 != 11) return 'месяц';
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+      return 'месяца';
+    }
+    return 'месяцев';
   }
 
   String _audienceLabel(BuildContext context, String value) {
@@ -611,6 +645,24 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (key.startsWith('settings_notif_')) {
       widget.controller.refreshPushNotificationPolicy();
     }
+    if (key.startsWith('settings_language_')) {
+      _onTranslationSettingSaved(
+        prefetch: key == _prefsLanguageShowTranslateButtonKey && value,
+      );
+    }
+  }
+
+  /// Открытые чаты перечитывают настройки перевода сразу. Включили кнопку —
+  /// заранее качаем пакет языка перевода, чтобы первое нажатие в чате не
+  /// ждало загрузки (~30 МБ, один раз).
+  void _onTranslationSettingSaved({bool prefetch = false}) {
+    MessageTranslationService.settingsChanged.value++;
+    if (!prefetch || !kTranslationAvailable || !mounted) return;
+    final pinned = _translateTargetLang.trim();
+    final target = pinned.isNotEmpty
+        ? pinned
+        : Localizations.localeOf(context).languageCode;
+    unawaited(MessageTranslationService.instance.prefetchModel(target));
   }
 
   Future<void> _saveIntSetting(String key, int value) async {
@@ -626,6 +678,12 @@ class _SettingsScreenState extends State<SettingsScreen>
     await prefs.setString(key, value);
     if (key.startsWith('settings_notif_')) {
       widget.controller.refreshPushNotificationPolicy();
+    }
+    if (key.startsWith('settings_language_')) {
+      _onTranslationSettingSaved(
+        prefetch: key == _prefsLanguageTranslateTargetKey &&
+            _languageShowTranslateButton,
+      );
     }
   }
 
@@ -1520,6 +1578,15 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
+  /// Значок раздела для вступления страницы — тот же, что в главном списке.
+  Widget _introIcon(String asset, Color tint) => Image.asset(
+    asset,
+    width: 28,
+    height: 28,
+    color: tint,
+    colorBlendMode: BlendMode.srcIn,
+  );
+
   Widget _buildAppInfoFooter({
     required BuildContext context,
     required ColorScheme cs,
@@ -2005,6 +2072,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                         ),
                       ),
                     ),
+                  SettingsGroupHeader(context.l10n.settingsHubAccountGroup),
                   _card([
                     _tile(
                       context: context,
@@ -2014,16 +2082,112 @@ class _SettingsScreenState extends State<SettingsScreen>
                       iconBg: Colors.transparent,
                       iconFg: cs.onSurface,
                       title: l10n.accountSection,
+                      subtitle: context.l10n.settingsHubAccountSub,
                       onTap: () {
                         Navigator.of(context).push(
                           SecretlyPageRoute(
                             builder: (_) => _SettingsCategoryScreen(
                               title: l10n.accountSection,
-                              child: _buildAccount(
-                                context: context,
-                                c: c,
-                                cs: cs,
-                                l10n: l10n,
+                              child: _live(
+                                (ctx) => _buildAccount(
+                                  context: ctx,
+                                  c: c,
+                                  cs: Theme.of(ctx).colorScheme,
+                                  l10n: l10n,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const Divider(height: 1),
+                    _tile(
+                      context: context,
+                      iconAsset: _iconPrivacy,
+                      fallbackIcon: AppIcons.privacyTip,
+                      iconTint: _iconGreen,
+                      iconBg: Colors.transparent,
+                      iconFg: cs.onSurface,
+                      title: l10n.privacySection,
+                      subtitle: context.l10n.settingsHubPrivacySub,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          SecretlyPageRoute(
+                            builder: (_) => _SettingsCategoryScreen(
+                              title: l10n.privacySection,
+                              child: _live(
+                                (ctx) => _buildPrivacy(
+                                  context: ctx,
+                                  c: c,
+                                  cs: Theme.of(ctx).colorScheme,
+                                  l10n: l10n,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const Divider(height: 1),
+                    _tile(
+                      context: context,
+                      iconAsset: _iconPrivacyStop,
+                      fallbackIcon: Icons.lock_rounded,
+                      iconTint: _iconAmber,
+                      iconBg: Colors.transparent,
+                      iconFg: cs.onSurface,
+                      title: _label(
+                        context,
+                        ru: 'Безопасность',
+                        en: 'Security',
+                      ),
+                      subtitle: context.l10n.settingsHubSecuritySub,
+                      onTap: () =>
+                          openSecuritySettings(context: context, controller: c),
+                    ),
+                    const Divider(height: 1),
+                    _tile(
+                      context: context,
+                      iconAsset: _iconDevices,
+                      fallbackIcon: AppIcons.devices,
+                      iconTint: _iconCyan,
+                      iconBg: Colors.transparent,
+                      iconFg: cs.onSurface,
+                      title: l10n.devicesSection,
+                      subtitle: context.l10n.settingsHubDevicesSub,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          SecretlyPageRoute(
+                            builder: (_) => DevicesAuthScreen(controller: c),
+                          ),
+                        );
+                      },
+                    ),
+                  ]),
+                  SettingsGroupHeader(context.l10n.settingsHubTalkGroup),
+                  _card([
+                    _tile(
+                      context: context,
+                      iconAsset: _iconNotifications,
+                      fallbackIcon: AppIcons.bell,
+                      iconTint: _iconRed,
+                      iconBg: Colors.transparent,
+                      iconFg: cs.onSurface,
+                      title: l10n.notificationsSection,
+                      subtitle: context.l10n.settingsHubNotificationsSub,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          SecretlyPageRoute(
+                            builder: (_) => _SettingsCategoryScreen(
+                              title: l10n.notificationsSection,
+                              child: _live(
+                                (ctx) => _buildNotifications(
+                                  context: ctx,
+                                  c: c,
+                                  cs: Theme.of(ctx).colorScheme,
+                                  l10n: l10n,
+                                ),
                               ),
                             ),
                           ),
@@ -2039,6 +2203,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       iconBg: Colors.transparent,
                       iconFg: cs.onSurface,
                       title: l10n.chatsSection,
+                      subtitle: context.l10n.settingsHubChatsSub,
                       onTap: () {
                         Navigator.of(context).push(
                           SecretlyPageRoute(
@@ -2061,101 +2226,58 @@ class _SettingsScreenState extends State<SettingsScreen>
                     const Divider(height: 1),
                     _tile(
                       context: context,
-                      iconAsset: _iconPolicy,
-                      fallbackIcon: AppIcons.photo,
-                      iconTint: _iconBlue,
+                      iconAsset: _iconLanguage,
+                      fallbackIcon: AppIcons.language,
+                      iconTint: _iconPurple,
                       iconBg: Colors.transparent,
                       iconFg: cs.onSurface,
-                      title: _label(
-                        context,
-                        ru: 'Медиа и профиль',
-                        en: 'Media & profile',
-                      ),
+                      title: l10n.languageSection,
+                      subtitle: kTranslationAvailable
+                          ? context.l10n.settingsHubLanguageSub
+                          : null,
                       onTap: () {
                         Navigator.of(context).push(
                           SecretlyPageRoute(
                             builder: (_) => _SettingsCategoryScreen(
-                              title: _label(
-                                context,
-                                ru: 'Медиа и профиль',
-                                en: 'Media & profile',
-                              ),
-                              child: _buildMedia(
-                                context: context,
-                                c: c,
-                                cs: cs,
-                                l10n: l10n,
+                              title: l10n.languageSection,
+                              child: _live(
+                                (ctx) => _buildLanguage(
+                                  context: ctx,
+                                  cs: Theme.of(ctx).colorScheme,
+                                  l10n: l10n,
+                                ),
                               ),
                             ),
                           ),
                         );
                       },
                     ),
-                    const Divider(height: 1),
-                    _tile(
-                      context: context,
-                      iconAsset: _iconPrivacy,
-                      fallbackIcon: AppIcons.privacyTip,
-                      iconTint: _iconGreen,
-                      iconBg: Colors.transparent,
-                      iconFg: cs.onSurface,
-                      title: l10n.privacySection,
-                      onTap: () {
-                        Navigator.of(context).push(
-                          SecretlyPageRoute(
-                            builder: (_) => _SettingsCategoryScreen(
-                              title: l10n.privacySection,
-                              child: _buildPrivacy(
-                                context: context,
-                                c: c,
-                                cs: cs,
-                                l10n: l10n,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    const Divider(height: 1),
+                  ]),
+                  SettingsGroupHeader(context.l10n.settingsHubConnectionGroup),
+                  _card([
                     _tile(
                       context: context,
                       iconAsset: _iconPrivacyStop,
-                      fallbackIcon: Icons.lock_rounded,
+                      fallbackIcon: Icons.alt_route_rounded,
                       iconTint: _iconAmber,
                       iconBg: Colors.transparent,
                       iconFg: cs.onSurface,
-                      title: _label(
-                        context,
-                        ru: 'Безопасность',
-                        en: 'Security',
-                      ),
+                      title: _label(context, ru: 'Сеть', en: 'Network'),
+                      subtitle: context.l10n.settingsHubNetworkSub,
                       onTap: () =>
-                          openSecuritySettings(context: context, controller: c),
+                          openNetworkSettings(context: context, controller: c),
                     ),
                     const Divider(height: 1),
                     _tile(
                       context: context,
-                      iconAsset: _iconNotifications,
-                      fallbackIcon: AppIcons.bell,
-                      iconTint: _iconRed,
+                      iconAsset: _iconInvite,
+                      fallbackIcon: Icons.outbox_rounded,
+                      iconTint: _iconGreen,
                       iconBg: Colors.transparent,
                       iconFg: cs.onSurface,
-                      title: l10n.notificationsSection,
-                      onTap: () {
-                        Navigator.of(context).push(
-                          SecretlyPageRoute(
-                            builder: (_) => _SettingsCategoryScreen(
-                              title: l10n.notificationsSection,
-                              child: _buildNotifications(
-                                context: context,
-                                c: c,
-                                cs: cs,
-                                l10n: l10n,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+                      title: context.l10n.settingsGroupOffline,
+                      subtitle: context.l10n.settingsHubOfflineSub,
+                      onTap: () => openOfflineTransfer(context: context, controller: c),
                     ),
                     // DELIVERY RELIABILITY (2026-07-16, delivery-wake audit):
                     // диагностика системных переключателей, глушащих доставку
@@ -2185,6 +2307,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                           fr: 'Fiabilite',
                           de: 'Zuverlaessigkeit',
                         ),
+                        subtitle: context.l10n.settingsHubReliabilitySub,
                         trailing: FutureBuilder<DeliveryReliabilityStatus?>(
                           future: DeliveryReliabilityService().getStatus(),
                           builder: (context, snap) {
@@ -2204,54 +2327,29 @@ class _SettingsScreenState extends State<SettingsScreen>
                               builder: (_) => DeliveryReliabilityScreen(
                                 healthLoader:
                                     widget.controller.deliveryHealthCounters,
+                                connectionSection: _BackgroundConnectionCard(
+                                  initial: _notifBackgroundConnection,
+                                  onChanged: (v) async {
+                                    if (mounted) {
+                                      setState(
+                                        () => _notifBackgroundConnection = v,
+                                      );
+                                    }
+                                    await _saveBoolSetting(
+                                      _prefsNotifBackgroundConnectionKey,
+                                      v,
+                                    );
+                                  },
+                                ),
                               ),
                             ),
                           );
                         },
                       ),
                     ],
-                    const Divider(height: 1),
-                    _tile(
-                      context: context,
-                      iconAsset: _iconLanguage,
-                      fallbackIcon: AppIcons.language,
-                      iconTint: _iconPurple,
-                      iconBg: Colors.transparent,
-                      iconFg: cs.onSurface,
-                      title: l10n.languageSection,
-                      onTap: () {
-                        Navigator.of(context).push(
-                          SecretlyPageRoute(
-                            builder: (_) => _SettingsCategoryScreen(
-                              title: l10n.languageSection,
-                              child: _buildLanguage(
-                                context: context,
-                                cs: cs,
-                                l10n: l10n,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    const Divider(height: 1),
-                    _tile(
-                      context: context,
-                      iconAsset: _iconDevices,
-                      fallbackIcon: AppIcons.devices,
-                      iconTint: _iconCyan,
-                      iconBg: Colors.transparent,
-                      iconFg: cs.onSurface,
-                      title: l10n.devicesSection,
-                      onTap: () {
-                        Navigator.of(context).push(
-                          SecretlyPageRoute(
-                            builder: (_) => DevicesAuthScreen(controller: c),
-                          ),
-                        );
-                      },
-                    ),
-                    const Divider(height: 1),
+                  ]),
+                  SettingsGroupHeader(context.l10n.settingsHubPhoneGroup),
+                  _card([
                     _tile(
                       context: context,
                       icon: Icons.bolt_rounded,
@@ -2314,7 +2412,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                               ru: 'Есть системное сообщение',
                               en: 'System message available',
                             )
-                          : null,
+                          : context.l10n.settingsHubSystemSub,
                       onTap: () {
                         Navigator.of(context).push(
                           SecretlyPageRoute(
@@ -2335,8 +2433,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       },
                     ),
                   ]),
-
-                  const SizedBox(height: 12),
+                  SettingsGroupHeader(context.l10n.settingsHubMoreGroup),
                   _card([
                     _tile(
                       context: context,
@@ -2350,6 +2447,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                         ru: 'Пригласить друзей',
                         en: 'Invite friends',
                       ),
+                      subtitle: context.l10n.settingsHubInviteSub,
                       onTap: () => _shareInvite(context, c),
                     ),
                     // Apple App Review guideline 3.1.1 (rejection f3cc3e8a-ef24
@@ -2371,6 +2469,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                           ru: 'Поддержать Secretly',
                           en: 'Donate Secretly',
                         ),
+                        subtitle: context.l10n.settingsHubDonateSub,
                         onTap: () => _openDonateSection(context),
                       ),
                     ],
@@ -2383,6 +2482,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       iconBg: Colors.transparent,
                       iconFg: cs.onSurface,
                       title: _label(context, ru: 'Поддержка', en: 'Support'),
+                      subtitle: context.l10n.settingsHubSupportSub,
                       // Точка «обращение в работе» либо кружок с числом
                       // непрочитанных ответов — см. SupportBadge.
                       trailing: SupportBadgeListener(controller: c),
@@ -2445,6 +2545,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                         ru: 'Политика конфиденциальности',
                         en: 'Privacy policy',
                       ),
+                      subtitle: context.l10n.settingsHubPolicySub,
                       onTap: () => _openPrivacyPolicySection(context),
                     ),
                     const Divider(height: 1),
@@ -2460,6 +2561,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                         ru: 'о Secretly',
                         en: 'About Secretly',
                       ),
+                      subtitle: context.l10n.settingsHubAboutSub,
                       onTap: () => _openAboutSection(context, c),
                     ),
                   ]),
@@ -2481,6 +2583,12 @@ class _SettingsScreenState extends State<SettingsScreen>
   }) {
     return Column(
       children: [
+        SettingsPageIntro(
+          icon: _introIcon(_iconAccount, _iconBlue),
+          color: _iconBlue,
+          text: context.l10n.settingsIntroAccount,
+        ),
+        SettingsGroupHeader(context.l10n.settingsGroupProfile),
         _card([
           _tile(
             context: context,
@@ -2550,7 +2658,55 @@ class _SettingsScreenState extends State<SettingsScreen>
             },
           ),
         ]),
-        const SizedBox(height: 10),
+        SettingsGroupHeader(context.l10n.settingsGroupShare),
+        _card([
+          _tile(
+            context: context,
+            iconAsset: _iconPrivacyVisibility,
+            iconTint: _iconBlue,
+            iconBg: Colors.transparent,
+            iconFg: cs.onSurface,
+            fallbackIcon: Icons.qr_code_2_rounded,
+            title: _label(context, ru: 'QR-профиль', en: 'Profile QR'),
+            subtitle: _label(
+              context,
+              ru: 'Показать ваш QR-код профиля',
+              en: 'Show your profile QR code',
+            ),
+            onTap: () {
+              Navigator.of(context).push(
+                SecretlyPageRoute(
+                  builder: (_) => MySecretlyIdScreen(controller: c),
+                ),
+              );
+            },
+          ),
+          const Divider(height: 1),
+          _tile(
+            context: context,
+            iconAsset: _iconPrivacyList,
+            iconTint: _iconPurple,
+            iconBg: Colors.transparent,
+            iconFg: cs.onSurface,
+            fallbackIcon: Icons.qr_code_scanner_rounded,
+            title: _label(context, ru: 'Сканер QR', en: 'QR scanner'),
+            subtitle: _label(
+              context,
+              ru: 'Сканировать QR-код контакта',
+              en: 'Scan a contact QR code',
+            ),
+            onTap: () async {
+              await _openMyId(context, c, initialTab: MySecretlyIdTab.scanQr);
+            },
+          ),
+        ]),
+        SettingsGroupHeader(
+          context.l10n.settingsGroupRecovery,
+          help: SettingsHelp(
+            title: context.l10n.settingsGroupRecovery,
+            text: context.l10n.settingsCaptionAccountRestore,
+          ),
+        ),
         _card([
           _tile(
             context: context,
@@ -2603,7 +2759,13 @@ class _SettingsScreenState extends State<SettingsScreen>
             },
           ),
         ]),
-        const SizedBox(height: 10),
+        SettingsGroupHeader(
+          context.l10n.settingsGroupLeave,
+          help: SettingsHelp(
+            title: context.l10n.settingsGroupLeave,
+            text: context.l10n.settingsCaptionLeave,
+          ),
+        ),
         _card([
           _tile(
             context: context,
@@ -3094,6 +3256,12 @@ class _SettingsScreenState extends State<SettingsScreen>
 
     return Column(
       children: [
+        SettingsPageIntro(
+          icon: _introIcon(_iconNotifications, _iconRed),
+          color: _iconRed,
+          text: context.l10n.settingsIntroNotifications,
+        ),
+        SettingsGroupHeader(context.l10n.settingsGroupGeneral),
         _card([
           _tile(
             context: context,
@@ -3123,7 +3291,13 @@ class _SettingsScreenState extends State<SettingsScreen>
             ),
           ),
         ]),
-        const SizedBox(height: 10),
+        SettingsGroupHeader(
+          context.l10n.settingsGroupMessages,
+          help: SettingsHelp(
+            title: context.l10n.settingsGroupMessages,
+            text: context.l10n.settingsCaptionMessages,
+          ),
+        ),
         _card([
           _tile(
             context: context,
@@ -3283,7 +3457,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             iconTint: _iconAmber,
           ),
         ]),
-        const SizedBox(height: 10),
+        SettingsGroupHeader(context.l10n.settingsGroupCalls),
         _card([
           _tile(
             context: context,
@@ -3433,7 +3607,13 @@ class _SettingsScreenState extends State<SettingsScreen>
             onTap: pickCallRingtone,
           ),
         ]),
-        const SizedBox(height: 10),
+        SettingsGroupHeader(
+          context.l10n.settingsGroupInApp,
+          help: SettingsHelp(
+            title: context.l10n.settingsGroupInApp,
+            text: context.l10n.settingsCaptionInApp,
+          ),
+        ),
         _card([
           _tile(
             context: context,
@@ -3551,7 +3731,9 @@ class _SettingsScreenState extends State<SettingsScreen>
             ),
             onTap: () => setAppHaptics(!_appHaptics),
           ),
-          const Divider(height: 1),
+        ]),
+        SettingsGroupHeader(context.l10n.settingsGroupNotificationLook),
+        _card([
           _tile(
             context: context,
             iconAsset: _iconChatsTheme,
@@ -3600,40 +3782,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             ),
           ),
         ]),
-        _card([
-          _tile(
-            context: context,
-            iconAsset: _iconDevices,
-            iconTint: _iconBlue,
-            iconBg: Colors.transparent,
-            iconFg: cs.onSurface,
-            fallbackIcon: Icons.sync_rounded,
-            title: _label(
-              context,
-              ru: 'Фоновое соединение',
-              en: 'Background connection',
-            ),
-            subtitle: _label(
-              context,
-              ru: 'Поддерживать минимальное соединение, пока приложение остаётся в памяти. При полном закрытии работают только push-уведомления.',
-              en: 'Keep a minimal connection while the app stays in memory. When the app is fully closed, delivery relies on push notifications.',
-            ),
-            trailing: Switch(
-              value: _notifBackgroundConnection,
-              onChanged: (v) => setLocalBool(
-                _prefsNotifBackgroundConnectionKey,
-                v,
-                (x) => _notifBackgroundConnection = x,
-              ),
-            ),
-            onTap: () => setLocalBool(
-              _prefsNotifBackgroundConnectionKey,
-              !_notifBackgroundConnection,
-              (x) => _notifBackgroundConnection = x,
-            ),
-          ),
-        ]),
-        const SizedBox(height: 10),
+        const SizedBox(height: 24),
         _card([
           _tile(
             context: context,
@@ -4026,7 +4175,81 @@ class _SettingsScreenState extends State<SettingsScreen>
 
     return Column(
       children: [
+        SettingsPageIntro(
+          icon: _introIcon(_iconLanguage, _iconPurple),
+          color: _iconPurple,
+          text: context.l10n.settingsIntroLanguage,
+        ),
+        SettingsGroupHeader(context.l10n.settingsGroupAppLanguage),
         _card([
+          _tile(
+            context: context,
+            iconAsset: _iconLanguage,
+            iconTint: _iconBlue,
+            iconBg: Colors.transparent,
+            iconFg: cs.onSurface,
+            fallbackIcon: Icons.language_rounded,
+            title: l10n.languageSection,
+            subtitle: current,
+          ),
+          const Divider(height: 1),
+          _tile(
+            context: context,
+            leading: languageFlagLeading(systemPreference),
+            iconAsset: _iconChatsApproved,
+            iconTint: _iconGreen,
+            iconBg: Colors.transparent,
+            iconFg: cs.onSurface,
+            fallbackIcon: Icons.flag_rounded,
+            title: l10n.languageSystemDefault,
+            subtitle: languageName(systemPreference),
+            trailing: Icon(
+              selectedLocale.isEmpty
+                  ? AppIcons.radioChecked
+                  : AppIcons.radioUnchecked,
+              color: cs.primary,
+            ),
+            onTap: () => selectLocale('system'),
+          ),
+          for (final preference in localeOptions) ...[
+            const Divider(height: 1),
+            _tile(
+              context: context,
+              leading: languageFlagLeading(preference),
+              iconAsset: _iconChatsApproved,
+              iconTint: languageTint(preference),
+              iconBg: Colors.transparent,
+              iconFg: cs.onSurface,
+              fallbackIcon: Icons.public_rounded,
+              title: languageName(preference),
+              trailing: Icon(
+                selectedLocale == preference
+                    ? AppIcons.radioChecked
+                    : AppIcons.radioUnchecked,
+                color: cs.primary,
+              ),
+              onTap: () => selectLocale(preference),
+            ),
+          ],
+        ]),
+        const SizedBox(height: 10),
+        _card([
+          _tile(
+            context: context,
+            iconAsset: _iconPrivacyVisibility,
+            iconTint: _iconPurple,
+            iconBg: Colors.transparent,
+            iconFg: cs.onSurface,
+            fallbackIcon: Icons.info_rounded,
+            title: l10n.languageChooseAppLanguage,
+            subtitle: l10n.languageAvailableWave1,
+          ),
+        ]),
+        if (kTranslationAvailable)
+          SettingsGroupHeader(context.l10n.settingsGroupTranslation),
+        // Облегчённая сборка: перевод сообщений держится на библиотеках
+        // ML Kit, которых в пакете нет, — раздел не показываем.
+        if (kTranslationAvailable) _card([
           _tile(
             context: context,
             iconAsset: _iconChatsTheme,
@@ -4148,71 +4371,6 @@ class _SettingsScreenState extends State<SettingsScreen>
                 ? appLangTargetLabel
                 : translateLangLabel(_translateTargetLang),
             onTap: () => pickTranslateLang(isSource: false),
-          ),
-        ]),
-        const SizedBox(height: 10),
-        _card([
-          _tile(
-            context: context,
-            iconAsset: _iconLanguage,
-            iconTint: _iconBlue,
-            iconBg: Colors.transparent,
-            iconFg: cs.onSurface,
-            fallbackIcon: Icons.language_rounded,
-            title: l10n.languageSection,
-            subtitle: current,
-          ),
-          const Divider(height: 1),
-          _tile(
-            context: context,
-            leading: languageFlagLeading(systemPreference),
-            iconAsset: _iconChatsApproved,
-            iconTint: _iconGreen,
-            iconBg: Colors.transparent,
-            iconFg: cs.onSurface,
-            fallbackIcon: Icons.flag_rounded,
-            title: l10n.languageSystemDefault,
-            subtitle: languageName(systemPreference),
-            trailing: Icon(
-              selectedLocale.isEmpty
-                  ? AppIcons.radioChecked
-                  : AppIcons.radioUnchecked,
-              color: cs.primary,
-            ),
-            onTap: () => selectLocale('system'),
-          ),
-          for (final preference in localeOptions) ...[
-            const Divider(height: 1),
-            _tile(
-              context: context,
-              leading: languageFlagLeading(preference),
-              iconAsset: _iconChatsApproved,
-              iconTint: languageTint(preference),
-              iconBg: Colors.transparent,
-              iconFg: cs.onSurface,
-              fallbackIcon: Icons.public_rounded,
-              title: languageName(preference),
-              trailing: Icon(
-                selectedLocale == preference
-                    ? AppIcons.radioChecked
-                    : AppIcons.radioUnchecked,
-                color: cs.primary,
-              ),
-              onTap: () => selectLocale(preference),
-            ),
-          ],
-        ]),
-        const SizedBox(height: 10),
-        _card([
-          _tile(
-            context: context,
-            iconAsset: _iconPrivacyVisibility,
-            iconTint: _iconPurple,
-            iconBg: Colors.transparent,
-            iconFg: cs.onSurface,
-            fallbackIcon: Icons.info_rounded,
-            title: l10n.languageChooseAppLanguage,
-            subtitle: l10n.languageAvailableWave1,
           ),
         ]),
       ],
@@ -5493,103 +5651,6 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
-  Widget _buildMedia({
-    required BuildContext context,
-    required AppController c,
-    required ColorScheme cs,
-    required dynamic l10n,
-  }) {
-    return _card([
-      _tile(
-        context: context,
-        iconAsset: _iconPrivacyVisibility,
-        iconTint: _iconBlue,
-        iconBg: Colors.transparent,
-        iconFg: cs.onSurface,
-        fallbackIcon: Icons.qr_code_2_rounded,
-        title: _label(context, ru: 'QR-профиль', en: 'Profile QR'),
-        subtitle: _label(
-          context,
-          ru: 'Показать ваш QR-код профиля',
-          en: 'Show your profile QR code',
-        ),
-        onTap: () {
-          Navigator.of(context).push(
-            SecretlyPageRoute(
-              builder: (_) => MySecretlyIdScreen(controller: c),
-            ),
-          );
-        },
-      ),
-      const Divider(height: 1),
-      _tile(
-        context: context,
-        iconAsset: _iconPrivacyList,
-        iconTint: _iconPurple,
-        iconBg: Colors.transparent,
-        iconFg: cs.onSurface,
-        fallbackIcon: Icons.qr_code_scanner_rounded,
-        title: _label(context, ru: 'Сканер QR', en: 'QR scanner'),
-        subtitle: _label(
-          context,
-          ru: 'Сканировать QR-код контакта',
-          en: 'Scan a contact QR code',
-        ),
-        onTap: () async {
-          await _openMyId(context, c, initialTab: MySecretlyIdTab.scanQr);
-        },
-      ),
-      const Divider(height: 1),
-      _tile(
-        context: context,
-        iconAsset: _iconChatsBubbleStyle,
-        iconTint: _iconOrange,
-        iconBg: Colors.transparent,
-        iconFg: cs.onSurface,
-        fallbackIcon: Icons.folder_special_rounded,
-        title: _label(context, ru: 'Личные чаты', en: 'Personal chats'),
-        subtitle: _label(
-          context,
-          ru: 'Открыть личную подборку чатов',
-          en: 'Open your personal chat collection',
-        ),
-        onTap: () async {
-          final unlocked = await ensureSecurityScopeUnlocked(
-            context: context,
-            controller: c,
-            scope: SecurityLockScope.personal,
-          );
-          if (!context.mounted || !unlocked) {
-            return;
-          }
-          Navigator.of(context).push(
-            SecretlyPageRoute(
-              builder: (_) => PersonalChatsScreen(controller: c),
-            ),
-          );
-        },
-      ),
-      const Divider(height: 1),
-      _tile(
-        context: context,
-        iconAsset: _iconPrivacyStop,
-        iconTint: _iconGreen,
-        iconBg: Colors.transparent,
-        iconFg: cs.onSurface,
-        fallbackIcon: Icons.lock_rounded,
-        title: _label(context, ru: 'Приватность медиа', en: 'Media privacy'),
-        subtitle: _label(
-          context,
-          ru: 'Медиа из профиля видите только вы',
-          en: 'Profile media is visible only to you',
-        ),
-      ),
-      // Peer cosmetics motion MOVED to Settings → Power (2026-07-31):
-      // it is a motion/battery choice, not a media one, and it belongs next
-      // to the other things that cost frames.
-    ]);
-  }
-
   Widget _buildPrivacy({
     required BuildContext context,
     required AppController c,
@@ -5821,7 +5882,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     title: Text(
                       _label(
                         context,
-                        ru: '$months ${months == 1 ? 'месяц' : 'месяца'}',
+                        ru: '$months ${_ruMonths(months)}',
                         en: '$months month${months == 1 ? '' : 's'}',
                       ),
                     ),
@@ -5862,6 +5923,12 @@ class _SettingsScreenState extends State<SettingsScreen>
 
     return Column(
       children: [
+        SettingsPageIntro(
+          icon: _introIcon(_iconPrivacy, _iconGreen),
+          color: _iconGreen,
+          text: context.l10n.settingsIntroPrivacy,
+        ),
+        SettingsGroupHeader(context.l10n.settingsGroupWhoCan),
         _card([
           audienceTile(
             key: 'last_seen',
@@ -5911,7 +5978,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             tint: _iconCyan,
           ),
         ]),
-        const SizedBox(height: 10),
+        SettingsGroupHeader(context.l10n.settingsGroupNewChats),
         _card([
           _tile(
             context: context,
@@ -5937,63 +6004,57 @@ class _SettingsScreenState extends State<SettingsScreen>
             onTap: () => setArchiveUnknown(!c.privacyArchiveUnknownChats),
           ),
         ]),
-        const SizedBox(height: 10),
-        // SEC-10③: механизм «только через сервер» существовал давно, но
-        // человеку был недоступен — политику назначал сервер. По умолчанию
-        // соединение прямое, а значит собеседник видит IP-адрес.
-        //
-        // 🔴 Цена названа в самой подписи. Молча ухудшить связь ради
-        // приватности — тот же обман, что молча раскрыть адрес: человек
-        // должен выбирать, зная размен.
+        SettingsGroupHeader(context.l10n.settingsGroupSearchBlocking),
         _card([
           _tile(
             context: context,
-            icon: Icons.vpn_lock_rounded,
-            fallbackIcon: Icons.vpn_lock_rounded,
-            iconTint: _iconGreen,
+            iconAsset: _iconPrivacyVisibility,
+            iconTint: _iconBlue,
             iconBg: Colors.transparent,
             iconFg: cs.onSurface,
+            fallbackIcon: Icons.visibility_rounded,
             title: _label(
               context,
-              ru: 'Скрывать мой адрес в звонках',
-              en: 'Hide my address in calls',
+              ru: 'Видимость по никнейму',
+              en: 'Discoverable by nickname',
             ),
             subtitle: _label(
               context,
-              ru: 'Через наш сервер: собеседник не увидит IP-адрес, но задержка может вырасти',
-              en: 'Through our server: the other person will not see your IP address, but latency may increase',
+              ru: 'Позволить находить вас по никнейму',
+              en: 'Allow others to find you by nickname',
             ),
             trailing: Switch(
-              value: c.hideAddressInCalls,
-              onChanged: (v) => unawaited(c.setHideAddressInCalls(v)),
+              value: c.discoverableByNickname,
+              onChanged: (v) => c.setDiscoverableByNickname(v),
             ),
-            onTap: () =>
-                unawaited(c.setHideAddressInCalls(!c.hideAddressInCalls)),
+            onTap: () => c.setDiscoverableByNickname(!c.discoverableByNickname),
           ),
-        ]),
-        const SizedBox(height: 10),
-        _card([
+          const Divider(height: 1),
           _tile(
             context: context,
-            iconAsset: _iconSystem,
-            iconTint: _iconAmber,
+            fallbackIcon: Icons.block_rounded,
+            iconAsset: _iconPrivacyStop,
+            iconTint: _iconRed,
             iconBg: Colors.transparent,
             iconFg: cs.onSurface,
-            fallbackIcon: Icons.person_remove_rounded,
             title: _label(
               context,
-              ru: 'Удалить мой аккаунт',
-              en: 'Delete my account',
+              ru: 'Конфиденциальность',
+              en: 'Privacy controls',
             ),
             subtitle: _label(
               context,
-              ru: 'Если я не захожу: ${c.privacyDeleteAccountMonths} ${c.privacyDeleteAccountMonths == 1 ? 'месяц' : 'месяца'}',
-              en: 'If away for: ${c.privacyDeleteAccountMonths} month${c.privacyDeleteAccountMonths == 1 ? '' : 's'}',
+              ru: 'Управление заблокированными пользователями',
+              en: 'Manage blocked users',
             ),
-            onTap: pickDeleteAccountAfter,
+            onTap: () {
+              Navigator.of(context).push(
+                SecretlyPageRoute(builder: (_) => PrivacyScreen(controller: c)),
+              );
+            },
           ),
         ]),
-        const SizedBox(height: 10),
+        SettingsGroupHeader(context.l10n.settingsGroupPhoneContacts),
         _card([
           _tile(
             context: context,
@@ -6052,56 +6113,120 @@ class _SettingsScreenState extends State<SettingsScreen>
             onTap: () => setUserLookup(!c.allowNicknameLookup),
           ),
         ]),
-        const SizedBox(height: 10),
+        SettingsGroupHeader(context.l10n.settingsGroupCalls),
+        // SEC-10③: механизм «только через сервер» существовал давно, но
+        // человеку был недоступен — политику назначал сервер. По умолчанию
+        // соединение прямое, а значит собеседник видит IP-адрес.
+        //
+        // 🔴 Цена названа в самой подписи. Молча ухудшить связь ради
+        // приватности — тот же обман, что молча раскрыть адрес: человек
+        // должен выбирать, зная размен.
         _card([
           _tile(
             context: context,
-            iconAsset: _iconPrivacyVisibility,
-            iconTint: _iconBlue,
+            icon: Icons.vpn_lock_rounded,
+            fallbackIcon: Icons.vpn_lock_rounded,
+            iconTint: _iconGreen,
             iconBg: Colors.transparent,
             iconFg: cs.onSurface,
-            fallbackIcon: Icons.visibility_rounded,
             title: _label(
               context,
-              ru: 'Видимость по никнейму',
-              en: 'Discoverable by nickname',
+              ru: 'Скрывать мой адрес в звонках',
+              en: 'Hide my address in calls',
             ),
             subtitle: _label(
               context,
-              ru: 'Позволить находить вас по никнейму',
-              en: 'Allow others to find you by nickname',
+              ru: 'Через наш сервер: собеседник не увидит IP-адрес, но задержка может вырасти',
+              en: 'Through our server: the other person will not see your IP address, but latency may increase',
             ),
             trailing: Switch(
-              value: c.discoverableByNickname,
-              onChanged: (v) => c.setDiscoverableByNickname(v),
+              value: c.hideAddressInCalls,
+              onChanged: (v) => unawaited(c.setHideAddressInCalls(v)),
             ),
-            onTap: () => c.setDiscoverableByNickname(!c.discoverableByNickname),
+            onTap: () =>
+                unawaited(c.setHideAddressInCalls(!c.hideAddressInCalls)),
           ),
-          const Divider(height: 1),
+        ]),
+        SettingsGroupHeader(
+          context.l10n.settingsGroupInactive,
+          help: SettingsHelp(
+            title: context.l10n.settingsGroupInactive,
+            text: context.l10n.settingsCaptionInactive,
+          ),
+        ),
+        _card([
           _tile(
             context: context,
-            fallbackIcon: Icons.block_rounded,
-            iconAsset: _iconPrivacyStop,
-            iconTint: _iconRed,
+            iconAsset: _iconSystem,
+            iconTint: _iconAmber,
             iconBg: Colors.transparent,
             iconFg: cs.onSurface,
+            fallbackIcon: Icons.person_remove_rounded,
             title: _label(
               context,
-              ru: 'Конфиденциальность',
-              en: 'Privacy controls',
+              ru: 'Удалить мой аккаунт',
+              en: 'Delete my account',
             ),
             subtitle: _label(
               context,
-              ru: 'Управление заблокированными пользователями',
-              en: 'Manage blocked users',
+              ru: 'Если я не захожу: ${c.privacyDeleteAccountMonths} ${_ruMonths(c.privacyDeleteAccountMonths)}',
+              en: 'If away for: ${c.privacyDeleteAccountMonths} month${c.privacyDeleteAccountMonths == 1 ? '' : 's'}',
             ),
-            onTap: () {
-              Navigator.of(context).push(
-                SecretlyPageRoute(builder: (_) => PrivacyScreen(controller: c)),
-              );
-            },
+            onTap: pickDeleteAccountAfter,
           ),
         ]),
+        // Перенесено из «Медиа и профиль» (раздел расформирован по макету
+        // владельца, 11.2026). Строка только сообщает факт — как и раньше.
+        SettingsGroupHeader(context.l10n.settingsGroupMedia),
+        _card([
+          _tile(
+            context: context,
+            iconAsset: _iconPrivacyStop,
+            iconTint: _iconGreen,
+            iconBg: Colors.transparent,
+            iconFg: cs.onSurface,
+            fallbackIcon: Icons.lock_rounded,
+            title: _label(context, ru: 'Приватность медиа', en: 'Media privacy'),
+            subtitle: _label(
+              context,
+              ru: 'Медиа из профиля видите только вы',
+              en: 'Profile media is visible only to you',
+            ),
+          ),
+        ]),
+        // Перенесено из «Сети»: обезличенные отчёты — это вопрос данных.
+        // Ключ и значение по умолчанию прежние (setTransportReportsEnabled).
+        if (c.transportReportsOffered) ...[
+          // Длинное описание отчётов — в «?», как в макете.
+          SettingsGroupHeader(
+            context.l10n.settingsGroupData,
+            help: SettingsHelp(
+              title: context.l10n.netSettingsDeliveryReportsTitle,
+              text: context.l10n.netSettingsDeliveryReportsSubtitle,
+            ),
+          ),
+          _card([
+            _StreamRebuild(
+              stream: c.changed,
+              builder: (ctx) => _tile(
+                context: ctx,
+                icon: Icons.insights_rounded,
+                fallbackIcon: Icons.insights_rounded,
+                iconTint: _iconBlue,
+                iconBg: Colors.transparent,
+                iconFg: _iconBlue,
+                title: ctx.l10n.netSettingsDeliveryReportsTitle,
+                trailing: Switch(
+                  value: c.transportReportsEnabled,
+                  onChanged: (v) => c.setTransportReportsEnabled(v),
+                ),
+                onTap: () => c.setTransportReportsEnabled(
+                  !c.transportReportsEnabled,
+                ),
+              ),
+            ),
+          ]),
+        ],
       ],
     );
   }
@@ -6122,6 +6247,15 @@ class _SettingsScreenState extends State<SettingsScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: SettingsPageIntro(
+            icon: _introIcon(_iconSystem, _iconAmber),
+            color: _iconAmber,
+            text: context.l10n.settingsIntroSystem,
+            inset: 4,
+          ),
+        ),
         // Status card
         if (warn != null || blocked || localProfile) ...[
           Card(
@@ -6591,6 +6725,17 @@ class _PowerSettingsScreenState extends State<_PowerSettingsScreen> {
         builder: (context, _) => ListView(
           padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
           children: [
+            SettingsPageIntro(
+              icon: const Icon(
+                Icons.bolt_rounded,
+                color: Color(0xFFE0A43A),
+                size: 28,
+              ),
+              color: const Color(0xFFE0A43A),
+              text: context.l10n.settingsIntroPower,
+              inset: 4,
+            ),
+            const SizedBox(height: 10),
             Padding(
               padding: const EdgeInsets.fromLTRB(4, 4, 4, 14),
               child: Text(
@@ -6896,6 +7041,14 @@ class _StorageSettingsScreenState extends State<_StorageSettingsScreen> {
       body: ListView(
         padding: EdgeInsets.only(top: topInset, bottom: 32 + bottomInset),
         children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: SettingsPageIntro(
+              icon: Icon(AppIcons.archive, color: const Color(0xFF2AABEE), size: 28),
+              color: const Color(0xFF2AABEE),
+              text: l10n.settingsIntroStorage,
+            ),
+          ),
           // ---- usage breakdown ------------------------------------------
           _storageCard([
             Padding(
@@ -6990,9 +7143,209 @@ class _StorageSettingsScreenState extends State<_StorageSettingsScreen> {
               ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             ),
           ),
+          // ---- auto-download (П1, 15.11.2026) -----------------------------
+          const SizedBox(height: 16),
+          _storageCard([
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+              child: Text(
+                l10n.autoDownloadCellularTitle,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            RadioGroup<CellularAutoDownload>(
+              groupValue: widget.controller.cellularAutoDownload,
+              onChanged: (v) async {
+                if (v == null) return;
+                await widget.controller.setCellularAutoDownload(v);
+                if (mounted) setState(() {});
+              },
+              child: Column(
+                children: [
+                  for (final option in CellularAutoDownload.values)
+                    RadioListTile<CellularAutoDownload>(
+                      key: ValueKey('autoDownload:${option.name}'),
+                      value: option,
+                      title: Text(switch (option) {
+                        CellularAutoDownload.everything =>
+                          l10n.autoDownloadEverything,
+                        CellularAutoDownload.upTo15Mb =>
+                          l10n.autoDownloadUpTo15Mb,
+                        CellularAutoDownload.photosOnly =>
+                          l10n.autoDownloadPhotosOnly,
+                        CellularAutoDownload.nothing =>
+                          l10n.autoDownloadNothing,
+                      }),
+                    ),
+                ],
+              ),
+            ),
+          ]),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 12, 28, 0),
+            child: Text(
+              l10n.autoDownloadHint,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ),
+          // ---- keep media (П4, 15.11.2026) --------------------------------
+          const SizedBox(height: 16),
+          _storageCard([
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+              child: Text(
+                l10n.keepMediaTitle,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            RadioGroup<int>(
+              groupValue: widget.controller.keepMediaDays,
+              onChanged: (v) async {
+                if (v == null) return;
+                await widget.controller.setKeepMediaDays(v);
+                if (!mounted) return;
+                setState(() {});
+                await _refresh();
+              },
+              child: Column(
+                children: [
+                  for (final days in AppController.keepMediaDaysOptions)
+                    RadioListTile<int>(
+                      key: ValueKey('keepMedia:$days'),
+                      value: days,
+                      title: Text(switch (days) {
+                        30 => l10n.keepMediaMonth,
+                        7 => l10n.keepMediaWeek,
+                        _ => l10n.keepMediaForever,
+                      }),
+                    ),
+                ],
+              ),
+            ),
+          ]),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 12, 28, 0),
+            child: Text(
+              l10n.keepMediaHint,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: cs.onSurfaceVariant),
+            ),
+          ),
+          // ---- media by chat (П4) ---------------------------------------
+          const SizedBox(height: 16),
+          _storageCard([
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+              child: Text(
+                l10n.chatMediaTitle,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (_chatUsage == null)
+              _actionTile(
+                icon: AppIcons.archive,
+                tint: _storageBlue,
+                title: l10n.chatMediaShow,
+                trailing: _chatUsageLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2.2),
+                      )
+                    : null,
+                onTap: _chatUsageLoading ? null : _loadChatUsage,
+              )
+            else if (_chatUsage!.isEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+                child: Text(l10n.chatMediaEmpty),
+              )
+            else
+              for (final u in _chatUsage!)
+                ListTile(
+                  key: ValueKey('chatMedia:${u.convoId}'),
+                  title: Text(
+                    u.title.trim().isEmpty ? u.convoId : u.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${_fmtBytes(u.bytes)} · ${l10n.chatMediaFilesCount(u.files)}',
+                  ),
+                  trailing: IconButton(
+                    tooltip: l10n.chatMediaDeleteConfirm,
+                    icon: Icon(AppIcons.delete, color: _storageRed),
+                    onPressed: _busy ? null : () => _deleteChatMedia(u),
+                  ),
+                ),
+          ]),
         ],
       ),
     );
+  }
+
+  List<ChatMediaUsage>? _chatUsage;
+  bool _chatUsageLoading = false;
+
+  Future<void> _loadChatUsage() async {
+    setState(() => _chatUsageLoading = true);
+    try {
+      final usage = await widget.controller.chatMediaUsage();
+      if (!mounted) return;
+      setState(() => _chatUsage = usage);
+    } finally {
+      if (mounted) setState(() => _chatUsageLoading = false);
+    }
+  }
+
+  /// 🔴 Удаление — только после вопроса: отправленное своё и старше 7 дней
+  /// не вернуть.
+  Future<void> _deleteChatMedia(ChatMediaUsage u) async {
+    final l10n = context.l10n;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.chatMediaDeleteTitle),
+        content: Text(l10n.chatMediaDeleteBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            key: const ValueKey('chatMedia:confirm'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.chatMediaDeleteConfirm),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await widget.controller.deleteChatMedia(u.convoId);
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+      if (!mounted) return;
+      setState(() {
+        _chatUsage = _chatUsage?.where((x) => x.convoId != u.convoId).toList();
+      });
+      await _refresh();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 }
 
@@ -7006,6 +7359,58 @@ class _FlatIconMode extends InheritedWidget {
 
   static bool of(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_FlatIconMode>() != null;
+}
+
+/// «Фоновое соединение» на странице «Надёжность» (перенесено из
+/// «Уведомлений» по макету владельца, 11.2026). Ключ, значение по умолчанию
+/// и запись — прежние: сохраняет экран настроек через [onChanged].
+class _BackgroundConnectionCard extends StatefulWidget {
+  const _BackgroundConnectionCard({
+    required this.initial,
+    required this.onChanged,
+  });
+
+  final bool initial;
+  final Future<void> Function(bool value) onChanged;
+
+  @override
+  State<_BackgroundConnectionCard> createState() =>
+      _BackgroundConnectionCardState();
+}
+
+class _BackgroundConnectionCardState extends State<_BackgroundConnectionCard> {
+  late bool _value = widget.initial;
+
+  void _set(bool v) {
+    setState(() => _value = v);
+    widget.onChanged(v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: SwitchListTile(
+        value: _value,
+        onChanged: _set,
+        secondary: const Icon(Icons.sync_rounded),
+        title: Text(
+          _settingsLabel(
+            context,
+            ru: 'Фоновое соединение',
+            en: 'Background connection',
+          ),
+        ),
+        subtitle: Text(
+          _settingsLabel(
+            context,
+            ru: 'Поддерживать минимальное соединение, пока приложение остаётся в памяти. При полном закрытии работают только push-уведомления.',
+            en: 'Keep a minimal connection while the app stays in memory. When the app is fully closed, delivery relies on push notifications.',
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _SettingsCategoryScreen extends StatelessWidget {

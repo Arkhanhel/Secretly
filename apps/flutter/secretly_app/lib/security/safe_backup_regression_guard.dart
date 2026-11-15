@@ -52,4 +52,46 @@ class SafeBackupRegressionGuard {
     return 'Skipped: this device now holds $nextEvents messages but the last '
         'backup held $previousEvents. Refusing to overwrite it automatically.';
   }
+
+  /// Сколько сообщений в снимке базы из копии (таблица `events`).
+  /// `null` — снимка нет или он не того вида: сравнивать не с чем.
+  static int? eventsInSnapshot(Map<String, Object?>? dbSnapshot) {
+    final rows = dbSnapshot?['events'];
+    return rows is List ? rows.length : null;
+  }
+
+  /// 🔴 Первая автокопия с устройства, которое ещё ни разу не писало копию
+  /// (13.11.2026).
+  ///
+  /// Порог [allowsOverwrite] хранится на устройстве. У устройства, где
+  /// личность восстановили ключом (история пустая) или порог стёрт, его нет —
+  /// и защита «открыта»: включил автокопию → полная копия на сервере затёрта
+  /// пустой. Поэтому перед первой записью смотрим на саму копию на сервере.
+  ///
+  /// Возвращает причину отказа или `null`, если писать можно:
+  /// * копии на сервере нет — можно;
+  /// * копия читается этим паролем — тот же порог, что и всегда;
+  /// * копия есть, но этим паролем не открывается — не затираем: её мог
+  ///   сделать сам человек со старым паролем. Ручное сохранение по-прежнему
+  ///   доступно, после него автокопия пойдёт как обычно.
+  static String? firstOverwriteRefusal({
+    required bool serverHasBackup,
+    required bool openedWithThisPassword,
+    required int? serverEvents,
+    required int nextEvents,
+  }) {
+    if (!serverHasBackup) return null;
+    if (!openedWithThisPassword) {
+      return 'Автокопия не сохранена: на сервере уже есть копия, сделанная '
+          'с другим паролем. Чтобы не потерять её, автокопия её не затирает. '
+          'Если она больше не нужна, сохраните копию вручную.';
+    }
+    final stored = serverEvents ?? 0;
+    if (allowsOverwrite(previousEvents: stored, nextEvents: nextEvents)) {
+      return null;
+    }
+    return 'Автокопия не сохранена: в копии на сервере $stored сообщений, '
+        'а на этом устройстве $nextEvents. Чтобы не потерять историю, '
+        'автокопия её не затирает. Восстановите копию или сохраните вручную.';
+  }
 }

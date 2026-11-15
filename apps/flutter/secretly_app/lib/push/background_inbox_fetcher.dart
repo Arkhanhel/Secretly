@@ -295,7 +295,9 @@ class BackgroundInboxFetcher {
     }
     final AppDb db;
     try {
-      db = await AppDb.open(passphrase: dbPass);
+      // Своё соединение: `close()` в конце не должен закрыть базу основному
+      // приложению, если оно живо (см. [AppDb.open]).
+      db = await AppDb.open(passphrase: dbPass, shared: false);
     } catch (_) {
       client.close();
       rethrow;

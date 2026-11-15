@@ -77,6 +77,51 @@ else changes.
 Flags whose names contain `FORCE_PREMIUM`, `DEMO_DATA` or `CALL_LOGS` exist for
 development. Leave them unset for anything you intend to use.
 
+### A lightweight Android build
+
+The full APK is large, mostly because of three sets of native libraries:
+on-device translation, speech-to-text and video processing. You can leave them
+out. Both halves of the switch must be set together — the Gradle property drops
+the libraries from the package, the Dart define stops the app from offering
+what needs them:
+
+```sh
+flutter build apk --release   -Psecretly.lite=true   --dart-define=SECRETLY_LITE=true   ...the rest of the defines above
+```
+
+What goes: message translation, voice-message transcription and dictation on
+Android, video compression on send, video thumbnails, trimming, round video
+notes, animated stickers and video avatars. What stays: everything about
+security, and QR scanning — without it you cannot link a device.
+
+Decorative files also leave the package: 365 profile icons and the chat
+wallpapers, about 20 MiB. The app fetches one when it is actually shown and
+keeps it on disk. Each file is requested by its SHA-256 and checked against a
+list that ships inside the signed package, so a server cannot substitute one.
+If the server has no such files, the app shows initials instead of an icon and
+a plain colour instead of a wallpaper, and nothing else changes. Rebuild that
+list whenever those files change:
+
+```sh
+python3 tools/build_on_demand_assets.py
+```
+
+It writes the list into the app and a flat directory of files named by their
+hash, which is what the server serves from
+`SECRETLY_RELAY_APP_ASSETS_DIR`.
+
+For cheap and older phones there is a 32-bit build — add
+`--target-platform android-arm`. Measured sizes of a signed release: the full
+build is 136 MiB, the lightweight 64-bit one 73 MiB, the lightweight 32-bit
+one 65 MiB.
+
+Setting only the Gradle property leaves the app offering features whose
+libraries are gone; setting only the Dart define hides the features but still
+ships the libraries. The project's own script sets both: `--lite` in
+`tools/macos_build_android_release.sh`, which also checks the finished APK for
+leftover libraries. That script refuses to build a Play bundle in this mode:
+the store listing is always the full build.
+
 ## Running the servers
 
 ```bash

@@ -77,6 +77,30 @@ code rather than search for it. §5 lists what we know is imperfect.
 
 ---
 
+### Check what we depend on
+
+Run this from the repository root:
+
+```sh
+python3 tools/build_sbom.py --check
+```
+
+It rebuilds the dependency inventory from the lock files and compares it with
+the one in `artifacts/sbom/secretly.cdx.json` (CycloneDX 1.5): 252 Dart
+packages and 360 Rust crates as of 13 October 2026, including the six copies we
+vendor ourselves. If it reports a mismatch, the inventory is out of date, not
+the lock files — regenerate it without `--check`.
+
+The inventory is built from `pubspec.lock` and `Cargo.lock`, that is from the
+versions actually installed, not from the ranges requested in the manifests. A
+list built from the manifests would describe something other than what shipped,
+which makes it useless for answering "do you ship a vulnerable version of X".
+
+One honest limitation: the inventory covers packages. It does not cover
+pre-built native binaries that some packages carry inside them, such as the
+FFmpeg and WebRTC libraries. For those the version is in the package entry, and
+the licence texts are in the app's own licence screen.
+
 ## 2. Artefacts we published or uploaded
 
 SHA-256 sums of the exact files we published ourselves or handed to Apple and
@@ -84,6 +108,15 @@ Google, with the git tag of the source each was built from.
 
 | Release | Platform | File | Date | SHA-256 | Source |
 |---|---|---|---|---|---|
+| 1.8.64 (645) | macOS | `Secretly-1.8.64-645.dmg` | 2026-10-04 | `818274387146b50e47d9818c961be39b4eeacc6b9cfef5f075c01bb8691df8fe` | `v1.8.64-645` |
+| 1.8.64 (645) | Windows installer | `Secretly-Setup-1.8.64-645-x64.exe` | 2026-10-04 | `13dd96562cf79331cbf2a397789e5945568dcbc62a3b76cfd4bf0cf955e0b23b` | `v1.8.64-645` |
+| 1.8.64 (645) | Windows | `Secretly-1.8.64-645-windows-x64.zip` | 2026-10-04 | `6ade4b96e6b39ad3bb79598271d8ec8613f7859e7efee8d617103a846ed9cd65` | `v1.8.64-645` |
+| 1.8.64 (645) | Android | `secretly-production-1.8.64-645-store645.aab` | 2026-10-04 | `cbc4df99fea42d9d0378150e3f144db06f1315509a46fdf8391c740c5b361cac` | `v1.8.64-645` |
+| 1.8.64 (645) | iOS | `secretly-production-1.8.64-645-store645.ipa` | 2026-10-04 | `e707578083034270de3f14ccf7fb6a67afecd722dc69f9a162dca74c44f62f48` | `v1.8.64-645` |
+| 1.8.63 (644) | macOS | `Secretly-1.8.63-644.dmg` | 2026-10-04 | `9078a170d2323f7175656e8360da3b47ab3c98f9182ef1a4d8023850e7d05d45` | `v1.8.63-644` |
+| 1.8.63 (644) | Windows installer | `Secretly-Setup-1.8.63-644-x64.exe` | 2026-10-04 | `75c5de4b26e3888c9692f6445e8d62d40776213077a835fad578d04540f42e7b` | `v1.8.63-644` |
+| 1.8.63 (644) | Android | `secretly-production-1.8.63-644-store644.aab` | 2026-10-01 | `e1851ceec745330e1a80ea5e4fa370e2a03e9211dbb52ef6d0f9a7d58f5416f4` | `v1.8.63-644` |
+| 1.8.63 (644) | iOS | `secretly-production-1.8.63-644-store644.ipa` | 2026-10-01 | `d02753ed69cceafadab7c9dd138852109fc6a6e67be793b50861e6e6e4b814e8` | `v1.8.63-644` |
 | 1.8.62 (635) | macOS | `Secretly-1.8.62-635.dmg` | 2026-09-28 | `9c40a3ec95bb92152808d52a135c3b43fe27b5a44f775b1c6cd92164288aa619` | `v1.8.62-635` |
 | 1.8.62 (635) | Windows installer | `Secretly-Setup-1.8.62-635-x64.exe` | 2026-09-28 | `aeb9d7d63be5dafd3ffd508227e72baab4a480182626043c297e6a0af8a6d467` | `v1.8.62-635` |
 | 1.8.62 (635) | Windows | `Secretly-1.8.62-635-windows-x64.zip` | 2026-09-28 | `c9dff9a784b59a9d2b6574dd538a98ee9cb0466372d74c0e14b4839cd04a01a0` | `v1.8.62-635` |
@@ -97,12 +130,12 @@ Google, with the git tag of the source each was built from.
 | 1.8.39 (588) | Android | `secretly-production-1.8.39-588-store588.aab` | 2026-09-05 | `0441577c7ee0161acfcba4d4c40d90b5eedbf96395a7f05c8de0eff8dd57e31a` | — |
 | 1.8.39 (588) | iOS | `secretly-production-1.8.39-588-store588.ipa` | 2026-09-05 | `049d83a97a81090d5b983f4e45a2884bfaf91b875e4eea8bd96de412de146f15` | — |
 
-What is where on 28 September 2026: the desktop apps update themselves to
-1.8.62 (635) — on Windows, from this release on, through the installer, which
-the app checks against our Ed25519 update signature before running it (the
-installer itself is not code-signed, see below);
-Google Play serves 1.8.61 (631) until 1.8.62 (635) is through review; the App
-Store still serves 1.8.39 (588), with 1.8.62 (635) in TestFlight.
+What is where on 8 October 2026: the desktop apps update themselves to
+1.8.64 (645) — on Windows through the installer, which the app checks against
+our Ed25519 update signature before running it (the installer itself is not
+code-signed, see below). The phone packages for 1.8.63 (644) and 1.8.64 (645)
+were handed to Apple and Google on the dates above; what each store serves
+right now is shown in its own listing.
 
 **Desktop files come straight from us**, from `updates.secretlyapp.com`, so the
 file you download is byte-for-byte the file listed above. Compute its SHA-256 —

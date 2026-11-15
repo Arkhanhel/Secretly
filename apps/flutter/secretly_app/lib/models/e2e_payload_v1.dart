@@ -10,6 +10,22 @@ import 'link_preview_v1.dart';
 
 export 'link_preview_v1.dart' show LinkPreviewV1;
 
+/// Предел срока исчезающего сообщения, секунд (365 дней). Больше — мусор.
+const int kDisappearMaxSeconds = 365 * 24 * 60 * 60;
+
+/// Срок исчезающего сообщения из поля `exp` (ТЗ 22.10.2026, §2.1).
+///
+/// Необязательное поле; сборки до него не шлют и, получив, пропускают.
+/// Терпимо к мусору: не число, ноль, отрицательное или больше года — `null`,
+/// то есть «без срока». Мусор в одном поле не роняет сообщение.
+int? disappearSecondsFromJson(Object? raw) {
+  if (raw is! num) return null;
+  if (raw.isNaN || raw.isInfinite) return null;
+  final seconds = raw.toInt();
+  if (seconds <= 0 || seconds > kDisappearMaxSeconds) return null;
+  return seconds;
+}
+
 /// E2E payload format v1.
 ///
 /// This is encrypted end-to-end and opaque to the relay.
@@ -117,6 +133,7 @@ abstract class E2eEventV1 {
         // Испорченное превью не роняет сообщение: [LinkPreviewV1.fromJson]
         // вернёт null, и текст придёт без карточки.
         linkPreview: LinkPreviewV1.fromJson(json['link_preview']),
+        exp: disappearSecondsFromJson(json['exp']),
       ),
       'sys' => SystemEventV1(
         eventId: json['event_id'] as String,
@@ -161,6 +178,7 @@ abstract class E2eEventV1 {
         width: (json['width'] as num?)?.toInt(),
         height: (json['height'] as num?)?.toInt(),
         thumbB64: json['thumb_b64'] as String?,
+        exp: disappearSecondsFromJson(json['exp']),
       ),
       'sticker' => StickerEventV1(
         eventId: json['event_id'] as String,
@@ -183,6 +201,10 @@ abstract class E2eEventV1 {
         packTitle: json['pack_title'] as String?,
         packStickerCount: (json['pack_sticker_count'] as num?)?.toInt(),
         packOriginPid: json['pack_origin_pid'] as String?,
+        packAccess: json['pack_access'] is String
+            ? (json['pack_access'] as String).trim()
+            : null,
+        exp: disappearSecondsFromJson(json['exp']),
       ),
       'call' => CallEventV1(
         eventId: json['event_id'] as String,
@@ -282,10 +304,16 @@ class MsgEventV1 extends E2eEventV1 {
     this.mentions = const <MsgMentionV1>[],
     this.topicId,
     this.linkPreview,
+    this.exp,
   });
 
   final String eventId;
   final String text;
+
+  /// Срок исчезающего сообщения, секунд (ТЗ 22.10.2026, §2.1). `null` — без
+  /// срока. Необязательное поле: прежние версии его пропускают и показывают
+  /// сообщение как обычное.
+  final int? exp;
   final String? replyToEventId;
   final List<MsgMentionV1> mentions;
 
@@ -311,6 +339,7 @@ class MsgEventV1 extends E2eEventV1 {
           .toList(growable: false),
     if (topicId != null && topicId!.isNotEmpty) 'topic_id': topicId,
     if (linkPreview != null) 'link_preview': linkPreview!.toJson(),
+    if (exp != null && exp! > 0) 'exp': exp,
   };
 }
 
@@ -666,10 +695,14 @@ class AttachmentEventV1 extends E2eEventV1 {
     this.width,
     this.height,
     this.thumbB64,
+    this.exp,
   });
 
   final String eventId;
   final String blobId;
+
+  /// Срок исчезающего сообщения, секунд; `null` — без срока. См. [MsgEventV1.exp].
+  final int? exp;
   final String fileKeyB64;
   final String? blobAccessTokenB64;
   final int sizeBytes;
@@ -755,6 +788,7 @@ class AttachmentEventV1 extends E2eEventV1 {
     if (width != null && width! > 0) 'width': width,
     if (height != null && height! > 0) 'height': height,
     if (thumbB64 != null && thumbB64!.isNotEmpty) 'thumb_b64': thumbB64,
+    if (exp != null && exp! > 0) 'exp': exp,
   };
 }
 
@@ -793,10 +827,15 @@ class StickerEventV1 extends E2eEventV1 {
     this.packTitle,
     this.packStickerCount,
     this.packOriginPid,
+    this.packAccess,
+    this.exp,
   });
 
   final String eventId;
   final String packId;
+
+  /// Срок исчезающего сообщения, секунд; `null` — без срока. См. [MsgEventV1.exp].
+  final int? exp;
   final int packVersion;
   final String stickerId;
   final String emojiHint;
@@ -834,6 +873,19 @@ class StickerEventV1 extends E2eEventV1 {
   /// recipient sends the pack-fetch request back to. Null for catalog/bundled.
   final String? packOriginPid;
 
+  /// Режим набора у автора (ТЗ 14.11.2026): `closed` — автор закрыл набор,
+  /// получатель видит замок вместо «Добавить». `null` — открытый, то есть
+  /// нынешнее поведение; так читаются и все сообщения старых сборок.
+  ///
+  /// 🔴 Это ПОДСКАЗКА интерфейсу, а не защита: сам набор не отдаёт устройство
+  /// автора, и оно проверяет закрытость независимо от этого поля.
+  final String? packAccess;
+
+  static const String packAccessClosed = 'closed';
+
+  /// Закрыт ли набор, из которого прислан стикер.
+  bool get packClosed => packAccess == packAccessClosed;
+
   /// True when this sticker carries its own pixels via [blobId] instead of a
   /// shared catalog reference.
   bool get hasInlineBlob => (blobId ?? '').isNotEmpty;
@@ -868,6 +920,8 @@ class StickerEventV1 extends E2eEventV1 {
       'pack_sticker_count': packStickerCount,
     if (packOriginPid != null && packOriginPid!.isNotEmpty)
       'pack_origin_pid': packOriginPid,
+    if (packAccess != null && packAccess!.isNotEmpty) 'pack_access': packAccess,
+    if (exp != null && exp! > 0) 'exp': exp,
   };
 }
 

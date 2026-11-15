@@ -3,6 +3,7 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import '../models/e2e_payload_v1.dart';
 import '../ui/app_asset_paths.dart';
+import 'sticker_share_mode.dart';
 
 /// [webp] is an ANIMATED WebP (full-alpha, multi-frame) — Premium "live"
 /// stickers. Flutter's Image widget plays it inline natively (no video_player /
@@ -12,6 +13,17 @@ import '../ui/app_asset_paths.dart';
 enum SecretlyStickerFormat { png, lottie, webp }
 
 enum SecretlyStickerAssetSource { bundledAsset, file, missing }
+
+/// В наборе уже предельное число стикеров (Э0, ТЗ 14.11.2026). Бросается при
+/// добавлении НОВОГО стикера; уже существующие наборы больше предела не
+/// обрезаются и продолжают работать.
+class StickerPackFullException implements Exception {
+  const StickerPackFullException(this.max);
+  final int max;
+
+  @override
+  String toString() => 'StickerPackFullException(max: $max)';
+}
 
 enum SecretlyStickerPackOrigin { bundled, remote }
 
@@ -173,6 +185,7 @@ class SecretlyStickerPack {
     this.origin = SecretlyStickerPackOrigin.bundled,
     this.featuredRank,
     this.iconEmojiHint = '',
+    this.shareMode = StickerShareMode.fallback,
   });
 
   final String id;
@@ -186,6 +199,13 @@ class SecretlyStickerPack {
   final SecretlyStickerPackOrigin origin;
   final int? featuredRank;
   final String iconEmojiHint;
+
+  /// Режим доступа к СВОЕМУ набору (ТЗ 14.11.2026). Для каталога и встроенных
+  /// всегда значение по умолчанию — «открытый», то есть нынешнее поведение.
+  final StickerShareMode shareMode;
+
+  /// Закрыт ли набор автором: собеседникам он не отдаётся.
+  bool get isClosed => shareMode == StickerShareMode.personal;
 
   bool get isRemoteAvailableOnly =>
       origin == SecretlyStickerPackOrigin.remote && !installed;

@@ -256,6 +256,13 @@ class _SelfProfileViewState extends State<SelfProfileView> {
   /// getters already return null when the tier does not allow them, so a
   /// lapsed subscription simply stops rendering the choice rather than
   /// losing it.
+  bool _cosmeticAllowed({required bool frame, required String id}) =>
+      isCosmeticAllowed(
+        _c.entitlementStateNow,
+        frame ? CosmeticKind.avatarFrame : CosmeticKind.profileCover,
+        id,
+      );
+
   Future<void> _pickCosmetic({required bool frame}) async {
     final currentId = frame ? _c.myFrameId : _c.myCoverId;
     final name = _c.myNickname.trim();
@@ -287,6 +294,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
           itemBuilder: (ctx, i) {
             final id = ids[i];
             final selected = id == currentId;
+            final locked = id != null && !_cosmeticAllowed(frame: frame, id: id);
             final label = id == null
                 ? (frame ? l10n.desktopProfileNoFrame : l10n.desktopProfileNoCover)
                 : (frame
@@ -330,11 +338,28 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                     // они выглядят, только применив каждую по очереди. Показ
                     // ничего не стоит: и рамка, и обложка умеют рисовать себя
                     // сами (`builder`), тем же кодом, что и в профиле.
-                    _CosmeticPreview(
-                      id: id,
-                      frame: frame,
-                      name: display,
-                      avatarPath: hasAvatar ? avatarPath : null,
+                    // Замок — в углу превью: часть рамок бесплатна (13.11.2026),
+                    // и без него человек узнаёт о Premium, только нажав.
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        _CosmeticPreview(
+                          id: id,
+                          frame: frame,
+                          name: display,
+                          avatarPath: hasAvatar ? avatarPath : null,
+                        ),
+                        if (locked)
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: Icon(
+                              Icons.lock_rounded,
+                              size: 14,
+                              color: DColors.of(ctx).textSecondary,
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -363,6 +388,13 @@ class _SelfProfileViewState extends State<SelfProfileView> {
     );
     if (picked == null || !mounted) return;
     final value = picked == '__none' ? null : picked;
+    if (value != null && !_cosmeticAllowed(frame: frame, id: value)) {
+      DesktopSnackbar.show(
+        context,
+        message: l10n.desktopProfileCosmeticPremiumOnly,
+      );
+      return;
+    }
     try {
       if (frame) {
         await _c.setMyFrame(value);

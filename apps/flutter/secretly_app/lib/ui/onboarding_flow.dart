@@ -22,6 +22,7 @@ import 'l10n.dart';
 import 'root_messenger.dart';
 import 'safe_backup_file_io.dart';
 import 'widgets/system_bottom_fade.dart';
+import 'backup_refusal_text.dart';
 
 // ─── palette ─────────────────────────────────────────────────────────────────
 
@@ -1030,11 +1031,12 @@ class _ProfilePageState extends State<_ProfilePage>
     await widget.controller.setIncomingCallsEnabled(_callsEnabled);
     if (_notifEnabled && _supportsPushPermissionPrompt) {
       try {
-        await FirebaseMessaging.instance.requestPermission(
-          alert: true,
-          badge: true,
-          sound: true,
-        );
+        // Play, отзыв 7.11.2026: без предела «Далее» висело, если ответ
+        // системы не приходил (на части телефонов без служб Google).
+        // Окно разрешения остаётся на экране, ответ человека запишется сам.
+        await FirebaseMessaging.instance
+            .requestPermission(alert: true, badge: true, sound: true)
+            .timeout(const Duration(seconds: 15));
       } catch (_) {}
     }
     widget.onNext();
@@ -1242,6 +1244,11 @@ class _BackupPageState extends State<_BackupPage>
     super.dispose();
   }
 
+  // 🔴 Play, отзыв 7.11.2026: с этой страницы было не уйти. Профиль ещё не
+  // создан (медленная сеть при первом запуске) — пароль копии сохранить
+  // некуда, `setSafeBackupAutoPassword` бросал «profile not ready», и
+  // «Готово» каждый раз снова спрашивало пароль. Копия — не условие входа:
+  // без профиля она просто откладывается, включить её можно в Настройках.
   Future<void> _onFinish() async {
     // 🔴 Локализованную строку берём ЗАРАНЕЕ, пока экран точно на месте.
     //
@@ -1249,6 +1256,20 @@ class _BackupPageState extends State<_BackupPage>
     // он падает — то есть попытка сказать «копия не сохранилась» упала бы
     // раньше, чем успела что-нибудь сказать.
     final failedMessage = context.l10n.onboardingBackupSaveFailed;
+    final laterMessage = context.l10n.onboardingBackupLater;
+    // Профиля ещё нет — копия откладывается (см. выше).
+    if (_backupEnabled && !widget.controller.hasServerProfile) {
+      setState(() => _saving = true);
+      try {
+        await widget.controller.setSafeBackupAutoEnabled(false);
+      } catch (_) {}
+      showRootSnackBar(
+        SecretlySnackBar(content: Text(laterMessage)),
+        context: mounted ? context : null,
+      );
+      await widget.onFinish();
+      return;
+    }
     setState(() => _saving = true);
     try {
       await widget.controller.setSafeBackupAutoEnabled(_backupEnabled);
@@ -1270,11 +1291,18 @@ class _BackupPageState extends State<_BackupPage>
     } catch (_) {
       // Строка взята ДО ожидания (см. `failedMessage` выше): за `context.l10n`
       // стоит тот же поиск по дереву, и на снятом элементе он упал бы первым.
-      if (mounted) setState(() => _saving = false);
+      //
+      // 🔴 Сбой сохранения настроек копии больше не держит человека на этой
+      // странице (отзыв 7.11.2026): копию выключаем, говорим об этом и
+      // пускаем дальше — включить её можно в Настройках.
+      try {
+        await widget.controller.setSafeBackupAutoEnabled(false);
+      } catch (_) {}
       showRootSnackBar(
         SecretlySnackBar(content: Text(failedMessage)),
         context: mounted ? context : null,
       );
+      await widget.onFinish();
     }
   }
 
@@ -2135,7 +2163,14 @@ class _RestoreAccountPageState extends State<_RestoreAccountPage>
       if (!mounted) return;
       if (!exists || payload == null || payload.trim().isEmpty) {
         _setLoading(false);
-        _snack(context.l10n.onboardingServerBackupNotFound);
+        _snack(
+          serverBackupRefusalText(
+            context,
+            context.l10n,
+            widget.controller.lastServerBackupRefusal,
+            fallback: context.l10n.onboardingServerBackupNotFound,
+          ),
+        );
         return;
       }
 

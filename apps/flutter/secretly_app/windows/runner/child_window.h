@@ -43,7 +43,10 @@ class SecretlyChildWindow : public Win32Window {
   // после Create; стили окошку даёт конструктор.
   void MakeNotificationPopup();
   // Место в правом нижнем углу рабочей области: [slot] 0 — нижний.
-  void PlaceAtCorner(int slot, int margin_dip, int gap_dip);
+  // [own_monitor] — угол монитора, где стоит само окно (свёрнутый звонок не
+  // прыгает на другой экран); иначе — главного (окошки уведомлений).
+  void PlaceAtCorner(int slot, int margin_dip, int gap_dip,
+                     bool own_monitor = false);
   void SetFullScreen(bool on);
   void Minimize();
   void Present();

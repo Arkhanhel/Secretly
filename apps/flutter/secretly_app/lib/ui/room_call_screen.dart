@@ -13,11 +13,15 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../app/app_controller.dart';
 import '../calls/call_audio_route.dart';
+import '../l10n/app_localizations.dart';
+import '../rooms/call_e2ee/call_e2ee_protocol.dart';
+import '../rooms/call_e2ee/room_call_e2ee_status.dart';
 import '../rooms/room_call_manager.dart';
 import '../rooms/room_call_media_controller.dart';
 import '../rooms/room_call_media_state.dart';
 import '../rooms/room_call_state.dart';
 import 'android_picture_in_picture.dart';
+import 'room_call_e2ee_ui.dart';
 import 'icons/app_icons.dart';
 import 'wave1_l10n.dart';
 import 'widgets/avatar_initials.dart';
@@ -37,7 +41,6 @@ const _kCallTextPrimary = Colors.white;
 // Slightly brighter secondary than iOS' 8E8E93 — against the flat #0D0D0D
 // call background the stock grey read as washed-out/pale.
 const _kCallTextSecondary = Color(0xFF9C9CA3);
-const _kCallTileMetaBg = Color(0xCC11131A);
 
 String _roomCallText(
   BuildContext context, {
@@ -244,6 +247,30 @@ class _RoomCallScreenState extends State<RoomCallScreen>
     required bool muted,
   }) {
     return _runAction('join:$mediaType:$videoEnabled:$muted', () async {
+      // ТЗ E2EE созвонов, §7.3/§8: с каким контрактом входить. Пока у
+      // устройства нет раскатки шифрования — без окон и без лишних
+      // запросов, ровно как раньше.
+      final l10n = AppLocalizations.of(context)!;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      final decision = await decideRoomCallJoin(
+        loadPlan: () => widget.controller.planRoomCallJoin(widget.groupId),
+        displayName: widget.controller.cachedProfileDisplayName,
+        l10n: l10n,
+        askCreatorChoice: (names) async {
+          if (!mounted) return null;
+          return showRoomCallCreatorChoiceDialog(context, names);
+        },
+        askOpenJoin: () async {
+          if (!mounted) return false;
+          return showRoomCallOpenJoinDialog(context);
+        },
+        notifyBlocked: (message) => messenger?.showSnackBar(
+          SecretlySnackBar(content: Text(message)),
+        ),
+      );
+      // Человек передумал или вход закрыт (сообщение уже показано) — это не
+      // сбой действия.
+      if (decision == null || !mounted) return true;
       final effectiveMediaType = vm.activeCall?.mediaType ?? mediaType;
       final result = await widget.controller.joinRelayRoomCall(
         roomId: widget.groupId,
@@ -254,7 +281,16 @@ class _RoomCallScreenState extends State<RoomCallScreen>
         deafened: false,
         videoEnabled: videoEnabled,
         screenShareEnabled: false,
+        mediaContract: decision.contract,
       );
+      if (result != null && decision.notifyMembers) {
+        unawaited(
+          widget.controller.sendRoomCallUpdateNotice(
+            roomId: widget.groupId,
+            text: l10n.roomCallUpdateNotice,
+          ),
+        );
+      }
       if (result != null) {
         await RoomCallManager.instance?.ensureJoined(
           roomId: widget.groupId,
@@ -603,23 +639,33 @@ class _RoomCallScreenState extends State<RoomCallScreen>
     final joinedCount = participants
         .where((participant) => participant.isJoined)
         .length;
-    final metaParts = <String>[
-      if (elapsed != null) elapsed,
-      if (vm.activeCall != null && joinedCount > 0)
-        _roomCallText(
-          context,
-          ru: '$joinedCount в эфире',
-          en: '$joinedCount live',
-          uk: '$joinedCount в ефірі',
-          es: '$joinedCount en directo',
-          pt: '$joinedCount ao vivo',
-          ptBr: '$joinedCount ao vivo',
-          fr: '$joinedCount en direct',
-          de: '$joinedCount live',
-        ),
-      if (mediaStatus != null) mediaStatus,
-    ];
-    final metaText = metaParts.join(' • ');
+    final showCount = vm.activeCall != null && joinedCount > 0;
+    // Словами число говорит только чтению с экрана; глазу хватает значка.
+    final countLabel = showCount
+        ? _roomCallText(
+            context,
+            ru: '$joinedCount в эфире',
+            en: '$joinedCount live',
+            uk: '$joinedCount в ефірі',
+            es: '$joinedCount en directo',
+            pt: '$joinedCount ao vivo',
+            ptBr: '$joinedCount ao vivo',
+            fr: '$joinedCount en direct',
+            de: '$joinedCount live',
+          )
+        : null;
+    // ТЗ E2EE созвонов, §8. С 14.11.2026 открытый замок виден в любом
+    // открытом созвоне, а не только во время раскатки: при доле 0 все
+    // созвоны комнат открыты для сервера, и человек должен это видеть.
+    // Контракт неизвестен — значит, вход был по старому контракту v1.
+    final showOpenWarning =
+        vm.activeCall != null &&
+        (widget.controller.roomCallMediaContract(
+                  widget.groupId,
+                  vm.activeCall!.callId,
+                ) ??
+                kRoomMediaContractV1) ==
+            kRoomMediaContractV1;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
       child: Row(
@@ -630,38 +676,108 @@ class _RoomCallScreenState extends State<RoomCallScreen>
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: _CallGlassIsland(
-              radius: 20,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    vm.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _kCallTextPrimary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
+            child: RoomCallE2eeMarkBuilder(
+              mediaController: vm.activeCall == null
+                  ? null
+                  : RoomCallManager.instance?.mediaController,
+              showOpenWarning: showOpenWarning,
+              builder: (context, mark) {
+                const metaStyle = TextStyle(
+                  color: _kCallTextSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                );
+                final spans = <InlineSpan>[
+                  if (mark != null) ...[
+                    WidgetSpan(
+                      alignment: PlaceholderAlignment.middle,
+                      child: Icon(mark.icon, size: 12, color: mark.color),
                     ),
-                  ),
-                  if (metaText.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      metaText,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: _kCallTextSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
+                    const TextSpan(text: ' '),
+                  ],
+                  if (mark != null && mark.alert)
+                    TextSpan(
+                      text: mark.title,
+                      style: TextStyle(color: mark.color),
+                    )
+                  else ...[
+                    if (elapsed != null) TextSpan(text: elapsed),
+                    if (showCount) ...[
+                      if (elapsed != null) const TextSpan(text: '  '),
+                      const WidgetSpan(
+                        alignment: PlaceholderAlignment.middle,
+                        child: Icon(
+                          AppIcons.personOutline,
+                          size: 11,
+                          color: _kCallTextSecondary,
+                        ),
+                      ),
+                      TextSpan(text: ' $joinedCount'),
+                    ],
+                    if (mediaStatus != null)
+                      TextSpan(
+                        text: elapsed != null || showCount
+                            ? '  ·  $mediaStatus'
+                            : mediaStatus,
+                      ),
+                  ],
+                ];
+                final semanticsLabel = <String>[
+                  vm.title,
+                  if (mark != null) mark.title,
+                  if (mark == null || !mark.alert) ...[
+                    if (elapsed != null) elapsed,
+                    if (countLabel != null) countLabel,
+                    if (mediaStatus != null) mediaStatus,
+                  ],
+                ].join(', ');
+                return Semantics(
+                  container: true,
+                  button: mark != null,
+                  label: semanticsLabel,
+                  child: ExcludeSemantics(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: mark == null
+                          ? null
+                          : () => unawaited(
+                              showRoomCallE2eeDetails(context, mark),
+                            ),
+                      child: _CallGlassIsland(
+                        radius: 20,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 7,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              vm.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: _kCallTextPrimary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            ),
+                            if (spans.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text.rich(
+                                TextSpan(style: metaStyle, children: spans),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
                     ),
-                  ],
-                ],
-              ),
+                  ),
+                );
+              },
             ),
           ),
           if (vm.canModerateCall) ...[
@@ -757,22 +873,6 @@ class _RoomCallScreenState extends State<RoomCallScreen>
                 fontWeight: FontWeight.w700,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              _roomCallText(
-                context,
-                ru: 'Начните голосовой или видеозвонок',
-                en: 'Start a voice or video call',
-                uk: 'Почніть голосовий або відеодзвінок',
-                es: 'Inicia una llamada de voz o video',
-                pt: 'Inicie uma chamada de voz ou video',
-                ptBr: 'Inicie uma chamada de voz ou video',
-                fr: 'Demarrez un appel vocal ou video',
-                de: 'Starte einen Sprach- oder Videoanruf',
-              ),
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: _kCallTextSecondary, fontSize: 15),
-            ),
             const SizedBox(height: 32),
             Row(
               children: [
@@ -819,133 +919,37 @@ class _RoomCallScreenState extends State<RoomCallScreen>
     );
   }
 
+  /// Вход в идущий созвон — одна кнопка (06.10.2026, по просьбе владельца).
+  ///
+  /// Раньше здесь была карточка в две строки: «Идёт голосовой звонок» и
+  /// «N участников уже в эфире». И то и другое уже сказано: шапкой (время и
+  /// число) и плитками участников. Остаётся действие.
   Widget _buildJoinHint(_RoomCallVm vm) {
     final isVideo = vm.activeCall!.mediaType == 'video';
-    return Padding(
-      padding: EdgeInsets.zero,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          // Dark glass (white call text needs a dark plate) but lifted like the
-          // app's islands: brighter rim + a soft drop shadow.
-          color: _kCallTileMetaBg,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.24),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
+    return SizedBox(
+      width: double.infinity,
+      height: 52,
+      child: FilledButton.icon(
+        onPressed: _pendingAction == null
+            ? () => unawaited(
+                _startOrJoinCall(
+                  vm,
+                  mediaType: vm.activeCall!.mediaType,
+                  videoEnabled: isVideo,
+                  muted: false,
+                ),
+              )
+            : null,
+        style: FilledButton.styleFrom(
+          backgroundColor: _kCallSpeakGreen,
+          foregroundColor: Colors.white,
+          shape: const StadiumBorder(),
+          elevation: 0,
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: _kCallSpeakGreen.withValues(alpha: 0.16),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                isVideo ? AppIcons.video : AppIcons.callAlt,
-                color: _kCallSpeakGreen,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    isVideo
-                        ? _roomCallText(
-                            context,
-                            ru: 'Идёт видеозвонок',
-                            en: 'Video call in progress',
-                            uk: 'Триває відеодзвінок',
-                            es: 'Videollamada en curso',
-                            pt: 'Chamada de video em curso',
-                            ptBr: 'Chamada de video em andamento',
-                            fr: 'Appel video en cours',
-                            de: 'Videoanruf lauft',
-                          )
-                        : _roomCallText(
-                            context,
-                            ru: 'Идёт голосовой звонок',
-                            en: 'Voice call in progress',
-                            uk: 'Триває голосовий дзвінок',
-                            es: 'Llamada de voz en curso',
-                            pt: 'Chamada de voz em curso',
-                            ptBr: 'Chamada de voz em andamento',
-                            fr: 'Appel vocal en cours',
-                            de: 'Sprachanruf lauft',
-                          ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _kCallTextPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _roomCallText(
-                      context,
-                      ru: '${vm.joinedParticipantCount} участников уже в эфире',
-                      en: '${vm.joinedParticipantCount} people are already live',
-                      uk: '${vm.joinedParticipantCount} учасників вже в ефірі',
-                      es: '${vm.joinedParticipantCount} personas ya estan en directo',
-                      pt: '${vm.joinedParticipantCount} pessoas ja estao ao vivo',
-                      ptBr:
-                          '${vm.joinedParticipantCount} pessoas ja estao ao vivo',
-                      fr: '${vm.joinedParticipantCount} personnes sont deja en direct',
-                      de: '${vm.joinedParticipantCount} Personen sind bereits live',
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: _kCallTextSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            FilledButton(
-              onPressed: _pendingAction == null
-                  ? () => unawaited(
-                      _startOrJoinCall(
-                        vm,
-                        mediaType: vm.activeCall!.mediaType,
-                        videoEnabled: vm.activeCall!.mediaType == 'video',
-                        muted: false,
-                      ),
-                    )
-                  : null,
-              style: FilledButton.styleFrom(
-                backgroundColor: _kCallSpeakGreen,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
-              ),
-              child: Text(
-                _roomCallText(context, ru: 'Войти', en: 'Join'),
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
+        icon: Icon(isVideo ? AppIcons.video : AppIcons.callAlt, size: 20),
+        label: Text(
+          _roomCallText(context, ru: 'Войти', en: 'Join'),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
       ),
     );
@@ -1511,17 +1515,40 @@ class _CallParticipantTile extends StatelessWidget {
         // Screen-share status intentionally has no chip here — the
         // capabilities row at the bottom already shows a screen-share icon,
         // and showing both was a duplicated signal for the same fact.
+        //
+        // 🔴 Только значки, без слов (06.10.2026, по просьбе владельца).
+        // Чипа «Вы» нет: имя на плитке и так с «(Вы)». «Ждём ключ» и «Сеть»
+        // — значки; слова остаются чтению с экрана.
         final badgeChildren = <Widget>[
-          if (participant.isSelf && !compact)
-            _ParticipantStatusChip(
-              label: _roomCallText(context, ru: 'Вы', en: 'You'),
+          // ТЗ E2EE созвонов, §8.1: «Ждём ключ» / «Не удаётся расшифровать».
+          if (!participant.isSelf &&
+              mediaController is RoomCallE2eeStatusSource &&
+              (mediaController as RoomCallE2eeStatusSource).e2eeStatus.value !=
+                  null)
+            ValueListenableBuilder<RoomCallE2eeStatus?>(
+              valueListenable:
+                  (mediaController as RoomCallE2eeStatusSource).e2eeStatus,
+              builder: (context, status, _) {
+                final caption = roomCallE2eePeerCaption(
+                  status,
+                  participant.deviceId,
+                  AppLocalizations.of(context)!,
+                );
+                if (caption == null) return const SizedBox.shrink();
+                final failing =
+                    status?.peersByDeviceId[participant.deviceId.trim()] ==
+                    RoomCallE2eePeerState.failing;
+                return _ParticipantStatusChip(
+                  icon: Icons.key_rounded,
+                  semanticLabel: caption,
+                  tint: failing ? _kCallLeaveRed : const Color(0xFFFFB84D),
+                );
+              },
             ),
           if (participant.isReconnecting)
             _ParticipantStatusChip(
               icon: Icons.sync_problem_rounded,
-              label: compact
-                  ? ''
-                  : _roomCallText(context, ru: 'Сеть', en: 'Network'),
+              semanticLabel: _roomCallText(context, ru: 'Сеть', en: 'Network'),
               tint: const Color(0xFFFFB84D),
             ),
         ];
@@ -1932,46 +1959,33 @@ class _CallControlButton extends StatelessWidget {
   }
 }
 
+/// Значок состояния на плитке участника. Слова — только чтению с экрана.
 class _ParticipantStatusChip extends StatelessWidget {
   const _ParticipantStatusChip({
-    this.icon,
-    required this.label,
+    required this.icon,
+    required this.semanticLabel,
     this.tint = Colors.white,
   });
 
-  final IconData? icon;
-  final String label;
+  final IconData icon;
+  final String semanticLabel;
   final Color tint;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: label.isEmpty ? 7 : 9,
-        vertical: 5,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.36),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 12, color: tint),
-            if (label.isNotEmpty) const SizedBox(width: 5),
-          ],
-          if (label.isNotEmpty)
-            Text(
-              label,
-              style: TextStyle(
-                color: tint,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-        ],
+    return Semantics(
+      container: true,
+      label: semanticLabel,
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.36),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          child: Icon(icon, size: 13, color: tint),
+        ),
       ),
     );
   }

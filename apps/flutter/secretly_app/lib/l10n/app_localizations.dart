@@ -1468,6 +1468,168 @@ abstract class AppLocalizations {
   /// **'Couldn\'t transfer the attachment right now. Check internet/server and try again.'**
   String get attachmentTransferUnavailable;
 
+  /// Button on the startup error screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get startupRetry;
+
+  /// Onboarding: backup deferred because the profile is not created yet (Play review 7.11).
+  ///
+  /// In en, this message translates to:
+  /// **'Backup isn\'t on yet — your profile is still being created. Turn it on later in Settings.'**
+  String get onboardingBackupLater;
+
+  /// Storage settings (media audit П4).
+  ///
+  /// In en, this message translates to:
+  /// **'Keep media on this device'**
+  String get keepMediaTitle;
+
+  /// Storage settings (media audit П4).
+  ///
+  /// In en, this message translates to:
+  /// **'Forever'**
+  String get keepMediaForever;
+
+  /// Storage settings (media audit П4).
+  ///
+  /// In en, this message translates to:
+  /// **'1 month'**
+  String get keepMediaMonth;
+
+  /// Storage settings (media audit П4).
+  ///
+  /// In en, this message translates to:
+  /// **'1 week'**
+  String get keepMediaWeek;
+
+  /// Storage settings (media audit П4).
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded photos, videos and files older than this are removed from the phone. Messages stay; media no longer on the server (older than 7 days) and media you sent are removed for good.'**
+  String get keepMediaHint;
+
+  /// Storage settings (media audit П4).
+  ///
+  /// In en, this message translates to:
+  /// **'Media by chat'**
+  String get chatMediaTitle;
+
+  /// Storage settings (media audit П4).
+  ///
+  /// In en, this message translates to:
+  /// **'Count by chat'**
+  String get chatMediaShow;
+
+  /// Storage: files of a chat (media audit П4).
+  ///
+  /// In en, this message translates to:
+  /// **'{count} files'**
+  String chatMediaFilesCount(int count);
+
+  /// Storage settings (media audit П4).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this chat\'s media?'**
+  String get chatMediaDeleteTitle;
+
+  /// Storage settings (media audit П4).
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded photos, videos and files of this chat will be removed from the phone; messages stay. Anything still on the server (up to 7 days) can be downloaded again; the rest — what you sent and older media — is removed for good.'**
+  String get chatMediaDeleteBody;
+
+  /// Storage settings (media audit П4).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get chatMediaDeleteConfirm;
+
+  /// Storage settings (media audit П4).
+  ///
+  /// In en, this message translates to:
+  /// **'No downloaded media in chats'**
+  String get chatMediaEmpty;
+
+  /// Shared media gallery: reveal older items (media audit П8).
+  ///
+  /// In en, this message translates to:
+  /// **'Show more ({count} left)'**
+  String galleryShowMore(int count);
+
+  /// Storage settings: cellular auto-download (media audit П1).
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-download on mobile data'**
+  String get autoDownloadCellularTitle;
+
+  /// Storage settings: cellular auto-download (media audit П1).
+  ///
+  /// In en, this message translates to:
+  /// **'Everything'**
+  String get autoDownloadEverything;
+
+  /// Storage settings: cellular auto-download (media audit П1).
+  ///
+  /// In en, this message translates to:
+  /// **'Photos, videos and files up to 15 MB'**
+  String get autoDownloadUpTo15Mb;
+
+  /// Storage settings: cellular auto-download (media audit П1).
+  ///
+  /// In en, this message translates to:
+  /// **'Photos only'**
+  String get autoDownloadPhotosOnly;
+
+  /// Storage settings: cellular auto-download (media audit П1).
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing but voice messages'**
+  String get autoDownloadNothing;
+
+  /// Storage settings: cellular auto-download (media audit П1).
+  ///
+  /// In en, this message translates to:
+  /// **'Everything downloads on Wi-Fi. Anything postponed downloads once you\'re on Wi-Fi or when you open it. Files are kept on the server for 7 days.'**
+  String get autoDownloadHint;
+
+  /// Pending upload that failed on network/server (media audit О2).
+  ///
+  /// In en, this message translates to:
+  /// **'Not sent — tap to retry'**
+  String get uploadNotSentTapToRetry;
+
+  /// Retry a failed upload.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get uploadRetry;
+
+  /// Tooltip on media whose blob expired on the relay (media audit П7).
+  ///
+  /// In en, this message translates to:
+  /// **'The file is no longer on the server: it is kept for 7 days.'**
+  String get attachmentExpiredOnServer;
+
+  /// Upload refused by the server (media audit О11).
+  ///
+  /// In en, this message translates to:
+  /// **'The file is too large for the server. Send a smaller one or split it.'**
+  String get attachmentServerRejectedSize;
+
+  /// Upload refused by the server (media audit О11).
+  ///
+  /// In en, this message translates to:
+  /// **'The server is low on space right now. Try again later.'**
+  String get attachmentServerStorageFull;
+
+  /// Upload refused by the server (media audit О11).
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve reached the file storage limit. Files are kept for 7 days — try again later.'**
+  String get attachmentUploadQuotaExceeded;
+
   /// No description provided for @attachmentSendUnavailable.
   ///
   /// In en, this message translates to:
@@ -2119,7 +2281,7 @@ abstract class AppLocalizations {
   /// No description provided for @onboardingWelcomeSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'A next-generation messenger.\nComplete privacy. No compromises.'**
+  /// **'A next-generation messenger.\nPrivacy by design.'**
   String get onboardingWelcomeSubtitle;
 
   /// No description provided for @onboardingCreateAccount.
@@ -2149,7 +2311,7 @@ abstract class AppLocalizations {
   /// No description provided for @onboardingFeaturePrivacyTitle.
   ///
   /// In en, this message translates to:
-  /// **'Full anonymity'**
+  /// **'No personal data'**
   String get onboardingFeaturePrivacyTitle;
 
   /// No description provided for @onboardingFeaturePrivacyBody.
@@ -2161,13 +2323,13 @@ abstract class AppLocalizations {
   /// No description provided for @onboardingFeatureRelayTitle.
   ///
   /// In en, this message translates to:
-  /// **'No middlemen'**
+  /// **'Server can\'t read'**
   String get onboardingFeatureRelayTitle;
 
   /// No description provided for @onboardingFeatureRelayBody.
   ///
   /// In en, this message translates to:
-  /// **'The relay server does not store messages. It only passes them through.'**
+  /// **'The server only passes on encrypted messages and deletes them after delivery.'**
   String get onboardingFeatureRelayBody;
 
   /// No description provided for @onboardingProfileTitle.
@@ -6535,7 +6697,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopPrivacyEncryptionHint.
   ///
   /// In en, this message translates to:
-  /// **'Messages, files and one-to-one calls are end-to-end encrypted; the keys live only on your devices. Group calls are encrypted only in transit for now.'**
+  /// **'Messages, files and one-to-one calls are end-to-end encrypted; the keys live only on your devices. End-to-end encryption for group calls is rolling out gradually: a lock in the call shows it is on; without it, the call is encrypted only in transit.'**
   String get desktopPrivacyEncryptionHint;
 
   /// No description provided for @desktopPrivacyE2eeActive.
@@ -7285,7 +7447,7 @@ abstract class AppLocalizations {
   /// No description provided for @desktopSecurityE2eeHint.
   ///
   /// In en, this message translates to:
-  /// **'Messages, files and one-to-one calls are encrypted on your device, and the keys never leave your devices. The server can\'t read the content but does see service data, such as who writes to whom and when. Group calls are encrypted only in transit for now.'**
+  /// **'Messages, files and one-to-one calls are encrypted on your device, and the keys never leave your devices. The server can\'t read the content but does see service data, such as who writes to whom and when. End-to-end encryption for group calls is rolling out gradually: a lock in the call shows it is on; without it, the call is encrypted only in transit.'**
   String get desktopSecurityE2eeHint;
 
   /// No description provided for @desktopSecurityVerifiedDevices.
@@ -9183,6 +9345,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Emoji status is part of Premium; you can subscribe in the app on your phone'**
   String get desktopProfileEmojiStatusPremiumOnly;
+
+  /// No description provided for @desktopProfileCosmeticPremiumOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'This frame or cover is part of Premium; you can subscribe in the app on your phone'**
+  String get desktopProfileCosmeticPremiumOnly;
 
   /// No description provided for @desktopProfileApplyFailed.
   ///
@@ -13011,6 +13179,2214 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Default'**
   String get desktopSoundNameDefault;
+
+  /// No description provided for @roomCallE2eeOn.
+  ///
+  /// In en, this message translates to:
+  /// **'End-to-end encrypted'**
+  String get roomCallE2eeOn;
+
+  /// No description provided for @roomCallE2eeOnHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Only participants can hear and see this call — not our server.'**
+  String get roomCallE2eeOnHint;
+
+  /// No description provided for @roomCallE2eeConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Setting up encryption…'**
+  String get roomCallE2eeConnecting;
+
+  /// No description provided for @roomCallE2eeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t turn on encryption. This device can\'t join the call.'**
+  String get roomCallE2eeFailed;
+
+  /// No description provided for @roomCallE2eeUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypted group calls aren\'t available on this device yet.'**
+  String get roomCallE2eeUnsupported;
+
+  /// No description provided for @roomCallE2eeWaitingKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for key'**
+  String get roomCallE2eeWaitingKey;
+
+  /// No description provided for @roomCallE2eeFailing.
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t decrypt — they may have an older version'**
+  String get roomCallE2eeFailing;
+
+  /// No description provided for @roomCallE2eeUnknownParticipants.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown participants not heard: {count}'**
+  String roomCallE2eeUnknownParticipants(int count);
+
+  /// No description provided for @roomCallOpenBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'Not end-to-end encrypted — our server can see and hear this call'**
+  String get roomCallOpenBanner;
+
+  /// No description provided for @roomCallJoinOpenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Join a call without encryption?'**
+  String get roomCallJoinOpenTitle;
+
+  /// No description provided for @roomCallJoinOpenBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This call isn\'t end-to-end encrypted: it was started in an older version of Secretly. Our server can see and hear it.'**
+  String get roomCallJoinOpenBody;
+
+  /// No description provided for @roomCallJoinOpenAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Join anyway'**
+  String get roomCallJoinOpenAction;
+
+  /// No description provided for @roomCallStartChoiceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Start an encrypted call?'**
+  String get roomCallStartChoiceTitle;
+
+  /// No description provided for @roomCallStartChoiceBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Older version of Secretly — won\'t be able to join: {names}.'**
+  String roomCallStartChoiceBody(String names);
+
+  /// No description provided for @roomCallStartChoiceNotify.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell them in the chat to update'**
+  String get roomCallStartChoiceNotify;
+
+  /// No description provided for @roomCallStartEncrypted.
+  ///
+  /// In en, this message translates to:
+  /// **'Start encrypted'**
+  String get roomCallStartEncrypted;
+
+  /// No description provided for @roomCallStartOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Start without encryption'**
+  String get roomCallStartOpen;
+
+  /// No description provided for @roomCallUpdateNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'An encrypted call is in progress. Update Secretly to join.'**
+  String get roomCallUpdateNotice;
+
+  /// No description provided for @roomCallE2eeScreenShareIos.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen sharing from iPhone isn\'t available in encrypted calls yet'**
+  String get roomCallE2eeScreenShareIos;
+
+  /// No description provided for @roomCallFull.
+  ///
+  /// In en, this message translates to:
+  /// **'The encrypted call is full'**
+  String get roomCallFull;
+
+  /// No description provided for @roomPrivateTopicNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New topic'**
+  String get roomPrivateTopicNew;
+
+  /// No description provided for @roomPrivateTopicOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get roomPrivateTopicOpen;
+
+  /// No description provided for @roomPrivateTopicOpenHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Everyone in the room sees it'**
+  String get roomPrivateTopicOpenHint;
+
+  /// No description provided for @roomPrivateTopicClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'Private'**
+  String get roomPrivateTopicClosed;
+
+  /// No description provided for @roomPrivateTopicClosedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Invited people only. Others won\'t know it exists'**
+  String get roomPrivateTopicClosedHint;
+
+  /// No description provided for @roomPrivateTopicTitleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Topic name'**
+  String get roomPrivateTopicTitleHint;
+
+  /// No description provided for @roomPrivateTopicMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'Who to invite'**
+  String get roomPrivateTopicMembers;
+
+  /// No description provided for @roomPrivateTopicOnlyYou.
+  ///
+  /// In en, this message translates to:
+  /// **'Just you for now — you can add people later'**
+  String get roomPrivateTopicOnlyYou;
+
+  /// No description provided for @roomPrivateTopicCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get roomPrivateTopicCreate;
+
+  /// No description provided for @roomPrivateTopicFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t create the private topic'**
+  String get roomPrivateTopicFailed;
+
+  /// No description provided for @roomPrivateTopicLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Private topic limit reached: {count}'**
+  String roomPrivateTopicLimit(int count);
+
+  /// No description provided for @roomPrivateTopicLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Private topic'**
+  String get roomPrivateTopicLabel;
+
+  /// No description provided for @roomPrivateTopicInRoom.
+  ///
+  /// In en, this message translates to:
+  /// **'Private topic · {room}'**
+  String roomPrivateTopicInRoom(String room);
+
+  /// No description provided for @roomPrivateTopicAllowMembers.
+  ///
+  /// In en, this message translates to:
+  /// **'Create private topics'**
+  String get roomPrivateTopicAllowMembers;
+
+  /// Space gate screen: prompt above the code field
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your code'**
+  String get spaceGateEnterCode;
+
+  /// Space gate screen: the entered code was wrong
+  ///
+  /// In en, this message translates to:
+  /// **'That code did not match. Try again.'**
+  String get spaceGateWrongCode;
+
+  /// Space gate screen: lockout countdown, seconds remaining
+  ///
+  /// In en, this message translates to:
+  /// **'Wait {seconds} s'**
+  String spaceGateWaitSeconds(int seconds);
+
+  /// Space gate screen: button that submits the code
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock'**
+  String get spaceGateUnlock;
+
+  /// Space gate screen: button that unlocks with biometrics
+  ///
+  /// In en, this message translates to:
+  /// **'Use biometrics'**
+  String get spaceGateUseBiometrics;
+
+  /// Space gate screen: reason shown by the system biometric prompt
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock Secretly'**
+  String get spaceGateBiometricReason;
+
+  /// Title of the screen where the duress code is set (not the real app password)
+  ///
+  /// In en, this message translates to:
+  /// **'Duress code'**
+  String get duressSetupTitle;
+
+  /// Explanation on the duress-code setup screen
+  ///
+  /// In en, this message translates to:
+  /// **'This code opens a separate, empty profile instead of yours. It must differ from your real code. Whoever watches you type it sees a freshly installed messenger.'**
+  String get duressSetupDescription;
+
+  /// Duress code section: title
+  ///
+  /// In en, this message translates to:
+  /// **'Duress code'**
+  String get duressSectionTitle;
+
+  /// Duress code section: subtitle when a duress code is configured
+  ///
+  /// In en, this message translates to:
+  /// **'Set. A second code opens a separate, empty profile.'**
+  String get duressSectionSubtitleSet;
+
+  /// Duress code section: subtitle when no duress code is configured
+  ///
+  /// In en, this message translates to:
+  /// **'A second code that opens a separate, empty profile instead of yours.'**
+  String get duressSectionSubtitleUnset;
+
+  /// Duress code section: button that changes the existing duress code
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get duressSectionChange;
+
+  /// Duress code section: button that sets up a duress code
+  ///
+  /// In en, this message translates to:
+  /// **'Set up'**
+  String get duressSectionSetUp;
+
+  /// Duress code section: switch that erases the main profile when the duress code is entered
+  ///
+  /// In en, this message translates to:
+  /// **'Erase the main profile when the code is entered'**
+  String get duressWipeMainTitle;
+
+  /// Duress code section: warning under the erase-main-profile switch
+  ///
+  /// In en, this message translates to:
+  /// **'Irreversible. Recovery only from a recovery kit or a backup.'**
+  String get duressWipeMainSubtitle;
+
+  /// Duress code section: action that removes the duress code
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the duress code'**
+  String get duressRemoveCode;
+
+  /// Duress code section: switch that erases everything after N failed unlock attempts
+  ///
+  /// In en, this message translates to:
+  /// **'Erase everything after {attempts} failed attempts'**
+  String duressWipeAfterAttemptsTitle(int attempts);
+
+  /// Duress code section: explanation under the erase-after-failed-attempts switch
+  ///
+  /// In en, this message translates to:
+  /// **'Both profiles and the lock itself. A delay already applies after 3 failed attempts.'**
+  String get duressWipeAfterAttemptsSubtitle;
+
+  /// Duress code section: footnote on what the duress code does and does not protect against
+  ///
+  /// In en, this message translates to:
+  /// **'Protects against a \"show me your phone\" check, not against device forensics. Biometrics always open the main profile. To return to it from the decoy, close the app and enter your real code.'**
+  String get duressSectionFootnote;
+
+  /// Duress code section: generic error when a setting could not be saved
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save.'**
+  String get duressSaveFailed;
+
+  /// Network screen: offline message file held nothing new for this device
+  ///
+  /// In en, this message translates to:
+  /// **'No new messages for this device.'**
+  String get netSettingsImportNoNewMessages;
+
+  /// Network screen: how many messages an offline message file delivered
+  ///
+  /// In en, this message translates to:
+  /// **'Messages received: {count}'**
+  String netSettingsImportReceived(int count);
+
+  /// Network screen: the picked file is not a valid Secretly message file
+  ///
+  /// In en, this message translates to:
+  /// **'This is not a Secretly message file, or it was altered.'**
+  String get netSettingsImportNotEnvelopeFile;
+
+  /// Network screen: the picked message file could not be opened
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the file.'**
+  String get netSettingsImportCouldNotOpen;
+
+  /// Network screen: the message file could not be read, with the in-app menu path to open it instead
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the file. Open it in Secretly: Settings → Without internet → \"Open a message file\".'**
+  String get netSettingsImportCouldNotRead;
+
+  /// Network screen: traffic goes straight to the servers
+  ///
+  /// In en, this message translates to:
+  /// **'Direct'**
+  String get netSettingsPathDirect;
+
+  /// Network screen: traffic goes through a fallback address
+  ///
+  /// In en, this message translates to:
+  /// **'Via fallback address'**
+  String get netSettingsPathFallback;
+
+  /// Network screen: traffic goes through a mirror
+  ///
+  /// In en, this message translates to:
+  /// **'Via mirror'**
+  String get netSettingsPathMirror;
+
+  /// Network screen: traffic goes through a CDN
+  ///
+  /// In en, this message translates to:
+  /// **'Via CDN'**
+  String get netSettingsPathCdn;
+
+  /// Network screen: traffic goes through a proxy
+  ///
+  /// In en, this message translates to:
+  /// **'Via proxy'**
+  String get netSettingsPathProxy;
+
+  /// Network screen: traffic goes through a SOCKS proxy
+  ///
+  /// In en, this message translates to:
+  /// **'Via SOCKS'**
+  String get netSettingsPathSocks;
+
+  /// Network screen: traffic goes through Tor
+  ///
+  /// In en, this message translates to:
+  /// **'Via Tor'**
+  String get netSettingsPathTor;
+
+  /// Network screen: the proxy field needs a host name
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a host name, for example proxy.example.org'**
+  String get netSettingsProxyHostError;
+
+  /// Network screen: the SOCKS field needs a host:port address
+  ///
+  /// In en, this message translates to:
+  /// **'Enter an address like 127.0.0.1:9050'**
+  String get netSettingsSocksAddressError;
+
+  /// Network screen: cannot build an offline message file without contacts
+  ///
+  /// In en, this message translates to:
+  /// **'No contacts yet.'**
+  String get netSettingsNoContactsYet;
+
+  /// Network screen: header of the sheet that picks who the offline file is for
+  ///
+  /// In en, this message translates to:
+  /// **'Who is the file for'**
+  String get netSettingsPickRecipientTitle;
+
+  /// Network screen: no recent messages for the picked contact
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to carry to this contact from the last week.'**
+  String get netSettingsNothingToCarry;
+
+  /// Network screen: the offline message file could not be created
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create the file.'**
+  String get netSettingsCouldNotCreateFile;
+
+  /// Network screen: title
+  ///
+  /// In en, this message translates to:
+  /// **'Network'**
+  String get netSettingsTitle;
+
+  /// Network screen: current path to the servers
+  ///
+  /// In en, this message translates to:
+  /// **'Path to the servers'**
+  String get netSettingsPathToServersTitle;
+
+  /// Network screen: path subtitle when alternative paths are off or unavailable
+  ///
+  /// In en, this message translates to:
+  /// **'Direct. Alternative paths are off or unavailable.'**
+  String get netSettingsPathDirectOff;
+
+  /// Network screen: switch that allows alternative paths
+  ///
+  /// In en, this message translates to:
+  /// **'Try alternative paths'**
+  String get netSettingsTryAlternativeTitle;
+
+  /// Network screen: what the alternative-paths switch does
+  ///
+  /// In en, this message translates to:
+  /// **'When the direct path is blocked, the app tries fallback addresses, mirrors and proxies on its own. Content stays end-to-end encrypted.'**
+  String get netSettingsTryAlternativeSubtitle;
+
+  /// Network screen: volunteer proxy section
+  ///
+  /// In en, this message translates to:
+  /// **'Volunteer proxy'**
+  String get netSettingsVolunteerProxyTitle;
+
+  /// Network screen: what a volunteer proxy sees and does not see
+  ///
+  /// In en, this message translates to:
+  /// **'A link like secretly://proxy#host. The proxy owner cannot read your traffic, but can see that you use Secretly.'**
+  String get netSettingsVolunteerProxyDescription;
+
+  /// Network screen: SOCKS5 proxy field label
+  ///
+  /// In en, this message translates to:
+  /// **'SOCKS5 (for example Tor via Orbot)'**
+  String get netSettingsSocksTitle;
+
+  /// Network screen: action that exports messages to a file
+  ///
+  /// In en, this message translates to:
+  /// **'Send without network'**
+  String get netSettingsSendWithoutNetworkTitle;
+
+  /// Network screen: what the offline export file contains
+  ///
+  /// In en, this message translates to:
+  /// **'A file with your encrypted messages to a contact from the last week. Pass it on any way — USB stick, Bluetooth, another messenger.'**
+  String get netSettingsSendWithoutNetworkSubtitle;
+
+  /// Network screen: action that imports messages from a file
+  ///
+  /// In en, this message translates to:
+  /// **'Open a message file'**
+  String get netSettingsOpenMessageFileTitle;
+
+  /// Network screen: what the offline import accepts
+  ///
+  /// In en, this message translates to:
+  /// **'A .secretly file from a contact. Messages for other devices and ones you already have are skipped.'**
+  String get netSettingsOpenMessageFileSubtitle;
+
+  /// Network screen: switch for anonymous delivery reports
+  ///
+  /// In en, this message translates to:
+  /// **'Anonymous delivery reports'**
+  String get netSettingsDeliveryReportsTitle;
+
+  /// Network screen: what an anonymous delivery report contains
+  ///
+  /// In en, this message translates to:
+  /// **'Once a day: platform, network type, which path worked and which failed, country from the system language. No identifiers, no addresses.'**
+  String get netSettingsDeliveryReportsSubtitle;
+
+  /// Network screen: action that points the SOCKS proxy at Orbot
+  ///
+  /// In en, this message translates to:
+  /// **'Route through Orbot (Tor)'**
+  String get netSettingsOrbotTitle;
+
+  /// Network screen: what the Orbot action does and its limit
+  ///
+  /// In en, this message translates to:
+  /// **'Fills in the SOCKS address of Orbot, 127.0.0.1:9050. Install Orbot and start it; Secretly cannot check whether it is running.'**
+  String get netSettingsOrbotSubtitle;
+
+  /// Network screen: confirmation after the Orbot address was filled in
+  ///
+  /// In en, this message translates to:
+  /// **'SOCKS address set to Orbot. Start Orbot, then come back.'**
+  String get netSettingsOrbotDone;
+
+  /// Network screen: switch that allows Tor as the last resort
+  ///
+  /// In en, this message translates to:
+  /// **'Tor as the last resort'**
+  String get netSettingsTorTitle;
+
+  /// Network screen: cost of using Tor
+  ///
+  /// In en, this message translates to:
+  /// **'Slower and uses more battery; used only when everything else is blocked.'**
+  String get netSettingsTorSubtitle;
+
+  /// Social recovery: guardians section title
+  ///
+  /// In en, this message translates to:
+  /// **'Guardians'**
+  String get socialRecoveryGuardiansTitle;
+
+  /// Social recovery entry card: what guardians are
+  ///
+  /// In en, this message translates to:
+  /// **'Friends who together can bring your profile back if your phone is lost. Alone, none of them can do anything.'**
+  String get socialRecoveryEntryGuardiansSubtitle;
+
+  /// Social recovery entry card: open the guardian helper screen
+  ///
+  /// In en, this message translates to:
+  /// **'Help someone recover'**
+  String get socialRecoveryHelpSomeoneTitle;
+
+  /// Social recovery entry card: when the guardian helper screen is for you
+  ///
+  /// In en, this message translates to:
+  /// **'If you are someone\'s guardian.'**
+  String get socialRecoveryHelpSomeoneSubtitle;
+
+  /// Social recovery entry card: start recovering your own profile
+  ///
+  /// In en, this message translates to:
+  /// **'Recover my profile'**
+  String get socialRecoveryRecoverMineTitle;
+
+  /// Social recovery entry card: when recovering your own profile applies
+  ///
+  /// In en, this message translates to:
+  /// **'On a new phone, with the help of your guardians.'**
+  String get socialRecoveryRecoverMineSubtitle;
+
+  /// Guardians setup: at least two guardians must be picked
+  ///
+  /// In en, this message translates to:
+  /// **'Pick at least two guardians.'**
+  String get socialRecoveryNeedTwoGuardians;
+
+  /// Guardians setup: the shares could not be sent
+  ///
+  /// In en, this message translates to:
+  /// **'Could not send the shares. Check your connection.'**
+  String get socialRecoverySendSharesFailed;
+
+  /// Guardians setup: how splitting the profile between guardians works
+  ///
+  /// In en, this message translates to:
+  /// **'Your profile is split into parts between guardians. To bring it back you need as many of them as you choose. Pick people whose voice you know, and whose safety number you have verified.'**
+  String get socialRecoveryOwnerIntro;
+
+  /// Guardians setup: recovery is fully configured
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery is set up'**
+  String get socialRecoveryIsSetUp;
+
+  /// Guardians setup: some guardians have not confirmed yet
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for confirmations'**
+  String get socialRecoveryWaitingConfirmations;
+
+  /// Guardians setup: how many guardians confirmed and how many are needed
+  ///
+  /// In en, this message translates to:
+  /// **'{accepted} of {total} confirmed. {threshold} needed to recover.'**
+  String socialRecoveryConfirmedProgress(int accepted, int total, int threshold);
+
+  /// Guardians setup: this guardian holds a part of the profile
+  ///
+  /// In en, this message translates to:
+  /// **'Holds a part'**
+  String get socialRecoveryGuardianHoldsPart;
+
+  /// Guardians setup: the part could not be delivered to this guardian
+  ///
+  /// In en, this message translates to:
+  /// **'Not sent'**
+  String get socialRecoveryGuardianNotSent;
+
+  /// Guardians setup: the part was sent and the guardian has not confirmed yet
+  ///
+  /// In en, this message translates to:
+  /// **'Sent, waiting'**
+  String get socialRecoveryGuardianSentWaiting;
+
+  /// Guardians setup: how many contacts to pick as guardians
+  ///
+  /// In en, this message translates to:
+  /// **'Pick 2 to {max} contacts'**
+  String socialRecoveryPickContacts(int max);
+
+  /// Guardians setup: there are no contacts to pick from
+  ///
+  /// In en, this message translates to:
+  /// **'No contacts yet.'**
+  String get socialRecoveryNoContactsYet;
+
+  /// Guardians setup: the chosen recovery threshold
+  ///
+  /// In en, this message translates to:
+  /// **'Guardians needed to recover: {threshold} of {total}'**
+  String socialRecoveryThresholdLabel(int threshold, int total);
+
+  /// Guardians setup: colluding guardians could recover the profile without you
+  ///
+  /// In en, this message translates to:
+  /// **'This many guardians, acting together, could recover your profile without you. Avoid people who know each other too closely.'**
+  String get socialRecoveryThresholdWarning;
+
+  /// Guardians setup: send the profile parts to the picked guardians
+  ///
+  /// In en, this message translates to:
+  /// **'Send the parts'**
+  String get socialRecoverySendParts;
+
+  /// Guardians setup: resend the parts after changing the guardian list
+  ///
+  /// In en, this message translates to:
+  /// **'Update guardians'**
+  String get socialRecoveryUpdateGuardians;
+
+  /// Guardians setup: disable social recovery entirely
+  ///
+  /// In en, this message translates to:
+  /// **'Turn recovery off'**
+  String get socialRecoveryTurnOff;
+
+  /// Guardian helper: title of the QR scanner for a recovery code
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery code'**
+  String get socialRecoveryCodeScanTitle;
+
+  /// Guardian helper: the scanned QR code is not a recovery code
+  ///
+  /// In en, this message translates to:
+  /// **'This is not a recovery code.'**
+  String get socialRecoveryNotRecoveryCode;
+
+  /// Guardian helper: the clipboard holds no recovery code
+  ///
+  /// In en, this message translates to:
+  /// **'No recovery code in the clipboard.'**
+  String get socialRecoveryNoCodeInClipboard;
+
+  /// Guardian helper: the guardian part could not be sent
+  ///
+  /// In en, this message translates to:
+  /// **'Could not send. Check your connection.'**
+  String get socialRecoverySendFailed;
+
+  /// Guardian helper screen: title
+  ///
+  /// In en, this message translates to:
+  /// **'Help recover'**
+  String get socialRecoveryHelpRecoverTitle;
+
+  /// Guardian helper: nobody has picked you as a guardian yet
+  ///
+  /// In en, this message translates to:
+  /// **'You are not anyone\'s guardian yet. When someone picks you, their name appears here.'**
+  String get socialRecoveryNotGuardianYet;
+
+  /// Guardian helper: pick whose recovery you are helping with
+  ///
+  /// In en, this message translates to:
+  /// **'Who are you helping'**
+  String get socialRecoveryWhoAreYouHelping;
+
+  /// Guardian helper: how many of this owner's guardians are needed
+  ///
+  /// In en, this message translates to:
+  /// **'{threshold} of {guardians} guardians needed'**
+  String socialRecoveryThresholdOfGuardians(int threshold, int guardians);
+
+  /// Guardian helper: scan the owner's recovery QR code
+  ///
+  /// In en, this message translates to:
+  /// **'Scan code'**
+  String get socialRecoveryScanCode;
+
+  /// Guardian helper: paste the owner's recovery code from the clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'Paste code'**
+  String get socialRecoveryPasteCode;
+
+  /// Guardian helper: header of the voice-verification warning
+  ///
+  /// In en, this message translates to:
+  /// **'Check the words by voice'**
+  String get socialRecoveryCheckWordsByVoice;
+
+  /// Guardian helper: why the words must be read out by the owner in person
+  ///
+  /// In en, this message translates to:
+  /// **'Call the person or meet them. Ask them to read the words from their screen. If any word differs, or you are not sure it is them, do not send. This is how an attacker would take over someone\'s profile.'**
+  String get socialRecoveryCheckWordsExplanation;
+
+  /// Guardian helper: checkbox confirming the words were heard from the owner
+  ///
+  /// In en, this message translates to:
+  /// **'I heard these words from this person'**
+  String get socialRecoveryHeardWordsConfirm;
+
+  /// Guardian helper: the guardian part has been sent
+  ///
+  /// In en, this message translates to:
+  /// **'Sent'**
+  String get socialRecoverySent;
+
+  /// Guardian helper: send your part of the owner's profile
+  ///
+  /// In en, this message translates to:
+  /// **'Send my part'**
+  String get socialRecoverySendMyPart;
+
+  /// Recovery request screen: title
+  ///
+  /// In en, this message translates to:
+  /// **'Recover profile'**
+  String get socialRecoveryRecoverProfileTitle;
+
+  /// Recovery request: what happens to the profile now open on this phone
+  ///
+  /// In en, this message translates to:
+  /// **'This phone will replace the profile now open on it with your previous profile. Your guardians send their parts, and once there are enough, the app restarts with your profile.'**
+  String get socialRecoveryRecoverIntro;
+
+  /// Recovery request: show the recovery code to the guardians
+  ///
+  /// In en, this message translates to:
+  /// **'Show code to guardians'**
+  String get socialRecoveryShowCodeToGuardians;
+
+  /// Recovery request: how to pass the code and the words to a guardian
+  ///
+  /// In en, this message translates to:
+  /// **'Show the code to a guardian or send it as text, then read these words to them by voice.'**
+  String get socialRecoveryShowCodeHint;
+
+  /// Recovery request: copy the recovery code to the clipboard
+  ///
+  /// In en, this message translates to:
+  /// **'Copy code'**
+  String get socialRecoveryCopyCode;
+
+  /// Recovery request: no guardian parts have arrived yet
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for guardians'**
+  String get socialRecoveryWaitingGuardians;
+
+  /// Recovery request: how many guardian parts arrived out of the threshold
+  ///
+  /// In en, this message translates to:
+  /// **'{received} of {threshold} received'**
+  String socialRecoveryReceivedProgress(int received, int threshold);
+
+  /// Recovery request: one guardian part failed to authenticate
+  ///
+  /// In en, this message translates to:
+  /// **'One part did not fit. Ask another guardian.'**
+  String get socialRecoveryPartDidNotFit;
+
+  /// Recovery request: the profile could not be reassembled, with the raw error code
+  ///
+  /// In en, this message translates to:
+  /// **'Could not assemble the profile ({error}).'**
+  String socialRecoveryAssembleFailed(String error);
+
+  /// Recovery request: cancel the pending recovery
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get socialRecoveryCancel;
+
+  /// Title of the shared chat timer setting (messages vanish for everyone)
+  ///
+  /// In en, this message translates to:
+  /// **'Disappearing messages'**
+  String get disappearingTitle;
+
+  /// Subtitle when the shared timer is on
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} · for everyone in the chat'**
+  String disappearingSubtitleOn(Object duration);
+
+  /// Honest explanation in the timer picker
+  ///
+  /// In en, this message translates to:
+  /// **'Messages are deleted from every participant\'s devices when the time runs out. This does not protect against screenshots or against devices with an old version of the app.'**
+  String get disappearingDialogHint;
+
+  /// Picker option to enter a custom duration
+  ///
+  /// In en, this message translates to:
+  /// **'Custom…'**
+  String get disappearingCustom;
+
+  /// Title of the custom duration dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Custom time'**
+  String get disappearingCustomTitle;
+
+  /// Allowed range in the custom duration dialog
+  ///
+  /// In en, this message translates to:
+  /// **'From {min} to {max}'**
+  String disappearingCustomHint(Object min, Object max);
+
+  /// Unit in the custom duration dialog
+  ///
+  /// In en, this message translates to:
+  /// **'seconds'**
+  String get disappearingUnitSeconds;
+
+  /// Unit in the custom duration dialog
+  ///
+  /// In en, this message translates to:
+  /// **'minutes'**
+  String get disappearingUnitMinutes;
+
+  /// Unit in the custom duration dialog
+  ///
+  /// In en, this message translates to:
+  /// **'hours'**
+  String get disappearingUnitHours;
+
+  /// Unit in the custom duration dialog
+  ///
+  /// In en, this message translates to:
+  /// **'days'**
+  String get disappearingUnitDays;
+
+  /// Validation error in the custom duration dialog
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a number within the allowed range'**
+  String get disappearingCustomInvalid;
+
+  /// Banner in a chat with the shared timer on
+  ///
+  /// In en, this message translates to:
+  /// **'Disappearing messages: {duration}'**
+  String disappearingBannerOn(Object duration);
+
+  /// Warning when a contact device does not understand the timer
+  ///
+  /// In en, this message translates to:
+  /// **'Your contact has an old version of the app — messages will not disappear on their side.'**
+  String get disappearingPeerOutdated;
+
+  /// Warning when one of my own devices does not understand the timer
+  ///
+  /// In en, this message translates to:
+  /// **'One of your devices has an old version of the app — messages will not disappear there.'**
+  String get disappearingOwnOutdated;
+
+  /// Warning when the relay could not tell whether the contact understands the timer
+  ///
+  /// In en, this message translates to:
+  /// **'Could not check your contact\'s app version.'**
+  String get disappearingSupportUnknown;
+
+  /// Tooltip on the timer chip in the chat header
+  ///
+  /// In en, this message translates to:
+  /// **'Disappearing messages — for everyone in the chat'**
+  String get disappearingChipTooltip;
+
+  /// Toast after changing the shared timer
+  ///
+  /// In en, this message translates to:
+  /// **'Disappearing messages timer changed'**
+  String get disappearingUpdated;
+
+  /// Error after a failed timer change
+  ///
+  /// In en, this message translates to:
+  /// **'Could not change the timer'**
+  String get disappearingSetFailed;
+
+  /// Hint when a room member without rights taps the shared timer
+  ///
+  /// In en, this message translates to:
+  /// **'Only the owner and admins can change the timer'**
+  String get disappearingAdminOnly;
+
+  /// Warning in a room when some members do not understand the timer
+  ///
+  /// In en, this message translates to:
+  /// **'Some members have an old version of the app — messages will not disappear for them.'**
+  String get disappearingRoomOutdated;
+
+  /// Quote placeholder when the replied-to message has disappeared by its timer
+  ///
+  /// In en, this message translates to:
+  /// **'Message disappeared'**
+  String get disappearingQuoteGone;
+
+  /// Б3: banner title when a server response failed signature verification (possible interception)
+  ///
+  /// In en, this message translates to:
+  /// **'Server response failed verification'**
+  String get serverAuthAlertTitle;
+
+  /// Б3: banner body — what happened, what is still safe, what to do
+  ///
+  /// In en, this message translates to:
+  /// **'Someone between you and the Secretly server may be tampering with data. Your existing chats stay protected and keep working. New contacts and devices won’t be accepted until this clears. Try another network or a proxy.'**
+  String get serverAuthAlertBody;
+
+  /// Б3: button that hides the server verification banner
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get serverAuthAlertDismiss;
+
+  /// Heading above the open/closed choice when creating or editing an own sticker pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Who can add this pack'**
+  String get stickerPackAccessTitle;
+
+  /// Sticker pack access mode: friends can add the pack (peer-to-peer, no server).
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get stickerPackAccessOpen;
+
+  /// One-line explanation under the Open option.
+  ///
+  /// In en, this message translates to:
+  /// **'People you send a sticker to can add the whole pack. It never goes to the server.'**
+  String get stickerPackAccessOpenHint;
+
+  /// Sticker pack access mode: only the author has the pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed'**
+  String get stickerPackAccessClosed;
+
+  /// Honest explanation under the Closed option: UI restriction, not cryptography.
+  ///
+  /// In en, this message translates to:
+  /// **'Only you have the pack. People will see the stickers you send them but can\'t add the pack. Stickers you send stay on their device anyway — this doesn\'t stop screenshots.'**
+  String get stickerPackAccessClosedHint;
+
+  /// Shown when switching an existing pack to Closed.
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone who already added this pack keeps it.'**
+  String get stickerPackClosedExistingNote;
+
+  /// Subtitle on a recipient's pack sheet for a closed pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed pack'**
+  String get stickerPackClosedLabel;
+
+  /// Replaces the Add button on a closed pack.
+  ///
+  /// In en, this message translates to:
+  /// **'The author doesn\'t allow adding this pack'**
+  String get stickerPackClosedNote;
+
+  /// Sticker creation source: from a photo.
+  ///
+  /// In en, this message translates to:
+  /// **'From photo'**
+  String get stickerCreateFromPhoto;
+
+  /// Sticker creation source: text only.
+  ///
+  /// In en, this message translates to:
+  /// **'Text sticker'**
+  String get stickerCreateTextOnly;
+
+  /// Error while creating a sticker.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not create sticker: {error}'**
+  String stickerCreateFailed(String error);
+
+  /// Recipient pack sheet: some stickers did not arrive.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} more sticker didn\'t transfer — the author may be on an older app version} other{{count} more stickers didn\'t transfer — the author may be on an older app version}}'**
+  String stickerPackMissingNote(int count);
+
+  /// Snackbar after saving a sticker to a pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Sticker added to the pack'**
+  String get stickerAddedToPack;
+
+  /// Error while saving a sticker.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save: {error}'**
+  String stickerSaveFailed(String error);
+
+  /// Name of the own Favorites sticker pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites'**
+  String get stickerFavoritesPackTitle;
+
+  /// Snackbar after adding a sticker to Favorites.
+  ///
+  /// In en, this message translates to:
+  /// **'Sticker added to favorites'**
+  String get stickerAddedToFavorites;
+
+  /// Animated sticker could not be produced.
+  ///
+  /// In en, this message translates to:
+  /// **'Animation isn\'t available on this device'**
+  String get stickerAnimationUnavailable;
+
+  /// Title of the motion-effect picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a motion effect'**
+  String get stickerMotionPickTitle;
+
+  /// Motion speed.
+  ///
+  /// In en, this message translates to:
+  /// **'Slow'**
+  String get stickerMotionSlow;
+
+  /// Motion speed.
+  ///
+  /// In en, this message translates to:
+  /// **'Normal'**
+  String get stickerMotionNormal;
+
+  /// Motion speed.
+  ///
+  /// In en, this message translates to:
+  /// **'Fast'**
+  String get stickerMotionFast;
+
+  /// Motion effect.
+  ///
+  /// In en, this message translates to:
+  /// **'Pulse'**
+  String get stickerMotionPulse;
+
+  /// Motion effect.
+  ///
+  /// In en, this message translates to:
+  /// **'Bounce'**
+  String get stickerMotionBounce;
+
+  /// Motion effect.
+  ///
+  /// In en, this message translates to:
+  /// **'Wobble'**
+  String get stickerMotionWobble;
+
+  /// Motion effect.
+  ///
+  /// In en, this message translates to:
+  /// **'Ta-da'**
+  String get stickerMotionTada;
+
+  /// Title of the finished-sticker screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Your sticker'**
+  String get stickerReadyTitle;
+
+  /// Hint above emoji choices for a new sticker.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick emoji that match this sticker'**
+  String get stickerPickEmojiHint;
+
+  /// Action on the finished-sticker screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Send sticker'**
+  String get stickerSend;
+
+  /// Progress while the sticker is being animated.
+  ///
+  /// In en, this message translates to:
+  /// **'Animating…'**
+  String get stickerAnimating;
+
+  /// Action: pick another motion effect.
+  ///
+  /// In en, this message translates to:
+  /// **'Change motion'**
+  String get stickerChangeMotion;
+
+  /// Action: animate the sticker (Premium).
+  ///
+  /// In en, this message translates to:
+  /// **'Animate · Premium'**
+  String get stickerAnimatePremium;
+
+  /// Action: save the sticker to Favorites.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to favorites'**
+  String get stickerMakeFavorite;
+
+  /// Action: save the sticker to a pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to pack'**
+  String get stickerAddToPack;
+
+  /// Back from the pack chooser.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get stickerBack;
+
+  /// Create a new sticker pack.
+  ///
+  /// In en, this message translates to:
+  /// **'New pack'**
+  String get stickerNewPack;
+
+  /// Hint in the new-pack dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Give the pack a name.'**
+  String get stickerNewPackHint;
+
+  /// Confirm button in the new-pack dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get stickerCreate;
+
+  /// Sticker editor: cutout found nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'No object found'**
+  String get stickerEditorObjectNotFound;
+
+  /// Sticker editor: nothing selected.
+  ///
+  /// In en, this message translates to:
+  /// **'Select an object'**
+  String get stickerEditorPickObject;
+
+  /// Sticker editor: text tool / text colour target.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get stickerEditorText;
+
+  /// Sticker editor title while selecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Select the object'**
+  String get stickerEditorSelectObject;
+
+  /// The word "sticker" (titles and previews).
+  ///
+  /// In en, this message translates to:
+  /// **'Sticker'**
+  String get stickerWord;
+
+  /// Sticker editor tooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get stickerEditorUndo;
+
+  /// Sticker editor tooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get stickerEditorRedo;
+
+  /// Sticker editor tooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get stickerEditorDelete;
+
+  /// Done (sticker editor and pack edit sheet).
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get stickerEditorDone;
+
+  /// Text background style.
+  ///
+  /// In en, this message translates to:
+  /// **'No background'**
+  String get stickerEditorBgNone;
+
+  /// Text background style.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill'**
+  String get stickerEditorBgSolid;
+
+  /// Text background style.
+  ///
+  /// In en, this message translates to:
+  /// **'Label'**
+  String get stickerEditorBgPill;
+
+  /// Sticker editor: outline tool.
+  ///
+  /// In en, this message translates to:
+  /// **'Outline'**
+  String get stickerEditorOutline;
+
+  /// Sticker editor: background tool / colour target.
+  ///
+  /// In en, this message translates to:
+  /// **'Background'**
+  String get stickerEditorBackground;
+
+  /// Sticker editor: run cutout again.
+  ///
+  /// In en, this message translates to:
+  /// **'Cut again'**
+  String get stickerEditorRecut;
+
+  /// Sticker editor: cut out the object.
+  ///
+  /// In en, this message translates to:
+  /// **'Cut out object'**
+  String get stickerEditorCut;
+
+  /// Sticker editor tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Draw'**
+  String get stickerEditorDraw;
+
+  /// Sticker editor tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Adjust'**
+  String get stickerEditorAdjust;
+
+  /// Sticker editor tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Emoji'**
+  String get stickerEditorEmoji;
+
+  /// Sticker editor adjustment.
+  ///
+  /// In en, this message translates to:
+  /// **'Exposure'**
+  String get stickerEditorExposure;
+
+  /// Sticker editor adjustment.
+  ///
+  /// In en, this message translates to:
+  /// **'Contrast'**
+  String get stickerEditorContrast;
+
+  /// Sticker editor adjustment.
+  ///
+  /// In en, this message translates to:
+  /// **'Saturation'**
+  String get stickerEditorSaturation;
+
+  /// Sticker editor: several objects found.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the objects to keep'**
+  String get stickerEditorTapObjects;
+
+  /// Sticker editor: one object found.
+  ///
+  /// In en, this message translates to:
+  /// **'Object selected'**
+  String get stickerEditorObjectSelected;
+
+  /// Catalog pack install failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to install sticker pack: {error}'**
+  String stickerPackInstallFailed(String error);
+
+  /// Catalog pack removal failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to remove sticker pack: {error}'**
+  String stickerPackRemoveFailed(String error);
+
+  /// Confirm removing a catalog pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove sticker pack?'**
+  String get stickerPackRemoveTitle;
+
+  /// Body of the remove-pack dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Pack \"{title}\" will stay in the catalog, but its local files will be removed.'**
+  String stickerPackRemoveBody(String title);
+
+  /// Confirm button: remove pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get stickerPackRemoveAction;
+
+  /// Snackbar after removing a catalog pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed \"{title}\" from this device.'**
+  String stickerPackRemovedSnack(String title);
+
+  /// Small "edit" link next to an own pack.
+  ///
+  /// In en, this message translates to:
+  /// **'edit'**
+  String get stickerPackEdit;
+
+  /// Snackbar after changing a pack cover.
+  ///
+  /// In en, this message translates to:
+  /// **'Pack cover updated'**
+  String get stickerPackCoverUpdated;
+
+  /// Adding a sticker to a pack that already has the maximum number.
+  ///
+  /// In en, this message translates to:
+  /// **'This pack already has {max} stickers — create a new one'**
+  String stickerPackFull(int max);
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Profile'**
+  String get settingsGroupProfile;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Recovery'**
+  String get settingsGroupRecovery;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Your ID and backup are what bring your account back on a new phone. Write the ID down and keep it apart from the phone.'**
+  String get settingsCaptionAccountRestore;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Log out and delete'**
+  String get settingsGroupLeave;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Logging out erases data on this device only. Deleting erases the profile on the server too, and it cannot be brought back.'**
+  String get settingsCaptionLeave;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'General'**
+  String get settingsGroupGeneral;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Messages'**
+  String get settingsGroupMessages;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Anyone holding your phone can see the message text and name in a notification.'**
+  String get settingsCaptionMessages;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Calls'**
+  String get settingsGroupCalls;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Inside the app'**
+  String get settingsGroupInApp;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Sounds and vibration while Secretly is open.'**
+  String get settingsCaptionInApp;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'How notifications look'**
+  String get settingsGroupNotificationLook;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'In the background'**
+  String get settingsGroupBackground;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'QR code'**
+  String get settingsGroupQr;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Personal'**
+  String get settingsGroupPersonal;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Who can see and contact you'**
+  String get settingsGroupWhoCan;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'New chats'**
+  String get settingsGroupNewChats;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Search and blocking'**
+  String get settingsGroupSearchBlocking;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Phone contacts'**
+  String get settingsGroupPhoneContacts;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'If I’m away for a long time'**
+  String get settingsGroupInactive;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'If you don’t open Secretly for this long, the account is deleted automatically.'**
+  String get settingsCaptionInactive;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'App language'**
+  String get settingsGroupAppLanguage;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Translation'**
+  String get settingsGroupTranslation;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get settingsGroupStatus;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'If Secretly is blocked'**
+  String get settingsGroupBlocked;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Usually nothing needs setting up. A proxy and Orbot are for when the alternative paths did not help.'**
+  String get settingsCaptionBlocked;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Your own proxy'**
+  String get settingsGroupOwnProxy;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Without internet'**
+  String get settingsGroupOffline;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'This is a file, not a live connection: your contact reads the messages when they open the file.'**
+  String get settingsCaptionOffline;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Help improve delivery'**
+  String get settingsGroupHelpDelivery;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'How it works'**
+  String get netHowItWorksTitle;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Getting around blocks and sending without internet, in plain words'**
+  String get netHowItWorksSubtitle;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'How a message gets there'**
+  String get netHowStep1Title;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone encrypts the message before sending. The server keeps it encrypted while your contact is offline and hands it over when they come online. The server cannot read it.'**
+  String get netHowStep1Body;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'If Secretly is blocked'**
+  String get netHowStep2Title;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'“Try alternative paths” is on by default. The app tries a spare address, a copy of the server (a “mirror”) and large delivery networks (“CDN”) that are hard to block entirely. The first connection may take longer than usual.'**
+  String get netHowStep2Body;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'If that did not help'**
+  String get netHowStep3Title;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Ask someone you trust for a proxy link and paste it under “Volunteer proxy”. You can also install Orbot, the Tor network app. This is slower, and Orbot uses battery.'**
+  String get netHowStep3Body;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'No internet at all'**
+  String get netHowStep4Title;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Tap “Send without network”, pick your contact and pass the file on any way you like: a USB stick, AirDrop, Bluetooth. They open it in Secretly. The file holds only messages you already wrote in the last week. There is no live connection over Bluetooth or through nearby phones yet.'**
+  String get netHowStep4Body;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'Calls'**
+  String get netHowStep5Title;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'In “Privacy” you can hide your address in calls: the call goes through our server and your contact does not see your IP address. The delay may grow a little.'**
+  String get netHowStep5Body;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'So messages are not late'**
+  String get netHowStep6Title;
+
+  /// Settings redesign 2026-11: group header/caption on a phone settings page
+  ///
+  /// In en, this message translates to:
+  /// **'The phone’s system may put Secretly to sleep, and then messages arrive only when you open the app. “Reliability” shows what gets in the way of delivery.'**
+  String get netHowStep6Body;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get settingsHelpGotIt;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Tip'**
+  String get settingsHelpTip;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Explanation'**
+  String get settingsHelpButton;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Account & protection'**
+  String get settingsHubAccountGroup;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Communication'**
+  String get settingsHubTalkGroup;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Connection'**
+  String get settingsHubConnectionGroup;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Phone'**
+  String get settingsHubPhoneGroup;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get settingsHubMoreGroup;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Name, Secretly ID, QR, backup'**
+  String get settingsHubAccountSub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Who sees you and can message you'**
+  String get settingsHubPrivacySub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'App lock, personal chats'**
+  String get settingsHubSecuritySub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Where your account is open'**
+  String get settingsHubDevicesSub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Messages, rooms, calls'**
+  String get settingsHubNotificationsSub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Theme, wallpapers, bubbles, icon'**
+  String get settingsHubChatsSub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'App language and translation'**
+  String get settingsHubLanguageSub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'How Secretly reaches its servers'**
+  String get settingsHubNetworkSub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Pass messages on as a file'**
+  String get settingsHubOfflineSub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'What can delay delivery'**
+  String get settingsHubReliabilitySub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Reset and service messages'**
+  String get settingsHubSystemSub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Share a link'**
+  String get settingsHubInviteSub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Help the project'**
+  String get settingsHubDonateSub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Write to us'**
+  String get settingsHubSupportSub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'What is stored and where'**
+  String get settingsHubPolicySub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Version and licences'**
+  String get settingsHubAboutSub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'How others see you and how not to lose access to your chats.'**
+  String get settingsIntroAccount;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Decide who sees your details and who can contact you.'**
+  String get settingsIntroPrivacy;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Protection in case your phone ends up in someone else’s hands.'**
+  String get settingsIntroSecurity;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'What to tell you and how. Start with the main switch.'**
+  String get settingsIntroNotifications;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'The language Secretly speaks to you in.'**
+  String get settingsIntroLanguage;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'How Secretly connects to its servers. Usually nothing here needs changing.'**
+  String get settingsIntroNetwork;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'With no internet at all, you can pass messages on as a file — on a USB stick, over Bluetooth or through another messenger.'**
+  String get settingsIntroOffline;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'We check whether the system keeps messages and calls from arriving on time.'**
+  String get settingsIntroReliability;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Turn effects off if your phone gets warm or drains fast.'**
+  String get settingsIntroPower;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'How much space Secretly takes on your phone.'**
+  String get settingsIntroStorage;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Service actions. Use them only if something went wrong.'**
+  String get settingsIntroSystem;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get settingsGroupShare;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Media'**
+  String get settingsGroupMedia;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Data'**
+  String get settingsGroupData;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Lock'**
+  String get settingsGroupLock;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Manual setup'**
+  String get settingsGroupManual;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Only needed if the alternative paths did not help. Pick one way: a proxy from a volunteer you know, SOCKS5, or Tor via Orbot.'**
+  String get settingsHelpManual;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Connection'**
+  String get settingsGroupConnection;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get settingsGroupSend;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Receive'**
+  String get settingsGroupReceive;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Open personal chats'**
+  String get settingsOpenPersonalChats;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Your hidden chat collection'**
+  String get settingsOpenPersonalChatsSub;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Create a file'**
+  String get offlineStep1Title;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Pick a contact — the file holds your encrypted messages to them from the past week.'**
+  String get offlineStep1Body;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Pass it on any way'**
+  String get offlineStep2Title;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'USB stick, Bluetooth, AirDrop, another messenger. Only the recipient can read the messages.'**
+  String get offlineStep2Body;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'Your contact opens the file'**
+  String get offlineStep3Title;
+
+  /// Settings redesign by the owner's mockup (2026-11): phone settings hub/page text
+  ///
+  /// In en, this message translates to:
+  /// **'In Secretly: “Without internet” → “Open a message file”. The messages appear in the chat.'**
+  String get offlineStep3Body;
+
+  /// Message translator (2026-11): reason shown when a translation could not be shown
+  ///
+  /// In en, this message translates to:
+  /// **'The message is already in this language'**
+  String get translateSameLanguage;
+
+  /// Message translator (2026-11): reason shown when a translation could not be shown
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t tell the language. Pick the source language in Settings → Language.'**
+  String get translateUndetected;
+
+  /// Message translator (2026-11): reason shown when a translation could not be shown
+  ///
+  /// In en, this message translates to:
+  /// **'The on-device translator doesn’t know this language yet'**
+  String get translateUnsupported;
+
+  /// Message translator (2026-11): reason shown when a translation could not be shown
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t download the language pack. Check your connection and tap again.'**
+  String get translateDownloadFailed;
+
+  /// Message translator (2026-11): reason shown when a translation could not be shown
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t translate. Tap again.'**
+  String get translateFailed;
+
+  /// Message translator (2026-11): reason shown when a translation could not be shown
+  ///
+  /// In en, this message translates to:
+  /// **'There’s nothing to translate here'**
+  String get translateNothing;
+
+  /// Message translator (2026-11): reason shown when a translation could not be shown
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading the language pack — only needed once'**
+  String get translateDownloading;
+
+  /// Message translator (2026-11): reason shown when a translation could not be shown
+  ///
+  /// In en, this message translates to:
+  /// **'Translate'**
+  String get translateButtonTooltip;
+
+  /// Shown when a photo or video could not be cleaned of location/camera metadata, so it was not sent (privacy, TZ E1 phase 2)
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t remove the location and phone details from this file, so it wasn’t sent. Try another photo or send it as a file.'**
+  String get attachmentMetadataScrubFailed;
+
+  /// Server backup restore: the password does not match (K4). Also shown when there is no backup, so the answer does not reveal whether one exists.
+  ///
+  /// In en, this message translates to:
+  /// **'Wrong password, or there’s no backup for this profile ID. Check the ID, keyboard layout and letter case.'**
+  String get backupServerWrongPassword;
+
+  /// Server backup restore: too many wrong passwords from this network; {time} is a local clock time like 14:30 (K4)
+  ///
+  /// In en, this message translates to:
+  /// **'Too many wrong passwords from this network. Try again after {time} or from another network.'**
+  String backupServerLocked(String time);
+
+  /// Backup screen: section header for the copy stored on the server (K8)
+  ///
+  /// In en, this message translates to:
+  /// **'Backup on the server'**
+  String get backupServerSection;
+
+  /// Backup screen: action that deletes this profile's encrypted backup from the server (K8)
+  ///
+  /// In en, this message translates to:
+  /// **'Delete backup from server'**
+  String get backupServerDelete;
+
+  /// Backup screen: footer under the delete-from-server action (K8)
+  ///
+  /// In en, this message translates to:
+  /// **'The encrypted backup is removed from the server. Backups on this device and in files stay.'**
+  String get backupServerDeleteFooter;
+
+  /// Confirm dialog title before deleting the server backup (K8)
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the backup from the server?'**
+  String get backupServerDeleteConfirmTitle;
+
+  /// Confirm dialog body before deleting the server backup (K8)
+  ///
+  /// In en, this message translates to:
+  /// **'You won’t be able to restore your chats from the server on a new phone. Automatic backup to the server will be turned off. This can’t be undone.'**
+  String get backupServerDeleteConfirmBody;
+
+  /// Confirm button for deleting the server backup (K8)
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get backupServerDeleteConfirm;
+
+  /// Snackbar after the server backup was deleted (K8)
+  ///
+  /// In en, this message translates to:
+  /// **'Backup deleted from the server'**
+  String get backupServerDeleteDone;
+
+  /// Snackbar when there was no server backup to delete (K8)
+  ///
+  /// In en, this message translates to:
+  /// **'There was no backup on the server'**
+  String get backupServerDeleteNone;
+
+  /// Snackbar when deleting the server backup failed (K8)
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t delete the backup. Check your connection and try again.'**
+  String get backupServerDeleteFailed;
+
+  /// Backup screen footer: automatic backup cannot run because its password is not set
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic backup isn’t running: the backup password isn’t set. Set it — without a password the backup can’t be encrypted.'**
+  String get backupAutoErrorNoPassword;
+
+  /// Backup screen footer: automatic backup stopped because the saved password no longer meets the policy
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic backup isn’t running: the backup password no longer meets the requirements. Set a new one.'**
+  String get backupAutoErrorWeakPassword;
+
+  /// Backup failed because Android's protected key storage could not decrypt one of the app's keys (AEADBadTagException). {slot} is a technical slot name.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t read the “{slot}” key from the phone’s protected storage, so the backup wasn’t created. Your chats on this phone are intact. Contact support — this can be fixed without losing data.'**
+  String backupKeystoreUnreadable(String slot);
+
+  /// Title of the dialog confirming removal of one sticker from the user's own pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete sticker?'**
+  String get stickerDeleteTitle;
+
+  /// Body of the dialog confirming removal of one sticker. {title} is the pack name.
+  ///
+  /// In en, this message translates to:
+  /// **'The sticker will be removed from “{title}”. Stickers already sent in chats stay there.'**
+  String stickerDeleteBody(String title);
+
+  /// Title of the dialog shown when the user deletes the LAST sticker of their pack, which deletes the whole pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the whole pack?'**
+  String get stickerDeleteLastTitle;
+
+  /// Body of the dialog when deleting the last sticker deletes the pack. {title} is the pack name.
+  ///
+  /// In en, this message translates to:
+  /// **'This is the last sticker in “{title}”. Deleting it deletes the whole pack.'**
+  String stickerDeleteLastBody(String title);
+
+  /// Destructive button in the sticker delete dialogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get stickerDeleteAction;
+
+  /// Tooltip of the small gear next to the user's own sticker pack title.
+  ///
+  /// In en, this message translates to:
+  /// **'Pack settings'**
+  String get stickerPackSettings;
+
+  /// Tooltip of the small ⋯ button (more actions) on a sticker or someone else's pack.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get stickerMore;
+
+  /// Action: remove someone else's sticker pack from your own panel only.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from my packs'**
+  String get stickerPackRemoveFromMine;
+
+  /// Body of the dialog removing someone else's pack from your panel. {title} is the pack name.
+  ///
+  /// In en, this message translates to:
+  /// **'“{title}” will disappear from your panel. The author and others keep it; you can add it again by tapping a sticker from it in a chat.'**
+  String stickerPackRemoveFromMineBody(String title);
+
+  /// Menu action in the user's own pack: delete the whole pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete pack'**
+  String get stickerPackDeleteWhole;
+
+  /// Title of the dialog confirming deletion of the user's own whole pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete pack?'**
+  String get stickerPackDeleteWholeTitle;
+
+  /// Body of the dialog deleting the user's own pack. {title} is the pack name. Stickers already sent stay in chats.
+  ///
+  /// In en, this message translates to:
+  /// **'The pack “{title}” will be deleted from this device. Stickers already sent stay in chats.'**
+  String stickerPackDeleteWholeBody(String title);
+
+  /// Action: make this sticker the cover (icon) of its pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Make cover'**
+  String get stickerMakeCover;
+
+  /// Action: remove a sticker from the Favorites pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from favorites'**
+  String get stickerRemoveFromFavorites;
+
+  /// Snack after removing a sticker from Favorites.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed from favorites'**
+  String get stickerRemovedFromFavorites;
+
+  /// Primary action in the new-sticker preview when it was opened from a pack's + tile. {title} is the pack name.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to “{title}”'**
+  String stickerAddToThisPack(String title);
+
+  /// Tooltip of the + tile in a pack: add a new sticker to this pack.
+  ///
+  /// In en, this message translates to:
+  /// **'Add sticker'**
+  String get stickerAddSticker;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

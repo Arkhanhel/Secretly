@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:secretly_app/security/safe_backup_regression_guard.dart';
 
@@ -9,6 +11,7 @@ import 'package:secretly_app/security/safe_backup_regression_guard.dart';
 /// on, that empty state would have replaced the last good copy. These pin the
 /// rule that stops it.
 void main() {
+  _firstOverwrite();
   _barIntegrity();
   bool allows(int previous, int next) =>
       SafeBackupRegressionGuard.allowsOverwrite(
@@ -142,5 +145,80 @@ void _barIntegrity() {
         isTrue,
       );
     });
+  });
+}
+
+/// 🔴 13.11.2026: устройство без порога (личность восстановлена ключом,
+/// история пустая) не должно затирать полную копию на сервере при первой
+/// автокопии; и восстановление не должно молча терять снимок истории.
+void _firstOverwrite() {
+  group('первая автокопия с устройства без порога', () {
+    String? refusal({
+      bool exists = true,
+      bool opened = true,
+      int? serverEvents = 5000,
+      required int next,
+    }) => SafeBackupRegressionGuard.firstOverwriteRefusal(
+      serverHasBackup: exists,
+      openedWithThisPassword: opened,
+      serverEvents: serverEvents,
+      nextEvents: next,
+    );
+
+    test('копии на сервере нет — пишем', () {
+      expect(refusal(exists: false, opened: false, serverEvents: null, next: 0),
+          isNull);
+    });
+
+    test('🔴 пустая история после восстановления ключом не затирает полную копию', () {
+      final r = refusal(next: 0);
+      expect(r, isNotNull);
+      expect(r, contains('5000'));
+    });
+
+    test('история заметно меньше копии — не затираем', () {
+      expect(refusal(next: 100), isNotNull);
+    });
+
+    test('история как в копии или больше — пишем', () {
+      expect(refusal(next: 5000), isNull);
+      expect(refusal(next: 5200), isNull);
+    });
+
+    test('копия есть, но этим паролем не открывается — не затираем', () {
+      expect(refusal(opened: false, serverEvents: null, next: 9000), isNotNull);
+    });
+
+    test('копия без снимка базы считается пустой — пишем', () {
+      expect(refusal(serverEvents: null, next: 0), isNull);
+    });
+
+    test('сообщения в снимке считаются по таблице events', () {
+      expect(SafeBackupRegressionGuard.eventsInSnapshot(null), isNull);
+      expect(
+        SafeBackupRegressionGuard.eventsInSnapshot(<String, Object?>{
+          'events': <Object?>[{}, {}, {}],
+          'contacts': <Object?>[{}],
+        }),
+        3,
+      );
+      expect(
+        SafeBackupRegressionGuard.eventsInSnapshot(<String, Object?>{
+          'contacts': <Object?>[],
+        }),
+        isNull,
+      );
+    });
+  });
+
+  test('🔴 снимок истории не стирается после первой же неудачи импорта', () {
+    final src = File('lib/app/app_controller.dart').readAsStringSync();
+    final start = src.indexOf('Future<void> _importPendingSafeBackupIfAny(');
+    expect(start, greaterThan(0));
+    final body = src.substring(start, src.indexOf('Future<void> _applyPendingSafeImportPayload(', start));
+    expect(RegExp(r'\}\s*finally\s*\{').hasMatch(body), isFalse,
+        reason: 'снимок нельзя удалять в finally — только после успеха или исчерпания попыток');
+    expect(body.contains('_pendingSafeImportMaxAttempts'), isTrue);
+    expect(body.contains('_prefsPendingSafeImportAttemptsKey'), isTrue);
   });
 }

@@ -191,6 +191,13 @@ class DesktopWallpaperGrid extends StatelessWidget {
     // Плитки 3:4 — как в «Внешнем виде» и как на телефоне: обои рисуются на
     // вытянутом вверх окне переписки, и узор на плитке той же пропорции
     // выглядит так, как будет выглядеть в чате.
+    //
+    // Отмечена та картинка, которая видна в чате: «Графит» в светлой теме
+    // рисуется «Небом» (`desktopThemedChatWallpaperId`) — его и отмечаем.
+    final shownId = desktopThemedChatWallpaperId(
+      selectedId,
+      dark: DColors.of(context).isDark,
+    );
     return GridView.builder(
       shrinkWrap: shrinkWrap,
       physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
@@ -205,7 +212,7 @@ class DesktopWallpaperGrid extends StatelessWidget {
         final choice = choices[i];
         return DesktopWallpaperTile(
           choice: choice,
-          selected: choice.id == selectedId,
+          selected: choice.id == selectedId || choice.id == shownId,
           locked: isLocked?.call(choice.id) ?? false,
           previewId: choice.id == kGlobalChatWallpaperSelectionId
               ? (globalPreviewId ?? 'default')

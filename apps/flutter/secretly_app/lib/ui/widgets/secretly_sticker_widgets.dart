@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'dart:async';
 import 'dart:io';
 import '../scroll_feel.dart';
 
@@ -10,51 +11,12 @@ import 'package:lottie/lottie.dart';
 
 import '../../app/app_controller.dart';
 import '../../stickers/sticker_catalog.dart';
+import '../../stickers/sticker_share_mode.dart';
 import '../icons/app_icons.dart';
 import '../l10n.dart';
-import '../wave1_l10n.dart';
 import 'broken_media_box.dart';
+import 'sticker_pack_access_picker.dart';
 
-String _stickerText(
-  BuildContext context, {
-  required String ru,
-  required String en,
-  String? uk,
-  String? es,
-  String? pt,
-  String? ptBr,
-  String? fr,
-  String? de,
-}) {
-  return wave1Text(
-    context,
-    ru: ru,
-    en: en,
-    uk: uk,
-    es: es,
-    pt: pt,
-    ptBr: ptBr,
-    fr: fr,
-    de: de,
-  );
-}
-
-String _stickerPreviewLabel(
-  BuildContext context, {
-  String? emojiHint,
-  String? label,
-}) {
-  final base = _stickerText(context, ru: 'Стикер', en: 'Sticker');
-  final normalizedEmoji = (emojiHint ?? '').trim();
-  if (normalizedEmoji.isNotEmpty) {
-    return '$base $normalizedEmoji';
-  }
-  final normalizedLabel = (label ?? '').trim();
-  if (normalizedLabel.isNotEmpty) {
-    return '$base · $normalizedLabel';
-  }
-  return base;
-}
 
 class SecretlyStickerAssetView extends StatelessWidget {
   const SecretlyStickerAssetView({
@@ -172,6 +134,7 @@ class SecretlyStickerPickerTab extends StatefulWidget {
     required this.recentStickers,
     required this.onStickerSelected,
     this.onCreateSticker,
+    this.onAddStickerToPack,
     this.bottomInset = 0,
   });
 
@@ -182,6 +145,10 @@ class SecretlyStickerPickerTab extends StatefulWidget {
   /// Tapped the "Создать стикер" affordance — opens the photo→sticker flow.
   /// Null hides the entry (e.g. where sticker creation isn't available).
   final VoidCallback? onCreateSticker;
+
+  /// «+» в окне своего набора — новый стикер сразу в этот набор (15.11.2026).
+  /// Null прячет клетку «+».
+  final ValueChanged<String>? onAddStickerToPack;
   final double bottomInset;
 
   @override
@@ -196,14 +163,16 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
   bool _loadingPacks = true;
   String _query = '';
 
-  // Paged layout (2026-07-02 redesign): one full page per section (recents +
-  // each pack), matching Telegram/iMessage — the top icon bar SWITCHES the
-  // visible page (smooth animated transition) instead of scrolling one long
-  // combined grid to an anchor, so browsing one pack never shows a neighbour
-  // pack's stickers above/below it. [_selectedPackId] doubles as the
-  // highlighted top icon AND the active page.
-  final PageController _pageController = PageController();
-  bool _pageControllerJumping = false;
+  // 🔴 ЛЕНТА РАЗДЕЛОВ (15.11.2026, образец владельца). С 02.07 панель листала
+  // наборы страницами; владелец показал образец: одна лента — «Недавние» с
+  // клеткой «Создать» первой, затем разделы наборов с заголовками. Значок в
+  // верхней полосе прокручивает к разделу, прокрутка подсвечивает значок.
+  final ScrollController _scroll = ScrollController();
+  final Map<String, GlobalKey> _sectionKeys = <String, GlobalKey>{};
+  bool _scrollingToSection = false;
+
+  GlobalKey _sectionKey(String id) =>
+      _sectionKeys.putIfAbsent(id, () => GlobalKey(debugLabel: 'stickers:$id'));
 
   String get _fallbackPackId => SecretlyStickerCatalog.defaultPickerPackId;
 
@@ -231,6 +200,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
     _selectedPackId = widget.recentStickers.isNotEmpty
         ? SecretlyStickerCatalog.recentPackId
         : _fallbackPackId;
+    _scroll.addListener(_syncSelectedSectionWithScroll);
     _loadPacks();
   }
 
@@ -242,32 +212,60 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
 
   @override
   void dispose() {
-    _pageController.dispose();
+    _scroll.removeListener(_syncSelectedSectionWithScroll);
+    _scroll.dispose();
     super.dispose();
   }
 
-  /// Ordered section ids matching the icon strip AND the PageView: recents
-  /// first (only when it has stickers), then one id per pack.
+  /// Порядок разделов — как в верхней полосе: «Недавние» (если есть что
+  /// показать или куда нажать «Создать»), затем наборы.
   List<String> _sectionIds(List<SecretlyStickerPack> packs) => [
-    if (_visibleRecentStickers.isNotEmpty) SecretlyStickerCatalog.recentPackId,
+    if (_visibleRecentStickers.isNotEmpty || widget.onCreateSticker != null)
+      SecretlyStickerCatalog.recentPackId,
     for (final pack in packs) pack.id,
   ];
 
-  /// Animate the PageView to [sectionId]'s page and highlight its top-bar
-  /// icon. [sectionId] is a packId or the recents id.
+  /// Прокрутить ленту к разделу и подсветить его значок.
   void _goToSection(String sectionId, List<SecretlyStickerPack> packs) {
-    final ids = _sectionIds(packs);
-    final index = ids.indexOf(sectionId);
     setState(() => _selectedPackId = sectionId);
-    if (index < 0 || !_pageController.hasClients) return;
-    _pageControllerJumping = true;
-    _pageController
-        .animateToPage(
-          index,
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeOutCubic,
-        )
-        .whenComplete(() => _pageControllerJumping = false);
+    final ctx = _sectionKeys[sectionId]?.currentContext;
+    if (ctx == null) return;
+    _scrollingToSection = true;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    ).whenComplete(() => _scrollingToSection = false);
+  }
+
+  /// Подсветка значка по прокрутке: последний раздел, чей заголовок уже
+  /// поднялся до верха ленты.
+  void _syncSelectedSectionWithScroll() {
+    if (_scrollingToSection || !mounted) return;
+    final viewport = _scroll.position.context.storageContext.findRenderObject();
+    if (viewport is! RenderBox) return;
+    final top = viewport.localToGlobal(Offset.zero).dy;
+    String? current;
+    for (final entry in _sectionKeys.entries) {
+      final box = entry.value.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.attached) continue;
+      final y = box.localToGlobal(Offset.zero).dy - top;
+      if (y <= 12) {
+        if (current == null) {
+          current = entry.key;
+        } else {
+          final prevBox = _sectionKeys[current]!.currentContext!
+              .findRenderObject()! as RenderBox;
+          if (prevBox.localToGlobal(Offset.zero).dy - top < y) {
+            current = entry.key;
+          }
+        }
+      }
+    }
+    current ??= _sectionKeys.keys.firstOrNull;
+    if (current != null && current != _selectedPackId) {
+      setState(() => _selectedPackId = current!);
+    }
   }
 
   Future<void> _loadPacks({
@@ -331,26 +329,8 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
   void _showPackActionError({required Object error, required bool installing}) {
     _showPackActionSnack(
       installing
-          ? _stickerText(
-              context,
-              ru: 'Не удалось установить стикерпак: $error',
-              en: 'Failed to install sticker pack: $error',
-              uk: 'Не вдалося встановити стікерпак: $error',
-              es: 'No se pudo instalar el paquete de stickers: $error',
-              pt: 'Nao foi possivel instalar o pacote de stickers: $error',
-              fr: 'Impossible d installer le pack de stickers : $error',
-              de: 'Stickerpaket konnte nicht installiert werden: $error',
-            )
-          : _stickerText(
-              context,
-              ru: 'Не удалось удалить стикерпак: $error',
-              en: 'Failed to remove sticker pack: $error',
-              uk: 'Не вдалося видалити стікерпак: $error',
-              es: 'No se pudo eliminar el paquete de stickers: $error',
-              pt: 'Nao foi possivel remover o pacote de stickers: $error',
-              fr: 'Impossible de supprimer le pack de stickers : $error',
-              de: 'Stickerpaket konnte nicht entfernt werden: $error',
-            ),
+          ? context.l10n.stickerPackInstallFailed('$error')
+          : context.l10n.stickerPackRemoveFailed('$error'),
     );
   }
 
@@ -384,44 +364,20 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
       builder: (dialogContext) {
         return AlertDialog(
           title: Text(
-            _stickerText(
-              dialogContext,
-              ru: 'Удалить стикерпак?',
-              en: 'Remove sticker pack?',
-              uk: 'Видалити стікерпак?',
-              es: 'Eliminar paquete de stickers?',
-              pt: 'Remover pacote de stickers?',
-              fr: 'Supprimer le pack de stickers ?',
-              de: 'Stickerpaket entfernen?',
-            ),
+            dialogContext.l10n.stickerPackRemoveTitle,
           ),
           content: Text(
-            _stickerText(
-              dialogContext,
-              ru: 'Пак "${pack.title}" останется в каталоге, но локальные файлы будут удалены.',
-              en: 'Pack "${pack.title}" will stay in the catalog, but its local files will be removed.',
-              uk: 'Пак "${pack.title}" залишиться в каталозі, але локальні файли буде видалено.',
-              es: 'El paquete "${pack.title}" seguira en el catalogo, pero se eliminaran sus archivos locales.',
-              pt: 'O pacote "${pack.title}" fica no catalogo, mas os ficheiros locais serao removidos.',
-              ptBr:
-                  'O pacote "${pack.title}" ficara no catalogo, mas os arquivos locais serao removidos.',
-              fr: 'Le pack "${pack.title}" restera dans le catalogue, mais ses fichiers locaux seront supprimes.',
-              de: 'Das Paket "${pack.title}" bleibt im Katalog, aber lokale Dateien werden entfernt.',
-            ),
+            dialogContext.l10n.stickerPackRemoveBody(pack.title),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: Text(
-                _stickerText(dialogContext, ru: 'Отмена', en: 'Cancel'),
-              ),
+              child: Text(dialogContext.l10n.cancel),
             ),
             TextButton(
               style: TextButton.styleFrom(foregroundColor: Colors.red),
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text(
-                _stickerText(dialogContext, ru: 'Удалить', en: 'Remove'),
-              ),
+              child: Text(dialogContext.l10n.stickerPackRemoveAction),
             ),
           ],
         );
@@ -443,16 +399,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
         _normalizePickerSelection();
       });
       _showPackActionSnack(
-        _stickerText(
-          context,
-          ru: 'Стикерпак "${pack.title}" удалён с устройства.',
-          en: 'Removed "${pack.title}" from this device.',
-          uk: 'Стікерпак "${pack.title}" видалено з пристрою.',
-          es: '"${pack.title}" eliminado de este dispositivo.',
-          pt: '"${pack.title}" removido deste dispositivo.',
-          fr: '"${pack.title}" supprime de cet appareil.',
-          de: '"${pack.title}" von diesem Gerat entfernt.',
-        ),
+        context.l10n.stickerPackRemovedSnack(pack.title),
       );
     } catch (error) {
       if (!mounted) return;
@@ -476,56 +423,140 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
     );
   }
 
-  Future<void> _showStickerPreview(SecretlyStickerDescriptor sticker) async {
+  /// Долгое нажатие: стикер крупно и меню (15.11.2026, образец владельца):
+  /// отправить; в избранное или убрать; у своего набора — обложка и удаление.
+  Future<void> _showStickerPreview(
+    SecretlyStickerDescriptor sticker, {
+    SecretlyStickerPack? pack,
+  }) async {
     final cs = Theme.of(context).colorScheme;
-    await showDialog<void>(
+    final myPid = widget.controller.profileId;
+    final favoritesId = 'user:$myPid:favorites';
+    final isFavorite = widget.controller.isStickerFavorite(sticker.stickerId);
+    final ownPack = pack != null &&
+        pack.id.startsWith('user:$myPid:') &&
+        pack.id != favoritesId;
+    final action = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 28,
-            vertical: 36,
-          ),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: cs.surface.withValues(alpha: 0.92),
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(
-                color: cs.outlineVariant.withValues(alpha: 0.42),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 32,
-                  offset: const Offset(0, 18),
-                ),
-              ],
-            ),
+        Widget item(String id, IconData icon, String label,
+            {bool danger = false}) {
+          final color = danger ? Colors.red : cs.onSurface;
+          return InkWell(
+            key: ValueKey('stickers:preview:$id'),
+            onTap: () => Navigator.of(dialogContext).pop(id),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+              child: Row(
                 children: [
-                  SecretlyStickerAssetView(sticker: sticker, size: 220),
-                  const SizedBox(height: 10),
-                  Text(
-                    _stickerPreviewLabel(
-                      context,
-                      emojiHint: sticker.emojiHint,
-                      label: sticker.label,
-                    ),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+                  Icon(icon, size: 22, color: color),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(fontSize: 16, color: color),
                     ),
                   ),
                 ],
               ),
             ),
+          );
+        }
+
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 36),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (sticker.emojiHint.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    sticker.emojiHint.trim(),
+                    style: const TextStyle(fontSize: 30),
+                  ),
+                ),
+              SecretlyStickerAssetView(sticker: sticker, size: 220),
+              const SizedBox(height: 18),
+              Material(
+                color: cs.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(16),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    item('send', Icons.send_rounded,
+                        dialogContext.l10n.stickerSend),
+                    if (isFavorite)
+                      item('unfavorite', Icons.star_rounded,
+                          dialogContext.l10n.stickerRemoveFromFavorites)
+                    else
+                      item('favorite', Icons.star_outline_rounded,
+                          dialogContext.l10n.stickerMakeFavorite),
+                    if (ownPack) ...[
+                      item('cover', Icons.image_outlined,
+                          dialogContext.l10n.stickerMakeCover),
+                      item('delete', Icons.delete_outline_rounded,
+                          dialogContext.l10n.stickerDeleteAction,
+                          danger: true),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
         );
       },
     );
+    if (action == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
+    try {
+      switch (action) {
+        case 'send':
+          widget.onStickerSelected(sticker);
+        case 'favorite':
+          await widget.controller.addStickerToFavorites(
+            sticker,
+            favoritesTitle: l10n.stickerFavoritesPackTitle,
+          );
+          messenger.showSnackBar(
+            SecretlySnackBar(content: Text(l10n.stickerAddedToFavorites)),
+          );
+        case 'unfavorite':
+          await widget.controller.removeStickerFromFavorites(sticker.stickerId);
+          messenger.showSnackBar(
+            SecretlySnackBar(content: Text(l10n.stickerRemovedFromFavorites)),
+          );
+        case 'cover':
+          await widget.controller.setUserStickerPackCover(
+            packId: pack!.id,
+            stickerId: sticker.stickerId,
+          );
+          messenger.showSnackBar(
+            SecretlySnackBar(content: Text(l10n.stickerPackCoverUpdated)),
+          );
+        case 'delete':
+          final ok = await _confirmStickerDelete(
+            context,
+            packTitle: pack!.title,
+            isLast: pack.stickers.length <= 1,
+          );
+          if (!ok) return;
+          await widget.controller.deleteUserStickerFromPack(
+            packId: pack.id,
+            stickerId: sticker.stickerId,
+          );
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SecretlySnackBar(content: Text(l10n.stickerSaveFailed('$e'))),
+      );
+    }
+    if (!mounted || action == 'send') return;
+    await _loadPacks(refresh: false);
   }
 
   @override
@@ -557,41 +588,46 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
             Expanded(child: _buildPickerBody(cs, packs)),
           ],
         ),
-        // Create-sticker affordance: a sticker-sized tile pinned bottom-left,
-        // sitting in the empty gap beside the centered tab strip.
-        if (widget.onCreateSticker != null)
-          Positioned(
-            left: 12,
-            bottom: (widget.bottomInset - 60).clamp(8.0, 320.0),
-            child: _buildCreateStickerTile(cs),
-          ),
       ],
     );
   }
 
-  /// Sticker-sized "create" tile (bottom-left). Neutral glassy square with a
-  /// camera-plus glyph — reads as a sticker cell, not a CTA button.
+  /// «Создать» — первая клетка раздела «Недавние» (15.11.2026, образец
+  /// владельца): клетка размером со стикер, «+» и подпись под ним. Раньше —
+  /// плитка, прибитая к левому нижнему углу панели.
   Widget _buildCreateStickerTile(ColorScheme cs) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(18),
-        onTap: widget.onCreateSticker,
-        child: Container(
-          width: 60,
-          height: 60,
-          decoration: BoxDecoration(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : Colors.black.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: cs.onSurface.withValues(alpha: 0.10)),
-          ),
-          child: Icon(
-            Icons.add_a_photo_rounded,
-            size: 24,
-            color: cs.onSurface.withValues(alpha: 0.7),
+    return Padding(
+      padding: const EdgeInsets.all(3),
+      child: Material(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.07)
+            : Colors.black.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          key: const ValueKey('stickers:create'),
+          borderRadius: BorderRadius.circular(16),
+          onTap: widget.onCreateSticker,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.add_rounded,
+                size: 26,
+                color: cs.onSurface.withValues(alpha: 0.75),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                context.l10n.stickerCreate,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -779,115 +815,149 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
       );
     }
     final recents = _visibleRecentStickers;
-    if (recents.isEmpty && packs.isEmpty) {
+    final canCreate = widget.onCreateSticker != null;
+    if (recents.isEmpty && packs.isEmpty && !canCreate) {
       return _emptyState(cs, context.l10n.noRecentStickers);
     }
     final myPid = widget.controller.profileId;
-    final sectionIds = _sectionIds(packs);
-    return PageView.builder(
-      controller: _pageController,
-      itemCount: sectionIds.length,
-      onPageChanged: (index) {
-        if (_pageControllerJumping) return;
-        final id = sectionIds[index];
-        if (id != _selectedPackId) setState(() => _selectedPackId = id);
-      },
-      itemBuilder: (context, index) {
-        final id = sectionIds[index];
-        if (id == SecretlyStickerCatalog.recentPackId) {
-          return _buildSectionPage(
+    // Ключи — только у разделов, которые сейчас на экране.
+    final ids = _sectionIds(packs).toSet();
+    _sectionKeys.removeWhere((id, _) => !ids.contains(id));
+    return CustomScrollView(
+      controller: _scroll,
+      physics: secretlyListPhysics(),
+      slivers: [
+        if (ids.contains(SecretlyStickerCatalog.recentPackId)) ...[
+          _sectionHeader(
             cs,
+            id: SecretlyStickerCatalog.recentPackId,
             title: context.l10n.stickersRecent,
+          ),
+          _sectionGrid(
+            cs,
+            leading: canCreate ? _buildCreateStickerTile(cs) : null,
             stickers: recents,
-          );
-        }
-        final pack = packs.firstWhere((p) => p.id == id);
-        return _buildSectionPage(
-          cs,
-          title: pack.title,
-          stickers: pack.stickers,
-          onEdit: pack.id.startsWith('user:$myPid')
-              ? () => _editUserPack(pack)
-              : null,
-        );
-      },
-    );
-  }
-
-  Widget _buildSectionPage(
-    ColorScheme cs, {
-    required String title,
-    required List<SecretlyStickerDescriptor> stickers,
-    VoidCallback? onEdit,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: cs.onSurfaceVariant,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              if (onEdit != null)
-                InkWell(
-                  onTap: onEdit,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    child: Text(
-                      _stickerText(context, ru: 'изменить', en: 'edit'),
-                      style: TextStyle(
-                        color: cs.onSurface.withValues(alpha: 0.55),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
           ),
-        ),
-        Expanded(
-          child: GridView.builder(
-            padding: EdgeInsets.fromLTRB(12, 0, 12, 14 + widget.bottomInset),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 78,
-              mainAxisSpacing: 6,
-              crossAxisSpacing: 6,
-              childAspectRatio: 1,
-            ),
-            itemCount: stickers.length,
-            itemBuilder: (context, i) => _stickerTile(cs, stickers[i]),
+        ],
+        for (final pack in packs) ...[
+          _sectionHeader(
+            cs,
+            id: pack.id,
+            title: pack.title,
+            onSettings: pack.id.startsWith('user:$myPid:')
+                ? () => _editUserPack(pack)
+                : null,
+            onMore: pack.id.startsWith('user:$myPid:')
+                ? null
+                : () => _showForeignPackActions(pack),
           ),
-        ),
+          _sectionGrid(cs, stickers: pack.stickers, pack: pack),
+        ],
+        SliverToBoxAdapter(child: SizedBox(height: 14 + widget.bottomInset)),
       ],
     );
   }
 
-  Widget _stickerTile(ColorScheme cs, SecretlyStickerDescriptor sticker) {
-    return _StickerTile(
-      sticker: sticker,
-      onTap: () => widget.onStickerSelected(sticker),
-      onLongPress: () => _showStickerPreview(sticker),
+  /// Заголовок раздела: название и, рядом с ним, маленькая ⚙ у своего набора
+  /// (образец владельца) или ⋯ у чужого.
+  Widget _sectionHeader(
+    ColorScheme cs, {
+    required String id,
+    required String title,
+    VoidCallback? onSettings,
+    VoidCallback? onMore,
+  }) {
+    final muted = cs.onSurface.withValues(alpha: 0.55);
+    Widget smallButton(IconData icon, String tooltip, VoidCallback onTap,
+        String keyName) {
+      return Tooltip(
+        message: tooltip,
+        child: InkResponse(
+          key: ValueKey('stickers:$keyName:$id'),
+          onTap: onTap,
+          radius: 18,
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Icon(icon, size: 17, color: muted),
+          ),
+        ),
+      );
+    }
+
+    return SliverToBoxAdapter(
+      child: Padding(
+        key: _sectionKey(id),
+        padding: const EdgeInsets.fromLTRB(16, 10, 10, 4),
+        child: Row(
+          children: [
+            Flexible(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+            if (onSettings != null)
+              smallButton(Icons.settings_outlined,
+                  context.l10n.stickerPackSettings, onSettings, 'settings'),
+            if (onMore != null)
+              smallButton(Icons.more_horiz_rounded, context.l10n.stickerMore,
+                  onMore, 'more'),
+          ],
+        ),
+      ),
     );
   }
 
-  /// «Изменить» for one of the user's OWN packs — delete stickers from it.
+  /// Сетка раздела — пять стикеров в ряд, как на образце.
+  Widget _sectionGrid(
+    ColorScheme cs, {
+    required List<SecretlyStickerDescriptor> stickers,
+    Widget? leading,
+    SecretlyStickerPack? pack,
+  }) {
+    final offset = leading == null ? 0 : 1;
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
+      sliver: SliverGrid(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 5,
+          mainAxisSpacing: 2,
+          crossAxisSpacing: 2,
+        ),
+        delegate: SliverChildBuilderDelegate(
+          (context, i) {
+            if (i < offset) return leading!;
+            return _stickerTile(cs, stickers[i - offset], pack: pack);
+          },
+          childCount: stickers.length + offset,
+        ),
+      ),
+    );
+  }
+
+  Widget _stickerTile(
+    ColorScheme cs,
+    SecretlyStickerDescriptor sticker, {
+    SecretlyStickerPack? pack,
+  }) {
+    return _StickerTile(
+      sticker: sticker,
+      onTap: () => widget.onStickerSelected(sticker),
+      onLongPress: () => _showStickerPreview(sticker, pack: pack),
+    );
+  }
+
+  /// ⚙ у своего набора — окно набора целиком: добавить, удалить, обложка,
+  /// доступ, удалить набор (15.11.2026, образец владельца).
   Future<void> _editUserPack(SecretlyStickerPack pack) async {
+    final addTo = widget.onAddStickerToPack;
+    String? addRequested;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -899,12 +969,101 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
         controller: widget.controller,
         packId: pack.id,
         title: pack.title,
+        onAddSticker: addTo == null ? null : () => addRequested = pack.id,
       ),
     );
     if (!mounted) return;
-    await _loadPacks(refresh: true);
+    await _loadPacks(refresh: false);
+    final target = addRequested;
+    if (target != null) addTo?.call(target);
+  }
+
+  /// ⋯ у чужого набора — убрать его из своей панели. У автора и у других он
+  /// остаётся.
+  Future<void> _showForeignPackActions(SecretlyStickerPack pack) async {
+    final remove = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              key: const ValueKey('stickers:remove-foreign'),
+              leading: const Icon(Icons.remove_circle_outline_rounded),
+              title: Text(sheetCtx.l10n.stickerPackRemoveFromMine),
+              onTap: () => Navigator.of(sheetCtx).pop(true),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (remove != true || !mounted) return;
+    final confirmed = await _confirmDestructive(
+      context,
+      title: context.l10n.stickerPackRemoveFromMine,
+      body: context.l10n.stickerPackRemoveFromMineBody(pack.title),
+      action: context.l10n.stickerPackRemoveAction,
+    );
+    if (!confirmed || !mounted) return;
+    await widget.controller.deleteUserStickerPack(pack.id);
+    if (!mounted) return;
+    await _loadPacks(refresh: false);
   }
 }
+
+/// Вопрос перед удалением (15.11.2026): ни стикер, ни набор не исчезают без
+/// подтверждения.
+Future<bool> _confirmDestructive(
+  BuildContext context, {
+  required String title,
+  required String body,
+  required String action,
+}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(title),
+      content: Text(body),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: Text(dialogContext.l10n.cancel),
+        ),
+        TextButton(
+          key: const ValueKey('stickers:confirm'),
+          style: TextButton.styleFrom(foregroundColor: Colors.red),
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          child: Text(action),
+        ),
+      ],
+    ),
+  );
+  return ok == true;
+}
+
+/// Удалить стикер из своего набора — с вопросом; последний уносит набор,
+/// и вопрос об этом говорит прямо.
+Future<bool> _confirmStickerDelete(
+  BuildContext context, {
+  required String packTitle,
+  required bool isLast,
+}) =>
+    _confirmDestructive(
+      context,
+      title: isLast
+          ? context.l10n.stickerDeleteLastTitle
+          : context.l10n.stickerDeleteTitle,
+      body: isLast
+          ? context.l10n.stickerDeleteLastBody(packTitle)
+          : context.l10n.stickerDeleteBody(packTitle),
+      action: context.l10n.stickerDeleteAction,
+    );
 
 /// A single grid tile with a soft press-down scale for tactile feedback —
 /// no colour change, just a subtle physical response (iOS-style), matching
@@ -960,19 +1119,44 @@ class _StickerPackEditSheet extends StatefulWidget {
     required this.controller,
     required this.packId,
     required this.title,
+    this.onAddSticker,
   });
 
   final AppController controller;
   final String packId;
   final String title;
 
+  /// «+» — закрыть окно и открыть создание стикера в этот набор.
+  final VoidCallback? onAddSticker;
+
   @override
   State<_StickerPackEditSheet> createState() => _StickerPackEditSheetState();
 }
 
+/// Окно своего набора по ⚙ (15.11.2026, образец владельца): название и ⋮,
+/// сетка по пять с «⋯» у каждого стикера, клетка «+», кнопка «Готово».
 class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
   List<SecretlyStickerDescriptor> _stickers =
       const <SecretlyStickerDescriptor>[];
+  StickerShareMode _mode = StickerShareMode.fallback;
+
+  /// Режим можно менять только у СВОЕГО набора и только в доле флага.
+  /// Чужой установленный набор тоже начинается с `user:`, но его режим решает
+  /// автор.
+  bool get _canChangeAccess =>
+      widget.controller.stickerPackAccessUiEnabled &&
+      widget.packId.startsWith('user:${widget.controller.profileId}');
+
+  Future<void> _setMode(StickerShareMode mode) async {
+    if (mode == _mode) return;
+    final previous = _mode;
+    setState(() => _mode = mode);
+    final ok = await widget.controller.setUserStickerPackShareMode(
+      packId: widget.packId,
+      mode: mode,
+    );
+    if (!ok && mounted) setState(() => _mode = previous);
+  }
 
   @override
   void initState() {
@@ -982,12 +1166,21 @@ class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
 
   void _reload() {
     final pack = SecretlyStickerCatalog.pickerPackById(widget.packId);
-    setState(
-      () => _stickers = pack?.stickers ?? const <SecretlyStickerDescriptor>[],
-    );
+    setState(() {
+      _stickers = pack?.stickers ?? const <SecretlyStickerDescriptor>[];
+      _mode = pack?.shareMode ?? StickerShareMode.fallback;
+    });
   }
 
   Future<void> _delete(SecretlyStickerDescriptor sticker) async {
+    // 🔴 15.11.2026: раньше «×» удалял сразу — без вопроса и без отмены, а
+    // последний стикер уносил весь набор. Владелец потерял набор с iPhone.
+    final ok = await _confirmStickerDelete(
+      context,
+      packTitle: widget.title,
+      isLast: _stickers.length <= 1,
+    );
+    if (!ok || !mounted) return;
     try {
       await widget.controller.deleteUserStickerFromPack(
         packId: widget.packId,
@@ -997,6 +1190,18 @@ class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
     if (!mounted) return;
     _reload();
     if (_stickers.isEmpty && mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _deletePack() async {
+    final ok = await _confirmDestructive(
+      context,
+      title: context.l10n.stickerPackDeleteWholeTitle,
+      body: context.l10n.stickerPackDeleteWholeBody(widget.title),
+      action: context.l10n.stickerDeleteAction,
+    );
+    if (!ok || !mounted) return;
+    await widget.controller.deleteUserStickerPack(widget.packId);
+    if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _setCover(SecretlyStickerDescriptor sticker) async {
@@ -1009,13 +1214,49 @@ class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
-      SecretlySnackBar(content: const Text('Обложка набора обновлена')),
+      SecretlySnackBar(content: Text(context.l10n.stickerPackCoverUpdated)),
     );
+  }
+
+  Future<void> _stickerMenu(
+    SecretlyStickerDescriptor sticker,
+    BuildContext anchor,
+  ) async {
+    final box = anchor.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (box == null || overlay == null) return;
+    final topLeft = box.localToGlobal(Offset.zero, ancestor: overlay);
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        topLeft & box.size,
+        Offset.zero & overlay.size,
+      ),
+      items: [
+        PopupMenuItem<String>(
+          value: 'cover',
+          child: Text(context.l10n.stickerMakeCover),
+        ),
+        PopupMenuItem<String>(
+          value: 'delete',
+          child: Text(
+            context.l10n.stickerDeleteAction,
+            style: const TextStyle(color: Colors.red),
+          ),
+        ),
+      ],
+    );
+    if (!mounted) return;
+    if (choice == 'cover') await _setCover(sticker);
+    if (choice == 'delete') await _delete(sticker);
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final add = widget.onAddSticker;
+    final count = _stickers.length + (add == null ? 0 : 1);
     return SafeArea(
       top: false,
       child: Padding(
@@ -1040,70 +1281,111 @@ class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 17,
+                      fontSize: 22,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: Text(_stickerText(context, ru: 'Готово', en: 'Done')),
+                PopupMenuButton<String>(
+                  key: const ValueKey('stickers:pack-menu'),
+                  icon: const Icon(Icons.more_vert_rounded),
+                  onSelected: (v) {
+                    if (v == 'delete-pack') unawaited(_deletePack());
+                  },
+                  itemBuilder: (menuCtx) => [
+                    PopupMenuItem<String>(
+                      value: 'delete-pack',
+                      child: Text(
+                        menuCtx.l10n.stickerPackDeleteWhole,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
             const SizedBox(height: 4),
+            if (_canChangeAccess) ...[
+              StickerPackAccessPicker(
+                value: _mode,
+                onChanged: (m) => unawaited(_setMode(m)),
+                showExistingNote: true,
+                foreground: cs.onSurface,
+              ),
+              const SizedBox(height: 12),
+            ],
             Flexible(
               child: GridView.builder(
                 shrinkWrap: true,
                 physics: secretlyListPhysics(),
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 88,
-                  mainAxisSpacing: 8,
-                  crossAxisSpacing: 8,
-                  childAspectRatio: 1,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 5,
+                  mainAxisSpacing: 6,
+                  crossAxisSpacing: 6,
                 ),
-                itemCount: _stickers.length,
+                itemCount: count,
                 itemBuilder: (context, i) {
-                  final s = _stickers[i];
-                  return Stack(
-                    children: [
-                      Positioned.fill(
-                        child: GestureDetector(
-                          // Long-press a sticker → make it the pack cover/icon.
-                          onLongPress: () => _setCover(s),
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: cs.surfaceContainerHigh.withValues(
-                                alpha: 0.4,
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
+                  if (i == _stickers.length) {
+                    return Tooltip(
+                      message: context.l10n.stickerAddSticker,
+                      child: Center(
+                        child: Material(
+                          color: cs.surfaceContainerHighest,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            key: const ValueKey('stickers:pack-add'),
+                            customBorder: const CircleBorder(),
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              add?.call();
+                            },
                             child: Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: SecretlyStickerAssetView(
-                                sticker: s,
-                                size: 60,
+                              padding: const EdgeInsets.all(14),
+                              child: Icon(
+                                Icons.add_rounded,
+                                size: 28,
+                                color: cs.onSurfaceVariant,
                               ),
                             ),
                           ),
                         ),
                       ),
+                    );
+                  }
+                  final s = _stickers[i];
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned.fill(
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: SecretlyStickerAssetView(sticker: s, size: 60),
+                        ),
+                      ),
                       Positioned(
-                        top: 0,
-                        right: 0,
-                        child: GestureDetector(
-                          onTap: () => _delete(s),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: cs.error,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: cs.surface, width: 1.5),
-                            ),
-                            padding: const EdgeInsets.all(3),
-                            child: Icon(
-                              Icons.close_rounded,
-                              size: 13,
-                              color: cs.onError,
+                        top: -2,
+                        right: -2,
+                        child: Builder(
+                          builder: (anchor) => Tooltip(
+                            message: context.l10n.stickerMore,
+                            child: InkResponse(
+                              key: ValueKey('stickers:sticker-more:${s.stickerId}'),
+                              radius: 16,
+                              onTap: () => unawaited(_stickerMenu(s, anchor)),
+                              child: Container(
+                                width: 22,
+                                height: 22,
+                                decoration: BoxDecoration(
+                                  color: cs.surfaceContainerHighest
+                                      .withValues(alpha: 0.92),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.more_horiz_rounded,
+                                  size: 16,
+                                  color: cs.onSurface,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -1111,6 +1393,27 @@ class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
                     ],
                   );
                 },
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                key: const ValueKey('stickers:pack-done'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(
+                  context.l10n.stickerEditorDone,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ),
           ],

@@ -13,7 +13,12 @@ import 'package:livekit_client/livekit_client.dart' as lk;
 import '../calls/call_log.dart';
 import '../calls/screen_share_runtime.dart';
 import '../transport/relay_client.dart';
+import 'call_e2ee/call_e2ee_protocol.dart';
+import 'call_e2ee/call_key_transport.dart';
+import 'call_e2ee/e2ee_room_call_media_controller.dart';
+import 'call_e2ee/room_call_e2ee_status.dart';
 import 'room_call_media_state.dart';
+import 'room_call_stealth.dart';
 
 /// Какой именно вид участника нужен: экран, камера или «что есть».
 ///
@@ -189,16 +194,52 @@ abstract class RoomCallMediaControllerFactory {
 
 class DefaultRoomCallMediaControllerFactory
     implements RoomCallMediaControllerFactory {
-  const DefaultRoomCallMediaControllerFactory();
+  const DefaultRoomCallMediaControllerFactory({
+    this.e2eeTransport,
+    this.e2eeKeySwitchDelayMs,
+    this.stealthPlan,
+  });
+
+  /// Транспорт ключей зашифрованного созвона (ТЗ E2EE созвонов). Нет его —
+  /// зашифрованный созвон получает закрытый отказ, а не открытое медиа.
+  final RoomCallKeyTransport? e2eeTransport;
+
+  final int Function()? e2eeKeySwitchDelayMs;
+
+  /// Э5: групповой созвон под цензурой — только через сервер и только по TLS
+  /// на 443. `null` или возврат `null` оставляют всё как было.
+  final Future<RoomCallStealthPlan?> Function()? stealthPlan;
 
   @override
-  RoomCallMediaController create() => DefaultRoomCallMediaController();
+  RoomCallMediaController create() => DefaultRoomCallMediaController(
+    e2eeTransport: e2eeTransport,
+    e2eeKeySwitchDelayMs: e2eeKeySwitchDelayMs,
+    stealthPlan: stealthPlan,
+  );
 }
 
-enum _RoomCallMediaRuntimeKind { localPreview, livekit }
+enum _RoomCallMediaRuntimeKind { localPreview, livekit, livekitE2ee }
 
-class DefaultRoomCallMediaController implements RoomCallMediaController {
-  DefaultRoomCallMediaController();
+class DefaultRoomCallMediaController
+    implements RoomCallMediaController, RoomCallE2eeStatusSource {
+  DefaultRoomCallMediaController({
+    RoomCallKeyTransport? e2eeTransport,
+    int Function()? e2eeKeySwitchDelayMs,
+    Future<RoomCallStealthPlan?> Function()? stealthPlan,
+  }) : _e2eeTransport = e2eeTransport,
+       _e2eeKeySwitchDelayMs = e2eeKeySwitchDelayMs,
+       _stealthPlan = stealthPlan;
+
+  final RoomCallKeyTransport? _e2eeTransport;
+  final int Function()? _e2eeKeySwitchDelayMs;
+  final Future<RoomCallStealthPlan?> Function()? _stealthPlan;
+
+  /// Состояние шифрования делегата; `null` — созвон открытый.
+  final ValueNotifier<RoomCallE2eeStatus?> _e2eeStatus = ValueNotifier(null);
+  ValueListenable<RoomCallE2eeStatus?>? _delegateE2eeStatus;
+
+  @override
+  ValueListenable<RoomCallE2eeStatus?> get e2eeStatus => _e2eeStatus;
 
   final ValueNotifier<RoomCallLocalMediaState> _state = ValueNotifier(
     const RoomCallLocalMediaState.idle(),
@@ -310,6 +351,7 @@ class DefaultRoomCallMediaController implements RoomCallMediaController {
   @override
   Future<void> dispose() async {
     final delegate = _delegate;
+    _detachE2eeStatus();
     if (delegate != null) {
       delegate.state.removeListener(_forwardDelegateState);
       _delegate = null;
@@ -317,6 +359,16 @@ class DefaultRoomCallMediaController implements RoomCallMediaController {
       await delegate.dispose();
     }
     _state.dispose();
+    _e2eeStatus.dispose();
+  }
+
+  void _detachE2eeStatus() {
+    _delegateE2eeStatus?.removeListener(_forwardE2eeStatus);
+    _delegateE2eeStatus = null;
+  }
+
+  void _forwardE2eeStatus() {
+    _e2eeStatus.value = _delegateE2eeStatus?.value;
   }
 
   Future<void> _ensureDelegate(_RoomCallMediaRuntimeKind nextKind) async {
@@ -324,19 +376,39 @@ class DefaultRoomCallMediaController implements RoomCallMediaController {
       return;
     }
     final previous = _delegate;
+    _detachE2eeStatus();
     if (previous != null) {
       previous.state.removeListener(_forwardDelegateState);
       _delegate = null;
       _delegateKind = null;
       await previous.dispose();
     }
-    final delegate = switch (nextKind) {
+    final transport = _e2eeTransport;
+    final RoomCallMediaController delegate = switch (nextKind) {
       _RoomCallMediaRuntimeKind.localPreview =>
         _LocalPreviewRoomCallMediaController(),
-      _RoomCallMediaRuntimeKind.livekit => _LiveKitRoomCallMediaController(),
+      _RoomCallMediaRuntimeKind.livekit => _LiveKitRoomCallMediaController(
+        stealthPlan: _stealthPlan,
+      ),
+      // 🔴 Зашифрованный созвон — только своим контроллером. Нет транспорта
+      // ключей — закрытый отказ; на открытый путь не откатываемся никогда.
+      _RoomCallMediaRuntimeKind.livekitE2ee =>
+        transport == null
+            ? UnavailableE2eeRoomCallMediaController('transport_unavailable')
+            : E2eeLiveKitRoomCallMediaController(
+                transport: transport,
+                keySwitchDelayMs: _e2eeKeySwitchDelayMs,
+                stealthPlan: _stealthPlan,
+              ),
     };
     _delegate = delegate;
     _delegateKind = nextKind;
+    if (delegate is RoomCallE2eeStatusSource) {
+      final source = (delegate as RoomCallE2eeStatusSource).e2eeStatus;
+      _delegateE2eeStatus = source;
+      source.addListener(_forwardE2eeStatus);
+    }
+    _forwardE2eeStatus();
     final pendingSpeaker = _pendingSpeakerEnabled;
     if (pendingSpeaker != null) {
       // Seed BEFORE the caller's syncSession connects the runtime, so the
@@ -356,8 +428,11 @@ class DefaultRoomCallMediaController implements RoomCallMediaController {
         session.backend.hasAccessToken &&
         (session.backend.roomName?.trim().isNotEmpty ?? false) &&
         (session.backend.participantIdentity?.trim().isNotEmpty ?? false)) {
-      return _RoomCallMediaRuntimeKind.livekit;
+      return isE2eeRoomMediaContract(session.contractVersion)
+          ? _RoomCallMediaRuntimeKind.livekitE2ee
+          : _RoomCallMediaRuntimeKind.livekit;
     }
+    // Без токена — только местное превью: оно ничего не передаёт.
     return _RoomCallMediaRuntimeKind.localPreview;
   }
 
@@ -927,7 +1002,11 @@ class _LiveKitParticipantMetadata {
 }
 
 class _LiveKitRoomCallMediaController implements RoomCallMediaController {
-  _LiveKitRoomCallMediaController();
+  _LiveKitRoomCallMediaController({
+    Future<RoomCallStealthPlan?> Function()? stealthPlan,
+  }) : _stealthPlan = stealthPlan;
+
+  final Future<RoomCallStealthPlan?> Function()? _stealthPlan;
 
   final ValueNotifier<RoomCallLocalMediaState> _state = ValueNotifier(
     const RoomCallLocalMediaState.idle(),
@@ -1372,7 +1451,16 @@ class _LiveKitRoomCallMediaController implements RoomCallMediaController {
       // prepareConnection is an optimization only.
     }
 
-    await room.connect(url, token);
+    // Э5: под цензурой — только через сервер и только по TLS на 443. Нет
+    // такого TURN — настройка не меняется, иначе созвон не собрался бы вовсе.
+    await room.connect(
+      url,
+      token,
+      connectOptions: roomCallConnectOptions(
+        plan: await _stealthPlan?.call(),
+        autoSubscribe: true,
+      ),
+    );
     try {
       await room.startAudio();
     } catch (_) {
@@ -1475,7 +1563,9 @@ class _LiveKitRoomCallMediaController implements RoomCallMediaController {
 
   Future<void> _applySpeakerRoute(lk.Room room) async {
     try {
-      await room.setSpeakerOn(_speakerEnabled);
+      // livekit_client 2.13: `room.setSpeakerOn` устарел и сам лишь
+      // пересылает сюда с force: false — поведение то же.
+      await lk.AudioManager.instance.setSpeakerOutputPreferred(_speakerEnabled);
       return;
     } catch (_) {
       // ignore and try the lower-level route helper

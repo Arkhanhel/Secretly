@@ -63,9 +63,9 @@ PODS:
     - FlutterMacOS
   - flutter_secure_storage_macos (6.1.3):
     - FlutterMacOS
-  - flutter_webrtc (0.12.6):
+  - flutter_webrtc (1.6.2):
     - FlutterMacOS
-    - WebRTC-SDK (= 125.6422.06)
+    - WebRTC-SDK (= 150.7871.01)
   - FlutterMacOS (1.0.0)
   - FMDB/Core (2.7.12)
   - FMDB/SQLCipher (2.7.12):
@@ -104,10 +104,10 @@ PODS:
   - just_audio (0.0.1):
     - Flutter
     - FlutterMacOS
-  - livekit_client (2.4.0):
+  - livekit_client (2.13.1):
     - flutter_webrtc
     - FlutterMacOS
-    - WebRTC-SDK (= 125.6422.06)
+    - WebRTC-SDK (= 150.7871.01)
   - local_auth_darwin (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -134,6 +134,8 @@ PODS:
   - rust_lib_audiotags (0.0.1):
     - FlutterMacOS
   - screen_retriever_macos (0.0.1):
+    - FlutterMacOS
+  - secretly_transport_ffi (0.0.1):
     - FlutterMacOS
   - share_plus (0.0.1):
     - FlutterMacOS
@@ -188,7 +190,7 @@ PODS:
     - FlutterMacOS
   - wakelock_plus (0.0.1):
     - FlutterMacOS
-  - WebRTC-SDK (125.6422.06)
+  - WebRTC-SDK (150.7871.01)
   - webview_flutter_wkwebview (0.0.1):
     - Flutter
     - FlutterMacOS
@@ -224,6 +226,7 @@ DEPENDENCIES:
   - record_macos (from `Flutter/ephemeral/.symlinks/plugins/record_macos/macos`)
   - rust_lib_audiotags (from `Flutter/ephemeral/.symlinks/plugins/rust_lib_audiotags/macos`)
   - screen_retriever_macos (from `Flutter/ephemeral/.symlinks/plugins/screen_retriever_macos/macos`)
+  - secretly_transport_ffi (from `Flutter/ephemeral/.symlinks/plugins/secretly_transport_ffi/macos`)
   - share_plus (from `Flutter/ephemeral/.symlinks/plugins/share_plus/macos`)
   - shared_preferences_foundation (from `Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin`)
   - Sparkle (= 2.9.6)
@@ -313,6 +316,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/rust_lib_audiotags/macos
   screen_retriever_macos:
     :path: Flutter/ephemeral/.symlinks/plugins/screen_retriever_macos/macos
+  secretly_transport_ffi:
+    :path: Flutter/ephemeral/.symlinks/plugins/secretly_transport_ffi/macos
   share_plus:
     :path: Flutter/ephemeral/.symlinks/plugins/share_plus/macos
   shared_preferences_foundation:
@@ -358,14 +363,14 @@ SPEC CHECKSUMS:
   flutter_contacts: 79bd91c6f0edbe70e001ec3f0ded2ef1a1e9711e
   flutter_local_notifications: 4b427ffabf278fc6ea9484c97505e231166927a5
   flutter_secure_storage_macos: c2754d3483d20bb207bb9e5a14f1b8e771abcdb9
-  flutter_webrtc: d55fd3f5c75b42940b6b4b2cf376a5797398d1f8
+  flutter_webrtc: 8c2ed7ad05aacb54f592f321203b833c7972f68f
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   FMDB: 728731dd336af3936ce00f91d9d8495f5718a0e6
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
   in_app_purchase_storekit: 2342c0a5da86593124d08dd13d920f39a52b273a
   just_audio: a42c63806f16995daf5b219ae1d679deb76e6a79
-  livekit_client: 2e766be2c3ee6274a8e2633b356b98b5eb842987
+  livekit_client: 8a95de3dcbda951add53a6f95633c58a6f0bfbc4
   local_auth_darwin: 63c73d6d28cc3e239be2b6aa460ea6e317cd5100
   local_notifier: e9506bc66fc70311e8bc7291fb70f743c081e4ff
   mobile_scanner: 77265f3dc8d580810e91849d4a0811a90467ed5e
@@ -377,6 +382,7 @@ SPEC CHECKSUMS:
   record_macos: 4680f37daeebf52162e715efb7ff682f0a5ce4fd
   rust_lib_audiotags: 07dc689d3e0c27c4b417542b5b7235164966e2f0
   screen_retriever_macos: 776e0fa5d42c6163d2bf772d22478df4b302b161
+  secretly_transport_ffi: 9ec847010a5611584a85b26d472678fdbaadc074
   share_plus: 1fa619de8392a4398bfaf176d441853922614e89
   shared_preferences_foundation: 5086985c1d43c5ba4d5e69a4e8083a389e2909e6
   Sparkle: b8c9cf4ced217ffc708a1ca5f988a7ba877658db
@@ -389,10 +395,10 @@ SPEC CHECKSUMS:
   url_launcher_macos: 175a54c831f4375a6cf895875f716ee5af3888ce
   video_player_avfoundation: 7993f492ae0bd77edaea24d9dc051d8bb2cd7c86
   wakelock_plus: 9d63063ffb7af1c215209769067c57103bde719d
-  WebRTC-SDK: 79942c006ea64f6fb48d7da8a4786dfc820bc1db
+  WebRTC-SDK: 7dc931c64c00c735a614382f1a59cf65019c3c17
   webview_flutter_wkwebview: 29eb20d43355b48fe7d07113835b9128f84e3af4
   window_manager: e25faf20d88283a0d46e7b1a759d07261ca27575
 
-PODFILE CHECKSUM: 68b6fa8d50cfd6fe92784b73251550fcf4e155ae
+PODFILE CHECKSUM: dae1f590428540e80277ba6ba976e1aef6135b2b
 
 COCOAPODS: 1.16.2

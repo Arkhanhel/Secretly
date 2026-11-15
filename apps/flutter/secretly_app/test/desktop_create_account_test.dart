@@ -111,6 +111,7 @@ class _FakeKeys extends KeysClient {
     required String profileSecretB64,
     String? accountIdentityPubB64,
     String? deviceCertB64,
+    int signedPrekeyId = 1,
   }) async {
     published = true;
     return true;

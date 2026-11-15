@@ -17,6 +17,7 @@ import '../shell/desktop_shell.dart' show DesktopShellApi;
 import '../shell/list_thread_split.dart';
 import 'desktop_app_view_model.dart';
 import 'desktop_selector.dart';
+import '../primitives/motion_widgets.dart';
 
 /// Ширина левой панели раздела звонков. Совпадает с исходной шириной списка
 /// чатов: разделы отличаются содержимым, а не тем, где проходит граница.
@@ -106,7 +107,19 @@ class _DesktopCallsSectionState extends State<DesktopCallsSection> {
       return ListThreadSplit.fromApi(
         api,
         list: _listPanel(c),
-        thread: _detail(c),
+        // Другой звонок — карточка «через затухание» (05.10.2026).
+        thread: DPageSwitcher(
+          child: KeyedSubtree(
+            // По номеру звонка, а не по объекту: журнал при обновлении
+            // пересоздаёт записи, и карточка мигала бы на каждое обновление.
+            key: ValueKey<String?>(
+              _selected == null
+                  ? null
+                  : '${_selected!.callId}:${_selected!.callAttemptId}',
+            ),
+            child: _detail(c),
+          ),
+        ),
       );
     }
     return Row(
@@ -373,7 +386,7 @@ class _RecallButton extends StatelessWidget {
     final c = DColors.of(context);
     return HoverListener(
       onTap: onTap,
-      builder: (ctx, hovered, pressed) => AnimatedContainer(
+      builder: (ctx, hovered, pressed) => DPressScale(pressed: pressed, scale: 0.9, child: AnimatedContainer(
         duration: DMotion.fast,
         height: 34,
         padding: const EdgeInsets.symmetric(horizontal: DSpace.l),
@@ -398,7 +411,7 @@ class _RecallButton extends StatelessWidget {
             ),
           ],
         ),
-      ),
+      )),
     );
   }
 }

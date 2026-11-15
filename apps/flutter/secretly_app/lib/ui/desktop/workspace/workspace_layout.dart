@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import '../design/tokens.dart';
 import '../primitives/context_menu.dart';
 import '../primitives/hover_listener.dart';
+import '../primitives/motion_widgets.dart';
 import 'settings_kit.dart';
 import 'settings_style.dart';
 
@@ -301,16 +302,32 @@ class _WorkspaceLayoutState extends State<WorkspaceLayout> {
         ));
       }
       for (final i in byGroup[g]!) {
-        rows.add(_SectionRow(
-          section: widget.sections[i],
-          active: _index == i,
-          onTap: () => setState(() => _index = i),
+        rows.add(DSelectionTarget(
+          id: i,
+          child: _SectionRow(
+            section: widget.sections[i],
+            active: _index == i,
+            onTap: () => setState(() => _index = i),
+          ),
         ));
       }
     }
     return ListView(
       padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
-      children: rows,
+      children: [
+        // Подложка выбранного раздела одна и переезжает (05.10.2026).
+        DSelectionGroup(
+          selected: _index,
+          decoration: BoxDecoration(
+            color: p.sel,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: rows,
+          ),
+        ),
+      ],
     );
   }
 
@@ -425,7 +442,7 @@ class _WorkspaceLayoutState extends State<WorkspaceLayout> {
                           excludeSemantics: true,
                           child: HoverListener(
                             onTap: widget.onClose,
-                            builder: (ctx, h, _) => AnimatedContainer(
+                            builder: (ctx, h, pressedNow) => DPressScale(pressed: pressedNow, scale: 0.9, child: AnimatedContainer(
                               duration: DMotion.fast,
                               width: 28,
                               height: 28,
@@ -438,7 +455,7 @@ class _WorkspaceLayoutState extends State<WorkspaceLayout> {
                                 size: 20,
                                 color: h ? p.head : p.faint,
                               ),
-                            ),
+                            )),
                           ),
                         ),
                     ],
@@ -480,18 +497,9 @@ class _WorkspaceLayoutState extends State<WorkspaceLayout> {
                   maxWidth: maxWidth,
                 ),
                 Expanded(
-                  child: AnimatedSwitcher(
-                    duration: DMotion.base,
-                    transitionBuilder: (child, anim) => FadeTransition(
-                      opacity: anim,
-                      child: SlideTransition(
-                        position: Tween<Offset>(
-                          begin: const Offset(0, 0.02),
-                          end: Offset.zero,
-                        ).animate(CurvedAnimation(parent: anim, curve: DMotion.easeOutCubic)),
-                        child: child,
-                      ),
-                    ),
+                  // Страница раздела — «через затухание», как разделы окна
+                  // (05.10.2026): две страницы сразу не просвечивают.
+                  child: DPageSwitcher(
                     child: KeyedSubtree(
                       key: ValueKey(section.id),
                       child: _constrain(section.builder(context), maxWidth),
@@ -705,7 +713,11 @@ class _SectionRow extends StatelessWidget {
             margin: const EdgeInsets.symmetric(vertical: 1),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
             decoration: BoxDecoration(
-              color: active ? p.sel : (h ? p.hover : Colors.transparent),
+              // Выбранный — подложкой группы, которая переезжает; своя
+              // только в первом кадре, пока группа её не измерила.
+              color: active
+                  ? (DSelectionGroup.slides(ctx) ? Colors.transparent : p.sel)
+                  : (h ? p.hover : Colors.transparent),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(

@@ -611,8 +611,10 @@ void main() {
         isTrue,
         reason: 'галочки снова уехали в строку превью',
       );
+      // 05.10.2026: счётчик всплывает и уходит плавно (DPopSwitcher), но
+      // место то же — строка превью — и он по-прежнему один.
       expect(
-        list.contains('if (item.unread > 0) ...[\n                                const SizedBox(width: 6),\n                                _unreadBadge(c),'),
+        list.contains('child: item.unread > 0\n                                    ? Padding(\n                                        key: const ValueKey<String>(\'unread\'),\n                                        padding: const EdgeInsets.only(left: 6),\n                                        child: _unreadBadge(c),'),
         isTrue,
         reason: 'счётчик — на строке превью и один',
       );

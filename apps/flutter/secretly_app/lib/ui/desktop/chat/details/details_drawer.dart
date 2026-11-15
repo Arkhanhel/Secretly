@@ -12,6 +12,7 @@ import 'desktop_selection_store.dart';
 import 'member_profile_card.dart' show MemberProfileCard;
 import 'room_details_view.dart';
 import 'self_profile_view.dart';
+import '../../primitives/motion_widgets.dart';
 
 /// Root of the third-column drawer.
 ///
@@ -97,13 +98,9 @@ class DetailsDrawer extends StatelessWidget {
             onClose: onClose,
           );
         }
-        return AnimatedSwitcher(
-          duration: DMotion.fast,
-          switchInCurve: DMotion.easeOutCubic,
-          switchOutCurve: DMotion.easeInCubic,
-          transitionBuilder: (c, a) => FadeTransition(opacity: a, child: c),
-          child: child,
-        );
+        // Сведения другой переписки — «через затухание», как разделы окна
+        // (05.10.2026): две карточки сразу не просвечивают.
+        return DPageSwitcher(child: child);
       },
     );
   }

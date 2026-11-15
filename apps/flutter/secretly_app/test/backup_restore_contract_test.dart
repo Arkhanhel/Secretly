@@ -287,7 +287,10 @@ void main() {
     expect(nonAscii.problems, contains(BackupPasswordProblem.nonAscii));
   });
 
-  test('SafeBackupPlainV1.fromJson rejects unknown db_snapshot table', () {
+  // 13.11.2026: незнакомая таблица — признак копии более новой версии. Копия
+  // не отвергается целиком; таблица отбрасывается перед импортом
+  // (sanitizeSafeBackupDbSnapshot, test/safe_backup_forward_compat_test.dart).
+  test('SafeBackupPlainV1.fromJson accepts unknown db_snapshot table (newer version)', () {
     expect(
       () => SafeBackupPlainV1.fromJson(
         safeBackupJson(
@@ -298,11 +301,24 @@ void main() {
           },
         ),
       ),
+      returnsNormally,
+    );
+  });
+
+  test('SafeBackupPlainV1.fromJson still rejects a malformed db_snapshot table', () {
+    expect(
+      () => SafeBackupPlainV1.fromJson(
+        safeBackupJson(
+          dbSnapshot: <String, Object?>{'contacts': 'not a list'},
+        ),
+      ),
       throwsStateError,
     );
   });
 
-  test('SafeBackupPlainV1.fromJson rejects unknown db_snapshot column', () {
+  // 13.11.2026: незнакомый столбец (копия более новой версии) не отвергает
+  // копию; он отбрасывается перед импортом.
+  test('SafeBackupPlainV1.fromJson accepts unknown db_snapshot column (newer version)', () {
     expect(
       () => SafeBackupPlainV1.fromJson(
         safeBackupJson(
@@ -319,7 +335,7 @@ void main() {
           },
         ),
       ),
-      throwsStateError,
+      returnsNormally,
     );
   });
 

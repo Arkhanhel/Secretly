@@ -11,6 +11,7 @@ import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../version/app_package_info.dart';
 import 'server_clock.dart';
+import 'transport_paths.dart';
 
 class _ManagedWebSocketSink implements WebSocketSink {
   _ManagedWebSocketSink({
@@ -133,6 +134,11 @@ const bool _enableHttpDnsFallbacksForWebSockets = bool.fromEnvironment(
   'SECRETLY_ENABLE_HTTP_DNS_FALLBACKS_FOR_WEBSOCKETS',
   defaultValue: true,
 );
+
+/// Запасные адреса из сборки — те же, что использует DNS-фолбэк; библиотека
+/// транспорта получает их как путь `ip` встроенного списка входов (Э1).
+Map<String, String> httpDnsFallbacksFromEnv() =>
+    _parseHttpDnsFallbacks(_httpDnsFallbacksEnv);
 
 Map<String, String> _parseHttpDnsFallbacks(String raw) {
   final parsed = <String, String>{};
@@ -466,10 +472,30 @@ class _HardenedClient extends http.BaseClient {
     // Учим по ЛЮБОМУ ответу, включая отказ: заголовок `Date` есть и в 401, а
     // именно 401 приходит устройству, чьи часы сбились. Иначе оно никогда бы не
     // узнало поправку — заколдованный круг.
+    // 🔴 ПУТИ ПОД БЛОКИРОВКАМИ (Э1, 10.10.2026). Если работает локальный
+    // прокси библиотеки транспорта, запрос к нашим серверам уходит на
+    // loopback с двумя заголовками; путь наружу выбирает библиотека. Запрос
+    // переписывается целиком (адрес, метод, заголовки, тело) — у `http`
+    // адрес неизменяем. Подписи хост не включают, поэтому это безопасно.
+    final transport = TransportPaths.instance;
+    final viaProxy = transport != null && transport.handles(request.url);
+    if (viaProxy) {
+      try {
+        request = rewriteRequestToLoopback(request, transport);
+      } catch (_) {
+        // Не смогли переписать — идём напрямую, как раньше.
+      }
+    }
     return _inner.send(request).then((resp) {
       try {
+        // Поправку часов учим только по ответам, которые не проходили через
+        // чужие узлы (зеркало, CDN, прокси волонтёра, Tor): их `Date` — не
+        // наш.
+        final via = resp.headers[TransportPaths.headerPath];
         final raw = resp.headers['date'];
-        if (raw != null && raw.isNotEmpty) {
+        if (raw != null &&
+            raw.isNotEmpty &&
+            TransportPaths.trustsDateFrom(via)) {
           ServerClock.instance.observeServerDate(HttpDate.parse(raw));
         }
       } catch (_) {
@@ -477,6 +503,13 @@ class _HardenedClient extends http.BaseClient {
         // обязан дойти до вызывающего нетронутым.
       }
       return resp;
+    }, onError: (Object e, StackTrace st) {
+      // Прокси на loopback не ответил (на iOS — сокет закрыт системой):
+      // проверить и поднять заново, чтобы следующая попытка дошла.
+      if (viaProxy && (e is SocketException || e is http.ClientException)) {
+        transport.noteLoopbackFailure();
+      }
+      Error.throwWithStackTrace(e, st);
     });
   }
 
@@ -485,6 +518,46 @@ class _HardenedClient extends http.BaseClient {
     _inner.close();
     super.close();
   }
+}
+
+/// Копия запроса с адресом на loopback и заголовками прокси.
+///
+/// Три формы запроса `package:http` переносятся по-разному: у [http.Request]
+/// тело уже в памяти; у [http.StreamedRequest] тело — поток, его можно
+/// забрать один раз; у [http.MultipartRequest] — поля и файлы.
+http.BaseRequest rewriteRequestToLoopback(
+  http.BaseRequest request,
+  TransportPaths transport,
+) {
+  final url = transport.rewrite(request.url);
+  final extra = transport.headersFor(request.url);
+  http.BaseRequest out;
+  if (request is http.Request) {
+    out = http.Request(request.method, url)..bodyBytes = request.bodyBytes;
+  } else if (request is http.MultipartRequest) {
+    out = http.MultipartRequest(request.method, url)
+      ..fields.addAll(request.fields)
+      ..files.addAll(request.files);
+  } else if (request is http.StreamedRequest) {
+    final streamed = http.StreamedRequest(request.method, url);
+    if (request.contentLength != null) {
+      streamed.contentLength = request.contentLength;
+    }
+    unawaited(
+      streamed.sink.addStream(request.finalize()).then((_) {
+        streamed.sink.close();
+      }),
+    );
+    out = streamed;
+  } else {
+    throw UnsupportedError(request.runtimeType.toString());
+  }
+  out.headers.addAll(request.headers);
+  out.headers.addAll(extra);
+  out.followRedirects = false;
+  out.persistentConnection = request.persistentConnection;
+  out.maxRedirects = request.maxRedirects;
+  return out;
 }
 
 http.Client createResilientHttpClient() {
@@ -510,6 +583,21 @@ WebSocketChannel connectResilientWebSocket(
   Duration? pingInterval,
   Duration? connectTimeout,
 }) {
+  // Э1: WebSocket к реле через локальный прокси библиотеки транспорта —
+  // открытый `ws://` на loopback, путь наружу выбирает библиотека.
+  final transport = TransportPaths.instance;
+  if (transport != null && transport.handles(uri)) {
+    final client = HttpClient();
+    final channel = IOWebSocketChannel.connect(
+      transport.rewrite(uri),
+      headers: transport.headersFor(uri),
+      pingInterval: pingInterval,
+      connectTimeout: connectTimeout,
+      customClient: client,
+    );
+    return _ManagedWebSocketChannel(delegate: channel, client: client);
+  }
+
   final fallbackByHost = _parseHttpDnsFallbacks(_httpDnsFallbacksEnv);
   if (fallbackByHost.isEmpty || !_enableHttpDnsFallbacksForWebSockets) {
     return WebSocketChannel.connect(uri);

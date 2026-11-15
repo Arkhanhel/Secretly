@@ -55,25 +55,32 @@ void main() {
   setUp(() => debugSeedProfileFxRandom(0));
 
   group('каталог', () {
-    test('🔴 живые рамки НЕ попали в список атласа', () {
-      // Семь проверок вокруг kAvatarFrames пекут петли. У живых рамок петли
-      // нет, и попадание туда означало бы печь несуществующее.
-      final atlas = kAvatarFrames.map((f) => f.id).toSet();
-      for (final id in kLiveFrameIds) {
-        expect(atlas.contains(id), isFalse, reason: '$id пролез в атлас');
+    test('🔴 13.11.2026: каждая рамка каталога — живая, атласа больше нет', () {
+      // Старые двадцать рамок переделаны в живые симуляции под прежними id,
+      // запечённые петли удалены. Рамка без симуляции рисовала бы пустоту.
+      for (final f in kAllAvatarFrames) {
+        expect(isLiveFrameId(f.id), isTrue, reason: '${f.id} не живая');
+        expect(makeLiveFrame(f.id), isNotNull, reason: '${f.id}: нет симуляции');
       }
+      expect(kClassicFrameIds, hasLength(20));
+      expect(kCollectionFrameIds, hasLength(10));
+      expect(
+        kCollectionAvatarFrames.map((f) => f.id).toList(),
+        kCollectionFrameIds,
+      );
+      expect(kAvatarFrames.map((f) => f.id).toList(), kClassicFrameIds);
     });
 
     test('набор перенесён целиком, идентификаторы не столкнулись', () {
-      expect(kLiveFrameIds.length, 26);
+      expect(kLiveFrameIds.length, 56);
       final ids = kAllAvatarFrames.map((f) => f.id).toList();
       expect(ids.toSet().length, ids.length);
-      expect(ids.length, kAvatarFrames.length + kLiveFrameIds.length);
+      expect(ids.toSet(), kLiveFrameIds.toSet());
       for (final id in kLiveFrameIds) {
         expect(frameById(id), isNotNull, reason: 'рамка $id не рисуется');
         expect(makeLiveFrame(id), isNotNull);
       }
-      expect(makeLiveFrame('cosmic'), isNull, reason: 'обычная рамка не живая');
+      expect(makeLiveFrame('no_such_frame'), isNull);
     });
 
     testWidgets('название переведено на все восемь языков', (tester) async {
@@ -97,7 +104,7 @@ void main() {
             ),
           ),
         );
-        for (final f in kLivingAvatarFrames) {
+        for (final f in kAllAvatarFrames) {
           expect(
             f.nameLocalized(ctx).trim(),
             isNotEmpty,
@@ -121,7 +128,7 @@ void main() {
           expect(label!.trim(), isNotEmpty);
         }
       }
-      expect(liveFrameActionLabelForLocale('ru', 'cosmic'), isNull);
+      expect(liveFrameActionLabelForLocale('ru', 'no_such_frame'), isNull);
       expect(liveFrameActionLabelForLocale('ru', null), isNull);
     });
 
@@ -130,7 +137,9 @@ void main() {
       // а десяток секунд — что человек будет ждать, пока кот отпустит уши.
       for (final id in kLiveFrameIds) {
         final d = liveFrameActionDuration(id);
-        expect(d.inMilliseconds, greaterThanOrEqualTo(1000), reason: id);
+        // 0.7 с: у «Пульса» и «Спирографа» по дизайну 0.8 с — короткий
+        // импульс, а не режим (13.11.2026).
+        expect(d.inMilliseconds, greaterThanOrEqualTo(700), reason: id);
         expect(d.inMilliseconds, lessThanOrEqualTo(6000), reason: id);
       }
     });
