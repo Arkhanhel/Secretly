@@ -8278,4 +8278,254 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get stickerAddSticker => 'Add sticker';
+
+  @override
+  String get welcomeTagline => 'No phone number, no email. Your account is a key that lives only on your devices.';
+
+  @override
+  String get welcomeCreateAccount => 'Create account';
+
+  @override
+  String get welcomeHaveAccount => 'I already have an account';
+
+  @override
+  String welcomeTermsNotice(String terms, String privacy) {
+    return 'By continuing, you accept the $terms and the $privacy';
+  }
+
+  @override
+  String get welcomeTermsLink => 'terms';
+
+  @override
+  String get welcomePrivacyLink => 'privacy policy';
+
+  @override
+  String get welcomeNameTitle => 'What\'s your name?';
+
+  @override
+  String get welcomeNameBody => 'People you chat with will see this name. You can change it later.';
+
+  @override
+  String get welcomeNameHint => 'Name or nickname';
+
+  @override
+  String get welcomeKeysStepIdentity => 'Creating your identity key';
+
+  @override
+  String get welcomeKeysStepPrekeys => 'Preparing keys for your first messages';
+
+  @override
+  String get welcomeKeysStepStorage => 'Encrypting local storage';
+
+  @override
+  String get welcomeKeysReady => 'Your keys are ready';
+
+  @override
+  String get welcomeKeysNote => 'Keys are created on this device — the server never sees them';
+
+  @override
+  String get welcomeBackupTitle => 'Backup';
+
+  @override
+  String get welcomeBackupBodyCloud => 'Your chats survive a lost phone. The backup is encrypted with a password only you know.';
+
+  @override
+  String get welcomeBackupBodyDevice => 'The backup stays on this device. Move it to a new one together with the password.';
+
+  @override
+  String get welcomeBackupInCloud => 'In the cloud';
+
+  @override
+  String get welcomeBackupOnDevice => 'On this device';
+
+  @override
+  String get welcomeBackupPasswordHint => 'Create a password';
+
+  @override
+  String get welcomeBackupPasswordRepeatHint => 'Repeat the password';
+
+  @override
+  String get welcomePasswordShow => 'Show';
+
+  @override
+  String get welcomePasswordHide => 'Hide';
+
+  @override
+  String get welcomePasswordStrong => 'Strong';
+
+  @override
+  String get welcomePasswordVeryStrong => 'Very strong';
+
+  @override
+  String get welcomeBackupEnable => 'Turn on backup';
+
+  @override
+  String get welcomeBackupLater => 'Set up later';
+
+  @override
+  String get welcomeBackupOnTitle => 'Backup is on';
+
+  @override
+  String welcomeBackupOnBody(String schedule) {
+    return '$schedule. You can change this in Settings.';
+  }
+
+  @override
+  String get welcomeNotifyTitle => 'Don\'t miss messages';
+
+  @override
+  String get welcomeNotifyBody => 'Apple and Google only pass on a signal that something new arrived — the text itself never goes through them.';
+
+  @override
+  String get welcomeNotifyPreviewMessage => 'New message';
+
+  @override
+  String get welcomeNotifyPreviewCall => 'Incoming call';
+
+  @override
+  String get welcomeNotifyNow => 'now';
+
+  @override
+  String get welcomeNotifyAllow => 'Allow notifications';
+
+  @override
+  String get welcomeNotifyNotNow => 'Not now';
+
+  @override
+  String welcomeDoneTitle(String name) {
+    return 'Welcome, $name';
+  }
+
+  @override
+  String get welcomeDoneTitleNoName => 'Welcome';
+
+  @override
+  String get welcomeDoneBody => 'Your account is ready. Invite the people you want to chat with.';
+
+  @override
+  String get welcomeDoneIdCaption => 'Your Secretly ID — people find you by it, and you need it to restore your account. Keep it safe.';
+
+  @override
+  String get welcomeCopy => 'Copy';
+
+  @override
+  String get welcomeCopied => 'Copied';
+
+  @override
+  String get welcomeOpenApp => 'Open Secretly';
+
+  @override
+  String get welcomeRestoreTitle => 'Restore';
+
+  @override
+  String get welcomeRestoreSubtitle => 'Where should we bring your account back from?';
+
+  @override
+  String get welcomeRestoreCloudTitle => 'Cloud backup';
+
+  @override
+  String get welcomeRestoreCloudBody => 'You need your Secretly ID and the backup password';
+
+  @override
+  String get welcomeRestoreCloudFormBody => 'Enter your Secretly ID and the backup password.';
+
+  @override
+  String get welcomeRestoreBackupPasswordHint => 'Backup password';
+
+  @override
+  String get welcomeRestoreFileTitle => 'File on this device';
+
+  @override
+  String get welcomeRestoreFileFormTitle => 'Backup file';
+
+  @override
+  String get welcomeRestoreFileFormBody => 'Choose the backup and enter its password.';
+
+  @override
+  String get welcomeRestoreFilePick => 'Find a backup on this device';
+
+  @override
+  String get welcomeRestoreFileChosen => 'Chosen file';
+
+  @override
+  String get welcomeRestoreFileOther => 'Change';
+
+  @override
+  String get welcomeRestoreStepDownload => 'Downloading the backup';
+
+  @override
+  String get welcomeRestoreStepDecrypt => 'Checking the password and decrypting';
+
+  @override
+  String get welcomeRestoreStepApply => 'Bringing back chats and contacts';
+
+  @override
+  String get welcomeRestoreNote => 'The backup is decrypted on this device. The server cannot see what is inside.';
+
+  @override
+  String get welcomeNewLoginTitle => 'Is this you signing in?';
+
+  @override
+  String get welcomeNewLoginBody => 'A new device is asking for access to your account. Allow it only if the device is yours.';
+
+  @override
+  String get welcomeNewLoginUnknownDevice => 'New device';
+
+  @override
+  String welcomeNewLoginTime(String time) {
+    return 'Today at $time';
+  }
+
+  @override
+  String get welcomeNewLoginSyncSection => 'What to move to the new device';
+
+  @override
+  String get welcomeNewLoginApprove => 'Yes, it\'s me';
+
+  @override
+  String get welcomeNewLoginDecline => 'No — decline sign-in';
+
+  @override
+  String get welcomeStart => 'Get started';
+
+  @override
+  String get welcomeDesktopChooseTitle => 'Connect this computer';
+
+  @override
+  String get welcomeDesktopChooseBody => 'The quickest way is through a phone that already has Secretly. All your chats will move here.';
+
+  @override
+  String get welcomeOr => 'or';
+
+  @override
+  String get welcomeDesktopNewAccount => 'New account';
+
+  @override
+  String get welcomeMoreInfo => 'More info';
+
+  @override
+  String get welcomeDesktopQrTitle => 'Scan with your phone';
+
+  @override
+  String welcomeDesktopUsePhonePrompt(String link) {
+    return 'Have a phone with Secretly nearby? $link — that way the phone keeps its access.';
+  }
+
+  @override
+  String get welcomeDesktopUsePhoneLink => 'Sign in through it';
+
+  @override
+  String get welcomeDesktopTakeOverUsePhone => 'Connect through the phone';
+
+  @override
+  String get welcomeDesktopKitKeepApart => 'Keep it away from this computer — on a flash drive or in the cloud.';
+
+  @override
+  String get pickerDone => 'Done';
+
+  @override
+  String get chatSwipeMute => 'Mute';
+
+  @override
+  String get chatSwipeUnmute => 'Unmute';
 }

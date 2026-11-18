@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import '../app/app_controller.dart' show AppController;
 import '../l10n/app_localizations.dart';
 import '../messages/disappearing_flags.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Срок человеческим языком: «30 с», «5 мин», «8 ч», «30 дн», «1 нед».
 ///
@@ -110,7 +111,7 @@ Future<DisappearChoice?> showDisappearingTimerPicker(
         );
       }
 
-      return AlertDialog(
+      return SecretlyAlertDialog(
         backgroundColor: backgroundColor,
         title: Text(l10n.disappearingTitle, style: TextStyle(color: fg)),
         content: SingleChildScrollView(
@@ -255,7 +256,7 @@ class _CustomDurationDialogState extends State<_CustomDurationDialog> {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final fg = widget.textColor ?? theme.colorScheme.onSurface;
-    return AlertDialog(
+    return SecretlyAlertDialog(
       backgroundColor: widget.backgroundColor,
       title: Text(l10n.disappearingCustomTitle, style: TextStyle(color: fg)),
       content: Column(

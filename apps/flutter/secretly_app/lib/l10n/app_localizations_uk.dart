@@ -8304,4 +8304,254 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get stickerAddSticker => 'Додати стікер';
+
+  @override
+  String get welcomeTagline => 'Без номера й пошти. Акаунт — це ключ, що живе лише на ваших пристроях.';
+
+  @override
+  String get welcomeCreateAccount => 'Створити акаунт';
+
+  @override
+  String get welcomeHaveAccount => 'У мене вже є акаунт';
+
+  @override
+  String welcomeTermsNotice(String terms, String privacy) {
+    return 'Продовжуючи, ви приймаєте $terms і $privacy';
+  }
+
+  @override
+  String get welcomeTermsLink => 'умови';
+
+  @override
+  String get welcomePrivacyLink => 'політику конфіденційності';
+
+  @override
+  String get welcomeNameTitle => 'Як вас звати?';
+
+  @override
+  String get welcomeNameBody => 'Це ім’я побачать співрозмовники. Його можна змінити.';
+
+  @override
+  String get welcomeNameHint => 'Ім’я або псевдонім';
+
+  @override
+  String get welcomeKeysStepIdentity => 'Створюємо ключ особи';
+
+  @override
+  String get welcomeKeysStepPrekeys => 'Готуємо ключі для перших повідомлень';
+
+  @override
+  String get welcomeKeysStepStorage => 'Шифруємо сховище';
+
+  @override
+  String get welcomeKeysReady => 'Ключі готові';
+
+  @override
+  String get welcomeKeysNote => 'Ключі створюються на цьому пристрої — сервер їх не бачить';
+
+  @override
+  String get welcomeBackupTitle => 'Резервна копія';
+
+  @override
+  String get welcomeBackupBodyCloud => 'Листування переживе втрату телефона. Копія шифрується паролем, який знаєте лише ви.';
+
+  @override
+  String get welcomeBackupBodyDevice => 'Копія зберігається на цьому пристрої. Перенесіть її на новий разом із паролем.';
+
+  @override
+  String get welcomeBackupInCloud => 'У хмарі';
+
+  @override
+  String get welcomeBackupOnDevice => 'На пристрої';
+
+  @override
+  String get welcomeBackupPasswordHint => 'Придумайте пароль';
+
+  @override
+  String get welcomeBackupPasswordRepeatHint => 'Повторіть пароль';
+
+  @override
+  String get welcomePasswordShow => 'Показати';
+
+  @override
+  String get welcomePasswordHide => 'Сховати';
+
+  @override
+  String get welcomePasswordStrong => 'Надійний';
+
+  @override
+  String get welcomePasswordVeryStrong => 'Дуже надійний';
+
+  @override
+  String get welcomeBackupEnable => 'Увімкнути копію';
+
+  @override
+  String get welcomeBackupLater => 'Налаштувати пізніше';
+
+  @override
+  String get welcomeBackupOnTitle => 'Копію увімкнено';
+
+  @override
+  String welcomeBackupOnBody(String schedule) {
+    return '$schedule. Змінити можна в налаштуваннях.';
+  }
+
+  @override
+  String get welcomeNotifyTitle => 'Не пропускайте повідомлення';
+
+  @override
+  String get welcomeNotifyBody => 'Apple і Google передають лише сигнал про нове повідомлення — сам текст через них не йде.';
+
+  @override
+  String get welcomeNotifyPreviewMessage => 'Нове повідомлення';
+
+  @override
+  String get welcomeNotifyPreviewCall => 'Вхідний дзвінок';
+
+  @override
+  String get welcomeNotifyNow => 'зараз';
+
+  @override
+  String get welcomeNotifyAllow => 'Дозволити сповіщення';
+
+  @override
+  String get welcomeNotifyNotNow => 'Не зараз';
+
+  @override
+  String welcomeDoneTitle(String name) {
+    return 'Ласкаво просимо, $name';
+  }
+
+  @override
+  String get welcomeDoneTitleNoName => 'Ласкаво просимо';
+
+  @override
+  String get welcomeDoneBody => 'Акаунт створено. Запросіть тих, з ким хочете листуватися.';
+
+  @override
+  String get welcomeDoneIdCaption => 'Ваш Secretly ID — за ним вас знаходять і відновлюють акаунт. Збережіть його.';
+
+  @override
+  String get welcomeCopy => 'Копіювати';
+
+  @override
+  String get welcomeCopied => 'Скопійовано';
+
+  @override
+  String get welcomeOpenApp => 'Відкрити Secretly';
+
+  @override
+  String get welcomeRestoreTitle => 'Відновлення';
+
+  @override
+  String get welcomeRestoreSubtitle => 'Звідки повернути акаунт?';
+
+  @override
+  String get welcomeRestoreCloudTitle => 'Копія в хмарі';
+
+  @override
+  String get welcomeRestoreCloudBody => 'Потрібні Secretly ID і пароль копії';
+
+  @override
+  String get welcomeRestoreCloudFormBody => 'Введіть Secretly ID і пароль копії.';
+
+  @override
+  String get welcomeRestoreBackupPasswordHint => 'Пароль копії';
+
+  @override
+  String get welcomeRestoreFileTitle => 'Файл на пристрої';
+
+  @override
+  String get welcomeRestoreFileFormTitle => 'Файл резервної копії';
+
+  @override
+  String get welcomeRestoreFileFormBody => 'Виберіть копію і введіть її пароль.';
+
+  @override
+  String get welcomeRestoreFilePick => 'Знайти копію на пристрої';
+
+  @override
+  String get welcomeRestoreFileChosen => 'Вибраний файл';
+
+  @override
+  String get welcomeRestoreFileOther => 'Інший';
+
+  @override
+  String get welcomeRestoreStepDownload => 'Завантажуємо копію';
+
+  @override
+  String get welcomeRestoreStepDecrypt => 'Перевіряємо пароль і розшифровуємо';
+
+  @override
+  String get welcomeRestoreStepApply => 'Повертаємо чати й контакти';
+
+  @override
+  String get welcomeRestoreNote => 'Копія розшифровується на цьому пристрої. Сервер не бачить її вмісту.';
+
+  @override
+  String get welcomeNewLoginTitle => 'Це ви входите?';
+
+  @override
+  String get welcomeNewLoginBody => 'Новий пристрій просить доступ до вашого акаунта. Дозволяйте, лише якщо це ваш пристрій.';
+
+  @override
+  String get welcomeNewLoginUnknownDevice => 'Новий пристрій';
+
+  @override
+  String welcomeNewLoginTime(String time) {
+    return 'Сьогодні о $time';
+  }
+
+  @override
+  String get welcomeNewLoginSyncSection => 'Що перенести на новий пристрій';
+
+  @override
+  String get welcomeNewLoginApprove => 'Так, це я';
+
+  @override
+  String get welcomeNewLoginDecline => 'Ні — відхилити вхід';
+
+  @override
+  String get welcomeStart => 'Почати';
+
+  @override
+  String get welcomeDesktopChooseTitle => 'Підключіть цей комп’ютер';
+
+  @override
+  String get welcomeDesktopChooseBody => 'Найшвидше — через телефон, де вже є Secretly. Усе листування переїде сюди.';
+
+  @override
+  String get welcomeOr => 'або';
+
+  @override
+  String get welcomeDesktopNewAccount => 'Новий акаунт';
+
+  @override
+  String get welcomeMoreInfo => 'Докладніше';
+
+  @override
+  String get welcomeDesktopQrTitle => 'Відскануйте телефоном';
+
+  @override
+  String welcomeDesktopUsePhonePrompt(String link) {
+    return 'Телефон із Secretly під рукою? $link — так телефон не втратить доступ.';
+  }
+
+  @override
+  String get welcomeDesktopUsePhoneLink => 'Увійдіть через нього';
+
+  @override
+  String get welcomeDesktopTakeOverUsePhone => 'Підключити через телефон';
+
+  @override
+  String get welcomeDesktopKitKeepApart => 'Зберігайте його окремо від комп’ютера — на флешці або в хмарі.';
+
+  @override
+  String get pickerDone => 'Готово';
+
+  @override
+  String get chatSwipeMute => 'Без звуку';
+
+  @override
+  String get chatSwipeUnmute => 'Зі звуком';
 }

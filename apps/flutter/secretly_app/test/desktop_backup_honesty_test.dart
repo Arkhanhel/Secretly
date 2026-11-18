@@ -173,6 +173,37 @@ void main() {
     await t.pump(const Duration(seconds: 1));
   });
 
+  testWidgets('предупреждение предлагает и безопасный путь — через телефон',
+      (t) async {
+    // Макет 17.11.2026: в окне переноса личности первой стоит привязка по
+    // QR — она не отбирает доступ у телефона.
+    bigView(t);
+    final ctrl = _Restore();
+    final vm = DesktopAppViewModel(controller: ctrl);
+    addTearDown(vm.dispose);
+    var phone = 0;
+    await t.pumpWidget(app(DesktopRestoreFlow(
+      vm: vm,
+      onBack: () {},
+      onUsePhone: () => phone++,
+    )));
+    await settle(t);
+    await t.tap(find.text(ru.desktopAuthServerOptionTitle));
+    await settle(t);
+    final fields = find.byType(EditableText);
+    await t.enterText(fields.at(0), 'pid');
+    await t.enterText(fields.at(1), 'correct horse battery');
+    await settle(t);
+    await t.tap(find.text(ru.desktopAuthRestoreTitle).last);
+    await settle(t);
+    expect(find.text(ru.desktopRestoreTakeOverTitle), findsOneWidget);
+    await t.tap(find.text(ru.welcomeDesktopTakeOverUsePhone));
+    await settle(t);
+    expect(phone, 1);
+    expect(ctrl.restores, 0, reason: 'выбран телефон — копию не трогаем');
+    await t.pumpWidget(const SizedBox());
+  });
+
   testWidgets('🔴 копия на сервер: сначала «Заменить копию на сервере?»',
       (t) async {
     bigView(t);

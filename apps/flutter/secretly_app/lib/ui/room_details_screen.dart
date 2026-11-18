@@ -49,6 +49,7 @@ import 'widgets/broken_media_box.dart';
 import 'disappearing_messages_ui.dart';
 import '../messages/disappearing_flags.dart' show DisappearingPeerSupport;
 import 'haptics.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 String _roomText(
   BuildContext context, {
@@ -319,7 +320,7 @@ Future<String?> _pickNextRoomOwnerDialog(
     builder: (context) {
       return StatefulBuilder(
         builder: (context, setLocalState) {
-          return AlertDialog(
+          return SecretlyAlertDialog(
             title: Text(
               _roomText(
                 context,
@@ -940,7 +941,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
               return nameOf(c).toLowerCase().contains(query) ||
                   c.profileId.toLowerCase().contains(query);
             }).toList(growable: false);
-            return AlertDialog(
+            return SecretlyAlertDialog(
               title: Text(
                 _roomText(
                   context,
@@ -1166,7 +1167,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     final controller = TextEditingController(text: vm.title);
     final nextTitle = await showDialog<String?>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
+      builder: (dialogCtx) => SecretlyAlertDialog(
         title: Text(
           _roomText(context, ru: 'Название комнаты', en: 'Room name'),
         ),
@@ -1231,7 +1232,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     );
     final next = await showDialog<String?>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
+      builder: (dialogCtx) => SecretlyAlertDialog(
         title: Text(
           _roomText(context, ru: 'Описание комнаты', en: 'Room description'),
         ),
@@ -1519,7 +1520,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     final controller = TextEditingController(text: currentTag ?? '');
     final nextTag = await showDialog<String?>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
+      builder: (dialogCtx) => SecretlyAlertDialog(
         title: Text(_roomText(context, ru: 'Тег в комнате', en: 'Room tag')),
         content: SizedBox(
           width: 360,
@@ -1909,7 +1910,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     }
     return showDialog<RoomInviteLink>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => SecretlyAlertDialog(
         title: Text(
           _roomText(
             context,
@@ -2087,7 +2088,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     if (!mounted) return;
     await showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => SecretlyAlertDialog(
         title: Text(
           _roomText(context, ru: 'Политика комнаты', en: 'Room policy'),
         ),
@@ -2314,7 +2315,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
       case 'clear_history':
         final okClear = await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => SecretlyAlertDialog(
             title: Text(
               _roomText(
                 context,
@@ -2375,7 +2376,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
       case 'delete_leave':
         final ok = await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => SecretlyAlertDialog(
             title: Text(
               _roomText(context, ru: 'Покинуть комнату?', en: 'Leave room?'),
             ),
@@ -2406,7 +2407,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
       case 'leave':
         final okLeave = await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
+          builder: (context) => SecretlyAlertDialog(
             title: Text(
               _roomText(context, ru: 'Покинуть комнату?', en: 'Leave room?'),
             ),
@@ -2606,7 +2607,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                           tooltip: MaterialLocalizations.of(
                             context,
                           ).backButtonTooltip,
-                          icon: const Icon(Icons.arrow_back),
+                          icon: Icon(appleBackIcon(Icons.arrow_back)),
                           onPressed: () => Navigator.of(context).maybePop(),
                         ),
                       ),
@@ -2671,7 +2672,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                 ],
               ),
               body: vm == null
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(child: SecretlySpinner())
                   : GestureDetector(
                       behavior: HitTestBehavior.translucent,
                       onVerticalDragUpdate:
@@ -3561,7 +3562,7 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
     if (vm.policy.isOwner && otherActiveMembers.isNotEmpty) {
       final choice = await showDialog<String?>(
         context: context,
-        builder: (ctx) => AlertDialog(
+        builder: (ctx) => SecretlyAlertDialog(
           title: Text(
             _roomText(
               context,
@@ -4176,7 +4177,7 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
             builder: (context, snapshot) {
               final vm = snapshot.data;
               if (vm == null) {
-                return const Center(child: CircularProgressIndicator());
+                return const Center(child: SecretlySpinner());
               }
               if (!_canManageRoomAdministration(vm.policy)) {
                 return Center(
@@ -4499,7 +4500,7 @@ class _RoomReactionsScreenState extends State<RoomReactionsScreen> {
         builder: (context, snapshot) {
           final settings = snapshot.data;
           if (settings == null) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: SecretlySpinner());
           }
           return ListView(
             padding: EdgeInsets.only(
@@ -4851,7 +4852,7 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setLocalState) {
-            return AlertDialog(
+            return SecretlyAlertDialog(
               title: Text(
                 _roomText(context, ru: 'Новая ссылка', en: 'New invite link'),
               ),
@@ -5615,7 +5616,7 @@ class _RoomPermissionsScreenState extends State<RoomPermissionsScreen> {
       body: Builder(
         builder: (context) {
           if (_loading && settings == null) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: SecretlySpinner());
           }
           if (settings == null) {
             return Center(
@@ -6218,7 +6219,7 @@ class _RoomMembersScreenState extends State<RoomMembersScreen> {
               .toList(growable: false);
           if (snap.connectionState == ConnectionState.waiting &&
               members.isEmpty) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: SecretlySpinner());
           }
           if (members.isEmpty) {
             return Center(

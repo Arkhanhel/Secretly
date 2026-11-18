@@ -70,6 +70,11 @@ Duration _shortenedDuration(Duration? duration) {
   return Duration(milliseconds: math.max(800, (milliseconds / 2).round()));
 }
 
+/// Содержимое уведомления без матовой подложки [SecretlySnackBar] — для
+/// капсулы iPhone (`apple_style.dart`), у которой своя подложка.
+Widget unwrapSecretlySnackBarContent(Widget content) =>
+    content is _SecretlySnackBarContent ? content.child : content;
+
 class _SecretlySnackBarContent extends StatelessWidget {
   const _SecretlySnackBarContent({required this.child});
 

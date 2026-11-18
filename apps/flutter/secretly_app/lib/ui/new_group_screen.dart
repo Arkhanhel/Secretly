@@ -18,6 +18,7 @@ import 'widgets/avatar_initials.dart';
 import 'widgets/content_edge_fade.dart';
 import 'widgets/frosted_header_island.dart';
 import 'widgets/glass_icon_island.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class NewGroupScreen extends StatefulWidget {
   const NewGroupScreen({super.key, required this.controller});
@@ -443,7 +444,7 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(
+                                child: SecretlySpinner(
                                   strokeWidth: 2,
                                 ),
                               )

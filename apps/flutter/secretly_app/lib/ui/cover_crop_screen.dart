@@ -11,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'secretly_snackbar.dart';
 import 'widgets/frosted_top_bar.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Lets the user pan/zoom an image inside a banner-shaped frame and saves the
 /// framed result as a PNG. Returns the saved file path via [Navigator.pop].
@@ -143,7 +144,7 @@ class _CoverCropScreenState extends State<CoverCropScreen> {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: SecretlySpinner(strokeWidth: 2),
                       )
                     : const Text(
                         'Готово',

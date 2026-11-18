@@ -13,6 +13,7 @@ import 'package:video_player/video_player.dart';
 import '../build_variant.dart';
 import '../media/h264_encoder.dart';
 import 'widgets/broken_media_box.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Result returned by [VideoTrimEditorScreen]: the (possibly re-encoded) output
 /// path plus the final duration in milliseconds.
@@ -330,7 +331,7 @@ class _VideoTrimEditorScreenState extends State<VideoTrimEditorScreen>
             Center(
               child: _error != null
                   ? Text(_error!, style: const TextStyle(color: Colors.white70))
-                  : const CircularProgressIndicator(color: Colors.white),
+                  : const SecretlySpinner(color: Colors.white),
             )
           else
             Column(
@@ -376,7 +377,7 @@ class _VideoTrimEditorScreenState extends State<VideoTrimEditorScreen>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
-                      const CircularProgressIndicator(color: Colors.white),
+                      const SecretlySpinner(color: Colors.white),
                       const SizedBox(height: 16),
                       Text(
                         _t('Обработка видео…', 'Processing video…'),

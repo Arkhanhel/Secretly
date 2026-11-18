@@ -14,6 +14,7 @@ import '../widgets/premium_glass.dart' show kPremiumGold;
 import '../chat_screen_l10n.dart';
 import '../paywall_screen.dart' show PaywallTrigger;
 import 'voice_transcription.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Telegram-style voice-to-text affordance.
 ///
@@ -140,7 +141,7 @@ class VoiceTranscriptionIconButton extends StatelessWidget {
               builder: (context, progress, _) => SizedBox(
                 width: 14,
                 height: 14,
-                child: CircularProgressIndicator(
+                child: SecretlySpinner(
                   strokeWidth: 1.6,
                   color: muted,
                   value: progress?.clamp(0.0, 1.0),

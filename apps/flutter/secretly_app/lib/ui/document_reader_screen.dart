@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../app/pdf_document.dart';
 import 'icons/app_icons.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Full-screen in-app document reader.
 ///
@@ -342,7 +343,7 @@ class _PdfPageViewState extends State<_PdfPageView>
               child: SizedBox(
                 width: 26,
                 height: 26,
-                child: CircularProgressIndicator(
+                child: SecretlySpinner(
                   strokeWidth: 2,
                   color: Colors.white70,
                 ),

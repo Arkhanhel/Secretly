@@ -24,8 +24,8 @@ its version and date on release day.
   decrypt. Up to 20 participants per encrypted call. The key changes when
   someone leaves, is removed or is banned. A lock in the call shows that
   encryption is on; a call without it is labelled "Not end-to-end encrypted".
-- The rollout is gradual: while it lasts, a signed server setting decides
-  what share of new calls is created encrypted, and older versions can only
+- New group calls are created encrypted. A signed server setting controls
+  this, so it can be rolled back without an update; older versions can only
   join calls without encryption. A running encrypted call cannot be switched
   to an unencrypted one.
 - Group calls: if the server tries to switch on adaptive video layers
@@ -66,9 +66,11 @@ its version and date on release day.
   own devices. Calls: signals for a running call are accepted only from the
   other participant and your own devices, and their age is judged by server
   time, not the phone's clock.
-- In the build but off until a signed server setting switches them on:
-  message length padding (also for room broadcasts), and disappearing
-  messages that are removed on both sides.
+- Message length padding is on: messages, including room broadcasts, are
+  padded to fixed size buckets before encryption, so their length says less
+  about their content. Builds before 1.8.67 read padded messages normally.
+- In the build but off until a signed server setting switches it on:
+  disappearing messages that are removed on both sides.
 
 ### Added
 - Duress code (phones): a second app-lock code that opens a separate, empty
@@ -106,17 +108,40 @@ its version and date on release day.
   Secretly", on iOS through "Open in". Opening a file directly from a file
   manager works only where the manager reports the file's own type; from
   Settings → Network → "Open a message file" it always works.
-- A lightweight Android build, distributed as a direct APK outside Google
-  Play: 73 MiB instead of 136, or 65 MiB for older 32-bit phones. It leaves
-  out on-device translation, voice transcription and video processing, and
-  fetches decorative profile icons and chat wallpapers only when they are
-  shown. Nothing about security changes, and QR scanning stays — without it a
-  device cannot be linked. Each fetched file is verified against a hash that
-  ships inside the signed package.
 - Network screen (phones): one tap points Secretly at Orbot, so traffic can
   go through Tor where Tor itself is reachable. Secretly cannot tell whether
   Orbot is running, so the screen says plainly that you install and start it
   yourself.
+- Media and files are reworked:
+  - Files of any size are sent in signed chunks and continue from where they
+    stopped after a lost connection, instead of starting again. This is
+    rolled out gradually by a signed server setting; the relay keeps the old
+    single-request upload for older versions. Downloads also resume where
+    they stopped.
+  - Upload and download progress is real for every file, and cancelling a
+    photo or a short video really stops it from being sent.
+  - A send that failed because of the network stays in the chat as "Not
+    sent" with a Retry button, also after the app is restarted (except sends
+    with a caption: the caption is message text and is not written outside
+    the encrypted database).
+  - Settings → Storage: auto-download on mobile data (everything, up to
+    15 MB, photos only, or nothing but voice messages; Wi-Fi always
+    downloads everything), how long downloaded media is kept on the device,
+    and how much each chat takes, with deleting a chat's media.
+  - Video in chats shows a poster frame instead of running a player for
+    every video; a video sent from a phone arrives with its proportions and a
+    blurred preview. The viewer shows captions and has a playback speed
+    button. The shared-media gallery shows all media, not only the latest
+    120, and files open from it.
+  - iPhone: decrypted chat media moved out of the Documents folder, so it is
+    no longer visible in the Files app or in Finder around the app lock.
+    Going back to a version before 1.8.67 hides that media until 1.8.67 is
+    installed again; the files are not lost.
+  - iPhone: "Share → Secretly" from Photos, Files, Safari and other apps.
+    The extension only copies what is shared into the app's own container
+    and opens Secretly; it has no access to keys, messages or the network.
+  - Round video messages close the recorder at once and send from the chat,
+    with a progress ring.
 - Private topics in rooms: a topic with its own member list, chosen from the
   room's members, and its own room key, so its messages reach only those
   members. Up to 20 per room. Room admins decide whether members may create
@@ -136,6 +161,23 @@ its version and date on release day.
 - Translation: the translate button explains why a translation failed.
 
 ### Fixed
+- One-to-one calls on iPhone: the speaker button switches the sound again.
+  Since the LiveKit 2.13.1 update its iOS code took over the audio session in
+  every call, and the speaker choice was overwritten at once. Android: the
+  speaker button shows its state again.
+- iPhone app badge: one message counted once. Resent copies of a message
+  that had not been delivered yet were counted separately.
+- Android: the fingerprint prompt no longer crashes on Android 9 and older,
+  and camera and video stop sending frames when the app goes to the
+  background (both seen in crash reports).
+- First start on slow networks: account creation is no longer cut off after
+  10 seconds, and the backup step of the setup no longer blocks finishing it.
+- Calls on Android: waiting for the camera has a limit, stopping the camera
+  no longer blocks the screen, and a call request is answered only once
+  (local fixes to the WebRTC plugin; all seen in crash reports).
+- Stickers: the panel is rebuilt — your own packs have a settings button,
+  deleting anything always asks first, and others' packs can be removed from
+  your collection.
 - The recovery kit and the safe backup now carry the account identity key.
   Restoring from either used to create a new one, so every contact saw
   "safety number changed" after a restore and a pinned key no longer matched.

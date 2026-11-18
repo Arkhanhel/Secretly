@@ -7,6 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../security/app_security_manager.dart';
 import 'l10n.dart';
 import 'security_lock_flow.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Раздел «Код принуждения» в настройках замка приложения (Э2).
 ///
@@ -118,7 +119,7 @@ class _SecurityDuressSectionState extends State<SecurityDuressSection> {
           ),
           if (configured) ...<Widget>[
             const Divider(height: 1),
-            SwitchListTile(
+            SecretlySwitchListTile(
               value: _status!.wipeMain,
               onChanged: disabled
                   ? null
@@ -136,7 +137,7 @@ class _SecurityDuressSectionState extends State<SecurityDuressSection> {
             ),
           ],
           const Divider(height: 1),
-          SwitchListTile(
+          SecretlySwitchListTile(
             value: _wipeAfter != null,
             onChanged: disabled
                 ? null

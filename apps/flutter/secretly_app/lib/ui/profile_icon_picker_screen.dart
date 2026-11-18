@@ -20,6 +20,7 @@ import 'profile_icon_asset_catalog.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_header_island.dart';
 import '../assets/on_demand_asset_image.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Prefix marking a server-hosted cosmetic icon selection (vs a bundled asset
 /// path). The suffix is the catalog item id.
@@ -414,7 +415,7 @@ class _ProfileIconPickerScreenState extends State<ProfileIconPickerScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: SecretlySpinner())
           : SafeArea(
               child: Stack(
                 children: [
@@ -686,7 +687,7 @@ class _ProfileIconPickerScreenState extends State<ProfileIconPickerScreen> {
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               child: _saving
-                                  ? const CircularProgressIndicator()
+                                  ? const SecretlySpinner()
                                   : Text(widget.applyButtonLabel),
                             ),
                           ),
@@ -903,7 +904,7 @@ class _ServerIconImageState extends State<_ServerIconImage> {
             child: SizedBox(
               width: fallbackSize * 0.7,
               height: fallbackSize * 0.7,
-              child: const CircularProgressIndicator(strokeWidth: 2),
+              child: const SecretlySpinner(strokeWidth: 2),
             ),
           );
         }

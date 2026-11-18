@@ -12,6 +12,7 @@ import 'package:video_player/video_player.dart';
 import '../../build_variant.dart';
 import '../../media/video_thumbnail_cache.dart';
 import '../../models/e2e_payload_v1.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Guards that only ONE enlarged video-note exists at a time. When a note
 /// expands it publishes its collapse callback here; expanding another note
@@ -604,7 +605,7 @@ class _VideoNoteBubbleState extends State<VideoNoteBubble>
                                 : const SizedBox(
                                     width: 28,
                                     height: 28,
-                                    child: CircularProgressIndicator(
+                                    child: SecretlySpinner(
                                       strokeWidth: 2.5,
                                       color: Colors.white,
                                     ),

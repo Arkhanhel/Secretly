@@ -21,6 +21,7 @@ import 'widgets/dismiss_keyboard_on_tap.dart';
 import 'widgets/frosted_header_island.dart';
 import 'widgets/glass_icon_island.dart';
 import 'widgets/horizontal_quick_action_button.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class NewChatPickerScreen extends StatefulWidget {
   const NewChatPickerScreen({super.key, required this.controller});
@@ -139,7 +140,7 @@ class _NewChatPickerScreenState extends State<NewChatPickerScreen> {
           Expanded(
             child: HorizontalQuickActionButton(
               assetPath: _inviteIconAsset,
-              fallbackIcon: Icons.share_rounded,
+              fallbackIcon: appleShareIcon(Icons.share_rounded),
               iconTint: const Color(0xFF2092E7),
               title: wave1Text(
                 context,

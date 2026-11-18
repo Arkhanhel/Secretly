@@ -11,6 +11,7 @@ import 'l10n.dart';
 import 'wave1_l10n.dart';
 import 'widgets/avatar_initials.dart';
 import 'widgets/secretly_glass_sheet.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 String _contactShareText(
   BuildContext context, {
@@ -192,7 +193,7 @@ class _ContactShareSheetState extends State<_ContactShareSheet>
                           child: SizedBox(
                             width: 28,
                             height: 28,
-                            child: CircularProgressIndicator(strokeWidth: 2.2),
+                            child: SecretlySpinner(strokeWidth: 2.2),
                           ),
                         );
                       }

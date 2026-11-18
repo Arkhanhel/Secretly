@@ -13,6 +13,7 @@ import 'icons/app_icons.dart';
 import 'l10n.dart';
 import 'qr_scan_screen.dart';
 import 'widgets/frosted_top_bar.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class VerifyContactScreen extends StatefulWidget {
   const VerifyContactScreen({
@@ -198,7 +199,7 @@ class _VerifyContactScreenState extends State<VerifyContactScreen> {
                 ? const SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: SecretlySpinner(strokeWidth: 2),
                   )
                 : const Icon(AppIcons.refresh),
           ),

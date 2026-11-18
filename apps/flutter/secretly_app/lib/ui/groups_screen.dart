@@ -30,6 +30,7 @@ import 'widgets/frosted_top_bar.dart';
 import 'widgets/secretly_glass_fab.dart';
 import 'widgets/room_call_presence.dart';
 import 'widgets/room_call_return_banner.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({super.key, required this.controller});
@@ -138,7 +139,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
     return showDialog<String>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(
             _menuLabel(
               context,
@@ -408,7 +409,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                             final ok = await showDialog<bool>(
                               context: context,
                               builder: (context) {
-                                return AlertDialog(
+                                return SecretlyAlertDialog(
                                   title: Text(
                                     l10n.deleteChatsConfirmTitle(
                                       _selected.length,
@@ -562,7 +563,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         final ok = await showDialog<bool>(
                           context: context,
                           builder: (context) {
-                            return AlertDialog(
+                            return SecretlyAlertDialog(
                               title: Text(
                                 l10n.clearHistoryConfirmTitle(_selected.length),
                               ),
@@ -733,7 +734,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                               child: SizedBox(
                                 width: 22,
                                 height: 22,
-                                child: CircularProgressIndicator(
+                                child: SecretlySpinner(
                                   strokeWidth: 2,
                                 ),
                               ),

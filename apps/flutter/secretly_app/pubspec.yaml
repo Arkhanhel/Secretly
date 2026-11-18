@@ -234,6 +234,8 @@ flutter:
     - assets/Background/
     - assets/Background/improved_light/
     - assets/wallpaper_fx/
+    # Фон приветственных экранов: точки логотипа (tool/gen_welcome_logo_field.py).
+    - assets/welcome/
     - assets/app_ui/icons/Interactive Mood Selector UI.json
     - assets/app_ui/icons/Messenger sync.json
     - assets/app_ui/icons/app_icon.png

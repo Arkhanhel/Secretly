@@ -28,6 +28,7 @@ import 'widgets/avatar_initials.dart';
 import 'widgets/frosted_header_island.dart';
 import 'widgets/system_bottom_fade.dart';
 import 'widgets/broken_media_box.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 // ── Dark call-screen colour palette ──────────────────────────────────────────
 const _kCallBg = Color(0xFF0D0D0D);
@@ -374,7 +375,7 @@ class _RoomCallScreenState extends State<RoomCallScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(
             _roomCallText(
               context,
@@ -437,7 +438,7 @@ class _RoomCallScreenState extends State<RoomCallScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(
             _roomCallText(
               context,

@@ -17,6 +17,7 @@ import 'security_lock_flow.dart';
 import 'settings_group.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_top_bar.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 Future<void> openSecuritySettings({
   required BuildContext context,
@@ -305,7 +306,7 @@ class _SecurityScopeDetailScreenState
     if (_selectedMethod == SecurityLockMethod.none && current.isEnabled) {
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => SecretlyAlertDialog(
           title: Text(
             _label(ru: 'Отключить защиту?', en: 'Turn off protection?'),
           ),
@@ -623,7 +624,7 @@ class _SecurityScopeDetailScreenState
               Card(
                 child: Column(
                   children: [
-                    SwitchListTile(
+                    SecretlySwitchListTile(
                       value: _relockOnBackground,
                       onChanged: _selectedMethod == SecurityLockMethod.none
                           ? null
@@ -696,7 +697,7 @@ class _SecurityScopeDetailScreenState
                     ),
                     if (canOfferBiometricQuickUnlock) ...[
                       const Divider(height: 1),
-                      SwitchListTile(
+                      SecretlySwitchListTile(
                         value: _allowBiometricUnlock,
                         onChanged: (value) {
                           setState(() {
@@ -812,7 +813,7 @@ class _SecurityScopeDetailScreenState
                           ? const SizedBox(
                               width: 20,
                               height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: SecretlySpinner(strokeWidth: 2),
                             )
                           : Text(_label(ru: 'Сохранить', en: 'Save changes')),
                     ),

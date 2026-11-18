@@ -134,6 +134,8 @@ import 'widgets/secretly_glass_sheet.dart';
 import 'widgets/secretly_sticker_widgets.dart';
 import 'widgets/system_bottom_fade.dart';
 import 'widgets/typing_dots.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/apple_style.dart';
 
 // Geometry for the chat's stacked header islands — pinned message, now-playing
 // and the call-return strip. They must read as ONE family: identical width,
@@ -2514,7 +2516,7 @@ class _ChatScreenState extends State<ChatScreen>
     final result = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(
             initial == null
                 ? chatText(context, ru: 'Новая тема', en: 'New topic')
@@ -7287,7 +7289,7 @@ class _ChatScreenState extends State<ChatScreen>
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
+            return SecretlyAlertDialog(
               title: Text(
                 localEventIds.length == 1
                     ? chatText(
@@ -8947,7 +8949,7 @@ class _ChatScreenState extends State<ChatScreen>
           child: SizedBox(
             width: 18,
             height: 18,
-            child: CircularProgressIndicator(strokeWidth: 2),
+            child: SecretlySpinner(strokeWidth: 2),
           ),
         ),
       );
@@ -15420,7 +15422,7 @@ class _ChatScreenState extends State<ChatScreen>
     if (!_isGroupChat || poll.isClosed || !poll.isCreator) return;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => SecretlyAlertDialog(
         title: Text(
           chatText(
             dialogContext,
@@ -18002,7 +18004,7 @@ class _ChatScreenState extends State<ChatScreen>
                       SizedBox(
                         width: 32,
                         height: 32,
-                        child: CircularProgressIndicator(
+                        child: SecretlySpinner(
                           value: slideUpProgress,
                           strokeWidth: 2.8,
                           color: iconColor.withValues(alpha: 0.7),
@@ -18718,7 +18720,7 @@ class _ChatScreenState extends State<ChatScreen>
           SizedBox(
             width: 22,
             height: 22,
-            child: CircularProgressIndicator(
+            child: SecretlySpinner(
               strokeWidth: 2.2,
               color: cs.primary,
             ),
@@ -19216,7 +19218,7 @@ class _ChatScreenState extends State<ChatScreen>
         final strict = widget.controller.blockUnverified;
         final choice = await showDialog<String>(
           context: context,
-          builder: (dialogContext) => AlertDialog(
+          builder: (dialogContext) => SecretlyAlertDialog(
             title: Text(
               strict ? l10n.verifyRequired : l10n.safetyNumberChangedTitle,
             ),
@@ -19873,7 +19875,7 @@ class _ChatScreenState extends State<ChatScreen>
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setLocalState) {
-            return AlertDialog(
+            return SecretlyAlertDialog(
               title: Text(
                 chatText(
                   context,
@@ -20013,7 +20015,7 @@ class _ChatScreenState extends State<ChatScreen>
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setLocalState) {
-            return AlertDialog(
+            return SecretlyAlertDialog(
               title: Text(
                 chatText(
                   context,
@@ -20177,7 +20179,7 @@ class _ChatScreenState extends State<ChatScreen>
             final ok = await showDialog<bool>(
               context: context,
               builder: (context) {
-                return AlertDialog(
+                return SecretlyAlertDialog(
                   title: Text(context.l10n.unblockUserConfirmTitle),
                   content: Text(peerProfileId),
                   actions: [
@@ -20208,7 +20210,7 @@ class _ChatScreenState extends State<ChatScreen>
             builder: (context) {
               return StatefulBuilder(
                 builder: (context, setState) {
-                  return AlertDialog(
+                  return SecretlyAlertDialog(
                     title: Text(context.l10n.blockUserConfirmTitle),
                     content: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -20258,7 +20260,7 @@ class _ChatScreenState extends State<ChatScreen>
           final ok = await showDialog<bool>(
             context: context,
             builder: (context) {
-              return AlertDialog(
+              return SecretlyAlertDialog(
                 title: Text(context.l10n.deleteChatConfirmTitle),
                 content: Text(context.l10n.deleteChatConfirmBody),
                 actions: [
@@ -20284,7 +20286,7 @@ class _ChatScreenState extends State<ChatScreen>
           final ok = await showDialog<bool>(
             context: context,
             builder: (context) {
-              return AlertDialog(
+              return SecretlyAlertDialog(
                 title: Text(
                   chatText(
                     context,
@@ -23350,6 +23352,21 @@ class _EventComposerSheetState extends State<_EventComposerSheet> {
 
   Future<void> _pickWhen() async {
     final now = DateTime.now();
+    if (appleControlsEnabled) {
+      // iPhone (17.11.2026): барабан снизу, как в iOS. Минута назад от
+      // «сейчас» — иначе барабан не даст выбрать текущий момент.
+      final initial = _when.isBefore(now) ? now : _when;
+      final picked = await showAppleDateTimePicker(
+        context,
+        initial: initial,
+        minimum: now.subtract(const Duration(minutes: 1)),
+        maximum: now.add(const Duration(days: 730)),
+        doneLabel: context.l10n.pickerDone,
+      );
+      if (picked == null || !mounted) return;
+      setState(() => _when = picked);
+      return;
+    }
     final date = await showDatePicker(
       context: context,
       initialDate: _when.isBefore(now) ? now : _when,
@@ -25406,7 +25423,7 @@ class _StickerPackSheet extends StatelessWidget {
             const SizedBox(
               width: 16,
               height: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: SecretlySpinner(strokeWidth: 2),
             ),
             const SizedBox(width: 10),
             Text(label),
@@ -25483,7 +25500,7 @@ class _ChatDownloadProgressMark extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: Colors.black.withValues(alpha: 0.35),
               ),
-              child: CircularProgressIndicator(
+              child: SecretlySpinner(
                 value: value,
                 strokeWidth: 2.4,
                 color: Colors.white,
@@ -26624,8 +26641,8 @@ class _AttachmentBubble extends StatelessWidget {
                                                 ),
                                               );
                                             },
-                                            icon: const Icon(
-                                              Icons.more_vert_rounded,
+                                            icon: Icon(
+                                              appleMoreIcon(Icons.more_vert_rounded),
                                               color: Colors.white,
                                               size: 18,
                                             ),
@@ -27026,7 +27043,7 @@ class _AttachmentBubble extends StatelessWidget {
           unawaited(onFileMenuRequested!(origin & box.size));
         },
         icon: Icon(
-          Icons.more_vert_rounded,
+          appleMoreIcon(Icons.more_vert_rounded),
           color: fg.withValues(alpha: 0.95),
           size: 20,
         ),
@@ -27114,7 +27131,7 @@ class _AttachmentBubble extends StatelessWidget {
                           child: SizedBox(
                             width: 22,
                             height: 22,
-                            child: CircularProgressIndicator(
+                            child: SecretlySpinner(
                               strokeWidth: 2.4,
                               valueColor: AlwaysStoppedAnimation<Color>(
                                 fg.withValues(alpha: 0.95),
@@ -28314,7 +28331,7 @@ class _ChatVideoPreviewSurfaceState extends State<_ChatVideoPreviewSurface> {
                     child: SizedBox(
                       width: 22,
                       height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                      child: SecretlySpinner(strokeWidth: 2.2),
                     ),
                   );
                 },
@@ -29016,7 +29033,7 @@ class _VideoPlayerDialogState extends State<_VideoPlayerDialog> {
             Expanded(
               child: Center(
                 child: !_ready
-                    ? const CircularProgressIndicator(color: Colors.white)
+                    ? const SecretlySpinner(color: Colors.white)
                     : GestureDetector(
                         onTap: () async {
                           if (_controller.value.isPlaying) {
@@ -30839,7 +30856,7 @@ class _GifPickerViewState extends State<_GifPickerView> {
 
   Widget _buildBody(ThemeData theme, ColorScheme cs) {
     if (_loadingFirst && _gifs.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: SecretlySpinner());
     }
 
     final showRecents = _recents.isNotEmpty && !_isSearching;
@@ -30921,7 +30938,7 @@ class _GifPickerViewState extends State<_GifPickerView> {
                     child: SizedBox(
                       width: 22,
                       height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2.1),
+                      child: SecretlySpinner(strokeWidth: 2.1),
                     ),
                   ),
                 ),
@@ -30997,7 +31014,7 @@ class _GifPickerViewState extends State<_GifPickerView> {
                 return ColoredBox(
                   color: cs.surface.withValues(alpha: 0.28),
                   child: const Center(
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: SecretlySpinner(strokeWidth: 2),
                   ),
                 );
               },
@@ -32060,7 +32077,7 @@ class _TranslateAffordance extends StatelessWidget {
         ? SizedBox(
             width: 14,
             height: 14,
-            child: CircularProgressIndicator(
+            child: SecretlySpinner(
               strokeWidth: 1.6,
               valueColor: AlwaysStoppedAnimation<Color>(
                 color.withValues(alpha: 0.6),

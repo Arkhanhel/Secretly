@@ -63,6 +63,7 @@ import 'widgets/frosted_header_island.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'widgets/support_badge.dart';
 import 'haptics.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.controller});
@@ -1255,7 +1256,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     final controller = TextEditingController(text: c.myNickname.trim());
     final name = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => SecretlyAlertDialog(
         title: Text(_label(context, ru: 'Имя профиля', en: 'Profile name')),
         content: TextField(
           controller: controller,
@@ -1382,7 +1383,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                               child: Row(
                                 children: [
                                   Icon(
-                                    Icons.share_outlined,
+                                    appleShareIcon(Icons.share_outlined),
                                     size: 22,
                                     color: cs.onSurface.withValues(alpha: 0.92),
                                   ),
@@ -2619,7 +2620,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               final controller = TextEditingController(text: c.myBio);
               final bio = await showDialog<String>(
                 context: context,
-                builder: (context) => AlertDialog(
+                builder: (context) => SecretlyAlertDialog(
                   title: Text(_label(context, ru: 'О себе', en: 'About')),
                   content: TextField(
                     controller: controller,
@@ -2782,7 +2783,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       child: SizedBox(
                         width: 22,
                         height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2.4),
+                        child: SecretlySpinner(strokeWidth: 2.4),
                       ),
                     ),
                   )
@@ -2798,7 +2799,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               final ok = await showDialog<bool>(
                 context: context,
                 builder: (context) {
-                  return AlertDialog(
+                  return SecretlyAlertDialog(
                     title: Text(
                       _label(context, ru: 'Выход из аккаунта', en: 'Log out'),
                     ),
@@ -2873,7 +2874,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(
             _label(
               dialogContext,
@@ -2917,13 +2918,13 @@ class _SettingsScreenState extends State<SettingsScreen>
       barrierDismissible: false,
       builder: (dialogContext) => PopScope(
         canPop: false,
-        child: AlertDialog(
+        child: SecretlyAlertDialog(
           content: Row(
             children: [
               const SizedBox(
                 width: 22,
                 height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2.4),
+                child: SecretlySpinner(strokeWidth: 2.4),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -3246,7 +3247,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         fallbackIcon: fallbackIcon,
         title: title,
         subtitle: subtitle,
-        trailing: Switch(
+        trailing: SecretlySwitch(
           value: value,
           onChanged: enabled ? (v) => onChanged(v) : null,
         ),
@@ -3276,7 +3277,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               en: 'Show notifications',
             ),
             subtitle: _label(context, ru: 'Всех аккаунтов', en: 'All accounts'),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: _notifAllAccounts,
               onChanged: (v) => setLocalBool(
                 _prefsNotifAllAccountsKey,
@@ -3308,7 +3309,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             fallbackIcon: Icons.chat_bubble_rounded,
             title: _label(context, ru: 'Личные чаты', en: 'Private chats'),
             subtitle: toggleStateLabel(_notifPrivateChats),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: _notifPrivateChats,
               onChanged: (v) => setLocalBool(
                 _prefsNotifPrivateChatsKey,
@@ -3388,7 +3389,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             fallbackIcon: Icons.group_rounded,
             title: _label(context, ru: 'Комнаты', en: 'Rooms'),
             subtitle: toggleStateLabel(_notifGroups),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: _notifGroups,
               onChanged: (v) => setLocalBool(
                 _prefsNotifGroupsKey,
@@ -3476,7 +3477,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               ru: 'Разрешить звонки в приложении',
               en: 'Allow calls in the app',
             ),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: c.callsEnabled,
               onChanged: (v) => c.setCallsEnabled(v),
             ),
@@ -3496,7 +3497,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               ru: 'Разрешить входящие вызовы',
               en: 'Allow incoming calls',
             ),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: c.incomingCallsEnabled,
               onChanged: c.callsEnabled
                   ? (v) => c.setIncomingCallsEnabled(v)
@@ -3570,7 +3571,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               ru: 'Разрешить входящие звонки с шарингом экрана',
               en: 'Allow incoming screen-sharing calls',
             ),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: c.incomingScreenShareEnabled,
               onChanged: c.callsEnabled
                   ? (v) => c.setIncomingScreenShareEnabled(v)
@@ -3623,7 +3624,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             iconFg: cs.onSurface,
             fallbackIcon: Icons.volume_up_rounded,
             title: _label(context, ru: 'Звук', en: 'Sound'),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: _notifInAppSound,
               onChanged: (v) => setLocalBool(
                 _prefsNotifInAppSoundKey,
@@ -3658,7 +3659,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             iconFg: cs.onSurface,
             fallbackIcon: Icons.chat_bubble_outline_rounded,
             title: _label(context, ru: 'Звук в чате', en: 'In-chat sound'),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: _notifInAppChatSound,
               onChanged: (v) => setLocalBool(
                 _prefsNotifInAppChatSoundKey,
@@ -3697,7 +3698,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             iconFg: cs.onSurface,
             fallbackIcon: Icons.vibration_rounded,
             title: _label(context, ru: 'Вибросигнал', en: 'Vibration'),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: _notifInAppVibrate,
               onChanged: (v) => setLocalBool(
                 _prefsNotifInAppVibrateKey,
@@ -3725,7 +3726,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               ru: 'Вибрация при раскрытии категорий, фото и других действиях в приложении.',
               en: 'Vibration for expanding categories, photos, and other in-app actions.',
             ),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: _appHaptics,
               onChanged: (v) => setAppHaptics(v),
             ),
@@ -3767,7 +3768,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               ru: 'Показывать системную карточку, когда приложение в фоне.',
               en: 'Show the system notification card while the app is in background.',
             ),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: _notifBackgroundCard,
               onChanged: (v) => setLocalBool(
                 _prefsNotifBackgroundCardKey,
@@ -3804,7 +3805,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             onTap: () async {
               final ok = await showDialog<bool>(
                 context: context,
-                builder: (context) => AlertDialog(
+                builder: (context) => SecretlyAlertDialog(
                   title: Text(
                     _label(context, ru: 'Сброс настроек', en: 'Reset settings'),
                   ),
@@ -4268,7 +4269,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             iconFg: cs.onSurface,
             fallbackIcon: Icons.touch_app_rounded,
             title: l10n.languageShowTranslateButton,
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: _languageShowTranslateButton,
               onChanged: (v) async {
                 setState(() {
@@ -4297,7 +4298,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             iconFg: cs.onSurface,
             fallbackIcon: Icons.g_translate,
             title: l10n.languageTranslateWholeChats,
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: _languageTranslateWholeChat,
               onChanged: _languageShowTranslateButton
                   ? (v) async {
@@ -5795,7 +5796,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) {
-          return AlertDialog(
+          return SecretlyAlertDialog(
             title: Text(
               _label(
                 context,
@@ -5997,7 +5998,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               ru: 'В архив и без уведомлений',
               en: 'Archive and mute',
             ),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: c.privacyArchiveUnknownChats,
               onChanged: setArchiveUnknown,
             ),
@@ -6023,7 +6024,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               ru: 'Позволить находить вас по никнейму',
               en: 'Allow others to find you by nickname',
             ),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: c.discoverableByNickname,
               onChanged: (v) => c.setDiscoverableByNickname(v),
             ),
@@ -6085,7 +6086,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               en: 'Sync contacts',
             ),
             subtitle: syncContactsSubtitle(),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: c.contactSyncEnabled,
               onChanged: c.contactSyncInFlight ? null : toggleContactSync,
             ),
@@ -6106,7 +6107,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               ru: 'Подсказка людей при поиске',
               en: 'People suggestions in search',
             ),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: c.allowNicknameLookup,
               onChanged: setUserLookup,
             ),
@@ -6139,7 +6140,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               ru: 'Через наш сервер: собеседник не увидит IP-адрес, но задержка может вырасти',
               en: 'Through our server: the other person will not see your IP address, but latency may increase',
             ),
-            trailing: Switch(
+            trailing: SecretlySwitch(
               value: c.hideAddressInCalls,
               onChanged: (v) => unawaited(c.setHideAddressInCalls(v)),
             ),
@@ -6216,7 +6217,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                 iconBg: Colors.transparent,
                 iconFg: _iconBlue,
                 title: ctx.l10n.netSettingsDeliveryReportsTitle,
-                trailing: Switch(
+                trailing: SecretlySwitch(
                   value: c.transportReportsEnabled,
                   onChanged: (v) => c.setTransportReportsEnabled(v),
                 ),
@@ -6362,7 +6363,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                       child: SizedBox(
                         width: 22,
                         height: 22,
-                        child: CircularProgressIndicator(strokeWidth: 2.4),
+                        child: SecretlySpinner(strokeWidth: 2.4),
                       ),
                     ),
                   )
@@ -6374,7 +6375,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               final ok = await showDialog<bool>(
                 context: context,
                 builder: (context) {
-                  return AlertDialog(
+                  return SecretlyAlertDialog(
                     title: Text(l10n.resetProfileDialogTitle),
                     content: Text(l10n.resetProfileDialogBody),
                     actions: [
@@ -6975,7 +6976,7 @@ class _StorageSettingsScreenState extends State<_StorageSettingsScreen> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => SecretlyAlertDialog(
         title: Text(l10n.storageRemoveVoiceModelConfirmTitle),
         content: Text(l10n.storageRemoveVoiceModelConfirmBody),
         actions: [
@@ -7120,7 +7121,7 @@ class _StorageSettingsScreenState extends State<_StorageSettingsScreen> {
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2.2),
+                      child: SecretlySpinner(strokeWidth: 2.2),
                     )
                   : null,
               onTap: _busy ? null : _clearCache,
@@ -7262,7 +7263,7 @@ class _StorageSettingsScreenState extends State<_StorageSettingsScreen> {
                     ? const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2.2),
+                        child: SecretlySpinner(strokeWidth: 2.2),
                       )
                     : null,
                 onTap: _chatUsageLoading ? null : _loadChatUsage,
@@ -7316,7 +7317,7 @@ class _StorageSettingsScreenState extends State<_StorageSettingsScreen> {
     final l10n = context.l10n;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => SecretlyAlertDialog(
         title: Text(l10n.chatMediaDeleteTitle),
         content: Text(l10n.chatMediaDeleteBody),
         actions: [
@@ -7390,7 +7391,7 @@ class _BackgroundConnectionCardState extends State<_BackgroundConnectionCard> {
   Widget build(BuildContext context) {
     return Card(
       clipBehavior: Clip.antiAlias,
-      child: SwitchListTile(
+      child: SecretlySwitchListTile(
         value: _value,
         onChanged: _set,
         secondary: const Icon(Icons.sync_rounded),
@@ -7737,7 +7738,7 @@ class _DonorboxSupportScreenState extends State<_DonorboxSupportScreen> {
                           child: ColoredBox(
                             color: cs.surface,
                             child: const Center(
-                              child: CircularProgressIndicator(),
+                              child: SecretlySpinner(),
                             ),
                           ),
                         ),

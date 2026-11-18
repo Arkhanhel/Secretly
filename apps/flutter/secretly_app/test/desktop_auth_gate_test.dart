@@ -23,6 +23,7 @@ import 'package:secretly_app/l10n/app_localizations.dart';
 import 'package:secretly_app/ui/desktop/app/desktop_app_view_model.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
 import 'package:secretly_app/ui/desktop/onboarding/desktop_auth_gate.dart';
+import 'package:secretly_app/ui/welcome/welcome_style.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -46,64 +47,83 @@ void main() {
 
   final ru = lookupAppLocalizations(const Locale('ru'));
 
-  testWidgets('🔴 предлагается ТРИ дороги, телефон первым', (t) async {
+  /// С 17.11.2026 вход начинается с приветствия («Начать»), выбор — следом.
+  Future<void> openChoice(WidgetTester t) async {
     t.view.physicalSize = const Size(1400, 1000);
     t.view.devicePixelRatio = 1.0;
     addTearDown(t.view.reset);
-
     await t.pumpWidget(host(DesktopAuthGate(vm: vm)));
     await t.pumpAndSettle();
+    expect(find.text('Secretly'), findsOneWidget);
+    await t.tap(find.text(ru.welcomeStart));
+    await t.pumpAndSettle();
+  }
+
+  testWidgets('🔴 предлагается ТРИ дороги, телефон первым', (t) async {
+    await openChoice(t);
 
     expect(find.text(ru.desktopAuthPhoneTitle), findsOneWidget);
-    expect(find.text(ru.desktopAuthCreateTitle), findsOneWidget);
+    expect(find.text(ru.welcomeDesktopNewAccount), findsOneWidget);
     expect(find.text(ru.desktopAuthRestoreTitle), findsOneWidget);
 
     // Порядок — не алфавитный: у большинства Secretly уже на телефоне, и это
     // самый быстрый и самый безопасный путь (аккаунт остаётся в двух местах).
-    final phoneY = t.getTopLeft(find.text(ru.desktopAuthPhoneTitle)).dy;
-    final createY = t.getTopLeft(find.text(ru.desktopAuthCreateTitle)).dy;
-    final restoreY = t.getTopLeft(find.text(ru.desktopAuthRestoreTitle)).dy;
-    expect(phoneY < createY, isTrue);
-    expect(createY < restoreY, isTrue);
+    // По макету 17.11.2026 телефон — главная кнопка сверху, под ней «или» и
+    // две равные: новый аккаунт слева, восстановление справа.
+    final phone = t.getTopLeft(find.text(ru.desktopAuthPhoneTitle));
+    final create = t.getTopLeft(find.text(ru.welcomeDesktopNewAccount));
+    final restore = t.getTopLeft(find.text(ru.desktopAuthRestoreTitle));
+    expect(phone.dy < create.dy, isTrue);
+    expect(phone.dy < restore.dy, isTrue);
+    expect(create.dx < restore.dx, isTrue);
   });
 
   testWidgets('🔴 про подписку сказано СРАЗУ, а не после создания', (t) async {
-    t.view.physicalSize = const Size(1400, 1000);
-    t.view.devicePixelRatio = 1.0;
-    addTearDown(t.view.reset);
-
-    await t.pumpWidget(host(DesktopAuthGate(vm: vm)));
-    await t.pumpAndSettle();
+    await openChoice(t);
 
     // Покупки живут в магазинах. Аккаунт, заведённый здесь, остаётся на
     // бесплатном уровне, пока к нему не присоединится телефон. Молчание об
-    // этом читается как обман.
-    expect(find.text(ru.desktopAuthCreateBody), findsOneWidget);
+    // этом читается как обман. Решение владельца 17.11.2026: пояснение — в
+    // значке «?» прямо на кнопке «Новый аккаунт», до создания.
+    final hint = find.byTooltip(ru.desktopAuthCreateBody);
+    expect(hint, findsOneWidget);
     expect(ru.desktopAuthCreateBody.toLowerCase().contains('телефон'), isTrue);
+    final button = find.ancestor(
+      of: find.text(ru.welcomeDesktopNewAccount),
+      matching: find.byType(WelcomeSecondaryButton),
+    );
+    expect(
+      find.descendant(of: button, matching: hint),
+      findsOneWidget,
+      reason: '«?» стоит на самой кнопке «Новый аккаунт»',
+    );
+    // У двух других дорог пояснения тоже есть.
+    expect(find.byTooltip(ru.desktopAuthPhoneBody), findsOneWidget);
+    expect(find.byTooltip(ru.desktopAuthRestoreBody), findsOneWidget);
+
+    // Нажатие на «?» показывает пояснение, а не открывает создание.
+    await t.tap(hint);
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.text(ru.desktopAuthCreateBody), findsOneWidget);
+    expect(find.text(ru.desktopAuthNameTitle), findsNothing);
+    await t.pumpAndSettle(const Duration(seconds: 10));
   });
 
   testWidgets('«Создать» ведёт к имени, а не сразу к созданию', (t) async {
-    t.view.physicalSize = const Size(1400, 1000);
-    t.view.devicePixelRatio = 1.0;
-    addTearDown(t.view.reset);
-
-    await t.pumpWidget(host(DesktopAuthGate(vm: vm)));
-    await t.pumpAndSettle();
-    await t.tap(find.text(ru.desktopAuthCreateTitle));
+    await openChoice(t);
+    await t.tap(find.text(ru.welcomeDesktopNewAccount));
     await t.pumpAndSettle();
 
     expect(find.text(ru.desktopAuthNameTitle), findsOneWidget);
     // Назад — есть: человек вправе передумать до того, как что-то создано.
-    expect(find.text(ru.desktopAuthBack), findsOneWidget);
+    expect(find.byTooltip(ru.desktopAuthBack), findsOneWidget);
+    await t.tap(find.byTooltip(ru.desktopAuthBack));
+    await t.pumpAndSettle();
+    expect(find.text(ru.welcomeDesktopChooseTitle), findsOneWidget);
   });
 
   testWidgets('«Восстановить» предлагает набор ПЕРВЫМ', (t) async {
-    t.view.physicalSize = const Size(1400, 1000);
-    t.view.devicePixelRatio = 1.0;
-    addTearDown(t.view.reset);
-
-    await t.pumpWidget(host(DesktopAuthGate(vm: vm)));
-    await t.pumpAndSettle();
+    await openChoice(t);
     await t.tap(find.text(ru.desktopAuthRestoreTitle).first);
     await t.pumpAndSettle();
 

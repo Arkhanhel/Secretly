@@ -17,6 +17,7 @@ import '../billing/show_paywall.dart';
 import 'wave1_l10n.dart';
 import 'widgets/avatar_initials.dart';
 import 'widgets/frosted_top_bar.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class RoomInviteJoinScreen extends StatefulWidget {
   const RoomInviteJoinScreen({
@@ -557,7 +558,7 @@ class _RoomInviteJoinScreenState extends State<RoomInviteJoinScreen> {
               icon: SizedBox(
                 width: 28,
                 height: 28,
-                child: CircularProgressIndicator(
+                child: SecretlySpinner(
                   strokeWidth: 2.5,
                   color: colorScheme.primary,
                 ),
@@ -845,7 +846,7 @@ class _RoomInviteJoinScreenState extends State<RoomInviteJoinScreen> {
                           ? SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(
+                              child: SecretlySpinner(
                                 strokeWidth: 2.1,
                                 color: colorScheme.onPrimary,
                               ),

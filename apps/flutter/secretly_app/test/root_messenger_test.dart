@@ -117,8 +117,23 @@ void main() {
 
     test('корневой ключ подключён к MaterialApp', () {
       final main = File('lib/main.dart').readAsStringSync();
+      // С 17.11.2026 на iPhone ключ у почтальона капсул (`apple_style.dart`),
+      // на остальных — по-прежнему у MaterialApp. Без хозяина он не остаётся
+      // ни в одном из двух случаев.
+      final compact = main.replaceAll(RegExp(r'\s+'), ' ');
       expect(
-        main.contains('scaffoldMessengerKey: rootScaffoldMessengerKey'),
+        compact.contains(
+          'scaffoldMessengerKey: appleTopToastsEnabled '
+          '? null : rootScaffoldMessengerKey',
+        ),
+        isTrue,
+      );
+      expect(
+        compact.contains(
+          'appleTopToastsEnabled '
+          '? AppleToastMessenger(key: rootScaffoldMessengerKey, child: app) '
+          ': app',
+        ),
         isTrue,
       );
     });

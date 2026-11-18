@@ -18,6 +18,7 @@ import 'widgets/secretly_sticker_widgets.dart';
 import 'widgets/broken_media_box.dart';
 import 'widgets/sticker_pack_access_picker.dart';
 import 'l10n.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// What the user chose to do with the finished sticker on the preview screen.
 /// `send` is handled by the chat; `done` means the preview already saved it to a
@@ -507,7 +508,7 @@ class _StickerPreviewScreenState extends State<StickerPreviewScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         _row(
-          Icons.arrow_back_rounded,
+          appleBackIcon(Icons.arrow_back_rounded),
           context.l10n.stickerBack,
           _busy ? null : () => setState(() => _view = _MenuView.actions),
         ),
@@ -631,7 +632,7 @@ class _NewPackDialogState extends State<_NewPackDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return SecretlyAlertDialog(
       backgroundColor: const Color(0xFF1F2733),
       title: Text(
         context.l10n.stickerNewPack,

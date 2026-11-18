@@ -4,14 +4,13 @@
 import '../../../l10n/app_localizations.dart';
 import 'dart:async';
 
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../../app/app_controller.dart';
+import '../../welcome/particle_logo_background.dart';
+import '../../welcome/welcome_style.dart';
 import '../app/desktop_app_view_model.dart';
-import '../design/tokens.dart';
-import '../primitives/desktop_button.dart';
 
 /// Real QR-link onboarding for fresh desktop installs.
 ///
@@ -239,135 +238,155 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
     await _startRequest();
   }
 
+  WelcomeBackgroundMood? _lastMood;
+
+  /// Пока телефон подтверждает и переносит переписку, фон «работает».
+  void _syncMood() {
+    final state = widget.controller.authFlowState;
+    final working = state == AuthFlowState.qrScannedWaitConfirm ||
+        state == AuthFlowState.bundleApplying;
+    final mood = working ? WelcomeBackgroundMood.work : null;
+    if (mood == _lastMood) return;
+    _lastMood = mood;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) WelcomeBackdrop.setMood(context, mood);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final c = DColors.of(context);
+    final s = WelcomeStyle.of(context);
     final extraError = _extraError;
-    return Container(
-      color: c.bg,
-      alignment: Alignment.center,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 540),
-        child: Padding(
-          padding: const EdgeInsets.all(DSpace.xl2),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              if (widget.onBack != null)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: DesktopButton(
-                    label: _l10n.desktopAuthBack,
-                    kind: DButtonKind.ghost,
-                    size: DButtonSize.small,
-                    icon: FluentIcons.chevron_left_24_regular,
-                    onPressed: widget.onBack,
+    _syncMood();
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: LayoutBuilder(
+            builder: (context, box) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: box.maxHeight),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 56,
+                    ),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          WelcomeHeading(
+                            title: _l10n.welcomeDesktopQrTitle,
+                            // 🔴 Подписи — ТЕЛЕФОННЫЕ, из тех же ключей, что
+                            // рисует телефон (01.10.2026): человек ищет на
+                            // телефоне кнопку с тем же названием.
+                            body: desktopPairingHowToText(_l10n),
+                            titleSize: 34,
+                          ),
+                          const SizedBox(height: 30),
+                          _qrCard(s),
+                          const SizedBox(height: 22),
+                          _statusLine(s),
+                          const SizedBox(height: 6),
+                          _validityLine(s),
+                          // The status line ALREADY renders
+                          // `controller.authFlowError` whenever the flow is in
+                          // `authError`, and `_errorMessage` is set from the
+                          // very same failure — show the second copy only
+                          // when it says something the status line does not
+                          // (seen twice on a live account 08.09.2026).
+                          if (extraError != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              extraError,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: s.error,
+                                fontSize: 13,
+                                height: 1.45,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 18),
+                          SizedBox(width: 280, child: _actionButton()),
+                          if (widget.controller
+                              .desktopDeviceRemovedFromAccount) ...[
+                            const SizedBox(height: 12),
+                            _recoveryBlock(s),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              _headerIcon(c),
-              const SizedBox(height: DSpace.xl),
-              Text(
-                _l10n.desktopPairingTitle,
-                style: DType.title.copyWith(color: c.textPrimary),
-                textAlign: TextAlign.center,
               ),
-              const SizedBox(height: DSpace.s),
-              Text(
-                // 🔴 Подписи — ТЕЛЕФОННЫЕ, из тех же ключей, что рисует телефон
-                // (01.10.2026). Здесь стояло «Link a device», «Vincular
-                // dispositivo», «Associer un appareil», а на телефоне кнопка
-                // зовётся «Connect device» / «Conectar dispositivo» /
-                // «Connecter un appareil»: человек искал кнопку, которой нет.
-                desktopPairingHowToText(_l10n),
-                textAlign: TextAlign.center,
-                style: DType.body.copyWith(color: c.textSecondary),
-              ),
-              const SizedBox(height: DSpace.xl2),
-              _qrCard(c),
-              const SizedBox(height: DSpace.s),
-              _validityLine(c),
-              const SizedBox(height: DSpace.m),
-              _statusLine(c),
-              // The status line ALREADY renders `controller.authFlowError`
-              // whenever the flow is in `authError`, and `_errorMessage` is
-              // set from the very same failure — so an evicted desktop showed
-              // the sentence «This desktop device was removed from your
-              // Secretly ID» twice, one line under the other, in the exact
-              // moment the user needs one clear instruction. Seen on a live
-              // account 08.09.2026. Show the second copy only when it says
-              // something the status line does not.
-              if (extraError != null) ...[
-                const SizedBox(height: DSpace.s),
-                Text(
-                  extraError,
-                  textAlign: TextAlign.center,
-                  style: DType.caption.copyWith(color: c.danger),
-                ),
-              ],
-              const SizedBox(height: DSpace.xl2),
-              _actionButton(),
-              if (widget.controller.desktopDeviceRemovedFromAccount) ...[
-                const SizedBox(height: DSpace.m),
-                _recoveryBlock(c),
-              ],
-            ],
+            ),
           ),
         ),
-      ),
+        if (widget.onBack != null)
+          Positioned(
+            top: 12,
+            left: 16,
+            child: WelcomeBackButton(
+              tooltip: _l10n.desktopAuthBack,
+              onPressed: widget.onBack,
+            ),
+          ),
+      ],
     );
   }
 
-  Widget _headerIcon(DColorSet c) => Container(
-        width: 72,
-        height: 72,
-        decoration: BoxDecoration(
-          color: c.elevated,
-          shape: BoxShape.circle,
-          border: Border.all(color: c.borderSubtle),
-        ),
-        child: Icon(
-          FluentIcons.qr_code_24_regular,
-          size: 30,
-          color: c.accentPrimary,
-        ),
-      );
-
-  Widget _qrCard(DColorSet c) {
+  Widget _qrCard(WelcomeStyle s) {
     final payload = _qrPayload;
-    final size = 240.0;
+    const size = 200.0;
     return Container(
-      width: size + 32,
-      height: size + 32,
+      width: 236,
+      height: 236,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(DRadii.lg),
-        border: Border.all(color: c.borderSubtle),
+        borderRadius: BorderRadius.circular(s.fluent ? 8 : 28),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x80000000),
+            blurRadius: 80,
+            offset: Offset(0, 30),
+          ),
+        ],
       ),
       alignment: Alignment.center,
-      padding: const EdgeInsets.all(DSpace.m),
       child: payload == null
           ? Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (_busy)
                   const SizedBox(
-                    width: 32,
-                    height: 32,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Color(0xFF0A0A0A),
+                    ),
                   )
                 else
-                  Icon(
-                    FluentIcons.qr_code_24_regular,
+                  const Icon(
+                    Icons.qr_code_2_rounded,
                     size: 48,
-                    color: c.textSecondary,
+                    color: Colors.black38,
                   ),
-                const SizedBox(height: DSpace.s),
+                const SizedBox(height: 12),
                 Text(
                   _busy
                       ? _l10n.desktopPairingPreparingQr
                       : _l10n.desktopPairingQrUnavailable,
-                  style: DType.caption.copyWith(color: Colors.black54),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF0A0A0A),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             )
@@ -375,7 +394,16 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
               data: payload,
               version: QrVersions.auto,
               size: size,
+              padding: EdgeInsets.zero,
               backgroundColor: Colors.white,
+              eyeStyle: const QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: Color(0xFF0A0A0A),
+              ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: Color(0xFF0A0A0A),
+              ),
             ),
     );
   }
@@ -383,37 +411,37 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
   /// Countdown under the code. Without it an expired QR is indistinguishable
   /// from a live one, which is exactly how a user ends up scanning a dead
   /// code over and over.
-  Widget _validityLine(DColorSet c) {
+  Widget _validityLine(WelcomeStyle s) {
     return ValueListenableBuilder<Duration>(
       valueListenable: _timeLeft,
       builder: (ctx, left, _) {
+        final caption = s.caption.copyWith(fontSize: 12.5);
+        const warning = Color(0xFFFF9F0A);
         if (_request == null) {
           // Пауза перед следующей попыткой — видна, а не угадывается.
           if (_retryAt == null || _busy) return const SizedBox.shrink();
           return Text(
             _l10n.desktopPairingRetryIn(left.inSeconds),
             textAlign: TextAlign.center,
-            style: DType.caption.copyWith(color: c.textSecondary),
+            style: caption,
           );
         }
         if (left <= Duration.zero) {
           return Text(
             _l10n.desktopPairingCodeExpired,
             textAlign: TextAlign.center,
-            style: DType.caption.copyWith(color: c.warning),
+            style: caption.copyWith(color: warning),
           );
         }
         final m = left.inMinutes;
-        final s = left.inSeconds % 60;
+        final sec = left.inSeconds % 60;
         final expiringSoon = left.inSeconds <= 60;
         return Text(
           _l10n.desktopPairingCodeValidFor(
-            '$m:${s.toString().padLeft(2, '0')}',
+            '$m:${sec.toString().padLeft(2, '0')}',
           ),
           textAlign: TextAlign.center,
-          style: DType.caption.copyWith(
-            color: expiringSoon ? c.warning : c.textSecondary,
-          ),
+          style: expiringSoon ? caption.copyWith(color: warning) : caption,
         );
       },
     );
@@ -432,19 +460,42 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
     return message.trim() == status.trim() ? null : message;
   }
 
-  Widget _statusLine(DColorSet c) {
+  /// Строка состояния с «дышащей» точкой, как в макете: зелёная — ждём
+  /// сканирования, синяя — телефон подтверждает, красная — ошибка.
+  Widget _statusLine(WelcomeStyle s) {
     final state = widget.controller.authFlowState;
     final label = _authFlowLabel(state);
-    Color color = c.textSecondary;
-    if (state == AuthFlowState.authError) color = c.danger;
+    var dot = const Color(0xFF34D399);
+    var color = s.textSecondary;
+    if (state == AuthFlowState.authError) {
+      dot = s.error;
+      color = s.error;
+    }
     if (state == AuthFlowState.bundleApplying ||
         state == AuthFlowState.qrScannedWaitConfirm) {
-      color = c.accentPrimary;
+      dot = s.focus;
+      color = s.text;
     }
-    return Text(
-      label,
-      textAlign: TextAlign.center,
-      style: DType.caption.copyWith(color: color),
+    return Semantics(
+      liveRegion: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _BreathingDot(color: dot),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: color,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -456,21 +507,20 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
   /// produced. This is the way out — and it is a separate, explicit button
   /// rather than something the retry does silently, because it discards this
   /// desktop's device identity.
-  Widget _recoveryBlock(DColorSet c) {
+  Widget _recoveryBlock(WelcomeStyle s) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           _l10n.desktopPairingRevoked,
           textAlign: TextAlign.center,
-          style: DType.caption.copyWith(color: c.textSecondary),
+          style: s.caption,
         ),
-        const SizedBox(height: DSpace.s),
-        DesktopButton(
+        const SizedBox(height: 12),
+        WelcomePrimaryButton(
           label: _repairing
               ? _l10n.desktopPairingPreparingNew
               : _l10n.desktopPairingConnectAsNew,
-          kind: DButtonKind.filled,
           onPressed: (_repairing || _busy) ? null : _resetIdentityAndRetry,
         ),
       ],
@@ -510,7 +560,7 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
     final pairingInFlight = state == AuthFlowState.qrScannedWaitConfirm ||
         state == AuthFlowState.bundleApplying;
     final canRetry = !_busy && !pairingInFlight;
-    return DesktopButton(
+    return WelcomeTextButton(
       label: pairingInFlight
           ? _l10n.desktopPairingWaitingConfirm
           : (_busy
@@ -519,7 +569,6 @@ class _DesktopOnboardingScreenState extends State<DesktopOnboardingScreen> {
                 : (_retryAt != null
                       ? _l10n.desktopDevicesRetry
                       : _l10n.desktopPairingNewQr)),
-      kind: DButtonKind.tonal,
       onPressed: canRetry ? _cancelAndRetry : null,
     );
   }
@@ -558,3 +607,51 @@ String desktopPairingHowToText(AppLocalizations l10n) =>
       l10n.devicesSection,
       l10n.devicesConnectDevice,
     );
+
+/// Точка состояния, которая мягко «дышит» (в макете — `sfBreath`). При
+/// выключенных анимациях стоит.
+class _BreathingDot extends StatefulWidget {
+  const _BreathingDot({required this.color});
+
+  final Color color;
+
+  @override
+  State<_BreathingDot> createState() => _BreathingDotState();
+}
+
+class _BreathingDotState extends State<_BreathingDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final still = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (still || WelcomeBackdropTesting.still) {
+      _c.value = 1;
+    } else if (!_c.isAnimating) {
+      _c.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween(begin: 0.35, end: 1.0).animate(_c),
+      child: Container(
+        width: 7,
+        height: 7,
+        decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
+      ),
+    );
+  }
+}

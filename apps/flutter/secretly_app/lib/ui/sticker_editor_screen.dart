@@ -15,6 +15,7 @@ import '../stickers/sticker_segmentation_service.dart';
 import 'l10n.dart';
 import 'secretly_snackbar.dart';
 import 'sticker_preview_screen.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Telegram-parity sticker editor — ONE screen, everything at once:
 ///  • photo in a fixed SQUARE frame (pan / pinch-zoom / rotate, two fingers);
@@ -1354,7 +1355,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
       children.add(
         const ColoredBox(
           color: Color(0x88000000),
-          child: Center(child: CircularProgressIndicator(color: Colors.white)),
+          child: Center(child: SecretlySpinner(color: Colors.white)),
         ),
       );
     }

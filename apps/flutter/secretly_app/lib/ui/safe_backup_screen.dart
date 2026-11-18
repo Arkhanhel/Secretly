@@ -24,6 +24,7 @@ import 'wave1_l10n.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'backup_refusal_text.dart';
 import 'backup_error_text.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class SafeBackupScreen extends StatefulWidget {
   const SafeBackupScreen({super.key, required this.controller});
@@ -311,7 +312,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
+      builder: (_) => const Center(child: SecretlySpinner()),
     );
     try {
       return await action();
@@ -432,7 +433,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(l10n.safeBackupRestoreConfirmTitle),
           content: SizedBox(
             width: 440,
@@ -581,7 +582,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
   ) {
     return showDialog<_BackupCreateDestination>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => SecretlyAlertDialog(
         title: Text(
           _label(context, ru: 'Создать резервную копию', en: 'Create backup'),
         ),
@@ -631,7 +632,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
   ) {
     return showDialog<_BackupRestoreSource>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => SecretlyAlertDialog(
         title: Text(
           _label(
             context,
@@ -779,7 +780,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     final action = await showDialog<Object>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(
             _label(
               context,
@@ -887,7 +888,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setLocalState) {
-            return AlertDialog(
+            return SecretlyAlertDialog(
               title: Text(
                 _label(context, ru: 'Частота сохранения', en: 'Save Frequency'),
               ),
@@ -1249,7 +1250,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     final l10n = context.l10n;
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => SecretlyAlertDialog(
         title: Text(l10n.backupServerDeleteConfirmTitle),
         content: Text(l10n.backupServerDeleteConfirmBody),
         actions: [
@@ -1721,7 +1722,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
               Navigator.of(context).pop(p1.text);
             }
 
-            return AlertDialog(
+            return SecretlyAlertDialog(
               title: Text(l10n.recoveryPasswordTitle),
               content: AutofillGroup(
                 child: Column(
@@ -1824,7 +1825,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     final res = await showDialog<({String profileId, String password})>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(l10n.safeBackupRestoreTitle),
           content: AutofillGroup(
             child: Column(
@@ -1986,7 +1987,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     final pw = await showDialog<String>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(title),
           content: AutofillGroup(
             child: TextField(
@@ -2077,7 +2078,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
               Navigator.of(context).pop((payload: payload, password: password));
             }
 
-            return AlertDialog(
+            return SecretlyAlertDialog(
               title: Text(l10n.restoreRecoveryKit),
               content: AutofillGroup(
                 child: Column(
@@ -2141,7 +2142,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(l10n.restoreConfirmTitle),
           content: Text(l10n.restoreConfirmBody),
           actions: [

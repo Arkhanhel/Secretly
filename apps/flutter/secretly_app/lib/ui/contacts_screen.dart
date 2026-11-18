@@ -29,6 +29,7 @@ import 'widgets/frosted_header_island.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'widgets/morphing_selection_islands.dart';
 import 'widgets/secretly_glass_fab.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 enum _AddContactDialogAction { add, invite }
 
@@ -432,7 +433,7 @@ class _ContactsScreenState extends State<ContactsScreen>
       final ok = await showDialog<bool>(
         context: outerContext,
         builder: (context) {
-          return AlertDialog(
+          return SecretlyAlertDialog(
             title: Text(context.l10n.deleteContactsConfirmTitle(ids.length)),
             content: Text(context.l10n.deleteContactsConfirmBody),
             actions: [
@@ -989,7 +990,7 @@ class _ContactsScreenState extends State<ContactsScreen>
     final action = await showDialog<_AddContactDialogAction>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           titlePadding: const EdgeInsets.fromLTRB(24, 20, 12, 0),
           title: Row(
             children: [
@@ -1449,7 +1450,7 @@ class _UserLookupPane extends StatelessWidget {
     if (loading && localMatches.isEmpty) {
       return Padding(
         padding: EdgeInsets.only(top: topInset),
-        child: const Center(child: CircularProgressIndicator()),
+        child: const Center(child: SecretlySpinner()),
       );
     }
 
@@ -1519,7 +1520,7 @@ class _UserLookupPane extends StatelessWidget {
         children.add(
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(child: CircularProgressIndicator()),
+            child: Center(child: SecretlySpinner()),
           ),
         );
       }
@@ -1533,7 +1534,7 @@ class _UserLookupPane extends StatelessWidget {
       children.add(
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 16),
-          child: Center(child: CircularProgressIndicator()),
+          child: Center(child: SecretlySpinner()),
         ),
       );
     }

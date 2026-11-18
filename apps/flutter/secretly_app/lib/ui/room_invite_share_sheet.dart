@@ -12,6 +12,7 @@ import 'wave1_l10n.dart';
 import 'widgets/avatar_initials.dart';
 import 'widgets/secretly_glass_sheet.dart';
 import 'widgets/broken_media_box.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 String _roomInviteText(
   BuildContext context, {
@@ -172,7 +173,7 @@ class _RoomInviteShareSheetState extends State<_RoomInviteShareSheet>
                             child: SizedBox(
                               width: 28,
                               height: 28,
-                              child: CircularProgressIndicator(
+                              child: SecretlySpinner(
                                 strokeWidth: 2.2,
                               ),
                             ),

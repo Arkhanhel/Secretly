@@ -17,6 +17,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'voice_transcription.dart';
 import '../wave1_l10n.dart';
 import '../widgets/secretly_glass_sheet.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 const Color _kGold = Color(0xFFE8A33D);
 
@@ -1339,7 +1340,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
                   width: 76,
                   height: 76,
                   child: Center(
-                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                    child: SecretlySpinner(strokeWidth: 2.4),
                   ),
                 )
               : GestureDetector(
@@ -1645,7 +1646,7 @@ class _Status extends StatelessWidget {
           height: 76,
           child: Center(
             child: spinner
-                ? const CircularProgressIndicator(strokeWidth: 2.4)
+                ? const SecretlySpinner(strokeWidth: 2.4)
                 : Icon(icon, size: 34, color: cs.onSurfaceVariant),
           ),
         ),

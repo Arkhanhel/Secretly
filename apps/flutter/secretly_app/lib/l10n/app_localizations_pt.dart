@@ -8278,6 +8278,256 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get stickerAddSticker => 'Adicionar sticker';
+
+  @override
+  String get welcomeTagline => 'Sem número nem e-mail. A sua conta é uma chave que vive apenas nos seus dispositivos.';
+
+  @override
+  String get welcomeCreateAccount => 'Criar conta';
+
+  @override
+  String get welcomeHaveAccount => 'Já tenho uma conta';
+
+  @override
+  String welcomeTermsNotice(String terms, String privacy) {
+    return 'Ao continuar, aceita os $terms e a $privacy';
+  }
+
+  @override
+  String get welcomeTermsLink => 'termos';
+
+  @override
+  String get welcomePrivacyLink => 'política de privacidade';
+
+  @override
+  String get welcomeNameTitle => 'Como se chama?';
+
+  @override
+  String get welcomeNameBody => 'Os seus contactos verão este nome. Pode alterá-lo.';
+
+  @override
+  String get welcomeNameHint => 'Nome ou alcunha';
+
+  @override
+  String get welcomeKeysStepIdentity => 'A criar a chave de identidade';
+
+  @override
+  String get welcomeKeysStepPrekeys => 'A preparar chaves para as primeiras mensagens';
+
+  @override
+  String get welcomeKeysStepStorage => 'A cifrar o armazenamento';
+
+  @override
+  String get welcomeKeysReady => 'As chaves estão prontas';
+
+  @override
+  String get welcomeKeysNote => 'As chaves são criadas neste dispositivo — o servidor nunca as vê';
+
+  @override
+  String get welcomeBackupTitle => 'Cópia de segurança';
+
+  @override
+  String get welcomeBackupBodyCloud => 'As conversas sobrevivem à perda do telemóvel. A cópia é cifrada com uma palavra-passe que só você conhece.';
+
+  @override
+  String get welcomeBackupBodyDevice => 'A cópia fica neste dispositivo. Passe-a para um novo juntamente com a palavra-passe.';
+
+  @override
+  String get welcomeBackupInCloud => 'Na nuvem';
+
+  @override
+  String get welcomeBackupOnDevice => 'No dispositivo';
+
+  @override
+  String get welcomeBackupPasswordHint => 'Crie uma palavra-passe';
+
+  @override
+  String get welcomeBackupPasswordRepeatHint => 'Repita a palavra-passe';
+
+  @override
+  String get welcomePasswordShow => 'Mostrar';
+
+  @override
+  String get welcomePasswordHide => 'Ocultar';
+
+  @override
+  String get welcomePasswordStrong => 'Forte';
+
+  @override
+  String get welcomePasswordVeryStrong => 'Muito forte';
+
+  @override
+  String get welcomeBackupEnable => 'Ativar cópia';
+
+  @override
+  String get welcomeBackupLater => 'Configurar mais tarde';
+
+  @override
+  String get welcomeBackupOnTitle => 'Cópia ativada';
+
+  @override
+  String welcomeBackupOnBody(String schedule) {
+    return '$schedule. Pode alterar isto nas Definições.';
+  }
+
+  @override
+  String get welcomeNotifyTitle => 'Não perca mensagens';
+
+  @override
+  String get welcomeNotifyBody => 'A Apple e a Google só transmitem um sinal de que chegou algo novo — o texto nunca passa por elas.';
+
+  @override
+  String get welcomeNotifyPreviewMessage => 'Nova mensagem';
+
+  @override
+  String get welcomeNotifyPreviewCall => 'Chamada recebida';
+
+  @override
+  String get welcomeNotifyNow => 'agora';
+
+  @override
+  String get welcomeNotifyAllow => 'Permitir notificações';
+
+  @override
+  String get welcomeNotifyNotNow => 'Agora não';
+
+  @override
+  String welcomeDoneTitle(String name) {
+    return 'Bem-vindo(a), $name';
+  }
+
+  @override
+  String get welcomeDoneTitleNoName => 'Bem-vindo(a)';
+
+  @override
+  String get welcomeDoneBody => 'A conta está pronta. Convide as pessoas com quem quer conversar.';
+
+  @override
+  String get welcomeDoneIdCaption => 'O seu Secretly ID — é por ele que o encontram e que se restaura a conta. Guarde-o.';
+
+  @override
+  String get welcomeCopy => 'Copiar';
+
+  @override
+  String get welcomeCopied => 'Copiado';
+
+  @override
+  String get welcomeOpenApp => 'Abrir o Secretly';
+
+  @override
+  String get welcomeRestoreTitle => 'Restauro';
+
+  @override
+  String get welcomeRestoreSubtitle => 'De onde recuperar a conta?';
+
+  @override
+  String get welcomeRestoreCloudTitle => 'Cópia na nuvem';
+
+  @override
+  String get welcomeRestoreCloudBody => 'Precisa do Secretly ID e da palavra-passe da cópia';
+
+  @override
+  String get welcomeRestoreCloudFormBody => 'Introduza o Secretly ID e a palavra-passe da cópia.';
+
+  @override
+  String get welcomeRestoreBackupPasswordHint => 'Palavra-passe da cópia';
+
+  @override
+  String get welcomeRestoreFileTitle => 'Ficheiro no dispositivo';
+
+  @override
+  String get welcomeRestoreFileFormTitle => 'Ficheiro da cópia';
+
+  @override
+  String get welcomeRestoreFileFormBody => 'Escolha a cópia e introduza a palavra-passe.';
+
+  @override
+  String get welcomeRestoreFilePick => 'Procurar cópia no dispositivo';
+
+  @override
+  String get welcomeRestoreFileChosen => 'Ficheiro escolhido';
+
+  @override
+  String get welcomeRestoreFileOther => 'Alterar';
+
+  @override
+  String get welcomeRestoreStepDownload => 'A transferir a cópia';
+
+  @override
+  String get welcomeRestoreStepDecrypt => 'A verificar a palavra-passe e a decifrar';
+
+  @override
+  String get welcomeRestoreStepApply => 'A recuperar conversas e contactos';
+
+  @override
+  String get welcomeRestoreNote => 'A cópia é decifrada neste dispositivo. O servidor não vê o conteúdo.';
+
+  @override
+  String get welcomeNewLoginTitle => 'É você a iniciar sessão?';
+
+  @override
+  String get welcomeNewLoginBody => 'Um novo dispositivo pede acesso à sua conta. Permita só se o dispositivo for seu.';
+
+  @override
+  String get welcomeNewLoginUnknownDevice => 'Novo dispositivo';
+
+  @override
+  String welcomeNewLoginTime(String time) {
+    return 'Hoje às $time';
+  }
+
+  @override
+  String get welcomeNewLoginSyncSection => 'O que passar para o novo dispositivo';
+
+  @override
+  String get welcomeNewLoginApprove => 'Sim, sou eu';
+
+  @override
+  String get welcomeNewLoginDecline => 'Não — recusar o acesso';
+
+  @override
+  String get welcomeStart => 'Começar';
+
+  @override
+  String get welcomeDesktopChooseTitle => 'Ligue este computador';
+
+  @override
+  String get welcomeDesktopChooseBody => 'O mais rápido é através de um telemóvel que já tenha o Secretly. As conversas passam todas para aqui.';
+
+  @override
+  String get welcomeOr => 'ou';
+
+  @override
+  String get welcomeDesktopNewAccount => 'Nova conta';
+
+  @override
+  String get welcomeMoreInfo => 'Saber mais';
+
+  @override
+  String get welcomeDesktopQrTitle => 'Leia com o telemóvel';
+
+  @override
+  String welcomeDesktopUsePhonePrompt(String link) {
+    return 'Tem à mão um telemóvel com o Secretly? $link — assim o telemóvel não perde o acesso.';
+  }
+
+  @override
+  String get welcomeDesktopUsePhoneLink => 'Entre através dele';
+
+  @override
+  String get welcomeDesktopTakeOverUsePhone => 'Ligar através do telemóvel';
+
+  @override
+  String get welcomeDesktopKitKeepApart => 'Guarde-o fora deste computador — numa pen USB ou na nuvem.';
+
+  @override
+  String get pickerDone => 'OK';
+
+  @override
+  String get chatSwipeMute => 'Silenciar';
+
+  @override
+  String get chatSwipeUnmute => 'Com som';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -16554,4 +16804,254 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get stickerAddSticker => 'Adicionar figurinha';
+
+  @override
+  String get welcomeTagline => 'Sem número nem e-mail. Sua conta é uma chave que vive só nos seus dispositivos.';
+
+  @override
+  String get welcomeCreateAccount => 'Criar conta';
+
+  @override
+  String get welcomeHaveAccount => 'Já tenho uma conta';
+
+  @override
+  String welcomeTermsNotice(String terms, String privacy) {
+    return 'Ao continuar, você aceita os $terms e a $privacy';
+  }
+
+  @override
+  String get welcomeTermsLink => 'termos';
+
+  @override
+  String get welcomePrivacyLink => 'política de privacidade';
+
+  @override
+  String get welcomeNameTitle => 'Qual é o seu nome?';
+
+  @override
+  String get welcomeNameBody => 'Seus contatos verão este nome. Dá para mudar depois.';
+
+  @override
+  String get welcomeNameHint => 'Nome ou apelido';
+
+  @override
+  String get welcomeKeysStepIdentity => 'Criando sua chave de identidade';
+
+  @override
+  String get welcomeKeysStepPrekeys => 'Preparando chaves para as primeiras mensagens';
+
+  @override
+  String get welcomeKeysStepStorage => 'Criptografando o armazenamento';
+
+  @override
+  String get welcomeKeysReady => 'Suas chaves estão prontas';
+
+  @override
+  String get welcomeKeysNote => 'As chaves são criadas neste aparelho — o servidor nunca as vê';
+
+  @override
+  String get welcomeBackupTitle => 'Backup';
+
+  @override
+  String get welcomeBackupBodyCloud => 'Suas conversas sobrevivem à perda do celular. O backup é criptografado com uma senha que só você sabe.';
+
+  @override
+  String get welcomeBackupBodyDevice => 'O backup fica neste aparelho. Passe-o para um novo junto com a senha.';
+
+  @override
+  String get welcomeBackupInCloud => 'Na nuvem';
+
+  @override
+  String get welcomeBackupOnDevice => 'No aparelho';
+
+  @override
+  String get welcomeBackupPasswordHint => 'Crie uma senha';
+
+  @override
+  String get welcomeBackupPasswordRepeatHint => 'Repita a senha';
+
+  @override
+  String get welcomePasswordShow => 'Mostrar';
+
+  @override
+  String get welcomePasswordHide => 'Ocultar';
+
+  @override
+  String get welcomePasswordStrong => 'Forte';
+
+  @override
+  String get welcomePasswordVeryStrong => 'Muito forte';
+
+  @override
+  String get welcomeBackupEnable => 'Ativar backup';
+
+  @override
+  String get welcomeBackupLater => 'Configurar depois';
+
+  @override
+  String get welcomeBackupOnTitle => 'Backup ativado';
+
+  @override
+  String welcomeBackupOnBody(String schedule) {
+    return '$schedule. Dá para mudar nas Configurações.';
+  }
+
+  @override
+  String get welcomeNotifyTitle => 'Não perca mensagens';
+
+  @override
+  String get welcomeNotifyBody => 'Apple e Google só repassam um sinal de que chegou algo novo — o texto nunca passa por eles.';
+
+  @override
+  String get welcomeNotifyPreviewMessage => 'Nova mensagem';
+
+  @override
+  String get welcomeNotifyPreviewCall => 'Chamada recebida';
+
+  @override
+  String get welcomeNotifyNow => 'agora';
+
+  @override
+  String get welcomeNotifyAllow => 'Permitir notificações';
+
+  @override
+  String get welcomeNotifyNotNow => 'Agora não';
+
+  @override
+  String welcomeDoneTitle(String name) {
+    return 'Boas-vindas, $name';
+  }
+
+  @override
+  String get welcomeDoneTitleNoName => 'Boas-vindas';
+
+  @override
+  String get welcomeDoneBody => 'Sua conta está pronta. Convide as pessoas com quem quer conversar.';
+
+  @override
+  String get welcomeDoneIdCaption => 'Seu Secretly ID — é por ele que te encontram e que você restaura a conta. Guarde-o.';
+
+  @override
+  String get welcomeCopy => 'Copiar';
+
+  @override
+  String get welcomeCopied => 'Copiado';
+
+  @override
+  String get welcomeOpenApp => 'Abrir o Secretly';
+
+  @override
+  String get welcomeRestoreTitle => 'Restauração';
+
+  @override
+  String get welcomeRestoreSubtitle => 'De onde recuperar a conta?';
+
+  @override
+  String get welcomeRestoreCloudTitle => 'Backup na nuvem';
+
+  @override
+  String get welcomeRestoreCloudBody => 'Você precisa do Secretly ID e da senha do backup';
+
+  @override
+  String get welcomeRestoreCloudFormBody => 'Digite seu Secretly ID e a senha do backup.';
+
+  @override
+  String get welcomeRestoreBackupPasswordHint => 'Senha do backup';
+
+  @override
+  String get welcomeRestoreFileTitle => 'Arquivo no aparelho';
+
+  @override
+  String get welcomeRestoreFileFormTitle => 'Arquivo de backup';
+
+  @override
+  String get welcomeRestoreFileFormBody => 'Escolha o backup e digite a senha dele.';
+
+  @override
+  String get welcomeRestoreFilePick => 'Procurar backup no aparelho';
+
+  @override
+  String get welcomeRestoreFileChosen => 'Arquivo escolhido';
+
+  @override
+  String get welcomeRestoreFileOther => 'Trocar';
+
+  @override
+  String get welcomeRestoreStepDownload => 'Baixando o backup';
+
+  @override
+  String get welcomeRestoreStepDecrypt => 'Verificando a senha e descriptografando';
+
+  @override
+  String get welcomeRestoreStepApply => 'Recuperando conversas e contatos';
+
+  @override
+  String get welcomeRestoreNote => 'O backup é descriptografado neste aparelho. O servidor não vê o conteúdo.';
+
+  @override
+  String get welcomeNewLoginTitle => 'É você entrando?';
+
+  @override
+  String get welcomeNewLoginBody => 'Um novo aparelho está pedindo acesso à sua conta. Permita só se ele for seu.';
+
+  @override
+  String get welcomeNewLoginUnknownDevice => 'Novo aparelho';
+
+  @override
+  String welcomeNewLoginTime(String time) {
+    return 'Hoje às $time';
+  }
+
+  @override
+  String get welcomeNewLoginSyncSection => 'O que levar para o novo aparelho';
+
+  @override
+  String get welcomeNewLoginApprove => 'Sim, sou eu';
+
+  @override
+  String get welcomeNewLoginDecline => 'Não — recusar o acesso';
+
+  @override
+  String get welcomeStart => 'Começar';
+
+  @override
+  String get welcomeDesktopChooseTitle => 'Conecte este computador';
+
+  @override
+  String get welcomeDesktopChooseBody => 'O jeito mais rápido é pelo celular que já tem o Secretly. Todas as conversas vêm para cá.';
+
+  @override
+  String get welcomeOr => 'ou';
+
+  @override
+  String get welcomeDesktopNewAccount => 'Nova conta';
+
+  @override
+  String get welcomeMoreInfo => 'Saiba mais';
+
+  @override
+  String get welcomeDesktopQrTitle => 'Escaneie com o celular';
+
+  @override
+  String welcomeDesktopUsePhonePrompt(String link) {
+    return 'Está com um celular com o Secretly? $link — assim o celular não perde o acesso.';
+  }
+
+  @override
+  String get welcomeDesktopUsePhoneLink => 'Entre por ele';
+
+  @override
+  String get welcomeDesktopTakeOverUsePhone => 'Conectar pelo celular';
+
+  @override
+  String get welcomeDesktopKitKeepApart => 'Guarde fora deste computador — num pendrive ou na nuvem.';
+
+  @override
+  String get pickerDone => 'OK';
+
+  @override
+  String get chatSwipeMute => 'Silenciar';
+
+  @override
+  String get chatSwipeUnmute => 'Com som';
 }

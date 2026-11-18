@@ -18,6 +18,7 @@ import 'profile_icon_picker_screen.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'widgets/secretly_glass_sheet.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 String _editContactText(
   BuildContext context, {
@@ -394,7 +395,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: SecretlySpinner(strokeWidth: 2),
                   )
                 : Text(l10n.contactEditDone),
           ),
@@ -473,7 +474,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
                       ? const SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: SecretlySpinner(strokeWidth: 2),
                         )
                       : null,
                   onTap: _updatingPhoto ? null : _setPhoto,
@@ -499,7 +500,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
               onTap: () async {
                 final ok = await showDialog<bool>(
                   context: context,
-                  builder: (context) => AlertDialog(
+                  builder: (context) => SecretlyAlertDialog(
                     title: Text(l10n.contactDetailsDeleteConfirmTitle),
                     content: Text(widget.profileId),
                     actions: [

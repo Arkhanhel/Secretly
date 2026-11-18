@@ -1,19 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
-import 'package:animations/animations.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
-import '../app/desktop_app_view_model.dart';
-import '../design/tokens.dart';
-import '../primitives/desktop_button.dart';
-import '../primitives/desktop_dialog.dart';
-import '../primitives/desktop_text_field.dart';
-import '../primitives/hover_listener.dart';
-import 'desktop_auth_scaffold.dart';
 import '../../backup_refusal_text.dart';
+import '../../welcome/welcome_style.dart';
+import '../app/desktop_app_view_model.dart';
+import 'desktop_auth_scaffold.dart';
 
 /// Восстановление аккаунта на компьютере.
 ///
@@ -27,10 +22,15 @@ class DesktopRestoreFlow extends StatefulWidget {
     super.key,
     required this.vm,
     required this.onBack,
+    this.onUsePhone,
   });
 
   final DesktopAppViewModel vm;
   final VoidCallback onBack;
+
+  /// Перейти к привязке по телефону (из подсказки и из предупреждения о
+  /// переносе личности). `null` — такой дороги рядом нет.
+  final VoidCallback? onUsePhone;
 
   @override
   State<DesktopRestoreFlow> createState() => _DesktopRestoreFlowState();
@@ -164,46 +164,65 @@ class _DesktopRestoreFlowState extends State<DesktopRestoreFlow> {
   }
 
   /// «Компьютер станет устройством, сделавшим копию» — да или нет.
+  ///
+  /// В окне три выхода (макет 17.11.2026): подключиться через телефон — это
+  /// и есть безопасный путь, всё равно восстановить, отмена.
   Future<bool> _confirmTakeOver() async {
     final l10n = AppLocalizations.of(context)!;
-    final ok = await DesktopDialog.show<bool>(
-      context,
-      title: l10n.desktopRestoreTakeOverTitle,
-      size: DDialogSize.small,
-      body: Text(
-        l10n.desktopRestoreTakeOverBody,
-        style: DType.body.copyWith(
-          color: DColors.of(context).textSecondary,
-          height: 1.45,
-        ),
-      ),
-      primary: DDialogAction(
-        label: l10n.desktopRestoreTakeOverConfirm,
-        kind: DButtonKind.danger,
-        onPressed: () => Navigator.of(context).maybePop(true),
-      ),
-      secondary: DDialogAction(
-        label: l10n.cancel,
-        onPressed: () => Navigator.of(context).maybePop(false),
-      ),
+    final usePhone = widget.onUsePhone;
+    final answer = await showWelcomeDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final s = WelcomeStyle.of(ctx);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Semantics(
+              header: true,
+              child: Text(
+                l10n.desktopRestoreTakeOverTitle,
+                style: s.title.copyWith(fontSize: 24, height: 1.18),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(l10n.desktopRestoreTakeOverBody, style: s.body),
+            const SizedBox(height: 22),
+            if (usePhone != null) ...[
+              WelcomePrimaryButton(
+                label: l10n.welcomeDesktopTakeOverUsePhone,
+                height: s.fluent ? 40 : 50,
+                onPressed: () => Navigator.of(ctx).maybePop('phone'),
+              ),
+              const SizedBox(height: 8),
+            ],
+            WelcomePrimaryButton(
+              label: l10n.desktopRestoreTakeOverConfirm,
+              height: s.fluent ? 40 : 48,
+              danger: true,
+              onPressed: () => Navigator.of(ctx).maybePop('restore'),
+            ),
+            const SizedBox(height: 4),
+            WelcomeTextButton(
+              label: l10n.cancel,
+              onPressed: () => Navigator.of(ctx).maybePop('cancel'),
+            ),
+          ],
+        );
+      },
     );
-    return ok == true;
+    if (answer == 'phone' && usePhone != null) usePhone();
+    return answer == 'restore';
   }
 
-  /// Выбор способа ↔ форма — тем же сдвигом, что шаги входа (05.10.2026).
+  /// Выбор способа ↔ форма — тем же плавным переходом, что шаги входа.
   @override
   Widget build(BuildContext context) {
-    final c = DColors.of(context);
-    return PageTransitionSwitcher(
-      duration: DMotion.of(context, DMotion.page),
-      reverse: _way == _RestoreWay.pick,
-      transitionBuilder: (child, primary, secondary) => SharedAxisTransition(
-        animation: primary,
-        secondaryAnimation: secondary,
-        transitionType: SharedAxisTransitionType.horizontal,
-        fillColor: c.bg,
-        child: child,
-      ),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 400),
+      switchInCurve: const Cubic(0.2, 0.8, 0.2, 1),
+      transitionBuilder: (child, animation) =>
+          FadeTransition(opacity: animation, child: child),
       child: KeyedSubtree(
         key: ValueKey<_RestoreWay>(_way),
         child: _page(context),
@@ -220,19 +239,30 @@ class _DesktopRestoreFlowState extends State<DesktopRestoreFlow> {
           title: l10n.desktopAuthRestoreTitle,
           subtitle: l10n.desktopAuthRestoreBody,
           children: [
-            _WayCard(
-              icon: FluentIcons.key_24_regular,
-              title: l10n.desktopAuthKitOptionTitle,
-              body: l10n.desktopAuthKitOptionBody,
-              onTap: () => setState(() => _way = _RestoreWay.kit),
+            WelcomeGlass(
+              child: Material(
+                type: MaterialType.transparency,
+                child: Column(
+                  children: [
+                    WelcomeChoiceRow(
+                      first: true,
+                      title: l10n.desktopAuthKitOptionTitle,
+                      subtitle: l10n.desktopAuthKitOptionBody,
+                      onTap: () => setState(() => _way = _RestoreWay.kit),
+                    ),
+                    WelcomeChoiceRow(
+                      title: l10n.desktopAuthServerOptionTitle,
+                      subtitle: l10n.desktopAuthServerOptionBody,
+                      onTap: () => setState(() => _way = _RestoreWay.server),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: DSpace.m),
-            _WayCard(
-              icon: FluentIcons.cloud_arrow_down_24_regular,
-              title: l10n.desktopAuthServerOptionTitle,
-              body: l10n.desktopAuthServerOptionBody,
-              onTap: () => setState(() => _way = _RestoreWay.server),
-            ),
+            if (widget.onUsePhone != null) ...[
+              const SizedBox(height: 28),
+              _UsePhoneHint(onTap: widget.onUsePhone!),
+            ],
           ],
         );
       case _RestoreWay.kit:
@@ -240,18 +270,18 @@ class _DesktopRestoreFlowState extends State<DesktopRestoreFlow> {
           title: l10n.desktopAuthKitOptionTitle,
           subtitle: l10n.desktopAuthKitOptionBody,
           fields: [
-            DesktopTextField(
+            WelcomeTextField(
               controller: _payload,
               autofocus: true,
-              hintText: l10n.desktopAuthKitPasteHint,
+              hint: l10n.desktopAuthKitPasteHint,
               maxLines: 4,
               onChanged: (_) => setState(() {}),
             ),
-            const SizedBox(height: DSpace.m),
-            DesktopTextField(
+            const SizedBox(height: 10),
+            WelcomeTextField(
               controller: _kitPassword,
-              hintText: l10n.password,
-              obscureText: true,
+              hint: l10n.password,
+              obscure: true,
               onChanged: (_) => setState(() {}),
               onSubmitted: (_) => _restoreFromKit(),
             ),
@@ -265,18 +295,22 @@ class _DesktopRestoreFlowState extends State<DesktopRestoreFlow> {
           title: l10n.desktopAuthServerOptionTitle,
           subtitle: l10n.desktopAuthServerOptionBody,
           fields: [
-            DesktopTextField(
-              controller: _profileId,
-              autofocus: true,
-              hintText: l10n.mySecretlyId,
-              prefixIcon: FluentIcons.fingerprint_24_regular,
-              onChanged: (_) => setState(() {}),
+            Semantics(
+              label: l10n.mySecretlyId,
+              child: WelcomeTextField(
+                controller: _profileId,
+                autofocus: true,
+                hint: l10n.secretlyIdHint,
+                monospace: true,
+                textAlign: TextAlign.center,
+                onChanged: (_) => setState(() {}),
+              ),
             ),
-            const SizedBox(height: DSpace.m),
-            DesktopTextField(
+            const SizedBox(height: 10),
+            WelcomeTextField(
               controller: _backupPassword,
-              hintText: l10n.password,
-              obscureText: true,
+              hint: l10n.password,
+              obscure: true,
               onChanged: (_) => setState(() {}),
               onSubmitted: (_) => _restoreFromServer(),
             ),
@@ -295,7 +329,7 @@ class _DesktopRestoreFlowState extends State<DesktopRestoreFlow> {
     required bool ready,
     required VoidCallback onSubmit,
   }) {
-    final c = DColors.of(context);
+    final s = WelcomeStyle.of(context);
     final l10n = AppLocalizations.of(context)!;
     return DesktopAuthScaffold(
       // Назад — к выбору способа, а не к началу: человек уже решил, что
@@ -306,17 +340,24 @@ class _DesktopRestoreFlowState extends State<DesktopRestoreFlow> {
       children: [
         ...fields,
         if (_error != null) ...[
-          const SizedBox(height: DSpace.m),
-          Text(
-            _error!,
-            style: DType.label.copyWith(color: c.danger, height: 1.45),
+          const SizedBox(height: 12),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: s.error,
+                fontSize: 13,
+                height: 1.45,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
-        const SizedBox(height: DSpace.xl),
-        DesktopButton(
+        const SizedBox(height: 32),
+        WelcomePrimaryButton(
           label: _busy ? l10n.desktopAuthRestoring : l10n.desktopAuthRestoreTitle,
-          kind: DButtonKind.filled,
-          expand: true,
           onPressed: (_busy || !ready) ? null : onSubmit,
         ),
       ],
@@ -324,59 +365,52 @@ class _DesktopRestoreFlowState extends State<DesktopRestoreFlow> {
   }
 }
 
-class _WayCard extends StatelessWidget {
-  const _WayCard({
-    required this.icon,
-    required this.title,
-    required this.body,
-    required this.onTap,
-  });
+/// «Телефон с Secretly под рукой? Войдите через него — так телефон не
+/// потеряет доступ.» Ссылка внутри фразы ведёт к привязке по QR.
+class _UsePhoneHint extends StatefulWidget {
+  const _UsePhoneHint({required this.onTap});
 
-  final IconData icon;
-  final String title;
-  final String body;
   final VoidCallback onTap;
 
   @override
+  State<_UsePhoneHint> createState() => _UsePhoneHintState();
+}
+
+class _UsePhoneHintState extends State<_UsePhoneHint> {
+  late final TapGestureRecognizer _tap = TapGestureRecognizer()
+    ..onTap = widget.onTap;
+
+  @override
+  void dispose() {
+    _tap.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final c = DColors.of(context);
-    return HoverListener(
-      onTap: onTap,
-      cursor: SystemMouseCursors.click,
-      builder: (ctx, hovered, pressed) => AnimatedContainer(
-        duration: DMotion.fast,
-        padding: const EdgeInsets.all(DSpace.l),
-        decoration: BoxDecoration(
-          color: hovered ? c.hover : c.chatList,
-          border: Border.all(color: c.borderSubtle),
-          borderRadius: BorderRadius.circular(DRadii.md),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 22, color: c.textSecondary),
-            const SizedBox(width: DSpace.m),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(title,
-                      style: DType.body.copyWith(
-                        color: c.textPrimary,
-                        fontWeight: FontWeight.w700,
-                      )),
-                  const SizedBox(height: 3),
-                  Text(body,
-                      style: DType.label
-                          .copyWith(color: c.textSecondary, height: 1.45)),
-                ],
-              ),
+    final s = WelcomeStyle.of(context);
+    final l10n = AppLocalizations.of(context)!;
+    const mark = '\u0001';
+    final parts = l10n.welcomeDesktopUsePhonePrompt(mark).split(mark);
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(text: parts.first),
+          TextSpan(
+            text: l10n.welcomeDesktopUsePhoneLink,
+            recognizer: _tap,
+            mouseCursor: SystemMouseCursors.click,
+            style: TextStyle(
+              color: s.text,
+              decoration: TextDecoration.underline,
+              decorationColor: s.text,
             ),
-            Icon(Icons.chevron_right_rounded, size: 20, color: c.textDisabled),
-          ],
-        ),
+          ),
+          if (parts.length > 1) TextSpan(text: parts.sublist(1).join()),
+        ],
       ),
+      textAlign: TextAlign.center,
+      style: s.body.copyWith(fontSize: 14, color: s.textSecondary),
     );
   }
 }

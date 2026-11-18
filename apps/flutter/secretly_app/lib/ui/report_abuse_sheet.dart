@@ -9,6 +9,7 @@ import 'icons/app_icons.dart';
 import 'support_request_utils.dart';
 import 'wave1_l10n.dart';
 import 'widgets/secretly_glass_sheet.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 enum ReportAbuseTargetType { profile, room }
 
@@ -493,7 +494,7 @@ Future<ReportAbuseResult?> showReportAbuseSheet({
                             icon: submitting
                                 ? const SizedBox.square(
                                     dimension: 18,
-                                    child: CircularProgressIndicator(
+                                    child: SecretlySpinner(
                                       strokeWidth: 2,
                                     ),
                                   )

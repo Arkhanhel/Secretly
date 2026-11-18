@@ -8,6 +8,7 @@ import '../reliability/delivery_reliability_service.dart';
 import 'settings_group.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_top_bar.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// DELIVERY RELIABILITY SCREEN (2026-07-16, delivery-wake audit).
 ///
@@ -249,7 +250,7 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
           if (_loading)
             const Padding(
               padding: EdgeInsets.only(top: 48),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(child: SecretlySpinner()),
             )
           else if (status == null)
             _InfoCard(

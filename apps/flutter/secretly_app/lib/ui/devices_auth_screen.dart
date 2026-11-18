@@ -17,9 +17,11 @@ import 'app_asset_paths.dart';
 import 'l10n.dart';
 import 'qr_scan_screen.dart';
 import 'wave1_l10n.dart';
+import 'welcome/welcome_style.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'paywall_screen.dart';
 import '../billing/show_paywall.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class DevicesAuthScreen extends StatefulWidget {
   const DevicesAuthScreen({super.key, required this.controller});
@@ -275,7 +277,7 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogCtx) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(
             _label(
               context,
@@ -629,7 +631,7 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
   Future<void> _resetForNewUser() async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => SecretlyAlertDialog(
         title: Text(_label(context, ru: 'Новый пользователь', en: 'New user')),
         content: Text(
           _label(
@@ -801,153 +803,9 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
     }
   }
 
-  Future<_ApprovalDecision?> _showApproveDialog(
+  Future<NewLoginDecision?> _showApproveDialog(
     DesktopLinkQrPayload payload,
-  ) async {
-    bool syncChats = true;
-    bool syncSettings = true;
-    bool syncMedia = false;
-    final name = payload.deviceLabel.trim();
-
-    return showModalBottomSheet<_ApprovalDecision>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _label(
-                        context,
-                        ru: 'Разрешить вход на устройстве?',
-                        en: 'Approve sign-in on this device?',
-                      ),
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      name.isEmpty
-                          ? _label(
-                              context,
-                              ru: 'Подтвердите синхронизацию с основного устройства (телефон).',
-                              en: 'Confirm sync from the primary device (phone).',
-                            )
-                          : _label(
-                              context,
-                              ru: 'Устройство: $name. Подтверждение выполняется только с основного телефона.',
-                              en: 'Device: $name. Approval is allowed from primary phone only.',
-                            ),
-                    ),
-                    const SizedBox(height: 10),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      value: syncChats,
-                      title: Text(
-                        _label(
-                          context,
-                          ru: 'Синхронизировать чаты',
-                          en: 'Sync chats',
-                        ),
-                      ),
-                      onChanged: (v) {
-                        setModalState(() {
-                          syncChats = v;
-                          if (!syncChats) syncMedia = false;
-                        });
-                      },
-                    ),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      value: syncSettings,
-                      title: Text(
-                        _label(
-                          context,
-                          ru: 'Синхронизировать настройки',
-                          en: 'Sync settings',
-                        ),
-                      ),
-                      onChanged: (v) => setModalState(() => syncSettings = v),
-                    ),
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      value: syncMedia,
-                      title: Text(
-                        _label(
-                          context,
-                          ru: 'Синхронизировать медиа',
-                          en: 'Sync media',
-                        ),
-                      ),
-                      onChanged: syncChats
-                          ? (v) => setModalState(() => syncMedia = v)
-                          : null,
-                    ),
-                    const SizedBox(height: 12),
-                    Column(
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.of(context).pop(null),
-                            child: Text(
-                              _label(context, ru: 'Закрыть', en: 'Close'),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: () => Navigator.of(
-                              context,
-                            ).pop(const _ApprovalDecision.decline()),
-                            icon: const Icon(Icons.block_rounded),
-                            label: Text(
-                              _label(
-                                context,
-                                ru: 'Отклонить вход',
-                                en: 'Decline sign-in',
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            onPressed: (!syncChats && !syncSettings)
-                                ? null
-                                : () => Navigator.of(context).pop(
-                                    _ApprovalDecision.approve(
-                                      syncChats: syncChats,
-                                      syncSettings: syncSettings,
-                                      syncMedia: syncMedia,
-                                    ),
-                                  ),
-                            child: Text(
-                              _label(context, ru: 'Разрешить', en: 'Approve'),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
+  ) => showNewLoginSheet(context, deviceLabel: payload.deviceLabel);
 
   @override
   Widget build(BuildContext context) {
@@ -1332,14 +1190,186 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
   }
 }
 
-class _ApprovalDecision {
-  const _ApprovalDecision.approve({
+/// Окно «Новый вход» (макет «Secretly Kit», 17.11.2026): телефон спрашивает,
+/// пускать ли новое устройство. Решения те же, что были: разрешить с
+/// выбранным переносом, отклонить или закрыть лист (ничего не делать).
+Future<NewLoginDecision?> showNewLoginSheet(
+BuildContext context, {
+required String deviceLabel,
+}) async {
+  bool syncChats = true;
+  bool syncSettings = true;
+  bool syncMedia = false;
+  final name = deviceLabel.trim();
+  final requestedAt = TimeOfDay.now();
+
+  return showWelcomeSheet<NewLoginDecision>(
+    context: context,
+    builder: (context) {
+      return StatefulBuilder(
+        builder: (context, setModalState) {
+          final s = WelcomeStyle.of(context);
+          final l10n = context.l10n;
+          Widget syncRow(
+            String title,
+            bool value,
+            ValueChanged<bool>? onChanged,
+          ) {
+            return SwitchListTile.adaptive(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              value: value,
+              activeTrackColor: s.switchTrack,
+      activeThumbColor: s.switchThumb,
+              title: Text(
+                title,
+                style: TextStyle(
+                  color: onChanged == null ? s.textTertiary : s.text,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              onChanged: onChanged,
+            );
+          }
+
+          return SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(
+                    l10n.welcomeNewLoginTitle,
+                    style: s.title.copyWith(fontSize: 26, height: 1.15),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(l10n.welcomeNewLoginBody, style: s.body),
+                const SizedBox(height: 20),
+                WelcomeGlass(
+                  radius: s.material ? 24 : 22,
+          fill: s.sheetCardFill,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        ExcludeSemantics(
+                          child: Icon(
+                            Icons.laptop_rounded,
+                            size: 40,
+                            color: s.text.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name.isEmpty
+                                    ? l10n.welcomeNewLoginUnknownDevice
+                                    : name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: s.text,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                l10n.welcomeNewLoginTime(
+                                  requestedAt.format(context),
+                                ),
+                                style: s.caption,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 8),
+                  child: Text(
+                    l10n.welcomeNewLoginSyncSection,
+                    style: s.caption.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                WelcomeGlass(
+                  radius: s.material ? 24 : 22,
+          fill: s.sheetCardFill,
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: Column(
+                      children: [
+                        syncRow(l10n.devicesSyncChats, syncChats, (v) {
+                          setModalState(() {
+                            syncChats = v;
+                            if (!syncChats) syncMedia = false;
+                          });
+                        }),
+                        syncRow(
+                          l10n.devicesSyncSettings,
+                          syncSettings,
+                          (v) => setModalState(() => syncSettings = v),
+                        ),
+                        syncRow(
+                          l10n.devicesSyncMedia,
+                          syncMedia,
+                          syncChats
+                              ? (v) => setModalState(() => syncMedia = v)
+                              : null,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                WelcomePrimaryButton(
+                  label: l10n.welcomeNewLoginApprove,
+                  height: 52,
+                  onPressed: (!syncChats && !syncSettings)
+                      ? null
+                      : () => Navigator.of(context).pop(
+                          NewLoginDecision.approve(
+                            syncChats: syncChats,
+                            syncSettings: syncSettings,
+                            syncMedia: syncMedia,
+                          ),
+                        ),
+                ),
+                const SizedBox(height: 8),
+                WelcomePrimaryButton(
+                  label: l10n.welcomeNewLoginDecline,
+                  height: 48,
+                  danger: true,
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).pop(const NewLoginDecision.decline()),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
+/// Ответ на окно «Новый вход».
+class NewLoginDecision {
+  const NewLoginDecision.approve({
     required this.syncChats,
     required this.syncSettings,
     required this.syncMedia,
   }) : isApproved = true;
 
-  const _ApprovalDecision.decline()
+  const NewLoginDecision.decline()
     : isApproved = false,
       syncChats = false,
       syncSettings = false,
@@ -1417,7 +1447,7 @@ class _MobileDevicesCard extends StatelessWidget {
               const SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2.2),
+                child: SecretlySpinner(strokeWidth: 2.2),
               ),
               const SizedBox(width: 12),
               Flexible(
@@ -1479,7 +1509,7 @@ class _MobileDevicesCard extends StatelessWidget {
                       ? const SizedBox(
                           width: 22,
                           height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2.2),
+                          child: SecretlySpinner(strokeWidth: 2.2),
                         )
                       : TextButton(
                           onPressed: endingDeviceId != null

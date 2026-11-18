@@ -10,6 +10,7 @@ import 'icons/app_icons.dart';
 import 'l10n.dart';
 import 'wave1_l10n.dart';
 import 'widgets/full_bleed_zoom.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class LocalImageGalleryItem {
   const LocalImageGalleryItem({
@@ -219,7 +220,7 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
               value: _LocalImageGalleryMenuAction.showAllMedia,
             ),
           (
-            icon: Icons.share_outlined,
+            icon: appleShareIcon(Icons.share_outlined),
             label: _label(context, ru: 'Поделиться', en: 'Share'),
             value: _LocalImageGalleryMenuAction.share,
           ),

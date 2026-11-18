@@ -15387,6 +15387,486 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add sticker'**
   String get stickerAddSticker;
+
+  /// Welcome screen: one-line promise under the Secretly wordmark.
+  ///
+  /// In en, this message translates to:
+  /// **'No phone number, no email. Your account is a key that lives only on your devices.'**
+  String get welcomeTagline;
+
+  /// Welcome screen: primary button.
+  ///
+  /// In en, this message translates to:
+  /// **'Create account'**
+  String get welcomeCreateAccount;
+
+  /// Welcome screen: text button that opens account restore.
+  ///
+  /// In en, this message translates to:
+  /// **'I already have an account'**
+  String get welcomeHaveAccount;
+
+  /// Welcome screen: small print. {terms} and {privacy} are links (welcomeTermsLink, welcomePrivacyLink).
+  ///
+  /// In en, this message translates to:
+  /// **'By continuing, you accept the {terms} and the {privacy}'**
+  String welcomeTermsNotice(String terms, String privacy);
+
+  /// Link text inside welcomeTermsNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'terms'**
+  String get welcomeTermsLink;
+
+  /// Link text inside welcomeTermsNotice.
+  ///
+  /// In en, this message translates to:
+  /// **'privacy policy'**
+  String get welcomePrivacyLink;
+
+  /// Name step: title.
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s your name?'**
+  String get welcomeNameTitle;
+
+  /// Name step: subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'People you chat with will see this name. You can change it later.'**
+  String get welcomeNameBody;
+
+  /// Name step: field placeholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Name or nickname'**
+  String get welcomeNameHint;
+
+  /// Keys step: progress phrase 1.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating your identity key'**
+  String get welcomeKeysStepIdentity;
+
+  /// Keys step: progress phrase 2.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing keys for your first messages'**
+  String get welcomeKeysStepPrekeys;
+
+  /// Keys step: progress phrase 3.
+  ///
+  /// In en, this message translates to:
+  /// **'Encrypting local storage'**
+  String get welcomeKeysStepStorage;
+
+  /// Keys step: final title.
+  ///
+  /// In en, this message translates to:
+  /// **'Your keys are ready'**
+  String get welcomeKeysReady;
+
+  /// Keys step: footnote.
+  ///
+  /// In en, this message translates to:
+  /// **'Keys are created on this device — the server never sees them'**
+  String get welcomeKeysNote;
+
+  /// Backup step: title.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup'**
+  String get welcomeBackupTitle;
+
+  /// Backup step: body when "In the cloud" is selected.
+  ///
+  /// In en, this message translates to:
+  /// **'Your chats survive a lost phone. The backup is encrypted with a password only you know.'**
+  String get welcomeBackupBodyCloud;
+
+  /// Backup step: body when "On this device" is selected.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup stays on this device. Move it to a new one together with the password.'**
+  String get welcomeBackupBodyDevice;
+
+  /// Backup step: segment "In the cloud".
+  ///
+  /// In en, this message translates to:
+  /// **'In the cloud'**
+  String get welcomeBackupInCloud;
+
+  /// Backup step: segment "On this device".
+  ///
+  /// In en, this message translates to:
+  /// **'On this device'**
+  String get welcomeBackupOnDevice;
+
+  /// Backup step: first password field.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a password'**
+  String get welcomeBackupPasswordHint;
+
+  /// Backup step: second password field.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat the password'**
+  String get welcomeBackupPasswordRepeatHint;
+
+  /// Password field: show the typed password.
+  ///
+  /// In en, this message translates to:
+  /// **'Show'**
+  String get welcomePasswordShow;
+
+  /// Password field: hide the typed password.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide'**
+  String get welcomePasswordHide;
+
+  /// Password strength label (meets all rules).
+  ///
+  /// In en, this message translates to:
+  /// **'Strong'**
+  String get welcomePasswordStrong;
+
+  /// Password strength label (meets all rules, 12+ characters).
+  ///
+  /// In en, this message translates to:
+  /// **'Very strong'**
+  String get welcomePasswordVeryStrong;
+
+  /// Backup step: primary button.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on backup'**
+  String get welcomeBackupEnable;
+
+  /// Backup step: skip button.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up later'**
+  String get welcomeBackupLater;
+
+  /// Backup step: success title.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup is on'**
+  String get welcomeBackupOnTitle;
+
+  /// Backup step: success body. {schedule} is how often, e.g. "Every day".
+  ///
+  /// In en, this message translates to:
+  /// **'{schedule}. You can change this in Settings.'**
+  String welcomeBackupOnBody(String schedule);
+
+  /// Notifications step: title.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t miss messages'**
+  String get welcomeNotifyTitle;
+
+  /// Notifications step: body. Push services only get a wake-up signal, never the text.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple and Google only pass on a signal that something new arrived — the text itself never goes through them.'**
+  String get welcomeNotifyBody;
+
+  /// Notifications step: sample notification text.
+  ///
+  /// In en, this message translates to:
+  /// **'New message'**
+  String get welcomeNotifyPreviewMessage;
+
+  /// Notifications step: sample notification text.
+  ///
+  /// In en, this message translates to:
+  /// **'Incoming call'**
+  String get welcomeNotifyPreviewCall;
+
+  /// Notifications step: time label on the sample notification.
+  ///
+  /// In en, this message translates to:
+  /// **'now'**
+  String get welcomeNotifyNow;
+
+  /// Notifications step: primary button (asks the system permission).
+  ///
+  /// In en, this message translates to:
+  /// **'Allow notifications'**
+  String get welcomeNotifyAllow;
+
+  /// Notifications step: skip button.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get welcomeNotifyNotNow;
+
+  /// Final step: title with the chosen name.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome, {name}'**
+  String welcomeDoneTitle(String name);
+
+  /// Final step: title when no name was entered.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome'**
+  String get welcomeDoneTitleNoName;
+
+  /// Final step: body.
+  ///
+  /// In en, this message translates to:
+  /// **'Your account is ready. Invite the people you want to chat with.'**
+  String get welcomeDoneBody;
+
+  /// Final step: caption under the Secretly ID.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Secretly ID — people find you by it, and you need it to restore your account. Keep it safe.'**
+  String get welcomeDoneIdCaption;
+
+  /// Copy button next to the Secretly ID.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get welcomeCopy;
+
+  /// Copy button after copying.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get welcomeCopied;
+
+  /// Final step: primary button.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Secretly'**
+  String get welcomeOpenApp;
+
+  /// Restore: title of the source picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get welcomeRestoreTitle;
+
+  /// Restore: subtitle of the source picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Where should we bring your account back from?'**
+  String get welcomeRestoreSubtitle;
+
+  /// Restore: cloud option and form title.
+  ///
+  /// In en, this message translates to:
+  /// **'Cloud backup'**
+  String get welcomeRestoreCloudTitle;
+
+  /// Restore: cloud option subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You need your Secretly ID and the backup password'**
+  String get welcomeRestoreCloudBody;
+
+  /// Restore: cloud form subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your Secretly ID and the backup password.'**
+  String get welcomeRestoreCloudFormBody;
+
+  /// Restore: backup password field.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup password'**
+  String get welcomeRestoreBackupPasswordHint;
+
+  /// Restore: file option title.
+  ///
+  /// In en, this message translates to:
+  /// **'File on this device'**
+  String get welcomeRestoreFileTitle;
+
+  /// Restore: file form title.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup file'**
+  String get welcomeRestoreFileFormTitle;
+
+  /// Restore: file form subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the backup and enter its password.'**
+  String get welcomeRestoreFileFormBody;
+
+  /// Restore: dashed area that searches for a backup file.
+  ///
+  /// In en, this message translates to:
+  /// **'Find a backup on this device'**
+  String get welcomeRestoreFilePick;
+
+  /// Restore: label of a file picked by hand (its name is unknown).
+  ///
+  /// In en, this message translates to:
+  /// **'Chosen file'**
+  String get welcomeRestoreFileChosen;
+
+  /// Restore: button that picks another file.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get welcomeRestoreFileOther;
+
+  /// Restore progress: downloading the backup.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading the backup'**
+  String get welcomeRestoreStepDownload;
+
+  /// Restore progress: checking the password and decrypting.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking the password and decrypting'**
+  String get welcomeRestoreStepDecrypt;
+
+  /// Restore progress: applying the backup.
+  ///
+  /// In en, this message translates to:
+  /// **'Bringing back chats and contacts'**
+  String get welcomeRestoreStepApply;
+
+  /// Restore progress: footnote.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup is decrypted on this device. The server cannot see what is inside.'**
+  String get welcomeRestoreNote;
+
+  /// New sign-in sheet (phone approves a new device): title.
+  ///
+  /// In en, this message translates to:
+  /// **'Is this you signing in?'**
+  String get welcomeNewLoginTitle;
+
+  /// New sign-in sheet: body.
+  ///
+  /// In en, this message translates to:
+  /// **'A new device is asking for access to your account. Allow it only if the device is yours.'**
+  String get welcomeNewLoginBody;
+
+  /// New sign-in sheet: device name when the device did not send one.
+  ///
+  /// In en, this message translates to:
+  /// **'New device'**
+  String get welcomeNewLoginUnknownDevice;
+
+  /// New sign-in sheet: when the request came. {time} is a local time like 14:02.
+  ///
+  /// In en, this message translates to:
+  /// **'Today at {time}'**
+  String welcomeNewLoginTime(String time);
+
+  /// New sign-in sheet: heading above the sync switches.
+  ///
+  /// In en, this message translates to:
+  /// **'What to move to the new device'**
+  String get welcomeNewLoginSyncSection;
+
+  /// New sign-in sheet: approve button.
+  ///
+  /// In en, this message translates to:
+  /// **'Yes, it\'s me'**
+  String get welcomeNewLoginApprove;
+
+  /// New sign-in sheet: decline button.
+  ///
+  /// In en, this message translates to:
+  /// **'No — decline sign-in'**
+  String get welcomeNewLoginDecline;
+
+  /// Desktop welcome screen: primary button.
+  ///
+  /// In en, this message translates to:
+  /// **'Get started'**
+  String get welcomeStart;
+
+  /// Desktop: how to sign in — title.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect this computer'**
+  String get welcomeDesktopChooseTitle;
+
+  /// Desktop: how to sign in — subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'The quickest way is through a phone that already has Secretly. All your chats will move here.'**
+  String get welcomeDesktopChooseBody;
+
+  /// Divider between the main and the other sign-in buttons.
+  ///
+  /// In en, this message translates to:
+  /// **'or'**
+  String get welcomeOr;
+
+  /// Desktop: button that creates a new account on this computer.
+  ///
+  /// In en, this message translates to:
+  /// **'New account'**
+  String get welcomeDesktopNewAccount;
+
+  /// Screen reader label of the small “?” info icon.
+  ///
+  /// In en, this message translates to:
+  /// **'More info'**
+  String get welcomeMoreInfo;
+
+  /// Desktop: QR pairing title.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan with your phone'**
+  String get welcomeDesktopQrTitle;
+
+  /// Desktop restore: hint below the options. {link} is welcomeDesktopUsePhoneLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Have a phone with Secretly nearby? {link} — that way the phone keeps its access.'**
+  String welcomeDesktopUsePhonePrompt(String link);
+
+  /// Link inside welcomeDesktopUsePhonePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in through it'**
+  String get welcomeDesktopUsePhoneLink;
+
+  /// Desktop restore warning: button that switches to QR pairing instead.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect through the phone'**
+  String get welcomeDesktopTakeOverUsePhone;
+
+  /// Desktop: after the recovery kit is saved.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep it away from this computer — on a flash drive or in the cloud.'**
+  String get welcomeDesktopKitKeepApart;
+
+  /// iPhone: the button above the date and time wheel, as in iOS.
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get pickerDone;
+
+  /// iPhone: short label of the swipe button on a chat row that turns its notifications off.
+  ///
+  /// In en, this message translates to:
+  /// **'Mute'**
+  String get chatSwipeMute;
+
+  /// iPhone: short label of the swipe button on a muted chat row that turns its notifications back on.
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get chatSwipeUnmute;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

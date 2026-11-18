@@ -7,6 +7,8 @@ import 'dart:ui';
 
 import 'package:animations/animations.dart' as material_motion;
 import 'package:flutter/material.dart';
+import 'package:secretly_app/ui/apple_style.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/rendering.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:glass_kit/glass_kit.dart';
@@ -62,6 +64,7 @@ import 'widgets/typing_dots.dart';
 import 'widgets/room_call_return_banner.dart';
 import 'widgets/broken_media_box.dart';
 import 'haptics.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Smart-sorting modes for the Chats tab list (PART 2). Persisted by name to
 /// SharedPreferences so an unknown/legacy value fails safe back to [byTime].
@@ -1581,6 +1584,32 @@ class _ChatsScreenState extends State<ChatsScreen>
     super.dispose();
   }
 
+  /// Смахивание «Удалить» на iPhone: то же подтверждение и то же удаление,
+  /// что у кнопки «Удалить» в режиме выбора — только для одного чата.
+  Future<void> _confirmDeleteOneChat(String convoId) async {
+    final l10n = context.l10n;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => SecretlyAlertDialog(
+        title: Text(l10n.deleteChatsConfirmTitle(1)),
+        content: Text(l10n.deleteChatsConfirmBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(l10n.cancel),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(l10n.delete),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || ok != true) return;
+    await widget.controller.deleteChat(convoId: convoId);
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
@@ -1803,7 +1832,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                             final ok = await showDialog<bool>(
                               context: context,
                               builder: (context) {
-                                return AlertDialog(
+                                return SecretlyAlertDialog(
                                   title: Text(
                                     l10n.deleteChatsConfirmTitle(
                                       _selected.length,
@@ -1973,7 +2002,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                         final ok = await showDialog<bool>(
                           context: context,
                           builder: (context) {
-                            return AlertDialog(
+                            return SecretlyAlertDialog(
                               title: Text(
                                 l10n.clearHistoryConfirmTitle(_selected.length),
                               ),
@@ -2344,7 +2373,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                               const SizedBox(
                                 width: 22,
                                 height: 22,
-                                child: CircularProgressIndicator(
+                                child: SecretlySpinner(
                                   strokeWidth: 2,
                                 ),
                               )
@@ -2457,7 +2486,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                       );
                     }
 
-                    return InkWell(
+                    final tile = InkWell(
                       key: ValueKey<String>('chat-tile-${c.convoId}'),
                       // Самое частое нажатие во всём приложении, и отклика в нём
                       // не было. Долгое нажатие — средний: вход в режим выбора
@@ -2645,6 +2674,56 @@ class _ChatsScreenState extends State<ChatsScreen>
                           ),
                         ),
                       ),
+                    );
+                    // iPhone (решение владельца 17.11.2026): смахивание строки, как
+                    // в «Сообщениях» iOS. Влево — «Без звука» и «Удалить», вправо —
+                    // «Закрепить». На строках чатов это смахивание забирает свайп
+                    // между разделами; на остальном экране он остаётся.
+                    if (!appleControlsEnabled || isRequest || _selectionMode) {
+                      return tile;
+                    }
+                    final pinned = c.pinnedAtMs != null;
+                    return AppleSwipeActions(
+                      key: ValueKey<String>('chat-swipe-${c.convoId}'),
+                      leading: [
+                        AppleSwipeAction(
+                          label: pinned ? l10n.unpin : l10n.pin,
+                          icon: pinned
+                              ? CupertinoIcons.pin_slash_fill
+                              : CupertinoIcons.pin_fill,
+                          color: const Color(0xFFFF9500),
+                          onPressed: () => unawaited(
+                            controller.setChatPinned(
+                              convoId: c.convoId,
+                              pinned: !pinned,
+                            ),
+                          ),
+                        ),
+                      ],
+                      trailing: [
+                        AppleSwipeAction(
+                          label: c.muted
+                              ? l10n.chatSwipeUnmute
+                              : l10n.chatSwipeMute,
+                          icon: c.muted
+                              ? CupertinoIcons.bell_fill
+                              : CupertinoIcons.bell_slash_fill,
+                          color: const Color(0xFF5856D6),
+                          onPressed: () => unawaited(
+                            controller.setChatMuted(
+                              convoId: c.convoId,
+                              muted: !c.muted,
+                            ),
+                          ),
+                        ),
+                        AppleSwipeAction(
+                          label: l10n.delete,
+                          icon: CupertinoIcons.trash_fill,
+                          color: const Color(0xFFFF3B30),
+                          onPressed: () => unawaited(_confirmDeleteOneChat(c.convoId)),
+                        ),
+                      ],
+                      child: tile,
                     );
                   },
                 ),

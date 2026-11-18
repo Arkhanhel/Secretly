@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app/app_controller.dart';
 import 'settings_screen_l10n.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// In-app Support chat (Variant C).
 /// The user types (and can attach a photo/file); the message is sealed to the
@@ -490,7 +491,7 @@ class _SupportScreenState extends State<SupportScreen> {
         children: [
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: SecretlySpinner())
                 : _messages.isEmpty
                     ? _empty(cs)
                     : ListView.builder(
@@ -745,7 +746,7 @@ class _SupportScreenState extends State<SupportScreen> {
                 ? SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: fg),
+                    child: SecretlySpinner(strokeWidth: 2, color: fg),
                   )
                 : Icon(icon, color: fg, size: 22),
           ),

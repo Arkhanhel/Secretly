@@ -17,6 +17,7 @@ import '../../build_variant.dart';
 import '../wave1_l10n.dart';
 import '../widgets/frosted_header_island.dart';
 import '../../media/h264_encoder.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Result of a finished video-note recording (квадратик). Returned by
 /// [showVideoNoteRecorder] when the user releases / sends a valid take.
@@ -1028,7 +1029,7 @@ class _VideoNoteRecorderOverlayState extends State<_VideoNoteRecorderOverlay>
                               ),
                               style: const TextStyle(color: Colors.white70),
                             )
-                          : const CircularProgressIndicator(
+                          : const SecretlySpinner(
                               color: Colors.white,
                             ),
                     ),

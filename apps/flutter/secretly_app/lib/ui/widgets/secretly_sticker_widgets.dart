@@ -16,6 +16,7 @@ import '../icons/app_icons.dart';
 import '../l10n.dart';
 import 'broken_media_box.dart';
 import 'sticker_pack_access_picker.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 
 class SecretlyStickerAssetView extends StatelessWidget {
@@ -362,7 +363,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(
             dialogContext.l10n.stickerPackRemoveTitle,
           ),
@@ -733,7 +734,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
                                                   width: 10,
                                                   height: 10,
                                                   child:
-                                                      CircularProgressIndicator(
+                                                      SecretlySpinner(
                                                         strokeWidth: 1.4,
                                                         color: cs.onPrimary,
                                                       ),
@@ -795,7 +796,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
         child: SizedBox(
           width: 22,
           height: 22,
-          child: CircularProgressIndicator(strokeWidth: 2.1, color: cs.primary),
+          child: SecretlySpinner(strokeWidth: 2.1, color: cs.primary),
         ),
       );
     }
@@ -1027,7 +1028,7 @@ Future<bool> _confirmDestructive(
 }) async {
   final ok = await showDialog<bool>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
+    builder: (dialogContext) => SecretlyAlertDialog(
       title: Text(title),
       content: Text(body),
       actions: [
@@ -1288,7 +1289,7 @@ class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
                 ),
                 PopupMenuButton<String>(
                   key: const ValueKey('stickers:pack-menu'),
-                  icon: const Icon(Icons.more_vert_rounded),
+                  icon: Icon(appleMoreIcon(Icons.more_vert_rounded)),
                   onSelected: (v) {
                     if (v == 'delete-pack') unawaited(_deletePack());
                   },

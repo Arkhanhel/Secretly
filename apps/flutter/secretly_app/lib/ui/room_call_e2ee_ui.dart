@@ -17,6 +17,7 @@ import '../rooms/call_e2ee/call_e2ee_protocol.dart';
 import '../rooms/call_e2ee/room_call_e2ee_status.dart';
 import '../rooms/call_e2ee/room_call_join_plan.dart';
 import '../rooms/room_call_media_controller.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// С чем входить в созвон и написать ли в чат «обновитесь».
 class RoomCallJoinDecision {
@@ -112,7 +113,7 @@ Future<({bool encrypted, bool notify})?> showRoomCallCreatorChoiceDialog(
   return showDialog<({bool encrypted, bool notify})>(
     context: context,
     builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setState) => AlertDialog(
+      builder: (ctx, setState) => SecretlyAlertDialog(
         title: Text(l10n.roomCallStartChoiceTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -155,7 +156,7 @@ Future<bool> showRoomCallOpenJoinDialog(BuildContext context) async {
   final l10n = AppLocalizations.of(context)!;
   final ok = await showDialog<bool>(
     context: context,
-    builder: (ctx) => AlertDialog(
+    builder: (ctx) => SecretlyAlertDialog(
       title: Text(l10n.roomCallJoinOpenTitle),
       content: Text(l10n.roomCallJoinOpenBody),
       actions: [

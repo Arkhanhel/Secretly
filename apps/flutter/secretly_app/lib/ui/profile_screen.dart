@@ -59,6 +59,7 @@ import 'widgets/secretly_glass_sheet.dart';
 import '../security/app_security_manager.dart';
 import 'widgets/broken_media_box.dart';
 import '../media/h264_encoder.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// A profile top-island action button: jelly press on liquid glass (iOS),
 /// standard IconButton elsewhere. Icon colour follows the theme icon colour so
@@ -283,7 +284,7 @@ class _ProfileConversationPickerSheet extends StatelessWidget {
                             child: SizedBox(
                               width: 28,
                               height: 28,
-                              child: CircularProgressIndicator(
+                              child: SecretlySpinner(
                                 strokeWidth: 2.2,
                               ),
                             ),
@@ -996,7 +997,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
+      builder: (_) => const Center(child: SecretlySpinner()),
     );
     var loaderOpen = true;
     void closeLoader() {
@@ -1132,7 +1133,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               child: Row(
                                 children: [
                                   Icon(
-                                    Icons.share_outlined,
+                                    appleShareIcon(Icons.share_outlined),
                                     size: 22,
                                     color: cs.onSurface.withValues(alpha: 0.92),
                                   ),
@@ -2016,7 +2017,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                       SizedBox(
                                         width: 18,
                                         height: 18,
-                                        child: CircularProgressIndicator(
+                                        child: SecretlySpinner(
                                           strokeWidth: 2.2,
                                           color: cs.primary,
                                         ),
@@ -2674,7 +2675,7 @@ class _ProfileScreenState extends State<ProfileScreen>
               children: [
                 if (canPop)
                   IconButton(
-                    icon: const Icon(Icons.arrow_back),
+                    icon: Icon(appleBackIcon(Icons.arrow_back)),
                     onPressed: () => Navigator.of(context).maybePop(),
                   )
                 else
@@ -3341,8 +3342,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                                       padding: EdgeInsets.zero,
                                     ),
                                     onPressed: _shareProfileLink,
-                                    child: const Icon(
-                                      Icons.share_outlined,
+                                    child: Icon(
+                                      appleShareIcon(Icons.share_outlined),
                                       size: 18,
                                     ),
                                   ),
@@ -3420,7 +3421,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               onSubmitted: (v) => controller.setMyNickname(v),
                             ),
                             const SizedBox(height: 6),
-                            SwitchListTile(
+                            SecretlySwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: Text(l10n.includeNicknameInQr),
                               subtitle: Text(
@@ -3437,7 +3438,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               onChanged: (v) =>
                                   controller.setShareNicknameInQr(v),
                             ),
-                            SwitchListTile(
+                            SecretlySwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: Text(
                                 _label(
@@ -3464,7 +3465,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                               onChanged: (v) =>
                                   controller.setDiscoverableByNickname(v),
                             ),
-                            SwitchListTile(
+                            SecretlySwitchListTile(
                               contentPadding: EdgeInsets.zero,
                               title: Text(
                                 _label(

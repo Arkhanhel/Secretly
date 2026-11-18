@@ -27,6 +27,7 @@ import 'paywall_screen.dart';
 import 'l10n.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_top_bar.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class _MessageDiagnosticsData {
   const _MessageDiagnosticsData({
@@ -1357,7 +1358,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                       snapshot.data == null)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Center(child: CircularProgressIndicator()),
+                      child: Center(child: SecretlySpinner()),
                     )
                   else if (actionable.isEmpty)
                     Text('—', style: Theme.of(context).textTheme.bodySmall)
@@ -1379,7 +1380,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                       snapshot.data == null)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Center(child: CircularProgressIndicator()),
+                      child: Center(child: SecretlySpinner()),
                     )
                   else if (actionableCalls.isEmpty)
                     Text('—', style: Theme.of(context).textTheme.bodySmall)

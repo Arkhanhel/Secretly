@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../theme_presets.dart';
 import '../wave1_l10n.dart';
 import 'telegram_wallpaper.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Near-fullscreen preview of an animated wallpaper with a faithful mock chat on
 /// top and a frosted "island" control to pick the animation mode + apply.
@@ -520,7 +521,7 @@ class _ControlIsland extends StatelessWidget {
                 ],
               ),
             ),
-            Switch(
+            SecretlySwitch(
               value: conduct,
               onChanged: onConductChanged,
               activeThumbColor: cs.onPrimary,

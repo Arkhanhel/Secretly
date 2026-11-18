@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:secretly_app/legal/third_party_licenses.dart';
 import 'package:secretly_app/ui/secretly_snackbar.dart';
+import 'package:secretly_app/ui/apple_style.dart';
 import 'package:flutter/services.dart';
 import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -59,6 +60,7 @@ import 'ui/thermal_guard.dart';
 import 'legal/ffmpeg_mobile_license.dart';
 import 'assets/on_demand_assets.dart';
 import 'transport/resilient_http_client.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -518,7 +520,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       useMaterial3: true,
       // flutter_dash mirrors Telegram Android, which uses Roboto. On Android
       // 'Roboto' resolves to the system font (no bundling). Other themes: Inter.
-      fontFamily: appPreset.id == 'flutter_dash' ? 'Roboto' : 'Inter',
+      // На iPhone (17.11.2026) — системный шрифт Apple: `null` берёт его из
+      // типографики платформы (`apple_style.dart`, kAppleSystemFont).
+      fontFamily: appPreset.id == 'flutter_dash'
+          ? 'Roboto'
+          : (appleSystemFontEnabled ? null : 'Inter'),
       colorScheme: scheme,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       textTheme: const TextTheme(
@@ -645,11 +651,45 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ),
       ),
       dividerColor: scheme.outlineVariant.withValues(alpha: 0.35),
+      // На iPhone (17.11.2026) нажатие — без «волны» Android: нажатое место
+      // подсвечивается, как в iOS. Кнопки сохраняют свою подсветку нажатия.
+      splashFactory: appleControlsEnabled ? NoSplash.splashFactory : null,
       dialogTheme: DialogThemeData(
+        // Фон под окном на iPhone — светлее, как у окон iOS.
+        barrierColor: appleDialogsEnabled
+            ? (isDark ? const Color(0x66000000) : const Color(0x33000000))
+            : null,
         backgroundColor: scheme.surface,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
+      // На iPhone (17.11.2026) меню «⋯» — как выпадающее меню iOS: светлая
+      // или тёмная матовая плашка со скруглением 13, крупные строки. На
+      // остальных платформах — null, то есть прежнее оформление.
+      popupMenuTheme: appleDialogsEnabled
+          ? PopupMenuThemeData(
+              color: isDark ? const Color(0xF52C2C2E) : const Color(0xF7F9F9F9),
+              surfaceTintColor: Colors.transparent,
+              elevation: 14,
+              shadowColor: Colors.black.withValues(alpha: isDark ? 0.5 : 0.22),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(13),
+              ),
+              menuPadding: EdgeInsets.zero,
+              textStyle: TextStyle(
+                fontSize: 17,
+                letterSpacing: -0.4,
+                color: isDark ? Colors.white : Colors.black,
+              ),
+              labelTextStyle: WidgetStatePropertyAll(
+                TextStyle(
+                  fontSize: 17,
+                  letterSpacing: -0.4,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
+            )
+          : null,
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: Color.alphaBlend(
           scheme.secondary.withValues(alpha: isDark ? 0.16 : 0.08),
@@ -659,6 +699,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
+        // На iPhone (17.11.2026) ручка листа — короткая серая, как в iOS.
+        // Сама ручка включается каждым листом, как и раньше.
+        dragHandleColor: appleDialogsEnabled
+            ? (isDark ? const Color(0x66EBEBF5) : const Color(0x4D3C3C43))
+            : null,
+        dragHandleSize: appleDialogsEnabled ? const Size(36, 5) : null,
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: Colors.transparent,
@@ -1285,7 +1331,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final shown = port == 443 ? host : '$host:$port';
     final ok = await showDialog<bool>(
       context: ctx,
-      builder: (dialogCtx) => AlertDialog(
+      builder: (dialogCtx) => SecretlyAlertDialog(
         title: Text(ru ? 'Использовать прокси?' : 'Use this proxy?'),
         content: Text(
           ru
@@ -1387,13 +1433,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (context) => AlertDialog(
+        builder: (context) => SecretlyAlertDialog(
           content: Row(
             children: [
               const SizedBox(
                 width: 22,
                 height: 22,
-                child: CircularProgressIndicator(strokeWidth: 2.4),
+                child: SecretlySpinner(strokeWidth: 2.4),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -1685,7 +1731,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           // который его заказал, уже закрылся: длинные операции — запрос
           // резервной копии, восстановление — переживают свою страницу. См.
           // `ui/root_messenger.dart`, там же найденный по этому поводу отказ.
-          scaffoldMessengerKey: rootScaffoldMessengerKey,
+          //
+          // На iPhone ключ у [AppleToastMessenger] в `builder` ниже: он
+          // показывает уведомления капсулой сверху (17.11.2026).
+          scaffoldMessengerKey: appleTopToastsEnabled
+              ? null
+              : rootScaffoldMessengerKey,
           // Read-receipt scope (2026-07-18): lets a ChatScreen learn when it
           // becomes visible again after a pushed sub-screen is popped, so it
           // can mark-read only while genuinely on screen.
@@ -1862,7 +1913,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 }
               });
             }
-            return AnnotatedRegion<SystemUiOverlayStyle>(
+            final app = AnnotatedRegion<SystemUiOverlayStyle>(
               value: overlayStyle,
               child: ThemeTransitionLayer(
                 onToggle: (v) => _controller.setDarkMode(v),
@@ -1920,6 +1971,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                               // minimized.
                               if (_callManager != null)
                                 CallBubbleOverlay(callManager: _callManager!),
+                              // Капсула уведомлений iPhone — ниже заслонки
+                              // блокировки, чтобы текст не был виден поверх.
+                              if (appleTopToastsEnabled)
+                                const AppleToastHost(),
                               if (_shouldShowAppLockOverlay)
                                 AppSecurityLockOverlay(controller: _controller),
                             ],
@@ -1931,6 +1986,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 ),
               ),
             );
+            return appleTopToastsEnabled
+                ? AppleToastMessenger(key: rootScaffoldMessengerKey, child: app)
+                : app;
           },
           theme: light,
           darkTheme: dark,

@@ -25,6 +25,7 @@ import '../secretly_snackbar.dart';
 import '../wave1_l10n.dart';
 import 'full_bleed_zoom.dart';
 import 'broken_media_box.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class ConversationMediaGalleryVm {
   const ConversationMediaGalleryVm({
@@ -666,7 +667,7 @@ class _MediaGridCellState extends State<_MediaGridCell> {
         child: SizedBox(
           width: 18,
           height: 18,
-          child: CircularProgressIndicator(
+          child: SecretlySpinner(
             strokeWidth: 2,
             color: cs.onSurfaceVariant.withValues(alpha: 0.6),
           ),
@@ -1085,7 +1086,7 @@ class ConversationMusicList extends StatelessWidget {
               fr: 'Actions',
               de: 'Aktionen',
             ),
-            icon: Icon(Icons.more_vert_rounded, color: cs.onSurfaceVariant),
+            icon: Icon(appleMoreIcon(Icons.more_vert_rounded), color: cs.onSurfaceVariant),
             onSelected: (action) => _handle(context, action, index),
             itemBuilder: (context) => [
               PopupMenuItem<_MusicMenuAction>(
@@ -1157,7 +1158,7 @@ class ConversationMusicList extends StatelessWidget {
                 value: _MusicMenuAction.share,
                 child: Row(
                   children: [
-                    const Icon(Icons.share_outlined, size: 18),
+                    Icon(appleShareIcon(Icons.share_outlined), size: 18),
                     const SizedBox(width: 10),
                     Text(
                       wave1Text(

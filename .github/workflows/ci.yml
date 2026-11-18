@@ -104,6 +104,13 @@ jobs:
       - name: Show toolchain
         run: rustc --version && cargo --version
 
+      # The plugin is built for both Mac architectures at once, and cargokit
+      # asked rustup for each target in parallel: two installs of the same
+      # standard library collided ("detected conflict: rust-std-x86_64-apple-
+      # darwin"). Installing both targets up front, one step, removes the race.
+      - name: Install Rust targets for a universal build
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
       - name: Cache CocoaPods
         uses: actions/cache@v4
         with:

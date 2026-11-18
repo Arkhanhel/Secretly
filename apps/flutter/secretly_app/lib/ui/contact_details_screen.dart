@@ -42,6 +42,7 @@ import 'widgets/frosted_top_bar.dart';
 import 'widgets/broken_media_box.dart';
 import 'disappearing_messages_ui.dart';
 import '../messages/disappearing_flags.dart' show DisappearingPeerSupport;
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class ContactDetailsScreen extends StatefulWidget {
   const ContactDetailsScreen({
@@ -410,7 +411,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                 child: IconButton(
                   padding: EdgeInsets.zero,
                   tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-                  icon: const Icon(Icons.arrow_back),
+                  icon: Icon(appleBackIcon(Icons.arrow_back)),
                   onPressed: () => Navigator.of(context).maybePop(),
                 ),
               ),
@@ -1017,8 +1018,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                           padding: EdgeInsets.zero,
                                         ),
                                         onPressed: () => _shareContactId(vm),
-                                        child: const Icon(
-                                          Icons.share_outlined,
+                                        child: Icon(
+                                          appleShareIcon(Icons.share_outlined),
                                           size: 18,
                                         ),
                                       ),
@@ -1922,7 +1923,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(l10n.contactDetailsDeleteConfirmTitle),
           content: Text(widget.peerProfileId),
           actions: [

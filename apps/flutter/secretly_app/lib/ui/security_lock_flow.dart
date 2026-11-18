@@ -13,6 +13,7 @@ import 'animations/animations.dart';
 import 'app_asset_paths.dart';
 import 'l10n.dart';
 import 'wave1_l10n.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 String _securityLockLabel(
   BuildContext context, {
@@ -647,7 +648,7 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
         ? SizedBox(
             width: 18,
             height: 18,
-            child: CircularProgressIndicator(
+            child: SecretlySpinner(
               strokeWidth: 2,
               color: filled
                   ? theme.colorScheme.onSecondaryContainer
@@ -699,7 +700,7 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
           ? SizedBox(
               width: 18,
               height: 18,
-              child: CircularProgressIndicator(
+              child: SecretlySpinner(
                 strokeWidth: 2,
                 color: theme.colorScheme.primary,
               ),
@@ -737,7 +738,7 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
           ? const SizedBox(
               width: 18,
               height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: SecretlySpinner(strokeWidth: 2),
             )
           : const Icon(Icons.password_rounded),
       label: Text(_label(ru: 'Войти с помощью пароля', en: 'Use password')),

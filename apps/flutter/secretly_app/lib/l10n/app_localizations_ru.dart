@@ -8304,4 +8304,254 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get stickerAddSticker => 'Добавить стикер';
+
+  @override
+  String get welcomeTagline => 'Без номера и почты. Аккаунт — это ключ, который живёт только на ваших устройствах.';
+
+  @override
+  String get welcomeCreateAccount => 'Создать аккаунт';
+
+  @override
+  String get welcomeHaveAccount => 'У меня уже есть аккаунт';
+
+  @override
+  String welcomeTermsNotice(String terms, String privacy) {
+    return 'Продолжая, вы принимаете $terms и $privacy';
+  }
+
+  @override
+  String get welcomeTermsLink => 'условия';
+
+  @override
+  String get welcomePrivacyLink => 'политику конфиденциальности';
+
+  @override
+  String get welcomeNameTitle => 'Как вас зовут?';
+
+  @override
+  String get welcomeNameBody => 'Это имя увидят собеседники. Его можно изменить.';
+
+  @override
+  String get welcomeNameHint => 'Имя или псевдоним';
+
+  @override
+  String get welcomeKeysStepIdentity => 'Создаём ключ личности';
+
+  @override
+  String get welcomeKeysStepPrekeys => 'Готовим ключи для первых сообщений';
+
+  @override
+  String get welcomeKeysStepStorage => 'Шифруем хранилище';
+
+  @override
+  String get welcomeKeysReady => 'Ключи готовы';
+
+  @override
+  String get welcomeKeysNote => 'Ключи создаются на этом устройстве — сервер их не видит';
+
+  @override
+  String get welcomeBackupTitle => 'Резервная копия';
+
+  @override
+  String get welcomeBackupBodyCloud => 'Переписка переживёт потерю телефона. Копия шифруется паролем, который знаете только вы.';
+
+  @override
+  String get welcomeBackupBodyDevice => 'Копия хранится на этом устройстве. Перенесите её на новое вместе с паролем.';
+
+  @override
+  String get welcomeBackupInCloud => 'В облаке';
+
+  @override
+  String get welcomeBackupOnDevice => 'На устройстве';
+
+  @override
+  String get welcomeBackupPasswordHint => 'Придумайте пароль';
+
+  @override
+  String get welcomeBackupPasswordRepeatHint => 'Повторите пароль';
+
+  @override
+  String get welcomePasswordShow => 'Показать';
+
+  @override
+  String get welcomePasswordHide => 'Скрыть';
+
+  @override
+  String get welcomePasswordStrong => 'Надёжный';
+
+  @override
+  String get welcomePasswordVeryStrong => 'Очень надёжный';
+
+  @override
+  String get welcomeBackupEnable => 'Включить копию';
+
+  @override
+  String get welcomeBackupLater => 'Настроить позже';
+
+  @override
+  String get welcomeBackupOnTitle => 'Копия включена';
+
+  @override
+  String welcomeBackupOnBody(String schedule) {
+    return '$schedule. Изменить можно в настройках.';
+  }
+
+  @override
+  String get welcomeNotifyTitle => 'Не пропускайте сообщения';
+
+  @override
+  String get welcomeNotifyBody => 'Apple и Google передают только сигнал о новом сообщении — сам текст через них не идёт.';
+
+  @override
+  String get welcomeNotifyPreviewMessage => 'Новое сообщение';
+
+  @override
+  String get welcomeNotifyPreviewCall => 'Входящий звонок';
+
+  @override
+  String get welcomeNotifyNow => 'сейчас';
+
+  @override
+  String get welcomeNotifyAllow => 'Разрешить уведомления';
+
+  @override
+  String get welcomeNotifyNotNow => 'Не сейчас';
+
+  @override
+  String welcomeDoneTitle(String name) {
+    return 'Добро пожаловать, $name';
+  }
+
+  @override
+  String get welcomeDoneTitleNoName => 'Добро пожаловать';
+
+  @override
+  String get welcomeDoneBody => 'Аккаунт создан. Пригласите тех, с кем хотите переписываться.';
+
+  @override
+  String get welcomeDoneIdCaption => 'Ваш Secretly ID — по нему вас находят и восстанавливают аккаунт. Сохраните его.';
+
+  @override
+  String get welcomeCopy => 'Копировать';
+
+  @override
+  String get welcomeCopied => 'Скопировано';
+
+  @override
+  String get welcomeOpenApp => 'Открыть Secretly';
+
+  @override
+  String get welcomeRestoreTitle => 'Восстановление';
+
+  @override
+  String get welcomeRestoreSubtitle => 'Откуда вернуть аккаунт?';
+
+  @override
+  String get welcomeRestoreCloudTitle => 'Копия в облаке';
+
+  @override
+  String get welcomeRestoreCloudBody => 'Нужны Secretly ID и пароль копии';
+
+  @override
+  String get welcomeRestoreCloudFormBody => 'Введите Secretly ID и пароль копии.';
+
+  @override
+  String get welcomeRestoreBackupPasswordHint => 'Пароль копии';
+
+  @override
+  String get welcomeRestoreFileTitle => 'Файл на устройстве';
+
+  @override
+  String get welcomeRestoreFileFormTitle => 'Файл резервной копии';
+
+  @override
+  String get welcomeRestoreFileFormBody => 'Выберите копию и введите её пароль.';
+
+  @override
+  String get welcomeRestoreFilePick => 'Найти копию на устройстве';
+
+  @override
+  String get welcomeRestoreFileChosen => 'Выбранный файл';
+
+  @override
+  String get welcomeRestoreFileOther => 'Другой';
+
+  @override
+  String get welcomeRestoreStepDownload => 'Загружаем копию';
+
+  @override
+  String get welcomeRestoreStepDecrypt => 'Проверяем пароль и расшифровываем';
+
+  @override
+  String get welcomeRestoreStepApply => 'Возвращаем чаты и контакты';
+
+  @override
+  String get welcomeRestoreNote => 'Копия расшифровывается на этом устройстве. Сервер не видит её содержимого.';
+
+  @override
+  String get welcomeNewLoginTitle => 'Это вы входите?';
+
+  @override
+  String get welcomeNewLoginBody => 'Новое устройство просит доступ к вашему аккаунту. Разрешайте, только если это ваше устройство.';
+
+  @override
+  String get welcomeNewLoginUnknownDevice => 'Новое устройство';
+
+  @override
+  String welcomeNewLoginTime(String time) {
+    return 'Сегодня в $time';
+  }
+
+  @override
+  String get welcomeNewLoginSyncSection => 'Что перенести на новое устройство';
+
+  @override
+  String get welcomeNewLoginApprove => 'Да, это я';
+
+  @override
+  String get welcomeNewLoginDecline => 'Нет — отклонить вход';
+
+  @override
+  String get welcomeStart => 'Начать';
+
+  @override
+  String get welcomeDesktopChooseTitle => 'Подключите этот компьютер';
+
+  @override
+  String get welcomeDesktopChooseBody => 'Быстрее всего — через телефон, где уже есть Secretly. Вся переписка переедет сюда.';
+
+  @override
+  String get welcomeOr => 'или';
+
+  @override
+  String get welcomeDesktopNewAccount => 'Новый аккаунт';
+
+  @override
+  String get welcomeMoreInfo => 'Подробнее';
+
+  @override
+  String get welcomeDesktopQrTitle => 'Отсканируйте телефоном';
+
+  @override
+  String welcomeDesktopUsePhonePrompt(String link) {
+    return 'Телефон с Secretly под рукой? $link — так телефон не потеряет доступ.';
+  }
+
+  @override
+  String get welcomeDesktopUsePhoneLink => 'Войдите через него';
+
+  @override
+  String get welcomeDesktopTakeOverUsePhone => 'Подключить через телефон';
+
+  @override
+  String get welcomeDesktopKitKeepApart => 'Храните его отдельно от компьютера — на флешке или в облаке.';
+
+  @override
+  String get pickerDone => 'Готово';
+
+  @override
+  String get chatSwipeMute => 'Без звука';
+
+  @override
+  String get chatSwipeUnmute => 'Со звуком';
 }

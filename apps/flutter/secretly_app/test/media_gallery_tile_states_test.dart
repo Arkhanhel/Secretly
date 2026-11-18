@@ -40,7 +40,9 @@ void main() {
     test('на телефоне', () {
       expect(mobile.contains('enum _CellPhase { loading, ready, failed, gone }'), isTrue);
       expect(mobile.contains('_CellPhase.failed'), isTrue);
-      expect(mobile.contains('CircularProgressIndicator'), isTrue);
+      // С 17.11.2026 крутилка телефона — `SecretlySpinner` (на iPhone —
+      // индикатор Apple, на Android — то же кольцо).
+      expect(mobile.contains('SecretlySpinner('), isTrue);
     });
 
     test('на компьютере', () {

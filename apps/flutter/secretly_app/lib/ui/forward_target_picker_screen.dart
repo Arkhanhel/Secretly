@@ -9,6 +9,7 @@ import '../app/app_controller.dart';
 import 'chat_screen_l10n.dart';
 import 'icons/app_icons.dart';
 import 'widgets/avatar_initials.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Full-screen «Переслать…» target picker. Returns the chosen [Conversation]
 /// (or null if cancelled). Tabs: «Чаты» (all non-archived), «Комнаты» (groups),
@@ -134,7 +135,7 @@ class _ForwardTargetPickerScreenState extends State<ForwardTargetPickerScreen>
           ),
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const Center(child: SecretlySpinner())
                 : TabBarView(
                     controller: _tabs,
                     children: <Widget>[

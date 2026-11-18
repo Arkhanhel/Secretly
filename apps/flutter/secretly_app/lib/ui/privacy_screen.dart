@@ -10,6 +10,7 @@ import 'icons/app_icons.dart';
 import 'l10n.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_top_bar.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class PrivacyScreen extends StatelessWidget {
   const PrivacyScreen({super.key, required this.controller});
@@ -153,7 +154,7 @@ class PrivacyScreen extends StatelessWidget {
                             final ok = await showDialog<bool>(
                               context: context,
                               builder: (context) {
-                                return AlertDialog(
+                                return SecretlyAlertDialog(
                                   title: Text(l10n.unblockUserConfirmTitle),
                                   content: Text(pid),
                                   actions: [

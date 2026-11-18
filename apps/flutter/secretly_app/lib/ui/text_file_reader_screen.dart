@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'icons/app_icons.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Full-screen in-app reader for PLAIN-TEXT attachments (.txt, .log, .json,
 /// .csv, .md …).
@@ -153,7 +154,7 @@ class _TextFileReaderScreenState extends State<TextFileReaderScreen> {
                     child: SizedBox(
                       width: 26,
                       height: 26,
-                      child: CircularProgressIndicator(
+                      child: SecretlySpinner(
                         strokeWidth: 2,
                         color: Colors.white70,
                       ),

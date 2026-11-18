@@ -13,6 +13,7 @@ import 'animations/animations.dart';
 import 'chat_screen.dart';
 import 'contact_action_error_text.dart';
 import 'l10n.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 class ContactQrScanOutcome {
   const ContactQrScanOutcome({
@@ -72,7 +73,7 @@ Future<ContactQrScanOutcome?> handleContactQrScan({
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return SecretlyAlertDialog(
           title: Text(context.l10n.differentServerTitle),
           content: Text(
             context.l10n.differentServerBody(

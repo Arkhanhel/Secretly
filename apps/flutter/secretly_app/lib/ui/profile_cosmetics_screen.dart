@@ -28,6 +28,7 @@ import 'widgets/framed_avatar.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'widgets/premium_glass.dart';
 import '../media/h264_encoder.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Premium picker for the animated avatar frame + animated profile cover.
 ///
@@ -1211,7 +1212,7 @@ class _CustomCoverTile extends StatelessWidget {
                   child: SizedBox(
                     width: 24,
                     height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: SecretlySpinner(strokeWidth: 2),
                   ),
                 ),
               if (locked) const _LockBadge(),

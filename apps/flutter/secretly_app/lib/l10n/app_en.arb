@@ -5050,5 +5050,353 @@
   "stickerAddSticker": "Add sticker",
   "@stickerAddSticker": {
     "description": "Tooltip of the + tile in a pack: add a new sticker to this pack."
+  },
+  "welcomeTagline": "No phone number, no email. Your account is a key that lives only on your devices.",
+  "@welcomeTagline": {
+    "description": "Welcome screen: one-line promise under the Secretly wordmark."
+  },
+  "welcomeCreateAccount": "Create account",
+  "@welcomeCreateAccount": {
+    "description": "Welcome screen: primary button."
+  },
+  "welcomeHaveAccount": "I already have an account",
+  "@welcomeHaveAccount": {
+    "description": "Welcome screen: text button that opens account restore."
+  },
+  "welcomeTermsNotice": "By continuing, you accept the {terms} and the {privacy}",
+  "@welcomeTermsNotice": {
+    "description": "Welcome screen: small print. {terms} and {privacy} are links (welcomeTermsLink, welcomePrivacyLink).",
+    "placeholders": {
+      "terms": {
+        "type": "String"
+      },
+      "privacy": {
+        "type": "String"
+      }
+    }
+  },
+  "welcomeTermsLink": "terms",
+  "@welcomeTermsLink": {
+    "description": "Link text inside welcomeTermsNotice."
+  },
+  "welcomePrivacyLink": "privacy policy",
+  "@welcomePrivacyLink": {
+    "description": "Link text inside welcomeTermsNotice."
+  },
+  "welcomeNameTitle": "What's your name?",
+  "@welcomeNameTitle": {
+    "description": "Name step: title."
+  },
+  "welcomeNameBody": "People you chat with will see this name. You can change it later.",
+  "@welcomeNameBody": {
+    "description": "Name step: subtitle."
+  },
+  "welcomeNameHint": "Name or nickname",
+  "@welcomeNameHint": {
+    "description": "Name step: field placeholder."
+  },
+  "welcomeKeysStepIdentity": "Creating your identity key",
+  "@welcomeKeysStepIdentity": {
+    "description": "Keys step: progress phrase 1."
+  },
+  "welcomeKeysStepPrekeys": "Preparing keys for your first messages",
+  "@welcomeKeysStepPrekeys": {
+    "description": "Keys step: progress phrase 2."
+  },
+  "welcomeKeysStepStorage": "Encrypting local storage",
+  "@welcomeKeysStepStorage": {
+    "description": "Keys step: progress phrase 3."
+  },
+  "welcomeKeysReady": "Your keys are ready",
+  "@welcomeKeysReady": {
+    "description": "Keys step: final title."
+  },
+  "welcomeKeysNote": "Keys are created on this device — the server never sees them",
+  "@welcomeKeysNote": {
+    "description": "Keys step: footnote."
+  },
+  "welcomeBackupTitle": "Backup",
+  "@welcomeBackupTitle": {
+    "description": "Backup step: title."
+  },
+  "welcomeBackupBodyCloud": "Your chats survive a lost phone. The backup is encrypted with a password only you know.",
+  "@welcomeBackupBodyCloud": {
+    "description": "Backup step: body when \"In the cloud\" is selected."
+  },
+  "welcomeBackupBodyDevice": "The backup stays on this device. Move it to a new one together with the password.",
+  "@welcomeBackupBodyDevice": {
+    "description": "Backup step: body when \"On this device\" is selected."
+  },
+  "welcomeBackupInCloud": "In the cloud",
+  "@welcomeBackupInCloud": {
+    "description": "Backup step: segment \"In the cloud\"."
+  },
+  "welcomeBackupOnDevice": "On this device",
+  "@welcomeBackupOnDevice": {
+    "description": "Backup step: segment \"On this device\"."
+  },
+  "welcomeBackupPasswordHint": "Create a password",
+  "@welcomeBackupPasswordHint": {
+    "description": "Backup step: first password field."
+  },
+  "welcomeBackupPasswordRepeatHint": "Repeat the password",
+  "@welcomeBackupPasswordRepeatHint": {
+    "description": "Backup step: second password field."
+  },
+  "welcomePasswordShow": "Show",
+  "@welcomePasswordShow": {
+    "description": "Password field: show the typed password."
+  },
+  "welcomePasswordHide": "Hide",
+  "@welcomePasswordHide": {
+    "description": "Password field: hide the typed password."
+  },
+  "welcomePasswordStrong": "Strong",
+  "@welcomePasswordStrong": {
+    "description": "Password strength label (meets all rules)."
+  },
+  "welcomePasswordVeryStrong": "Very strong",
+  "@welcomePasswordVeryStrong": {
+    "description": "Password strength label (meets all rules, 12+ characters)."
+  },
+  "welcomeBackupEnable": "Turn on backup",
+  "@welcomeBackupEnable": {
+    "description": "Backup step: primary button."
+  },
+  "welcomeBackupLater": "Set up later",
+  "@welcomeBackupLater": {
+    "description": "Backup step: skip button."
+  },
+  "welcomeBackupOnTitle": "Backup is on",
+  "@welcomeBackupOnTitle": {
+    "description": "Backup step: success title."
+  },
+  "welcomeBackupOnBody": "{schedule}. You can change this in Settings.",
+  "@welcomeBackupOnBody": {
+    "description": "Backup step: success body. {schedule} is how often, e.g. \"Every day\".",
+    "placeholders": {
+      "schedule": {
+        "type": "String"
+      }
+    }
+  },
+  "welcomeNotifyTitle": "Don't miss messages",
+  "@welcomeNotifyTitle": {
+    "description": "Notifications step: title."
+  },
+  "welcomeNotifyBody": "Apple and Google only pass on a signal that something new arrived — the text itself never goes through them.",
+  "@welcomeNotifyBody": {
+    "description": "Notifications step: body. Push services only get a wake-up signal, never the text."
+  },
+  "welcomeNotifyPreviewMessage": "New message",
+  "@welcomeNotifyPreviewMessage": {
+    "description": "Notifications step: sample notification text."
+  },
+  "welcomeNotifyPreviewCall": "Incoming call",
+  "@welcomeNotifyPreviewCall": {
+    "description": "Notifications step: sample notification text."
+  },
+  "welcomeNotifyNow": "now",
+  "@welcomeNotifyNow": {
+    "description": "Notifications step: time label on the sample notification."
+  },
+  "welcomeNotifyAllow": "Allow notifications",
+  "@welcomeNotifyAllow": {
+    "description": "Notifications step: primary button (asks the system permission)."
+  },
+  "welcomeNotifyNotNow": "Not now",
+  "@welcomeNotifyNotNow": {
+    "description": "Notifications step: skip button."
+  },
+  "welcomeDoneTitle": "Welcome, {name}",
+  "@welcomeDoneTitle": {
+    "description": "Final step: title with the chosen name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "welcomeDoneTitleNoName": "Welcome",
+  "@welcomeDoneTitleNoName": {
+    "description": "Final step: title when no name was entered."
+  },
+  "welcomeDoneBody": "Your account is ready. Invite the people you want to chat with.",
+  "@welcomeDoneBody": {
+    "description": "Final step: body."
+  },
+  "welcomeDoneIdCaption": "Your Secretly ID — people find you by it, and you need it to restore your account. Keep it safe.",
+  "@welcomeDoneIdCaption": {
+    "description": "Final step: caption under the Secretly ID."
+  },
+  "welcomeCopy": "Copy",
+  "@welcomeCopy": {
+    "description": "Copy button next to the Secretly ID."
+  },
+  "welcomeCopied": "Copied",
+  "@welcomeCopied": {
+    "description": "Copy button after copying."
+  },
+  "welcomeOpenApp": "Open Secretly",
+  "@welcomeOpenApp": {
+    "description": "Final step: primary button."
+  },
+  "welcomeRestoreTitle": "Restore",
+  "@welcomeRestoreTitle": {
+    "description": "Restore: title of the source picker."
+  },
+  "welcomeRestoreSubtitle": "Where should we bring your account back from?",
+  "@welcomeRestoreSubtitle": {
+    "description": "Restore: subtitle of the source picker."
+  },
+  "welcomeRestoreCloudTitle": "Cloud backup",
+  "@welcomeRestoreCloudTitle": {
+    "description": "Restore: cloud option and form title."
+  },
+  "welcomeRestoreCloudBody": "You need your Secretly ID and the backup password",
+  "@welcomeRestoreCloudBody": {
+    "description": "Restore: cloud option subtitle."
+  },
+  "welcomeRestoreCloudFormBody": "Enter your Secretly ID and the backup password.",
+  "@welcomeRestoreCloudFormBody": {
+    "description": "Restore: cloud form subtitle."
+  },
+  "welcomeRestoreBackupPasswordHint": "Backup password",
+  "@welcomeRestoreBackupPasswordHint": {
+    "description": "Restore: backup password field."
+  },
+  "welcomeRestoreFileTitle": "File on this device",
+  "@welcomeRestoreFileTitle": {
+    "description": "Restore: file option title."
+  },
+  "welcomeRestoreFileFormTitle": "Backup file",
+  "@welcomeRestoreFileFormTitle": {
+    "description": "Restore: file form title."
+  },
+  "welcomeRestoreFileFormBody": "Choose the backup and enter its password.",
+  "@welcomeRestoreFileFormBody": {
+    "description": "Restore: file form subtitle."
+  },
+  "welcomeRestoreFilePick": "Find a backup on this device",
+  "@welcomeRestoreFilePick": {
+    "description": "Restore: dashed area that searches for a backup file."
+  },
+  "welcomeRestoreFileChosen": "Chosen file",
+  "@welcomeRestoreFileChosen": {
+    "description": "Restore: label of a file picked by hand (its name is unknown)."
+  },
+  "welcomeRestoreFileOther": "Change",
+  "@welcomeRestoreFileOther": {
+    "description": "Restore: button that picks another file."
+  },
+  "welcomeRestoreStepDownload": "Downloading the backup",
+  "@welcomeRestoreStepDownload": {
+    "description": "Restore progress: downloading the backup."
+  },
+  "welcomeRestoreStepDecrypt": "Checking the password and decrypting",
+  "@welcomeRestoreStepDecrypt": {
+    "description": "Restore progress: checking the password and decrypting."
+  },
+  "welcomeRestoreStepApply": "Bringing back chats and contacts",
+  "@welcomeRestoreStepApply": {
+    "description": "Restore progress: applying the backup."
+  },
+  "welcomeRestoreNote": "The backup is decrypted on this device. The server cannot see what is inside.",
+  "@welcomeRestoreNote": {
+    "description": "Restore progress: footnote."
+  },
+  "welcomeNewLoginTitle": "Is this you signing in?",
+  "@welcomeNewLoginTitle": {
+    "description": "New sign-in sheet (phone approves a new device): title."
+  },
+  "welcomeNewLoginBody": "A new device is asking for access to your account. Allow it only if the device is yours.",
+  "@welcomeNewLoginBody": {
+    "description": "New sign-in sheet: body."
+  },
+  "welcomeNewLoginUnknownDevice": "New device",
+  "@welcomeNewLoginUnknownDevice": {
+    "description": "New sign-in sheet: device name when the device did not send one."
+  },
+  "welcomeNewLoginTime": "Today at {time}",
+  "@welcomeNewLoginTime": {
+    "description": "New sign-in sheet: when the request came. {time} is a local time like 14:02.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "welcomeNewLoginSyncSection": "What to move to the new device",
+  "@welcomeNewLoginSyncSection": {
+    "description": "New sign-in sheet: heading above the sync switches."
+  },
+  "welcomeNewLoginApprove": "Yes, it's me",
+  "@welcomeNewLoginApprove": {
+    "description": "New sign-in sheet: approve button."
+  },
+  "welcomeNewLoginDecline": "No — decline sign-in",
+  "@welcomeNewLoginDecline": {
+    "description": "New sign-in sheet: decline button."
+  },
+  "welcomeStart": "Get started",
+  "@welcomeStart": {
+    "description": "Desktop welcome screen: primary button."
+  },
+  "welcomeDesktopChooseTitle": "Connect this computer",
+  "@welcomeDesktopChooseTitle": {
+    "description": "Desktop: how to sign in — title."
+  },
+  "welcomeDesktopChooseBody": "The quickest way is through a phone that already has Secretly. All your chats will move here.",
+  "@welcomeDesktopChooseBody": {
+    "description": "Desktop: how to sign in — subtitle."
+  },
+  "welcomeOr": "or",
+  "@welcomeOr": {
+    "description": "Divider between the main and the other sign-in buttons."
+  },
+  "welcomeDesktopNewAccount": "New account",
+  "@welcomeDesktopNewAccount": {
+    "description": "Desktop: button that creates a new account on this computer."
+  },
+  "welcomeMoreInfo": "More info",
+  "@welcomeMoreInfo": {
+    "description": "Screen reader label of the small “?” info icon."
+  },
+  "welcomeDesktopQrTitle": "Scan with your phone",
+  "@welcomeDesktopQrTitle": {
+    "description": "Desktop: QR pairing title."
+  },
+  "welcomeDesktopUsePhonePrompt": "Have a phone with Secretly nearby? {link} — that way the phone keeps its access.",
+  "@welcomeDesktopUsePhonePrompt": {
+    "description": "Desktop restore: hint below the options. {link} is welcomeDesktopUsePhoneLink.",
+    "placeholders": {
+      "link": {
+        "type": "String"
+      }
+    }
+  },
+  "welcomeDesktopUsePhoneLink": "Sign in through it",
+  "@welcomeDesktopUsePhoneLink": {
+    "description": "Link inside welcomeDesktopUsePhonePrompt."
+  },
+  "welcomeDesktopTakeOverUsePhone": "Connect through the phone",
+  "@welcomeDesktopTakeOverUsePhone": {
+    "description": "Desktop restore warning: button that switches to QR pairing instead."
+  },
+  "welcomeDesktopKitKeepApart": "Keep it away from this computer — on a flash drive or in the cloud.",
+  "@welcomeDesktopKitKeepApart": {
+    "description": "Desktop: after the recovery kit is saved."
+  },
+  "pickerDone": "Done",
+  "@pickerDone": {
+    "description": "iPhone: the button above the date and time wheel, as in iOS."
+  },
+  "chatSwipeMute": "Mute",
+  "@chatSwipeMute": {
+    "description": "iPhone: short label of the swipe button on a chat row that turns its notifications off."
+  },
+  "chatSwipeUnmute": "Unmute",
+  "@chatSwipeUnmute": {
+    "description": "iPhone: short label of the swipe button on a muted chat row that turns its notifications back on."
   }
 }

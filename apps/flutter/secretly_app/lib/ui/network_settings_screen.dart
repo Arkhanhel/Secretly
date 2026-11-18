@@ -18,6 +18,7 @@ import 'animations/page_transitions.dart';
 import 'app_asset_paths.dart';
 import 'settings_group.dart';
 import 'widgets/frosted_top_bar.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 /// Экран «Сеть» (Э1): каким путём приложение доходит до серверов, прокси
 /// волонтёра, SOCKS и Tor. Сообщения файлом — в [OfflineTransferScreen]. Подписи — из общих локализаций (ARB).
@@ -260,7 +261,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
           ),
           Card(
             clipBehavior: Clip.antiAlias,
-            child: SwitchListTile(
+            child: SecretlySwitchListTile(
               value: enabled,
               onChanged: (v) => c.setTransportPathsEnabled(v),
               title: Text(l10n.netSettingsTryAlternativeTitle),
@@ -352,7 +353,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                 ),
                 if (c.transportTorOffered) ...<Widget>[
                   const Divider(height: 1),
-                  SwitchListTile(
+                  SecretlySwitchListTile(
                     value: c.transportTorAllowed,
                     onChanged: enabled
                         ? (v) => c.setTransportTorAllowed(v)

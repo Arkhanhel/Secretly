@@ -18,6 +18,7 @@ import '../icons/app_icons.dart';
 import '../l10n.dart';
 import 'full_bleed_zoom.dart';
 import 'broken_media_box.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 bool _isVideoMediaMime(String mime) =>
     mime.trim().toLowerCase().startsWith('video/');
@@ -538,7 +539,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
             ),
           if (widget.onShare != null)
             (
-              icon: Icons.share_outlined,
+              icon: appleShareIcon(Icons.share_outlined),
               label: chatText(context, ru: 'Поделиться', en: 'Share'),
               value: MediaViewerMenuAction.share,
             ),
@@ -656,7 +657,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
                             .toLowerCase();
                         if (snapshot.connectionState ==
                             ConnectionState.waiting) {
-                          return const CircularProgressIndicator(
+                          return const SecretlySpinner(
                             color: Colors.white,
                           );
                         }
@@ -1346,7 +1347,7 @@ class _MediaViewerVideoPageState extends State<_MediaViewerVideoPage>
       return const Icon(AppIcons.brokenImage, color: Colors.white70, size: 44);
     }
     if (controller == null || !controller.value.isInitialized) {
-      return const CircularProgressIndicator(color: Colors.white);
+      return const SecretlySpinner(color: Colors.white);
     }
 
     if (!widget.isActive && controller.value.isPlaying) {

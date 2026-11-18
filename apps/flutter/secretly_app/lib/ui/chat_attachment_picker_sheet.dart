@@ -29,6 +29,7 @@ import 'theme_presets.dart';
 import 'wave1_l10n.dart';
 import 'widgets/secretly_glass_sheet.dart';
 import 'widgets/broken_media_box.dart';
+import 'package:secretly_app/ui/apple_controls.dart';
 
 enum ChatAttachmentPickerResultKind {
   photos,
@@ -1040,7 +1041,7 @@ class _ChatAttachmentPickerSheetState
                             child: SizedBox(
                               width: 30,
                               height: 30,
-                              child: CircularProgressIndicator(
+                              child: SecretlySpinner(
                                 strokeWidth: 2.4,
                               ),
                             ),
@@ -1077,7 +1078,7 @@ class _ChatAttachmentPickerSheetState
         child: SizedBox(
           width: 28,
           height: 28,
-          child: CircularProgressIndicator(strokeWidth: 2.4),
+          child: SecretlySpinner(strokeWidth: 2.4),
         ),
       );
     }
@@ -1819,7 +1820,7 @@ class _ChatAttachmentPickerSheetState
                     child: SizedBox(
                       width: 24,
                       height: 24,
-                      child: CircularProgressIndicator(
+                      child: SecretlySpinner(
                         strokeWidth: 2.2,
                         color: Colors.white,
                       ),
@@ -2113,7 +2114,7 @@ class _ChatAttachmentPickerSheetState
               child: SizedBox(
                 width: 20,
                 height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
+                child: SecretlySpinner(strokeWidth: 2),
               ),
             ),
           );
@@ -2524,7 +2525,7 @@ class _InAppCameraPageState extends State<_InAppCameraPage> {
             )
           else
             const Center(
-              child: CircularProgressIndicator(color: Colors.white),
+              child: SecretlySpinner(color: Colors.white),
             ),
 
           // Top bar: close + recording indicator.
@@ -3245,7 +3246,7 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
                         size: 44,
                       )
                     : _file == null
-                    ? const CircularProgressIndicator(color: Colors.white)
+                    ? const SecretlySpinner(color: Colors.white)
                     : _isVideo
                     ? (video != null && video.value.isInitialized
                           ? AspectRatio(
@@ -3254,7 +3255,7 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
                                   : video.value.aspectRatio,
                               child: VideoPlayer(video),
                             )
-                          : const CircularProgressIndicator(
+                          : const SecretlySpinner(
                               color: Colors.white,
                             ))
                     : InteractiveViewer(
@@ -3527,7 +3528,7 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
                           child: _exporting
                               ? const Padding(
                                   padding: EdgeInsets.all(12),
-                                  child: CircularProgressIndicator(
+                                  child: SecretlySpinner(
                                     strokeWidth: 2.2,
                                     color: Colors.white,
                                   ),
@@ -4080,7 +4081,7 @@ class _DrawPageState extends State<_DrawPage> {
                         ? const SizedBox(
                             width: 18,
                             height: 18,
-                            child: CircularProgressIndicator(
+                            child: SecretlySpinner(
                               strokeWidth: 2,
                               color: Colors.white,
                             ),

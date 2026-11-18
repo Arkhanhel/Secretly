@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
-import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/material.dart';
 
 import '../../../l10n/app_localizations.dart';
+import '../../welcome/particle_logo_background.dart';
+import '../../welcome/welcome_style.dart';
 import '../app/desktop_app_view_model.dart';
 import '../app/recovery_kit_export.dart';
-import '../design/tokens.dart';
-import '../primitives/desktop_button.dart';
 import 'desktop_account_setup.dart';
 import 'desktop_auth_scaffold.dart';
 
@@ -78,53 +77,71 @@ class _DesktopRecoveryKitGateState extends State<DesktopRecoveryKitGate> {
 
   @override
   Widget build(BuildContext context) {
-    final c = DColors.of(context);
+    final s = WelcomeStyle.of(context);
     final l10n = AppLocalizations.of(context)!;
-    return DesktopAuthScaffold(
-      // Уйти нельзя: это и есть смысл шага.
-      title: l10n.desktopAuthKitTitle,
-      subtitle: l10n.desktopAuthKitBody,
-      children: [
-        if (_outcome != RecoveryKitOutcome.notSaved) ...[
-          Container(
-            padding: const EdgeInsets.all(DSpace.l),
-            decoration: BoxDecoration(
-              color: c.success.withValues(alpha: 0.12),
-              border: Border.all(color: c.success.withValues(alpha: 0.45)),
-              borderRadius: BorderRadius.circular(DRadii.md),
-            ),
-            child: Row(
-              children: [
-                Icon(FluentIcons.checkmark_circle_24_regular,
-                    size: 22, color: c.success),
-                const SizedBox(width: DSpace.m),
-                Expanded(
-                  child: Text(
-                    _outcome == RecoveryKitOutcome.savedToFile
-                        ? l10n.desktopAuthKitSaved
-                        : l10n.desktopAuthKitConfirmed,
-                    style: DType.body.copyWith(color: c.textPrimary),
-                  ),
-                ),
-              ],
+    final saved = _outcome != RecoveryKitOutcome.notSaved;
+    final Widget step;
+    if (saved) {
+      step = DesktopAuthScaffold(
+        key: const ValueKey('kit-saved'),
+        // Уйти нельзя: это и есть смысл шага.
+        showBack: false,
+        title: _outcome == RecoveryKitOutcome.savedToFile
+            ? l10n.desktopAuthKitSaved
+            : l10n.desktopAuthKitConfirmed,
+        subtitle: l10n.welcomeDesktopKitKeepApart,
+        leading: ExcludeSemantics(
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.4, end: 1),
+            duration: const Duration(milliseconds: 500),
+            curve: const Cubic(0.2, 1.4, 0.4, 1),
+            builder: (_, v, child) => Transform.scale(scale: v, child: child),
+            child: Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: s.success.withValues(alpha: 0.14),
+              ),
+              child: Icon(Icons.check_rounded, color: s.success, size: 38),
             ),
           ),
-          const SizedBox(height: DSpace.xl),
-          DesktopButton(
+        ),
+        children: [
+          WelcomePrimaryButton(
             label: l10n.desktopAuthContinue,
-            kind: DButtonKind.filled,
-            expand: true,
             onPressed: () => _finish(),
           ),
-        ] else
-          DesktopButton(
+        ],
+      );
+    } else {
+      step = DesktopAuthScaffold(
+        key: const ValueKey('kit-open'),
+        // Уйти нельзя: это и есть смысл шага.
+        showBack: false,
+        title: l10n.desktopAuthKitTitle,
+        subtitle: l10n.desktopAuthKitBody,
+        children: [
+          WelcomePrimaryButton(
             label: l10n.desktopAuthKitAction,
-            kind: DButtonKind.filled,
-            icon: FluentIcons.key_24_regular,
-            expand: true,
             onPressed: _busy ? null : () => _makeKit(),
           ),
-      ],
+        ],
+      );
+    }
+    return ColoredBox(
+      color: s.dark ? const Color(0xFF060607) : Colors.white,
+      child: WelcomeBackdrop(
+        mood: saved
+            ? WelcomeBackgroundMood.success
+            : WelcomeBackgroundMood.calm,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 450),
+          transitionBuilder: (child, animation) =>
+              FadeTransition(opacity: animation, child: child),
+          child: step,
+        ),
+      ),
     );
   }
 }
