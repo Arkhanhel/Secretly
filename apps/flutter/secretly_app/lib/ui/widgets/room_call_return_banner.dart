@@ -204,10 +204,10 @@ class RoomCallReturnBanner extends StatelessWidget {
                 ru: 'Вы в эфире • $joinedCount',
                 en: 'You are live • $joinedCount',
                 uk: 'Ви в ефірі • $joinedCount',
-                es: 'Estas en directo • $joinedCount',
-                pt: 'Esta ao vivo • $joinedCount',
-                ptBr: 'Voce esta ao vivo • $joinedCount',
-                fr: 'Vous etes en direct • $joinedCount',
+                es: 'Estás en directo • $joinedCount',
+                pt: 'Está ao vivo • $joinedCount',
+                ptBr: 'Você está ao vivo • $joinedCount',
+                fr: 'Vous êtes en direct • $joinedCount',
                 de: 'Du bist live • $joinedCount',
               )
             : isVideo
@@ -216,9 +216,9 @@ class RoomCallReturnBanner extends StatelessWidget {
                 ru: 'Видео • $joinedCount в звонке',
                 en: 'Video • $joinedCount in call',
                 uk: 'Відео • $joinedCount у дзвінку',
-                es: 'Video • $joinedCount en llamada',
-                pt: 'Video • $joinedCount na chamada',
-                fr: 'Video • $joinedCount en appel',
+                es: 'Vídeo • $joinedCount en llamada',
+                pt: 'Vídeo • $joinedCount na chamada',
+                fr: 'Vidéo • $joinedCount en appel',
                 de: 'Video • $joinedCount im Anruf',
               )
             : wave1Text(

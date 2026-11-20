@@ -574,9 +574,9 @@ class _ProfileIconPickerScreenState extends State<ProfileIconPickerScreen> {
                             en: 'Icons',
                             uk: 'Іконки',
                             es: 'Iconos',
-                            pt: 'Icones',
-                            ptBr: 'Icones',
-                            fr: 'Icones',
+                            pt: 'Ícones',
+                            ptBr: 'Ícones',
+                            fr: 'Icônes',
                             de: 'Symbole',
                           ),
                           avatarsLabel: wave1Text(
@@ -610,7 +610,7 @@ class _ProfileIconPickerScreenState extends State<ProfileIconPickerScreen> {
                                               es: 'No se encontraron avatares',
                                               pt: 'Nenhum avatar encontrado',
                                               ptBr: 'Nenhum avatar encontrado',
-                                              fr: 'Aucun avatar trouve',
+                                              fr: 'Aucun avatar trouvé',
                                               de: 'Keine Avatare gefunden',
                                             )
                                           : (_loadError ?? 'Иконки не найдены'),

@@ -51,10 +51,10 @@ String formatRoomCallPresenceText(
             en: 'Reconnecting to video room call • $joinedCount in call',
             uk: 'Перепідключення до відеодзвінка • $joinedCount у дзвінку',
             es: 'Reconectando a la videollamada de sala • $joinedCount en llamada',
-            pt: 'A reconectar a chamada de video da sala • $joinedCount na chamada',
+            pt: 'A reconectar a chamada de vídeo da sala • $joinedCount na chamada',
             ptBr:
-                'Reconectando a chamada de video da sala • $joinedCount na chamada',
-            fr: 'Reconnexion a l appel video du salon • $joinedCount en appel',
+                'Reconectando a chamada de vídeo da sala • $joinedCount na chamada',
+            fr: 'Reconnexion à l’appel vidéo du salon • $joinedCount en appel',
             de: 'Verbindung zum Video-Raumanruf wird wiederhergestellt • $joinedCount im Anruf',
           )
         : _presenceText(
@@ -66,7 +66,7 @@ String formatRoomCallPresenceText(
             pt: 'A reconectar a chamada de voz da sala • $joinedCount na chamada',
             ptBr:
                 'Reconectando a chamada de voz da sala • $joinedCount na chamada',
-            fr: 'Reconnexion a l appel vocal du salon • $joinedCount en appel',
+            fr: 'Reconnexion à l’appel vocal du salon • $joinedCount en appel',
             de: 'Verbindung zum Sprach-Raumanruf wird wiederhergestellt • $joinedCount im Anruf',
           );
   }
@@ -77,11 +77,11 @@ String formatRoomCallPresenceText(
             ru: 'Вы в активном видеозвонке • $joinedCount в звонке',
             en: 'You are in the active video room call • $joinedCount in call',
             uk: 'Ви в активному відеодзвінку • $joinedCount у дзвінку',
-            es: 'Estas en la videollamada de sala activa • $joinedCount en llamada',
-            pt: 'Esta na chamada de video ativa da sala • $joinedCount na chamada',
+            es: 'Estás en la videollamada de sala activa • $joinedCount en llamada',
+            pt: 'Está na chamada de vídeo ativa da sala • $joinedCount na chamada',
             ptBr:
-                'Voce esta na chamada de video ativa da sala • $joinedCount na chamada',
-            fr: 'Vous etes dans l appel video actif du salon • $joinedCount en appel',
+                'Você está na chamada de vídeo ativa da sala • $joinedCount na chamada',
+            fr: 'Vous êtes dans l’appel vidéo actif du salon • $joinedCount en appel',
             de: 'Du bist im aktiven Video-Raumanruf • $joinedCount im Anruf',
           )
         : _presenceText(
@@ -89,11 +89,11 @@ String formatRoomCallPresenceText(
             ru: 'Вы в активном голосовом звонке • $joinedCount в звонке',
             en: 'You are in the active voice room call • $joinedCount in call',
             uk: 'Ви в активному голосовому дзвінку • $joinedCount у дзвінку',
-            es: 'Estas en la llamada de voz de sala activa • $joinedCount en llamada',
-            pt: 'Esta na chamada de voz ativa da sala • $joinedCount na chamada',
+            es: 'Estás en la llamada de voz de sala activa • $joinedCount en llamada',
+            pt: 'Está na chamada de voz ativa da sala • $joinedCount na chamada',
             ptBr:
-                'Voce esta na chamada de voz ativa da sala • $joinedCount na chamada',
-            fr: 'Vous etes dans l appel vocal actif du salon • $joinedCount en appel',
+                'Você está na chamada de voz ativa da sala • $joinedCount na chamada',
+            fr: 'Vous êtes dans l’appel vocal actif du salon • $joinedCount en appel',
             de: 'Du bist im aktiven Sprach-Raumanruf • $joinedCount im Anruf',
           );
   }
@@ -104,8 +104,8 @@ String formatRoomCallPresenceText(
           en: 'Active video room call • $joinedCount in call',
           uk: 'Активний відеодзвінок • $joinedCount у дзвінку',
           es: 'Videollamada de sala activa • $joinedCount en llamada',
-          pt: 'Chamada de video ativa da sala • $joinedCount na chamada',
-          fr: 'Appel video actif du salon • $joinedCount en appel',
+          pt: 'Chamada de vídeo ativa da sala • $joinedCount na chamada',
+          fr: 'Appel vidéo actif du salon • $joinedCount en appel',
           de: 'Aktiver Video-Raumanruf • $joinedCount im Anruf',
         )
       : _presenceText(
@@ -129,10 +129,10 @@ String roomCallPresenceHeadline(BuildContext context, CachedRoomCall call) {
       ru: 'Звонок восстанавливается',
       en: 'Room call is reconnecting',
       uk: 'Дзвінок відновлюється',
-      es: 'La llamada de sala se esta reconectando',
-      pt: 'A chamada da sala esta a reconectar',
-      ptBr: 'A chamada da sala esta reconectando',
-      fr: 'L appel du salon se reconnecte',
+      es: 'La llamada de sala se está reconectando',
+      pt: 'A chamada da sala está a reconectar',
+      ptBr: 'A chamada da sala está reconectando',
+      fr: 'L’appel du salon se reconnecte',
       de: 'Raum-Anruf verbindet sich neu',
     );
   }
@@ -142,10 +142,10 @@ String roomCallPresenceHeadline(BuildContext context, CachedRoomCall call) {
       ru: 'Вы уже в звонке комнаты',
       en: 'You are already in the room call',
       uk: 'Ви вже у дзвінку кімнати',
-      es: 'Ya estas en la llamada de sala',
-      pt: 'Ja esta na chamada da sala',
-      ptBr: 'Voce ja esta na chamada da sala',
-      fr: 'Vous etes deja dans l appel du salon',
+      es: 'Ya estás en la llamada de sala',
+      pt: 'Já está na chamada da sala',
+      ptBr: 'Você já está na chamada da sala',
+      fr: 'Vous êtes déjà dans l’appel du salon',
       de: 'Du bist bereits im Raum-Anruf',
     );
   }
@@ -154,9 +154,9 @@ String roomCallPresenceHeadline(BuildContext context, CachedRoomCall call) {
     ru: 'В комнате активный звонок',
     en: 'Room call is active',
     uk: 'У кімнаті активний дзвінок',
-    es: 'La llamada de sala esta activa',
-    pt: 'A chamada da sala esta ativa',
-    fr: 'L appel du salon est actif',
+    es: 'La llamada de sala está activa',
+    pt: 'A chamada da sala está ativa',
+    fr: 'L’appel du salon est actif',
     de: 'Raum-Anruf ist aktiv',
   );
 }

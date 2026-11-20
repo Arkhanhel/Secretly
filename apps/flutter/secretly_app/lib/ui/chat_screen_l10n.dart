@@ -244,21 +244,21 @@ const Map<String, Map<String, String>> _chatTextTranslations = {
     'uk': 'Не вдалося відкрити посилання',
     'es': 'No se pudo abrir el enlace',
     'pt': 'Não foi possível abrir o link',
-    'fr': 'Impossible d\'ouvrir le lien',
+    'fr': 'Impossible d’ouvrir le lien',
     'de': 'Link konnte nicht geöffnet werden',
   },
   'Failed to open chat': {
     'uk': 'Не вдалося відкрити чат',
     'es': 'No se pudo abrir el chat',
     'pt': 'Não foi possível abrir o chat',
-    'fr': 'Impossible d\'ouvrir le chat',
+    'fr': 'Impossible d’ouvrir le chat',
     'de': 'Chat konnte nicht geöffnet werden',
   },
   'Chat wallpapers': {
     'uk': 'Шпалери чату',
     'es': 'Fondos de chat',
     'pt': 'Papéis de parede do chat',
-    'fr': 'Fonds d\'écran du chat',
+    'fr': 'Fonds d’écran du chat',
     'de': 'Chat-Hintergründe',
   },
   'Hidden': {
@@ -321,7 +321,7 @@ const Map<String, Map<String, String>> _chatTextTranslations = {
     'uk': 'Очистити історію',
     'es': 'Borrar historial',
     'pt': 'Limpar histórico',
-    'fr': 'Effacer l\'historique',
+    'fr': 'Effacer l’historique',
     'de': 'Verlauf löschen',
   },
   'Delete chat': {
@@ -384,14 +384,14 @@ const Map<String, Map<String, String>> _chatTextTranslations = {
     'uk': 'Скасувати відправку',
     'es': 'Cancelar envío',
     'pt': 'Cancelar envio',
-    'fr': 'Annuler l\'envoi',
+    'fr': 'Annuler l’envoi',
     'de': 'Senden abbrechen',
   },
   'Retry sending': {
     'uk': 'Повторити відправку',
     'es': 'Reintentar envío',
     'pt': 'Tentar enviar novamente',
-    'fr': 'Réessayer l\'envoi',
+    'fr': 'Réessayer l’envoi',
     'de': 'Erneut senden',
   },
   'Personal notebook': {
@@ -418,7 +418,7 @@ const Map<String, Map<String, String>> _chatTextTranslations = {
   'Only administrators can send media.': {
     'uk': 'Лише адміністратори можуть надсилати медіа.',
     'es': 'Solo los administradores pueden enviar medios.',
-    'pt': 'Apenas administradores podem enviar mídia.',
+    'pt': 'Apenas administradores podem enviar multimédia.',
     'fr': 'Seuls les administrateurs peuvent envoyer des médias.',
     'de': 'Nur Administratoren können Medien senden.',
   },
@@ -426,7 +426,7 @@ const Map<String, Map<String, String>> _chatTextTranslations = {
     'uk': 'Не вдалося відкрити запрошення',
     'es': 'No se pudo abrir la invitación',
     'pt': 'Não foi possível abrir o convite',
-    'fr': 'Impossible d\'ouvrir l\'invitation',
+    'fr': 'Impossible d’ouvrir l’invitation',
     'de': 'Einladung konnte nicht geöffnet werden',
   },
   'You': {'uk': 'Ви', 'es': 'Tú', 'pt': 'Você', 'fr': 'Vous', 'de': 'Sie'},
@@ -585,7 +585,7 @@ const Map<String, Map<String, String>> _chatTextTranslations = {
     'pt':
         'Algumas mensagens reencaminhadas foram ignoradas porque o remetente restringiu o reencaminhamento.',
     'fr':
-        'Certains messages transférés ont été ignorés car l\'expéditeur a limité le transfert.',
+        'Certains messages transférés ont été ignorés car l’expéditeur a limité le transfert.',
     'de':
         'Einige weitergeleitete Nachrichten wurden übersprungen, weil der Absender das Weiterleiten eingeschränkt hat.',
   },
@@ -597,7 +597,7 @@ const Map<String, Map<String, String>> _chatTextTranslations = {
     'pt':
         'Estas mensagens não podem ser reencaminhadas porque o remetente restringiu o reencaminhamento.',
     'fr':
-        'Ces messages ne peuvent pas être transférés car l\'expéditeur a limité le transfert.',
+        'Ces messages ne peuvent pas être transférés car l’expéditeur a limité le transfert.',
     'de':
         'Diese Nachrichten können nicht weitergeleitet werden, weil der Absender das Weiterleiten eingeschränkt hat.',
   },
@@ -605,7 +605,7 @@ const Map<String, Map<String, String>> _chatTextTranslations = {
     'uk': 'Очистити історію?',
     'es': '¿Borrar historial?',
     'pt': 'Limpar histórico?',
-    'fr': 'Effacer l\'historique ?',
+    'fr': 'Effacer l’historique ?',
     'de': 'Verlauf löschen?',
   },
   'Messages will be cleared for you and the other participant on all connected devices.': {
@@ -616,7 +616,7 @@ const Map<String, Map<String, String>> _chatTextTranslations = {
     'pt':
         'As mensagens serão limpas para você e a outra pessoa em todos os dispositivos conectados.',
     'fr':
-        'Les messages seront effacés pour vous et l\'autre participant sur tous les appareils connectés.',
+        'Les messages seront effacés pour vous et l’autre participant sur tous les appareils connectés.',
     'de':
         'Die Nachrichten werden für Sie und die andere Person auf allen verbundenen Geräten gelöscht.',
   },
@@ -701,14 +701,14 @@ const Map<String, Map<String, String>> _chatTextTranslations = {
     'uk': 'Історію для нових учасників увімкнено',
     'es': 'El historial para nuevos miembros está activado',
     'pt': 'O histórico para novos membros está ativado',
-    'fr': 'L\'historique pour les nouveaux membres est activé',
+    'fr': 'L’historique pour les nouveaux membres est activé',
     'de': 'Verlauf für neue Mitglieder ist aktiviert',
   },
   'History for new members is disabled': {
     'uk': 'Історію для нових учасників вимкнено',
     'es': 'El historial para nuevos miembros está desactivado',
     'pt': 'O histórico para novos membros está desativado',
-    'fr': 'L\'historique pour les nouveaux membres est désactivé',
+    'fr': 'L’historique pour les nouveaux membres est désactivé',
     'de': 'Verlauf für neue Mitglieder ist deaktiviert',
   },
   'Open room': {
@@ -729,7 +729,7 @@ const Map<String, Map<String, String>> _chatTextTranslations = {
     'uk': 'Запросити доступ',
     'es': 'Solicitar acceso',
     'pt': 'Solicitar acesso',
-    'fr': 'Demander l\'accès',
+    'fr': 'Demander l’accès',
     'de': 'Zugriff anfragen',
   },
   'Join room': {
@@ -756,7 +756,7 @@ const Map<String, Map<String, String>> _chatTextTranslations = {
   'Show all media': {
     'uk': 'Показати всі медіа',
     'es': 'Mostrar todos los medios',
-    'pt': 'Mostrar todas as mídias',
+    'pt': 'Mostrar toda a multimédia',
     'fr': 'Afficher tous les médias',
     'de': 'Alle Medien anzeigen',
   },
@@ -799,7 +799,7 @@ const Map<String, Map<String, String>> _chatTextTranslations = {
     'uk': 'Сьогодні',
     'es': 'Hoy',
     'pt': 'Hoje',
-    'fr': 'Aujourd\'hui',
+    'fr': 'Aujourd’hui',
     'de': 'Heute',
   },
   'Tomorrow': {

@@ -145,7 +145,7 @@ class _MyQrPane extends StatelessWidget {
             es: 'ID copiado',
             pt: 'ID copiado',
             ptBr: 'ID copiado',
-            fr: 'ID copie',
+            fr: 'ID copié',
             de: 'ID kopiert',
           ),
         ),
@@ -191,7 +191,7 @@ class _MyQrPane extends StatelessWidget {
       es: 'Copiar ID',
       pt: 'Copiar ID',
       ptBr: 'Copiar ID',
-      fr: 'Copier l ID',
+      fr: 'Copier l’ID',
       de: 'ID kopieren',
     );
     final qrDescription = wave1Text(
@@ -199,12 +199,12 @@ class _MyQrPane extends StatelessWidget {
       ru: 'Покажите друзьям этот QR-код, чтобы они могли быстро начать с вами чат.',
       en: 'Show this QR code to friends so they can quickly start a chat with you.',
       uk: 'Покажіть друзям цей QR-код, щоб вони швидко почали чат з вами.',
-      es: 'Muestra este codigo QR a tus amigos para que puedan iniciar un chat contigo rapidamente.',
-      pt: 'Mostre este codigo QR aos amigos para iniciarem rapidamente uma conversa consigo.',
+      es: 'Muestra este código QR a tus amigos para que puedan iniciar un chat contigo rápidamente.',
+      pt: 'Mostre este código QR aos amigos para iniciarem rapidamente uma conversa consigo.',
       ptBr:
-          'Mostre este codigo QR aos amigos para iniciarem uma conversa com voce rapidamente.',
-      fr: 'Montrez ce QR code a vos amis pour qu ils commencent vite un chat avec vous.',
-      de: 'Zeige Freunden diesen QR-Code, damit sie schnell einen Chat mit dir starten konnen.',
+          'Mostre este código QR aos amigos para iniciarem uma conversa com você rapidamente.',
+      fr: 'Montrez ce QR code à vos amis pour qu’ils commencent vite un chat avec vous.',
+      de: 'Zeige Freunden diesen QR-Code, damit sie schnell einen Chat mit dir starten können.',
     );
     final qrForeground = isDark ? Colors.white : Colors.black;
     final qrBackground = isDark ? const Color(0xFF111111) : Colors.white;

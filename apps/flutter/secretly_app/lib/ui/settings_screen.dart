@@ -2305,8 +2305,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                           es: 'Fiabilidad',
                           pt: 'Fiabilidade',
                           ptBr: 'Confiabilidade',
-                          fr: 'Fiabilite',
-                          de: 'Zuverlaessigkeit',
+                          fr: 'Fiabilité',
+                          de: 'Zuverlässigkeit',
                         ),
                         subtitle: context.l10n.settingsHubReliabilitySub,
                         trailing: FutureBuilder<DeliveryReliabilityStatus?>(
@@ -4104,7 +4104,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       es: 'Idioma de la aplicación',
       pt: 'Idioma da aplicação',
       ptBr: 'Idioma do aplicativo',
-      fr: "Langue de l'application",
+      fr: "Langue de l’application",
       de: 'App-Sprache',
     );
 

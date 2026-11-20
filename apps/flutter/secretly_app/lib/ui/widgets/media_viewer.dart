@@ -800,7 +800,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
                                           es: 'Reenviar',
                                           pt: 'Reencaminhar',
                                           ptBr: 'Encaminhar',
-                                          fr: 'Transferer',
+                                          fr: 'Transférer',
                                           de: 'Weiterleiten',
                                         ),
                                         onPressed: () =>
@@ -816,11 +816,11 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
                                           ru: 'Меню',
                                           en: 'Menu',
                                           uk: 'Меню',
-                                          es: 'Menu',
+                                          es: 'Menú',
                                           pt: 'Menu',
                                           ptBr: 'Menu',
                                           fr: 'Menu',
-                                          de: 'Menue',
+                                          de: 'Menü',
                                         ),
                                         onPressed: _openActionsMenu,
                                         icon: const Icon(

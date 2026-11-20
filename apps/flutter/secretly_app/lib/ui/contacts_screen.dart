@@ -791,7 +791,7 @@ class _ContactsScreenState extends State<ContactsScreen>
                                                           es: 'Agregar amigos',
                                                           pt: 'Adicionar amigos',
                                                           fr: 'Ajouter des amis',
-                                                          de: 'Freunde hinzufugen',
+                                                          de: 'Freunde hinzufügen',
                                                         ),
                                                         maxLines: 1,
                                                         overflow: TextOverflow
@@ -841,8 +841,8 @@ class _ContactsScreenState extends State<ContactsScreen>
                                                           es: 'Registro de llamadas',
                                                           pt: 'Registo de chamadas',
                                                           ptBr:
-                                                              'Historico de chamadas',
-                                                          fr: 'Journal d appels',
+                                                              'Histórico de chamadas',
+                                                          fr: 'Journal d’appels',
                                                           de: 'Anrufliste',
                                                         ),
                                                         maxLines: 1,

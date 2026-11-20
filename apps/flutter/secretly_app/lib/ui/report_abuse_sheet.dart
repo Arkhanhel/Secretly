@@ -79,8 +79,8 @@ class _ReportReason {
           uk: 'Переслідування або образи',
           es: 'Acoso o abuso',
           pt: 'Assedio ou abuso',
-          fr: 'Harcelement ou abus',
-          de: 'Belastigung oder Missbrauch',
+          fr: 'Harcèlement ou abus',
+          de: 'Belästigung oder Missbrauch',
         );
       case 'unsafe_or_illegal_content':
         return _reportTextForLocale(
@@ -89,8 +89,8 @@ class _ReportReason {
           en: enTitle,
           uk: 'Небезпечний або незаконний контент',
           es: 'Contenido inseguro o ilegal',
-          pt: 'Conteudo inseguro ou ilegal',
-          fr: 'Contenu dangereux ou illegal',
+          pt: 'Conteúdo inseguro ou ilegal',
+          fr: 'Contenu dangereux ou illégal',
           de: 'Unsichere oder illegale Inhalte',
         );
       case 'impersonation':
@@ -99,9 +99,9 @@ class _ReportReason {
           ru: ruTitle,
           en: enTitle,
           uk: 'Видає себе за іншого',
-          es: 'Suplantacion de identidad',
+          es: 'Suplantación de identidad',
           pt: 'Falsa identidade',
-          fr: 'Usurpation d identite',
+          fr: 'Usurpation d’identité',
           de: 'Gibt sich als jemand anderes aus',
         );
       case 'privacy_or_security':
@@ -111,8 +111,8 @@ class _ReportReason {
           en: enTitle,
           uk: 'Проблема приватності або безпеки',
           es: 'Problema de privacidad o seguridad',
-          pt: 'Problema de privacidade ou seguranca',
-          fr: 'Probleme de confidentialite ou de securite',
+          pt: 'Problema de privacidade ou segurança',
+          fr: 'Problème de confidentialité ou de sécurité',
           de: 'Datenschutz- oder Sicherheitsproblem',
         );
       default:
@@ -136,10 +136,10 @@ class _ReportReason {
         ru: ruSubtitle,
         en: enSubtitle,
         uk: 'Масові запрошення, фішинг або оманлива активність у кімнаті.',
-        es: 'Invitaciones masivas, phishing o actividad enganosa en la sala.',
+        es: 'Invitaciones masivas, phishing o actividad engañosa en la sala.',
         pt: 'Convites em massa, phishing ou atividade enganosa na sala.',
-        fr: 'Invitations massives, phishing ou activite trompeuse dans le salon.',
-        de: 'Masseneinladungen, Phishing oder irrefuhrende Raumaktivitat.',
+        fr: 'Invitations massives, phishing ou activité trompeuse dans le salon.',
+        de: 'Masseneinladungen, Phishing oder irreführende Raumaktivität.',
       );
     }
     switch (code) {
@@ -149,10 +149,10 @@ class _ReportReason {
           ru: ruSubtitle,
           en: enSubtitle,
           uk: 'Небажані повідомлення, фішинг або оманлива поведінка.',
-          es: 'Mensajes no deseados, phishing o comportamiento enganoso.',
+          es: 'Mensajes no deseados, phishing o comportamiento engañoso.',
           pt: 'Mensagens indesejadas, phishing ou comportamento enganoso.',
-          fr: 'Messages indesirables, phishing ou comportement trompeur.',
-          de: 'Unerwunschte Nachrichten, Phishing oder tauschendes Verhalten.',
+          fr: 'Messages indésirables, phishing ou comportement trompeur.',
+          de: 'Unerwünschte Nachrichten, Phishing oder tauschendes Verhalten.',
         );
       case 'harassment_or_abuse':
         return _reportTextForLocale(
@@ -161,10 +161,10 @@ class _ReportReason {
           en: enSubtitle,
           uk: 'Погрози, цілеспрямовані образи або повторні небажані контакти.',
           es: 'Amenazas, abuso dirigido o contacto no deseado repetido.',
-          pt: 'Ameacas, abuso direcionado ou contacto indesejado repetido.',
-          ptBr: 'Ameacas, abuso direcionado ou contato indesejado repetido.',
-          fr: 'Menaces, abus cibles ou contacts repetes non desires.',
-          de: 'Drohungen, gezielter Missbrauch oder wiederholter unerwunschter Kontakt.',
+          pt: 'Ameaças, abuso direcionado ou contacto indesejado repetido.',
+          ptBr: 'Ameaças, abuso direcionado ou contato indesejado repetido.',
+          fr: 'Menaces, abus ciblés ou contacts répétés non désirés.',
+          de: 'Drohungen, gezielter Missbrauch oder wiederholter unerwünschter Kontakt.',
         );
       case 'unsafe_or_illegal_content':
         return _reportTextForLocale(
@@ -173,9 +173,9 @@ class _ReportReason {
           en: enSubtitle,
           uk: 'Контент, який може порушувати правила безпеки або закон.',
           es: 'Contenido que puede infringir normas de seguridad o la ley.',
-          pt: 'Conteudo que pode violar regras de seguranca ou a lei.',
-          fr: 'Contenu pouvant enfreindre les regles de securite ou la loi.',
-          de: 'Inhalte, die Sicherheitsregeln oder Gesetze verletzen konnten.',
+          pt: 'Conteúdo que pode violar regras de segurança ou a lei.',
+          fr: 'Contenu pouvant enfreindre les règles de sécurité ou la loi.',
+          de: 'Inhalte, die Sicherheitsregeln oder Gesetze verletzen könnten.',
         );
       case 'impersonation':
         return _reportTextForLocale(
@@ -184,9 +184,9 @@ class _ReportReason {
           en: enSubtitle,
           uk: 'Видає себе за іншу людину, команду або сервіс.',
           es: 'Finge ser otra persona, equipo o servicio.',
-          pt: 'Finge ser outra pessoa, equipa ou servico.',
-          ptBr: 'Finge ser outra pessoa, equipe ou servico.',
-          fr: 'Pretend etre une autre personne, equipe ou service.',
+          pt: 'Finge ser outra pessoa, equipa ou serviço.',
+          ptBr: 'Finge ser outra pessoa, equipe ou serviço.',
+          fr: 'Prétend être une autre personne, équipe ou service.',
           de: 'Gibt vor, eine andere Person, ein Team oder ein Dienst zu sein.',
         );
       case 'privacy_or_security':
@@ -195,10 +195,10 @@ class _ReportReason {
           ru: ruSubtitle,
           en: enSubtitle,
           uk: 'Витік персональних даних, підозрілі ключі або тиск щодо безпеки.',
-          es: 'Datos personales filtrados, claves sospechosas o presion de seguridad.',
-          pt: 'Dados pessoais expostos, chaves suspeitas ou pressao de seguranca.',
-          fr: 'Donnees personnelles divulguees, cles suspectes ou pression de securite.',
-          de: 'Offengelegte personliche Daten, verdachtige Schlussel oder Sicherheitsdruck.',
+          es: 'Datos personales filtrados, claves sospechosas o presión de seguridad.',
+          pt: 'Dados pessoais expostos, chaves suspeitas ou pressão de segurança.',
+          fr: 'Données personnelles divulguées, clés suspectes ou pression de sécurité.',
+          de: 'Offengelegte persönliche Daten, verdächtige Schlüssel oder Sicherheitsdruck.',
         );
       default:
         return _reportTextForLocale(
@@ -206,11 +206,11 @@ class _ReportReason {
           ru: ruSubtitle,
           en: enSubtitle,
           uk: 'Інша ситуація, яку має перевірити команда Secretly.',
-          es: 'Otra situacion que el equipo de Secretly debe revisar.',
-          pt: 'Outra situacao que a equipa Secretly deve rever.',
-          ptBr: 'Outra situacao que a equipe Secretly deve revisar.',
-          fr: 'Une autre situation que l equipe Secretly doit examiner.',
-          de: 'Eine andere Situation, die das Secretly-Team prufen sollte.',
+          es: 'Otra situación que el equipo de Secretly debe revisar.',
+          pt: 'Outra situação que a equipa Secretly deve rever.',
+          ptBr: 'Outra situação que a equipe Secretly deve revisar.',
+          fr: 'Une autre situation que l’équipe Secretly doit examiner.',
+          de: 'Eine andere Situation, die das Secretly-Team prüfen sollte.',
         );
     }
   }
@@ -291,11 +291,11 @@ String reportAbuseDeliveryMessage(
         ru: 'Черновик отчета открыт в почте. Отправьте письмо, чтобы завершить жалобу.',
         en: 'Report draft opened in mail. Send it to submit the report.',
         uk: 'Чернетку звіту відкрито в пошті. Надішліть лист, щоб завершити скаргу.',
-        es: 'El borrador del reporte se abrio en el correo. Envialo para enviar el reporte.',
-        pt: 'O rascunho da denuncia abriu no email. Envie-o para concluir.',
-        ptBr: 'O rascunho da denuncia abriu no email. Envie-o para concluir.',
-        fr: 'Le brouillon du signalement est ouvert dans l email. Envoyez-le pour terminer.',
-        de: 'Der Berichtsentwurf wurde in Mail geoffnet. Sende ihn, um die Meldung abzuschliessen.',
+        es: 'El borrador del reporte se abrió en el correo. Envíalo para enviar el reporte.',
+        pt: 'O rascunho da denúncia abriu no email. Envie-o para concluir.',
+        ptBr: 'O rascunho da denúncia abriu no email. Envie-o para concluir.',
+        fr: 'Le brouillon du signalement est ouvert dans l’email. Envoyez-le pour terminer.',
+        de: 'Der Berichtsentwurf wurde in Mail geöffnet. Sende ihn, um die Meldung abzuschließen.',
       );
     case ReportAbuseDeliveryMode.clipboard:
       return _reportText(
@@ -303,12 +303,12 @@ String reportAbuseDeliveryMessage(
         ru: 'Не удалось открыть почту. Текст жалобы скопирован в буфер обмена.',
         en: 'Could not open mail. Report text copied to clipboard.',
         uk: 'Не вдалося відкрити пошту. Текст скарги скопійовано в буфер обміну.',
-        es: 'No se pudo abrir el correo. El texto del reporte se copio al portapapeles.',
-        pt: 'Nao foi possivel abrir o email. O texto da denuncia foi copiado.',
+        es: 'No se pudo abrir el correo. El texto del reporte se copió al portapapeles.',
+        pt: 'Não foi possível abrir o email. O texto da denúncia foi copiado.',
         ptBr:
-            'Nao foi possivel abrir o email. O texto da denuncia foi copiado.',
-        fr: 'Impossible d ouvrir l email. Le texte du signalement a ete copie.',
-        de: 'Mail konnte nicht geoffnet werden. Der Meldungstext wurde kopiert.',
+            'Não foi possível abrir o email. O texto da denúncia foi copiado.',
+        fr: 'Impossible d’ouvrir l’email. Le texte du signalement a été copié.',
+        de: 'Mail konnte nicht geöffnet werden. Der Meldungstext wurde kopiert.',
       );
   }
 }
@@ -433,7 +433,7 @@ Future<ReportAbuseResult?> showReportAbuseSheet({
                                 uk: 'Додаткові деталі',
                                 es: 'Detalles adicionales',
                                 pt: 'Detalhes adicionais',
-                                fr: 'Details supplementaires',
+                                fr: 'Détails supplémentaires',
                                 de: 'Weitere Details',
                               ),
                               hintText: _reportText(
@@ -441,10 +441,10 @@ Future<ReportAbuseResult?> showReportAbuseSheet({
                                 ru: 'Опишите, что произошло. Содержимое сообщений не прикладывается автоматически.',
                                 en: 'Describe what happened. Message contents are not attached automatically.',
                                 uk: 'Опишіть, що сталося. Вміст повідомлень не додається автоматично.',
-                                es: 'Describe lo que paso. El contenido de los mensajes no se adjunta automaticamente.',
-                                pt: 'Descreva o que aconteceu. O conteudo das mensagens nao e anexado automaticamente.',
-                                fr: 'Decrivez ce qui s est passe. Le contenu des messages n est pas joint automatiquement.',
-                                de: 'Beschreibe, was passiert ist. Nachrichteninhalte werden nicht automatisch angehangt.',
+                                es: 'Describe lo que pasó. El contenido de los mensajes no se adjunta automáticamente.',
+                                pt: 'Descreva o que aconteceu. O conteúdo das mensagens não é anexado automaticamente.',
+                                fr: 'Décrivez ce qui s’est passé. Le contenu des messages n’est pas joint automatiquement.',
+                                de: 'Beschreibe, was passiert ist. Nachrichteninhalte werden nicht automatisch angehängt.',
                               ),
                               alignLabelWithHint: true,
                             ),
@@ -461,9 +461,9 @@ Future<ReportAbuseResult?> showReportAbuseSheet({
                                   ru: 'Заблокировать после жалобы',
                                   en: 'Block after reporting',
                                   uk: 'Заблокувати після скарги',
-                                  es: 'Bloquear despues de reportar',
+                                  es: 'Bloquear después de reportar',
                                   pt: 'Bloquear depois de denunciar',
-                                  fr: 'Bloquer apres le signalement',
+                                  fr: 'Bloquer après le signalement',
                                   de: 'Nach der Meldung blockieren',
                                 ),
                               ),
@@ -473,10 +473,10 @@ Future<ReportAbuseResult?> showReportAbuseSheet({
                                   ru: 'Пользователь не сможет доставлять вам сообщения.',
                                   en: 'This user will not be able to deliver messages to you.',
                                   uk: 'Користувач не зможе доставляти вам повідомлення.',
-                                  es: 'Este usuario no podra enviarte mensajes.',
-                                  pt: 'Este utilizador nao podera enviar-lhe mensagens.',
+                                  es: 'Este usuario no podrá enviarte mensajes.',
+                                  pt: 'Este utilizador não poderá enviar-lhe mensagens.',
                                   ptBr:
-                                      'Este usuario nao podera enviar mensagens para voce.',
+                                      'Este usuário não poderá enviar mensagens para você.',
                                   fr: 'Cet utilisateur ne pourra plus vous envoyer de messages.',
                                   de: 'Dieser Nutzer kann dir keine Nachrichten mehr zustellen.',
                                 ),
@@ -509,7 +509,7 @@ Future<ReportAbuseResult?> showReportAbuseSheet({
                                       es: 'Preparando...',
                                       pt: 'A preparar...',
                                       ptBr: 'Preparando...',
-                                      fr: 'Preparation...',
+                                      fr: 'Préparation...',
                                       de: 'Vorbereitung...',
                                     )
                                   : _reportText(
@@ -518,7 +518,7 @@ Future<ReportAbuseResult?> showReportAbuseSheet({
                                       en: 'Submit report',
                                       uk: 'Надіслати скаргу',
                                       es: 'Enviar reporte',
-                                      pt: 'Enviar denuncia',
+                                      pt: 'Enviar denúncia',
                                       fr: 'Envoyer le signalement',
                                       de: 'Meldung senden',
                                     ),
@@ -704,7 +704,7 @@ class _ReportHeader extends StatelessWidget {
             uk: 'користувача',
             es: 'usuario',
             pt: 'utilizador',
-            ptBr: 'usuario',
+            ptBr: 'usuário',
             fr: 'utilisateur',
             de: 'Nutzer',
           );
@@ -735,10 +735,10 @@ class _ReportHeader extends StatelessWidget {
                   ru: 'Отправьте жалобу на $targetTypeLabel "$targetName". Содержимое сообщений не прикладывается автоматически.',
                   en: 'Submit a report about this $targetTypeLabel "$targetName". Message contents are not attached automatically.',
                   uk: 'Надішліть скаргу на $targetTypeLabel "$targetName". Вміст повідомлень не додається автоматично.',
-                  es: 'Envia un reporte sobre este $targetTypeLabel "$targetName". El contenido de los mensajes no se adjunta automaticamente.',
-                  pt: 'Envie uma denuncia sobre este $targetTypeLabel "$targetName". O conteudo das mensagens nao e anexado automaticamente.',
-                  fr: 'Envoyez un signalement sur ce $targetTypeLabel "$targetName". Le contenu des messages n est pas joint automatiquement.',
-                  de: 'Sende eine Meldung zu diesem $targetTypeLabel "$targetName". Nachrichteninhalte werden nicht automatisch angehangt.',
+                  es: 'Envía un reporte sobre este $targetTypeLabel "$targetName". El contenido de los mensajes no se adjunta automáticamente.',
+                  pt: 'Envie uma denúncia sobre este $targetTypeLabel "$targetName". O conteúdo das mensagens não é anexado automaticamente.',
+                  fr: 'Envoyez un signalement sur ce $targetTypeLabel "$targetName". Le contenu des messages n’est pas joint automatiquement.',
+                  de: 'Sende eine Meldung zu diesem $targetTypeLabel "$targetName". Nachrichteninhalte werden nicht automatisch angehängt.',
                 ),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: Theme.of(context).colorScheme.onSurfaceVariant,

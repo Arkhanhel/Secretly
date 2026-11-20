@@ -27,11 +27,11 @@ class OwnDeviceRemovedBanner extends StatelessWidget {
           ru: 'Это устройство отключено от вашего аккаунта. Новые сообщения сюда не приходят. Переписка на устройстве сохранена.',
           en: 'This device was disconnected from your account. New messages no longer arrive here. Chats on this device are kept.',
           uk: 'Цей пристрій відключено від вашого акаунта. Нові повідомлення сюди не надходять. Листування на пристрої збережено.',
-          es: 'Este dispositivo se desconecto de tu cuenta. Aqui ya no llegan mensajes nuevos. Los chats del dispositivo se conservan.',
-          pt: 'Este dispositivo foi desligado da sua conta. Novas mensagens ja nao chegam aqui. As conversas no dispositivo foram mantidas.',
-          ptBr: 'Este dispositivo foi desconectado da sua conta. Novas mensagens nao chegam mais aqui. As conversas no dispositivo foram mantidas.',
-          fr: 'Cet appareil a ete deconnecte de votre compte. Les nouveaux messages n arrivent plus ici. Les conversations sur l appareil sont conservees.',
-          de: 'Dieses Gerat wurde von deinem Konto getrennt. Neue Nachrichten kommen hier nicht mehr an. Die Chats auf dem Gerat bleiben erhalten.',
+          es: 'Este dispositivo se desconectó de tu cuenta. Aquí ya no llegan mensajes nuevos. Los chats del dispositivo se conservan.',
+          pt: 'Este dispositivo foi desligado da sua conta. Novas mensagens já não chegam aqui. As conversas no dispositivo foram mantidas.',
+          ptBr: 'Este dispositivo foi desconectado da sua conta. Novas mensagens não chegam mais aqui. As conversas no dispositivo foram mantidas.',
+          fr: 'Cet appareil a été déconnecté de votre compte. Les nouveaux messages n’arrivent plus ici. Les conversations sur l’appareil sont conservées.',
+          de: 'Dieses Gerät wurde von deinem Konto getrennt. Neue Nachrichten kommen hier nicht mehr an. Die Chats auf dem Gerät bleiben erhalten.',
         );
         return Padding(
           padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),

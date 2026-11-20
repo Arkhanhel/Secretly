@@ -503,10 +503,10 @@ class _ChatsScreenState extends State<ChatsScreen>
           ru: 'Сначала непрочитанные',
           en: 'Unread first',
           uk: 'Спершу непрочитані',
-          es: 'No leidos primero',
-          pt: 'Nao lidos primeiro',
-          ptBr: 'Nao lidos primeiro',
-          fr: 'Non lus d abord',
+          es: 'No leídos primero',
+          pt: 'Não lidos primeiro',
+          ptBr: 'Não lidos primeiro',
+          fr: 'Non lus d’abord',
           de: 'Ungelesene zuerst',
         );
       case _ChatsSortMode.pinnedFirst:
@@ -518,7 +518,7 @@ class _ChatsScreenState extends State<ChatsScreen>
           es: 'Fijados primero',
           pt: 'Fixados primeiro',
           ptBr: 'Fixados primeiro',
-          fr: 'Epingles d abord',
+          fr: 'Épinglés d’abord',
           de: 'Angeheftete zuerst',
         );
     }
@@ -1198,7 +1198,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                                   es: 'Crear',
                                   pt: 'Criar',
                                   ptBr: 'Criar',
-                                  fr: 'Creer',
+                                  fr: 'Créer',
                                   de: 'Erstellen',
                                 ),
                           ),
@@ -1291,7 +1291,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                             pt: 'Excluir',
                             ptBr: 'Excluir',
                             fr: 'Supprimer',
-                            de: 'Loschen',
+                            de: 'Löschen',
                           ),
                           onTap: () =>
                               Navigator.of(popupContext).pop('delete'),
@@ -3802,7 +3802,7 @@ class _ChatListTypingSubtitle extends StatelessWidget {
       uk: 'Друкує',
       es: 'Escribiendo',
       pt: 'Digitando',
-      fr: 'En train d\'écrire',
+      fr: 'En train d’écrire',
       de: 'Schreibt',
     );
     return Row(

@@ -858,11 +858,11 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                 en: 'This setting only affects this chat for you and does not change the room rules for other members.',
                 uk: 'Цей параметр впливає лише на цей чат у вас і не змінює правила кімнати для інших учасників.',
                 es: 'Este ajuste solo afecta a este chat para ti y no cambia las reglas de la sala para otros miembros.',
-                pt: 'Esta definicao afeta apenas este chat para si e nao altera as regras da sala para outros membros.',
+                pt: 'Esta definição afeta apenas este chat para si e não altera as regras da sala para outros membros.',
                 ptBr:
-                    'Esta configuracao afeta apenas este chat para voce e nao altera as regras da sala para outros membros.',
-                fr: 'Ce reglage ne concerne que ce chat pour vous et ne modifie pas les regles du salon pour les autres membres.',
-                de: 'Diese Einstellung betrifft nur diesen Chat fuer dich und aendert die Raumregeln fuer andere Mitglieder nicht.',
+                    'Esta configuração afeta apenas este chat para você e não altera as regras da sala para outros membros.',
+                fr: 'Ce réglage ne concerne que ce chat pour vous et ne modifie pas les règles du salon pour les autres membres.',
+                de: 'Diese Einstellung betrifft nur diesen Chat für dich und ändert die Raumregeln für andere Mitglieder nicht.',
               ),
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -1877,7 +1877,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
             pt: 'restam: $remainingUses',
             ptBr: 'restam: $remainingUses',
             fr: 'restants : $remainingUses',
-            de: 'uebrig: $remainingUses',
+            de: 'übrig: $remainingUses',
           ));
     final expiresAtMs = link.expiresAtMs;
     final expiresAtText = expiresAtMs == null
@@ -1891,9 +1891,9 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
             en: 'until $expiresAtText',
             uk: 'до $expiresAtText',
             es: 'hasta $expiresAtText',
-            pt: 'ate $expiresAtText',
-            ptBr: 'ate $expiresAtText',
-            fr: 'jusqu au $expiresAtText',
+            pt: 'até $expiresAtText',
+            ptBr: 'até $expiresAtText',
+            fr: 'jusqu’au $expiresAtText',
             de: 'bis $expiresAtText',
           );
     return '$roleText • $approvalText • $usageText • $expiryText';
@@ -1963,12 +1963,12 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
               ru: 'Ссылками-приглашениями могут управлять только владельцы и администраторы комнаты.',
               en: 'Only room owners and admins can manage and share invite links.',
               uk: 'Керувати посиланнями-запрошеннями можуть лише власники й адміністратори кімнати.',
-              es: 'Solo los propietarios y administradores de la sala pueden gestionar y compartir enlaces de invitacion.',
-              pt: 'Apenas proprietarios e administradores da sala podem gerir e partilhar links de convite.',
+              es: 'Solo los propietarios y administradores de la sala pueden gestionar y compartir enlaces de invitación.',
+              pt: 'Apenas proprietários e administradores da sala podem gerir e partilhar links de convite.',
               ptBr:
-                  'Somente proprietarios e administradores da sala podem gerenciar e compartilhar links de convite.',
-              fr: 'Seuls les proprietaires et administrateurs du salon peuvent gerer et partager les liens d invitation.',
-              de: 'Nur Raumbesitzer und Administratoren koennen Einladungslinks verwalten und teilen.',
+                  'Somente proprietários e administradores da sala podem gerenciar e compartilhar links de convite.',
+              fr: 'Seuls les propriétaires et administrateurs du salon peuvent gérer et partager les liens d’invitation.',
+              de: 'Nur Raumbesitzer und Administratoren können Einladungslinks verwalten und teilen.',
             ),
           ),
         ),
@@ -2035,10 +2035,10 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                 ru: 'Приглашение отправлено в ${conversation.title}',
                 en: 'Invite sent to ${conversation.title}',
                 uk: 'Запрошення надіслано в ${conversation.title}',
-                es: 'Invitacion enviada a ${conversation.title}',
+                es: 'Invitación enviada a ${conversation.title}',
                 pt: 'Convite enviado para ${conversation.title}',
                 ptBr: 'Convite enviado para ${conversation.title}',
-                fr: 'Invitation envoyee dans ${conversation.title}',
+                fr: 'Invitation envoyée dans ${conversation.title}',
                 de: 'Einladung an ${conversation.title} gesendet',
               ),
             ),
@@ -2098,12 +2098,12 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
             ru: 'Сообщения и вложения в комнате защищены E2EE. Вложения хранятся на relay только временно по TTL. Владельцы управляют передачей прав и удалением комнаты, администраторы меняют настройки, роли и ссылки-приглашения, модераторы работают с очередью вступления и нарушениями, а возможности обычных, ограниченных и гостевых ролей задаются политикой комнаты.',
             en: 'Room messages and attachments are protected with E2EE. Attachments are stored on relay only temporarily by TTL. Owners handle ownership transfer and room deletion, admins manage settings, roles, and invite links, moderators handle join approvals and member moderation, and member, restricted, and guest capabilities follow the room policy.',
             uk: 'Повідомлення й вкладення в кімнаті захищені E2EE. Вкладення зберігаються на relay лише тимчасово за TTL. Власники керують передачею прав і видаленням кімнати, адміністратори змінюють налаштування, ролі та запрошення, модератори працюють із запитами на вступ і порушеннями, а можливості ролей визначає політика кімнати.',
-            es: 'Los mensajes y adjuntos de la sala estan protegidos con E2EE. Los adjuntos se guardan en relay solo de forma temporal por TTL. Los propietarios gestionan transferencia y eliminacion, los administradores ajustes, roles e invitaciones, los moderadores aprobaciones y moderacion, y las capacidades de cada rol siguen la politica de la sala.',
-            pt: 'As mensagens e anexos da sala estao protegidos com E2EE. Os anexos ficam no relay apenas temporariamente por TTL. Proprietarios gerem transferencia e eliminacao, administradores gerem definicoes, funcoes e convites, moderadores tratam aprovacoes e moderacao, e as capacidades das funcoes seguem a politica da sala.',
+            es: 'Los mensajes y adjuntos de la sala están protegidos con E2EE. Los adjuntos se guardan en relay solo de forma temporal por TTL. Los propietarios gestionan transferencia y eliminación, los administradores ajustes, roles e invitaciones, los moderadores aprobaciones y moderación, y las capacidades de cada rol siguen la política de la sala.',
+            pt: 'As mensagens e anexos da sala estão protegidos com E2EE. Os anexos ficam no relay apenas temporariamente por TTL. Proprietários gerem transferência e eliminação, administradores gerem definições, funções e convites, moderadores tratam aprovações e moderação, e as capacidades das funções seguem a política da sala.',
             ptBr:
-                'As mensagens e anexos da sala sao protegidos com E2EE. Os anexos ficam no relay apenas temporariamente por TTL. Proprietarios gerenciam transferencia e exclusao, administradores gerenciam configuracoes, funcoes e convites, moderadores cuidam de aprovacoes e moderacao, e as capacidades de cada funcao seguem a politica da sala.',
-            fr: 'Les messages et pieces jointes du salon sont proteges par E2EE. Les pieces jointes sont stockees sur le relay uniquement de facon temporaire selon le TTL. Les proprietaires gerent le transfert et la suppression, les administrateurs les reglages, roles et invitations, les moderateurs les demandes et la moderation, et les droits suivent la politique du salon.',
-            de: 'Raumnachrichten und Anhaenge sind mit E2EE geschuetzt. Anhaenge liegen nur temporaer per TTL auf dem Relay. Besitzer verwalten Uebertragung und Loeschung, Administratoren Einstellungen, Rollen und Einladungen, Moderatoren Beitrittsanfragen und Moderation, und Rollenrechte folgen der Raumrichtlinie.',
+                'As mensagens e anexos da sala são protegidos com E2EE. Os anexos ficam no relay apenas temporariamente por TTL. Proprietários gerenciam transferência e exclusão, administradores gerenciam configurações, funções e convites, moderadores cuidam de aprovações e moderação, e as capacidades de cada função seguem a política da sala.',
+            fr: 'Les messages et pièces jointes du salon sont protégés par E2EE. Les pièces jointes sont stockées sur le relay uniquement de façon temporaire selon le TTL. Les propriétaires gèrent le transfert et la suppression, les administrateurs les réglages, rôles et invitations, les modérateurs les demandes et la modération, et les droits suivent la politique du salon.',
+            de: 'Raumnachrichten und Anhänge sind mit E2EE geschützt. Anhänge liegen nur temporär per TTL auf dem Relay. Besitzer verwalten Übertragung und Löschung, Administratoren Einstellungen, Rollen und Einladungen, Moderatoren Beitrittsanfragen und Moderation, und Rollenrechte folgen der Raumrichtlinie.',
           ),
         ),
         actions: [
@@ -2329,12 +2329,12 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                 ru: 'История будет очищена у всех участников комнаты. Новые сообщения после очистки сохранятся.',
                 en: 'History will be cleared for every room participant. New messages sent after the clear will remain.',
                 uk: 'Історію буде очищено для всіх учасників кімнати. Нові повідомлення після очищення залишаться.',
-                es: 'El historial se borrara para todos los participantes de la sala. Los mensajes nuevos enviados despues se conservaran.',
-                pt: 'O historico sera limpo para todos os participantes da sala. As mensagens novas enviadas depois continuarao.',
+                es: 'El historial se borrará para todos los participantes de la sala. Los mensajes nuevos enviados después se conservarán.',
+                pt: 'O histórico será limpo para todos os participantes da sala. As mensagens novas enviadas depois continuarão.',
                 ptBr:
-                    'O historico sera limpo para todos os participantes da sala. As novas mensagens enviadas depois permanecerao.',
-                fr: 'L historique sera efface pour tous les participants du salon. Les nouveaux messages envoyes ensuite resteront.',
-                de: 'Der Verlauf wird fuer alle Raumteilnehmer geloescht. Neue Nachrichten nach dem Loeschen bleiben erhalten.',
+                    'O histórico será limpo para todos os participantes da sala. As novas mensagens enviadas depois permanecerão.',
+                fr: 'L’historique sera effacé pour tous les participants du salon. Les nouveaux messages envoyés ensuite resteront.',
+                de: 'Der Verlauf wird für alle Raumteilnehmer gelöscht. Neue Nachrichten nach dem Löschen bleiben erhalten.',
               ),
             ),
             actions: [
@@ -4654,9 +4654,9 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
       en: 'Role: $roleText, $approvalText.',
       uk: 'Роль: $roleText, $approvalText.',
       es: 'Rol: $roleText, $approvalText.',
-      pt: 'Funcao: $roleText, $approvalText.',
-      ptBr: 'Funcao: $roleText, $approvalText.',
-      fr: 'Role : $roleText, $approvalText.',
+      pt: 'Função: $roleText, $approvalText.',
+      ptBr: 'Função: $roleText, $approvalText.',
+      fr: 'Rôle : $roleText, $approvalText.',
       de: 'Rolle: $roleText, $approvalText.',
     );
   }
@@ -4670,10 +4670,10 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
         ru: 'Использования по ссылке не ограничены.',
         en: 'This link has unlimited joins.',
         uk: 'Кількість вступів за посиланням не обмежена.',
-        es: 'Este enlace no tiene limite de uniones.',
-        pt: 'Este link nao tem limite de entradas.',
-        ptBr: 'Este link nao tem limite de entradas.',
-        fr: 'Ce lien n a pas de limite d adhesions.',
+        es: 'Este enlace no tiene límite de uniones.',
+        pt: 'Este link não tem limite de entradas.',
+        ptBr: 'Este link não tem limite de entradas.',
+        fr: 'Ce lien n’a pas de limite d’adhésions.',
         de: 'Dieser Link hat keine Beitrittsbegrenzung.',
       );
     }
@@ -4685,8 +4685,8 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
       es: 'Usado: ${link.useCount} de $maxUses. Quedan: $remainingUses.',
       pt: 'Usado: ${link.useCount} de $maxUses. Restam: $remainingUses.',
       ptBr: 'Usado: ${link.useCount} de $maxUses. Restam: $remainingUses.',
-      fr: 'Utilise : ${link.useCount} sur $maxUses. Restants : $remainingUses.',
-      de: 'Verwendet: ${link.useCount} von $maxUses. Uebrig: $remainingUses.',
+      fr: 'Utilisé : ${link.useCount} sur $maxUses. Restants : $remainingUses.',
+      de: 'Verwendet: ${link.useCount} von $maxUses. Übrig: $remainingUses.',
     );
   }
 
@@ -4699,10 +4699,10 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
         en: 'This link does not expire by time.',
         uk: 'Це посилання не має обмеження за часом.',
         es: 'Este enlace no caduca por tiempo.',
-        pt: 'Este link nao expira por tempo.',
-        ptBr: 'Este link nao expira por tempo.',
-        fr: 'Ce lien n expire pas dans le temps.',
-        de: 'Dieser Link laeuft zeitlich nicht ab.',
+        pt: 'Este link não expira por tempo.',
+        ptBr: 'Este link não expira por tempo.',
+        fr: 'Ce lien n’expire pas dans le temps.',
+        de: 'Dieser Link läuft zeitlich nicht ab.',
       );
     }
     final dateText = _formatInviteDateTime(expiresAtMs);
@@ -4711,11 +4711,11 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
       ru: 'Действует до: $dateText.',
       en: 'Valid until: $dateText.',
       uk: 'Діє до: $dateText.',
-      es: 'Valido hasta: $dateText.',
-      pt: 'Valido ate: $dateText.',
-      ptBr: 'Valido ate: $dateText.',
-      fr: 'Valide jusqu au : $dateText.',
-      de: 'Gueltig bis: $dateText.',
+      es: 'Válido hasta: $dateText.',
+      pt: 'Válido até: $dateText.',
+      ptBr: 'Válido até: $dateText.',
+      fr: 'Valide jusqu’au : $dateText.',
+      de: 'Gültig bis: $dateText.',
     );
   }
 
@@ -5220,7 +5220,7 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
                                 ru: 'Ссылка ${index + 1}',
                                 en: 'Invite ${index + 1}',
                                 uk: 'Посилання ${index + 1}',
-                                es: 'Invitacion ${index + 1}',
+                                es: 'Invitación ${index + 1}',
                                 pt: 'Convite ${index + 1}',
                                 ptBr: 'Convite ${index + 1}',
                                 fr: 'Invitation ${index + 1}',

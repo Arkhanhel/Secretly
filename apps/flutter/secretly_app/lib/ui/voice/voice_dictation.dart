@@ -989,7 +989,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
               es: 'Sin acceso al micrófono. Abre los ajustes y permite el acceso al micrófono para Secretly.',
               pt: 'Sem acesso ao microfone. Abra as definições e permita o acesso ao microfone ao Secretly.',
               ptBr: 'Sem acesso ao microfone. Abra as configurações e permita o acesso ao microfone ao Secretly.',
-              fr: "Pas d'accès au micro. Ouvrez les réglages et autorisez l'accès au micro pour Secretly.",
+              fr: "Pas d’accès au micro. Ouvrez les réglages et autorisez l’accès au micro pour Secretly.",
               de: 'Kein Mikrofonzugriff. Öffne die Einstellungen und erlaube Secretly den Mikrofonzugriff.',
             )
           : wave1Text(
@@ -1000,7 +1000,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
               es: 'El reconocimiento de voz necesita acceso al micrófono.',
               pt: 'O reconhecimento de voz precisa de acesso ao microfone.',
               ptBr: 'O reconhecimento de voz precisa de acesso ao microfone.',
-              fr: "La reconnaissance vocale a besoin de l'accès au micro.",
+              fr: "La reconnaissance vocale a besoin de l’accès au micro.",
               de: 'Die Spracherkennung benötigt Mikrofonzugriff.',
             );
       final buttonLabel = _permissionPermanentlyDenied
@@ -1064,7 +1064,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
             es: 'Escuchando…',
             pt: 'A ouvir…',
             ptBr: 'Ouvindo…',
-            fr: "J'écoute…",
+            fr: "J’écoute…",
             de: 'Höre zu…',
           )
         // Watchdog fired: show the retry hint until the user taps the mic again.
@@ -1209,7 +1209,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
               es: 'Sin acceso al micrófono. Abre los ajustes y permite el acceso al micrófono para Secretly.',
               pt: 'Sem acesso ao microfone. Abra as definições e permita o acesso ao microfone ao Secretly.',
               ptBr: 'Sem acesso ao microfone. Abra as configurações e permita o acesso ao microfone ao Secretly.',
-              fr: "Pas d'accès au micro. Ouvrez les réglages et autorisez l'accès au micro pour Secretly.",
+              fr: "Pas d’accès au micro. Ouvrez les réglages et autorisez l’accès au micro pour Secretly.",
               de: 'Kein Mikrofonzugriff. Öffne die Einstellungen und erlaube Secretly den Mikrofonzugriff.',
             )
           : wave1Text(
@@ -1220,7 +1220,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
               es: 'La entrada de voz necesita acceso al micrófono.',
               pt: 'A entrada de voz precisa de acesso ao microfone.',
               ptBr: 'A entrada de voz precisa de acesso ao microfone.',
-              fr: "La saisie vocale a besoin de l'accès au micro.",
+              fr: "La saisie vocale a besoin de l’accès au micro.",
               de: 'Die Spracheingabe benötigt Mikrofonzugriff.',
             );
     } else if (_offlineDownloading) {

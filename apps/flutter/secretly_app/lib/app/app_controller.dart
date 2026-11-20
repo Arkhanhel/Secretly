@@ -35139,7 +35139,7 @@ class AppController {
           es: '⚠️ Algunos miembros tienen una versión antigua de la app: para ellos los mensajes no desaparecerán.',
           pt: '⚠️ Alguns membros têm uma versão antiga da app — para eles as mensagens não vão desaparecer.',
           ptBr: '⚠️ Alguns membros têm uma versão antiga do app — para eles as mensagens não vão desaparecer.',
-          fr: "⚠️ Certains membres utilisent une ancienne version de l'app : chez eux, les messages ne disparaîtront pas.",
+          fr: "⚠️ Certains membres utilisent une ancienne version de l’app : chez eux, les messages ne disparaîtront pas.",
           de: '⚠️ Einige Mitglieder nutzen eine alte App-Version – bei ihnen verschwinden die Nachrichten nicht.',
         );
       case DisappearingPeerSupport.peerOutdated:
@@ -35150,7 +35150,7 @@ class AppController {
           es: '⚠️ Tu contacto tiene una versión antigua de la app: en su lado los mensajes no desaparecerán.',
           pt: '⚠️ O seu contacto tem uma versão antiga da app — do lado dele as mensagens não vão desaparecer.',
           ptBr: '⚠️ Seu contato tem uma versão antiga do app — do lado dele as mensagens não vão desaparecer.',
-          fr: "⚠️ Votre contact utilise une ancienne version de l'app : chez lui, les messages ne disparaîtront pas.",
+          fr: "⚠️ Votre contact utilise une ancienne version de l’app : chez lui, les messages ne disparaîtront pas.",
           de: '⚠️ Dein Kontakt nutzt eine alte App-Version – bei ihm verschwinden die Nachrichten nicht.',
         );
       case DisappearingPeerSupport.ownOutdated:
@@ -35161,7 +35161,7 @@ class AppController {
           es: '⚠️ Uno de tus dispositivos tiene una versión antigua de la app: allí los mensajes no desaparecerán.',
           pt: '⚠️ Um dos seus dispositivos tem uma versão antiga da app — aí as mensagens não vão desaparecer.',
           ptBr: '⚠️ Um dos seus dispositivos tem uma versão antiga do app — lá as mensagens não vão desaparecer.',
-          fr: "⚠️ L'un de vos appareils utilise une ancienne version de l'app : les messages n'y disparaîtront pas.",
+          fr: "⚠️ L’un de vos appareils utilise une ancienne version de l’app : les messages n’y disparaîtront pas.",
           de: '⚠️ Eines deiner Geräte nutzt eine alte App-Version – dort verschwinden die Nachrichten nicht.',
         );
       case DisappearingPeerSupport.supported:
@@ -37416,7 +37416,7 @@ class AppController {
         pt: '🔒 O número de segurança deste contacto mudou — provavelmente reinstalou a app ou mudou de dispositivo. Em caso de dúvida, verifique novamente.',
         ptBr:
             '🔒 O número de segurança deste contato mudou — provavelmente reinstalou o app ou trocou de dispositivo. Na dúvida, verifique novamente.',
-        fr: "🔒 Le numéro de sécurité de ce contact a changé — il a probablement réinstallé l'app ou changé d'appareil. En cas de doute, revérifiez le contact.",
+        fr: "🔒 Le numéro de sécurité de ce contact a changé — il a probablement réinstallé l’app ou changé d’appareil. En cas de doute, revérifiez le contact.",
         de: '🔒 Die Sicherheitsnummer dieses Kontakts hat sich geändert – wahrscheinlich App neu installiert oder Gerät gewechselt. Im Zweifel den Kontakt neu verifizieren.',
       );
       final ev = SystemEventV1(eventId: _uuid.v4(), text: text);

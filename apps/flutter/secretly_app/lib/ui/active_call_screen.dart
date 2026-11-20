@@ -1142,9 +1142,9 @@ class _BottomControls extends StatelessWidget {
                           en: 'Screen share permission denied',
                           uk: 'Немає дозволу на демонстрацію екрана',
                           es: 'Permiso de compartir pantalla denegado',
-                          pt: 'Permissao de partilha de ecra negada',
-                          ptBr: 'Permissao para compartilhar tela negada',
-                          fr: 'Autorisation de partage d ecran refusee',
+                          pt: 'Permissão de partilha de ecrã negada',
+                          ptBr: 'Permissão para compartilhar tela negada',
+                          fr: 'Autorisation de partage d’écran refusée',
                           de: 'Berechtigung zur Bildschirmfreigabe verweigert',
                         );
                         final ok = await callManager.toggleScreenShare();

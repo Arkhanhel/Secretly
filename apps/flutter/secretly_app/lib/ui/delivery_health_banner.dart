@@ -132,7 +132,7 @@ class _DeliveryHealthBannerState extends State<DeliveryHealthBanner>
                           es: 'El sistema restringe la app. Toca para solucionarlo',
                           pt: 'O sistema restringe o app. Toque para corrigir',
                           ptBr: 'O sistema restringe o app. Toque para corrigir',
-                          fr: 'Le système limite l\'app. Touchez pour corriger',
+                          fr: 'Le système limite l’app. Touchez pour corriger',
                           de: 'Das System schränkt die App ein. Zum Beheben tippen',
                         ),
                         style: TextStyle(

@@ -248,7 +248,7 @@ const Map<String, Map<String, String>> _callHistoryTextTranslations = {
   },
   'Video': {
     'uk': 'Відео',
-    'es': 'Video',
+    'es': 'Vídeo',
     'pt': 'Vídeo',
     'fr': 'Vidéo',
     'de': 'Video',
@@ -257,7 +257,7 @@ const Map<String, Map<String, String>> _callHistoryTextTranslations = {
     'uk': 'Сьогодні',
     'es': 'Hoy',
     'pt': 'Hoje',
-    'fr': 'Aujourd\'hui',
+    'fr': 'Aujourd’hui',
     'de': 'Heute',
   },
   'Yesterday': {
@@ -419,7 +419,7 @@ const Map<String, Map<String, String>> _callHistoryTextTranslations = {
     'uk': 'Історія дзвінків поки порожня',
     'es': 'Aún no hay historial de llamadas',
     'pt': 'Ainda não há histórico de chamadas',
-    'fr': 'Aucun historique d\'appels pour le moment',
+    'fr': 'Aucun historique d’appels pour le moment',
     'de': 'Noch kein Anrufverlauf',
   },
   'No entries for the selected filter': {

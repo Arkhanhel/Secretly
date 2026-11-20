@@ -158,7 +158,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               uk: 'скоро',
               es: 'pronto',
               pt: 'em breve',
-              fr: 'bientot',
+              fr: 'bientôt',
               de: 'bald',
             )
           : wave1Text(
@@ -168,7 +168,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               uk: 'щойно',
               es: 'ahora mismo',
               pt: 'agora mesmo',
-              fr: 'a l instant',
+              fr: 'à l’instant',
               de: 'gerade eben',
             );
     }
@@ -270,8 +270,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       en: '$value ago',
       uk: '$value тому',
       es: 'hace $value',
-      pt: 'ha $value',
-      ptBr: 'ha $value',
+      pt: 'há $value',
+      ptBr: 'há $value',
       fr: 'il y a $value',
       de: 'vor $value',
     );

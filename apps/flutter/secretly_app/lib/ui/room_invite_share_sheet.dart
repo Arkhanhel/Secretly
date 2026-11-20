@@ -195,8 +195,8 @@ class _RoomInviteShareSheetState extends State<_RoomInviteShareSheet>
                                 ru: 'Других комнат пока нет',
                                 en: 'No other rooms yet',
                                 uk: 'Інших кімнат поки немає',
-                                es: 'No hay otras salas todavia',
-                                pt: 'Ainda nao ha outras salas',
+                                es: 'No hay otras salas todavía',
+                                pt: 'Ainda não há outras salas',
                                 fr: 'Aucun autre salon pour le moment',
                                 de: 'Noch keine anderen Räume',
                               ),
@@ -364,7 +364,7 @@ class _RoomInviteConversationTab extends StatelessWidget {
                       es: 'Chat privado',
                       pt: 'Chat privado',
                       ptBr: 'Conversa privada',
-                      fr: 'Chat prive',
+                      fr: 'Chat privé',
                       de: 'Privater Chat',
                     ));
         return ListTile(

@@ -208,8 +208,8 @@ String _pendingPaymentBody(String localeTag) => wave1TextForLocale(
       ptBr: 'O pedido foi criado, mas o pagamento ainda não foi confirmado. '
           'Conclua o pagamento pelo método escolhido — o Premium será '
           'ativado sozinho.',
-      fr: "La commande est créée mais le paiement n'est pas encore confirmé. "
-          "Terminez le paiement avec le moyen choisi — Premium s'activera "
+      fr: "La commande est créée mais le paiement n’est pas encore confirmé. "
+          "Terminez le paiement avec le moyen choisi — Premium s’activera "
           'tout seul.',
       de: 'Die Bestellung wurde erstellt, die Zahlung ist aber noch nicht '
           'bestätigt. Bezahle mit der gewählten Methode — Premium wird von '
@@ -325,7 +325,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                 es: 'La compra no está disponible. Inténtalo de nuevo más tarde.',
                 pt: 'A compra está indisponível. Tente novamente mais tarde.',
                 ptBr: 'A compra está indisponível. Tente novamente mais tarde.',
-                fr: "L'achat est indisponible. Réessayez plus tard.",
+                fr: "L’achat est indisponible. Réessayez plus tard.",
                 de: 'Kauf derzeit nicht verfügbar. Bitte später erneut versuchen.',
               ),
             ),

@@ -519,7 +519,7 @@ class _PremiumTrialCard extends StatelessWidget {
                         es: 'Términos de uso',
                         pt: 'Termos de uso',
                         ptBr: 'Termos de uso',
-                        fr: "Conditions d'utilisation",
+                        fr: "Conditions d’utilisation",
                         de: 'Nutzungsbedingungen',
                       ),
                       style: TextStyle(
