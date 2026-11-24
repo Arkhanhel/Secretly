@@ -701,6 +701,17 @@ Future<File?> _loadNotoLottieFile(String emoji) {
   return _notoLoadFutures[codepoint] ??= _doLoadNotoLottie(codepoint);
 }
 
+/// После отправки клавиатура не поднимается сама: отправили из панели
+/// эмодзи (панель остаётся на месте) или отправили соло-эмодзи, когда
+/// клавиатура была опущена — иначе она закрыла бы эффект на весь экран
+/// (владелец, 24.11.2026).
+@visibleForTesting
+bool composerKeepsKeyboardDownAfterSend({
+  required bool soloEmoji,
+  required bool keyboardWasUp,
+  required bool emojiPanelOpen,
+}) => emojiPanelOpen || (soloEmoji && !keyboardWasUp);
+
 bool _isSoloNotoEmoji(String text) {
   final t = text.trim();
   return t.isNotEmpty && _notoCodepoints.containsKey(t);
@@ -21164,6 +21175,8 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _sendInner({int? scheduledAtMs}) async {
     final text = _text.text.trim();
+    // Была ли поднята клавиатура в момент отправки (см. finally ниже).
+    final keyboardWasUp = _messageInputFocusNode.hasFocus;
     final editingTarget = _editingTarget;
     final hasForward = _forwardDraft != null;
     if (text.isEmpty && !hasForward) return;
@@ -21508,7 +21521,16 @@ class _ChatScreenState extends State<ChatScreen>
         SecretlySnackBar(content: Text(directMessageErrorText(l10n, e))),
       );
     } finally {
-      if (mounted) {
+      // 24.11.2026 (владелец): после соло-эмодзи клавиатура поднималась
+      // заново и закрывала эффект на весь экран. Клавиатуру возвращаем,
+      // только если она и была: соло-эмодзи при опущенной клавиатуре и
+      // отправка из панели эмодзи (панель остаётся) — без неё.
+      if (mounted &&
+          !composerKeepsKeyboardDownAfterSend(
+            soloEmoji: _isSoloNotoEmoji(text),
+            keyboardWasUp: keyboardWasUp,
+            emojiPanelOpen: _inlineEmojiPanel?.isOpen.value ?? false,
+          )) {
         _messageInputFocusNode.requestFocus();
       }
     }
@@ -35446,8 +35468,9 @@ String _formatEta(int seconds) {
 ///
 ///   отправлено  → ОДНА приглушённая галочка — ушло на релей, получатель ещё
 ///                 не подтвердил, что конверт до него дошёл;
-///   доставлено  → ОДНА яркая галочка — устройство получателя приняло конверт
-///                 и прислало квитанцию;
+///   доставлено  → ДВЕ приглушённые галочки — устройство получателя приняло
+///                 конверт и прислало квитанцию (24.11.2026, как в списке чатов;
+///                 было: одна яркая);
 ///   прочитано   → ДВЕ яркие галочки — собеседник открыл чат и увидел.
 ///
 /// До этого «отправлено» и «доставлено» рисовались ОДИНАКОВО, и разница между
@@ -35467,7 +35490,9 @@ String _formatEta(int seconds) {
 ({double alpha, bool doubled})? chatDeliveryTickStyle(String localState) {
   return switch (MessageLocalState.normalize(localState)) {
     MessageLocalState.sent => (alpha: 0.55, doubled: false),
-    MessageLocalState.delivered => (alpha: 1.0, doubled: false),
+    // 24.11.2026 (владелец): «доставлено» — ДВЕ серые, как в списке чатов
+    // (было: одна яркая — в списке и в чате значки расходились).
+    MessageLocalState.delivered => (alpha: 0.55, doubled: true),
     MessageLocalState.read => (alpha: 1.0, doubled: true),
     _ => null,
   };

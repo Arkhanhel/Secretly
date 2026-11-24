@@ -405,7 +405,9 @@ class ChatListPinGlyph extends StatelessWidget {
 
 // ─── Галочки ────────────────────────────────────────────────────────────────
 
-enum ChatListTick { none, sent, delivered, read }
+/// [sending] — часики, как в пузыре (24.11.2026: пока сообщение в пути, в
+/// списке не было ничего — «галочки иногда нет»).
+enum ChatListTick { none, sending, sent, delivered, read }
 
 /// Галочка в начале превью: одна — отправлено, две — доставлено (серые),
 /// две акцентом — прочитано.
@@ -418,6 +420,17 @@ class ChatListTickGlyph extends StatelessWidget {
   Widget build(BuildContext context) {
     if (tick == ChatListTick.none) return const SizedBox.shrink();
     final c = chatListColors(context);
+    if (tick == ChatListTick.sending) {
+      return Padding(
+        key: const ValueKey<ChatListTick>(ChatListTick.sending),
+        padding: const EdgeInsets.only(right: 3),
+        child: Icon(
+          _isIos() ? CupertinoIcons.clock : Icons.schedule_rounded,
+          size: 14,
+          color: c.muted,
+        ),
+      );
+    }
     final read = tick == ChatListTick.read;
     final color = read ? c.accent : c.muted;
     // iPhone — галочки Apple (SF): у Cupertino нет двойной, поэтому две

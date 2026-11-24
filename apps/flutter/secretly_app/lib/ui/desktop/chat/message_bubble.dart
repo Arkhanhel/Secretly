@@ -123,8 +123,8 @@ Widget _deliveryTickGlyph(DeliveryStatus s, Color col) {
       return Icon(FluentIcons.calendar_clock_24_regular, size: 12, color: col);
     case DeliveryStatus.sent:
       // 🔴 Три ступени, как на телефоне (`chatDeliveryTickStyle`, 17.09.2026):
-      // «отправлено» — одна ПРИГЛУШЁННАЯ галочка, «доставлено» — одна яркая,
-      // «прочитано» — две яркие. Раньше «ушло на сервер» и «дошло до
+      // «отправлено» — одна ПРИГЛУШЁННАЯ галочка, «доставлено» — две
+      // приглушённые, «прочитано» — две яркие (24.11.2026). Раньше «ушло на сервер» и «дошло до
       // человека» здесь выглядели одинаково. 0,55 — та же ступень, что у
       // телефона; от цвета, а не абсолютом: мета-строка бывает полупрозрачной.
       return Icon(
@@ -133,7 +133,20 @@ Widget _deliveryTickGlyph(DeliveryStatus s, Color col) {
         color: col.withValues(alpha: col.a * kDesktopSentTickAlpha),
       );
     case DeliveryStatus.delivered:
-      return Icon(FluentIcons.checkmark_24_regular, size: 12, color: col);
+      // 24.11.2026 (владелец): «доставлено» — ДВЕ приглушённые, как в
+      // списке чатов и на телефоне (было: одна яркая).
+      final dim = col.withValues(alpha: col.a * kDesktopSentTickAlpha);
+      return SizedBox(
+        width: 20,
+        height: 12,
+        child: Stack(children: [
+          Icon(FluentIcons.checkmark_24_regular, size: 12, color: dim),
+          Padding(
+            padding: const EdgeInsets.only(left: 5),
+            child: Icon(FluentIcons.checkmark_24_regular, size: 12, color: dim),
+          ),
+        ]),
+      );
     case DeliveryStatus.read:
       return SizedBox(
         width: 20,

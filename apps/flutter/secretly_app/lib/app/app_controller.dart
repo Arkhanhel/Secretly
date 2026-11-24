@@ -988,6 +988,9 @@ enum SafeBackupHealth {
 
 class AppController {
   AppController() {
+    // Галочки в списке чатов (24.11.2026): смена состояния сообщения
+    // обновляет превью строки — см. AppDb.onMessageStateChanged.
+    AppDb.onMessageStateChanged = bumpConvoPreviewEpochForState;
     // Any code path that emits `_changed` is signalling that some piece of
     // user-visible state changed (new inbound message, receipt, mute toggle,
     // contact rename, …). The chats screen rebuilds via `controller.changed`
@@ -42607,6 +42610,16 @@ class AppController {
   final Map<String, int> _convoPreviewEpoch = <String, int>{};
   int convoPreviewEpoch(String convoId) => _convoPreviewEpoch[convoId.trim()] ?? 0;
 
+  /// Состояние сообщения сменилось (квитанция «доставлено/прочитано»,
+  /// отправка ушла, провал): превью строки списка пересчитывается — иначе
+  /// галочка застывала в старом состоянии или не появлялась вовсе.
+  @visibleForTesting
+  void bumpConvoPreviewEpochForState(String convoId) {
+    final id = convoId.trim();
+    if (id.isEmpty) return;
+    _convoPreviewEpoch[id] = (_convoPreviewEpoch[id] ?? 0) + 1;
+  }
+
   Future<bool> editTextMessage({
     required String convoId,
     required String payloadEventId,
@@ -43169,24 +43182,28 @@ class AppController {
         final sName = await resolveSenderName(event.senderDeviceId);
         if (mime.startsWith('image/')) {
           final imageBlobIds = <String>[payload.blobId];
+          var caption = (payload.caption ?? '').trim();
           final groupId = (payload.mediaGroupId ?? '').trim();
           if (groupId.isNotEmpty) {
-            for (
-              var j = i + 1;
-              j < events.length && imageBlobIds.length < 3;
-              j++
-            ) {
+            // Подпись альбома лежит на одном из его снимков — смотрим всю
+            // группу (до 10), миниатюр берём не больше трёх.
+            for (var j = i + 1; j < events.length && j <= i + 10; j++) {
+              if (imageBlobIds.length >= 3 && caption.isNotEmpty) break;
               final p2 = await payloadEventForChatEvent(events[j]);
               if (p2 is! AttachmentEventV1) break;
               final m2 = (p2.mime ?? '').toLowerCase();
               if (!m2.startsWith('image/')) break;
               if ((p2.mediaGroupId ?? '').trim() != groupId) break;
-              imageBlobIds.add(p2.blobId);
+              if (imageBlobIds.length < 3) imageBlobIds.add(p2.blobId);
+              if (caption.isEmpty) caption = (p2.caption ?? '').trim();
             }
           }
           return ChatListPreview(
             kind: ChatListPreviewKind.photo,
-            text: _localizedText(ru: 'Фотография', en: 'Photo'),
+            text: caption.isNotEmpty
+                ? caption
+                : _localizedText(ru: 'Фотография', en: 'Photo'),
+            caption: caption.isEmpty ? null : caption,
             imageBlobIds: imageBlobIds,
             senderName: sName,
             senderDeviceId: event.senderDeviceId,
@@ -43223,17 +43240,25 @@ class AppController {
               senderLocalState: event.localState,
             );
           }
+          final musicCaption = (payload.caption ?? '').trim();
           return ChatListPreview(
             kind: ChatListPreviewKind.music,
-            text: _localizedText(ru: 'Музыка', en: 'Music'),
+            text: musicCaption.isNotEmpty
+                ? musicCaption
+                : _localizedText(ru: 'Музыка', en: 'Music'),
+            caption: musicCaption.isEmpty ? null : musicCaption,
             senderName: sName,
             senderDeviceId: event.senderDeviceId,
             senderLocalState: event.localState,
           );
         }
+        final fileCaption = (payload.caption ?? '').trim();
         return ChatListPreview(
           kind: ChatListPreviewKind.file,
-          text: _localizedText(ru: 'Файл', en: 'File'),
+          text: fileCaption.isNotEmpty
+              ? fileCaption
+              : _localizedText(ru: 'Файл', en: 'File'),
+          caption: fileCaption.isEmpty ? null : fileCaption,
           senderName: sName,
           senderDeviceId: event.senderDeviceId,
           senderLocalState: event.localState,
@@ -62039,11 +62064,13 @@ class ChatListPreview {
     this.senderLocalState,
     this.mentionsSelf = false,
     this.isCall = false,
+    this.caption,
   });
 
   const ChatListPreview.empty()
     : kind = ChatListPreviewKind.empty,
       text = null,
+      caption = null,
       imageBlobIds = const <String>[],
       senderName = null,
       senderDeviceId = null,
@@ -62054,6 +62081,11 @@ class ChatListPreview {
   final ChatListPreviewKind kind;
   final String? text;
   final List<String> imageBlobIds;
+
+  /// Подпись под фото/альбомом/файлом (24.11.2026, владелец: «в превью видно
+  /// только „Фотография“ — хотелось бы комментарий»). Когда есть — она же
+  /// в [text]; миниатюра или значок слева остаются.
+  final String? caption;
 
   /// Display name of whoever sent the last message (for room subtitle).
   final String? senderName;

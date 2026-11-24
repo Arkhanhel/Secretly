@@ -29,11 +29,11 @@ void main() {
       );
     });
 
-    test('доставлено — одна яркая галочка', () {
+    test('доставлено — две серые галочки (как в списке чатов, 24.11.2026)', () {
       final style = chatDeliveryTickStyle(MessageLocalState.delivered);
       expect(style, isNotNull);
-      expect(style!.doubled, isFalse);
-      expect(style.alpha, 1.0);
+      expect(style!.doubled, isTrue);
+      expect(style.alpha, 0.55);
     });
 
     test('прочитано — две яркие галочки', () {
@@ -54,15 +54,12 @@ void main() {
       );
     });
 
-    test('доставлено и прочитано различаются количеством, а не яркостью', () {
+    test('доставлено и прочитано различаются яркостью (обе — две галочки)', () {
       final delivered = chatDeliveryTickStyle(MessageLocalState.delivered)!;
       final read = chatDeliveryTickStyle(MessageLocalState.read)!;
-      expect(read.doubled, isNot(delivered.doubled));
-      expect(
-        read.alpha,
-        delivered.alpha,
-        reason: 'обе ступени яркие; глаз считает галочки, а не оттенок',
-      );
+      expect(read.doubled, delivered.doubled);
+      expect(read.alpha, greaterThan(delivered.alpha),
+          reason: 'прочитано — яркие, доставлено — серые, как в списке чатов');
     });
 
     test('приглушённая ступень остаётся читаемой', () {

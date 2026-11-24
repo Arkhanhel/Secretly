@@ -164,6 +164,35 @@ typedef OutboxNackTarget = ({
 class AppDb {
   AppDb._(this._db);
 
+  /// Состояние сообщения сменилось (отправлено → доставлено → прочитано …)
+  /// в переписке `convoId`. 🔴 Зачем (24.11.2026, владелец: «в списках чатов
+  /// не всегда эти галочки высвечиваются»): превью строки списка
+  /// кэшируется по времени последнего события, а квитанция время не меняет —
+  /// галочка застывала в том состоянии, в каком превью построили (на отправке —
+  /// без галочки вовсе). Контроллер сдвигает по этому сигналу эпоху превью.
+  static void Function(String convoId)? onMessageStateChanged;
+
+  static void _notifyStateChanged(String? convoId) {
+    final id = convoId?.trim() ?? '';
+    if (id.isEmpty) return;
+    try {
+      onMessageStateChanged?.call(id);
+    } catch (_) {
+      // Подсказка для экрана — не повод ронять запись в базу.
+    }
+  }
+
+  Future<String?> _convoIdOfEvent(String eventId) async {
+    final rows = await _db.query(
+      'events',
+      columns: ['convo_id'],
+      where: 'event_id = ?',
+      whereArgs: [eventId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first['convo_id'] as String?;
+  }
+
   /// Максимум идентификаторов в одном `IN (...)`.
   ///
   /// 🔴 ЭТО ПРЕДЕЛ SQLITE, А НЕ ВКУСОВЩИНА. Число параметров запроса ограничено
@@ -2923,6 +2952,7 @@ CREATE TABLE IF NOT EXISTS local_kv (
         where: "event_id = ? AND local_state = 'sent'",
         whereArgs: [id],
       );
+      if (n > 0) _notifyStateChanged(await _convoIdOfEvent(id));
       return n > 0;
     } catch (_) {
       return false;
@@ -11448,6 +11478,7 @@ ORDER BY c.created_at_ms ASC
       reasonCode: reasonCode,
       convoId: convoId,
     );
+    _notifyStateChanged(convoId);
   }
 
   Future<void> updateLocalStateByPayloadEventId({
@@ -11482,6 +11513,7 @@ ORDER BY c.created_at_ms ASC
         reasonCode: reasonCode,
         convoId: convoId,
       );
+      _notifyStateChanged(convoId);
     }
   }
 
@@ -12023,12 +12055,13 @@ HAVING COUNT(*) > 1;
   /// 'scheduled'`) stops considering it, preventing a duplicate send when the
   /// phone wakes.
   Future<void> markScheduledDirectUploaded(String localEventId) async {
-    await _db.update(
+    final n = await _db.update(
       'events',
       {'local_state': MessageLocalState.sent},
       where: 'event_id = ? AND local_state = ?',
       whereArgs: [localEventId, MessageLocalState.scheduled],
     );
+    if (n > 0) _notifyStateChanged(await _convoIdOfEvent(localEventId));
   }
 
   Future<List<Map<String, Object?>>> listDueScheduledDirectEvents({

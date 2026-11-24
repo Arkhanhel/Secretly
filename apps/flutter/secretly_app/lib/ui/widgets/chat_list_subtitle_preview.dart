@@ -137,6 +137,15 @@ class _ChatListSubtitlePreviewState extends State<ChatListSubtitlePreview> {
   }
 
   String _formatLabel(BuildContext context, ChatListPreview preview) {
+    // Подпись под фото/файлом — вместо «Фотография»/«Файл»; миниатюра или
+    // значок слева остаются (24.11.2026).
+    final caption = (preview.caption ?? '').trim();
+    if (caption.isNotEmpty &&
+        (preview.kind == ChatListPreviewKind.photo ||
+            preview.kind == ChatListPreviewKind.file ||
+            preview.kind == ChatListPreviewKind.music)) {
+      return caption.replaceAll('\n', ' ');
+    }
     switch (preview.kind) {
       case ChatListPreviewKind.photo:
         return wave1Text(context, ru: 'Фотография', en: 'Photo');
@@ -185,6 +194,14 @@ class _ChatListSubtitlePreviewState extends State<ChatListSubtitlePreview> {
       case MessageLocalState.sentToServer:
       case MessageLocalState.queuedRemote:
         return ChatListTick.sent;
+      // В пути — часики, как в пузыре (иначе в списке пусто).
+      case MessageLocalState.pending:
+      case MessageLocalState.sending:
+      case MessageLocalState.retry:
+      case MessageLocalState.queuedLocal:
+      case MessageLocalState.encrypting:
+      case MessageLocalState.retryWait:
+        return ChatListTick.sending;
       default:
         return ChatListTick.none;
     }

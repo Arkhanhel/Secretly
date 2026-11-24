@@ -42,28 +42,19 @@ void main() {
     expect(icons.single.icon, FluentIcons.checkmark_24_regular);
   });
 
-  testWidgets('🔴 sent is DIMMER than delivered — the three steps differ',
+  testWidgets('🔴 sent: one dim tick; delivered: TWO dim ticks (24.11.2026)',
       (tester) async {
-    // Как на телефоне (`chatDeliveryTickStyle`): отправлено — 0,55,
-    // доставлено — полная яркость. Раньше обе рисовались одинаково.
+    // Как на телефоне и в списке чатов: отправлено — одна серая, доставлено —
+    // две серые, прочитано — две яркие.
     await pumpGlyph(tester, DeliveryStatus.sent);
     final sent = iconsOf(tester).single.color!;
-    await pumpGlyph(tester, DeliveryStatus.delivered);
-    final delivered = iconsOf(tester).single.color!;
-    expect(sent, isNot(delivered));
-    expect(delivered.a, closeTo(1.0, 0.001));
     expect(sent.a, closeTo(kDesktopSentTickAlpha, 0.001));
-    expect(sent.r, delivered.r);
-    expect(sent.g, delivered.g);
-    expect(sent.b, delivered.b);
-  });
-
-  testWidgets('delivered-but-unread is still ONE tick', (tester) async {
     await pumpGlyph(tester, DeliveryStatus.delivered);
-    final icons = iconsOf(tester);
-    expect(icons, hasLength(1),
-        reason: 'a second tick must mean READ, nothing else');
-    expect(icons.single.icon, FluentIcons.checkmark_24_regular);
+    final delivered = iconsOf(tester);
+    expect(delivered, hasLength(2));
+    for (final i in delivered) {
+      expect(i.color!.a, closeTo(kDesktopSentTickAlpha, 0.001));
+    }
   });
 
   testWidgets('read shows TWO ticks in the SAME colour', (tester) async {

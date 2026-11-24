@@ -594,8 +594,10 @@ void main() {
         ),
       );
       await t.pump();
-      final tick = find.byIcon(FluentIcons.checkmark_24_regular);
-      expect(tick, findsOneWidget);
+      // «Доставлено» — две галочки (24.11.2026); у края — правая из них.
+      final ticks = find.byIcon(FluentIcons.checkmark_24_regular);
+      expect(ticks, findsNWidgets(2));
+      final tick = ticks.last;
       final card = t.getRect(
         find
             .ancestor(
