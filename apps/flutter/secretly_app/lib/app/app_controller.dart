@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:ui' show Locale, PlatformDispatcher;
 import 'dart:ui' as ui;
@@ -18240,8 +18241,13 @@ class AppController {
       }
       // B: размер спрашивается ДО чтения — байты не попадают в память, если
       // файл не проходит в бюджет привязки ПК.
-      if (budget != null && !budget.admit(await f.length())) return;
-      out[rel] = base64Encode(await f.readAsBytes());
+      final size = await f.length();
+      if (budget != null && !budget.admit(size)) return;
+      // 24.11.2026 (ANR): крупный файл (видео, фото) кодируется вне потока
+      // интерфейса — изолят сам читает файл и отдаёт строку без копии.
+      out[rel] = size > 256 * 1024
+          ? await readFileBase64OffUi(absolutePath)
+          : base64Encode(await f.readAsBytes());
     } catch (_) {
       // Best-effort for individual files.
     }
@@ -62604,6 +62610,22 @@ String buildProfileDeepLink({required String profileId}) {
     host: 'profile',
     pathSegments: <String>[normalizedProfileId],
   ).toString();
+}
+
+/// Прочитать файл и закодировать в base64 вне потока интерфейса (24.11.2026,
+/// ANR автокопии с медиа). Функция верхнего уровня — замыкание изолята
+/// захватывает только путь. Изолят не поднялся — тот же результат в главном.
+Future<String> readFileBase64OffUi(String path) async {
+  try {
+    return await Isolate.run(
+      () async => base64Encode(await File(path).readAsBytes()),
+      debugName: 'backup_file_b64',
+    );
+  } on FileSystemException {
+    rethrow;
+  } catch (_) {
+    return base64Encode(await File(path).readAsBytes());
+  }
 }
 
 String buildProfileShareLink({required String profileId}) {

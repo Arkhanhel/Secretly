@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
@@ -465,10 +466,30 @@ class SafeBackupV1 {
     int? iterOverride,
   }) async {
     BackupPasswordPolicy.validateOrThrow(password);
+    final iterations = iterOverride ?? _iterWrite;
+    // 🔴 ВНЕ ПОТОКА ИНТЕРФЕЙСА (24.11.2026, ANR на Xiaomi, сборка 752).
+    // Автокопия при возвращении в приложение — PBKDF2 на 400 000 итераций,
+    // JSON всей переписки (а с медиа — 183 файла в base64) и AES-GCM в
+    // чистом Dart — шла в главном изоляте: почти минута без ответа на
+    // касания, три ANR подряд, для человека — «вылетело». Шифрование чисто
+    // на Dart (без плагинов), поэтому целиком уходит в отдельный изолят;
+    // формат архива не меняется.
+    if (kIsWeb) {
+      return _encryptBody(plain, password, iterations);
+    }
+    return Isolate.run(
+      () => _encryptBody(plain, password, iterations),
+      debugName: 'safe_backup_encrypt',
+    );
+  }
 
+  static Future<String> _encryptBody(
+    SafeBackupPlainV1 plain,
+    String password,
+    int iterations,
+  ) async {
     final salt = _randomBytes(16);
     final nonce = _randomBytes(12);
-    final iterations = iterOverride ?? _iterWrite;
     final keyBytes = await _deriveKey(
       password: password,
       salt: salt,
@@ -498,6 +519,19 @@ class SafeBackupV1 {
     required String payload,
     required String password,
   }) async {
+    // Та же причина, что у шифрования: PBKDF2 и AES-GCM большой копии в
+    // главном изоляте замораживали экран восстановления (24.11.2026).
+    if (kIsWeb) return _decryptBody(payload, password);
+    return Isolate.run(
+      () => _decryptBody(payload, password),
+      debugName: 'safe_backup_decrypt',
+    );
+  }
+
+  static Future<SafeBackupPlainV1> _decryptBody(
+    String payload,
+    String password,
+  ) async {
     final raw = payload.trim();
     if (!raw.startsWith(prefix)) {
       throw StateError('Not a safe backup');

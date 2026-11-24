@@ -350,7 +350,9 @@ void main() {
         src,
         'Future<void> _safeBackupAddFileIfExists({',
       );
-      final admitAt = addFile.indexOf('budget.admit(await f.length())');
+      // Размер — до чтения байтов (24.11.2026: в переменной `size`,
+      // крупные файлы читаются в изоляте).
+      final admitAt = addFile.indexOf('budget.admit(size)');
       expect(admitAt, greaterThan(0));
       expect(admitAt, lessThan(addFile.indexOf('readAsBytes()')));
     });
