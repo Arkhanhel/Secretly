@@ -131,6 +131,7 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
     attachScreenPrivacyChannel(messenger)
     attachNseConfigChannel(messenger)
     attachThermalStateChannel(messenger)
+    attachHeatProbeChannel(messenger)
     attachBackgroundTaskChannel(messenger)
     attachShareInboxChannel(messenger)
     attachPdfChannel(messenger)
@@ -470,6 +471,41 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
         result(FlutterMethodNotImplemented)
       }
     }
+  }
+
+  // Проба нагрева (24.11.2026): одна точка для журнала нагрева проверочных
+  // сборок (HeatLog). Только чтение состояния — ничего не меняет.
+  private func attachHeatProbeChannel(_ messenger: FlutterBinaryMessenger) {
+    FlutterMethodChannel(name: "secretly/heat_probe", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "sample" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        let device = UIDevice.current
+        device.isBatteryMonitoringEnabled = true
+        var usage = rusage()
+        getrusage(RUSAGE_SELF, &usage)
+        let cpuMs =
+          Int(usage.ru_utime.tv_sec) * 1000 + Int(usage.ru_utime.tv_usec) / 1000
+          + Int(usage.ru_stime.tv_sec) * 1000 + Int(usage.ru_stime.tv_usec) / 1000
+        let thermal: Int
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: thermal = 0
+        case .fair: thermal = 1
+        case .serious: thermal = 2
+        case .critical: thermal = 3
+        @unknown default: thermal = 0
+        }
+        result([
+          "thermal": thermal,
+          "battery": Double(device.batteryLevel),
+          "charging": device.batteryState == .charging || device.batteryState == .full,
+          "cpuMs": cpuMs,
+          "lowPower": ProcessInfo.processInfo.isLowPowerModeEnabled,
+          "brightness": Double(UIScreen.main.brightness),
+        ])
+      }
   }
 
   private func attachThermalStateChannel(_ messenger: FlutterBinaryMessenger) {

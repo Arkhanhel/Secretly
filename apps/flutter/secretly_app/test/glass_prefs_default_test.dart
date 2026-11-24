@@ -5,39 +5,50 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:secretly_app/ui/liquid_glass_flags.dart';
 
-// 2026-07-23: liquid glass ships OFF by default (matte bar) — the shader is the
-// app's biggest GPU cost and ran the chat hot. Someone who explicitly turned it
-// ON keeps it; only the untouched default is matte. These pin that so a future
-// edit does not quietly re-enable glass for everyone.
+// 2026-07-23: liquid glass shipped OFF by default (the shader ran the chat hot).
+// 2026-11-24 (owner, 1.9): ON by default on iPhone, measured by the heat log;
+// thermal levels step the glass down (fair → balanced, serious → edge,
+// critical → flat). Android stays matte by default — glass is iPhone-only.
+// An explicit choice in Settings always wins over the default.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  tearDown(() => GlassPrefs.debugDefaultIsIos = null);
 
-  test('a fresh install defaults to matte (glass OFF)', () async {
+  test('iPhone: a fresh install gets glass ON', () async {
+    GlassPrefs.debugDefaultIsIos = true;
     SharedPreferences.setMockInitialValues({});
-    final prefs = await SharedPreferences.getInstance();
-    await GlassPrefs.load(prefs);
+    await GlassPrefs.load(await SharedPreferences.getInstance());
+    expect(GlassPrefs.enabled.value, isTrue);
+  });
+
+  test('🔴 Android: a fresh install stays matte (glass is iPhone-only)', () async {
+    GlassPrefs.debugDefaultIsIos = false;
+    SharedPreferences.setMockInitialValues({});
+    await GlassPrefs.load(await SharedPreferences.getInstance());
+    expect(GlassPrefs.enabled.value, isFalse);
+  });
+
+  test('iPhone: a person who turned glass OFF keeps it off', () async {
+    GlassPrefs.debugDefaultIsIos = true;
+    SharedPreferences.setMockInitialValues({'liquid_glass_enabled_v1': false});
+    await GlassPrefs.load(await SharedPreferences.getInstance());
     expect(GlassPrefs.enabled.value, isFalse,
-        reason: 'no stored preference must mean matte, not glass');
+        reason: 'an explicit opt-out must survive the new default');
   });
 
   test('a person who turned glass ON keeps it across load', () async {
-    SharedPreferences.setMockInitialValues(
-        {'liquid_glass_enabled_v1': true});
-    final prefs = await SharedPreferences.getInstance();
-    await GlassPrefs.load(prefs);
-    expect(GlassPrefs.enabled.value, isTrue,
-        reason: 'an explicit opt-in must survive the new default');
+    GlassPrefs.debugDefaultIsIos = false;
+    SharedPreferences.setMockInitialValues({'liquid_glass_enabled_v1': true});
+    await GlassPrefs.load(await SharedPreferences.getInstance());
+    expect(GlassPrefs.enabled.value, isTrue);
   });
 
   test('setEnabled persists and flips the live value', () async {
-    // Start from a known matte state (load resets the static notifier) so the
-    // flip below actually changes the value — setEnabled is a no-op when the
-    // value already matches, and the static notifier leaks between tests.
+    GlassPrefs.debugDefaultIsIos = false;
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     await GlassPrefs.load(prefs);
     expect(GlassPrefs.enabled.value, isFalse);
-
     await GlassPrefs.setEnabled(true);
     expect(GlassPrefs.enabled.value, isTrue);
     expect(prefs.getBool('liquid_glass_enabled_v1'), isTrue);

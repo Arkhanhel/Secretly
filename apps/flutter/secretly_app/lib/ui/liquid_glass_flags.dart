@@ -16,8 +16,10 @@
 /// byte-identical, so both switches are visually safe.
 library;
 
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
@@ -121,10 +123,28 @@ class GlassPrefs {
   /// look people can opt INTO in Settings; the plain matte bar ships by default
   /// so the app stays cool out of the box. A person who already turned it ON
   /// (an explicit `true` in prefs) keeps it — only the untouched default flips.
-  static final ValueNotifier<bool> enabled = ValueNotifier<bool>(false);
+  ///
+  /// 24.11.2026 (владелец, выпуск 1.9): «Оставь включённым, но измеряй очень
+  /// детально» — по умолчанию ВКЛЮЧЕНО. Кто выключал сам (явное `false` в
+  /// настройках), остаётся без стекла. Защита от нагрева — уровни качества
+  /// (`GlassQualityController`: fair → облегчённое, serious → края,
+  /// critical → плоское), замер — журнал нагрева (`HeatLog`).
+  /// 🔴 Только iPhone: стекло — iOS (слово владельца); на Android по
+  /// умолчанию по-прежнему матовое, иначе сменилась бы и геометрия нижней
+  /// панели (см. [bottomBarFootprint]).
+  static bool get defaultEnabled =>
+      debugDefaultIsIos ?? (!kIsWeb && Platform.isIOS);
+
+  /// Только для проверок: подменить платформу при выборе умолчания.
+  @visibleForTesting
+  static bool? debugDefaultIsIos;
+
+  static final ValueNotifier<bool> enabled = ValueNotifier<bool>(
+    defaultEnabled,
+  );
 
   static Future<void> load(SharedPreferences prefs) async {
-    enabled.value = prefs.getBool(_prefsKey) ?? false;
+    enabled.value = prefs.getBool(_prefsKey) ?? defaultEnabled;
   }
 
   static Future<void> setEnabled(bool value) async {

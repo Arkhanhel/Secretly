@@ -73,12 +73,15 @@ import 'legal/ffmpeg_mobile_license.dart';
 import 'assets/on_demand_assets.dart';
 import 'transport/resilient_http_client.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/diagnostics/heat_log.dart';
 import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // М7: замер кадров — только в сборке с SECRETLY_FRAME_STATS=true.
   FrameStats.start();
+  // Журнал нагрева — та же проверочная сборка (24.11.2026).
+  HeatLog.start();
   // 🔴 Пространство профиля выбирается ПЕРВЫМ (Э2, код принуждения): до
   // первого обращения к настройкам, до пушей и до фоновых задач — префикс
   // настроек нельзя сменить после первого чтения. Если код принуждения не

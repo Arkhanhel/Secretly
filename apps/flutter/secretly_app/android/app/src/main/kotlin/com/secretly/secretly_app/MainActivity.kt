@@ -456,6 +456,39 @@ class MainActivity : FlutterFragmentActivity() {
             }
         }
 
+        // Проба нагрева (24.11.2026): одна точка для журнала нагрева
+        // проверочных сборок (HeatLog). Только чтение — ничего не меняет.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "secretly/heat_probe").setMethodCallHandler { call, result ->
+            if (call.method != "sample") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            try {
+                val pm = applicationContext.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                val thermal = if (Build.VERSION.SDK_INT >= 29) (pm?.currentThermalStatus ?: -1) else -1
+                val bm = applicationContext.getSystemService(Context.BATTERY_SERVICE) as? android.os.BatteryManager
+                val level = bm?.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
+                // Липкая рассылка: без приёмника, только чтение последнего значения.
+                val sticky = applicationContext.registerReceiver(
+                    null,
+                    android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+                )
+                val tempTenths = sticky?.getIntExtra(android.os.BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
+                    ?: Int.MIN_VALUE
+                result.success(
+                    mapOf(
+                        "thermal" to thermal,
+                        "battery" to (if (level >= 0) level / 100.0 else -1.0),
+                        "charging" to (bm?.isCharging ?: false),
+                        "cpuMs" to android.os.Process.getElapsedCpuTime(),
+                        "lowPower" to (pm?.isPowerSaveMode ?: false),
+                        "batteryTempC" to (if (tempTenths != Int.MIN_VALUE) tempTenths / 10.0 else null),
+                    ),
+                )
+            } catch (e: Exception) {
+                result.error("heat_probe", e.message, null)
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "secretly/battery").setMethodCallHandler { call, result ->
             when (call.method) {
                 "isIgnoringBatteryOptimizations" -> {

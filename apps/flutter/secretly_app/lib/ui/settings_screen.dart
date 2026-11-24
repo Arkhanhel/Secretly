@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../diagnostics/heat_log.dart';
 import 'whats_new/pen_mark.dart';
 import 'whats_new/whats_new_flow.dart';
 import 'dart:async';
@@ -73,6 +74,7 @@ import 'settings_root_model.dart';
 import 'settings_screen_l10n.dart';
 import 'share_utils.dart';
 import 'wave1_l10n.dart';
+import 'package:share_plus/share_plus.dart';
 import 'widgets/content_edge_fade.dart';
 import 'widgets/frosted_header_island.dart';
 import 'widgets/frosted_top_bar.dart';
@@ -2347,6 +2349,30 @@ class _SettingsScreenState extends State<SettingsScreen>
               glyph: SettingsGlyph.about,
               title: loc.whatsNewSettingsRow,
               onTap: () => showWhatsNew19(context, startWithDemo: true),
+            ),
+          // Журнал нагрева — только проверочные сборки (24.11.2026).
+          if (kHeatLog)
+            SettingsRootRow(
+              id: 'heat_log',
+              glyph: SettingsGlyph.diagnostics,
+              title: wave1Text(
+                context,
+                ru: 'Журнал нагрева',
+                en: 'Heat log',
+                uk: 'Журнал нагрівання',
+                es: 'Registro de temperatura',
+                pt: 'Registo de temperatura',
+                ptBr: 'Registro de temperatura',
+                fr: 'Journal de chauffe',
+                de: 'Wärmeprotokoll',
+              ),
+              onTap: () async {
+                final f = await HeatLog.logFile();
+                if (f == null) return;
+                await SharePlus.instance.share(
+                  ShareParams(files: <XFile>[XFile(f.path, mimeType: 'text/csv')]),
+                );
+              },
             ),
           // 🔴 ДИАГНОСТИКА СКРЫТА ПО УМОЛЧАНИЮ (16.08.2026): раздел показывает
           // profile_id, device_id, адреса серверов и состояние очередей.
