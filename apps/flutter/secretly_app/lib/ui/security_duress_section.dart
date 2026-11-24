@@ -8,6 +8,7 @@ import '../security/app_security_manager.dart';
 import 'l10n.dart';
 import 'security_lock_flow.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Раздел «Код принуждения» в настройках замка приложения (Э2).
 ///
@@ -103,7 +104,7 @@ class _SecurityDuressSectionState extends State<SecurityDuressSection> {
       child: Column(
         children: <Widget>[
           ListTile(
-            leading: const Icon(Icons.shield_outlined),
+            leading: const Icon(AdaptiveIcons.shield_outlined),
             title: Text(l10n.duressSectionTitle),
             subtitle: Text(
               configured

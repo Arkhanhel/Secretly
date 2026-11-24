@@ -60,7 +60,12 @@ class ThermalGuard {
   /// it flattens the effect while still paying for a backdrop read — and it
   /// looked worse than either end. Better an honest switch between two good
   /// looks than a bad one in between.
+  /// Последнее состояние iOS (0 nominal … 3 critical) — для уровней
+  /// качества стекла SecretlyGlass (23.11.2026). Android и ПК — всегда 0.
+  static final ValueNotifier<int> thermalState = ValueNotifier<int>(0);
+
   static void _applyThermalState(int state) {
+    thermalState.value = state;
     final hot = state >= 2;
     if (hot) {
       _coolSince = null;

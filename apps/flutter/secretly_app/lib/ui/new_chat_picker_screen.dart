@@ -12,6 +12,7 @@ import 'app_asset_paths.dart';
 import 'chat_screen.dart';
 import 'contact_action_error_text.dart';
 import 'l10n.dart';
+import 'motion/press_feedback.dart';
 import 'my_secretly_id_screen.dart';
 import 'share_utils.dart';
 import 'wave1_l10n.dart';
@@ -22,6 +23,7 @@ import 'widgets/frosted_header_island.dart';
 import 'widgets/glass_icon_island.dart';
 import 'widgets/horizontal_quick_action_button.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 class NewChatPickerScreen extends StatefulWidget {
   const NewChatPickerScreen({super.key, required this.controller});
@@ -114,17 +116,17 @@ class _NewChatPickerScreenState extends State<NewChatPickerScreen> {
         onTapOutside: (_) => FocusManager.instance.primaryFocus?.unfocus(),
         decoration: InputDecoration(
           hintText: l10n.queryLabel,
-          prefixIcon: const Icon(Icons.search),
+          prefixIcon: const Icon(AdaptiveIcons.search),
           suffixIcon: _query.trim().isEmpty
               ? null
-              : IconButton(
+              : PressFeedback(child: IconButton(
                   tooltip: l10n.cancel,
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(AdaptiveIcons.close),
                   onPressed: () {
                     _searchController.clear();
                     setState(() => _query = '');
                   },
-                ),
+                )),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
         ),
         onChanged: (v) => setState(() => _query = v),
@@ -140,7 +142,7 @@ class _NewChatPickerScreenState extends State<NewChatPickerScreen> {
           Expanded(
             child: HorizontalQuickActionButton(
               assetPath: _inviteIconAsset,
-              fallbackIcon: appleShareIcon(Icons.share_rounded),
+              fallbackIcon: appleShareIcon(AdaptiveIcons.share_rounded),
               iconTint: const Color(0xFF2092E7),
               title: wave1Text(
                 context,
@@ -158,7 +160,7 @@ class _NewChatPickerScreenState extends State<NewChatPickerScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: HorizontalQuickActionButton(
-              icon: Icons.qr_code_2_rounded,
+              icon: AdaptiveIcons.qr_code_2_rounded,
               iconTint: const Color(0xFF2DBE4C),
               title: wave1Text(
                 context,
@@ -371,7 +373,7 @@ class _NewChatPickerScreenState extends State<NewChatPickerScreen> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                     trailing: r.alreadyInContacts
-                                        ? FilledButton.tonal(
+                                        ? PressFeedback(child: FilledButton.tonal(
                                             onPressed: () => _openChat(
                                               context: context,
                                               profileId: r.profileId,
@@ -380,8 +382,8 @@ class _NewChatPickerScreenState extends State<NewChatPickerScreen> {
                                             child: Text(
                                               l10n.contactDetailsChat,
                                             ),
-                                          )
-                                        : FilledButton(
+                                          ))
+                                        : PressFeedback(child: FilledButton(
                                             onPressed: () async {
                                               try {
                                                 await widget.controller
@@ -419,7 +421,7 @@ class _NewChatPickerScreenState extends State<NewChatPickerScreen> {
                                               );
                                             },
                                             child: Text(l10n.add),
-                                          ),
+                                          )),
                                   );
                                 },
                               );
@@ -450,7 +452,7 @@ class _NewChatPickerScreenState extends State<NewChatPickerScreen> {
               child: Row(
                 children: [
                   GlassIconIsland(
-                    icon: Icons.arrow_back_ios_new,
+                    icon: AdaptiveIcons.arrow_back_ios_new,
                     tooltip: MaterialLocalizations.of(
                       context,
                     ).backButtonTooltip,

@@ -505,14 +505,20 @@ String chatWallpaperDisplayTitle(
 /// Decoding to the size actually painted is the standard remedy: identical
 /// pixels on screen, a fraction of the memory. Preview tiles shrink ~29x.
 int chatWallpaperDecodeWidth(BuildContext context, {required bool preview}) {
-  final view = MediaQuery.maybeOf(context);
-  final dpr = (view?.devicePixelRatio ?? 1.0).clamp(1.0, 4.0);
+  // 🔴 Только размер и плотность экрана: `MediaQuery.maybeOf` подписывал
+  // вызывающего (весь экран чата!) на ВСЕ поля, включая отступ клавиатуры, —
+  // и на стандартных обоях чат перестраивался целиком в каждом кадре её
+  // появления и скрытия.
+  final dpr = (MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0).clamp(
+    1.0,
+    4.0,
+  );
   if (preview) {
     // A picker tile is a thumbnail. 320 physical px covers the largest tile on
     // the widest phone with room to spare, and is ~0.4 MB instead of 14 MB.
     return 320;
   }
-  final logicalWidth = view?.size.width ?? 420.0;
+  final logicalWidth = MediaQuery.maybeSizeOf(context)?.width ?? 420.0;
   // Full-bleed: the screen width is all that can ever be shown. `BoxFit.cover`
   // may crop horizontally, never stretch beyond it.
   return (logicalWidth * dpr).round().clamp(360, 2160);

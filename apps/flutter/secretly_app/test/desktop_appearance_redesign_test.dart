@@ -323,14 +323,20 @@ void main() {
     test('🔴 «Классика» — ровно то, что даёт «По умолчанию»', () {
       final classic = desktopAppearancePresets().first;
       expect(classic.id, 'classic');
-      expect(classic.themeId, 'flutter_dash');
+      expect(classic.themeId, AppController.kDefaultAppThemePresetId);
       expect(classic.customAccent, isNull);
       expect(classic.wallpaper(dark: true),
           themeStandardChatWallpaperId(darkMode: true));
       expect(classic.wallpaper(dark: false),
           themeStandardChatWallpaperId(darkMode: false));
-      expect(classic.bubbleId, normalizeChatBubbleStylePresetId('flutter_dash'));
-      expect(classic.indicatorId, 'theme');
+      expect(
+        classic.bubbleId,
+        normalizeChatBubbleStylePresetId(
+          AppController.kDefaultBubbleStylePresetId,
+        ),
+      );
+      // 23.11.2026: по умолчанию индикаторы синие (Графит + синий).
+      expect(classic.indicatorId, kDefaultIndicatorColorPresetId);
       expect(classic.names, 'person');
     });
   });
@@ -444,10 +450,11 @@ void main() {
       await t.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
       await t.pump(const Duration(milliseconds: 300));
       expect(DesktopUiPrefs.customAccentArgb.value, 0);
-      expect(ctrl.appThemePresetId, 'flutter_dash');
+      // Тема по умолчанию — «Графит» (решение владельца 20.11.2026).
+      expect(ctrl.appThemePresetId, 'graphite');
       expect(ctrl.defaultChatWallpaperId,
           themeStandardChatWallpaperId(darkMode: true));
-      expect(ctrl.indicatorColorPresetId, 'theme');
+      expect(ctrl.indicatorColorPresetId, kDefaultIndicatorColorPresetId);
       expect(DesktopUiPrefs.messageDensity.value, 'cozy');
       expect(DesktopUiPrefs.senderNameColors.value, 'person');
       expect(DesktopUiPrefs.themeMode.value, 'dark');

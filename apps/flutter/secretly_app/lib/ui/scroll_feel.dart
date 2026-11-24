@@ -23,8 +23,11 @@
 library;
 
 import 'dart:io' show Platform;
+import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 
 /// Android's fling friction, scaled. 1.0 is the platform default exactly.
 ///
@@ -93,6 +96,16 @@ class _GlideClampingScrollPhysics extends ClampingScrollPhysics {
     if (velocity < 0.0 && position.pixels <= position.minScrollExtent) {
       return null;
     }
+    if (kAndroidSmoothGlide) {
+      // 23.11.2026: торможение с плавным длинным «хвостом» (см.
+      // [kAndroidSmoothGlide]). Скорость — та же, что у пальца.
+      return FrictionSimulation(
+        kSmoothGlideDrag,
+        position.pixels,
+        velocity,
+        tolerance: tolerance,
+      );
+    }
     return ClampingScrollSimulation(
       position: position.pixels,
       // Untouched, on purpose. This is the finger's own speed.
@@ -102,6 +115,28 @@ class _GlideClampingScrollPhysics extends ClampingScrollPhysics {
     );
   }
 }
+
+/// Android: торможение броска — плавное, с длинным хвостом, а не сплайн
+/// Android (23.11.2026, владелец: «у Telegram останавливается гораздо
+/// медленнее и плавнее, у нас почти резко»).
+///
+/// 🔴 ПОЧЕМУ. Flutter считает прокрутку сам по стандартной кривой Android
+/// (сплайн `OverScroller`): короткий выбег и довольно резкая остановка. Xiaomi
+/// (HyperOS) подменяет в системе эту кривую своей — длинный плавный выбег с
+/// экспоненциальным хвостом, близкий к iPhone, — и обычные приложения, Telegram
+/// в том числе, получают её даром; Flutter — нет. Бросок 2000 т/с: сплайн
+/// ×0,8 — ~760 т за ~0,9 с с резким концом; здесь — ~1000 т за ~2,5 с, к концу
+/// скорость тает плавно. Края — как были (растяжение Android), старт — ровно
+/// скорость пальца. `false` — снова сплайн Android ×[kScrollFrictionScale].
+const bool kAndroidSmoothGlide = true;
+
+/// Физика списков Android — для проверок (на машине проверок не Android).
+@visibleForTesting
+ScrollPhysics debugAndroidGlidePhysics() => const _GlideClampingScrollPhysics();
+
+/// Затухание скорости за секунду: 0,135 = 0,998 за миллисекунду —
+/// `UIScrollView.decelerationRate.normal`.
+const double kSmoothGlideDrag = 0.135;
 
 ScrollPhysics secretlyListPhysics() {
   // `Platform` rather than `Theme.of(context).platform` on purpose: the theme's
@@ -132,11 +167,20 @@ ScrollPhysics secretlyListPhysics() {
 /// and give Android the glide it was supposed to get. The glide only scales the
 /// BALLISTIC velocity of an in-range fling, so it cannot touch a drag-driven
 /// pull either way.
-ScrollPhysics secretlyPullListPhysics() {
+///
+/// 🔴 22.11.2026 (владелец: «на главной нет айфоновской пружинки, только
+/// там»). [topPullDragActive] — список, у которого жест сверху свой: пока
+/// палец ТЯНЕТ у верхнего края, край прижат (жест получает overscroll, как
+/// раньше), а в остальном — пружина iOS: внизу списка и при броске к верху.
+ScrollPhysics secretlyPullListPhysics({bool Function()? topPullDragActive}) {
   if (Platform.isIOS || Platform.isMacOS) {
-    return const ClampingScrollPhysics(
-      parent: AlwaysScrollableScrollPhysics(),
-    );
+    if (topPullDragActive != null) {
+      return TopPullBounceScrollPhysics(
+        topPullDragActive: topPullDragActive,
+        parent: const AlwaysScrollableScrollPhysics(),
+      );
+    }
+    return secretlyProfileScrollPhysics();
   }
   return const _GlideClampingScrollPhysics(
     parent: AlwaysScrollableScrollPhysics(),
@@ -148,3 +192,171 @@ ScrollPhysics secretlyPullListPhysics() {
 /// Exposed so a widget that draws its own end-of-list affordance can match,
 /// instead of each one re-deriving the platform.
 bool get secretlyUsesBouncingScroll => Platform.isIOS || Platform.isMacOS;
+
+/// Пружина iOS везде, кроме верхнего края под пальцем: там край прижат, и
+/// весь overscroll уходит своему жесту сверху (у списка чатов — «Личные»).
+class TopPullBounceScrollPhysics extends BouncingScrollPhysics {
+  const TopPullBounceScrollPhysics({
+    required this.topPullDragActive,
+    super.parent,
+  });
+
+  /// Палец сейчас тянет список (а не бросок / возврат пружины).
+  final bool Function() topPullDragActive;
+
+  @override
+  TopPullBounceScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return TopPullBounceScrollPhysics(
+      topPullDragActive: topPullDragActive,
+      parent: buildParent(ancestor),
+    );
+  }
+
+  @override
+  double applyBoundaryConditions(ScrollMetrics position, double value) {
+    if (topPullDragActive()) {
+      // Как у ClampingScrollPhysics, только для верхнего края.
+      if (value < position.pixels &&
+          position.pixels <= position.minScrollExtent) {
+        return value - position.pixels;
+      }
+      if (value < position.minScrollExtent &&
+          position.minScrollExtent < position.pixels) {
+        return value - position.minScrollExtent;
+      }
+    }
+    return super.applyBoundaryConditions(position, value);
+  }
+}
+
+// ─────────────── 23.11.2026: прокрутка как у Telegram на всех экранах ───────────────
+// Разбор: docs/SCROLL_FEEL_TELEGRAM_2026-11-23.md.
+
+/// Выключатель «одной прокрутки»: `false` — экраны без явной физики снова
+/// получают стандарт Flutter (на Android выбег короче, чем в списке чатов).
+const bool kUnifiedScrollFeel = true;
+
+/// Выключатель кривой iOS на страницах с прижатым краем (профиль собеседника,
+/// комната, свой профиль). `false` — там снова кривая Android, как до 23.11.
+const bool kIosClampedGlide = true;
+
+/// Прокрутка приложения по умолчанию (телефон).
+///
+/// 🔴 ПОЧЕМУ (23.11.2026). Нашу физику получали 16 списков из 181; профиль,
+/// настройки, галерея и листы шли стандартом Flutter — на Android они
+/// тормозили раньше списка чатов, и страницы ощущались по-разному. У
+/// Telegram прокрутка везде одна (системная). Здесь — та же, что у чатов.
+///
+/// Явно заданная физика у списка остаётся главной (Flutter ставит её поверх
+/// этой): жесты, «пейджеры», запреты прокрутки не меняются. iPhone — как
+/// было (пружина iOS по умолчанию).
+class SecretlyScrollBehavior extends MaterialScrollBehavior {
+  const SecretlyScrollBehavior();
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) {
+    if (kUnifiedScrollFeel && Platform.isAndroid) {
+      return const _GlideClampingScrollPhysics(
+        parent: RangeMaintainingScrollPhysics(),
+      );
+    }
+    return super.getScrollPhysics(context);
+  }
+}
+
+/// Страница с прижатым верхним краем (жест «потянуть фото»): край прижат на
+/// обеих платформах, а торможение — своё у каждой. На iPhone прежде была
+/// кривая Android (резче и короче, чем у iOS, без разгона повторных
+/// бросков) — теперь торможение `UIScrollView`.
+ScrollPhysics secretlyProfileScrollPhysics() {
+  if (Platform.isIOS || Platform.isMacOS) {
+    if (!kIosClampedGlide) {
+      return const ClampingScrollPhysics(
+        parent: AlwaysScrollableScrollPhysics(),
+      );
+    }
+    return const IosClampedGlideScrollPhysics(
+      parent: AlwaysScrollableScrollPhysics(),
+    );
+  }
+  return const _GlideClampingScrollPhysics(
+    parent: AlwaysScrollableScrollPhysics(),
+  );
+}
+
+/// Края прижаты, как у [ClampingScrollPhysics] (overscroll уходит жесту
+/// страницы), но бросок тормозит как `UIScrollView .normal` — то же трение,
+/// что у [BouncingScrollPhysics] (0,998 за мс), и тот же разгон повторных
+/// бросков. Дошёл до края — останавливается (край прижат, пружины нет).
+@visibleForTesting
+class IosClampedGlideScrollPhysics extends ClampingScrollPhysics {
+  const IosClampedGlideScrollPhysics({super.parent});
+
+  @override
+  IosClampedGlideScrollPhysics applyTo(ScrollPhysics? ancestor) =>
+      IosClampedGlideScrollPhysics(parent: buildParent(ancestor));
+
+  @override
+  Simulation? createBallisticSimulation(
+    ScrollMetrics position,
+    double velocity,
+  ) {
+    // Возврат из-за края — как у прижатой прокрутки, без изменений.
+    if (position.outOfRange) {
+      return super.createBallisticSimulation(position, velocity);
+    }
+    final Tolerance tolerance = toleranceFor(position);
+    if (velocity.abs() < tolerance.velocity) return null;
+    if (velocity > 0.0 && position.pixels >= position.maxScrollExtent) {
+      return null;
+    }
+    if (velocity < 0.0 && position.pixels <= position.minScrollExtent) {
+      return null;
+    }
+    // UIScrollView.decelerationRate .normal = 0,998 за мс → 0,135 за секунду.
+    // Перелёт за край обрезает прижатая граница, и бросок там заканчивается.
+    return FrictionSimulation(
+      0.135,
+      position.pixels,
+      velocity,
+      tolerance: tolerance,
+    );
+  }
+
+  /// Разгон повторных бросков — формула iOS из [BouncingScrollPhysics].
+  @override
+  double carriedMomentum(double existingVelocity) =>
+      existingVelocity.sign *
+      math.min(
+        0.000816 * math.pow(existingVelocity.abs(), 1.967).toDouble(),
+        40000.0,
+      );
+
+  /// Как у iOS: случайный сдвиг пальца при отрыве не считается броском.
+  @override
+  double get dragStartDistanceMotionThreshold => 3.5;
+}
+
+/// Выключатель сглаживания касаний на Android.
+const bool kTouchResampling = true;
+
+/// На сколько раньше кадра берётся точка касания. Стандарт Flutter −38 мс
+/// (заметно «тянется» за пальцем); у Android сама система — около −5 мс.
+/// −8 мс — один кадр 120 Гц: между точками касания (Xiaomi шлёт их каждые
+/// ~4 мс) всегда есть пара по обе стороны, и точка считается честно, без
+/// угадывания вперёд.
+const Duration kTouchSamplingOffset = Duration(milliseconds: -8);
+
+/// Сглаживание касаний на Android (23.11.2026).
+///
+/// 🔴 ПОЧЕМУ. На экране 120 Гц точки касания приходят не в такт кадрам: в
+/// один кадр попадает две, в соседний одна — список под пальцем шагает
+/// неровно и «зернит». Telegram (обычные View Android) получает касания,
+/// уже пересчитанные системой на время кадра. Flutter умеет так же, но по
+/// умолчанию выключено. iPhone касания отдаёт в такт экрану — не трогаем.
+void enableTouchResamplingForAndroid() {
+  if (!kTouchResampling || !Platform.isAndroid) return;
+  GestureBinding.instance
+    ..resamplingEnabled = true
+    ..samplingOffset = kTouchSamplingOffset;
+}

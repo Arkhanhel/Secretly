@@ -120,7 +120,7 @@ String chatLastSeenText(
   final mon = (dt.month).toString().padLeft(2, '0');
 
   final todayStart = DateTime(now.year, now.month, now.day);
-  if (dt.isAfter(todayStart)) {
+  if (!dt.isBefore(todayStart)) {
     return chatTextForLocale(
       localeTag,
       ru: 'был(а) в $hh:$mm',
@@ -133,15 +133,46 @@ String chatLastSeenText(
     );
   }
 
+  // 🔴 Вчера — словом «вчера» (жалоба владельца 22.11.2026: одно время без
+  // дня читалось как «сегодня», и было непонятно, когда человек заходил).
+  final yesterdayStart = DateTime(now.year, now.month, now.day - 1);
+  if (!dt.isBefore(yesterdayStart)) {
+    return chatTextForLocale(
+      localeTag,
+      ru: 'был(а) вчера в $hh:$mm',
+      en: 'last seen yesterday at $hh:$mm',
+      uk: 'був(ла) вчора о $hh:$mm',
+      es: 'visto ayer a las $hh:$mm',
+      pt: 'visto ontem às $hh:$mm',
+      fr: 'vu hier à $hh:$mm',
+      de: 'zuletzt gestern um $hh:$mm',
+    );
+  }
+
+  // Другой год — только дата: время двухлетней давности ничего не говорит.
+  if (dt.year != now.year) {
+    final yy = (dt.year % 100).toString().padLeft(2, '0');
+    return chatTextForLocale(
+      localeTag,
+      ru: 'был(а) $dd.$mon.$yy',
+      en: 'last seen $dd.$mon.$yy',
+      uk: 'був(ла) $dd.$mon.$yy',
+      es: 'visto el $dd.$mon.$yy',
+      pt: 'visto em $dd.$mon.$yy',
+      fr: 'vu le $dd.$mon.$yy',
+      de: 'zuletzt am $dd.$mon.$yy',
+    );
+  }
+
   return chatTextForLocale(
     localeTag,
-    ru: 'был(а) $dd.$mon $hh:$mm',
-    en: 'last seen $dd.$mon $hh:$mm',
-    uk: 'був(ла) $dd.$mon $hh:$mm',
-    es: 'visto $dd.$mon $hh:$mm',
-    pt: 'visto $dd.$mon $hh:$mm',
-    fr: 'vu le $dd.$mon $hh:$mm',
-    de: 'zuletzt $dd.$mon $hh:$mm',
+    ru: 'был(а) $dd.$mon в $hh:$mm',
+    en: 'last seen $dd.$mon at $hh:$mm',
+    uk: 'був(ла) $dd.$mon о $hh:$mm',
+    es: 'visto el $dd.$mon a las $hh:$mm',
+    pt: 'visto em $dd.$mon às $hh:$mm',
+    fr: 'vu le $dd.$mon à $hh:$mm',
+    de: 'zuletzt am $dd.$mon um $hh:$mm',
   );
 }
 

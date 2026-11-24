@@ -655,10 +655,15 @@ void main() {
         'lib/ui/room_details_screen.dart',
       ]) {
         final src = code(path);
+        // 24.11.2026: в профиле собеседника текст белеет и на живой
+        // обложке (тёмная сцена в любой теме).
         expect(
           src.contains(
-            'final heroTextWhite = _pullExpand > 0.35 && !heroOnLightFallback;',
-          ),
+                'final heroTextWhite = _pullExpand > 0.35 && !heroOnLightFallback;',
+              ) ||
+              src.contains(
+                '(_pullExpand > 0.35 && !heroOnLightFallback) || liveCoverText;',
+              ),
           isTrue,
           reason: path,
         );

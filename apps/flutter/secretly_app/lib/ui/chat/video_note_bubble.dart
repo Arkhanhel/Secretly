@@ -4,44 +4,44 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:video_player/video_player.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 
 import '../../build_variant.dart';
 import '../../media/video_thumbnail_cache.dart';
 import '../../models/e2e_payload_v1.dart';
-import 'package:secretly_app/ui/apple_controls.dart';
+import '../l10n.dart';
+import 'chat_media_circle.dart';
+import 'video_note_playback.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
-/// Guards that only ONE enlarged video-note exists at a time. When a note
-/// expands it publishes its collapse callback here; expanding another note
-/// first collapses the previous one (so two big squares never overlap).
-VoidCallback? _activeCollapse;
+export 'video_note_playback.dart'
+    show videoNoteSmallSide, videoNoteLargeSide, videoNoteRadiusFor;
 
-/// Telegram-style round-video message — but SQUARE. A fast record / fast-view
-/// mini video-voice-message rendered BARE over the chat wallpaper (no bubble
-/// background): just the rounded square plus a minimal floating footer below.
+/// Видео-заметка в ленте — макет «Video Notes», 5a (22.11.2026).
 ///
-/// Behaviour:
-///  * In the chat list the note does NOT autoplay. It shows a STATIC first
-///    frame (controller initialised, seeked to 0, PAUSED) plus a subtle
-///    centered play affordance and the duration. No looping, no muted autoplay.
-///  * TAP the small square → it EXPANDS IN PLACE, right inside the chat
-///    ListView. The note's reserved layout footprint grows to a large centered
-///    square, so neighbouring messages smoothly slide apart ("расступаются") to
-///    make room. There is NO overlay, NO scrim, NO dimming — the chat stays
-///    fully visible around the growing note. Because the item legitimately
-///    occupies more space (real layout, not a Transform.scale), nothing is
-///    clipped by the viewport. While enlarged it plays WITH SOUND and centers
-///    horizontally across the full chat width (sender-side alignment is
-///    ignored). The note also scrolls toward the vertical middle of the
-///    viewport via [Scrollable.ensureVisible].
-///  * While enlarged: TAP toggles play ⇄ pause (center play glyph when
-///    paused); a faint "X" top-right (or a tap) collapses it back to the small
-///    in-list static paused frame and the neighbours reflow back. The white
-///    bottom-edge progress slider + horizontal drag-to-seek live in the
-///    enlarged state.
+///  * В ленте квадрат 176 (скругление 20 %) играет БЕЗ ЗВУКА ПО КРУГУ, если
+///    он на экране и входит в две самые видимые заметки; иначе — кадр-превью.
+///    Внизу слева — значок «без звука», длительность и синяя точка, пока
+///    входящая заметка не просмотрена.
+///  * Касание раскрывает квадрат НА МЕСТЕ почти во всю ширину (зазор 12 по
+///    краям) пружиной 450 мс с лёгким перелётом; лента подкручивается, чтобы
+///    квадрат встал по центру, остальная лента приглушается до 35 %. Звук
+///    включается, ролик идёт сначала.
+///  * Прогресс — ОДИН: по контуру квадрата. Мини-плеер сверху (пауза, «Анна ·
+///    видео-заметка», время, закрыть) — без второй полосы.
+///  * Касание по раскрытому — пауза/продолжить; протяжка вбок — перемотка
+///    (ширина квадрата = вся длительность, по центру время с шевронами);
+///    скорость 1× → 1,5× → 2× справа сверху.
+///  * Закрытие — касание мимо, крестик мини-плеера или конец ролика (тогда
+///    через 380 мс раскрывается следующая непросмотренная входящая ниже).
 class VideoNoteBubble extends StatefulWidget {
   const VideoNoteBubble({
     super.key,
@@ -51,705 +51,826 @@ class VideoNoteBubble extends StatefulWidget {
     required this.footer,
     this.header,
     this.diameter,
+    this.createdAtMs = 0,
+    this.authorName,
+    this.onSoundStart,
+    this.hapticsEnabled,
   });
 
   final AttachmentEventV1 attachment;
   final bool isMe;
 
-  /// Resolves (downloads + decrypts, cached) the local file for this note —
-  /// wire to `controller.ensureCachedAttachmentFile`.
+  /// Скачивает (кэширует) файл заметки.
   final Future<File> Function(AttachmentEventV1 attachment) resolveFile;
 
-  /// Bubble chrome (timestamp + ticks + reactions) built by the chat screen so
-  /// the footer stays consistent with every other bubble. Rendered with NO
-  /// bubble background, directly below the square.
+  /// Время, галочки и реакции — строит чат, без подложки.
   final Widget footer;
 
-  /// Optional group-author header (avatar + name) rendered above the square.
+  /// Автор в комнате — над квадратом.
   final Widget? header;
 
-  /// Optional override for the (small) square edge length.
+  /// Своя сторона маленького квадрата (тесты, особые места).
   final double? diameter;
+
+  /// Время сообщения — для цепочки «следующая непросмотренная ниже».
+  final int createdAtMs;
+
+  /// «Анна» / «Вы» — заголовок мини-плеера.
+  final String? authorName;
+
+  /// Перед тем как зазвучать: чат ставит на паузу голосовые и музыку.
+  final VoidCallback? onSoundStart;
+  final bool Function()? hapticsEnabled;
 
   @override
   State<VideoNoteBubble> createState() => _VideoNoteBubbleState();
 }
 
 class _VideoNoteBubbleState extends State<VideoNoteBubble>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  /// Anchors the in-list square (used for [Scrollable.ensureVisible]).
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver
+    implements VideoNoteSessionHost, VideoNoteFeedClient {
   final GlobalKey _squareKey = GlobalKey();
+  final OverlayPortalController _portal = OverlayPortalController();
 
-  /// Owned here for the whole widget lifetime: initialised for the static
-  /// first frame, played (with sound) while enlarged, and disposed when this
-  /// widget is disposed.
-  VideoPlayerController? _controller;
-  bool _initStarted = false;
-  bool _initialized = false;
+  File? _file;
+  Future<File?>? _fileFuture;
+  File? _posterFile;
   bool _failed = false;
 
-  /// 🔴 П3 (разбор медиа 15.11.2026): в ленте кружок показывает кадр-превью
-  /// с диска, а не живой плеер — раньше каждый кружок держал свой плеер с
-  /// текстурой ради стоп-кадра. Плеер создаётся по нажатию и отпускается,
-  /// когда кружок свернулся. Без кадра (облегчённая сборка, кадр не вынулся)
-  /// — как раньше: плеер ради стоп-кадра.
-  File? _posterFile;
+  /// Лента: без звука, по кругу, звук других приложений не перебивает.
+  VideoPlayerController? _feed;
+  bool _feedReady = false;
+  bool _feedWanted = false;
 
-  /// Whether the note is currently enlarged (expanded in place).
+  /// Раскрытая: со звуком, один раз.
+  VideoPlayerController? _main;
+  bool _mainReady = false;
+
   bool _enlarged = false;
+  bool _endHandled = false;
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: kVideoNoteSpringDuration,
+  );
+  late final Animation<double> _t = CurvedAnimation(
+    parent: _anim,
+    curve: kVideoNoteSpring,
+    reverseCurve: kVideoNoteSpring.flipped,
+  );
 
-  /// Drives the in-place grow/collapse. 0 = small in-list note, 1 = large
-  /// centered square. The reserved layout footprint AND the inner square both
-  /// lerp on this, so the ListView reflows (neighbours part) as it grows.
-  late final AnimationController _anim;
-  late final Animation<double> _t;
+  final ValueNotifier<VideoNoteTime> _time = ValueNotifier<VideoNoteTime>(
+    VideoNoteTime.zero,
+  );
+  final ValueNotifier<double?> _scrub = ValueNotifier<double?>(null);
+  bool _scrubbed = false;
+  double _dragStartF = 0;
+  double _dragStartX = 0;
+  DateTime _lastSeek = DateTime.fromMillisecondsSinceEpoch(0);
+  double _speed = 1;
+  ValueListenable<TickerModeData>? _tickerMode;
 
-  /// Periodic repaint while enlarged so the progress slider / countdown stay
-  /// in sync (the video controller also ticks, but this keeps it smooth even
-  /// when no frame event fires).
-  Timer? _ticker;
+  String get _id => widget.attachment.blobId;
 
-  bool _scrubbing = false;
-  double _scrubFraction = 0;
+  // ─── VideoNoteSessionHost / FeedClient ────────────────────────────────────
 
-  /// The exact callback this state registered into [_activeCollapse], so
-  /// teardown only clears the global guard when it still points at us.
-  VoidCallback? _myCollapse;
+  @override
+  String get noteId => _id;
 
-  static const double _radius = 44;
+  @override
+  String get title => context.mounted
+      ? context.l10n.vnNoteTitle(widget.authorName ?? '')
+      : (widget.authorName ?? '');
+
+  @override
+  BuildContext? get squareContext => _squareKey.currentContext;
+
+  @override
+  ValueListenable<VideoNoteTime> get time => _time;
+
+  @override
+  bool get isPaused => !(_main?.value.isPlaying ?? false);
+
+  @override
+  int get createdAtMs => widget.createdAtMs;
+
+  @override
+  bool get isMe => widget.isMe;
+
+  @override
+  void togglePause() => _togglePause();
+
+  @override
+  void collapse() => _collapse();
+
+  @override
+  void openFromChain() => unawaited(_enlarge());
+
+  @override
+  void setFeedLive(bool live) {
+    _feedWanted = live;
+    if (live) {
+      unawaited(_startFeed());
+    } else {
+      _disposeFeed();
+    }
+  }
+
+  // ─── Жизнь ────────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    _anim = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 280),
-    );
-    _t = CurvedAnimation(
-      parent: _anim,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeOutCubic,
-    );
-    _anim.addStatusListener(_onAnimStatus);
     WidgetsBinding.instance.addObserver(this);
-    if (kVideoToolsAvailable) {
-      unawaited(_loadPosterOrPlayer());
-    } else {
-      // Kick off init for the static first frame (no autoplay).
-      unawaited(_ensureInitialized());
+    VideoNotePlayback.instance.register(this);
+    unawaited(VideoNoteWatched.instance.ensureLoaded());
+    if (kVideoToolsAvailable) unawaited(_loadPoster());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final tm = TickerMode.getValuesNotifier(context);
+    if (!identical(tm, _tickerMode)) {
+      _tickerMode?.removeListener(_onTickerMode);
+      _tickerMode = tm..addListener(_onTickerMode);
     }
   }
 
-  Future<void> _loadPosterOrPlayer() async {
-    try {
-      final file = await widget.resolveFile(widget.attachment);
-      if (!mounted) return;
-      final poster = await VideoThumbnailCache.forVideo(
-        key: p.basenameWithoutExtension(file.path),
-        videoPath: file.path,
-      );
-      if (!mounted) return;
-      if (poster != null) {
-        setState(() => _posterFile = poster.file);
-        return;
-      }
-    } catch (_) {
-      // Fall through to the player, which reports its own failure.
+  /// Чат закрыт другим экраном — заметка сворачивается и молчит.
+  void _onTickerMode() {
+    if (_tickerMode?.value.enabled ?? true) {
+      if (_feedWanted) unawaited(_startFeed());
+      return;
     }
-    if (mounted) unawaited(_ensureInitialized());
+    if (_enlarged) _collapse();
+    _disposeFeed(keepWanted: true);
   }
 
-  // 🔴 Play Vitals п. 1/12 (15.11.2026): сбой `FlutterJNI.ensureAttachedToNative`
-  // — кадр видео/камеры приходит в движок, уже отсоединённый от окна (свернули
-  // и закрыли). Уходя в фон, перестаём подавать кадры.
+  @override
+  void didUpdateWidget(covariant VideoNoteBubble old) {
+    super.didUpdateWidget(old);
+    if (old.attachment.blobId != widget.attachment.blobId) {
+      VideoNotePlayback.instance.unregister(this);
+      if (_enlarged) _collapse();
+      _disposeFeed();
+      _disposeMain();
+      _file = null;
+      _fileFuture = null;
+      _posterFile = null;
+      VideoNotePlayback.instance.register(this);
+      if (kVideoToolsAvailable) unawaited(_loadPoster());
+    }
+  }
+
+  // 🔴 Play Vitals п. 1/12 (15.11.2026): кадр видео не должен приходить в
+  // движок, отсоединённый от окна. Уходя в фон — сворачиваемся и молчим.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
-      if (_enlarged) {
-        _collapse();
-      } else {
-        final c = _controller;
-        if (c != null && _initialized && c.value.isPlaying) {
-          unawaited(c.pause());
-        }
-      }
+      if (_enlarged) _collapse();
+      _disposeFeed(keepWanted: true);
+    } else if (state == AppLifecycleState.resumed && _feedWanted) {
+      unawaited(_startFeed());
     }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _releaseGlobalGuard();
-    _ticker?.cancel();
-    _anim.removeStatusListener(_onAnimStatus);
+    _tickerMode?.removeListener(_onTickerMode);
+    VideoNotePlayback.instance.deactivate(this);
+    VideoNotePlayback.instance.unregister(this);
+    _disposeFeed();
+    _disposeMain();
     _anim.dispose();
-    _disposeController();
+    _time.dispose();
+    _scrub.dispose();
     super.dispose();
   }
 
-  void _disposeController() {
-    final c = _controller;
-    _controller = null;
-    _initStarted = false;
-    _initialized = false;
-    if (c != null) {
-      c.removeListener(_onControllerTick);
+  // ─── Файл и кадр ──────────────────────────────────────────────────────────
+
+  Future<File?> _ensureFile() {
+    final f = _file;
+    if (f != null) return Future<File?>.value(f);
+    return _fileFuture ??= () async {
+      try {
+        final file = await widget.resolveFile(widget.attachment);
+        _file = file;
+        if (_failed && mounted) setState(() => _failed = false);
+        return file;
+      } catch (_) {
+        _fileFuture = null;
+        if (mounted) setState(() => _failed = true);
+        return null;
+      }
+    }();
+  }
+
+  Future<void> _loadPoster() async {
+    final file = await _ensureFile();
+    if (file == null || !mounted) return;
+    try {
+      final poster = await VideoThumbnailCache.forVideo(
+        key: p.basenameWithoutExtension(file.path),
+        videoPath: file.path,
+      );
+      if (poster != null && mounted) setState(() => _posterFile = poster.file);
+    } catch (_) {
+      // Без кадра — полосатая подложка, лента всё равно оживит заметку.
+    }
+  }
+
+  // ─── Лента без звука ──────────────────────────────────────────────────────
+
+  bool get _feedAllowed =>
+      !_enlarged &&
+      (_tickerMode?.value.enabled ?? true) &&
+      !(MediaQuery.maybeDisableAnimationsOf(context) ?? false);
+
+  Future<void> _startFeed() async {
+    if (_feed != null || !_feedAllowed) return;
+    final file = await _ensureFile();
+    if (file == null || !mounted || !_feedWanted || !_feedAllowed) return;
+    if (_feed != null) return;
+    final c = VideoPlayerController.file(
+      file,
+      videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+    );
+    _feed = c;
+    try {
+      await c.initialize();
+      if (!mounted || !identical(_feed, c)) {
+        unawaited(c.dispose());
+        return;
+      }
+      await c.setVolume(0);
+      await c.setLooping(true);
+      await c.play();
+      if (mounted && identical(_feed, c)) setState(() => _feedReady = true);
+    } catch (_) {
+      if (identical(_feed, c)) {
+        _feed = null;
+        _feedReady = false;
+      }
       unawaited(c.dispose());
     }
   }
 
-  void _onControllerTick() {
-    if (!mounted) return;
-    // Keep the slider / countdown live while enlarged; cheap repaint for the
-    // paused→playing flip otherwise.
-    if (_scrubbing) return;
-    setState(() {});
+  void _disposeFeed({bool keepWanted = false}) {
+    if (!keepWanted) _feedWanted = false;
+    final c = _feed;
+    _feed = null;
+    if (_feedReady && mounted) {
+      setState(() => _feedReady = false);
+    } else {
+      _feedReady = false;
+    }
+    if (c != null) unawaited(c.dispose());
   }
 
-  /// Boots the controller, seeks to the first frame, and keeps it PAUSED so the
-  /// list shows a static poster — never autoplaying.
-  Future<void> _ensureInitialized() async {
-    if (_initialized || _initStarted) return;
-    _initStarted = true;
-    if (_failed && mounted) setState(() => _failed = false);
-    try {
-      final file = await widget.resolveFile(widget.attachment);
-      if (!mounted) {
-        _initStarted = false;
-        return;
-      }
-      final controller = VideoPlayerController.file(file);
-      _controller = controller;
-      await controller.initialize();
-      if (!mounted) {
-        _controller = null;
-        _initStarted = false;
-        await controller.dispose();
-        return;
-      }
-      _initialized = true;
-      // Static poster: muted, paused, parked on the first frame.
-      await controller.setLooping(false);
-      await controller.setVolume(0);
-      await controller.seekTo(Duration.zero);
-      await controller.pause();
-      controller.addListener(_onControllerTick);
-      if (mounted) setState(() {});
-    } catch (_) {
-      _disposeController();
-      if (mounted) setState(() => _failed = true);
-    }
-  }
+  // ─── Раскрытие ────────────────────────────────────────────────────────────
 
-  bool get _isReady => _initialized && _controller != null;
+  bool _haptics() => widget.hapticsEnabled?.call() ?? true;
 
-  // ── Tap on the SMALL note → expand in place ─────────────────────────────
-  void _onTapSmall() {
-    if (_failed) {
-      _initStarted = false;
-      unawaited(_ensureInitialized());
-      return;
-    }
-    if (!_isReady) {
-      // Плеер ещё не создан (в ленте — только кадр): создаём и сразу
-      // раскрываем, второй раз нажимать не нужно.
-      unawaited(_ensureInitialized().then((_) {
-        if (mounted && _isReady && !_enlarged) _enlarge();
-      }));
-      return;
-    }
-    _enlarge();
-  }
-
-  void _enlarge() {
+  Future<void> _enlarge() async {
     if (_enlarged) return;
-
-    // Only one enlarged note at a time — collapse any other open note first.
-    if (_activeCollapse != null && _activeCollapse != _myCollapse) {
-      _activeCollapse!.call();
+    if (_failed) {
+      setState(() => _failed = false);
     }
-    _myCollapse = _collapse;
-    _activeCollapse = _myCollapse;
-
+    final file = await _ensureFile();
+    if (file == null || !mounted || _enlarged) return;
+    VideoNotePlayback.instance.activate(this);
+    _endHandled = false;
+    _speed = 1;
+    _time.value = VideoNoteTime(
+      Duration.zero,
+      Duration(milliseconds: widget.attachment.durationMs ?? 0),
+    );
     setState(() => _enlarged = true);
-
-    final c = _controller;
-    if (c != null && _initialized) {
-      // Play WITH SOUND while enlarged.
-      unawaited(() async {
-        // Play ONCE (not looped) so it can auto-close when it reaches the end.
-        await c.setLooping(false);
-        await c.setVolume(1.0);
-        await c.seekTo(Duration.zero);
-        if (!c.value.isPlaying) await c.play();
-        if (mounted) setState(() {});
-      }());
-    }
-
-    _ticker?.cancel();
-    _ticker = Timer.periodic(const Duration(milliseconds: 90), (_) {
-      if (!mounted || !_enlarged) return;
-      // Auto-close once it has played through — мягко сворачиваем к постеру.
-      final pc = _controller;
-      if (pc != null && pc.value.isInitialized && !_scrubbing) {
-        final dur = pc.value.duration;
-        if (dur > const Duration(milliseconds: 300) &&
-            pc.value.position >= dur - const Duration(milliseconds: 80)) {
-          _collapse();
-          return;
-        }
-      }
-      if (!_scrubbing) setState(() {});
-    });
-
-    _anim.forward();
-
-    // Best-effort: scroll the (now growing) note toward the vertical middle of
-    // the chat viewport so it "вылезает к середине экрана". Runs after this
-    // frame so the enlarged footprint is laid out first.
+    if (_haptics()) HapticFeedback.lightImpact();
+    widget.onSoundStart?.call();
+    _portal.show();
+    unawaited(_anim.forward());
+    // Лента подкручивается, чтобы раскрытый квадрат встал по центру.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = _squareKey.currentContext;
-      if (ctx == null || !mounted) return;
+      if (ctx == null || !mounted || !_enlarged) return;
       unawaited(
         Scrollable.ensureVisible(
           ctx,
-          alignment: 0.5,
-          duration: const Duration(milliseconds: 280),
+          alignment: .5,
+          duration: kVideoNoteSpringDuration,
           curve: Curves.easeOutCubic,
         ),
       );
     });
-  }
-
-  /// Collapse back to the small in-list note: reverse the grow animation,
-  /// mute + pause + park on the first frame, and reflow neighbours back.
-  void _collapse() {
-    if (!_enlarged) return;
-    setState(() => _enlarged = false);
-    _ticker?.cancel();
-    _releaseGlobalGuard();
-
-    final c = _controller;
-    if (c != null && _initialized) {
-      // No sound on the way back; restore the static first-frame poster.
-      unawaited(() async {
-        try {
-          await c.pause();
-          await c.setVolume(0);
-          await c.setLooping(false);
-          await c.seekTo(Duration.zero);
-        } catch (_) {
-          // The player may already be released (see _onAnimStatus).
-        }
-        if (mounted) setState(() {});
-      }());
-    }
-
-    _anim.reverse();
-  }
-
-  void _onAnimStatus(AnimationStatus status) {
-    if (status == AnimationStatus.dismissed) {
-      // Fully collapsed — stop the high-frequency repaint ticker.
-      _ticker?.cancel();
-      _ticker = null;
-      // П3: свернулся — плеер больше не нужен, в ленте снова кадр.
-      if (_posterFile != null && !_enlarged && _controller != null) {
-        _disposeController();
-        if (mounted) setState(() {});
+    final c = VideoPlayerController.file(file);
+    _main = c;
+    _mainReady = false;
+    try {
+      await c.initialize();
+      if (!mounted || !identical(_main, c) || !_enlarged) {
+        if (identical(_main, c)) _main = null;
+        unawaited(c.dispose());
+        return;
+      }
+      await c.setLooping(false);
+      await c.setVolume(1);
+      await c.setPlaybackSpeed(_speed);
+      await c.seekTo(Duration.zero);
+      c.addListener(_onMainTick);
+      await c.play();
+      if (mounted && identical(_main, c)) setState(() => _mainReady = true);
+    } catch (_) {
+      if (identical(_main, c)) {
+        _main = null;
+        _mainReady = false;
+      }
+      unawaited(c.dispose());
+      if (mounted) {
+        setState(() => _failed = true);
+        _collapse();
       }
     }
   }
 
-  void _releaseGlobalGuard() {
-    if (_myCollapse != null && _activeCollapse == _myCollapse) {
-      _activeCollapse = null;
+  void _onMainTick() {
+    final c = _main;
+    if (c == null || !mounted) return;
+    final v = c.value;
+    if (!v.isInitialized) return;
+    if (_scrub.value == null) {
+      _time.value = VideoNoteTime(v.position, v.duration, paused: !v.isPlaying);
     }
-    _myCollapse = null;
+    final ended =
+        v.duration > const Duration(milliseconds: 300) &&
+        v.position >= v.duration - const Duration(milliseconds: 80) &&
+        !v.isPlaying &&
+        _scrub.value == null;
+    if (ended && !_endHandled && _enlarged) {
+      _endHandled = true;
+      final id = _id;
+      _collapse();
+      VideoNotePlayback.instance.scheduleChainAfter(id);
+    }
   }
 
-  void _togglePlayPause() {
-    final c = _controller;
-    if (c == null || !_initialized) return;
+  void _collapse() {
+    if (!_enlarged) return;
+    _enlarged = false;
+    _scrub.value = null;
+    unawaited(_main?.pause());
+    unawaited(VideoNoteWatched.instance.markWatched(_id));
+    _portal.hide();
+    VideoNotePlayback.instance.deactivate(this);
+    if (mounted) setState(() {});
+    unawaited(
+      _anim.reverse().whenComplete(() {
+        if (!_enlarged) _disposeMain();
+      }),
+    );
+  }
+
+  void _disposeMain() {
+    final c = _main;
+    _main = null;
+    _mainReady = false;
+    if (c != null) {
+      c.removeListener(_onMainTick);
+      unawaited(c.dispose());
+    }
+  }
+
+  void _togglePause() {
+    final c = _main;
+    if (c == null || !_mainReady) return;
     if (c.value.isPlaying) {
       unawaited(c.pause());
     } else {
+      if (c.value.position >= c.value.duration - const Duration(milliseconds: 80)) {
+        unawaited(c.seekTo(Duration.zero));
+        _endHandled = false;
+      }
       unawaited(c.play());
     }
-    if (mounted) setState(() {});
+    if (_haptics()) HapticFeedback.selectionClick();
   }
 
-  double get _progress {
-    if (_scrubbing) return _scrubFraction;
-    final c = _controller;
-    if (c == null || !_initialized) return 0;
-    final dur = c.value.duration.inMilliseconds;
-    if (dur <= 0) return 0;
-    return (c.value.position.inMilliseconds / dur).clamp(0.0, 1.0);
+  void _cycleSpeed() {
+    _speed = _speed == 1 ? 1.5 : (_speed == 1.5 ? 2 : 1);
+    unawaited(_main?.setPlaybackSpeed(_speed));
+    if (_haptics()) HapticFeedback.selectionClick();
+    setState(() {});
   }
 
-  void _seekToFraction(double fraction) {
-    final c = _controller;
-    if (c == null || !_initialized) return;
-    final ms = (c.value.duration.inMilliseconds * fraction).round();
-    unawaited(c.seekTo(Duration(milliseconds: ms)));
+  // ─── Перемотка протяжкой ──────────────────────────────────────────────────
+
+  void _scrubStart(DragStartDetails d) {
+    final c = _main;
+    if (c == null || !_mainReady) return;
+    _dragStartX = d.globalPosition.dx;
+    _dragStartF = _time.value.fraction;
+    _scrub.value = _dragStartF;
+    _scrubbed = true;
+    unawaited(c.pause());
   }
 
-  /// Small state shows total duration; enlarged state counts down remaining.
-  String _durationLabel({required bool countdown}) {
-    final c = _controller;
-    Duration d;
-    if (c != null && _initialized) {
-      d = countdown ? (c.value.duration - c.value.position) : c.value.duration;
-    } else {
-      d = Duration(milliseconds: widget.attachment.durationMs ?? 0);
+  void _scrubUpdate(DragUpdateDetails d, double side) {
+    final c = _main;
+    if (c == null || _scrub.value == null || side <= 0) return;
+    final f = (_dragStartF + (d.globalPosition.dx - _dragStartX) / side)
+        .clamp(0.0, .999);
+    _scrub.value = f;
+    final dur = c.value.duration;
+    _time.value = VideoNoteTime(
+      Duration(milliseconds: (dur.inMilliseconds * f).round()),
+      dur,
+      paused: true,
+    );
+    final now = DateTime.now();
+    if (now.difference(_lastSeek) > const Duration(milliseconds: 60)) {
+      _lastSeek = now;
+      unawaited(c.seekTo(_time.value.position));
     }
-    if (d.isNegative) d = Duration.zero;
-    final m = d.inMinutes;
-    final s = d.inSeconds % 60;
-    return '$m:${s.toString().padLeft(2, '0')}';
   }
+
+  void _scrubEnd() {
+    final c = _main;
+    final f = _scrub.value;
+    _scrub.value = null;
+    if (c == null || f == null) return;
+    final target = Duration(
+      milliseconds: (c.value.duration.inMilliseconds * f).round(),
+    );
+    _endHandled = false;
+    // Как в макете: отпустил после перемотки — играет дальше с этого места.
+    unawaited(c.seekTo(target).then((_) => c.play()));
+  }
+
+  void _onTap() {
+    if (_scrubbed) {
+      _scrubbed = false;
+      return;
+    }
+    if (_enlarged) {
+      _togglePause();
+    } else {
+      unawaited(_enlarge());
+    }
+  }
+
+  // ─── Отрисовка ────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final double smallSide =
-        widget.diameter ?? math.min(216.0, media.size.width * 0.58);
-    // Enlarged target: MUCH bigger, centered. min(width*0.82, height*0.55).
-    final double largeSide = math.min(
-      media.size.width * 0.82,
-      media.size.height * 0.55,
-    );
-
-    return AnimatedBuilder(
-      animation: _t,
-      builder: (context, _) {
-        final double t = _t.value;
-        final double side = _lerpD(smallSide, largeSide, t);
-
-        // Sender-side padding relaxes toward symmetric as the note grows, so a
-        // large square can occupy the full chat width and sit centered. We also
-        // clamp the horizontal insets so `side` always fits.
-        final double maxSide = math.max(
-          0.0,
-          media.size.width - 16, // 8px min gutter each side at full expand
-        );
-        final double clampedSide = math.min(side, maxSide);
-
-        final double leftBase = widget.isMe ? 48 : 8;
-        final double rightBase = widget.isMe ? 8 : 48;
-        final double leftPad = _lerpD(leftBase, 8, t);
-        final double rightPad = _lerpD(rightBase, 8, t);
-
-        // Cross-axis alignment slides from the sender side toward center.
-        final Alignment squareAlign = Alignment.lerp(
-          widget.isMe ? Alignment.centerRight : Alignment.centerLeft,
-          Alignment.center,
-          t,
-        )!;
-
-        final square = _buildSquare(clampedSide, t);
-
-        return Padding(
-          padding: EdgeInsets.fromLTRB(leftPad, 2, rightPad, 2),
-          child: Column(
-            crossAxisAlignment: widget.isMe
-                ? CrossAxisAlignment.end
-                : CrossAxisAlignment.start,
-            children: [
-              // Header / footer fade AND smoothly collapse their reserved
-              // height as the note enlarges (a big centered square shouldn't
-              // carry author/time chrome). Kept in the tree throughout so the
-              // column never jumps when crossing a threshold.
-              if (widget.header != null)
-                _collapsible(child: widget.header!, t: t),
-              // Full-width row so the growing square can center across the chat.
-              SizedBox(
-                width: double.infinity,
-                child: Align(alignment: squareAlign, child: square),
-              ),
-              _collapsible(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: widget.footer,
-                ),
-                t: t,
-              ),
-            ],
-          ),
-        );
+    final smallSide = widget.diameter ?? videoNoteSmallSide(media.size.width);
+    final largeSide = videoNoteLargeSide(media.size);
+    return VisibilityDetector(
+      key: ValueKey<String>('vn-vis-$_id-${identityHashCode(this)}'),
+      onVisibilityChanged: (info) {
+        if (!mounted) return;
+        VideoNotePlayback.instance.reportVisibility(_id, info.visibleFraction);
       },
-    );
-  }
-
-  /// Wraps header/footer chrome so it fades out AND collapses its reserved
-  /// height as the note enlarges ([t] 0→1), and restores on collapse — without
-  /// being added/removed from the tree (which would jolt the column layout).
-  Widget _collapsible({required Widget child, required double t}) {
-    final double f = (1 - t * 2).clamp(0.0, 1.0); // 1 at t=0, 0 by t=0.5
-    if (f <= 0) {
-      // Fully collapsed: keep a zero-size box in the tree to preserve identity.
-      return const SizedBox.shrink();
-    }
-    if (f >= 1) {
-      // Fully expanded (small in-list note) — the ONLY state where the footer's
-      // reaction chips are visible and play their scale-up "pop" entry. That pop
-      // overflows above the footer box on purpose, so we must NOT wrap it in a
-      // ClipRect/heightFactor here (that clip is the "invisible wall" that cuts
-      // the popping emoji in half). The height-collapse clip is only needed
-      // while the note is actively enlarging (0 < f < 1).
-      return child;
-    }
-    return ClipRect(
-      child: Align(
-        alignment: Alignment.topCenter,
-        heightFactor: f,
-        child: Opacity(opacity: f, child: child),
+      child: OverlayPortal(
+        controller: _portal,
+        overlayChildBuilder: (context) => _MiniPlayerLayer(host: this),
+        child: AnimatedBuilder(
+          animation: _t,
+          builder: (context, _) {
+            final t = _t.value;
+            final leftPad = _lerp(widget.isMe ? 48 : 8, 12, t.clamp(0, 1));
+            final rightPad = _lerp(widget.isMe ? 8 : 48, 12, t.clamp(0, 1));
+            final maxSide = math.max(0.0, media.size.width - leftPad - rightPad);
+            final side = math.min(_lerp(smallSide, largeSide, t), maxSide);
+            final align = Alignment.lerp(
+              widget.isMe ? Alignment.centerRight : Alignment.centerLeft,
+              Alignment.center,
+              t.clamp(0, 1),
+            )!;
+            return Padding(
+              padding: EdgeInsets.fromLTRB(leftPad, 2, rightPad, 2),
+              child: Column(
+                crossAxisAlignment: widget.isMe
+                    ? CrossAxisAlignment.end
+                    : CrossAxisAlignment.start,
+                children: [
+                  ?widget.header,
+                  SizedBox(
+                    width: double.infinity,
+                    child: Align(alignment: align, child: _square(side, t)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: widget.footer,
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 
-  /// The rounded video square at the current animated [side]. [t] (0→1) drives
-  /// chrome that only belongs to the enlarged state (slider, X, countdown).
-  Widget _buildSquare(double side, double t) {
-    final bool enlargedEnough = t > 0.02;
-    final bool playing =
-        _isReady && (_controller?.value.isPlaying ?? false);
-    final bool showSmallPlayGlyph =
-        (_isReady || _posterFile != null) && t < 0.5 && !playing;
-    final bool showBigPlayGlyph = _isReady && t >= 0.5 && !playing;
-
+  Widget _square(double side, double t) {
+    final radius = videoNoteRadiusFor(side);
+    final tt = t.clamp(0.0, 1.0);
+    final shadow = tt > .01
+        ? <BoxShadow>[
+            BoxShadow(
+              color: Color.fromRGBO(0, 0, 0, .5 * tt),
+              blurRadius: 60 * tt,
+              offset: Offset(0, 24 * tt),
+            ),
+          ]
+        : null;
     return SizedBox(
       key: _squareKey,
       width: side,
       height: side,
-      child: GestureDetector(
-        // Small note: tap to expand. Enlarged: tap toggles play/pause.
-        onTap: _enlarged ? _togglePlayPause : _onTapSmall,
-        // Drag-to-seek only meaningful while enlarged.
-        onHorizontalDragStart: _enlarged
-            ? (details) {
-                setState(() {
-                  _scrubbing = true;
-                  _scrubFraction =
-                      (details.localPosition.dx / side).clamp(0.0, 1.0);
-                });
-              }
-            : null,
-        onHorizontalDragUpdate: _enlarged
-            ? (details) {
-                if (!_scrubbing) return;
-                setState(() {
-                  _scrubFraction =
-                      (details.localPosition.dx / side).clamp(0.0, 1.0);
-                });
-              }
-            : null,
-        onHorizontalDragEnd: _enlarged
-            ? (_) {
-                if (!_scrubbing) return;
-                _seekToFraction(_scrubFraction);
-                setState(() => _scrubbing = false);
-              }
-            : null,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(_radius),
-            boxShadow: enlargedEnough
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.42 * t),
-                      blurRadius: 38 * t,
-                      spreadRadius: 2 * t,
-                      offset: Offset(0, 16 * t),
-                    ),
-                  ]
-                : null,
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(_radius),
-            child: ColoredBox(
-              color: Colors.black,
-              child: Stack(
-                clipBehavior: Clip.hardEdge,
-                children: [
-                  // Video texture / poster (or loading / failed placeholder).
-                  Positioned.fill(
-                    child: _isReady
-                        ? FittedBox(
-                            fit: BoxFit.cover,
-                            clipBehavior: Clip.hardEdge,
-                            child: SizedBox(
-                              width: _controller!.value.size.width,
-                              height: _controller!.value.size.height,
-                              child: VideoPlayer(_controller!),
-                            ),
-                          )
-                        : _posterFile != null && !_failed
-                        ? Image.file(
-                            _posterFile!,
-                            fit: BoxFit.cover,
-                            gaplessPlayback: true,
-                            errorBuilder: (_, _, _) =>
-                                const ColoredBox(color: Colors.black),
-                          )
-                        : Center(
-                            child: _failed
-                                ? const Icon(
-                                    Icons.refresh_rounded,
-                                    color: Colors.white,
-                                    size: 32,
-                                  )
-                                : const SizedBox(
-                                    width: 28,
-                                    height: 28,
-                                    child: SecretlySpinner(
-                                      strokeWidth: 2.5,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                          ),
-                  ),
-                  // Small-state centered play affordance.
-                  if (showSmallPlayGlyph)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: Center(
-                          child: Opacity(
-                            opacity: (1 - t * 2).clamp(0.0, 1.0),
-                            child: Container(
-                              padding: const EdgeInsets.all(11),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.34),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.play_arrow_rounded,
-                                color: Colors.white,
-                                size: 30,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  // Enlarged-state center play glyph when paused.
-                  if (showBigPlayGlyph)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: Center(
-                          child: Opacity(
-                            opacity: ((t - 0.5) * 2).clamp(0.0, 1.0),
-                            child: Container(
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.42),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.play_arrow_rounded,
-                                color: Colors.white,
-                                size: 40,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  // Duration label (bottom-right). Small: total. Enlarged:
-                  // counts down remaining.
-                  Positioned(
-                    right: _lerpD(8, 12, t),
-                    bottom: _lerpD(10, 16, t),
-                    child: IgnorePointer(
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: _lerpD(8, 9, t),
-                          vertical: _lerpD(3, 4, t),
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.45),
-                          borderRadius: BorderRadius.circular(_lerpD(10, 11, t)),
-                        ),
-                        child: Text(
-                          _durationLabel(countdown: t >= 0.5),
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: _lerpD(11, 12, t),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // White bottom-edge progress slider (enlarged only; drag is
-                  // handled by the outer GestureDetector).
-                  if (enlargedEnough)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: IgnorePointer(
+      child: Semantics(
+        button: true,
+        label: _enlarged ? context.l10n.vnScrubHint : null,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _onTap,
+          onHorizontalDragStart: _enlarged ? _scrubStart : null,
+          onHorizontalDragUpdate: _enlarged ? (d) => _scrubUpdate(d, side) : null,
+          onHorizontalDragEnd: _enlarged ? (_) => _scrubEnd() : null,
+          onHorizontalDragCancel: _enlarged ? _scrubEnd : null,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(radius),
+              boxShadow: shadow,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(radius),
+              child: ColoredBox(
+                color: Colors.black,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    RepaintBoundary(child: _surface()),
+                    if (tt > .01)
+                      IgnorePointer(
                         child: Opacity(
-                          opacity: t,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.only(
-                              bottomLeft: Radius.circular(_radius),
-                              bottomRight: Radius.circular(_radius),
+                          opacity: tt,
+                          child: ValueListenableBuilder<VideoNoteTime>(
+                            valueListenable: _time,
+                            builder: (context, time, _) => CustomPaint(
+                              painter: VideoNotePerimeterPainter(
+                                fraction: time.fraction,
+                                radius: radius,
+                              ),
                             ),
-                            child: SizedBox(
-                              height: 5,
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    color: Colors.white.withValues(alpha: 0.28),
-                                  ),
-                                  FractionallySizedBox(
-                                    alignment: Alignment.centerLeft,
-                                    widthFactor: _progress.clamp(0.0, 1.0),
-                                    child: Container(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.95),
+                          ),
+                        ),
+                      ),
+                    if (_enlarged) _centerOverlay(),
+                    if (_enlarged)
+                      Positioned(
+                        top: 14,
+                        right: 14,
+                        child: Opacity(
+                          opacity: tt,
+                          child: _SpeedChip(
+                            label:
+                                '${_speed == _speed.roundToDouble() ? _speed.toInt() : _speed}×'
+                                    .replaceAll(
+                                      '.',
+                                      Localizations.localeOf(context).languageCode == 'en'
+                                          ? '.'
+                                          : ',',
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            onTap: _cycleSpeed,
                           ),
                         ),
                       ),
-                    ),
-                  // Faint close "X" top-right — collapses back down (enlarged).
-                  if (enlargedEnough)
                     Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Opacity(
-                        opacity: t,
-                        child: GestureDetector(
-                          onTap: _collapse,
-                          child: Opacity(
-                            opacity: 0.55,
-                            child: Container(
-                              width: 34,
-                              height: 34,
-                              decoration: const BoxDecoration(
-                                color: Colors.black,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.close_rounded,
-                                color: Colors.white,
-                                size: 22,
-                              ),
-                            ),
+                      left: _lerp(10, 14, tt),
+                      bottom: _lerp(10, 14, tt),
+                      child: IgnorePointer(child: _badge()),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _surface() {
+    final c = _enlarged && _mainReady
+        ? _main
+        : (_feedReady ? _feed : (_mainReady ? _main : null));
+    if (c != null && c.value.isInitialized) {
+      final s = c.value.size;
+      return FittedBox(
+        fit: BoxFit.cover,
+        clipBehavior: Clip.hardEdge,
+        child: SizedBox(
+          width: s.width <= 0 ? 1 : s.width,
+          height: s.height <= 0 ? 1 : s.height,
+          child: VideoPlayer(c),
+        ),
+      );
+    }
+    final poster = _posterFile;
+    if (poster != null) {
+      return Image.file(
+        poster,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => const ColoredBox(color: Colors.black),
+      );
+    }
+    return VideoNoteStripes(
+      isMe: widget.isMe,
+      child: _failed
+          ? const ChatMediaCircle(glyph: ChatMediaGlyph.retry)
+          : const ChatMediaCircle(glyph: ChatMediaGlyph.none, ring: true),
+    );
+  }
+
+  /// Пауза — кнопка ▶ 60 по центру; перемотка — время с шевронами.
+  Widget _centerOverlay() {
+    return IgnorePointer(
+      child: ValueListenableBuilder<double?>(
+        valueListenable: _scrub,
+        builder: (context, scrub, _) {
+          return ValueListenableBuilder<VideoNoteTime>(
+            valueListenable: _time,
+            builder: (context, time, _) {
+              if (scrub != null) {
+                return Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xA60A0E13),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _VnIc.chevronLeft,
+                          size: 20,
+                          color: Colors.white.withValues(alpha: .7),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          formatVideoNoteTime(time.position),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: [ui.FontFeature.tabularFigures()],
                           ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          _VnIc.chevronRight,
+                          size: 20,
+                          color: Colors.white.withValues(alpha: .7),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+              final paused = _mainReady && time.paused;
+              return AnimatedOpacity(
+                opacity: paused ? 1 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: AnimatedScale(
+                  scale: paused ? 1 : .85,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutBack,
+                  child: Center(
+                    child: ClipOval(
+                      child: BackdropFilter(
+                        enabled: defaultTargetPlatform == TargetPlatform.iOS,
+                        filter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                        child: Container(
+                          width: 60,
+                          height: 60,
+                          color: const Color(0x8C0A0E13),
+                          alignment: Alignment.center,
+                          child: const Icon(_VnIc.play, size: 36, color: Colors.white),
                         ),
                       ),
                     ),
-                ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _badge() {
+    return ValueListenableBuilder<int>(
+      valueListenable: VideoNoteWatched.instance.revision,
+      builder: (context, _, _) {
+        final unread =
+            !_enlarged &&
+            !widget.isMe &&
+            !VideoNoteWatched.instance.isWatched(_id, widget.createdAtMs);
+        if (_enlarged) {
+          return ValueListenableBuilder<VideoNoteTime>(
+            valueListenable: _time,
+            builder: (context, time, _) => VideoNoteDurationTag(
+              label: formatVideoNoteTime(time.position),
+              icon: _VnIc.volumeOn,
+            ),
+          );
+        }
+        final d = Duration(milliseconds: widget.attachment.durationMs ?? 0);
+        final dur = d > Duration.zero
+            ? d
+            : (_feed?.value.isInitialized ?? false)
+            ? _feed!.value.duration
+            : Duration.zero;
+        return VideoNoteDurationTag(
+          label: formatVideoNoteTime(dur),
+          icon: _VnIc.volumeOff,
+          unread: unread,
+        );
+      },
+    );
+  }
+}
+
+class _VnIc {
+  static const IconData play = AdaptiveIconData(
+    Icons.play_arrow_rounded,
+    CupertinoIcons.play_fill,
+  );
+  static const IconData pause = AdaptiveIconData(
+    Icons.pause_rounded,
+    CupertinoIcons.pause_fill,
+  );
+  static const IconData volumeOn = AdaptiveIconData(
+    Icons.volume_up_rounded,
+    CupertinoIcons.speaker_2_fill,
+  );
+  static const IconData volumeOff = AdaptiveIconData(
+    Icons.volume_off_rounded,
+    CupertinoIcons.speaker_slash_fill,
+  );
+  static const IconData close = AdaptiveIconData(
+    Icons.close_rounded,
+    CupertinoIcons.xmark,
+  );
+  static const IconData chevronLeft = AdaptiveIconData(
+    Icons.chevron_left_rounded,
+    CupertinoIcons.chevron_left,
+  );
+  static const IconData chevronRight = AdaptiveIconData(
+    Icons.chevron_right_rounded,
+    CupertinoIcons.chevron_right,
+  );
+}
+
+class _SpeedChip extends StatelessWidget {
+  const _SpeedChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+          // Зона касания 44 при видимой капсуле 28.
+          padding: const EdgeInsets.all(8),
+          child: Container(
+            height: 28,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: const Color(0x990A0E13),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                fontFeatures: [ui.FontFeature.tabularFigures()],
               ),
             ),
           ),
@@ -759,6 +880,270 @@ class _VideoNoteBubbleState extends State<VideoNoteBubble>
   }
 }
 
-/// Local double lerp (avoids importing dart:ui just for `lerpDouble`, which is
-/// nullable). [a]+(b-a)*t.
-double _lerpD(double a, double b, double t) => a + (b - a) * t;
+/// Мини-плеер под шапкой чата: пауза, «Анна · видео-заметка», время,
+/// закрыть. Без полосы прогресса — прогресс один, по контуру квадрата.
+class _MiniPlayerLayer extends StatelessWidget {
+  const _MiniPlayerLayer({required this.host});
+
+  final VideoNoteSessionHost host;
+
+  @override
+  Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
+    final ctx = host.squareContext;
+    final scaffold = ctx != null && ctx.mounted ? Scaffold.maybeOf(ctx) : null;
+    final top = (scaffold?.appBarMaxHeight ?? (mq.padding.top + 64)) + 6;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final bg = dark ? const Color(0xD11D2733) : const Color(0xEBFFFFFF);
+    final ink = dark ? Colors.white : const Color(0xFF0E141B);
+    final sub = dark ? const Color(0xFF8FA3B7) : const Color(0x9E0E141B);
+    final accent = dark ? kVideoNoteAccent : const Color(0xFF1F7AE0);
+    final glass = defaultTargetPlatform == TargetPlatform.iOS;
+    Widget island = DecoratedBox(
+      decoration: BoxDecoration(
+        color: glass ? bg : bg.withValues(alpha: dark ? .96 : .98),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: dark ? const Color(0x33FFFFFF) : const Color(0x140E141B),
+          width: .5,
+        ),
+        boxShadow: dark
+            ? null
+            : const [BoxShadow(color: Color(0x1A0E141B), blurRadius: 18, offset: Offset(0, 4))],
+      ),
+      child: SizedBox(
+        height: 44,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: ValueListenableBuilder<VideoNoteTime>(
+            valueListenable: host.time,
+            builder: (context, time, _) {
+              return Row(
+                children: [
+                  _RoundButton(
+                    tooltip: time.paused ? context.l10n.mvPlay : context.l10n.mvPause,
+                    onTap: host.togglePause,
+                    background: accent.withValues(alpha: .16),
+                    child: Icon(
+                      time.paused ? _VnIc.play : _VnIc.pause,
+                      size: 20,
+                      color: accent,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          host.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: ink,
+                          ),
+                        ),
+                        Text(
+                          '${formatVideoNoteTime(time.position)} / ${formatVideoNoteTime(time.duration)}',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: sub,
+                            fontFeatures: const [ui.FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _RoundButton(
+                    tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
+                    onTap: host.collapse,
+                    child: Icon(_VnIc.close, size: 20, color: sub),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    if (glass) {
+      island = ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: island,
+        ),
+      );
+    }
+    return Positioned(
+      top: top,
+      left: 8,
+      right: 8,
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+        builder: (context, v, child) => Opacity(
+          opacity: v,
+          child: Transform.translate(offset: Offset(0, -10 * (1 - v)), child: child),
+        ),
+        child: Material(type: MaterialType.transparency, child: island),
+      ),
+    );
+  }
+}
+
+class _RoundButton extends StatelessWidget {
+  const _RoundButton({
+    required this.tooltip,
+    required this.onTap,
+    required this.child,
+    this.background,
+  });
+
+  final String tooltip;
+  final VoidCallback onTap;
+  final Widget child;
+  final Color? background;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          width: 40,
+          height: 44,
+          child: Center(
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(color: background, shape: BoxShape.circle),
+              alignment: Alignment.center,
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Скругление квадрата в ленте (5a: 176 → 35).
+const double kVideoNoteRadius = 35;
+
+/// Полосатая подложка, пока кадра нет: у своих — синяя, у чужих —
+/// графитовая.
+class VideoNoteStripes extends StatelessWidget {
+  const VideoNoteStripes({super.key, required this.isMe, this.child});
+
+  final bool isMe;
+  final Widget? child;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _StripesPainter(
+        a: isMe ? const Color(0xFF1C4E7A) : const Color(0xFF26323F),
+        b: isMe ? const Color(0xFF19466E) : const Color(0xFF212C38),
+      ),
+      child: Center(child: child),
+    );
+  }
+}
+
+class _StripesPainter extends CustomPainter {
+  const _StripesPainter({required this.a, required this.b});
+
+  final Color a;
+  final Color b;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = a);
+    // Полосы под 135° шагом 20 (10 + 10), как `repeating-linear-gradient`.
+    final paint = Paint()..color = b;
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
+    final span = size.width + size.height;
+    for (double x = -size.height; x < span; x += 20 * math.sqrt2) {
+      final path = Path()
+        ..moveTo(x + 10 * math.sqrt2, 0)
+        ..lineTo(x + 20 * math.sqrt2, 0)
+        ..lineTo(x + 20 * math.sqrt2 + size.height, size.height)
+        ..lineTo(x + 10 * math.sqrt2 + size.height, size.height)
+        ..close();
+      canvas.drawPath(path, paint);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_StripesPainter old) => old.a != a || old.b != b;
+}
+
+/// Ярлык макета 5a: капсула 24 `rgba(10,14,19,.6)`, значок 15, время 12/600 и
+/// синяя точка 6×6, пока входящая заметка не просмотрена.
+class VideoNoteDurationTag extends StatelessWidget {
+  const VideoNoteDurationTag({
+    super.key,
+    required this.label,
+    this.icon,
+    this.unread = false,
+  });
+
+  final String label;
+  final IconData? icon;
+  final bool unread;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 24,
+      padding: EdgeInsets.fromLTRB(icon == null ? 8 : 7, 0, 8, 0),
+      decoration: BoxDecoration(
+        color: const Color(0x990A0E13),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 15, color: Colors.white),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.2,
+              fontFeatures: [ui.FontFeature.tabularFigures()],
+            ),
+          ),
+          if (unread) ...[
+            const SizedBox(width: 5),
+            Container(
+              width: 6,
+              height: 6,
+              decoration: const BoxDecoration(
+                color: kVideoNoteAccent,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+double _lerp(double a, double b, double t) => a + (b - a) * t;

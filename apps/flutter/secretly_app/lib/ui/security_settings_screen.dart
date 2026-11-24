@@ -7,6 +7,8 @@ import 'package:secretly_app/ui/secretly_snackbar.dart';
 import '../app/app_controller.dart';
 import '../security/app_security_manager.dart';
 import '../security/profile_space.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'security_duress_section.dart';
 import 'social_recovery_screen.dart';
 import 'animations/animations.dart';
@@ -16,8 +18,12 @@ import 'personal_chats_screen.dart';
 import 'security_lock_flow.dart';
 import 'settings_group.dart';
 import 'wave1_l10n.dart';
+import 'widgets/apple_menu.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_settings_row.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
 
 Future<void> openSecuritySettings({
   required BuildContext context,
@@ -77,7 +83,30 @@ class SecuritySettingsScreen extends StatelessWidget {
           builder: (context, snapshot) {
             final biometricStatus =
                 snapshot.data ?? const SecurityBiometricStatus.unavailable();
-            return Scaffold(
+            // Android (23.11.2026): те же группы строк, что на iPhone, —
+            // вместо крупных карточек с плашками.
+            if (settingsAndroidPanels) {
+              return AppleSettingsPageTheme(
+                child: Scaffold(
+                  extendBodyBehindAppBar: true,
+                  appBar: frostedAppBar(
+                    title: Text(
+                      _label(context, ru: 'Безопасность', en: 'Security'),
+                    ),
+                  ),
+                  body: _AndroidSecurityList(
+                    controller: controller,
+                    manager: manager,
+                    biometricStatus: biometricStatus,
+                    topPad: topPad,
+                    bottomPad: bottomPad,
+                  ),
+                ),
+              );
+            }
+            // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
               extendBodyBehindAppBar: true,
               appBar: frostedAppBar(
                 title: Text(
@@ -112,8 +141,8 @@ class SecuritySettingsScreen extends StatelessWidget {
                         ? _label(context, ru: 'Готово', en: 'Ready')
                         : _label(context, ru: 'Недоступно', en: 'Unavailable'),
                     icon: biometricStatus.hasFace
-                        ? Icons.face_retouching_natural_rounded
-                        : Icons.fingerprint_rounded,
+                        ? AdaptiveIcons.face_retouching_natural_rounded
+                        : AdaptiveIcons.fingerprint_rounded,
                     description: biometricStatus.isAvailable
                         ? _label(
                             context,
@@ -173,10 +202,10 @@ class SecuritySettingsScreen extends StatelessWidget {
                   Card(
                     clipBehavior: Clip.antiAlias,
                     child: ListTile(
-                      leading: const Icon(Icons.folder_special_rounded),
+                      leading: const Icon(AdaptiveIcons.folder_special_rounded),
                       title: Text(context.l10n.settingsOpenPersonalChats),
                       subtitle: Text(context.l10n.settingsOpenPersonalChatsSub),
-                      trailing: const Icon(Icons.chevron_right_rounded),
+                      trailing: const Icon(AdaptiveIcons.chevron_right_rounded),
                       onTap: () async {
                         final unlocked = await ensureSecurityScopeUnlocked(
                           context: context,
@@ -204,10 +233,211 @@ class SecuritySettingsScreen extends StatelessWidget {
                   ],
                 ],
               ),
-            );
+            ),
+    );
           },
         );
       },
+    );
+  }
+}
+
+/// Страница «Безопасность» на Android (23.11.2026, владелец: «доделай все
+/// категории, половина на старом стиле»): цветные значки, название, серое
+/// пояснение и значение справа — те же сведения и те же нажатия, что у
+/// карточек iPhone ниже.
+class _AndroidSecurityList extends StatelessWidget {
+  const _AndroidSecurityList({
+    required this.controller,
+    required this.manager,
+    required this.biometricStatus,
+    required this.topPad,
+    required this.bottomPad,
+  });
+
+  final AppController controller;
+  final AppSecurityManager manager;
+  final SecurityBiometricStatus biometricStatus;
+  final double topPad;
+  final double bottomPad;
+
+  static const Color _green = Color(0xFF34C759);
+  static const Color _grey = Color(0xFF8E8E93);
+  static const Color _blue = Color(0xFF0A84FF);
+  static const Color _indigo = Color(0xFF5E5CE6);
+  static const Color _purple = Color(0xFFAF52DE);
+
+  Widget _scopeRow(
+    BuildContext context, {
+    required SecurityLockScope scope,
+    required String title,
+    required String description,
+    required IconData icon,
+    required Color tint,
+  }) {
+    final config = manager.scopeConfig(scope);
+    final locked = manager.isLocked(scope);
+    // Плашки карточки iPhone — второй строкой пояснения.
+    final status = !config.isEnabled
+        ? _label(context, ru: 'Выключено', en: 'Off')
+        : locked
+        ? _label(context, ru: 'Заблокировано', en: 'Locked')
+        : _label(context, ru: 'Разблокировано', en: 'Unlocked');
+    final parts = <String>[
+      status,
+      if (config.isEnabled && config.relockOnBackground)
+        config.backgroundGraceSeconds <= 0
+            ? _label(context, ru: 'Сразу после скрытия', en: 'After hide')
+            : _label(
+                context,
+                ru: 'Задержка ${config.backgroundGraceSeconds}с',
+                en: 'Grace ${config.backgroundGraceSeconds}s',
+              ),
+    ];
+    return AppleSettingsRow(
+      leading: AppleRowIcon(tint: tint, icon: icon),
+      title: title,
+      subtitle: '$description\n${parts.join(' · ')}',
+      trailing: _valueChevron(context, _modeLabel(context, config)),
+      onTap: () => openSecurityScopeSettings(
+        context: context,
+        controller: controller,
+        scope: scope,
+      ),
+    );
+  }
+
+  /// Значение серым и «›» — как у строки iOS со значением.
+  static Widget _valueChevron(BuildContext context, String value) {
+    final secondary = AppleGlass.secondaryLabel(
+      Theme.of(context).brightness == Brightness.dark,
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 120),
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 15, color: secondary),
+          ),
+        ),
+        const SizedBox(width: 2),
+        Icon(AdaptiveIcons.chevron_right_rounded, size: 24, color: secondary),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = AppleGlass.secondaryLabel(
+      Theme.of(context).brightness == Brightness.dark,
+    );
+    return ListView(
+      padding: EdgeInsets.only(top: topPad, bottom: bottomPad),
+      children: [
+        SettingsPageIntro(
+          icon: Image.asset(
+            '${AppAssetPaths.settingsIconsDir}/privat/w11-block.png',
+            color: _securityAmber,
+            colorBlendMode: BlendMode.srcIn,
+          ),
+          color: _securityAmber,
+          text: context.l10n.settingsIntroSecurity,
+        ),
+        SettingsGroupHeader(context.l10n.settingsGroupLock),
+        settingsRowsGroup([
+          AppleSettingsRow(
+            leading: AppleRowIcon(
+              tint: biometricStatus.isAvailable ? _green : _grey,
+              icon: biometricStatus.hasFace
+                  ? AdaptiveIcons.face_retouching_natural_rounded
+                  : AdaptiveIcons.fingerprint_rounded,
+            ),
+            title: _label(
+              context,
+              ru: 'Нативная аутентификация',
+              en: 'Native authentication',
+            ),
+            subtitle: _biometricLabel(context, biometricStatus),
+            trailing: Text(
+              biometricStatus.isAvailable
+                  ? _label(context, ru: 'Готово', en: 'Ready')
+                  : _label(context, ru: 'Недоступно', en: 'Unavailable'),
+              style: TextStyle(fontSize: 15, color: secondary),
+            ),
+          ),
+        ]),
+        SettingsGroupCaption(
+          biometricStatus.isAvailable
+              ? _label(
+                  context,
+                  ru: 'Используется для Face ID, отпечатка пальца и системной аутентификации устройства.',
+                  en: 'Used for Face ID, fingerprint, and native device authentication.',
+                )
+              : _label(
+                  context,
+                  ru: 'На этом устройстве биометрия или системная аутентификация сейчас недоступны.',
+                  en: 'Biometric or native device authentication is not available on this device right now.',
+                ),
+        ),
+        const SizedBox(height: 12),
+        settingsRowsGroup([
+          _scopeRow(
+            context,
+            scope: SecurityLockScope.app,
+            title: _label(context, ru: 'Вход в приложение', en: 'App lock'),
+            description: _label(
+              context,
+              ru: 'Блокирует вход в приложение и может срабатывать после скрытия приложения.',
+              en: 'Protects app entry and can relock after the app is hidden.',
+            ),
+            icon: AdaptiveIcons.lock_rounded,
+            tint: _blue,
+          ),
+          _scopeRow(
+            context,
+            scope: SecurityLockScope.personal,
+            title: _label(context, ru: 'Личные чаты', en: 'Personal chats'),
+            description: _label(
+              context,
+              ru: 'Защищает скрытую категорию Личные и вход в конкретные личные чаты.',
+              en: 'Protects the hidden Personal section and direct entry into personal chats.',
+            ),
+            icon: AdaptiveIcons.shield_rounded,
+            tint: _indigo,
+          ),
+          // Вход в личную подборку — рядом с её защитой, сперва проверка
+          // блокировки (как у карточки iPhone).
+          AppleSettingsRow(
+            leading: const AppleRowIcon(
+              tint: _purple,
+              icon: AdaptiveIcons.folder_special_rounded,
+            ),
+            title: context.l10n.settingsOpenPersonalChats,
+            subtitle: context.l10n.settingsOpenPersonalChatsSub,
+            onTap: () async {
+              final unlocked = await ensureSecurityScopeUnlocked(
+                context: context,
+                controller: controller,
+                scope: SecurityLockScope.personal,
+              );
+              if (!context.mounted || !unlocked) return;
+              await Navigator.of(context).push(
+                SecretlyPageRoute<void>(
+                  builder: (_) => PersonalChatsScreen(controller: controller),
+                ),
+              );
+            },
+          ),
+        ]),
+        if (ProfileSpaceRuntime.active == ProfileSpace.main) ...[
+          SettingsGroupHeader(context.l10n.settingsGroupRecovery),
+          SocialRecoveryEntryCard(controller: controller),
+        ],
+      ],
     );
   }
 }
@@ -304,7 +534,7 @@ class _SecurityScopeDetailScreenState
     }
     final current = _manager.scopeConfig(widget.scope);
     if (_selectedMethod == SecurityLockMethod.none && current.isEnabled) {
-      final confirmed = await showDialog<bool>(
+      final confirmed = await showAppDialog<bool>(
         context: context,
         builder: (context) => SecretlyAlertDialog(
           title: Text(
@@ -537,7 +767,14 @@ class _SecurityScopeDetailScreenState
             }
           });
         }
-        return Scaffold(
+        // Android (23.11.2026): карточки — панели групп, как на остальных
+        // страницах настроек; на iPhone — прежние карточки.
+        Widget panel(Widget child) => settingsAndroidPanels
+            ? AppleSettingsGroup(margin: EdgeInsets.zero, children: [child])
+            : Card(child: child);
+        // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
           extendBodyBehindAppBar: true,
           appBar: frostedAppBar(title: Text(_scopeTitle())),
           body: ListView(
@@ -550,15 +787,15 @@ class _SecurityScopeDetailScreenState
                   en: 'Choose how access should be protected.',
                 ),
                 trailingLabel: null,
-                icon: Icons.shield_rounded,
+                icon: AdaptiveIcons.shield_rounded,
                 description: _label(
                   ru: 'Пароль и графический ключ хранятся только как стойкие хэши в secure storage. Биометрия использует нативный системный экран.',
                   en: 'Passwords and patterns are stored only as strong hashes in secure storage. Biometrics use the native system prompt.',
                 ),
               ),
               const SizedBox(height: 14),
-              Card(
-                child: RadioGroup<SecurityLockMethod>(
+              panel(
+                RadioGroup<SecurityLockMethod>(
                   groupValue: _selectedMethod,
                   onChanged: (value) {
                     if (value == null) {
@@ -570,7 +807,7 @@ class _SecurityScopeDetailScreenState
                   },
                   child: Column(
                     children: [
-                      RadioListTile<SecurityLockMethod>(
+                      RadioListTile<SecurityLockMethod>.adaptive(
                         value: SecurityLockMethod.none,
                         title: Text(_label(ru: 'Выключено', en: 'Off')),
                         subtitle: Text(
@@ -581,7 +818,7 @@ class _SecurityScopeDetailScreenState
                         ),
                       ),
                       const Divider(height: 1),
-                      RadioListTile<SecurityLockMethod>(
+                      RadioListTile<SecurityLockMethod>.adaptive(
                         value: SecurityLockMethod.password,
                         title: Text(_label(ru: 'Пароль', en: 'Password')),
                         subtitle: Text(
@@ -592,7 +829,7 @@ class _SecurityScopeDetailScreenState
                         ),
                       ),
                       const Divider(height: 1),
-                      RadioListTile<SecurityLockMethod>(
+                      RadioListTile<SecurityLockMethod>.adaptive(
                         value: SecurityLockMethod.pattern,
                         title: Text(
                           _label(ru: 'Графический ключ', en: 'Pattern lock'),
@@ -605,7 +842,7 @@ class _SecurityScopeDetailScreenState
                         ),
                       ),
                       const Divider(height: 1),
-                      RadioListTile<SecurityLockMethod>(
+                      RadioListTile<SecurityLockMethod>.adaptive(
                         value: SecurityLockMethod.biometric,
                         title: Text(_biometricLabel(context, biometricStatus)),
                         subtitle: Text(
@@ -621,8 +858,8 @@ class _SecurityScopeDetailScreenState
                 ),
               ),
               const SizedBox(height: 14),
-              Card(
-                child: Column(
+              panel(
+                Column(
                   children: [
                     SecretlySwitchListTile(
                       value: _relockOnBackground,
@@ -666,7 +903,7 @@ class _SecurityScopeDetailScreenState
                               )
                             : _graceLabel(_backgroundGraceSeconds),
                       ),
-                      trailing: DropdownButton<int>(
+                      trailing: AppDropdownButton<int>(
                         value:
                             _graceOptionsSeconds.contains(
                               _backgroundGraceSeconds,
@@ -727,9 +964,9 @@ class _SecurityScopeDetailScreenState
                       _manager.scopeConfig(widget.scope).method ==
                           SecurityLockMethod.pattern)) ...[
                 const SizedBox(height: 14),
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.key_rounded),
+                panel(
+                  ListTile(
+                    leading: const Icon(AdaptiveIcons.key_rounded),
                     title: Text(
                       _manager.scopeConfig(widget.scope).method ==
                               SecurityLockMethod.password
@@ -777,7 +1014,7 @@ class _SecurityScopeDetailScreenState
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
+                    child: PressFeedback(child: OutlinedButton.icon(
                       onPressed:
                           _saving ||
                               !_manager.scopeConfig(widget.scope).isEnabled
@@ -799,15 +1036,15 @@ class _SecurityScopeDetailScreenState
                                 ),
                               );
                             },
-                      icon: const Icon(Icons.lock_clock_rounded),
+                      icon: const Icon(AdaptiveIcons.lock_clock_rounded),
                       label: Text(
                         _label(ru: 'Заблокировать сейчас', en: 'Lock now'),
                       ),
-                    ),
+                    )),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: FilledButton(
+                    child: PressFeedback(child: FilledButton(
                       onPressed: _saving ? null : () => _save(biometricStatus),
                       child: _saving
                           ? const SizedBox(
@@ -816,13 +1053,14 @@ class _SecurityScopeDetailScreenState
                               child: SecretlySpinner(strokeWidth: 2),
                             )
                           : Text(_label(ru: 'Сохранить', en: 'Save changes')),
-                    ),
+                    )),
                   ),
                 ],
               ),
             ],
           ),
-        );
+        ),
+    );
       },
     );
   }
@@ -858,6 +1096,36 @@ class _SecuritySummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    // Android (23.11.2026): строка группы со значком и пояснением под ней
+    // вместо крупной карточки с плашкой.
+    if (settingsAndroidPanels) {
+      final secondary = AppleGlass.secondaryLabel(
+        theme.brightness == Brightness.dark,
+      );
+      return AppleSettingsGroup(
+        margin: EdgeInsets.zero,
+        children: [
+          AppleSettingsRow(
+            leading: AppleRowIcon(tint: const Color(0xFF0A84FF), icon: icon),
+            title: title,
+            subtitle: subtitle,
+            trailing: trailingLabel == null
+                ? null
+                : Text(
+                    trailingLabel!,
+                    style: TextStyle(fontSize: 15, color: secondary),
+                  ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+            child: Text(
+              description,
+              style: TextStyle(fontSize: 13, height: 1.35, color: secondary),
+            ),
+          ),
+        ],
+      );
+    }
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -987,7 +1255,7 @@ class _SecurityScopeCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Icon(Icons.chevron_right_rounded),
+                  const Icon(AdaptiveIcons.chevron_right_rounded),
                 ],
               ),
               const SizedBox(height: 14),

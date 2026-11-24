@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'glass/glass_category_strip.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -8,10 +9,13 @@ import 'package:flutter/material.dart';
 import '../app/app_controller.dart';
 import 'icons/app_icons.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'wave1_l10n.dart';
 import 'widgets/avatar_initials.dart';
 import 'widgets/secretly_glass_sheet.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
 
 String _contactShareText(
   BuildContext context, {
@@ -60,6 +64,7 @@ Future<ContactShareSheetAction?> showContactShareSheet(
   String? avatarPath,
 }) {
   return showModalBottomSheet<ContactShareSheetAction>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
@@ -157,13 +162,13 @@ class _ContactShareSheetState extends State<_ContactShareSheet>
                     ),
                     Align(
                       alignment: Alignment.topRight,
-                      child: IconButton(
+                      child: PressFeedback(child: IconButton(
                         tooltip: MaterialLocalizations.of(
                           context,
                         ).closeButtonTooltip,
                         onPressed: () => Navigator.of(context).maybePop(),
                         icon: const Icon(AppIcons.close),
-                      ),
+                      )),
                     ),
                   ],
                 ),
@@ -306,7 +311,7 @@ class _ExternalShareButton extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return SizedBox(
       width: double.infinity,
-      child: FilledButton.icon(
+      child: PressFeedback(child: FilledButton.icon(
         onPressed: onPressed,
         style: FilledButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -318,7 +323,7 @@ class _ExternalShareButton extends StatelessWidget {
         ),
         icon: const Icon(AppIcons.forward),
         label: Text(context.l10n.chatMenuForward),
-      ),
+      )),
     );
   }
 }
@@ -330,6 +335,14 @@ class _ShareSheetTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 23.11.2026 (план стекла): полоса во всю ширину с каплей.
+    if (kGlassCategoryStrip) {
+      return GlassTabControllerStrip(
+        controller: tabController,
+        padding: EdgeInsets.zero,
+        labels: [context.l10n.tabChats, context.l10n.tabGroups],
+      );
+    }
     final colors = Theme.of(context).colorScheme;
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -427,7 +440,10 @@ class _ConversationTile extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: colors.surface.withValues(alpha: 0.68),
+            color: appleGlassFillOr(
+          context,
+          colors.surface.withValues(alpha: 0.68),
+        ),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: colors.outlineVariant.withValues(alpha: 0.28),

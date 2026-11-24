@@ -1,18 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'glass/glass_category_strip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../app/app_controller.dart';
+import '../security/qr_payload.dart';
 import 'animations/animations.dart';
 import 'contact_qr_flow.dart';
+import 'motion/press_feedback.dart';
 import 'secretly_snackbar.dart';
 import 'share_utils.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_top_bar.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_settings_row.dart';
 
 enum MySecretlyIdTab { myQr, scanQr }
 
@@ -66,11 +71,32 @@ class _MySecretlyIdScreenState extends State<MySecretlyIdScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
       extendBodyBehindAppBar: true,
       appBar: frostedAppBar(
         title: Text(wave1Text(context, ru: 'QR-код', en: 'QR code')),
-        bottom: TabBar(
+        bottom: kGlassCategoryStrip
+            // 23.11.2026 (план стекла): полоса во всю ширину с каплей.
+            ? GlassTabControllerStrip(
+                controller: _tabController,
+                labels: [
+                  wave1Text(context, ru: 'Мой QR-код', en: 'My QR code'),
+                  wave1Text(
+                    context,
+                    ru: 'Сканировать QR',
+                    en: 'Scan QR code',
+                    uk: 'Сканувати QR',
+                    es: 'Escanear QR',
+                    pt: 'Digitalizar QR',
+                    ptBr: 'Escanear QR',
+                    fr: 'Scanner le QR',
+                    de: 'QR scannen',
+                  ),
+                ],
+              )
+            : TabBar(
           controller: _tabController,
           tabs: [
             Tab(
@@ -101,6 +127,7 @@ class _MySecretlyIdScreenState extends State<MySecretlyIdScreen>
               : const SizedBox.shrink(),
         ],
       ),
+    ),
     );
   }
 }
@@ -219,15 +246,18 @@ class _MyQrPane extends StatelessWidget {
           future: controller.identityKeyPubB64(),
           builder: (context, snap) {
             final ik = snap.data;
-            final safeNick = nickname
-                .replaceAll(RegExp(r'[\r\n&]'), ' ')
-                .trim();
-            final qrData = (ik != null && ik.isNotEmpty)
-                ? 'secretly_id=$id\nkeys_base_url=$keysBaseUrl\ndevice_id=$deviceId\nidentity_key_pub_b64=$ik'
-                : 'secretly_id=$id\nkeys_base_url=$keysBaseUrl\ndevice_id=$deviceId';
-            final withNick = (shareNick && safeNick.isNotEmpty)
-                ? '$qrData\nnickname=$safeNick'
-                : qrData;
+            // 23.11.2026: QR — ссылка на links.secretlyapp.com/profile/<id>,
+            // ключи — в хвосте после `#` (на сервер не уходят). Системная
+            // камера открывает по ней приложение или страницу скачивания;
+            // старые сборки достают из той же ссылки id/устройство/ключ.
+            // Формат и причины — в описании [QrPayload].
+            final withNick = QrPayload.buildContactLink(
+              secretlyId: id,
+              keysBaseUrl: keysBaseUrl.toString(),
+              deviceId: deviceId,
+              identityKeyPubB64: ik,
+              nickname: shareNick ? nickname : null,
+            );
             return SingleChildScrollView(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
@@ -262,28 +292,28 @@ class _MyQrPane extends StatelessWidget {
                         SizedBox(
                           width: 36,
                           height: 36,
-                          child: IconButton(
+                          child: PressFeedback(child: IconButton(
                             padding: EdgeInsets.zero,
                             iconSize: 18,
                             visualDensity: VisualDensity.compact,
                             tooltip: copyLabel,
                             onPressed: () => _copySecretlyId(context, id),
-                            icon: const Icon(Icons.copy_rounded),
-                          ),
+                            icon: const Icon(AdaptiveIcons.copy_rounded),
+                          )),
                         ),
                       ],
                     ),
                     const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
-                      child: FilledButton.tonalIcon(
+                      child: PressFeedback(child: FilledButton.tonalIcon(
                         onPressed: () => _shareInviteFriend(context),
-                        icon: const Icon(Icons.person_add_alt_1_rounded),
+                        icon: const Icon(AdaptiveIcons.person_add_alt_1_rounded),
                         label: Text(inviteLabel),
                         style: FilledButton.styleFrom(
                           minimumSize: const Size.fromHeight(46),
                         ),
-                      ),
+                      )),
                     ),
                     const SizedBox(height: 10),
                     Text(
@@ -319,6 +349,11 @@ class _MyQrPane extends StatelessWidget {
                                 child: QrImageView(
                                   data: withNick,
                                   version: QrVersions.auto,
+                                  // Явно L (как и было по умолчанию): ссылка
+                                  // длиннее старого текста, и запас на
+                                  // коррекцию сделал бы модули мельче при
+                                  // наименьшем размере 180 px.
+                                  errorCorrectionLevel: QrErrorCorrectLevel.L,
                                   size: qrSize,
                                   backgroundColor: qrBackground,
                                   eyeStyle: QrEyeStyle(

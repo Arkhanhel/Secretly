@@ -86,6 +86,8 @@ import 'ui/desktop/services/desktop_tray_service.dart';
 import 'ui/desktop/services/desktop_ui_prefs.dart';
 import 'ui/desktop/services/desktop_window_activity.dart';
 import 'ui/desktop/services/desktop_window_state.dart';
+import 'ui/settings_icons/settings_icon_style.dart';
+import 'ui/chat_look_prefs.dart';
 
 /// 🔴 СЛОМАННЫЙ ВИДЖЕТ НЕ ЗАЛИВАЕТ ОКНО КРАСНЫМ — И НЕ УХОДИТ МОЛЧА.
 ///
@@ -327,6 +329,11 @@ Future<void> main(List<String> args) async {
     // программам: это расшифрованные файлы, и держать их дольше сеанса
     // незачем. Стираем в фоне — запуск ждать не должен.
     unawaited(clearAttachmentOpenCopies());
+
+    // 8. Стиль значков настроек — до первого кадра колонки настроек, чтобы
+    // значки не мигнули стилем по умолчанию.
+    unawaited(SettingsIconStylePrefs.load());
+    unawaited(ChatLookPrefs.load());
   }
 
   // Шрифт эмодзи (Э1) к этой строке обычно уже загружен; если диск медленный —

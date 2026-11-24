@@ -4612,6 +4612,11 @@ class RelayClient {
           if (!hadFullBatch) break;
         }
       }
+    } catch (e) {
+      // База занята (фоновый проход по пушу, «database is locked») — не
+      // роняем зону необработанной ошибкой: очередь цела, следующий насос
+      // отправит (журнал Xiaomi 23.11.2026).
+      DiagLog.event('outbox', 'pump_failed', {'err': e.runtimeType.toString()});
     } finally {
       if (_outboxPumpGeneration == myGen) {
         _isOutboxPumping = false;

@@ -1,15 +1,118 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'apple_settings_row.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'apple_glass.dart';
+
 import '../l10n/app_localizations.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 
 // Общие детали страниц настроек телефона по макету владельца
 // («Settings Redesign», 11.2026): заголовок группы с кнопкой «?», окно
 // пояснения снизу, вступление со значком, карточка состояния, пошаговая
 // карточка и большие кнопки. Только вид — ничего не сохраняют и не меняют.
 // Цвета берутся из темы, поэтому светлая и тёмная темы работают одинаково.
+
+/// Android в виде iPhone (23.11.2026, владелец: «доделай все категории,
+/// половина на старом стиле»): страницы настроек Android собираются из тех же
+/// групп и строк, что на iPhone. Отдельный признак — чтобы ветки «только
+/// Android» не трогали то, что рисует iPhone.
+bool get settingsAndroidPanels =>
+    settingsIosLayout && defaultTargetPlatform == TargetPlatform.android;
+
+/// Панель с произвольным содержимым (текст, поля ввода) — та же заливка и
+/// скругление, что у [AppleSettingsGroup], с плотными отступами внутри.
+class SettingsPanel extends StatelessWidget {
+  const SettingsPanel({
+    super.key,
+    required this.child,
+    this.padding = const EdgeInsets.fromLTRB(14, 12, 14, 12),
+    this.margin = const EdgeInsets.symmetric(horizontal: 16),
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final EdgeInsetsGeometry margin;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: margin,
+      child: AppleGlassPanel(padding: padding, child: child),
+    );
+  }
+}
+
+/// Группа строк без линий между ними на Android (тема группы прячет
+/// разделители) — список [rows] через тонкий [Divider], как на iPhone.
+Widget settingsRowsGroup(
+  List<Widget> rows, {
+  EdgeInsetsGeometry margin = const EdgeInsets.symmetric(horizontal: 16),
+}) {
+  return AppleSettingsGroup(
+    margin: margin,
+    children: [
+      for (var i = 0; i < rows.length; i++) ...[
+        if (i > 0) const Divider(height: 0.5),
+        rows[i],
+      ],
+    ],
+  );
+}
+
+/// Android (23.11.2026, владелец: «плашки и строки везде как в настройках;
+/// прозрачность — настройкой»): блок строк на страницах вне настроек —
+/// комната, контакт, профиль. Та же панель, что у [AppleSettingsGroup]
+/// (вид — по «Прозрачным плашкам»), и та же тема строк: компактный текст,
+/// без линий между строками. Сами строки остаются прежними `ListTile` —
+/// нажатия и семантика не меняются. Отступы снаружи задаёт экран.
+class SettingsRowsPanel extends StatelessWidget {
+  const SettingsRowsPanel({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppleGlassPanel(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Theme(
+        data: AppleSettingsPageTheme.apply(Theme.of(context)),
+        // Отклик нажатия строк рисуется поверх заливки панели, а не под ней
+        // (на плотной плашке иначе его не видно).
+        child: Material(
+          type: MaterialType.transparency,
+          child: Column(mainAxisSize: MainAxisSize.min, children: children),
+        ),
+      ),
+    );
+  }
+}
+
+/// Значок строки вне настроек: на Android — цветной квадрат, как в
+/// настройках ([AppleRowIcon]); на iPhone и компьютере — прежний [fallback].
+Widget settingsRowLeading({
+  required IconData icon,
+  required Color tint,
+  required Widget fallback,
+}) => settingsAndroidPanels ? AppleRowIcon(tint: tint, icon: icon) : fallback;
+
+/// Цвета значков-квадратов — те же, что у разделов настроек iOS.
+abstract final class SettingsRowTint {
+  static const Color blue = Color(0xFF0A84FF);
+  static const Color green = Color(0xFF34C759);
+  static const Color orange = Color(0xFFFF9500);
+  static const Color red = Color(0xFFFF3B30);
+  static const Color purple = Color(0xFF7D4CDB);
+  static const Color indigo = Color(0xFF5E5CE6);
+  static const Color teal = Color(0xFF30B0C7);
+  static const Color pink = Color(0xFFFF2D55);
+  static const Color grey = Color(0xFF8E8E93);
+  static const Color yellow = Color(0xFFE0A43A);
+}
 
 /// Пояснение к пункту или группе: открывается кнопкой «?».
 @immutable
@@ -24,12 +127,10 @@ class SettingsHelp {
 /// Окно пояснения снизу: заголовок, текст, совет и кнопка «Понятно».
 Future<void> showSettingsHelp(BuildContext context, SettingsHelp help) {
   return showModalBottomSheet<void>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-    ),
     builder: (ctx) {
       final theme = Theme.of(ctx);
       final cs = theme.colorScheme;
@@ -73,7 +174,10 @@ Future<void> showSettingsHelp(BuildContext context, SettingsHelp help) {
                 Container(
                   padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                   decoration: BoxDecoration(
-                    color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+                    color: appleGlassFillOr(
+          context,
+          cs.surfaceContainerHighest.withValues(alpha: 0.6),
+        ),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text.rich(
@@ -97,7 +201,7 @@ Future<void> showSettingsHelp(BuildContext context, SettingsHelp help) {
                 ),
               ],
               const SizedBox(height: 16),
-              FilledButton.tonal(
+              PressFeedback(child: FilledButton.tonal(
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(50),
                   shape: RoundedRectangleBorder(
@@ -112,7 +216,7 @@ Future<void> showSettingsHelp(BuildContext context, SettingsHelp help) {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-              ),
+              )),
             ],
           ),
         ),
@@ -203,11 +307,20 @@ class SettingsGroupHeader extends StatelessWidget {
       child: Text(
         text.toUpperCase(),
         textAlign: TextAlign.start,
-        style: theme.textTheme.labelMedium?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.6,
-        ),
+        // iPhone: заголовок группы iOS — 13, обычное начертание, серый.
+        style: settingsIosLayout
+            ? TextStyle(
+                fontSize: 13,
+                letterSpacing: -0.08,
+                color: AppleGlass.secondaryLabel(
+                  theme.brightness == Brightness.dark,
+                ),
+              )
+            : theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+              ),
       ),
     );
     final help = this.help;
@@ -260,6 +373,8 @@ class SettingsGroupCaption extends StatelessWidget {
 
 /// Плашка значка раздела: цвет раздела на 20 % поверх фона карточки.
 Color settingsIconPlate(BuildContext context, Color tint) {
+  // iPhone: плитка — полупрозрачный цвет раздела поверх стекла.
+  if (settingsIosLayout) return tint.withValues(alpha: 0.22);
   return Color.alphaBlend(
     tint.withValues(alpha: 0.20),
     Theme.of(context).colorScheme.surface,
@@ -347,11 +462,17 @@ class SettingsStatusCard extends StatelessWidget {
       container: true,
       child: Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Color.alphaBlend(tint.withValues(alpha: 0.12), cs.surface),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: tint.withValues(alpha: 0.28)),
-        ),
+        // iPhone: стекло с оттенком состояния и кромкой Liquid Glass.
+        decoration: settingsIosLayout
+            ? ShapeDecoration(
+                color: tint.withValues(alpha: 0.14),
+                shape: AppleGlassBorder(radius: 22, dark: dark),
+              )
+            : BoxDecoration(
+                color: Color.alphaBlend(tint.withValues(alpha: 0.12), cs.surface),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: tint.withValues(alpha: 0.28)),
+              ),
         child: Row(
           children: [
             Container(
@@ -409,11 +530,25 @@ class SettingsStepsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    // Android (23.11.2026): та же панель, что у групп строк, а не карточка
+    // Material — иначе шаги выбиваются из страницы.
+    if (settingsAndroidPanels) {
+      return AppleGlassPanel(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+        child: _stepsColumn(theme, cs),
+      );
+    }
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 2),
-        child: Column(
+        child: _stepsColumn(theme, cs),
+      ),
+    );
+  }
+
+  Widget _stepsColumn(ThemeData theme, ColorScheme cs) {
+    return Column(
           children: [
             for (var i = 0; i < steps.length; i++)
               IntrinsicHeight(
@@ -482,8 +617,6 @@ class SettingsStepsCard extends StatelessWidget {
                 ),
               ),
           ],
-        ),
-      ),
     );
   }
 }
@@ -526,7 +659,7 @@ class SettingsActionButton extends StatelessWidget {
             ],
           );
     return primary
-        ? FilledButton(style: style, onPressed: onPressed, child: child)
-        : FilledButton.tonal(style: style, onPressed: onPressed, child: child);
+        ? PressFeedback(child: FilledButton(style: style, onPressed: onPressed, child: child))
+        : PressFeedback(child: FilledButton.tonal(style: style, onPressed: onPressed, child: child));
   }
 }

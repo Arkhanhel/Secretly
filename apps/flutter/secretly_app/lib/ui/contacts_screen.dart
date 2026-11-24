@@ -7,6 +7,7 @@ import 'package:secretly_app/ui/secretly_snackbar.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:io';
 import 'package:lottie/lottie.dart';
+import '../storage/file_exists_cache.dart';
 import 'animations/animations.dart';
 import 'icons/app_icons.dart';
 
@@ -15,12 +16,20 @@ import 'app_asset_paths.dart';
 import 'call_history_screen.dart';
 import 'contact_action_error_text.dart';
 import 'contact_qr_flow.dart';
+import 'app_brand_logo.dart';
 import 'chat_screen.dart';
+import 'chats_screen.dart' show showHomeMainMenu;
+import 'home/home_shell_scope.dart';
+import 'home/home_top_islands.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'qr_scan_screen.dart';
 import 'share_utils.dart';
 import 'settings_screen.dart';
 import 'wave1_l10n.dart';
+import 'widgets/apple_menu.dart';
 import 'widgets/content_edge_fade.dart';
 import 'widgets/dismiss_keyboard_on_tap.dart';
 import 'widgets/avatar_initials.dart';
@@ -30,6 +39,7 @@ import 'widgets/frosted_top_bar.dart';
 import 'widgets/morphing_selection_islands.dart';
 import 'widgets/secretly_glass_fab.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'home/home_back_guard.dart';
 
 enum _AddContactDialogAction { add, invite }
 
@@ -112,6 +122,23 @@ class _ContactsScreenState extends State<ContactsScreen>
     _syncSelReveal();
   }
 
+  /// Раздел спрятали (слой главного экрана выключил TickerMode) — выделение
+  /// снимается сразу: иначе невидимое выделение держало «Назад» (первое
+  /// нажатие уходило на него, а не в Чаты / не сворачивало приложение).
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final visible = TickerMode.valuesOf(context).enabled;
+    if (!visible && _selectionMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectionMode &&
+            !TickerMode.getValuesNotifier(context).value.enabled) {
+          _clearSelection();
+        }
+      });
+    }
+  }
+
   void _clearSelection() {
     setState(() {
       _selectedContacts.clear();
@@ -167,8 +194,8 @@ class _ContactsScreenState extends State<ContactsScreen>
           CurvedAnimation(
             parent: _pullSnapController,
             curve: clamped < _pullExtent
-                ? Curves.easeOutQuart
-                : Curves.easeOutCubic,
+                ? Motion.standardQuart
+                : Motion.standard,
           ),
         );
     _pullSnapController
@@ -322,6 +349,48 @@ class _ContactsScreenState extends State<ContactsScreen>
     });
   }
 
+  // ── Острова v3 ─────────────────────────────────────────────────────────
+
+  bool _titleMenuOpen = false;
+
+  Future<void> _openTitleMenu() async {
+    setState(() => _titleMenuOpen = true);
+    try {
+      await showHomeMainMenu(context, widget.controller, anchorLeft: true);
+    } finally {
+      if (mounted) setState(() => _titleMenuOpen = false);
+    }
+  }
+
+  void _onHomeContactsRequest() {
+    final action = homeContactsRequest.value;
+    if (action == null || !mounted) return;
+    homeContactsRequest.value = null;
+    // После перелистывания на раздел — не посреди него.
+    Future<void>.delayed(const Duration(milliseconds: 420), () {
+      if (!mounted) return;
+      switch (action) {
+        case HomeContactsAction.add:
+          unawaited(_showAddContactDialog(context));
+        case HomeContactsAction.scanQr:
+          unawaited(_scanQr(context));
+      }
+    });
+  }
+
+  List<HomePlusAction> _homePlusActions(BuildContext context) => [
+    HomePlusAction(
+      label: context.l10n.addContact,
+      icon: AppIcons.personAdd,
+      onTap: () => _showAddContactDialog(context),
+    ),
+    HomePlusAction(
+      label: context.l10n.scanQr,
+      icon: AppIcons.qrScanner,
+      onTap: () => _scanQr(context),
+    ),
+  ];
+
   Future<void> _openContactsTopMenu(BuildContext outerContext) async {
     final action = await showFrostedPopup<String>(
       context: outerContext,
@@ -430,7 +499,7 @@ class _ContactsScreenState extends State<ContactsScreen>
     if (ids.isEmpty) return;
 
     if (action == 'delete') {
-      final ok = await showDialog<bool>(
+      final ok = await showAppDialog<bool>(
         context: outerContext,
         builder: (context) {
           return SecretlyAlertDialog(
@@ -570,6 +639,11 @@ class _ContactsScreenState extends State<ContactsScreen>
   @override
   void initState() {
     super.initState();
+    homeContactsRequest.addListener(_onHomeContactsRequest);
+    // Просьба могла прийти до того, как раздел построился («+» в Чатах).
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _onHomeContactsRequest(),
+    );
     _pullSnapController =
         AnimationController(
           vsync: this,
@@ -594,6 +668,7 @@ class _ContactsScreenState extends State<ContactsScreen>
 
   @override
   void dispose() {
+    homeContactsRequest.removeListener(_onHomeContactsRequest);
     _selRevealController.dispose();
     _pullSnapController.dispose();
     _lookupDebounce?.cancel();
@@ -639,11 +714,32 @@ class _ContactsScreenState extends State<ContactsScreen>
                           selectionReveal: selO,
                           islandRadius: _kIslandR,
                           islandHeight: _kIslandH,
-                          leftPadding: 16,
+                          leftPadding:
+                              HomeShellScope.maybeOf(context) != null ? 10 : 16,
                           centerLeftNormal: false,
-                          compactRightWidth: _kActionsIslandW,
+                          compactRightWidth:
+                              HomeShellScope.maybeOf(context) != null
+                              ? kHomeTopActionsWidth
+                              : _kActionsIslandW,
+                          compactLeft: HomeShellScope.maybeOf(context) != null,
+                          centerTitle: HomeShellScope.maybeOf(context) != null
+                              ? context.l10n.tabContacts
+                              : null,
                           selectionActionsWidth: 56,
-                          leftNormalContent: Align(
+                          leftNormalContent: HomeShellScope.maybeOf(context) !=
+                                  null
+                              ? HomeTitleIslandContent(
+                                  brand: AppBrandLogo(
+                                    controller: widget.controller,
+                                    showPremiumBadge: false,
+                                    titleSize: 18,
+                                    tight: true,
+                                  ),
+                                  menuOpen: _titleMenuOpen,
+                                  onTap: _openTitleMenu,
+                                  semanticLabel: context.l10n.more,
+                                )
+                              : Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
                               context.l10n.contactsTitle,
@@ -656,11 +752,11 @@ class _ContactsScreenState extends State<ContactsScreen>
                           leftSelectionContent: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              IconButton(
+                              PressFeedback(child: IconButton(
                                 tooltip: context.l10n.cancelSelection,
                                 icon: const Icon(AppIcons.close),
                                 onPressed: _clearSelection,
-                              ),
+                              )),
                               Padding(
                                 padding: const EdgeInsets.only(
                                   right: 10,
@@ -676,25 +772,36 @@ class _ContactsScreenState extends State<ContactsScreen>
                               ),
                             ],
                           ),
-                          rightCompactContent: Row(
+                          rightCompactContent: HomeShellScope.maybeOf(
+                                    context,
+                                  ) !=
+                                  null
+                              ? HomeTopActionsContent(
+                                  plus: _homePlusActions(context),
+                                  contactsActive: true,
+                                  onContacts: () {},
+                                  plusLabel: context.l10n.addContact,
+                                  contactsLabel: context.l10n.tabContacts,
+                                )
+                              : Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              IconButton(
+                              PressFeedback(child: IconButton(
                                 tooltip: context.l10n.search,
                                 icon: const Icon(AppIcons.search),
                                 onPressed: () =>
                                     _toggleSearch(focusKeyboard: true),
-                              ),
-                              IconButton(
+                              )),
+                              PressFeedback(child: IconButton(
                                 tooltip: context.l10n.scanQr,
                                 icon: const Icon(AppIcons.qrScanner),
                                 onPressed: () => _scanQr(context),
-                              ),
-                              IconButton(
+                              )),
+                              PressFeedback(child: IconButton(
                                 tooltip: context.l10n.more,
                                 icon: const Icon(AppIcons.moreVert, size: 23),
                                 onPressed: () => _openContactsTopMenu(context),
-                              ),
+                              )),
                             ],
                           ),
                           rightSearchContent: Row(
@@ -724,22 +831,22 @@ class _ContactsScreenState extends State<ContactsScreen>
                                   onChanged: _onSearchChanged,
                                 ),
                               ),
-                              IconButton(
+                              PressFeedback(child: IconButton(
                                 tooltip: context.l10n.cancel,
                                 icon: const Icon(AppIcons.close),
                                 onPressed: () => _toggleSearch(
                                   open: false,
                                   focusKeyboard: false,
                                 ),
-                              ),
+                              )),
                             ],
                           ),
-                          rightSelectionContent: IconButton(
+                          rightSelectionContent: PressFeedback(child: IconButton(
                             tooltip: context.l10n.more,
                             icon: const Icon(AppIcons.moreVert, size: 23),
                             onPressed: () =>
                                 _openContactsSelectionMenu(context),
-                          ),
+                          )),
                         ),
                       ),
                       // Quick-action islands collapse + fade out in selection.
@@ -760,7 +867,7 @@ class _ContactsScreenState extends State<ContactsScreen>
                                     child: Row(
                                       children: [
                                         Expanded(
-                                          child: FrostedHeaderIsland(
+                                          child: PressFeedback(child: FrostedHeaderIsland(
                                             radius: _kIslandR,
                                             height: _kIslandH,
                                             child: Material(
@@ -806,11 +913,11 @@ class _ContactsScreenState extends State<ContactsScreen>
                                                 ),
                                               ),
                                             ),
-                                          ),
+                                          )),
                                         ),
                                         const SizedBox(width: 8),
                                         Expanded(
-                                          child: FrostedHeaderIsland(
+                                          child: PressFeedback(child: FrostedHeaderIsland(
                                             radius: _kIslandR,
                                             height: _kIslandH,
                                             child: Material(
@@ -858,7 +965,7 @@ class _ContactsScreenState extends State<ContactsScreen>
                                                 ),
                                               ),
                                             ),
-                                          ),
+                                          )),
                                         ),
                                       ],
                                     ),
@@ -893,7 +1000,9 @@ class _ContactsScreenState extends State<ContactsScreen>
             extendBodyBehindAppBar: true,
             appBar: buildAppBar(),
             floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-            floatingActionButton: _selectionMode
+            // Острова v3: «Добавить контакт» — в «+» верхнего островка.
+            floatingActionButton:
+                _selectionMode || HomeShellScope.maybeOf(context) != null
                 ? null
                 : Padding(
                     padding: EdgeInsets.only(bottom: fabBottomOffset + 4),
@@ -914,6 +1023,12 @@ class _ContactsScreenState extends State<ContactsScreen>
               onPopInvokedWithResult: (didPop, _) {
                 if (didPop) return;
                 if (_selectionMode) {
+                  // 🔴 Нажатие «забирает» только ВИДИМЫЙ раздел (разбор 22.11.2026):
+                  // спрятанный слой (TickerMode выкл) снимает своё выделение, но не
+                  // мешает оболочке вернуться в Чаты — иначе первое «Назад» терялось.
+                  if (TickerMode.valuesOf(context).enabled) {
+                    HomeBackGuard.markConsumed();
+                  }
                   _clearSelection();
                 }
               },
@@ -987,7 +1102,7 @@ class _ContactsScreenState extends State<ContactsScreen>
     final nameController = TextEditingController();
     final l10n = context.l10n;
 
-    final action = await showDialog<_AddContactDialogAction>(
+    final action = await showAppDialog<_AddContactDialogAction>(
       context: context,
       builder: (context) {
         return SecretlyAlertDialog(
@@ -995,11 +1110,11 @@ class _ContactsScreenState extends State<ContactsScreen>
           title: Row(
             children: [
               Expanded(child: Text(l10n.addContact)),
-              IconButton(
+              PressFeedback(child: IconButton(
                 tooltip: MaterialLocalizations.of(context).closeButtonTooltip,
                 icon: const Icon(AppIcons.close),
                 onPressed: () => Navigator.of(context).pop(),
-              ),
+              )),
             ],
           ),
           content: Column(
@@ -1036,11 +1151,11 @@ class _ContactsScreenState extends State<ContactsScreen>
                 ),
               ),
             ),
-            FilledButton(
+            PressFeedback(child: FilledButton(
               onPressed: () =>
                   Navigator.of(context).pop(_AddContactDialogAction.add),
               child: Text(l10n.add),
-            ),
+            )),
           ],
         );
       },
@@ -1108,29 +1223,8 @@ class _ContactsMenuAction extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Row(
-          children: [
-            Icon(icon, size: 22, color: cs.onSurface.withValues(alpha: 0.92)),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      AppMenuRow(title: title, icon: icon, onTap: onTap);
 }
 
 class _ContactsTab extends StatelessWidget {
@@ -1184,7 +1278,7 @@ class _ContactsTab extends StatelessWidget {
         return FutureBuilder<List<Contact>>(
           future: controller.listContacts(),
           builder: (context, snapshot) {
-            final bottomInset = MediaQuery.of(context).viewPadding.bottom + 120;
+            final bottomInset = MediaQuery.viewPaddingOf(context).bottom + 120;
             final contacts = (snapshot.data ?? const [])
                 .where((c) => !controller.isSavedMessagesConvo(c.profileId))
                 .toList(growable: false);
@@ -1277,7 +1371,7 @@ class _RequestsTab extends StatelessWidget {
     final avatarPath = request.avatarPath?.trim();
     if (avatarPath != null &&
         avatarPath.isNotEmpty &&
-        File(avatarPath).existsSync()) {
+        FileExistsCache.exists(avatarPath)) {
       return CircleAvatar(backgroundImage: FileImage(File(avatarPath)));
     }
 
@@ -1301,6 +1395,17 @@ class _RequestsTab extends StatelessWidget {
         return FutureBuilder<List<RequestItem>>(
           future: controller.listRequests(),
           builder: (context, snapshot) {
+            // Первая загрузка — индикатор, а не «Нет заявок» на миг.
+            if (!snapshot.hasData &&
+                snapshot.connectionState != ConnectionState.done) {
+              return const Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: SecretlySpinner(strokeWidth: 2),
+                ),
+              );
+            }
             final reqs = snapshot.data ?? const [];
             if (reqs.isEmpty) {
               return Center(child: Text(context.l10n.noRequests));
@@ -1309,7 +1414,7 @@ class _RequestsTab extends StatelessWidget {
             return ListView.builder(
               padding: EdgeInsets.only(
                 top: topInset,
-                bottom: MediaQuery.of(context).viewPadding.bottom + 120,
+                bottom: MediaQuery.viewPaddingOf(context).bottom + 120,
               ),
               itemCount: reqs.length,
               itemBuilder: (context, i) {
@@ -1347,7 +1452,7 @@ class _RequestsTab extends StatelessWidget {
                         style: Theme.of(context).textTheme.labelSmall,
                       ),
                       const SizedBox(width: 8),
-                      IconButton(
+                      PressFeedback(child: IconButton(
                         tooltip: context.l10n.block,
                         icon: const Icon(AppIcons.block),
                         onPressed: () async {
@@ -1364,8 +1469,8 @@ class _RequestsTab extends StatelessWidget {
                             );
                           }
                         },
-                      ),
-                      IconButton(
+                      )),
+                      PressFeedback(child: IconButton(
                         tooltip: context.l10n.accept,
                         icon: const Icon(AppIcons.checkCircle),
                         onPressed: () async {
@@ -1382,7 +1487,7 @@ class _RequestsTab extends StatelessWidget {
                             );
                           }
                         },
-                      ),
+                      )),
                     ],
                   ),
                   onTap: () {
@@ -1544,7 +1649,7 @@ class _UserLookupPane extends StatelessWidget {
         0,
         topInset + 8,
         0,
-        MediaQuery.of(context).viewPadding.bottom + 120,
+        MediaQuery.viewPaddingOf(context).bottom + 120,
       ),
       children: children,
     );
@@ -1581,7 +1686,7 @@ class _UserLookupPane extends StatelessWidget {
       ),
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
       trailing: r.alreadyInContacts
-          ? FilledButton.tonal(
+          ? PressFeedback(child: FilledButton.tonal(
               onPressed: () {
                 Navigator.of(context).push(
                   SecretlyPageRoute(
@@ -1595,8 +1700,8 @@ class _UserLookupPane extends StatelessWidget {
                 );
               },
               child: Text(l10n.contactDetailsChat),
-            )
-          : FilledButton(
+            ))
+          : PressFeedback(child: FilledButton(
               onPressed: () async {
                 try {
                   await controller.addContact(
@@ -1621,7 +1726,7 @@ class _UserLookupPane extends StatelessWidget {
                 );
               },
               child: Text(l10n.add),
-            ),
+            )),
     );
   }
 }

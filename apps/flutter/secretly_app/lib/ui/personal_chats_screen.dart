@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'glass/glass_category_strip.dart';
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:animations/animations.dart' as material_motion;
@@ -9,9 +11,12 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../app/app_controller.dart';
 import '../security/app_security_manager.dart';
 import 'app_asset_paths.dart';
+import 'apple_glass.dart';
+import 'chat/chat_list_row_parts.dart';
 import 'chat_screen.dart';
 import 'favorites_title.dart';
 import 'icons/app_icons.dart';
+import 'motion/motion.dart';
 import 'security_lock_flow.dart';
 import 'wave1_l10n.dart';
 import 'widgets/avatar_initials.dart';
@@ -20,6 +25,9 @@ import 'widgets/chat_list_subtitle_preview.dart';
 import 'widgets/frosted_header_island.dart';
 import 'widgets/liquid_glass_segment.dart';
 import 'widgets/liquid_pressable.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'widgets/elite_badge_mark.dart';
+import 'home/home_back_guard.dart';
 
 
 class PersonalChatsScreen extends StatefulWidget {
@@ -39,19 +47,38 @@ class _PersonalChatsScreenState extends State<PersonalChatsScreen> {
   int _category = 0;
   final PageController _pageController = PageController();
 
+  /// Дробная позиция страницы — капля полосы идёт за пальцем (23.11.2026).
+  final ValueNotifier<double> _pagePosition = ValueNotifier<double>(0);
+
+  void _onPageScroll() {
+    if (!_pageController.hasClients) return;
+    final p = _pageController.page;
+    if (p != null) _pagePosition.value = p;
+  }
+
   void _selectCategory(int i) {
     if (i == _category) return;
     setState(() => _category = i);
     _pageController.animateToPage(
       i,
       duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOutCubic,
+      curve: Motion.standard,
     );
   }
 
   @override
+  void initState() {
+    super.initState();
+    // Черновики чатов для строк («Черновик: …»).
+    if (kChatListRowV2) unawaited(ChatListDrafts.ensureLoaded());
+    _pageController.addListener(_onPageScroll);
+  }
+
+  @override
   void dispose() {
+    _pageController.removeListener(_onPageScroll);
     _pageController.dispose();
+    _pagePosition.dispose();
     super.dispose();
   }
 
@@ -59,7 +86,9 @@ class _PersonalChatsScreenState extends State<PersonalChatsScreen> {
   // re-show (tab switch / `controller.changed` rebuild) renders instantly from
   // cache instead of flashing empty for ~1 s while the next DB reload runs. The
   // resolved future always overwrites the cache, so correctness is unchanged.
-  List<Conversation> _lastConvos = const <Conversation>[];
+  // С первого кадра — последний известный список (23.11.2026): новый экран
+  // не стоит пустым, пока идёт запрос к базе.
+  late List<Conversation> _lastConvos = widget.controller.lastKnownConversations;
 
   bool get _selectionMode => _selected.isNotEmpty;
 
@@ -201,7 +230,7 @@ class _PersonalChatsScreenState extends State<PersonalChatsScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             LiquidIconButton(
-                              icon: Icons.close,
+                              icon: AdaptiveIcons.close,
                               tooltip: _label(
                                 context,
                                 ru: 'Отмена',
@@ -221,7 +250,7 @@ class _PersonalChatsScreenState extends State<PersonalChatsScreen> {
                               ),
                             ),
                             LiquidIconButton(
-                              icon: Icons.unarchive_outlined,
+                              icon: AdaptiveIcons.unarchive_outlined,
                               tooltip: _label(
                                 context,
                                 ru: 'На главную',
@@ -246,6 +275,26 @@ class _PersonalChatsScreenState extends State<PersonalChatsScreen> {
                             child: leftIsland,
                           ),
                           const SizedBox(height: 10),
+                          if (kGlassCategoryStrip)
+                            // Полоса во всю ширину: капля идёт за пальцем
+                            // при свайпе списков (23.11.2026).
+                            GlassCategoryStrip(
+                              items: [
+                                GlassStripItem(
+                                  label: personalTitle,
+                                  badge: unreadPersonalChatsCount,
+                                ),
+                                GlassStripItem(
+                                  label: archiveTitle,
+                                  badge: unreadArchivedChatsCount,
+                                ),
+                              ],
+                              selected: _category,
+                              onSelect: _selectCategory,
+                              position: _pagePosition,
+                              margin: EdgeInsets.zero,
+                            )
+                          else
                           LiquidGlassSegment(
                             selected: _category,
                             onSelect: _selectCategory,
@@ -362,7 +411,10 @@ class _PersonalChatsScreenState extends State<PersonalChatsScreen> {
                                           .secondaryContainer
                                           .withValues(alpha: 0.45)
                                     : Colors.transparent,
-                                child: Padding(
+                                child: ChatListRowFlash(
+                                  stamp: c.lastEventAtMs,
+                                  unread: c.unreadCount,
+                                  child: Padding(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 16,
                                     vertical: 12,
@@ -507,16 +559,16 @@ class _PersonalChatsScreenState extends State<PersonalChatsScreen> {
                                                         ),
                                                       ),
                                                     ),
-                                                    if (c.premiumBadge) ...[
-                                                      const SizedBox(width: 5),
-                                                      const Icon(
-                                                        Icons.star_rounded,
-                                                        size: 15,
-                                                        color: Color(
-                                                          0xFFE8A33D,
-                                                        ),
-                                                      ),
-                                                    ],
+                                                    // Звёздочку премиума убрали
+                                                    // (21.11.2026) — знак только
+                                                    // у «важных» (выдаёт оператор).
+                                                    EliteBadgeMark(
+                                                      profileId:
+                                                          c.peerProfileId,
+                                                      size: 16,
+                                                      gap: 5,
+                                                      interactive: false,
+                                                    ),
                                                     if (c.emojiStatus != null &&
                                                         c
                                                             .emojiStatus!
@@ -530,9 +582,20 @@ class _PersonalChatsScreenState extends State<PersonalChatsScreen> {
                                                       ),
                                                     ],
                                                     const SizedBox(width: 8),
-                                                    _TimePill(
-                                                      ms: c.lastEventAtMs,
-                                                    ),
+                                                    if (c.pinnedAtMs != null &&
+                                                        kChatListRowV2)
+                                                      const ChatListPinGlyph(),
+                                                    if (kChatListRowV2)
+                                                      ChatListTime(
+                                                        ms: c.lastEventAtMs,
+                                                        highlight:
+                                                            c.unreadCount > 0 &&
+                                                            !c.muted,
+                                                      )
+                                                    else
+                                                      _TimePill(
+                                                        ms: c.lastEventAtMs,
+                                                      ),
                                                   ],
                                                 ),
                                               ),
@@ -546,7 +609,15 @@ class _PersonalChatsScreenState extends State<PersonalChatsScreen> {
                                                       CrossAxisAlignment.center,
                                                   children: [
                                                     Expanded(
-                                                      child: ChatListSubtitlePreview(
+                                                      // Черновик и «Идёт звонок»
+                                                      // — как в «Чатах».
+                                                      child: ChatListRowSubtitle(
+                                                        draftKey:
+                                                            c.peerProfileId ??
+                                                            c.convoId,
+                                                        peerProfileId:
+                                                            c.peerProfileId,
+                                                        preview: ChatListSubtitlePreview(
                                                         key: ValueKey<String>(
                                                           'personal-subtitle-${c.convoId}',
                                                         ),
@@ -564,13 +635,23 @@ class _PersonalChatsScreenState extends State<PersonalChatsScreen> {
                                                         subtitleFallback:
                                                             c.peerProfileId ??
                                                             c.convoId,
+                                                        rowV2: kChatListRowV2,
+                                                        unreadCount:
+                                                            c.unreadCount,
+                                                      ),
                                                       ),
                                                     ),
                                                     if (c.unreadCount > 0) ...[
                                                       const SizedBox(width: 6),
-                                                      _UnreadBadge(
-                                                        count: c.unreadCount,
-                                                      ),
+                                                      if (kChatListRowV2)
+                                                        ChatListUnreadBadge(
+                                                          count: c.unreadCount,
+                                                          muted: c.muted,
+                                                        )
+                                                      else
+                                                        _UnreadBadge(
+                                                          count: c.unreadCount,
+                                                        ),
                                                     ],
                                                   ],
                                                 ),
@@ -581,6 +662,7 @@ class _PersonalChatsScreenState extends State<PersonalChatsScreen> {
                                       ),
                                     ],
                                   ),
+                                ),
                                 ),
                               ),
                             );
@@ -602,6 +684,7 @@ class _PersonalChatsScreenState extends State<PersonalChatsScreen> {
                             canPop: !_selectionMode,
                             onPopInvokedWithResult: (didPop, _) {
                               if (!didPop && _selectionMode) {
+                                HomeBackGuard.markConsumed();
                                 _clearSelection();
                               }
                             },
@@ -685,8 +768,22 @@ class _TimePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // iPhone: время — просто текст цвета `secondaryLabel`, как в списках
+    // iOS/Telegram. Серая «таблетка» с текстом 38 % (≈ 2,2 : 1) читалась
+    // плохо в светлой теме.
+    if (appleGlassPanelsEnabled) {
+      return Text(
+        _formatTime(ms),
+        style: TextStyle(
+          color: AppleGlass.secondaryLabel(isDark),
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          height: 1.2,
+        ),
+      );
+    }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: isDark
             ? Colors.white.withValues(alpha: 0.09)
@@ -696,11 +793,12 @@ class _TimePill extends StatelessWidget {
       child: Text(
         _formatTime(ms),
         style: TextStyle(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.6)
+              : Colors.black.withValues(alpha: 0.6),
           fontSize: 11,
           fontWeight: FontWeight.w500,
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.45)
-              : Colors.black.withValues(alpha: 0.38),
+          height: 1.2,
         ),
       ),
     );

@@ -5,6 +5,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
+import 'motion/app_dialogs.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'wave1_l10n.dart';
 import 'widgets/secretly_glass_sheet.dart';
 
@@ -32,6 +35,7 @@ Future<DateTime?> showSearchDateCarousel(
   );
 
   return showModalBottomSheet<DateTime>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     enableDrag: true,
     isDismissible: true,
@@ -156,7 +160,7 @@ class _SearchDateCarouselState extends State<_SearchDateCarousel> {
           _dayCtrl.animateToItem(
             _day - 1,
             duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
+            curve: Motion.fade,
           );
         }
       });
@@ -376,7 +380,7 @@ class _SearchDateCarouselState extends State<_SearchDateCarousel> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: FilledButton(
+                child: PressFeedback(child: FilledButton(
                   onPressed: () {
                     final maxDay = _daysInMonth(_year, _month);
                     final d = _day.clamp(1, maxDay);
@@ -395,7 +399,7 @@ class _SearchDateCarouselState extends State<_SearchDateCarousel> {
                       de: 'Zum Datum',
                     ),
                   ),
-                ),
+                )),
               ),
             ],
           ),

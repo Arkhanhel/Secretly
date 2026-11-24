@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'package:flutter/material.dart';
+import '../motion/motion.dart';
 
 /// Telegram-style "press the jelly" feedback for icons that live ON our liquid
 /// glass (2026-07-19). On tap-down the child squishes to [pressedScale] fast;
@@ -84,7 +85,7 @@ class _LiquidPressableState extends State<LiquidPressable>
   late final Animation<double> _scale = _c.drive(
     Tween<double>(begin: 1.0, end: widget.pressedScale).chain(
       // Snappy press-in; elastic release for the "jelly" rebound.
-      CurveTween(curve: Curves.easeOut),
+      CurveTween(curve: Motion.fade),
     ),
   );
 
@@ -97,12 +98,12 @@ class _LiquidPressableState extends State<LiquidPressable>
   void _down(_) {
     if (!widget.enabled) return;
     _c.stop();
-    _c.animateTo(1.0, curve: Curves.easeOut);
+    _c.animateTo(1.0, curve: Motion.fade);
   }
 
   void _up() {
     if (!widget.enabled) return;
-    _c.animateBack(0.0, curve: Curves.elasticOut);
+    _c.animateBack(0.0, curve: Motion.popElastic);
   }
 
   @override

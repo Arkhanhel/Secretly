@@ -11331,7 +11331,9 @@ ORDER BY c.created_at_ms ASC
     return CallJournalEntry.fromDbRow(rows.first);
   }
 
-  Future<void> callJournalMarkMissedAcknowledged({String? convoId}) async {
+  /// Отмечает пропущенные звонки просмотренными. Возвращает, сколько строк
+  /// изменилось (0 — отмечать было нечего).
+  Future<int> callJournalMarkMissedAcknowledged({String? convoId}) async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final where = <String>[
       'result = ?',
@@ -11343,7 +11345,7 @@ ORDER BY c.created_at_ms ASC
       where.add('convo_id = ?');
       whereArgs.add(trimmedConvoId);
     }
-    await _db.update(
+    return _db.update(
       'call_journal',
       {'acknowledged_at_ms': nowMs, 'updated_at_ms': nowMs},
       where: where.join(' AND '),
@@ -11502,6 +11504,25 @@ ORDER BY c.created_at_ms ASC
       limit: 1,
     );
     return rows.isNotEmpty;
+  }
+
+  /// Время сообщения с логическим id [payloadEventId] в переписке
+  /// [convoId]; `null` — такого сообщения здесь нет.
+  Future<int?> payloadEventCreatedAtMs({
+    required String convoId,
+    required String payloadEventId,
+  }) async {
+    final id = payloadEventId.trim();
+    if (id.isEmpty) return null;
+    final rows = await _db.query(
+      'events',
+      columns: ['created_at_ms'],
+      where: 'payload_event_id = ? AND convo_id = ?',
+      whereArgs: [id, convoId],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return (rows.first['created_at_ms'] as num?)?.toInt();
   }
 
   /// Сколько дублей убрала миграция 68 в этом процессе — для журнала.

@@ -43,13 +43,16 @@ void main() {
       expect(kLiteBuild, isFalse);
       expect(kVideoToolsAvailable, isTrue);
       expect(kTranslationAvailable, isTrue);
-      expect(kVoiceTranscriptionAvailable, isTrue);
+      // «Голос в текст» убран решением владельца 20.11.2026 — отдельно от
+      // облегчённой сборки (kVoiceToTextEnabled).
+      expect(kVoiceToTextEnabled, isFalse);
+      expect(kVoiceTranscriptionAvailable, isFalse);
     });
 
     test('все три доступности — обратная сторона одного переключателя', () {
       expect(kVideoToolsAvailable, !kLiteBuild);
       expect(kTranslationAvailable, !kLiteBuild);
-      expect(kVoiceTranscriptionAvailable, !kLiteBuild);
+      expect(kVoiceTranscriptionAvailable, !kLiteBuild && kVoiceToTextEnabled);
     });
 
     test('порог сжатия видео в полной сборке остался 3 МБ', () {

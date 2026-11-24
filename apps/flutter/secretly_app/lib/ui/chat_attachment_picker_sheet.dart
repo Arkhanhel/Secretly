@@ -23,6 +23,9 @@ import 'package:video_player/video_player.dart';
 import '../build_variant.dart';
 import 'icons/app_icons.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'recent_attachments_store.dart';
 import 'widgets/island_backdrop.dart';
 import 'theme_presets.dart';
@@ -30,6 +33,7 @@ import 'wave1_l10n.dart';
 import 'widgets/secretly_glass_sheet.dart';
 import 'widgets/broken_media_box.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 enum ChatAttachmentPickerResultKind {
   photos,
@@ -177,6 +181,7 @@ Future<ChatAttachmentPickerResult?> showChatAttachmentPickerSheet(
   bool showEvent = false,
 }) {
   return showModalBottomSheet<ChatAttachmentPickerResult>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     enableDrag: true,
     isDismissible: true,
@@ -1006,7 +1011,7 @@ class _ChatAttachmentPickerSheetState
                         opacity: _overlayHidden ? 0 : 1,
                         child: AnimatedSlide(
                           duration: const Duration(milliseconds: 180),
-                          curve: Curves.easeOutCubic,
+                          curve: Motion.standard,
                           offset: _overlayHidden
                               ? const Offset(0, 0.6)
                               : Offset.zero,
@@ -1261,7 +1266,7 @@ class _ChatAttachmentPickerSheetState
                   ),
                 ),
               ),
-              Icon(Icons.add_rounded, size: 20, color: cs.primary),
+              Icon(AdaptiveIcons.add_rounded, size: 20, color: cs.primary),
             ],
           ),
         ),
@@ -1334,7 +1339,7 @@ class _ChatAttachmentPickerSheetState
                   ),
                 ),
                 Icon(
-                  Icons.north_east_rounded,
+                  AdaptiveIcons.north_east_rounded,
                   size: 18,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                 ),
@@ -1406,7 +1411,7 @@ class _ChatAttachmentPickerSheetState
                 ),
                 const SizedBox(width: 8),
                 Icon(
-                  Icons.north_east_rounded,
+                  AdaptiveIcons.north_east_rounded,
                   size: 16,
                   color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                 ),
@@ -2204,14 +2209,14 @@ class _ChatAttachmentPickerSheetState
             ),
           ),
           if (trailingIcon != null && onTrailingTap != null)
-            IconButton(
+            PressFeedback(child: IconButton(
               onPressed: _busy
                   ? null
                   : () {
                       unawaited(onTrailingTap());
                     },
               icon: Icon(trailingIcon),
-            ),
+            )),
         ],
       ),
     );
@@ -2535,11 +2540,11 @@ class _InAppCameraPageState extends State<_InAppCameraPage> {
             right: 8,
             child: Row(
               children: <Widget>[
-                IconButton(
+                PressFeedback(child: IconButton(
                   onPressed:
                       _recording ? null : () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                ),
+                  icon: const Icon(AdaptiveIcons.close, color: Colors.white, size: 28),
+                )),
                 const Spacer(),
                 if (_recording)
                   Container(
@@ -2597,14 +2602,14 @@ class _InAppCameraPageState extends State<_InAppCameraPage> {
                     SizedBox(
                       width: 48,
                       child: (widget.cameras.length > 1 && !_recording)
-                          ? IconButton(
+                          ? PressFeedback(child: IconButton(
                               onPressed: _busy ? null : () => _flipCamera(),
                               icon: const Icon(
-                                Icons.cameraswitch_outlined,
+                                AdaptiveIcons.cameraswitch_outlined,
                                 color: Colors.white,
                                 size: 28,
                               ),
-                            )
+                            ))
                           : null,
                     ),
                   ],
@@ -3288,7 +3293,7 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
                     color: Colors.black.withValues(alpha: 0.35),
                   ),
                   child: const Icon(
-                    Icons.play_arrow_rounded,
+                    AdaptiveIcons.play_arrow_rounded,
                     color: Colors.white,
                     size: 40,
                   ),
@@ -3304,7 +3309,7 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 _roundGlass(
-                  child: IconButton(
+                  child: PressFeedback(child: IconButton(
                     tooltip: wave1Text(
                       context,
                       ru: 'Назад',
@@ -3319,7 +3324,7 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
                     padding: EdgeInsets.zero,
                     onPressed: () => Navigator.of(context).maybePop(),
                     icon: const Icon(AppIcons.arrowBack, color: Colors.white),
-                  ),
+                  )),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -3359,7 +3364,7 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
                         ),
                       ),
                       child: Icon(
-                        Icons.check_rounded,
+                        AdaptiveIcons.check_rounded,
                         size: 18,
                         color: selected
                             ? Colors.white
@@ -3396,8 +3401,8 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
                             size: 38,
                             child: Icon(
                               _muted
-                                  ? Icons.volume_off_rounded
-                                  : Icons.volume_up_rounded,
+                                  ? AdaptiveIcons.volume_off_rounded
+                                  : AdaptiveIcons.volume_up_rounded,
                               color: Colors.white,
                               size: 19,
                             ),
@@ -3579,7 +3584,7 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
     if (_isPhoto) {
       tools.add(
         _toolButton(
-          icon: Icons.crop_rounded,
+          icon: AdaptiveIcons.crop_rounded,
           tooltip: wave1Text(
             context,
             ru: 'Кадрировать',
@@ -3596,7 +3601,7 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
       );
       tools.add(
         _toolButton(
-          icon: Icons.rotate_right_rounded,
+          icon: AdaptiveIcons.rotate_right_rounded,
           tooltip: wave1Text(
             context,
             ru: 'Повернуть',
@@ -3617,7 +3622,7 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
       );
       tools.add(
         _toolButton(
-          icon: Icons.brush_rounded,
+          icon: AdaptiveIcons.brush_rounded,
           tooltip: wave1Text(
             context,
             ru: 'Рисовать',
@@ -3665,13 +3670,13 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
     required String tooltip,
     required VoidCallback? onTap,
   }) {
-    return IconButton(
+    return PressFeedback(child: IconButton(
       tooltip: tooltip,
       onPressed: onTap,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 46, minHeight: 46),
       icon: Icon(icon, color: Colors.white, size: 21),
-    );
+    ));
   }
 }
 
@@ -4059,7 +4064,7 @@ class _DrawPageState extends State<_DrawPage> {
                     ),
                   ),
                   const Spacer(),
-                  IconButton(
+                  PressFeedback(child: IconButton(
                     tooltip: wave1Text(
                       context,
                       ru: 'Отменить штрих',
@@ -4072,8 +4077,8 @@ class _DrawPageState extends State<_DrawPage> {
                       de: 'Rückgängig',
                     ),
                     onPressed: _busy || _strokes.isEmpty ? null : _undo,
-                    icon: const Icon(Icons.undo_rounded, color: Colors.white),
-                  ),
+                    icon: const Icon(AdaptiveIcons.undo_rounded, color: Colors.white),
+                  )),
                   const Spacer(),
                   TextButton(
                     onPressed: _busy ? null : () => unawaited(_done()),

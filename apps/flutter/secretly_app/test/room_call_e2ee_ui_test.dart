@@ -18,6 +18,7 @@ import 'package:secretly_app/rooms/call_e2ee/room_call_join_plan.dart';
 import 'package:secretly_app/ui/desktop/calls/room_call_e2ee_desktop.dart';
 import 'package:secretly_app/ui/desktop/design/colors.dart';
 import 'package:secretly_app/ui/room_call_e2ee_ui.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 final AppLocalizations _l10n = AppLocalizationsEn();
 
@@ -290,7 +291,7 @@ void main() {
 
     test('телефон: открытый созвон при раскатке — красный открытый замок', () {
       final mark = roomCallE2eeMark(null, showOpenWarning: true, l10n: _l10n)!;
-      expect(mark.icon, Icons.lock_open_rounded);
+      expect(mark.icon, AdaptiveIcons.lock_open_rounded);
       expect(mark.title, _l10n.roomCallOpenBanner);
       expect(mark.alert, isFalse);
     });
@@ -301,7 +302,7 @@ void main() {
         showOpenWarning: true,
         l10n: _l10n,
       )!;
-      expect(mark.icon, Icons.lock_rounded);
+      expect(mark.icon, AdaptiveIcons.lock_rounded);
       expect(mark.title, _l10n.roomCallE2eeOn);
       expect(mark.detail, _l10n.roomCallE2eeOnHint);
       expect(mark.alert, isFalse);

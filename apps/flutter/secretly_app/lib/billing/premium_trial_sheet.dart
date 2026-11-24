@@ -25,6 +25,7 @@ import '../ui/paywall_screen.dart';
 import '../ui/wave1_l10n.dart';
 import 'billing_service.dart';
 import 'show_paywall.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 const String _kTrialFirstSeenMs = 'premium_trial_first_seen_ms';
 const String _kTrialLastShownMs = 'premium_trial_last_shown_ms';
@@ -142,7 +143,7 @@ class _PremiumTrialCard extends StatelessWidget {
                     padding: EdgeInsets.zero,
                   ),
                   icon: Icon(
-                    Icons.close_rounded,
+                    AdaptiveIcons.close_rounded,
                     size: 20,
                     color: cs.onSurfaceVariant,
                   ),
@@ -165,7 +166,7 @@ class _PremiumTrialCard extends StatelessWidget {
                       'assets/app_ui/icons/app_icon.png',
                       fit: BoxFit.contain,
                       errorBuilder: (_, __, ___) =>
-                          Icon(Icons.bolt_rounded, color: accent, size: 32),
+                          Icon(AdaptiveIcons.bolt_rounded, color: accent, size: 32),
                     ),
                   ),
                 ),
@@ -250,14 +251,14 @@ class _PremiumTrialCard extends StatelessWidget {
                   children: [
                     _benefit(
                       context,
-                      Icons.folder_rounded,
+                      AdaptiveIcons.folder_rounded,
                       accent,
                       ru: 'Файлы до 1 ГБ',
                       en: 'Files up to 1 GB',
                     ),
                     _benefit(
                       context,
-                      Icons.groups_rounded,
+                      AdaptiveIcons.groups_rounded,
                       accent,
                       ru: 'Группы до 500 и звонки до 50',
                       en: 'Groups up to 500, calls up to 50',
@@ -271,21 +272,21 @@ class _PremiumTrialCard extends StatelessWidget {
                     ),
                     _benefit(
                       context,
-                      Icons.palette_rounded,
+                      AdaptiveIcons.palette_rounded,
                       accent,
                       ru: 'Персонализация профиля и авторские эмодзи',
                       en: 'Profile personalization and custom emoji',
                     ),
                     _benefit(
                       context,
-                      Icons.verified_user_rounded,
+                      AdaptiveIcons.verified_user_rounded,
                       accent,
                       ru: 'Без рекламы и трекеров + свой Secretly ID',
                       en: 'No ads or trackers + custom Secretly ID',
                     ),
                     _benefit(
                       context,
-                      Icons.auto_awesome_rounded,
+                      AdaptiveIcons.auto_awesome_rounded,
                       accent,
                       ru: 'И многое другое',
                       en: 'And much more',

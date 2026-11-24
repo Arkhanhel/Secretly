@@ -3,6 +3,7 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:animations/animations.dart' as material_motion;
@@ -18,11 +19,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../app/app_controller.dart';
 import '../rooms/room_call_state.dart';
 import '../security/app_security_manager.dart';
+import '../storage/file_exists_cache.dart';
 import 'animations/animations.dart';
+import 'animations/avatar_bridge_route.dart';
 import 'app_asset_paths.dart';
 import 'app_brand_logo.dart';
 import 'call_history_screen.dart';
+import 'chat/chat_list_row_parts.dart';
 import 'chat_screen.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/entrance.dart';
+import 'motion/list_motion.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'own_device_removed_banner.dart';
 import 'server_auth_alert_banner.dart';
 import 'delivery_health_banner.dart';
@@ -45,12 +54,16 @@ import 'security_settings_screen.dart';
 import 'shared_audio_controls.dart';
 import 'theme_transition.dart';
 import 'wave1_l10n.dart';
+import 'widgets/apple_menu.dart';
+import 'home/home_islands.dart';
+import 'home/home_shell_scope.dart';
+import 'home/home_top_islands.dart';
+import 'widgets/covered_route_media_freeze.dart' show mediaQueryNow;
 import 'widgets/avatar_initials.dart';
 import 'widgets/framed_avatar.dart';
 import 'widgets/chat_list_subtitle_preview.dart';
 import 'widgets/content_edge_fade.dart';
 import 'widgets/dismiss_keyboard_on_tap.dart';
-import 'widgets/premium_glass.dart';
 import 'widgets/secretly_glass_fab.dart';
 // Prefixed: `glass_kit` (already used on this screen) exports its own
 // GlassContainer, so the two collide unqualified.
@@ -58,6 +71,7 @@ import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as lg;
 import 'liquid_glass_flags.dart';
 import 'scroll_feel.dart';
 import 'widgets/frosted_header_island.dart';
+import 'glass/glass_category_strip.dart';
 import 'widgets/liquid_glass_segment.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'widgets/typing_dots.dart';
@@ -65,6 +79,9 @@ import 'widgets/room_call_return_banner.dart';
 import 'widgets/broken_media_box.dart';
 import 'haptics.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
+import 'home/home_back_guard.dart';
 
 /// Smart-sorting modes for the Chats tab list (PART 2). Persisted by name to
 /// SharedPreferences so an unknown/legacy value fails safe back to [byTime].
@@ -98,9 +115,9 @@ class _ChatsScreenState extends State<ChatsScreen>
   // Top-bar matte islands (chat-header style).
   static const double _kListIslandHeight = 48;
   static const double _kListIslandRadius = 24;
-  // Wider so the three header icons (search / sort / more) sit harmoniously
-  // without crowding inside the frosted island.
-  static const double _kListActionsIslandWidth = 128;
+  // Под две кнопки (поиск / «ещё»): «Сортировка» убрана 20.11.2026, и
+  // островок стал уже, чтобы кнопки стояли ровно, без пустоты справа.
+  static const double _kListActionsIslandWidth = 92;
 
   // Chat folders + smart sorting (local to this screen, no DB; persisted to
   // SharedPreferences). Fail-safe defaults: folder = 'all', sort = by time.
@@ -115,6 +132,8 @@ class _ChatsScreenState extends State<ChatsScreen>
   // the AnimatedSwitcher slide so the chat list pages the way the finger went.
   int _folderNavDir = 1;
   _ChatsSortMode _sortMode = _ChatsSortMode.byTime;
+  // М3: новый чат вырастает, поднявшийся наверх — переезжает (Telegram).
+  final ListMotionController _listMotion = ListMotionController();
 
   // Cache of custom-folder membership (folderId -> set of convoIds), filled
   // lazily and refreshed whenever controller.changed fires (see _onChanged).
@@ -144,6 +163,10 @@ class _ChatsScreenState extends State<ChatsScreen>
   bool _lockListScrollUntilDragEnd = false;
   bool _fabVisible = true;
   double _dragOpenCap = _pullExtentMax;
+
+  /// Палец ведёт список (для пружины iPhone: у верха под пальцем край
+  /// прижат ради «Личных»).
+  bool _listUserDragging = false;
   late final AnimationController _pullSnapController;
   late final AnimationController _personalCollapseController;
   // Where the in-flight pull snap is headed (null when idle). Lets the swipe
@@ -166,7 +189,9 @@ class _ChatsScreenState extends State<ChatsScreen>
   // in flight so the list stays visible (Telegram-style instant re-show). This
   // only affects what is shown DURING the reload window — data correctness is
   // unchanged because the resolved future always overwrites the cache.
-  List<Conversation> _lastConvos = const <Conversation>[];
+  // С первого кадра — последний известный список (23.11.2026): новый экран
+  // не стоит пустым, пока идёт запрос к базе.
+  late List<Conversation> _lastConvos = widget.controller.lastKnownConversations;
   Map<String, int> _lastMissedByConvo = const <String, int>{};
   // Memoized conversations query — recomputed only when controller.changeVersion
   // changes (a real data change), NOT on every rebuild. Stops re-querying the DB
@@ -199,7 +224,12 @@ class _ChatsScreenState extends State<ChatsScreen>
   double get _searchRevealRaw => _searchRevealController.value.clamp(0.0, 1.0);
   double get _personalRevealRaw =>
       (_pullExtent / _personalPullMax).clamp(0.0, 1.0);
-  double get _searchReveal => Curves.easeOutCubic.transform(_searchRevealRaw);
+  // Кривая уже задана в _toggleSearch; вторая поверх «смазывала» движение
+  // (поиск открывался вяло и закрывался рывком). С движением Telegram —
+  // одна кривая.
+  double get _searchReveal => kTelegramMotion
+      ? _searchRevealRaw
+      : Curves.easeOutCubic.transform(_searchRevealRaw);
   double get _selectionRevealRaw =>
       _selectionRevealController.value.clamp(0.0, 1.0);
   // easeOutBack overshoots slightly past 1.0 near the end → the "soap bubble"
@@ -220,17 +250,11 @@ class _ChatsScreenState extends State<ChatsScreen>
   late final Stream<void> _coalescedChanged;
   StreamSubscription<void>? _coalescedChangedSub;
 
-  Future<void> _openCallHistory() async {
-    await Navigator.of(context).push(
-      SecretlyPageRoute(
-        builder: (_) => CallHistoryScreen(controller: widget.controller),
-      ),
-    );
-  }
-
   @override
   void initState() {
     super.initState();
+    // Черновики чатов для строк («Черновик: …», макет 3b).
+    if (kChatListRowV2) unawaited(ChatListDrafts.ensureLoaded());
     _coalescedChanged = _coalesceChanged(widget.controller.changed);
     _pullSnapController =
         AnimationController(
@@ -255,7 +279,9 @@ class _ChatsScreenState extends State<ChatsScreen>
     _searchRevealController =
         AnimationController(
           vsync: this,
-          duration: const Duration(milliseconds: 260),
+          duration: kTelegramMotion
+              ? MotionDurations.list
+              : const Duration(milliseconds: 260),
         )..addListener(() {
           if (!mounted) return;
           setState(() {});
@@ -309,7 +335,10 @@ class _ChatsScreenState extends State<ChatsScreen>
     try {
       final prefs = await SharedPreferences.getInstance();
       final folder = prefs.getString(_kFolderPrefsKey);
-      final sort = prefs.getString(_kSortPrefsKey);
+      // Сортировки больше нет — прежний выбор просто убираем из настроек.
+      if (prefs.containsKey(_kSortPrefsKey)) {
+        unawaited(prefs.remove(_kSortPrefsKey));
+      }
       if (!mounted) return;
       setState(() {
         // 'all' or a custom folder id. The custom id is validated against the
@@ -318,10 +347,10 @@ class _ChatsScreenState extends State<ChatsScreen>
         if (folder != null && folder.isNotEmpty) {
           _activeFolder = folder;
         }
-        _sortMode = _ChatsSortMode.values
-            .where((m) => m.name == sort)
-            .firstOrNull ??
-            _ChatsSortMode.byTime;
+        // Кнопки сортировки больше нет (20.11.2026): сохранённый когда-то
+        // «сначала непрочитанные» оставил бы человека в нём без выхода —
+        // поэтому сохранённое значение не читаем, всегда «по времени».
+        _sortMode = _ChatsSortMode.byTime;
       });
     } catch (_) {
       // Keep fail-safe defaults.
@@ -375,7 +404,11 @@ class _ChatsScreenState extends State<ChatsScreen>
   /// The pinned island stack under the top bar: folder strip, then the music /
   /// call island. Extracted so it can be rendered either standalone or as
   /// shapes inside one shared glass layer (see [SecretlyGlassGroup]).
-  Widget _pinnedIslandColumn(BuildContext context, AppController controller) {
+  Widget _pinnedIslandColumn(
+    BuildContext context,
+    AppController controller, {
+    Widget? roomCall,
+  }) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -397,7 +430,9 @@ class _ChatsScreenState extends State<ChatsScreen>
             onSelect: _setActiveFolder,
             onFolderLongPress: _openFolderChipMenu,
           ),
-        SharedAudioTopIslands(controller: controller),
+        // Музыка, звонок и звонок в комнате — одна «жидкая» пластина
+        // (23.11.2026).
+        SharedAudioTopIslands(controller: controller, roomCall: roomCall),
       ],
     );
   }
@@ -420,17 +455,6 @@ class _ChatsScreenState extends State<ChatsScreen>
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_kFolderPrefsKey, folder);
-    } catch (_) {
-      // Non-fatal: selection still applies for this session.
-    }
-  }
-
-  Future<void> _setSortMode(_ChatsSortMode mode) async {
-    if (_sortMode == mode) return;
-    setState(() => _sortMode = mode);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kSortPrefsKey, mode.name);
     } catch (_) {
       // Non-fatal: selection still applies for this session.
     }
@@ -481,102 +505,6 @@ class _ChatsScreenState extends State<ChatsScreen>
         });
         return sorted;
     }
-  }
-
-  String _sortModeLabel(BuildContext context, _ChatsSortMode mode) {
-    switch (mode) {
-      case _ChatsSortMode.byTime:
-        return wave1Text(
-          context,
-          ru: 'По времени',
-          en: 'By time',
-          uk: 'За часом',
-          es: 'Por hora',
-          pt: 'Por hora',
-          ptBr: 'Por hora',
-          fr: 'Par date',
-          de: 'Nach Zeit',
-        );
-      case _ChatsSortMode.unreadFirst:
-        return wave1Text(
-          context,
-          ru: 'Сначала непрочитанные',
-          en: 'Unread first',
-          uk: 'Спершу непрочитані',
-          es: 'No leídos primero',
-          pt: 'Não lidos primeiro',
-          ptBr: 'Não lidos primeiro',
-          fr: 'Non lus d’abord',
-          de: 'Ungelesene zuerst',
-        );
-      case _ChatsSortMode.pinnedFirst:
-        return wave1Text(
-          context,
-          ru: 'Сначала закреплённые',
-          en: 'Pinned first',
-          uk: 'Спершу закріплені',
-          es: 'Fijados primero',
-          pt: 'Fixados primeiro',
-          ptBr: 'Fixados primeiro',
-          fr: 'Épinglés d’abord',
-          de: 'Angeheftete zuerst',
-        );
-    }
-  }
-
-  Future<void> _openSortMenu() async {
-    final selected = await showFrostedPopup<_ChatsSortMode>(
-      context: context,
-      alignment: Alignment.topRight,
-      builder: (context) {
-        final cs = Theme.of(context).colorScheme;
-        return SafeArea(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => Navigator.of(context).pop(),
-                ),
-              ),
-              Positioned(
-                top: 10,
-                right: 10,
-                child: FrostedPopupContainer(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      minWidth: 230,
-                      maxWidth: 280,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (final mode in _ChatsSortMode.values)
-                          _GlassMenuAction(
-                            leading: Icon(
-                              _sortMode == mode
-                                  ? Icons.radio_button_checked_rounded
-                                  : Icons.radio_button_unchecked_rounded,
-                              size: 22,
-                              color: _sortMode == mode
-                                  ? kPremiumGold
-                                  : cs.onSurface.withValues(alpha: 0.55),
-                            ),
-                            title: _sortModeLabel(context, mode),
-                            onTap: () => Navigator.of(context).pop(mode),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    if (!mounted || selected == null) return;
-    await _setSortMode(selected);
   }
 
   void _clearSearchState() {
@@ -669,8 +597,8 @@ class _ChatsScreenState extends State<ChatsScreen>
           CurvedAnimation(
             parent: _pullSnapController,
             curve: clamped < _pullExtent
-                ? Curves.easeOutQuart
-                : Curves.easeOutCubic,
+                ? Motion.standardQuart
+                : Motion.standard,
           ),
         );
 
@@ -700,6 +628,23 @@ class _ChatsScreenState extends State<ChatsScreen>
       }
     });
     _syncSelectionReveal();
+  }
+
+  /// Раздел спрятали (слой главного экрана выключил TickerMode) — выделение
+  /// снимается сразу: иначе невидимое выделение держало «Назад» (первое
+  /// нажатие уходило на него, а не в Чаты / не сворачивало приложение).
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final visible = TickerMode.valuesOf(context).enabled;
+    if (!visible && _selectionMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _selectionMode &&
+            !TickerMode.getValuesNotifier(context).value.enabled) {
+          _clearSelection();
+        }
+      });
+    }
   }
 
   void _clearSelection() {
@@ -748,9 +693,14 @@ class _ChatsScreenState extends State<ChatsScreen>
       _searchOpen = nextOpen;
     });
     // Tap-only: animate the search bubble open/closed (independent of pull).
+    // Telegram: открытие 0,4 с фирменной кривой, закрытие — та же кривая
+    // за 0,3 с (быстрый старт, мягкая остановка), а не «разгон» easeIn.
     _searchRevealController.animateTo(
       nextOpen ? 1.0 : 0.0,
-      curve: nextOpen ? Curves.easeOutCubic : Curves.easeInCubic,
+      duration: kTelegramMotion && !nextOpen
+          ? MotionDurations.standard
+          : null,
+      curve: nextOpen || kTelegramMotion ? Motion.standard : Curves.easeInCubic,
     );
     if (!nextOpen) {
       _searchDebounce?.cancel();
@@ -776,6 +726,21 @@ class _ChatsScreenState extends State<ChatsScreen>
     }
     if (notification is UserScrollNotification) {
       _updateFabVisibilityForScrollDirection(notification.direction);
+    }
+    // Пружина iPhone: палец ли ведёт сам список (до всех ранних выходов).
+    if (notification.depth == 0 &&
+        notification.metrics.axis == Axis.vertical) {
+      // Бросок после отпускания идёт без dragDetails — с первого же его кадра
+      // верх снова пружинит.
+      if (notification is ScrollStartNotification) {
+        _listUserDragging = notification.dragDetails != null;
+      } else if (notification is ScrollUpdateNotification) {
+        _listUserDragging = notification.dragDetails != null;
+      } else if (notification is OverscrollNotification) {
+        _listUserDragging = notification.dragDetails != null;
+      } else if (notification is ScrollEndNotification) {
+        _listUserDragging = false;
+      }
     }
     if (_selectionMode) return false;
     if (notification.metrics.axis != Axis.vertical) return false;
@@ -984,7 +949,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _GlassMenuAction(
-                          icon: Icons.lock_outline_rounded,
+                          icon: AdaptiveIcons.lock_outline_rounded,
                           title: _menuLabel(
                             context,
                             ru: protectionEnabled
@@ -999,7 +964,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                         if (protectionEnabled) ...[
                           const Divider(height: 1),
                           _GlassMenuAction(
-                            icon: Icons.lock_clock_rounded,
+                            icon: AdaptiveIcons.lock_clock_rounded,
                             title: _menuLabel(
                               context,
                               ru: 'Заблокировать Личные сейчас',
@@ -1103,7 +1068,7 @@ class _ChatsScreenState extends State<ChatsScreen>
   }) async {
     final textController = TextEditingController(text: initial ?? '');
     final cs = Theme.of(context).colorScheme;
-    final result = await showDialog<String>(
+    final result = await showAppDialog<String>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (dialogContext) {
@@ -1130,8 +1095,9 @@ class _ChatsScreenState extends State<ChatsScreen>
                         fr: 'Nouveau dossier',
                         de: 'Neuer Ordner',
                       ),
+                      // Цвет текста — от темы: белый был невидим в светлой.
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
+                        color: cs.onSurface,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1140,7 +1106,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                       controller: textController,
                       autofocus: true,
                       textInputAction: TextInputAction.done,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: cs.onSurface),
                       onSubmitted: (v) =>
                           Navigator.of(dialogContext).pop(v.trim()),
                       decoration: InputDecoration(
@@ -1156,10 +1122,15 @@ class _ChatsScreenState extends State<ChatsScreen>
                           fr: 'Nom du dossier',
                           de: 'Ordnername',
                         ),
-                        border: const OutlineInputBorder(),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: cs.primary),
-                        ),
+                        // iPhone — поле из темы (полупрозрачное iOS).
+                        border: appleMenusEnabled(context)
+                            ? null
+                            : const OutlineInputBorder(),
+                        focusedBorder: appleMenusEnabled(context)
+                            ? null
+                            : OutlineInputBorder(
+                                borderSide: BorderSide(color: cs.primary),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -1184,7 +1155,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                           ),
                         ),
                         const SizedBox(width: 4),
-                        FilledButton(
+                        PressFeedback(child: FilledButton(
                           onPressed: () => Navigator.of(
                             dialogContext,
                           ).pop(textController.text.trim()),
@@ -1202,7 +1173,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                                   de: 'Erstellen',
                                 ),
                           ),
-                        ),
+                        )),
                       ],
                     ),
                   ],
@@ -1265,7 +1236,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _GlassMenuAction(
-                          icon: Icons.edit_outlined,
+                          icon: AdaptiveIcons.edit_outlined,
                           title: wave1Text(
                             context,
                             ru: 'Переименовать',
@@ -1281,7 +1252,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                               Navigator.of(popupContext).pop('rename'),
                         ),
                         _GlassMenuAction(
-                          icon: Icons.delete_outline_rounded,
+                          icon: AdaptiveIcons.delete_outline_rounded,
                           title: wave1Text(
                             context,
                             ru: 'Удалить',
@@ -1374,152 +1345,42 @@ class _ChatsScreenState extends State<ChatsScreen>
     return wave1Text(context, ru: ru, en: en);
   }
 
-  Future<void> _openMainMenu() async {
-    final controller = widget.controller;
-    final missedCallCount = await controller.missedCallCount();
-    if (!mounted) return;
-    final action = await showFrostedPopup<String>(
-      context: context,
-      alignment: Alignment.topRight,
-      builder: (context) {
-        return SafeArea(
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => Navigator.of(context).pop(),
-                ),
-              ),
-              Positioned(
-                top: 10,
-                right: 10,
-                child: FrostedPopupContainer(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      minWidth: 210,
-                      maxWidth: 250,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _GlassMenuAction(
-                          leading: _ThemeMenuAnimatedIcon(
-                            darkMode: controller.darkMode,
-                          ),
-                          title: _menuLabel(
-                            context,
-                            ru: controller.darkMode
-                                ? 'Светлая тема'
-                                : 'Тёмная тема',
-                            en: controller.darkMode
-                                ? 'Light theme'
-                                : 'Dark theme',
-                          ),
-                          onTap: () => Navigator.of(context).pop('theme'),
-                        ),
-                        _GlassMenuAction(
-                          leading: const _GroupMenuAnimatedIcon(),
-                          icon: AppIcons.createGroup,
-                          title: _menuLabel(
-                            context,
-                            ru: 'Создать комнату',
-                            en: 'Create room',
-                          ),
-                          onTap: () => Navigator.of(context).pop('group'),
-                        ),
-                        _GlassMenuAction(
-                          leading: const _FavoritesMenuAnimatedIcon(),
-                          title: localizedFavoritesTitle(context),
-                          onTap: () => Navigator.of(context).pop('favorites'),
-                        ),
-                        _GlassMenuAction(
-                          leading: _CallHistoryMenuAnimatedIcon(
-                            missedCount: missedCallCount,
-                          ),
-                          title: _menuLabel(context, ru: 'Звонки', en: 'Calls'),
-                          onTap: () =>
-                              Navigator.of(context).pop('call_history'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
+  Future<void> _openMainMenu() =>
+      showHomeMainMenu(context, widget.controller);
 
-    if (!mounted || action == null) return;
-    if (action == 'theme') {
-      if (!mounted) return;
-      final size = MediaQuery.sizeOf(context);
-      final topPad = MediaQuery.paddingOf(context).top;
-      final center = Offset(size.width - 40, topPad + kToolbarHeight / 2);
-      final scope = ThemeTransitionScope.of(context);
-      if (scope != null) {
-        scope.triggerTransition(center, !controller.darkMode);
-      } else {
-        await controller.setDarkMode(!controller.darkMode);
-      }
-      return;
-    }
-    if (action == 'group') {
-      final fallbackTitle = context.l10n.tabGroups;
-      final groupId = await Navigator.of(context).push<String>(
-        SecretlyPageRoute(
-          builder: (_) => NewGroupScreen(controller: controller),
-        ),
-      );
-      if (!mounted || groupId == null || groupId.isEmpty) return;
-      final updated = await controller.listConversations();
-      Conversation? created;
-      for (final convo in updated) {
-        if (convo.convoId == groupId) {
-          created = convo;
-          break;
-        }
-      }
-      final title = created?.title ?? fallbackTitle;
-      if (!mounted) return;
-      Navigator.of(context).push(
-        SecretlyPageRoute(
-          builder: (_) => ChatScreen(
-            controller: controller,
-            convoId: groupId,
-            title: title,
-          ),
-        ),
-      );
-      return;
-    }
-    if (action == 'favorites') {
-      await _openFavorites();
-      return;
-    }
-    if (action == 'call_history') {
-      await _openCallHistory();
+  /// Острова v3: меню по названию приложения, шеврон повёрнут, пока открыто.
+  bool _titleMenuOpen = false;
+
+  Future<void> _openTitleMenu() async {
+    setState(() => _titleMenuOpen = true);
+    try {
+      await showHomeMainMenu(context, widget.controller, anchorLeft: true);
+    } finally {
+      if (mounted) setState(() => _titleMenuOpen = false);
     }
   }
 
-  Future<void> _openFavorites() async {
-    final controller = widget.controller;
-    final title = localizedFavoritesTitle(context);
-    final convoId = await controller.ensureFavoritesChat(title: title);
-    if (!mounted) return;
-    Navigator.of(context).push(
-      SecretlyPageRoute(
-        builder: (_) => ChatScreen(
-          controller: controller,
-          convoId: convoId,
-          title: title,
-          peerProfileIdForSend: convoId,
-          initialForwardDraft: controller.forwardDraft,
+  List<HomePlusAction> _homePlusActions(HomeShellScope home) {
+    final l10n = context.l10n;
+    return [
+      HomePlusAction(
+        label: l10n.newChat,
+        icon: AppIcons.edit,
+        onTap: () => Navigator.of(context).push(
+          SecretlyPageRoute(
+            builder: (_) => NewChatPickerScreen(controller: widget.controller),
+          ),
         ),
       ),
-    );
+      HomePlusAction(
+        label: l10n.addContact,
+        icon: AppIcons.personAdd,
+        onTap: () {
+          homeContactsRequest.value = HomeContactsAction.add;
+          home.select(HomeTab.contacts);
+        },
+      ),
+    ];
   }
 
   void _scheduleMessageSearch() {
@@ -1588,7 +1449,7 @@ class _ChatsScreenState extends State<ChatsScreen>
   /// что у кнопки «Удалить» в режиме выбора — только для одного чата.
   Future<void> _confirmDeleteOneChat(String convoId) async {
     final l10n = context.l10n;
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (context) => SecretlyAlertDialog(
         title: Text(l10n.deleteChatsConfirmTitle(1)),
@@ -1682,6 +1543,8 @@ class _ChatsScreenState extends State<ChatsScreen>
             // PART 1 (custom-folder filter) + PART 2 (smart sort) — additive,
             // pure.
             final active = _applyFolderAndSort(baseActive);
+            // М3: порядок строк — для анимации вставки и перестановки.
+            _listMotion.update([for (final c in active) c.convoId]);
 
             final byId = <String, Conversation>{
               for (final c in convos) c.convoId: c,
@@ -1701,37 +1564,49 @@ class _ChatsScreenState extends State<ChatsScreen>
               // built once in the return below. These are the content LAYERS that
               // cross-fade INSIDE those frames as search / selection reveal — the
               // frame itself never disappears, so the islands reshape seamlessly.
-              final Widget logoContent = AppBrandLogo(controller: controller);
-              final Widget compactRightContent = Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              final home = HomeShellScope.maybeOf(context);
+              final Widget logoContent = home == null
+                  ? AppBrandLogo(controller: controller)
+                  : HomeTitleIslandContent(
+                      // Острова v3: без метки «Premium», надпись компактнее —
+                      // место островку с названием раздела.
+                      brand: AppBrandLogo(
+                        controller: controller,
+                        showPremiumBadge: false,
+                        titleSize: 18,
+                        tight: true,
+                      ),
+                      menuOpen: _titleMenuOpen,
+                      onTap: _openTitleMenu,
+                      semanticLabel: l10n.more,
+                    );
+              final double actionsIslandWidth = home == null
+                  ? _kListActionsIslandWidth
+                  : kHomeTopActionsWidth;
+              final Widget compactRightContent = home != null
+                  ? HomeTopActionsContent(
+                      plus: _homePlusActions(home),
+                      contactsActive: false,
+                      onContacts: () => home.select(HomeTab.contacts),
+                      plusLabel: l10n.newChat,
+                      contactsLabel: l10n.tabContacts,
+                    )
+                  : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  IconButton(
+                  PressFeedback(child: IconButton(
                     tooltip: l10n.search,
-                    icon: Icon(AppIcons.search, color: cs.onSurface),
+                    icon: Icon(AppIcons.search, color: appleLabelColorOr(context, cs.onSurface)),
                     onPressed: () => _toggleSearch(focusKeyboard: true),
-                  ),
-                  IconButton(
-                    tooltip: wave1Text(
-                      context,
-                      ru: 'Сортировка',
-                      en: 'Sort',
-                      uk: 'Сортування',
-                      es: 'Ordenar',
-                      pt: 'Ordenar',
-                      ptBr: 'Ordenar',
-                      fr: 'Trier',
-                      de: 'Sortieren',
-                    ),
-                    icon: Icon(Icons.swap_vert_rounded, color: cs.onSurface),
-                    iconSize: 23,
-                    onPressed: _openSortMenu,
-                  ),
-                  IconButton(
+                  )),
+                  // «Сортировка» убрана (решение владельца 20.11.2026): список
+                  // всегда по времени, закреплённые сверху.
+                  PressFeedback(child: IconButton(
                     tooltip: l10n.more,
-                    icon: Icon(AppIcons.moreVert, color: cs.onSurface),
+                    icon: Icon(AppIcons.moreVert, color: appleLabelColorOr(context, cs.onSurface)),
                     iconSize: 23,
                     onPressed: _openMainMenu,
-                  ),
+                  )),
                 ],
               );
               final Widget searchFieldContent = Row(
@@ -1760,12 +1635,12 @@ class _ChatsScreenState extends State<ChatsScreen>
                       onChanged: _onSearchChanged,
                     ),
                   ),
-                  IconButton(
+                  PressFeedback(child: IconButton(
                     tooltip: l10n.cancel,
                     icon: const Icon(AppIcons.close),
                     onPressed: () =>
                         _toggleSearch(open: false, focusKeyboard: false),
-                  ),
+                  )),
                 ],
               );
 
@@ -1795,15 +1670,17 @@ class _ChatsScreenState extends State<ChatsScreen>
               // left and an actions island on the right. All selection-mode
               // icons are bright white (via the wrapping IconTheme below).
               final Widget selCountContent = IconTheme(
-                data: IconThemeData(color: cs.onSurface),
+                data: IconThemeData(
+                  color: appleLabelColorOr(context, cs.onSurface),
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    IconButton(
+                    PressFeedback(child: IconButton(
                       tooltip: l10n.cancelSelection,
-                      icon: const Icon(Icons.close),
+                      icon: const Icon(AdaptiveIcons.close),
                       onPressed: _clearSelection,
-                    ),
+                    )),
                     Padding(
                       padding: const EdgeInsets.only(right: 10, left: 2),
                       child: Text(
@@ -1819,17 +1696,19 @@ class _ChatsScreenState extends State<ChatsScreen>
                 ),
               );
               final Widget selActionsContent = IconTheme(
-                data: IconThemeData(color: cs.onSurface),
+                data: IconThemeData(
+                  color: appleLabelColorOr(context, cs.onSurface),
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                  IconButton(
+                  PressFeedback(child: IconButton(
                     tooltip: l10n.delete,
-                    icon: const Icon(Icons.delete_outline_rounded),
+                    icon: const Icon(AdaptiveIcons.delete_outline_rounded),
                     onPressed: selectedConvos.isEmpty
                         ? null
                         : () async {
-                            final ok = await showDialog<bool>(
+                            final ok = await showAppDialog<bool>(
                               context: context,
                               builder: (context) {
                                 return SecretlyAlertDialog(
@@ -1864,13 +1743,13 @@ class _ChatsScreenState extends State<ChatsScreen>
                             }
                             _clearSelection();
                           },
-                  ),
-                  IconButton(
+                  )),
+                  PressFeedback(child: IconButton(
                     tooltip: shouldArchive ? l10n.archive : l10n.unarchive,
                     icon: Icon(
                       shouldArchive
-                          ? Icons.archive_outlined
-                          : Icons.unarchive_outlined,
+                          ? AdaptiveIcons.archive_outlined
+                          : AdaptiveIcons.unarchive_outlined,
                     ),
                     onPressed: selectedConvos.isEmpty
                         ? null
@@ -1920,8 +1799,8 @@ class _ChatsScreenState extends State<ChatsScreen>
                             }
                             _clearSelection();
                           },
-                  ),
-                  IconButton(
+                  )),
+                  PressFeedback(child: IconButton(
                     tooltip: wave1Text(
                       context,
                       ru: 'В папку',
@@ -1933,19 +1812,19 @@ class _ChatsScreenState extends State<ChatsScreen>
                       fr: 'Vers dossier',
                       de: 'In Ordner',
                     ),
-                    icon: const Icon(Icons.create_new_folder_outlined),
+                    icon: const Icon(AdaptiveIcons.create_new_folder_outlined),
                     onPressed: selectedConvos.isEmpty
                         ? null
                         : _createFolderFromSelection,
-                  ),
-                  IconButton(
+                  )),
+                  PressFeedback(child: IconButton(
                     tooltip: shouldMute
                         ? l10n.muteNotifications
                         : l10n.unmuteNotifications,
                     icon: Icon(
                       shouldMute
-                          ? Icons.notifications_off_outlined
-                          : Icons.notifications_outlined,
+                          ? AdaptiveIcons.notifications_off_outlined
+                          : AdaptiveIcons.notifications_outlined,
                     ),
                     onPressed: selectedConvos.isEmpty
                         ? null
@@ -1958,8 +1837,8 @@ class _ChatsScreenState extends State<ChatsScreen>
                             }
                             _clearSelection();
                           },
-                  ),
-                  IconButton(
+                  )),
+                  PressFeedback(child: IconButton(
                     tooltip: shouldPersonal
                         ? _menuLabel(
                             context,
@@ -1973,8 +1852,8 @@ class _ChatsScreenState extends State<ChatsScreen>
                           ),
                     icon: Icon(
                       shouldPersonal
-                          ? Icons.person_add_outlined
-                          : Icons.person_remove_outlined,
+                          ? AdaptiveIcons.person_add_outlined
+                          : AdaptiveIcons.person_remove_outlined,
                     ),
                     onPressed: selectedDirect.isEmpty
                         ? null
@@ -1986,8 +1865,8 @@ class _ChatsScreenState extends State<ChatsScreen>
                             if (!mounted) return;
                             _clearSelection();
                           },
-                  ),
-                  PopupMenuButton<String>(
+                  )),
+                  AppPopupMenuButton<String>(
                     tooltip: l10n.more,
                     onSelected: (v) async {
                       if (v == 'pin') {
@@ -1999,7 +1878,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                         }
                         _clearSelection();
                       } else if (v == 'clear') {
-                        final ok = await showDialog<bool>(
+                        final ok = await showAppDialog<bool>(
                           context: context,
                           builder: (context) {
                             return SecretlyAlertDialog(
@@ -2071,26 +1950,48 @@ class _ChatsScreenState extends State<ChatsScreen>
                             builder: (context, constraints) {
                               final total = constraints.maxWidth;
                               final normalRightW = lerpDouble(
-                                _kListActionsIslandWidth,
+                                actionsIslandWidth,
                                 total,
                                 s,
                               )!;
                               // 300 comfortably fits the 6 full-size action
                               // icons (delete / to-folder / archive / mute /
                               // personal / more); clamped so it never overflows.
+                              // 🔴 22.11.2026 (разбор): справа в выделении — не
+                              // больше, чем оставляет место для «✕ + число»
+                              // слева (≈92). При 300 на 393 pt число
+                              // обрезалось, на SE и 360 dp — и сам ✕.
+                              final selRightW = math.min(300.0, total - 92);
                               final rightW = lerpDouble(
                                 normalRightW,
-                                300.0,
+                                selRightW,
                                 selO,
                               )!.clamp(0.0, total);
-                              return Row(
-                                children: [
-                                  Expanded(
-                                    child: FrostedHeaderIsland(
+                              // Острова v3: левый островок — по размеру
+                                              // названия, правый прижат вправо.
+                              final compactLeft = home != null;
+                              // 🔴 21.11.2026: левому — только оставшееся от
+                              // правого (не больше половины), иначе в
+                              // выделении (правый → 300) они не помещались и
+                              // острова переставали перетекать друг в друга.
+                              final leftMax = math.max(
+                                0.0,
+                                math.min(total * 0.5, total - rightW - 8),
+                              );
+                              // Сжимаемое содержимое — обрезается, а не
+                              // «вылезает» за островок.
+                              Widget fitLeft(Widget child) => UnconstrainedBox(
+                                alignment: Alignment.centerLeft,
+                                constrainedAxis: Axis.vertical,
+                                clipBehavior: Clip.hardEdge,
+                                child: child,
+                              );
+                              final leftIsland = FrostedHeaderIsland(
                                       radius: _kListIslandRadius,
                                       height: _kListIslandHeight,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 14,
+                                      padding: EdgeInsets.only(
+                                        left: compactLeft ? 10 : 14,
+                                        right: compactLeft ? 12 : 14,
                                       ),
                                       child: Stack(
                                         alignment: Alignment.centerLeft,
@@ -2100,21 +2001,79 @@ class _ChatsScreenState extends State<ChatsScreen>
                                                 .clamp(0.0, 1.0),
                                             child: IgnorePointer(
                                               ignoring: selO > 0.5,
-                                              child: Center(child: logoContent),
+                                              // Обычное состояние: надпись
+                                              // СЖИМАЕТСЯ (FittedBox внутри),
+                                              // а не обрезается — обрезка
+                                              // только у слоя выделения.
+                                              child: compactLeft
+                                                  ? Align(
+                                                      alignment:
+                                                          Alignment.centerLeft,
+                                                      widthFactor: 1,
+                                                      child: logoContent,
+                                                    )
+                                                  : Center(child: logoContent),
                                             ),
                                           ),
                                           Opacity(
                                             opacity: selO,
                                             child: IgnorePointer(
                                               ignoring: selO < 0.5,
-                                              child: selCountContent,
+                                              child: compactLeft
+                                                  ? fitLeft(selCountContent)
+                                                  : selCountContent,
                                             ),
                                           ),
                                         ],
                                       ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 8 * (1 - s)),
+                                    );
+                              final centerFade = ((1 - s) * (1 - selO))
+                                  .clamp(0.0, 1.0);
+                              return Row(
+                                children: [
+                                  if (compactLeft)
+                                    // Левый островок — по содержимому, но не
+                                    // больше половины ширины.
+                                    ConstrainedBox(
+                                      constraints: BoxConstraints(
+                                        maxWidth: leftMax,
+                                      ),
+                                      child: leftIsland,
+                                    )
+                                  else
+                                    Expanded(child: leftIsland),
+                                  if (compactLeft)
+                                    // Острова v3: название раздела посередине.
+                                    Expanded(
+                                      child: centerFade <= 0.01
+                                          ? const SizedBox.shrink()
+                                          : Opacity(
+                                              opacity: centerFade,
+                                              child: Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                    ),
+                                                child: HomeSectionIsland(
+                                                  title: l10n.tabChats,
+                                                  island: (child) =>
+                                                      FrostedHeaderIsland(
+                                                        radius:
+                                                            _kListIslandRadius,
+                                                        height:
+                                                            _kListIslandHeight,
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                              horizontal: 12,
+                                                            ),
+                                                        child: child,
+                                                      ),
+                                                ),
+                                              ),
+                                            ),
+                                    )
+                                  else
+                                    SizedBox(width: 8 * (1 - s)),
                                   SizedBox(
                                     width: rightW,
                                     height: _kListIslandHeight,
@@ -2149,7 +2108,29 @@ class _ChatsScreenState extends State<ChatsScreen>
                                             opacity: selO,
                                             child: IgnorePointer(
                                               ignoring: selO < 0.5,
-                                              child: selActionsContent,
+                                              // Пока остров растёт — действия
+                                              // обрезаются, а не «вылезают».
+                                              child: UnconstrainedBox(
+                                                alignment:
+                                                    Alignment.centerRight,
+                                                constrainedAxis: Axis.vertical,
+                                                clipBehavior: Clip.hardEdge,
+                                                // Шесть действий — в ширину
+                                                // острова выделения (на узких
+                                                // экранах чуть мельче).
+                                                child: SizedBox(
+                                                  width: math.max(
+                                                    0.0,
+                                                    selRightW - 12,
+                                                  ),
+                                                  child: FittedBox(
+                                                    fit: BoxFit.scaleDown,
+                                                    alignment:
+                                                        Alignment.centerRight,
+                                                    child: selActionsContent,
+                                                  ),
+                                                ),
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -2208,6 +2189,8 @@ class _ChatsScreenState extends State<ChatsScreen>
             Widget buildRoomCallBanner(CachedRoomCall? call, String title) {
               if (call == null) return const SizedBox.shrink();
               return RuntimeAwareRoomCallReturnBanner(
+                // Строка общей пластины островков (23.11.2026).
+                merged: true,
                 title: title,
                 call: call,
                 onTap: () {
@@ -2237,19 +2220,21 @@ class _ChatsScreenState extends State<ChatsScreen>
                 // at the buildList call site) so it stays pinned under the top
                 // bar instead of scrolling away with the chat list. Reserve its
                 // height here so the first row isn't hidden behind it.
-                SharedAudioTopIslandsReserve(controller: controller),
-                SharedAudioCallBannerGate(controller: controller),
-                buildRoomCallBanner(roomCall, roomCallTitle),
+                // Звонок в комнате — строкой той же пластины (23.11.2026).
+                SharedAudioTopIslandsReserve(
+                  controller: controller,
+                  roomCallVisible: roomCall != null,
+                ),
                 // Предупреждение о системных ограничениях: пустое, пока всё в
                 // порядке. Ставится здесь, а не только в настройках, потому что
                 // проявляется проблема как «звонков нет вообще» — искать её в
                 // настройках человеку неоткуда (поле 22.08, Xiaomi HyperOS).
-                const DeliveryHealthBanner(),
+                PlateReveal(child: DeliveryHealthBanner()),
                 // У-1: устройство отключено от аккаунта — сказать прямо.
-                OwnDeviceRemovedBanner(controller: controller),
+                PlateReveal(child: OwnDeviceRemovedBanner(controller: controller)),
                 // Б3 Э2: ответ сервера не прошёл проверку подписи. Пусто, пока
                 // отказа не было (доля 0 — у всех).
-                const ServerAuthAlertBanner(),
+                PlateReveal(child: ServerAuthAlertBanner()),
                 // PART 1 — custom-folder strip is now a PINNED overlay (below),
                 // so it stays fixed under the top islands instead of scrolling
                 // away. Reserve its height here so the first row isn't hidden.
@@ -2278,9 +2263,28 @@ class _ChatsScreenState extends State<ChatsScreen>
                       // top-edge overscroll to drive the Personal reveal, and
                       // an iOS rubber-band would fight it. `secretlyPullListPhysics`
                       // keeps exactly that on iOS while giving Android the glide.
-                      : secretlyPullListPhysics(),
+                      // iPhone: пружина внизу и при броске к верху; пока
+                      // палец тянет у верха — край прижат, тянется «Личные».
+                      : secretlyPullListPhysics(
+                          topPullDragActive: () => _listUserDragging,
+                        ),
                   padding: EdgeInsets.only(bottom: 108 + bottomInset),
                   itemCount: itemCount,
+                  // М3: строка чата, сменившая место, сохраняет своё состояние
+                  // (и анимирует переезд), а не создаётся заново.
+                  findChildIndexCallback: (key) {
+                    if (key is! ValueKey<String>) return null;
+                    const prefix = 'chat-motion-';
+                    if (!key.value.startsWith(prefix)) return null;
+                    final idx = _listMotion.indexOf(
+                      key.value.substring(prefix.length),
+                    );
+                    if (idx == null) return null;
+                    return headerItems.length +
+                        (showPersonalEntry ? 1 : 0) +
+                        (showEmptyPlaceholder ? 1 : 0) +
+                        idx;
+                  },
                   itemBuilder: (context, i) {
                     if (i < headerItems.length) {
                       return headerItems[i];
@@ -2369,7 +2373,11 @@ class _ChatsScreenState extends State<ChatsScreen>
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (placeholderIsLoading)
+                            // Идёт поиск по сообщениям — индикатор, а не
+                            // голое слово «Поиск».
+                            if (placeholderIsLoading ||
+                                (_searchQuery.trim().isNotEmpty &&
+                                    _searchingMessages))
                               const SizedBox(
                                 width: 22,
                                 height: 22,
@@ -2381,9 +2389,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                               Text(
                                 _searchQuery.trim().isEmpty
                                     ? l10n.noChatsYet
-                                    : (_searchingMessages
-                                          ? l10n.search
-                                          : l10n.noMatches),
+                                    : l10n.noMatches,
                               ),
                           ],
                         ),
@@ -2398,6 +2404,14 @@ class _ChatsScreenState extends State<ChatsScreen>
 
                     final selected = _selected.contains(c.convoId);
                     final isRequest = c.convoId.startsWith('req:');
+                    // Макет 3b: после закреплённых — зазор 6.
+                    final gapAfterPinned =
+                        kChatListRowV2 &&
+                        c.pinnedAtMs != null &&
+                        listIndex + 1 < active.length &&
+                        active[listIndex + 1].pinnedAtMs == null;
+                    final isRoomRow = c.convoId.startsWith('group:');
+                    final unreadHighlight = c.unreadCount > 0 && !c.muted;
                     final subtitleFallback = c.peerProfileId ?? c.convoId;
                     final peerProfileId =
                         c.peerProfileId ??
@@ -2408,33 +2422,45 @@ class _ChatsScreenState extends State<ChatsScreen>
                     final isTyping = controller.isConversationTyping(c.convoId);
                     final missedCallCount = missedByConvo[c.convoId] ?? 0;
 
+                    // «Мост аватара» (22.11.2026): аватар строки летит в
+                    // профиль; метка та же, что у Hero строки.
+                    final avatarTag = avatarBridgeListTag(c.convoId);
                     void openAvatarDetails() {
                       if (c.convoId.startsWith('group:')) {
-                        Navigator.of(context).push(
-                          SecretlyPageRoute(
-                            builder: (_) => RoomDetailsScreen(
-                              controller: controller,
-                              groupId: c.convoId,
-                              initialTitle: c.title,
-                            ),
+                        pushAvatarBridge<void>(
+                          context,
+                          heroTag: avatarTag,
+                          precachePath: c.avatarPath,
+                          hapticsEnabled: () => controller.appHapticsEnabled,
+                          builder: (_) => RoomDetailsScreen(
+                            controller: controller,
+                            groupId: c.convoId,
+                            initialTitle: c.title,
+                            initialAvatarPath: kAvatarBridgeTransition
+                                ? c.avatarPath
+                                : null,
+                            heroTag: kAvatarBridgeTransition ? avatarTag : null,
                           ),
                         );
                         return;
                       }
-                      Navigator.of(context).push(
-                        SecretlyPageRoute(
-                          builder: (_) => ContactDetailsScreen(
-                            controller: controller,
-                            peerProfileId: peerProfileId,
-                            convoId: c.convoId,
-                            initialTitle: isFavoritesNotes
-                                ? localizedFavoritesTitle(context)
-                                : c.title,
-                            initialAvatarPath: isFavoritesNotes
-                                ? null
-                                : c.avatarPath,
-                            heroTag: 'avatar-${c.convoId}',
-                          ),
+                      pushAvatarBridge<void>(
+                        context,
+                        heroTag: avatarTag,
+                        precachePath: isFavoritesNotes ? null : c.avatarPath,
+                        precacheDecodeSide: 112,
+                        hapticsEnabled: () => controller.appHapticsEnabled,
+                        builder: (_) => ContactDetailsScreen(
+                          controller: controller,
+                          peerProfileId: peerProfileId,
+                          convoId: c.convoId,
+                          initialTitle: isFavoritesNotes
+                              ? localizedFavoritesTitle(context)
+                              : c.title,
+                          initialAvatarPath: isFavoritesNotes
+                              ? null
+                              : c.avatarPath,
+                          heroTag: avatarTag,
                         ),
                       );
                     }
@@ -2508,7 +2534,10 @@ class _ChatsScreenState extends State<ChatsScreen>
                             ? Theme.of(context).colorScheme.secondaryContainer
                                   .withValues(alpha: 0.45)
                             : Colors.transparent,
-                        child: Padding(
+                        child: ChatListRowFlash(
+                          stamp: c.lastEventAtMs,
+                          unread: c.unreadCount,
+                          child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 12,
@@ -2530,7 +2559,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                                   muted: c.muted,
                                   isFavoritesNotes: isFavoritesNotes,
                                   isOnline: c.isOnline,
-                                  heroTag: 'avatar-${c.convoId}',
+                                  heroTag: avatarTag,
                                   frameId: c.frameId,
                                   onTap: _selectionMode
                                       ? null
@@ -2540,7 +2569,11 @@ class _ChatsScreenState extends State<ChatsScreen>
                               const SizedBox(width: 12),
                               Expanded(
                                 child: SizedBox(
-                                  height: 52,
+                                  // Крупный шрифт: строка растёт вместе с
+                                  // текстом (при обычном — прежние 52).
+                                  height: MediaQuery.textScalerOf(context)
+                                      .scale(52)
+                                      .clamp(52.0, 96.0),
                                   child: Column(
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
@@ -2567,11 +2600,23 @@ class _ChatsScreenState extends State<ChatsScreen>
                                                   Flexible(
                                                     child: _FadingText(
                                                       baseTitle,
-                                                      style: const TextStyle(
-                                                        fontSize: 16,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                      ),
+                                                      style: kChatListRowV2
+                                                          ? TextStyle(
+                                                              fontSize: 16,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                              color:
+                                                                  chatListColors(
+                                                                    context,
+                                                                  ).name,
+                                                            )
+                                                          : const TextStyle(
+                                                              fontSize: 16,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                            ),
                                                     ),
                                                   ),
                                                   if (statusEmoji
@@ -2590,7 +2635,11 @@ class _ChatsScreenState extends State<ChatsScreen>
                                             Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                if (c.pinnedAtMs != null) ...[
+                                                if (c.pinnedAtMs != null &&
+                                                    kChatListRowV2)
+                                                  const ChatListPinGlyph()
+                                                else if (c.pinnedAtMs !=
+                                                    null) ...[
                                                   Icon(
                                                     AppIcons.pin,
                                                     size: 12,
@@ -2603,7 +2652,15 @@ class _ChatsScreenState extends State<ChatsScreen>
                                                   ),
                                                   const SizedBox(width: 3),
                                                 ],
-                                                _TimePill(ms: c.lastEventAtMs),
+                                                if (kChatListRowV2)
+                                                  ChatListTime(
+                                                    ms: c.lastEventAtMs,
+                                                    highlight: unreadHighlight,
+                                                  )
+                                                else
+                                                  _TimePill(
+                                                    ms: c.lastEventAtMs,
+                                                  ),
                                               ],
                                             ),
                                           ],
@@ -2625,12 +2682,21 @@ class _ChatsScreenState extends State<ChatsScreen>
                                                       isRoom: c.convoId
                                                           .startsWith('group:'),
                                                     )
-                                                  : ChatListSubtitlePreview(
+                                                  : _rowSubtitle(
+                                                      c: c,
+                                                      isRequest: isRequest,
+                                                      isRoom: isRoomRow,
+                                                      peerProfileId:
+                                                          peerProfileId,
+                                                      preview: ChatListSubtitlePreview(
                                                       key: ValueKey<String>(
                                                         'chat-subtitle-${c.convoId}',
                                                       ),
                                                       controller: controller,
                                                       convoId: c.convoId,
+                                                      rowV2: kChatListRowV2,
+                                                      unreadCount:
+                                                          c.unreadCount,
                                                       // Version by last-event
                                                       // time (NOT the global
                                                       // changeVersion, which
@@ -2650,18 +2716,34 @@ class _ChatsScreenState extends State<ChatsScreen>
                                                       subtitleFallback:
                                                           subtitleFallback,
                                                     ),
+                                                    ),
                                             ),
                                             if (missedCallCount > 0) ...[
                                               const SizedBox(width: 6),
-                                              _MissedCallBadge(
-                                                count: missedCallCount,
-                                              ),
+                                              if (kChatListRowV2)
+                                                ChatListMissedCallBadge(
+                                                  count: missedCallCount,
+                                                )
+                                              else
+                                                _MissedCallBadge(
+                                                  count: missedCallCount,
+                                                ),
                                             ],
-                                            if (c.unreadCount > 0) ...[
-                                              const SizedBox(width: 6),
-                                              _UnreadBadge(
+                                            if (ListMotionController.enabled)
+                                              _AnimatedUnreadBadge(
                                                 count: c.unreadCount,
-                                              ),
+                                                muted: c.muted,
+                                              )
+                                            else if (c.unreadCount > 0) ...[
+                                              const SizedBox(width: 6),
+                                              kChatListRowV2
+                                                  ? ChatListUnreadBadge(
+                                                      count: c.unreadCount,
+                                                      muted: c.muted,
+                                                    )
+                                                  : _UnreadBadge(
+                                                      count: c.unreadCount,
+                                                    ),
                                             ],
                                           ],
                                         ),
@@ -2673,17 +2755,29 @@ class _ChatsScreenState extends State<ChatsScreen>
                             ],
                           ),
                         ),
+                        ),
                       ),
                     );
                     // iPhone (решение владельца 17.11.2026): смахивание строки, как
                     // в «Сообщениях» iOS. Влево — «Без звука» и «Удалить», вправо —
                     // «Закрепить». На строках чатов это смахивание забирает свайп
                     // между разделами; на остальном экране он остаётся.
+                    Widget motion(Widget row) => ListMotionItem(
+                      key: ValueKey<String>('chat-motion-${c.convoId}'),
+                      controller: _listMotion,
+                      id: c.convoId,
+                      child: gapAfterPinned
+                          ? Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: row,
+                            )
+                          : row,
+                    );
                     if (!appleControlsEnabled || isRequest || _selectionMode) {
-                      return tile;
+                      return motion(tile);
                     }
                     final pinned = c.pinnedAtMs != null;
-                    return AppleSwipeActions(
+                    return motion(AppleSwipeActions(
                       key: ValueKey<String>('chat-swipe-${c.convoId}'),
                       leading: [
                         AppleSwipeAction(
@@ -2724,7 +2818,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                         ),
                       ],
                       child: tile,
-                    );
+                    ));
                   },
                 ),
               );
@@ -2744,7 +2838,9 @@ class _ChatsScreenState extends State<ChatsScreen>
               appBar: buildAppBar(),
               floatingActionButtonLocation:
                   FloatingActionButtonLocation.endFloat,
-              floatingActionButton: !_selectionMode
+              // Острова v3: «Новый чат» — в «+» верхнего островка.
+              floatingActionButton:
+                  !_selectionMode && HomeShellScope.maybeOf(context) == null
                   ? Padding(
                       padding: EdgeInsets.only(bottom: fabBottomOffset + 4),
                       child: AnimatedFab(
@@ -2782,6 +2878,12 @@ class _ChatsScreenState extends State<ChatsScreen>
                 onPopInvokedWithResult: (didPop, _) {
                   if (didPop) return;
                   if (_selectionMode) {
+                    // 🔴 Нажатие «забирает» только ВИДИМЫЙ раздел (разбор 22.11.2026):
+                    // спрятанный слой (TickerMode выкл) снимает своё выделение, но не
+                    // мешает оболочке вернуться в Чаты — иначе первое «Назад» терялось.
+                    if (TickerMode.valuesOf(context).enabled) {
+                      HomeBackGuard.markConsumed();
+                    }
                     _clearSelection();
                   }
                 },
@@ -2832,7 +2934,7 @@ class _ChatsScreenState extends State<ChatsScreen>
                               // like the jelly indicator gliding under the tabs.
                               child: AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 280),
-                                switchInCurve: Curves.easeOutCubic,
+                                switchInCurve: Motion.standard,
                                 switchOutCurve: Curves.easeInCubic,
                                 transitionBuilder: (child, anim) {
                                   final incoming =
@@ -2900,21 +3002,38 @@ class _ChatsScreenState extends State<ChatsScreen>
                               // pinned overlay), so it still refracts the live
                               // scroll rather than the screen backdrop — the
                               // mistake that flattened build 336.
-                              child: liquidGlassIslandsEnabled
-                                  ? SecretlyGlassGroup(
-                                      grouped: true,
-                                      child: lg.AdaptiveLiquidGlassLayer(
-                                        settings: secretlyIslandGlass(
-                                          Theme.of(context).brightness,
-                                        ),
-                                        quality: lg.GlassQuality.premium,
-                                        child: _pinnedIslandColumn(
+                              // Звонок в комнате — строкой общей пластины
+                              // островков (23.11.2026), а не своей капсулой.
+                              child: Builder(
+                                builder: (context) {
+                                  final pinnedRoomCall = roomCall == null
+                                      ? null
+                                      : buildRoomCallBanner(
+                                          roomCall,
+                                          roomCallTitle,
+                                        );
+                                  return liquidGlassIslandsEnabled
+                                      ? SecretlyGlassGroup(
+                                          grouped: true,
+                                          child: lg.AdaptiveLiquidGlassLayer(
+                                            settings: secretlyIslandGlass(
+                                              Theme.of(context).brightness,
+                                            ),
+                                            quality: lg.GlassQuality.premium,
+                                            child: _pinnedIslandColumn(
+                                              context,
+                                              controller,
+                                              roomCall: pinnedRoomCall,
+                                            ),
+                                          ),
+                                        )
+                                      : _pinnedIslandColumn(
                                           context,
                                           controller,
-                                        ),
-                                      ),
-                                    )
-                                  : _pinnedIslandColumn(context, controller),
+                                          roomCall: pinnedRoomCall,
+                                        );
+                                },
+                              ),
                             ),
                           ],
                         ),
@@ -2929,6 +3048,22 @@ class _ChatsScreenState extends State<ChatsScreen>
       },
     );
   }
+}
+
+/// Вторая строка чата — общая для трёх списков ([ChatListRowSubtitle]).
+Widget _rowSubtitle({
+  required Conversation c,
+  required bool isRequest,
+  required bool isRoom,
+  required String peerProfileId,
+  required Widget preview,
+}) {
+  return ChatListRowSubtitle(
+    draftKey: (isRoom || isRequest) ? c.convoId : (c.peerProfileId ?? c.convoId),
+    peerProfileId: (isRoom || isRequest) ? null : peerProfileId,
+    showDraft: !isRequest,
+    preview: preview,
+  );
 }
 
 class _PersonalGlassEntryCard extends StatelessWidget {
@@ -2991,11 +3126,13 @@ class _PersonalGlassEntryCard extends StatelessWidget {
       colors: [
         Color.alphaBlend(
           glassTint,
-          Colors.white.withValues(alpha: isDark ? 0.045 : 0.14),
+          // Светлая тема — почти белая карточка, как группы настроек
+          // (0,14/0,07 белого над #F2F2F7 давали серую «плиту»).
+          Colors.white.withValues(alpha: isDark ? 0.045 : 0.92),
         ),
         Color.alphaBlend(
           accentColor.withValues(alpha: isDark ? 0.015 : 0.018),
-          Colors.white.withValues(alpha: isDark ? 0.018 : 0.07),
+          Colors.white.withValues(alpha: isDark ? 0.018 : 0.86),
         ),
       ],
     );
@@ -3010,7 +3147,7 @@ class _PersonalGlassEntryCard extends StatelessWidget {
     );
     final menuSurface = isDark
         ? Colors.white.withValues(alpha: 0.045)
-        : Colors.white.withValues(alpha: 0.12);
+        : Colors.black.withValues(alpha: 0.05);
     final titleColor = isDark ? Colors.white : cs.onSurface;
     final subtitleColor = isDark
         ? Colors.white.withValues(alpha: 0.70)
@@ -3155,7 +3292,7 @@ class _PersonalGlassEntryCard extends StatelessWidget {
                                       if (protectionEnabled) ...[
                                         const SizedBox(width: 6),
                                         Icon(
-                                          Icons.lock_rounded,
+                                          AdaptiveIcons.lock_rounded,
                                           size: 16,
                                           color: titleLockColor,
                                         ),
@@ -3604,7 +3741,7 @@ class _ChatLeading extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = avatarPath;
-    final hasAvatar = p != null && p.isNotEmpty && File(p).existsSync();
+    final hasAvatar = p != null && p.isNotEmpty && FileExistsCache.exists(p);
 
     Widget base;
     if (isFavoritesNotes) {
@@ -3640,9 +3777,26 @@ class _ChatLeading extends StatelessWidget {
       );
     }
 
-    // Wrap with Hero for shared-element transition.
+    // Wrap with Hero for shared-element transition («мост аватара»: свой
+    // полёт с той же картинкой, что в строке).
     if (heroTag != null) {
-      base = Hero(tag: heroTag!, child: base);
+      base = AvatarBridgeHero(
+        tag: heroTag!,
+        side: AvatarBridgeSide.source,
+        spec: AvatarBridgeSpec.framed(
+          context,
+          size: 52,
+          path: hasAvatar ? p : null,
+          frameId: frameId,
+          seed: fallbackId.isNotEmpty ? fallbackId : title,
+          name: title,
+          fallbackId: fallbackId,
+          favoritesAsset: isFavoritesNotes
+              ? _ChatsScreenState._noteIconAssetPath
+              : null,
+        ),
+        child: base,
+      );
     }
 
     // Bottom-right indicator: muted or online dot.
@@ -3656,6 +3810,23 @@ class _ChatLeading extends StatelessWidget {
         child: const Padding(
           padding: EdgeInsets.all(2),
           child: Icon(AppIcons.bellOffSolid, size: 14),
+        ),
+      );
+    } else if (isOnline && kChatListRowV2) {
+      // Макет 3b: точка 13, кольцо фона 2,5.
+      bottomRight = Container(
+        width: 18,
+        height: 18,
+        padding: const EdgeInsets.all(2.5),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          shape: BoxShape.circle,
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: chatListColors(context).online,
+            shape: BoxShape.circle,
+          ),
         ),
       );
     } else if (isOnline) {
@@ -3690,7 +3861,7 @@ class _ChatLeading extends StatelessWidget {
       // и ноутбук: работа делалась, а на экране оставалось одно кольцо.
       clipBehavior: Clip.none,
       duration: const Duration(milliseconds: 240),
-      curve: Curves.easeOutBack,
+      curve: Motion.pop,
       alignment: Alignment.centerLeft,
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -3707,8 +3878,8 @@ class _ChatLeading extends StatelessWidget {
                     padding: const EdgeInsets.only(right: 10),
                     child: Icon(
                       selected
-                          ? Icons.check_circle_rounded
-                          : Icons.radio_button_unchecked,
+                          ? AdaptiveIcons.check_circle_rounded
+                          : AdaptiveIcons.radio_button_unchecked,
                       size: 24,
                       color: selected
                           ? Theme.of(context).colorScheme.primary
@@ -3794,7 +3965,9 @@ class _ChatListTypingSubtitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
+    final accent = kChatListRowV2
+        ? chatListColors(context).accent
+        : Theme.of(context).colorScheme.primary;
     final typingWord = wave1Text(
       context,
       ru: 'Пишет',
@@ -3824,7 +3997,7 @@ class _ChatListTypingSubtitle extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: kChatListRowV2 ? 14.5 : 14,
                   color: accent,
                   fontWeight: FontWeight.w500,
                 ),
@@ -3858,9 +4031,110 @@ class _OnlineDot extends StatelessWidget {
   }
 }
 
+/// М3: бейдж непрочитанных как в Telegram — появляется масштабом от 0,1 за
+/// 0,4 с (место под него раздвигается плавно), исчезает за 0,25 с, новое
+/// число въезжает снизу. Первое появление строки (прокрутка, запуск) —
+/// без анимации: бейдж просто есть.
+class _AnimatedUnreadBadge extends StatefulWidget {
+  const _AnimatedUnreadBadge({required this.count, this.muted = false});
+
+  final int count;
+  final bool muted;
+
+  @override
+  State<_AnimatedUnreadBadge> createState() => _AnimatedUnreadBadgeState();
+}
+
+class _AnimatedUnreadBadgeState extends State<_AnimatedUnreadBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: MotionDurations.list,
+    reverseDuration: const Duration(milliseconds: 250),
+    value: widget.count > 0 ? 1 : 0,
+  );
+  late int _shown = widget.count;
+
+  @override
+  void didUpdateWidget(_AnimatedUnreadBadge old) {
+    super.didUpdateWidget(old);
+    if (widget.count > 0) _shown = widget.count;
+    final reduced = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (old.count == 0 && widget.count > 0) {
+      reduced ? _c.value = 1 : _c.forward(from: 0);
+    } else if (old.count > 0 && widget.count == 0) {
+      reduced ? _c.value = 0 : _c.reverse();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, _) {
+        final t = _c.value;
+        if (t == 0) return const SizedBox.shrink();
+        final k = Motion.standard.transform(t);
+        return ClipRect(
+          child: Align(
+            alignment: Alignment.centerRight,
+            widthFactor: k,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Opacity(
+                opacity: (t / 0.625).clamp(0.0, 1.0),
+                child: Transform.scale(
+                  scale: 0.1 + 0.9 * k,
+                  child: AnimatedSwitcher(
+                    duration: MotionDurations.quick,
+                    switchInCurve: Motion.standard,
+                    switchOutCurve: Curves.easeIn,
+                    layoutBuilder: (current, previous) => Stack(
+                      alignment: Alignment.center,
+                      children: [...previous, ?current],
+                    ),
+                    transitionBuilder: (child, anim) {
+                      final incoming = child.key == ValueKey<int>(_shown);
+                      return ClipRect(
+                        child: SlideTransition(
+                          position: Tween<Offset>(
+                            begin: Offset(0, incoming ? 0.6 : -0.6),
+                            end: Offset.zero,
+                          ).animate(anim),
+                          child: FadeTransition(opacity: anim, child: child),
+                        ),
+                      );
+                    },
+                    child: kChatListRowV2
+                        ? ChatListUnreadBadge(
+                            key: ValueKey<int>(_shown),
+                            count: _shown,
+                            muted: widget.muted,
+                          )
+                        : _UnreadBadge(
+                            key: ValueKey<int>(_shown),
+                            count: _shown,
+                          ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Rounded pill badge showing unread message count.
 class _UnreadBadge extends StatelessWidget {
-  const _UnreadBadge({required this.count});
+  const _UnreadBadge({super.key, required this.count});
 
   final int count;
 
@@ -3899,6 +4173,20 @@ class _TimePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // iPhone: время — просто текст цвета `secondaryLabel`, как в списках
+    // iOS/Telegram. Серая «таблетка» с текстом 38 % (≈ 2,2 : 1) читалась
+    // плохо в светлой теме.
+    if (appleGlassPanelsEnabled) {
+      return Text(
+        _formatTime(ms),
+        style: TextStyle(
+          color: AppleGlass.secondaryLabel(isDark),
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          height: 1.2,
+        ),
+      );
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
@@ -3911,8 +4199,8 @@ class _TimePill extends StatelessWidget {
         _formatTime(ms),
         style: TextStyle(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.45)
-              : Colors.black.withValues(alpha: 0.38),
+              ? Colors.white.withValues(alpha: 0.6)
+              : Colors.black.withValues(alpha: 0.6),
           fontSize: 11,
           fontWeight: FontWeight.w500,
           height: 1.2,
@@ -3998,6 +4286,23 @@ class _ChatsFolderTabStrip extends StatelessWidget {
     var selectedIndex = ids.indexOf(activeFolder);
     if (selectedIndex < 0) selectedIndex = 0;
 
+    // 23.11.2026 (план стекла): одна пластина во всю ширину при любом числе
+    // папок — две папки делят её пополам; капля переливается между ними.
+    if (kGlassCategoryStrip) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(0, 2, 0, 6),
+        child: GlassCategoryStrip(
+          items: [for (final l in segmentLabels) GlassStripItem(label: l)],
+          selected: selectedIndex,
+          onSelect: (i) => onSelect(ids[i]),
+          onLongPress: (i) {
+            if (i >= 1 && i - 1 < folders.length) {
+              onFolderLongPress(folders[i - 1]);
+            }
+          },
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 2, 14, 6),
       child: LiquidGlassSegment(
@@ -4028,34 +4333,12 @@ class _GlassMenuAction extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Row(
-          children: [
-            leading ??
-                Icon(
-                  icon ?? AppIcons.more,
-                  size: 22,
-                  color: cs.onSurface.withValues(alpha: 0.92),
-                ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => AppMenuRow(
+    title: title,
+    icon: icon ?? AppIcons.more,
+    leading: leading,
+    onTap: onTap,
+  );
 }
 
 class _ThemeMenuAnimatedIcon extends StatelessWidget {
@@ -4237,7 +4520,7 @@ class _ChatBubbleFabIconState extends State<_ChatBubbleFabIcon>
         tween: Tween(
           begin: 0.82,
           end: 1.08,
-        ).chain(CurveTween(curve: Curves.easeOut)),
+        ).chain(CurveTween(curve: Motion.fade)),
         weight: 45,
       ),
       TweenSequenceItem(
@@ -4309,10 +4592,166 @@ class _ChatBubbleFabIconState extends State<_ChatBubbleFabIcon>
                 color: Colors.white,
               ),
               alignment: Alignment.center,
-              child: Icon(Icons.add, size: 13, color: cs.primary),
+              child: Icon(AdaptiveIcons.add, size: 13, color: cs.primary),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Меню приложения (бывший «⋯» списка чатов): тема, новая комната,
+/// «Избранное», звонки. Острова v3 открывают его по названию приложения в
+/// любом разделе — поэтому оно не привязано к экрану чатов.
+/// [anchorLeft] — под левым островком (название), иначе в правом углу.
+Future<void> showHomeMainMenu(
+  BuildContext context,
+  AppController controller, {
+  bool anchorLeft = false,
+}) async {
+  final missedCallCount = await controller.missedCallCount();
+  if (!context.mounted) return;
+  final action = await showFrostedPopup<String>(
+    context: context,
+    alignment: Alignment.topRight,
+    builder: (context) {
+      return SafeArea(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(context).pop(),
+              ),
+            ),
+            Positioned(
+              top: anchorLeft ? 58 : 10,
+              left: anchorLeft ? 10 : null,
+              right: anchorLeft ? null : 10,
+              child: FrostedPopupContainer(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minWidth: 210,
+                    maxWidth: 250,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _GlassMenuAction(
+                        leading: _ThemeMenuAnimatedIcon(
+                          darkMode: controller.darkMode,
+                        ),
+                        title: wave1Text(context,
+                          ru: controller.darkMode
+                              ? 'Светлая тема'
+                              : 'Тёмная тема',
+                          en: controller.darkMode
+                              ? 'Light theme'
+                              : 'Dark theme',
+                        ),
+                        onTap: () => Navigator.of(context).pop('theme'),
+                      ),
+                      _GlassMenuAction(
+                        leading: const _GroupMenuAnimatedIcon(),
+                        icon: AppIcons.createGroup,
+                        title: wave1Text(context,
+                          ru: 'Создать комнату',
+                          en: 'Create room',
+                        ),
+                        onTap: () => Navigator.of(context).pop('group'),
+                      ),
+                      _GlassMenuAction(
+                        leading: const _FavoritesMenuAnimatedIcon(),
+                        title: localizedFavoritesTitle(context),
+                        onTap: () => Navigator.of(context).pop('favorites'),
+                      ),
+                      _GlassMenuAction(
+                        leading: _CallHistoryMenuAnimatedIcon(
+                          missedCount: missedCallCount,
+                        ),
+                        title: wave1Text(context, ru: 'Звонки', en: 'Calls'),
+                        onTap: () =>
+                            Navigator.of(context).pop('call_history'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+
+  if (!context.mounted || action == null) return;
+  if (action == 'theme') {
+    if (!context.mounted) return;
+    final size = MediaQuery.sizeOf(context);
+    final topPad = mediaQueryNow(context).padding.top;
+    final center = Offset(
+      anchorLeft ? 60 : size.width - 40,
+      topPad + kToolbarHeight / 2,
+    );
+    final scope = ThemeTransitionScope.of(context);
+    if (scope != null) {
+      scope.triggerTransition(center, !controller.darkMode);
+    } else {
+      await controller.setDarkModeByUser(!controller.darkMode);
+    }
+    return;
+  }
+  if (action == 'group') {
+    final fallbackTitle = context.l10n.tabGroups;
+    final groupId = await Navigator.of(context).push<String>(
+      SecretlyPageRoute(
+        builder: (_) => NewGroupScreen(controller: controller),
+      ),
+    );
+    if (!context.mounted || groupId == null || groupId.isEmpty) return;
+    final updated = await controller.listConversations();
+    Conversation? created;
+    for (final convo in updated) {
+      if (convo.convoId == groupId) {
+        created = convo;
+        break;
+      }
+    }
+    final title = created?.title ?? fallbackTitle;
+    if (!context.mounted) return;
+    Navigator.of(context).push(
+      SecretlyPageRoute(
+        builder: (_) => ChatScreen(
+          controller: controller,
+          convoId: groupId,
+          title: title,
+        ),
+      ),
+    );
+    return;
+  }
+  if (action == 'favorites') {
+    final title = localizedFavoritesTitle(context);
+    final convoId = await controller.ensureFavoritesChat(title: title);
+    if (!context.mounted) return;
+    await Navigator.of(context).push(
+      SecretlyPageRoute(
+        builder: (_) => ChatScreen(
+          controller: controller,
+          convoId: convoId,
+          title: title,
+          peerProfileIdForSend: convoId,
+          initialForwardDraft: controller.forwardDraft,
+        ),
+      ),
+    );
+    return;
+  }
+  if (action == 'call_history') {
+    await Navigator.of(context).push(
+      SecretlyPageRoute(
+        builder: (_) => CallHistoryScreen(controller: controller),
       ),
     );
   }

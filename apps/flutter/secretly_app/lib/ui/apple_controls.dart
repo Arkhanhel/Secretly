@@ -7,10 +7,13 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+
+import 'apple_glass.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import 'apple_style.dart';
+import 'motion/motion.dart';
 
 /// Окна и элементы управления в стиле iPhone (решение владельца 17.11.2026).
 ///
@@ -318,11 +321,21 @@ class _AppleAlert extends StatelessWidget {
             ],
           );
 
+    // Liquid Glass (20.11.2026): скругление крупнее, как у окон iOS 26, и
+    // светлая кромка стекла поверх. Размытие под окном было и раньше.
+    final radius = appleGlassPanelsEnabled ? AppleGlass.radius : 14.0;
     final panel = ClipRRect(
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(radius),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-        child: ColoredBox(
+        child: DecoratedBox(
+          position: DecorationPosition.foreground,
+          decoration: appleGlassPanelsEnabled
+              ? ShapeDecoration(
+                  shape: AppleGlassBorder(radius: radius, dark: dark),
+                )
+              : const BoxDecoration(),
+          child: ColoredBox(
           color: fill,
           child: Material(
             type: MaterialType.transparency,
@@ -337,6 +350,7 @@ class _AppleAlert extends StatelessWidget {
                 ],
               ],
             ),
+          ),
           ),
         ),
       ),
@@ -790,7 +804,7 @@ class _AppleSwipeActionsState extends State<AppleSwipeActions>
     _offset.animateTo(
       target,
       duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
+      curve: Motion.standard,
     );
     if (target != 0) {
       if (!identical(_open, this)) HapticFeedback.selectionClick();

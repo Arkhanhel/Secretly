@@ -8,7 +8,10 @@ import 'package:flutter/material.dart';
 
 import '../app/pdf_document.dart';
 import 'icons/app_icons.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Full-screen in-app document reader.
 ///
@@ -135,7 +138,7 @@ class _DocumentReaderScreenState extends State<DocumentReaderScreen> {
         ignoring: !_chromeVisible,
         child: AnimatedSlide(
           duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
+          curve: Motion.standard,
           offset: _chromeVisible ? Offset.zero : const Offset(0, -0.16),
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 160),
@@ -149,13 +152,13 @@ class _DocumentReaderScreenState extends State<DocumentReaderScreen> {
                     padding: const EdgeInsets.all(6),
                     child: Row(
                       children: [
-                        IconButton(
+                        PressFeedback(child: IconButton(
                           onPressed: () => Navigator.of(context).pop(),
                           icon: const Icon(
                             AppIcons.arrowBack,
                             color: Colors.white,
                           ),
-                        ),
+                        )),
                         Expanded(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -204,7 +207,7 @@ class _DocumentReaderScreenState extends State<DocumentReaderScreen> {
         ignoring: !_chromeVisible,
         child: AnimatedSlide(
           duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
+          curve: Motion.standard,
           offset: _chromeVisible ? Offset.zero : const Offset(0, 0.2),
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 160),
@@ -227,7 +230,7 @@ class _DocumentReaderScreenState extends State<DocumentReaderScreen> {
                             await widget.onShare();
                           },
                           icon: const Icon(
-                            Icons.ios_share_rounded,
+                            AdaptiveIcons.ios_share_rounded,
                             color: Colors.white,
                             size: 20,
                           ),

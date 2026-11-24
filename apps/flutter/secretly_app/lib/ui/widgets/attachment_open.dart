@@ -24,9 +24,11 @@ import '../../models/e2e_payload_v1.dart';
 import '../animations/page_transitions.dart';
 import '../chat_screen_l10n.dart';
 import '../document_reader_screen.dart';
+import '../motion/app_dialogs.dart';
 import '../secretly_snackbar.dart';
 import '../text_file_reader_screen.dart';
 import 'attachment_actions.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Opens [file] (the decrypted [attachment]) the way the chat does.
 Future<void> openAttachmentFileForUser(
@@ -123,6 +125,7 @@ Future<void> openAttachmentFileForUser(
   // Drive, browser, mail), which is the standard Android way out of this, and
   // it also lets the user move the file somewhere they can open it.
   final decision = await showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     builder: (sheetContext) => SafeArea(
       child: Column(
@@ -140,7 +143,7 @@ Future<void> openAttachmentFileForUser(
             ),
           ),
           ListTile(
-            leading: const Icon(Icons.ios_share_rounded),
+            leading: const Icon(AdaptiveIcons.ios_share_rounded),
             title: Text(
               chatText(
                 sheetContext,
@@ -157,7 +160,7 @@ Future<void> openAttachmentFileForUser(
           // its share sheet already covers "save to Files".
           if (Platform.isAndroid)
             ListTile(
-              leading: const Icon(Icons.download_rounded),
+              leading: const Icon(AdaptiveIcons.download_rounded),
               title: Text(
                 chatText(
                   sheetContext,

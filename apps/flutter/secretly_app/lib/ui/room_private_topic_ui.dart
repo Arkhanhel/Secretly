@@ -17,7 +17,10 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../rooms/room_models.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'widgets/avatar_initials.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Что выбрал человек.
 class NewRoomTopicChoice {
@@ -38,6 +41,7 @@ Future<NewRoomTopicChoice?> showNewRoomTopicSheet(
   required List<RoomMember> members,
 }) {
   return showModalBottomSheet<NewRoomTopicChoice>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
@@ -118,14 +122,14 @@ class _NewRoomTopicSheetState extends State<_NewRoomTopicSheet> {
             ),
             const SizedBox(height: 8),
             _KindTile(
-              icon: Icons.tag_rounded,
+              icon: AdaptiveIcons.tag_rounded,
               title: l10n.roomPrivateTopicOpen,
               hint: l10n.roomPrivateTopicOpenHint,
               selected: !_private,
               onTap: () => setState(() => _private = false),
             ),
             _KindTile(
-              icon: Icons.lock_rounded,
+              icon: AdaptiveIcons.lock_rounded,
               title: l10n.roomPrivateTopicClosed,
               hint: l10n.roomPrivateTopicClosedHint,
               selected: _private,
@@ -148,7 +152,7 @@ class _NewRoomTopicSheetState extends State<_NewRoomTopicSheet> {
                   shrinkWrap: true,
                   children: <Widget>[
                     for (final member in widget.members)
-                      CheckboxListTile(
+                      CheckboxListTile.adaptive(
                         value: _picked.contains(member.profileId),
                         onChanged: (checked) => setState(() {
                           if (checked ?? false) {
@@ -171,10 +175,10 @@ class _NewRoomTopicSheetState extends State<_NewRoomTopicSheet> {
             ],
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-              child: FilledButton(
+              child: PressFeedback(child: FilledButton(
                 onPressed: _title.text.trim().isEmpty ? null : _submit,
                 child: Text(l10n.roomPrivateTopicCreate),
-              ),
+              )),
             ),
           ],
         ),
@@ -208,8 +212,8 @@ class _KindTile extends StatelessWidget {
       subtitle: Text(hint),
       trailing: Icon(
         selected
-            ? Icons.radio_button_checked_rounded
-            : Icons.radio_button_off_rounded,
+            ? AdaptiveIcons.radio_button_checked_rounded
+            : AdaptiveIcons.radio_button_off_rounded,
         color: selected ? cs.primary : cs.onSurfaceVariant,
       ),
       selected: selected,

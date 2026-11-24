@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'scroll_feel.dart';
+import 'glass/glass_category_strip.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:secretly_app/ui/secretly_snackbar.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +29,8 @@ import 'cover_crop_screen.dart';
 import 'fullscreen_image_viewer.dart';
 import 'icons/app_icons.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'paywall_screen.dart' show PaywallTrigger;
 import 'premium/cosmetic_animation_scope.dart';
 import 'premium/cosmetics_catalog.dart';
@@ -38,7 +43,10 @@ import 'room_invite_join_screen.dart';
 import 'room_invite_share_sheet.dart';
 import 'room_l10n_bridge.dart';
 import 'room_policy_error_text.dart';
+import 'settings_group.dart';
+import 'apple_settings_row.dart';
 import 'share_utils.dart';
+import 'widgets/apple_menu.dart';
 import 'widgets/avatar_initials.dart';
 import 'widgets/app_background.dart';
 import 'widgets/conversation_media_gallery.dart';
@@ -50,6 +58,13 @@ import 'disappearing_messages_ui.dart';
 import '../messages/disappearing_flags.dart' show DisappearingPeerSupport;
 import 'haptics.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
+import 'profile/profile_motion.dart';
+import 'premium/live_covers.dart' show CoverAvatarGeometry;
+import 'media_viewer/media_flight.dart' show MediaFlightAnchor;
+import 'animations/avatar_bridge_route.dart';
+import '../storage/file_exists_cache.dart';
 
 String _roomText(
   BuildContext context, {
@@ -315,7 +330,7 @@ Future<String?> _pickNextRoomOwnerDialog(
   }
   final localeTag = roomLocaleTagFromContext(context);
   var selectedProfileId = candidates.first.profileId;
-  return showDialog<String>(
+  return showAppDialog<String>(
     context: context,
     builder: (context) {
       return StatefulBuilder(
@@ -371,10 +386,10 @@ Future<String?> _pickNextRoomOwnerDialog(
                 onPressed: () => Navigator.of(context).pop(null),
                 child: Text(_roomText(context, ru: 'Отмена', en: 'Cancel')),
               ),
-              FilledButton(
+              PressFeedback(child: FilledButton(
                 onPressed: () => Navigator.of(context).pop(selectedProfileId),
                 child: Text(_roomText(context, ru: 'Передать', en: 'Transfer')),
-              ),
+              )),
             ],
           );
         },
@@ -389,11 +404,21 @@ class RoomDetailsScreen extends StatefulWidget {
     required this.controller,
     required this.groupId,
     required this.initialTitle,
+    this.initialAvatarPath,
+    this.heroTag,
   });
 
   final AppController controller;
   final String groupId;
   final String initialTitle;
+
+  /// Фото комнаты, которое уже знает открывший экран (строка списка, шапка
+  /// чата): первый кадр сразу с аватаром.
+  final String? initialAvatarPath;
+
+  /// Метка Hero аватара — та же, что у аватара, из которого открыли
+  /// («мост аватара»). `null` — прежняя `room-avatar-<id>`.
+  final String? heroTag;
 
   @override
   State<RoomDetailsScreen> createState() => _RoomDetailsScreenState();
@@ -460,92 +485,204 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
   String? _roomTitleOverride;
 
   final ScrollController _scrollController = ScrollController();
-  bool _collapseGestureActive = false;
-  double _pullExpand = 0;
-  double _avatarPullPx = 0;
-  double _avatarFullscreenPullPx = 0;
-  bool _avatarWasFullyExpanded = false;
+  // Движение шапки — общий двигатель макета «Profile Motion» (21.11.2026).
+  late final ProfileHeroDriver _hero = ProfileHeroDriver(
+    vsync: this,
+    onChanged: _onHeroChanged,
+    maxPx: _avatarPullMaxPx,
+    snap: _avatarSnapThreshold,
+    hapticsEnabled: () => widget.controller.appHapticsEnabled,
+  );
+  double get _pullExpand => _hero.expand;
+
+  void _onHeroChanged() {
+    if (!mounted) return;
+    _syncHeroAway();
+    // Кадр движения шапки — только перерисовка, без перезагрузки комнаты.
+    _heroFrame = true;
+    try {
+      setState(() {});
+    } finally {
+      _heroFrame = false;
+    }
+  }
+
+  /// Метка Hero аватара комнаты (и точки перелёта просмотра фото).
+  String get _avatarTag => widget.heroTag ?? 'room-avatar-${widget.groupId}';
+
+  /// «Мост аватара»: пока страница прокручена и аватар летит в остров,
+  /// перелёт при закрытии берёт летящий аватар.
+  final ValueNotifier<bool> _heroAway = ValueNotifier<bool>(false);
+
+  void _syncHeroAway() {
+    _heroAway.value = _hero.scroll.value > 0 && _hero.expand <= 0.001;
+  }
+
+  bool _heroFrame = false;
+
+  // 🔴 Прежде комната перезагружалась в КАЖДОЙ сборке (`future: _load()`
+  // прямо в build): и на каждом кадре движения шапки, и на каждый `changed`.
+  // Так же подхватывались изменения после действий (`setState(() {})`).
+  // Теперь будущее одно; перезагрузку дают setState (кроме кадров шапки) и
+  // `changed` — не чаще раза в [_vmReloadThrottleMs], последнее не теряется.
+  Future<_RoomVm>? _vmFuture;
+  _RoomVm? _lastVm;
+  StreamSubscription<void>? _changedSub;
+  Timer? _vmReloadTimer;
+  int _vmReloadAtMs = 0;
+  static const int _vmReloadThrottleMs = 400;
+
+  @override
+  void setState(VoidCallback fn) {
+    if (_heroFrame || _vmFuture == null) {
+      super.setState(fn);
+      return;
+    }
+    super.setState(() {
+      fn();
+      _vmFuture = _load();
+    });
+  }
+
+  void _maybeReloadVm() {
+    if (!mounted) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final wait = _vmReloadThrottleMs - (now - _vmReloadAtMs);
+    if (wait > 0) {
+      _vmReloadTimer ??= Timer(Duration(milliseconds: wait), () {
+        _vmReloadTimer = null;
+        _maybeReloadVm();
+      });
+      return;
+    }
+    _vmReloadAtMs = now;
+    setState(() {}); // перезагружает комнату (см. setState)
+  }
+
+  /// Комната из того, что знает открывший экран: первый кадр — с аватаром,
+  /// чтобы Hero нашёл пару. Права — «ничего нельзя», пока не загрузится.
+  _RoomVm? _seedVm() {
+    if (!kAvatarBridgeTransition) return null;
+    final title = widget.initialTitle.trim();
+    final path = widget.initialAvatarPath?.trim() ?? '';
+    final settings = RoomSettings.defaults(ownerProfileId: '').copyWith(
+      avatarPath: path.isNotEmpty && FileExistsCache.exists(path) ? path : null,
+    );
+    return _RoomVm(
+      isSeed: true,
+      title: title.isEmpty
+          ? _roomText(context, ru: 'Комната', en: 'Room')
+          : title,
+      muted: false,
+      autoDeleteSeconds: null,
+      settings: settings,
+      members: const <RoomMember>[],
+      inviteLinks: const <RoomInviteLink>[],
+      isAdmin: false,
+      policy: RoomPolicyState(
+        settings: settings,
+        isMember: false,
+        role: RoomMemberRole.member,
+        canSendText: false,
+        canSendMedia: false,
+        canAddMembers: false,
+        canPinMessages: false,
+        canChangeGroupInfo: false,
+        canChangeOwnTag: false,
+        canManageSettings: false,
+        canManageAdmins: false,
+        canManageMemberRoles: false,
+        canManageInviteLinks: false,
+        canApproveJoinRequests: false,
+        canRemoveMembers: false,
+        canBanMembers: false,
+        canUseBroadcastMentions: false,
+        canReceiveAdminMentions: false,
+        canReact: false,
+        allowedReactionEmojis: const <String>[],
+        isSlowModeActive: false,
+        slowModeRemainingSeconds: 0,
+      ),
+      myProfileId: widget.controller.profileId,
+      activeCall: null,
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // `_load` берёт подписи из контекста — поэтому здесь, а не в initState.
+    if (_vmFuture == null) {
+      _lastVm = _seedVm();
+      _vmFuture = _load();
+    }
+  }
+
+  /// Остров шапки. Пока страница въезжает «мостом» (Android) — сплошная
+  /// плашка без размытия.
+  Widget _bridgeIsland({required Widget child}) => AvatarBridgeEntrance(
+    child: child,
+    builder: (context, settled, child) => FrostedHeaderIsland(
+      radius: 24,
+      height: 48,
+      frosted: settled ? null : false,
+      child: child!,
+    ),
+  );
+
+  /// Летящий в остров аватар несёт Hero, пока аватар страницы «в стороне».
+  Widget _flyingBridge(_RoomVm room, Widget child) {
+    if (!kAvatarBridgeTransition || widget.heroTag == null) return child;
+    final p = room.settings.avatarPath;
+    return AvatarBridgeHero(
+      tag: _avatarTag,
+      side: AvatarBridgeSide.destination,
+      spec: AvatarBridgeSpec(
+        seed: widget.groupId,
+        name: room.title,
+        fallbackId: widget.groupId,
+        imagePath: p != null && p.isNotEmpty && FileExistsCache.exists(p)
+            ? p
+            : null,
+        labelFraction: 0.34,
+      ),
+      child: child,
+    );
+  }
+  // Магнитная привязка страницы (шапка → имя в шапке → галерея у шапки).
+  late final ProfileScrollSnapper _snap = ProfileScrollSnapper(
+    controller: _scrollController,
+    hapticsEnabled: () => widget.controller.appHapticsEnabled,
+  );
+
+  void _onHeroScroll() {
+    if (!_scrollController.hasClients) return;
+    _hero.setScroll(_scrollController.offset);
+    _syncHeroAway();
+  }
   bool _avatarViewerOpening = false;
   // 240px finger travel for a full open → the photo expands at half the finger
   // speed (2× slower / more gradual) than a 1:1 drag. IDENTICAL to contacts.
   static const double _avatarPullMaxPx = 240;
   static const double _avatarSnapThreshold = 0.45;
-  static const double _avatarFullscreenPullThreshold = 28;
-  late final AnimationController _pullSnapController;
-  Animation<double>? _pullSnapAnimation;
 
   @override
   void initState() {
     super.initState();
-    _pullSnapController =
-        AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 220),
-        )..addListener(() {
-          final animation = _pullSnapAnimation;
-          if (animation == null || !mounted) return;
-          setState(() {
-            _pullExpand = animation.value;
-            _avatarPullPx = (_pullExpand * _avatarPullMaxPx).clamp(
-              0.0,
-              _avatarPullMaxPx,
-            );
-          });
-          _updateAvatarPhotoFeedback();
-        });
+    _scrollController.addListener(_onHeroScroll);
+    _changedSub = widget.controller.changed.listen((_) => _maybeReloadVm());
   }
 
   @override
   void dispose() {
+    _changedSub?.cancel();
+    _vmReloadTimer?.cancel();
+    _heroAway.dispose();
+    _scrollController.removeListener(_onHeroScroll);
     _scrollController.dispose();
-    _pullSnapController.dispose();
+    _hero.dispose();
+    _snap.dispose();
     super.dispose();
-  }
-
-  void _stopPullSnap() {
-    if (_pullSnapController.isAnimating) {
-      _pullSnapController.stop();
-    }
-  }
-
-  void _updateAvatarPhotoFeedback() {
-    final fullyOpen = _pullExpand >= 0.995;
-    final fullyClosed = _pullExpand <= 0.001;
-    if (fullyOpen && !_avatarWasFullyExpanded) {
-      _avatarWasFullyExpanded = true;
-      unawaited(widget.controller.triggerUiHaptic());
-      return;
-    }
-    if (fullyClosed && _avatarWasFullyExpanded) {
-      _avatarWasFullyExpanded = false;
-      unawaited(widget.controller.triggerUiHaptic());
-    }
-  }
-
-  void _animatePullTo(double target) {
-    final clamped = target.clamp(0.0, 1.0);
-    if ((_pullExpand - clamped).abs() < 0.001) {
-      setState(() {
-        _pullExpand = clamped;
-        _avatarPullPx = (_pullExpand * _avatarPullMaxPx).clamp(
-          0.0,
-          _avatarPullMaxPx,
-        );
-      });
-      _updateAvatarPhotoFeedback();
-      return;
-    }
-    _stopPullSnap();
-    _pullSnapAnimation = Tween<double>(begin: _pullExpand, end: clamped)
-        .animate(
-          CurvedAnimation(
-            parent: _pullSnapController,
-            curve: Curves.easeOutCubic,
-          ),
-        );
-    _pullSnapController
-      ..reset()
-      ..forward();
   }
 
   String? _existingAvatarPath(String? rawPath) {
@@ -568,116 +705,36 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     if (_avatarViewerOpening) return;
     final path = _existingAvatarPath(vm.settings.avatarPath);
     if (path == null) return;
-    _avatarFullscreenPullPx = 0;
+    // «Мост аватара»: просмотр фото под той же меткой — только когда
+    // страница доехала.
+    final routeAnimation = ModalRoute.of(context)?.animation;
+    if (kAvatarBridgeTransition &&
+        routeAnimation != null &&
+        !routeAnimation.isCompleted) {
+      return;
+    }
+    _hero.releaseStretch();
     _avatarViewerOpening = true;
     try {
       await openFullscreenImageViewer(
         context,
         imagePath: path,
         title: vm.title,
-        heroTag: 'room-avatar-${widget.groupId}',
+        heroTag: _avatarTag,
       );
     } finally {
       _avatarViewerOpening = false;
     }
   }
 
-  void _handleAvatarSurfaceDragUpdate(
-    DragUpdateDetails details, {
-    required _RoomVm vm,
-  }) {
-    final delta = details.delta.dy;
-    if (_pullExpand >= 0.995 && delta > 0) {
-      _avatarFullscreenPullPx += delta;
-      if (_avatarFullscreenPullPx >= _avatarFullscreenPullThreshold) {
-        _avatarFullscreenPullPx = 0;
-        unawaited(_openAvatarFullScreen(vm));
-        return;
-      }
-    } else {
-      _avatarFullscreenPullPx = 0;
-    }
-    _stopPullSnap();
-    setState(() {
-      _avatarPullPx = (_avatarPullPx + delta).clamp(0.0, _avatarPullMaxPx);
-      _pullExpand = (_avatarPullPx / _avatarPullMaxPx).clamp(0.0, 1.0);
-    });
-    _updateAvatarPhotoFeedback();
-  }
-
-  void _handleAvatarSurfaceDragEnd(DragEndDetails _) {
-    _avatarFullscreenPullPx = 0;
-    _animatePullTo(_pullExpand >= _avatarSnapThreshold ? 1.0 : 0.0);
-  }
-
-  void _handleCollapseDrag(DragUpdateDetails details) {
-    _stopPullSnap();
-    _collapseGestureActive = true;
-    setState(() {
-      _avatarPullPx = (_avatarPullPx + details.delta.dy).clamp(
-        0.0,
-        _avatarPullMaxPx,
-      );
-      _pullExpand = (_avatarPullPx / _avatarPullMaxPx).clamp(0.0, 1.0);
-    });
-    _updateAvatarPhotoFeedback();
-  }
-
-  void _handleCollapseDragEnd(DragEndDetails _) {
-    _collapseGestureActive = false;
-    _animatePullTo(_pullExpand >= _avatarSnapThreshold ? 1.0 : 0.0);
-  }
-
   bool _handleAvatarPull(ScrollNotification notification) {
     if (notification.metrics.axis != Axis.vertical) return false;
     if (notification.depth != 0) return false;
-
-    final atTop =
-        notification.metrics.pixels <= 0.5 &&
-        notification.metrics.extentBefore <= 0.5;
-
-    if (notification is OverscrollNotification) {
-      if (notification.dragDetails == null) return false;
-      final delta = notification.overscroll;
-      if (atTop && delta < 0) {
-        _stopPullSnap();
-        setState(() {
-          _avatarPullPx = (_avatarPullPx + (-delta)).clamp(
-            0.0,
-            _avatarPullMaxPx,
-          );
-          _pullExpand = (_avatarPullPx / _avatarPullMaxPx).clamp(0.0, 1.0);
-        });
-        _updateAvatarPhotoFeedback();
-      }
-      return false;
+    // Фото тянет и ведёт слой пальца (ProfileHeroGestureLayer); здесь —
+    // только магнитная привязка страницы, когда фото не «в игре».
+    if (notification is ScrollEndNotification && !_hero.heroActive) {
+      _snap.onScrollEnd();
     }
-
-    if (notification is ScrollUpdateNotification) {
-      if (notification.dragDetails == null) return false;
-      final delta = notification.scrollDelta ?? 0;
-      if (atTop && delta < 0) {
-        _stopPullSnap();
-        setState(() {
-          _avatarPullPx = (_avatarPullPx + (-delta)).clamp(
-            0.0,
-            _avatarPullMaxPx,
-          );
-          _pullExpand = (_avatarPullPx / _avatarPullMaxPx).clamp(0.0, 1.0);
-        });
-        _updateAvatarPhotoFeedback();
-      }
-      return false;
-    }
-
-    if (notification is ScrollEndNotification) {
-      if (notification.dragDetails == null) return false;
-      if (_avatarPullPx > 0.001) {
-        _animatePullTo(_pullExpand >= _avatarSnapThreshold ? 1.0 : 0.0);
-      }
-      return false;
-    }
-
     return false;
   }
 
@@ -838,7 +895,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
         label: _roomText(context, ru: '30 дней', en: '30 days'),
       ),
     ];
-    final selected = await showDialog<int?>(
+    final selected = await showAppDialog<int?>(
       context: context,
       builder: (context) => SimpleDialog(
         title: Text(
@@ -923,7 +980,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     }
     if (!mounted) return;
     final existing = vm.members.map((m) => m.profileId).toSet();
-    final selected = await showDialog<Set<String>>(
+    final selected = await showAppDialog<Set<String>>(
       context: context,
       builder: (context) {
         final picked = <String>{};
@@ -962,7 +1019,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                       onChanged: (_) => setLocal(() {}),
                       decoration: InputDecoration(
                         isDense: true,
-                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                        prefixIcon: const Icon(AdaptiveIcons.search_rounded, size: 20),
                         hintText: _roomText(
                           context,
                           ru: 'Имя или Secretly ID',
@@ -1048,11 +1105,11 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                   ),
                                   trailing: inRoom
                                       ? Icon(
-                                          Icons.check_circle_rounded,
+                                          AdaptiveIcons.check_circle_rounded,
                                           color: cs.onSurfaceVariant
                                               .withValues(alpha: 0.5),
                                         )
-                                      : Checkbox(
+                                      : Checkbox.adaptive(
                                           value: checked,
                                           onChanged: (v) => setLocal(() {
                                             if (v == true) {
@@ -1083,12 +1140,12 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                   onPressed: () => Navigator.of(context).pop(null),
                   child: Text(_roomText(context, ru: 'Отмена', en: 'Cancel')),
                 ),
-                FilledButton(
+                PressFeedback(child: FilledButton(
                   onPressed: picked.isEmpty
                       ? null
                       : () => Navigator.of(context).pop(picked),
                   child: Text(_roomText(context, ru: 'Добавить', en: 'Add')),
-                ),
+                )),
               ],
             );
           },
@@ -1165,7 +1222,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
       return;
     }
     final controller = TextEditingController(text: vm.title);
-    final nextTitle = await showDialog<String?>(
+    final nextTitle = await showAppDialog<String?>(
       context: context,
       builder: (dialogCtx) => SecretlyAlertDialog(
         title: Text(
@@ -1193,10 +1250,10 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
             onPressed: () => Navigator.of(dialogCtx).pop(null),
             child: Text(_roomText(context, ru: 'Отмена', en: 'Cancel')),
           ),
-          FilledButton(
+          PressFeedback(child: FilledButton(
             onPressed: () => Navigator.of(dialogCtx).pop(controller.text),
             child: Text(_roomText(context, ru: 'Сохранить', en: 'Save')),
-          ),
+          )),
         ],
       ),
     );
@@ -1230,7 +1287,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     final controller = TextEditingController(
       text: vm.settings.description ?? '',
     );
-    final next = await showDialog<String?>(
+    final next = await showAppDialog<String?>(
       context: context,
       builder: (dialogCtx) => SecretlyAlertDialog(
         title: Text(
@@ -1259,10 +1316,10 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
             onPressed: () => Navigator.of(dialogCtx).pop(null),
             child: Text(_roomText(context, ru: 'Отмена', en: 'Cancel')),
           ),
-          FilledButton(
+          PressFeedback(child: FilledButton(
             onPressed: () => Navigator.of(dialogCtx).pop(controller.text),
             child: Text(_roomText(context, ru: 'Сохранить', en: 'Save')),
-          ),
+          )),
         ],
       ),
     );
@@ -1419,12 +1476,10 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
       de: 'Keine',
     );
     return showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF15171E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      // Лист — из темы (светлый в светлой): тёмный выглядел чужим.
       builder: (ctx) {
         return SafeArea(
           child: Padding(
@@ -1438,7 +1493,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                     width: 38,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Colors.white24,
+                      color: _onRoomSheet(context).withValues(alpha: 0.24),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -1446,8 +1501,8 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                 const SizedBox(height: 12),
                 Text(
                   title,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: _onRoomSheet(context),
                     fontWeight: FontWeight.w700,
                     fontSize: 17,
                   ),
@@ -1466,9 +1521,9 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                         selected: (currentId ?? '').isEmpty,
                         // Empty string => clear the cosmetic.
                         onTap: () => Navigator.pop(ctx, ''),
-                        preview: const Icon(
-                          Icons.block_rounded,
-                          color: Colors.white38,
+                        preview: Icon(
+                          AdaptiveIcons.block_rounded,
+                          color: _onRoomSheet(context).withValues(alpha: 0.38),
                           size: 30,
                         ),
                       ),
@@ -1518,7 +1573,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
         .cast<String?>()
         .firstOrNull;
     final controller = TextEditingController(text: currentTag ?? '');
-    final nextTag = await showDialog<String?>(
+    final nextTag = await showAppDialog<String?>(
       context: context,
       builder: (dialogCtx) => SecretlyAlertDialog(
         title: Text(_roomText(context, ru: 'Тег в комнате', en: 'Room tag')),
@@ -1553,10 +1608,10 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
             onPressed: () => Navigator.of(dialogCtx).pop(''),
             child: Text(_roomText(context, ru: 'Очистить', en: 'Clear')),
           ),
-          FilledButton(
+          PressFeedback(child: FilledButton(
             onPressed: () => Navigator.of(dialogCtx).pop(controller.text),
             child: Text(_roomText(context, ru: 'Сохранить', en: 'Save')),
-          ),
+          )),
         ],
       ),
     );
@@ -1626,6 +1681,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     }
     final hasPhoto = (vm.settings.avatarHash ?? '').trim().isNotEmpty;
     final selected = await showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       backgroundColor: Colors.transparent,
       builder: (sheetCtx) {
@@ -1908,7 +1964,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     if (links.length == 1) {
       return links.first;
     }
-    return showDialog<RoomInviteLink>(
+    return showAppDialog<RoomInviteLink>(
       context: context,
       builder: (context) => SecretlyAlertDialog(
         title: Text(
@@ -2086,7 +2142,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
 
   Future<void> _showRoomPolicy() async {
     if (!mounted) return;
-    await showDialog<void>(
+    await showAppDialog<void>(
       context: context,
       builder: (context) => SecretlyAlertDialog(
         title: Text(
@@ -2210,7 +2266,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                           ),
                         if (canShareInvite)
                           _roomMenuAction(
-                            icon: Icons.link_rounded,
+                            icon: AdaptiveIcons.link_rounded,
                             title: _roomText(
                               context,
                               ru: 'Управление ссылками',
@@ -2313,7 +2369,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
         await _copyRoomId();
         return;
       case 'clear_history':
-        final okClear = await showDialog<bool>(
+        final okClear = await showAppDialog<bool>(
           context: context,
           builder: (context) => SecretlyAlertDialog(
             title: Text(
@@ -2374,7 +2430,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
         );
         return;
       case 'delete_leave':
-        final ok = await showDialog<bool>(
+        final ok = await showAppDialog<bool>(
           context: context,
           builder: (context) => SecretlyAlertDialog(
             title: Text(
@@ -2405,7 +2461,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
         }
         return;
       case 'leave':
-        final okLeave = await showDialog<bool>(
+        final okLeave = await showAppDialog<bool>(
           context: context,
           builder: (context) => SecretlyAlertDialog(
             title: Text(
@@ -2445,36 +2501,18 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
     Color? iconColor,
     Color? textColor,
   }) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
-      // Отклик для всех строк меню комнаты сразу: построитель используется 11
-      // раз. В комнатах было 85 нажимаемых элементов и ни одного отклика.
+    // Отклик для всех строк меню комнаты сразу: построитель используется 11
+    // раз. В комнатах было 85 нажимаемых элементов и ни одного отклика.
+    return AppMenuRow(
+      title: title,
+      icon: icon,
+      iconColor: iconColor,
+      textColor: textColor,
+      destructive: textColor != null || iconColor != null,
       onTap: () {
         Haptics.tap();
         onTap();
       },
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: iconColor ?? cs.onSurface.withValues(alpha: 0.92),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: textColor,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -2484,9 +2522,11 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
       stream: widget.controller.changed,
       builder: (context, _) {
         return FutureBuilder<_RoomVm>(
-          future: _load(),
+          future: _vmFuture,
+          initialData: _lastVm,
           builder: (context, snapshot) {
-            final vm = snapshot.data;
+            final vm = snapshot.data ?? _lastVm;
+            if (vm != null) _lastVm = vm;
             final canEditRoomProfile =
                 vm != null &&
                 vm.policy.isMember &&
@@ -2494,7 +2534,14 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
             final canOpenAdministration =
                 vm != null && _canManageRoomAdministration(vm.policy);
             final screen = MediaQuery.of(context).size;
-            final safeTop = MediaQuery.of(context).padding.top;
+            // 🔴 23.11.2026 (владелец: «у комнаты обложки и рамки садятся
+            // неправильно, перелёт иконки и имени в островок неправильный»):
+            // у собеседника те же формулы считаются ВНУТРИ тела Scaffold
+            // (extendBodyBehindAppBar), где padding.top = статус-бар + шапка;
+            // здесь — снаружи, где только статус-бар, и весь верх страницы
+            // стоял на высоту шапки (56) выше: аватар, обложка, начало
+            // перелёта, линия под шапкой. Низ шапки — как у собеседника.
+            final safeTop = MediaQuery.of(context).padding.top + kToolbarHeight;
             final screenW = screen.width;
             final expandedImageHeight = (screen.height * 0.52).clamp(
               320.0,
@@ -2505,9 +2552,10 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
             // Stack(Clip.none) whose positions/sizes lerp on _pullExpand
             // (0 collapsed → 1 fully-expanded photo).
             final avatarSize = lerpDouble(112, screenW, _pullExpand)!;
+            // Раскрытое фото тянется вниз за пальцем и возвращается.
             final avatarHeight = lerpDouble(
               112,
-              expandedImageHeight,
+              expandedImageHeight + _hero.stretchPx,
               _pullExpand,
             )!;
             final avatarRadius = lerpDouble(56, 0, _pullExpand)!;
@@ -2561,7 +2609,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                 vm != null &&
                 !(heroPhoto != null &&
                     heroPhoto.isNotEmpty &&
-                    File(heroPhoto).existsSync()) &&
+                    FileExistsCache.exists(heroPhoto)) &&
                 AvatarInitials.fillIsLight(
                   context,
                   seed: widget.groupId.isNotEmpty ? widget.groupId : vm.title,
@@ -2580,10 +2628,17 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
             final roomCover = vm == null
                 ? null
                 : coverWidgetFor(vm.settings.coverId);
+            _hero.fadeY = buttonsTop + 6;
+            _snap
+              ..dockAt = kProfileScrollCollapse // магнит: аватар целиком в острове
+              ..headerBottom = safeTop;
+            final roomCoverH = collapsedButtonsTop + 66;
             final roomFrame = vm == null
                 ? null
                 : frameById(vm.settings.frameId);
-            return Scaffold(
+            return Stack(
+              children: [
+                Scaffold(
               extendBodyBehindAppBar: true,
               appBar: frostedAppBar(
                 // No full top bar — it would crop the cover/photo. Suppress
@@ -2596,20 +2651,18 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                   opacity: (1.0 - _pullExpand * 2.0).clamp(0.0, 1.0),
                   child: Padding(
                     padding: const EdgeInsets.only(left: 8, top: 4, bottom: 4),
-                    child: FrostedHeaderIsland(
-                      radius: 24,
-                      height: 48,
+                    child: _bridgeIsland(
                       child: SizedBox(
                         width: 48,
                         height: 48,
-                        child: IconButton(
+                        child: PressFeedback(child: IconButton(
                           padding: EdgeInsets.zero,
                           tooltip: MaterialLocalizations.of(
                             context,
                           ).backButtonTooltip,
-                          icon: Icon(appleBackIcon(Icons.arrow_back)),
+                          icon: Icon(appleBackIcon(AdaptiveIcons.arrow_back)),
                           onPressed: () => Navigator.of(context).maybePop(),
-                        ),
+                        )),
                       ),
                     ),
                   ),
@@ -2619,13 +2672,11 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                     opacity: (1.0 - _pullExpand * 2.0).clamp(0.0, 1.0),
                     child: Padding(
                       padding: const EdgeInsets.only(top: 4, bottom: 4),
-                      child: FrostedHeaderIsland(
-                        radius: 24,
-                        height: 48,
+                      child: _bridgeIsland(
                         child: SizedBox(
                           width: 48,
                           height: 48,
-                          child: IconButton(
+                          child: PressFeedback(child: IconButton(
                             padding: EdgeInsets.zero,
                             tooltip: _roomText(
                               context,
@@ -2637,7 +2688,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                 !canOpenAdministration || _pullExpand >= 1.0
                                 ? null
                                 : () => _openRoomAdministration(vm),
-                          ),
+                          )),
                         ),
                       ),
                     ),
@@ -2651,20 +2702,19 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                         top: 4,
                         bottom: 4,
                       ),
-                      child: FrostedHeaderIsland(
-                        radius: 24,
-                        height: 48,
+                      child: _bridgeIsland(
                         child: SizedBox(
                           width: 48,
                           height: 48,
-                          child: IconButton(
+                          child: PressFeedback(child: IconButton(
                             padding: EdgeInsets.zero,
                             tooltip: _roomText(context, ru: 'Меню', en: 'Menu'),
                             icon: const Icon(AppIcons.moreVert, size: 23),
-                            onPressed: vm == null || _pullExpand >= 1.0
+                            onPressed:
+                                vm == null || vm.isSeed || _pullExpand >= 1.0
                                 ? null
                                 : () => _openMenu(vm),
-                          ),
+                          )),
                         ),
                       ),
                     ),
@@ -2673,27 +2723,38 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
               ),
               body: vm == null
                   ? const Center(child: SecretlySpinner())
-                  : GestureDetector(
+                  // Затравка из списка — смотреть можно, нажимать нельзя:
+                  // права и состояние ещё не загружены.
+                  : IgnorePointer(
+                    ignoring: vm.isSeed,
+                    child: Stack(
+                      children: [
+                        ProfileHeroGestureLayer(
+  driver: _hero,
+  scrollController: _scrollController,
+  onPullToFullscreen: () => _openAvatarFullScreen(vm),
+  child: GestureDetector(
                       behavior: HitTestBehavior.translucent,
-                      onVerticalDragUpdate:
-                          (_pullExpand >= 1.0 || _collapseGestureActive)
-                          ? _handleCollapseDrag
-                          : null,
-                      onVerticalDragEnd:
-                          (_pullExpand >= 1.0 || _collapseGestureActive)
-                          ? _handleCollapseDragEnd
-                          : null,
-                      child: NotificationListener<ScrollNotification>(
-                        onNotification: _handleAvatarPull,
+                      onVerticalDragUpdate: null,
+                      onVerticalDragEnd: null,
+                      // Размеры списка поменялись (вкладка галереи короче) —
+                      // сверить шапку с настоящим положением (23.11.2026).
+                      child: NotificationListener<Notification>(
+                        onNotification: (n) {
+                          if (n is ScrollMetricsNotification) {
+                            _onHeroScroll();
+                            return false;
+                          }
+                          return n is ScrollNotification &&
+                              _handleAvatarPull(n);
+                        },
                         child: ListView(
                           controller: _scrollController,
-                          physics:
-                              (_pullExpand >= 1.0 || _collapseGestureActive)
-                              ? const NeverScrollableScrollPhysics()
-                              // Match own-profile's smooth pull (see contact_details).
-                              : const ClampingScrollPhysics(
-                                  parent: AlwaysScrollableScrollPhysics(),
-                                ),
+                          // Пока фото «в игре», страница стоит — палец ведёт фото.
+                physics: ProfileHeroScrollPhysics(
+                  frozen: () => _hero.freezesScroll,
+                  parent: secretlyProfileScrollPhysics(),
+                ),
                           padding: EdgeInsets.only(
                             top: 0,
                             bottom: MediaQuery.of(context).padding.bottom + 40,
@@ -2722,14 +2783,47 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                       left: 0,
                                       right: 0,
                                       height: collapsedButtonsTop + 66,
-                                      child: IgnorePointer(
+                                      child: ProfileCoverParallax(driver: _hero, child: IgnorePointer(
                                         child: Opacity(
                                           opacity: (1.0 - _pullExpand * 2.0)
                                               .clamp(0.0, 1.0),
                                           child:
                                               (roomCover != null
                                                   ? CosmeticShowcaseScope(
-                                                      child: roomCover,
+                                                      child: CoverAvatarGeometry(
+                                                        center: Offset(
+                                                          0.5,
+                                                          (avatarTop +
+                                                                  avatarSize /
+                                                                      2) /
+                                                              roomCoverH,
+                                                        ),
+                                                        radius:
+                                                            avatarSize /
+                                                            2 /
+                                                            screenW,
+                                                        child: ProfileMotionScope(
+                                                          motion: _hero.motion,
+                                                          tint:
+                                                              AvatarInitials.accentColor(
+                                                                seed: widget
+                                                                    .groupId,
+                                                              ),
+                                                          // Живая обложка
+                                                          // не тикает, пока
+                                                          // страница въезжает.
+                                                          child: AvatarBridgeEntrance(
+                                                            child: roomCover,
+                                                            builder:
+                                                                (context, settled, c) =>
+                                                                    TickerMode(
+                                                                      enabled:
+                                                                          settled,
+                                                                      child: c!,
+                                                                    ),
+                                                          ),
+                                                        ),
+                                                      ),
                                                     )
                                                   : null) ??
                                               ClipRect(
@@ -2750,7 +2844,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                                 ),
                                               ),
                                         ),
-                                      ),
+                                      )),
                                     ),
                                     // 2) Decoupled page-colour scrim — a SEPARATE
                                     //    layer running DOWN PAST the cover
@@ -2795,16 +2889,11 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                   Positioned(
                                     top: avatarTop,
                                     left: (screenW - avatarSize) / 2,
-                                    child: GestureDetector(
+                                    child: ProfileHideWhileFlying(driver: _hero, child: GestureDetector(
                                       behavior: HitTestBehavior.opaque,
                                       onTap: () => _openAvatarFullScreen(vm),
-                                      onVerticalDragUpdate: (details) =>
-                                          _handleAvatarSurfaceDragUpdate(
-                                            details,
-                                            vm: vm,
-                                          ),
-                                      onVerticalDragEnd:
-                                          _handleAvatarSurfaceDragEnd,
+                                      onVerticalDragUpdate: null,
+                                      onVerticalDragEnd: null,
                                       // Keep the footprint exactly avatarSize so
                                       // left:(screenW-avatarSize)/2 centers it; the
                                       // optional edit badge (+12) overflows
@@ -2824,8 +2913,8 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                             // чем в списке и в шапке чата.
                                             seed: widget.groupId,
                                             avatarPath: vm.settings.avatarPath,
-                                            heroTag:
-                                                'room-avatar-${widget.groupId}',
+                                            heroTag: _avatarTag,
+                                            heroAway: _heroAway,
                                             width: avatarSize,
                                             height: avatarHeight,
                                             borderRadius: avatarRadius,
@@ -2837,7 +2926,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                           ),
                                         ),
                                       ),
-                                    ),
+                                    )),
                                   ),
                                   if (roomFrame != null)
                                     // Premium FRAME ring encircling the avatar —
@@ -2851,7 +2940,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                           avatarHeight / 2 -
                                           (avatarSize / 0.86) / 2,
                                       left: (screenW - avatarSize / 0.86) / 2,
-                                      child: IgnorePointer(
+                                      child: ProfileHideWhileFlying(driver: _hero, frame: true, child: IgnorePointer(
                                         child: Opacity(
                                           opacity: (1.0 - _pullExpand * 3.0)
                                               .clamp(0.0, 1.0),
@@ -2862,19 +2951,25 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                             // — one big avatar, painted live at
                                             // full resolution.
                                             child: CosmeticShowcaseScope(
-                                              child: roomFrame.builder(
-                                                avatarSize / 0.86,
+                                              child: AvatarBridgeEntrance(
+                                                builder: (context, settled, _) =>
+                                                    TickerMode(
+                                                      enabled: settled,
+                                                      child: roomFrame.builder(
+                                                        avatarSize / 0.86,
+                                                      ),
+                                                    ),
                                               ),
                                             ),
                                           ),
                                         ),
-                                      ),
+                                      )),
                                     ),
                                   Positioned(
                                     top: nameTop,
                                     left: 24,
                                     right: 24,
-                                    child: Align(
+                                    child: ProfileHideWhileFlying(driver: _hero, child: Align(
                                       alignment: Alignment.lerp(
                                         Alignment.topCenter,
                                         Alignment.topLeft,
@@ -2925,13 +3020,13 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                           ],
                                         ),
                                       ),
-                                    ),
+                                    )),
                                   ),
                                   Positioned(
                                     top: statusTop,
                                     left: 24,
                                     right: 24,
-                                    child: Align(
+                                    child: ProfileTextCollapse(driver: _hero, status: true, child: Align(
                                       alignment: Alignment.lerp(
                                         Alignment.topCenter,
                                         Alignment.topLeft,
@@ -2976,7 +3071,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                           ),
                                         ),
                                       ),
-                                    ),
+                                    )),
                                   ),
                                   Positioned(
                                     top: buttonsTop,
@@ -2987,7 +3082,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                     // chips fit a row without overflow.
                                     left: 12,
                                     right: 12,
-                                    child: Row(
+                                    child: ProfileFadeUnderHeader(driver: _hero, restTop: collapsedButtonsTop, line: safeTop - kToolbarHeight + 52, child: Row(
                                       children: [
                                         Expanded(
                                           child: _ActionChip(
@@ -3055,7 +3150,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                           ),
                                         ),
                                       ],
-                                    ),
+                                    )),
                                   ),
                                 ],
                               ),
@@ -3067,7 +3162,8 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                             // не было вовсе, он прятался за нажатием по счётчику в шапке.
                             // Теперь то же деление, что и на компьютере: сведения, участники,
                             // медиа.
-                            _RoomTabs(
+                            SizedBox(key: _snap.galleryKey, height: 0),
+_RoomTabs(
                               index: _roomTab,
                               membersCount: vm.members.length,
                               onChanged: (i) => setState(() => _roomTab = i),
@@ -3082,7 +3178,13 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                 child: _SectionBlock(
                                   children: [
                                     ListTile(
-                                      leading: const Icon(AppIcons.edit),
+                                      // Android: значки — цветные квадраты,
+                                      // как в настройках (23.11.2026).
+                                      leading: settingsRowLeading(
+                                        icon: AppIcons.edit,
+                                        tint: SettingsRowTint.blue,
+                                        fallback: const Icon(AppIcons.edit),
+                                      ),
                                       title: Text(
                                         _roomText(
                                           context,
@@ -3099,7 +3201,13 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                     ),
                                     const Divider(height: 1),
                                     ListTile(
-                                      leading: const Icon(Icons.notes_rounded),
+                                      leading: settingsRowLeading(
+                                        icon: AdaptiveIcons.notes_rounded,
+                                        tint: SettingsRowTint.orange,
+                                        fallback: const Icon(
+                                          AdaptiveIcons.notes_rounded,
+                                        ),
+                                      ),
                                       title: Text(
                                         _roomText(
                                           context,
@@ -3141,8 +3249,13 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                 child: _SectionBlock(
                                   children: [
                                     ListTile(
-                                      leading: const Icon(
-                                        Icons.filter_frames_rounded,
+                                      leading: settingsRowLeading(
+                                        icon:
+                                            AdaptiveIcons.filter_frames_rounded,
+                                        tint: SettingsRowTint.purple,
+                                        fallback: const Icon(
+                                          AdaptiveIcons.filter_frames_rounded,
+                                        ),
                                       ),
                                       title: Text(
                                         _roomText(
@@ -3166,13 +3279,17 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
-                                      trailing: const Icon(Icons.chevron_right),
+                                      trailing: const Icon(AdaptiveIcons.chevron_right),
                                       onTap: () => _pickRoomFrame(vm),
                                     ),
                                     const Divider(height: 1),
                                     ListTile(
-                                      leading: const Icon(
-                                        Icons.wallpaper_rounded,
+                                      leading: settingsRowLeading(
+                                        icon: AdaptiveIcons.wallpaper_rounded,
+                                        tint: SettingsRowTint.pink,
+                                        fallback: const Icon(
+                                          AdaptiveIcons.wallpaper_rounded,
+                                        ),
                                       ),
                                       title: Text(
                                         _roomText(
@@ -3196,7 +3313,7 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
-                                      trailing: const Icon(Icons.chevron_right),
+                                      trailing: const Icon(AdaptiveIcons.chevron_right),
                                       onTap: () => _pickRoomCover(vm),
                                     ),
                                   ],
@@ -3218,7 +3335,11 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                               child: _SectionBlock(
                                 children: [
                                   ListTile(
-                                    leading: const Icon(AppIcons.badge),
+                                    leading: settingsRowLeading(
+                                      icon: AppIcons.badge,
+                                      tint: SettingsRowTint.grey,
+                                      fallback: const Icon(AppIcons.badge),
+                                    ),
                                     title: Text(
                                       widget.groupId,
                                       maxLines: 1,
@@ -3250,7 +3371,11 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                               child: _SectionBlock(
                                 children: [
                                   ListTile(
-                                    leading: const Icon(AppIcons.tag),
+                                    leading: settingsRowLeading(
+                                      icon: AppIcons.tag,
+                                      tint: SettingsRowTint.teal,
+                                      fallback: const Icon(AppIcons.tag),
+                                    ),
                                     title: Text(
                                       _roomText(
                                         context,
@@ -3319,10 +3444,100 @@ class _RoomDetailsScreenState extends State<RoomDetailsScreen>
                               convoId: widget.groupId,
                             ),
                             ],
-                          ],
+                          ProfileSnapSpacer(snapper: _snap),
+],
                         ),
                       ),
                     ),
+),
+                        // Шапка при прокрутке: фон проявляется, название
+                        // причаливает заголовком (макет «Profile Motion»).
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          child: ProfileTopFade(driver: _hero),
+                        ),
+                        Positioned(
+                          // 23.11.2026: здесь контекст ВНЕ тела Scaffold —
+                          // padding.top уже только статус-бар (у собеседника
+                          // это тело, отсюда «− шапка»). С вычитанием плашка
+                          // островка уходила за верх экрана.
+                          top: MediaQuery.paddingOf(context).top + (kToolbarHeight - 48) / 2,
+                          left: kProfileMiniIslandLeft,
+                          right: 112,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: ProfileMiniIsland(
+                              driver: _hero,
+                              scrollController: _scrollController,
+                              child: ProfileMiniIdentity(
+                            name: vm.title,
+                            ghost: true,
+                          reserve: 22,
+                          avatar: const SizedBox.shrink(),
+                          ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+            ),
+                // Один аватар летит ПОВЕРХ шапки в остров рядом с «назад».
+                Positioned.fill(
+                  child: Builder(
+                    builder: (context) {
+                      final mq = MediaQuery.of(context);
+                      final safeTop = mq.padding.top;
+              final room = vm;
+              if (room == null) return const SizedBox.shrink();
+              final label = ProfileFlyingLabel(
+                driver: _hero,
+                restTop: safeTop + kToolbarHeight + 8 + 112 + 18,
+                restCenterX: mq.size.width / 2,
+                targetLeft: kProfileMiniIslandLeft + 7 + 34 + 8,
+                targetCenterY: safeTop + kToolbarHeight / 2,
+                targetMaxWidth: mq.size.width - kProfileMiniIslandLeft - 112 - 49 - 14,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        room.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+              final avatar = ProfileFlyingAvatar(
+                driver: _hero,
+                restCenter: Offset(
+                  mq.size.width / 2,
+                  safeTop + kToolbarHeight + 8 + 56,
+                ),
+                islandCenter: Offset(kProfileMiniIslandLeft + 7 + 17, safeTop + kToolbarHeight / 2),
+                child: _flyingBridge(
+                  room,
+                  ProfileMiniPhoto(
+                    path: room.settings.avatarPath,
+                    seed: widget.groupId,
+                    name: room.title,
+                  ),
+                ),
+              );
+              return Stack(children: [avatar, label]);
+                    },
+                  ),
+                ),
+              ],
             );
           },
         );
@@ -3508,7 +3723,7 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
     if (!canRemove && !canBan && !canTransferOwnership) {
       return null;
     }
-    return PopupMenuButton<String>(
+    return AppPopupMenuButton<String>(
       tooltip: _roomText(
         context,
         ru: 'Действия с участником',
@@ -3560,7 +3775,7 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
         .where((m) => m.profileId != vm.myProfileId && m.isActive)
         .toList(growable: false);
     if (vm.policy.isOwner && otherActiveMembers.isNotEmpty) {
-      final choice = await showDialog<String?>(
+      final choice = await showAppDialog<String?>(
         context: context,
         builder: (ctx) => SecretlyAlertDialog(
           title: Text(
@@ -3695,13 +3910,18 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
     required List<RoomMember> members,
     required String emptyText,
     required Widget Function(RoomMember member) trailingBuilder,
+    Color tint = SettingsRowTint.blue,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: _SectionBlock(
         children: [
           ListTile(
-            leading: Icon(icon),
+            leading: settingsRowLeading(
+              icon: icon,
+              tint: tint,
+              fallback: Icon(icon),
+            ),
             title: Text(title),
             trailing: Text('${members.length}'),
           ),
@@ -3791,6 +4011,7 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
       return Future<RoomMemberRole?>.value(roles.first);
     }
     return showModalBottomSheet<RoomMemberRole>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
@@ -3803,7 +4024,10 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
           child: ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
             child: Material(
-              color: cs.surface,
+              color: appleSheetFillOr(
+          context,
+          cs.surface,
+        ),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
                 child: Column(
@@ -3846,8 +4070,8 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                         ),
                         leading: Icon(
                           currentRole == role
-                              ? Icons.check_circle_rounded
-                              : Icons.shield_outlined,
+                              ? AdaptiveIcons.check_circle_rounded
+                              : AdaptiveIcons.shield_outlined,
                           color: currentRole == role
                               ? cs.primary
                               : cs.onSurfaceVariant,
@@ -3866,7 +4090,7 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
   }
 
   Future<void> _pickMemberRoles(_RoomAdministrationVm vm) async {
-    final selected = await showDialog<Map<String, RoomMemberRole>>(
+    final selected = await showAppDialog<Map<String, RoomMemberRole>>(
       context: context,
       builder: (context) {
         final picked = <String, RoomMemberRole>{
@@ -3890,7 +4114,10 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                 horizontal: 12,
                 vertical: 16,
               ),
-              backgroundColor: Theme.of(context).colorScheme.surface,
+              backgroundColor: appleSheetFillOr(
+          context,
+          Theme.of(context).colorScheme.surface,
+        ),
               surfaceTintColor: Colors.transparent,
               child: SizedBox(
                 width: dialogWidth,
@@ -3932,13 +4159,13 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                               ],
                             ),
                           ),
-                          IconButton(
+                          PressFeedback(child: IconButton(
                             tooltip: MaterialLocalizations.of(
                               context,
                             ).closeButtonTooltip,
                             onPressed: () => Navigator.of(context).pop(null),
-                            icon: const Icon(Icons.close_rounded),
-                          ),
+                            icon: const Icon(AdaptiveIcons.close_rounded),
+                          )),
                         ],
                       ),
                       const SizedBox(height: 12),
@@ -4027,7 +4254,7 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                                   SizedBox(
                                     width: 184,
                                     child: availableRoles.length > 1
-                                        ? OutlinedButton(
+                                        ? PressFeedback(child: OutlinedButton(
                                             onPressed: () async {
                                               final next =
                                                   await _pickSingleMemberRole(
@@ -4061,7 +4288,7 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                                                 ),
                                               ],
                                             ),
-                                          )
+                                          ))
                                         : Container(
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 12,
@@ -4070,9 +4297,12 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                                             decoration: BoxDecoration(
                                               borderRadius:
                                                   BorderRadius.circular(14),
-                                              color: Theme.of(context)
+                                              color: appleGlassFillOr(
+          context,
+          Theme.of(context)
                                                   .colorScheme
                                                   .surfaceContainerHighest,
+        ),
                                             ),
                                             child: Text(
                                               _roomRoleLabelForContext(
@@ -4108,12 +4338,12 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          FilledButton(
+                          PressFeedback(child: FilledButton(
                             onPressed: () => Navigator.of(context).pop(picked),
                             child: Text(
                               _roomText(context, ru: 'Сохранить', en: 'Save'),
                             ),
-                          ),
+                          )),
                         ],
                       ),
                     ],
@@ -4207,7 +4437,11 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
               if (vm.policy.canManageSettings) {
                 addTile(
                   ListTile(
-                    leading: const Icon(AppIcons.emoji),
+                    leading: settingsRowLeading(
+                      icon: AppIcons.emoji,
+                      tint: SettingsRowTint.yellow,
+                      fallback: const Icon(AppIcons.emoji),
+                    ),
                     title: Text(
                       _roomText(context, ru: 'Реакции', en: 'Reactions'),
                     ),
@@ -4239,7 +4473,11 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                 );
                 addTile(
                   ListTile(
-                    leading: const Icon(AppIcons.lock),
+                    leading: settingsRowLeading(
+                      icon: AppIcons.lock,
+                      tint: SettingsRowTint.blue,
+                      fallback: const Icon(AppIcons.lock),
+                    ),
                     title: Text(
                       _roomText(context, ru: 'Разрешения', en: 'Permissions'),
                     ),
@@ -4271,7 +4509,11 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
               if (vm.policy.canManageInviteLinks) {
                 addTile(
                   ListTile(
-                    leading: const Icon(Icons.link_rounded),
+                    leading: settingsRowLeading(
+                      icon: AdaptiveIcons.link_rounded,
+                      tint: SettingsRowTint.teal,
+                      fallback: const Icon(AdaptiveIcons.link_rounded),
+                    ),
                     title: Text(
                       _roomText(
                         context,
@@ -4305,7 +4547,11 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
               if (vm.policy.canManageAdmins || vm.policy.canManageMemberRoles) {
                 addTile(
                   ListTile(
-                    leading: const Icon(AppIcons.verified),
+                    leading: settingsRowLeading(
+                      icon: AppIcons.verified,
+                      tint: SettingsRowTint.purple,
+                      fallback: const Icon(AppIcons.verified),
+                    ),
                     title: Text(_roomText(context, ru: 'Роли', en: 'Roles')),
                     subtitle: Text(
                       _roomText(
@@ -4375,7 +4621,8 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                   if (showJoinRequests) ...[
                     const SizedBox(height: 12),
                     _buildAdminMemberSection(
-                      icon: Icons.pending_actions_rounded,
+                      icon: AdaptiveIcons.pending_actions_rounded,
+                      tint: SettingsRowTint.orange,
                       title: _roomText(
                         context,
                         ru: 'Запросы на вступление',
@@ -4394,26 +4641,26 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                         return Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            IconButton(
+                            PressFeedback(child: IconButton(
                               tooltip: _roomText(
                                 context,
                                 ru: 'Одобрить',
                                 en: 'Approve',
                               ),
-                              icon: const Icon(Icons.check_rounded),
+                              icon: const Icon(AdaptiveIcons.check_rounded),
                               onPressed: () =>
                                   _approveJoinRequest(member.profileId),
-                            ),
-                            IconButton(
+                            )),
+                            PressFeedback(child: IconButton(
                               tooltip: _roomText(
                                 context,
                                 ru: 'Отклонить',
                                 en: 'Decline',
                               ),
-                              icon: const Icon(Icons.close_rounded),
+                              icon: const Icon(AdaptiveIcons.close_rounded),
                               onPressed: () =>
                                   _declineJoinRequest(member.profileId),
-                            ),
+                            )),
                           ],
                         );
                       },
@@ -4423,6 +4670,7 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                     const SizedBox(height: 12),
                     _buildAdminMemberSection(
                       icon: AppIcons.block,
+                      tint: SettingsRowTint.red,
                       title: _roomText(
                         context,
                         ru: 'Заблокированные',
@@ -4438,22 +4686,22 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                         if (!vm.policy.canBanMembers) {
                           return const SizedBox.shrink();
                         }
-                        return IconButton(
+                        return PressFeedback(child: IconButton(
                           tooltip: _roomText(
                             context,
                             ru: 'Снять бан',
                             en: 'Unban',
                           ),
-                          icon: const Icon(Icons.undo_rounded),
+                          icon: const Icon(AdaptiveIcons.undo_rounded),
                           onPressed: () => _unbanMember(member.profileId),
-                        );
+                        ));
                       },
                     ),
                   ],
                   const SizedBox(height: 16),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: FilledButton.tonal(
+                    child: PressFeedback(child: FilledButton.tonal(
                       onPressed: () => _ownerActionLeaveOrDelete(vm),
                       child: Text(
                         _ownerActionLabel(vm),
@@ -4461,7 +4709,7 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                           color: Theme.of(context).colorScheme.error,
                         ),
                       ),
-                    ),
+                    )),
                   ),
                 ],
               );
@@ -4847,7 +5095,7 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
     var maxUses = 0;
     var requiresApproval = false;
     var allowedRole = RoomMemberRole.member;
-    return showDialog<_RoomInviteDraft>(
+    return showAppDialog<_RoomInviteDraft>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -5025,7 +5273,7 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
                   onPressed: () => Navigator.of(context).pop(null),
                   child: Text(_roomText(context, ru: 'Отмена', en: 'Cancel')),
                 ),
-                FilledButton(
+                PressFeedback(child: FilledButton(
                   onPressed: () {
                     final expiresAtMs = expiryHours <= 0
                         ? null
@@ -5042,7 +5290,7 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
                     );
                   },
                   child: Text(_roomText(context, ru: 'Создать', en: 'Create')),
-                ),
+                )),
               ],
             );
           },
@@ -5059,14 +5307,18 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
   }) {
     final isActive =
         !link.revoked && !link.isExpiredAt(nowMs) && !link.isUsageLimitReached;
+    final linkIcon = link.revoked
+        ? AdaptiveIcons.link_off_rounded
+        : (link.isExpiredAt(nowMs) || link.isUsageLimitReached)
+        ? AdaptiveIcons.schedule_rounded
+        : AdaptiveIcons.link_rounded;
     return ListTile(
       onTap: isActive ? () => _openInviteLink(link) : null,
-      leading: Icon(
-        link.revoked
-            ? Icons.link_off_rounded
-            : (link.isExpiredAt(nowMs) || link.isUsageLimitReached)
-            ? Icons.schedule_rounded
-            : Icons.link_rounded,
+      // Android: значок — квадрат; живая ссылка цветная, архивная серая.
+      leading: settingsRowLeading(
+        icon: linkIcon,
+        tint: isActive ? SettingsRowTint.teal : SettingsRowTint.grey,
+        fallback: Icon(linkIcon),
       ),
       title: Text(title),
       subtitle: Text(
@@ -5084,7 +5336,7 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
             ),
         ].join('\n'),
       ),
-      trailing: PopupMenuButton<String>(
+      trailing: AppPopupMenuButton<String>(
         onSelected: (value) => _handleInviteAction(link, value),
         itemBuilder: (context) => <PopupMenuEntry<String>>[
           PopupMenuItem(
@@ -5286,7 +5538,7 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
                   const SizedBox(height: 12),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: FilledButton.tonalIcon(
+                    child: PressFeedback(child: FilledButton.tonalIcon(
                       onPressed: () async {
                         final draft = await _showCreateInviteDialog(
                           roomApprovalRequired: vm.roomApprovalRequired,
@@ -5316,7 +5568,7 @@ class _RoomInviteLinksScreenState extends State<RoomInviteLinksScreen> {
                           en: 'Create link',
                         ),
                       ),
-                    ),
+                    )),
                   ),
                 ],
               );
@@ -5507,6 +5759,24 @@ class _RoomPermissionsScreenState extends State<RoomPermissionsScreen> {
     required String subtitleEn,
     required List<Widget> children,
   }) {
+    // Android (23.11.2026): как группа в настройках — заголовок капсом над
+    // панелью, пояснение под ней, в панели только строки, без линий.
+    if (settingsAndroidPanels) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SettingsGroupHeader(
+            _roomText(context, ru: titleRu, en: titleEn),
+            inset: 16,
+          ),
+          _SectionBlock(children: children),
+          SettingsGroupCaption(
+            _roomText(context, ru: subtitleRu, en: subtitleEn),
+            inset: 16,
+          ),
+        ],
+      );
+    }
     final items = <Widget>[
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
@@ -5554,13 +5824,20 @@ class _RoomPermissionsScreenState extends State<RoomPermissionsScreen> {
             alignment: Alignment.centerLeft,
             child: Text(
               _roomText(context, ru: 'Медленный режим', en: 'Slow mode'),
-              style: Theme.of(context).textTheme.titleMedium,
+              // Android: кегль строки настроек, а не крупный заголовок.
+              style: settingsAndroidPanels
+                  ? TextStyle(
+                      fontSize: settingsRowTitleSize,
+                      letterSpacing: -0.4,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    )
+                  : Theme.of(context).textTheme.titleMedium,
             ),
           ),
         ),
         SizedBox(
           height: 60,
-          child: Slider(
+          child: Slider.adaptive(
             value: _slowModeSliderValue.clamp(0, maxSliderValue),
             min: 0,
             max: maxSliderValue,
@@ -5687,18 +5964,24 @@ class _RoomPermissionsScreenState extends State<RoomPermissionsScreen> {
                       titleEn: 'Send text messages',
                       value: settings.allowTextMessages,
                       onChanged: (v) => settings.copyWith(allowTextMessages: v),
+                      icon: AppIcons.chatBubble,
+                      tint: SettingsRowTint.blue,
                     ),
                     _permissionSwitch(
                       titleRu: 'Отправка медиа',
                       titleEn: 'Send media',
                       value: settings.allowMedia,
                       onChanged: (v) => settings.copyWith(allowMedia: v),
+                      icon: AppIcons.photo,
+                      tint: SettingsRowTint.pink,
                     ),
                     _permissionSwitch(
                       titleRu: 'Закреплять сообщения',
                       titleEn: 'Pin messages',
                       value: settings.allowPinMessages,
                       onChanged: (v) => settings.copyWith(allowPinMessages: v),
+                      icon: AppIcons.pin,
+                      tint: SettingsRowTint.orange,
                     ),
                     // Закрытые темы (Р-2): по умолчанию их создают владелец
                     // и админы. У самой закрытой темы вложенных нет.
@@ -5709,6 +5992,8 @@ class _RoomPermissionsScreenState extends State<RoomPermissionsScreen> {
                         value: settings.allowMembersCreateTopics,
                         onChanged: (v) =>
                             settings.copyWith(allowMembersCreateTopics: v),
+                        icon: AppIcons.lock,
+                        tint: SettingsRowTint.indigo,
                       ),
                     _buildSlowModeControls(
                       settings: settings,
@@ -5734,6 +6019,8 @@ class _RoomPermissionsScreenState extends State<RoomPermissionsScreen> {
                       titleEn: 'Add participants',
                       value: settings.allowAddMembers,
                       onChanged: (v) => settings.copyWith(allowAddMembers: v),
+                      icon: AppIcons.personAdd,
+                      tint: SettingsRowTint.green,
                     ),
                     _permissionSwitch(
                       titleRu: 'Вступление только после одобрения',
@@ -5741,6 +6028,8 @@ class _RoomPermissionsScreenState extends State<RoomPermissionsScreen> {
                       value: settings.joinApprovalRequired,
                       onChanged: (v) =>
                           settings.copyWith(joinApprovalRequired: v),
+                      icon: AppIcons.verified,
+                      tint: SettingsRowTint.purple,
                     ),
                   ],
                 ),
@@ -5762,6 +6051,8 @@ class _RoomPermissionsScreenState extends State<RoomPermissionsScreen> {
                       value: settings.chatHistoryVisible,
                       onChanged: (v) =>
                           settings.copyWith(chatHistoryVisible: v),
+                      icon: AdaptiveIcons.history_rounded,
+                      tint: SettingsRowTint.teal,
                     ),
                   ],
                 ),
@@ -5783,12 +6074,16 @@ class _RoomPermissionsScreenState extends State<RoomPermissionsScreen> {
                       value: settings.allowChangeGroupInfo,
                       onChanged: (v) =>
                           settings.copyWith(allowChangeGroupInfo: v),
+                      icon: AppIcons.edit,
+                      tint: SettingsRowTint.yellow,
                     ),
                     _permissionSwitch(
                       titleRu: 'Изменение своего тега',
                       titleEn: 'Edit own room tag',
                       value: settings.allowChangeTag,
                       onChanged: (v) => settings.copyWith(allowChangeTag: v),
+                      icon: AppIcons.tag,
+                      tint: SettingsRowTint.grey,
                     ),
                   ],
                 ),
@@ -5805,9 +6100,15 @@ class _RoomPermissionsScreenState extends State<RoomPermissionsScreen> {
     required String titleEn,
     required bool value,
     required RoomSettings Function(bool) onChanged,
+    required IconData icon,
+    required Color tint,
   }) {
     return SwitchListTile.adaptive(
       value: value,
+      // Android: цветной квадрат слева, как у строк настроек.
+      secondary: settingsAndroidPanels
+          ? AppleRowIcon(tint: tint, icon: icon)
+          : null,
       title: Text(_roomText(context, ru: titleRu, en: titleEn)),
       onChanged: _canManageSettings
           ? (next) {
@@ -5830,16 +6131,16 @@ class _MemberSearchDelegate extends SearchDelegate<void> {
   @override
   List<Widget>? buildActions(BuildContext context) {
     return [
-      IconButton(onPressed: () => query = '', icon: const Icon(AppIcons.close)),
+      PressFeedback(child: IconButton(onPressed: () => query = '', icon: const Icon(AppIcons.close))),
     ];
   }
 
   @override
   Widget? buildLeading(BuildContext context) {
-    return IconButton(
+    return PressFeedback(child: IconButton(
       onPressed: () => close(context, null),
       icon: const Icon(AppIcons.arrowBack),
-    );
+    ));
   }
 
   @override
@@ -5904,7 +6205,11 @@ class _RoomVm {
     this.disappearingVisible = false,
     this.disappearSeconds,
     this.disappearInherited = false,
+    this.isSeed = false,
   });
+
+  /// Затравка до первой загрузки (см. `_seedVm`).
+  final bool isSeed;
 
   final String title;
   final bool muted;
@@ -5953,6 +6258,7 @@ class _RoomAvatar extends StatelessWidget {
     required this.avatarPath,
     this.onEditTap,
     this.heroTag,
+    this.heroAway,
     this.width = 104,
     this.height = 104,
     this.borderRadius = 52,
@@ -5967,6 +6273,9 @@ class _RoomAvatar extends StatelessWidget {
   final String? avatarPath;
   final VoidCallback? onEditTap;
   final String? heroTag;
+
+  /// `true` — Hero сейчас несёт летящий в остров аватар; этот «в стороне».
+  final ValueListenable<bool>? heroAway;
   final double width;
   final double height;
   final double borderRadius;
@@ -5974,7 +6283,7 @@ class _RoomAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final path = avatarPath;
-    final has = path != null && path.isNotEmpty && File(path).existsSync();
+    final has = path != null && path.isNotEmpty && FileExistsCache.exists(path);
     final visuals = Theme.of(context).extension<ChatVisualsThemeExtension>();
     final cs = Theme.of(context).colorScheme;
     final actionTop = visuals?.actionTop ?? cs.primary;
@@ -6025,9 +6334,50 @@ class _RoomAvatar extends StatelessWidget {
             ),
     );
     if (heroTag != null) {
-      avatar = Hero(tag: heroTag!, child: avatar);
+      final tag = heroTag!;
+      if (kAvatarBridgeTransition) {
+        final spec = AvatarBridgeSpec(
+          seed: seed.isNotEmpty ? seed : title,
+          name: title,
+          fallbackId: seed,
+          imagePath: has ? path : null,
+          cornerFraction: smaller <= 0
+              ? 0.5
+              : (borderRadius / smaller).clamp(0.0, 0.5),
+          labelFraction: smaller <= 0 ? 0.42 : fallbackFontSize / smaller,
+        );
+        final inner = avatar;
+        final away = heroAway;
+        avatar = away == null
+            ? AvatarBridgeHero(
+                tag: tag,
+                spec: spec,
+                side: AvatarBridgeSide.destination,
+                child: inner,
+              )
+            : ValueListenableBuilder<bool>(
+                valueListenable: away,
+                child: inner,
+                builder: (context, isAway, child) => AvatarBridgeHero(
+                  tag: isAway ? AvatarBridgeParkedTag(tag) : tag,
+                  spec: spec,
+                  side: AvatarBridgeSide.destination,
+                  child: child!,
+                ),
+              );
+      } else {
+        avatar = Hero(tag: tag, child: avatar);
+      }
+      // Точка перелёта просмотра фото (тот же ключ, что у Hero).
+      avatar = MediaFlightAnchor(
+        tag: tag,
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: avatar,
+      );
     }
-    if (onEditTap == null) return avatar;
+    // «Мост аватара»: одно и то же дерево с карандашом и без — иначе Hero
+    // пересоздавался бы, когда права загрузятся посреди перелёта.
+    if (onEditTap == null && !kAvatarBridgeTransition) return avatar;
     return SizedBox(
       width: width + 12,
       height: height + 12,
@@ -6035,6 +6385,7 @@ class _RoomAvatar extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(child: Center(child: avatar)),
+          if (onEditTap != null)
           Positioned(
             right: 0,
             bottom: 0,
@@ -6067,7 +6418,7 @@ class _RoomAvatar extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.add, size: 20, color: Colors.white),
+                  child: const Icon(AdaptiveIcons.add, size: 20, color: Colors.white),
                 ),
               ),
             ),
@@ -6229,14 +6580,7 @@ class _RoomMembersScreenState extends State<RoomMembersScreen> {
               ),
             );
           }
-          return RefreshIndicator(
-            onRefresh: _reload,
-            child: ListView.separated(
-              physics: const AlwaysScrollableScrollPhysics(),
-              itemCount: members.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, i) {
-                final m = members[i];
+          Widget memberTile(BuildContext context, RoomMember m) {
                 final self = _isSelf(m);
                 return ListTile(
                   onTap: self ? null : () => _openProfile(m),
@@ -6265,7 +6609,7 @@ class _RoomMembersScreenState extends State<RoomMembersScreen> {
                       : Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            IconButton(
+                            PressFeedback(child: IconButton(
                               visualDensity: VisualDensity.compact,
                               tooltip: _roomText(
                                 context,
@@ -6274,8 +6618,8 @@ class _RoomMembersScreenState extends State<RoomMembersScreen> {
                               ),
                               icon: const Icon(AppIcons.chatBubbleSolid),
                               onPressed: () => _message(m),
-                            ),
-                            IconButton(
+                            )),
+                            PressFeedback(child: IconButton(
                               visualDensity: VisualDensity.compact,
                               tooltip: _roomText(
                                 context,
@@ -6284,11 +6628,43 @@ class _RoomMembersScreenState extends State<RoomMembersScreen> {
                               ),
                               icon: const Icon(AppIcons.callSolid),
                               onPressed: () => _call(m),
-                            ),
+                            )),
                           ],
                         ),
                 );
-              },
+          }
+
+          // Android (23.11.2026): список людей — в той же панели, что
+          // строки настроек, без линий; портреты остаются портретами.
+          // В комнате до 50 человек — один столбец без ленивой ленты.
+          if (settingsAndroidPanels) {
+            return RefreshIndicator.adaptive(
+              onRefresh: _reload,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  12,
+                  12,
+                  MediaQuery.paddingOf(context).bottom + 24,
+                ),
+                children: [
+                  _SectionBlock(
+                    children: [
+                      for (final m in members) memberTile(context, m),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }
+          return RefreshIndicator.adaptive(
+            onRefresh: _reload,
+            child: ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              itemCount: members.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, i) => memberTile(context, members[i]),
             ),
           );
         },
@@ -6409,7 +6785,7 @@ class _ActionChip extends StatelessWidget {
     // Horizontal padding kept at 8 so four chips fit a row without overflow;
     // other metrics (radius 18, icon 22, w600) match contacts. iconColor /
     // labelColor stay overridable so the Leave chip keeps its error tint.
-    return FrostedHeaderIsland(
+    return PressFeedback(child: FrostedHeaderIsland(
       radius: 18,
       child: Material(
         color: Colors.transparent,
@@ -6438,7 +6814,7 @@ class _ActionChip extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -6449,8 +6825,14 @@ class _SectionBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Android (23.11.2026, владелец: «плашки и строки везде как в
+    // настройках; прозрачность — настройкой»): блоки страницы комнаты и её
+    // управления — та же панель и те же строки, что в настройках, без линий.
+    if (settingsAndroidPanels) return SettingsRowsPanel(children: children);
     return DecoratedBox(
-      decoration: BoxDecoration(
+      decoration: appleGlassDecorationOr(
+        context,
+        BoxDecoration(
         borderRadius: BorderRadius.circular(18),
         color: Theme.of(
           context,
@@ -6460,6 +6842,7 @@ class _SectionBlock extends StatelessWidget {
             context,
           ).colorScheme.outlineVariant.withValues(alpha: 0.35),
         ),
+      ),
       ),
       child: Column(children: children),
     );
@@ -6509,10 +6892,10 @@ class _RoomCosmeticTile extends StatelessWidget {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: const Color(0xFF22242E),
+              color: _onRoomSheet(context).withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: selected ? accent : Colors.white12,
+                color: selected ? accent : _onRoomSheet(context).withValues(alpha: 0.12),
                 width: selected ? 2 : 1,
               ),
             ),
@@ -6528,7 +6911,7 @@ class _RoomCosmeticTile extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 11,
-              color: selected ? accent : Colors.white70,
+              color: selected ? accent : _onRoomSheet(context).withValues(alpha: 0.7),
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
@@ -6568,6 +6951,18 @@ class _RoomTabs extends StatelessWidget {
           : _roomText(context, ru: 'Участники', en: 'Members'),
       _roomText(context, ru: 'Медиа', en: 'Media'),
     ];
+    // 23.11.2026 (план стекла): полоса во всю ширину с каплей.
+    if (kGlassCategoryStrip) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 14, bottom: 2),
+        child: GlassCategoryStrip(
+          items: [for (final l in labels) GlassStripItem(label: l)],
+          selected: index,
+          onSelect: onChanged,
+          margin: const EdgeInsets.symmetric(horizontal: 12),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 2),
       child: Container(
@@ -6687,24 +7082,24 @@ class _RoomMembersPanel extends StatelessWidget {
             children: [
               if (canAdd)
                 Expanded(
-                  child: FilledButton.icon(
+                  child: PressFeedback(child: FilledButton.icon(
                     onPressed: onAdd,
                     icon: const Icon(AppIcons.personAdd, size: 20),
                     label: Text(
                       _roomText(context, ru: 'Добавить', en: 'Add'),
                     ),
-                  ),
+                  )),
                 ),
               if (canAdd && canInvite) const SizedBox(width: 8),
               if (canInvite)
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: PressFeedback(child: OutlinedButton.icon(
                     onPressed: onInvite,
-                    icon: const Icon(Icons.link_rounded, size: 20),
+                    icon: const Icon(AdaptiveIcons.link_rounded, size: 20),
                     label: Text(
                       _roomText(context, ru: 'Пригласить', en: 'Invite'),
                     ),
-                  ),
+                  )),
                 ),
             ],
           ),
@@ -6725,17 +7120,28 @@ class _RoomMembersPanel extends StatelessWidget {
                 ),
               if (hidden > 0)
                 ListTile(
-                  leading: Icon(Icons.expand_more_rounded, color: cs.primary),
+                  // Android: квадрат-значок и текст без цвета темы — как
+                  // строка настроек (владелец, 23.11.2026: «значки синие»).
+                  leading: settingsRowLeading(
+                    icon: AdaptiveIcons.expand_more_rounded,
+                    tint: SettingsRowTint.grey,
+                    fallback: Icon(
+                      AdaptiveIcons.expand_more_rounded,
+                      color: cs.primary,
+                    ),
+                  ),
                   title: Text(
                     _roomText(
                       context,
                       ru: 'Показать всех · ещё $hidden',
                       en: 'Show all · $hidden more',
                     ),
-                    style: TextStyle(
-                      color: cs.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    style: settingsAndroidPanels
+                        ? null
+                        : TextStyle(
+                            color: cs.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
                   ),
                   onTap: onOpenAll,
                 ),
@@ -6839,12 +7245,15 @@ class _RoomMemberTile extends StatelessWidget {
       onTap: onTap,
       trailing: onMessage == null
           ? null
-          : IconButton(
+          : PressFeedback(child: IconButton(
               visualDensity: VisualDensity.compact,
               tooltip: _roomText(context, ru: 'Написать', en: 'Message'),
               icon: const Icon(AppIcons.chatBubbleSolid, size: 20),
               onPressed: onMessage,
-            ),
+            )),
     );
   }
 }
+
+Color _onRoomSheet(BuildContext context) =>
+    Theme.of(context).colorScheme.onSurface;

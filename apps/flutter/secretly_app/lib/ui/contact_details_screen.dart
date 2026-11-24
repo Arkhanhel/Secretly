@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'scroll_feel.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 import 'animations/animations.dart';
 import 'icons/app_icons.dart';
 
+import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:secretly_app/ui/secretly_snackbar.dart';
@@ -19,13 +21,17 @@ import '../rooms/room_policy_failure.dart';
 import 'app_asset_paths.dart';
 import 'call_error_text.dart';
 import 'call_history_screen.dart';
+import '../entitlements/cosmetic_catalog.dart' show kNoProfileCoverId;
 import 'chat_screen.dart';
+import 'chat_screen_l10n.dart' show chatLastSeenText;
 import 'contact_share_sheet.dart';
 import 'edit_contact_screen.dart';
 import 'emoji/noto_status_emoji.dart';
 import 'favorites_title.dart';
 import 'fullscreen_image_viewer.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'premium/cosmetic_animation_scope.dart';
 import 'premium/cosmetics_catalog.dart';
 import 'premium/live_covers.dart';
@@ -33,7 +39,10 @@ import 'premium/live_frames.dart';
 import 'report_abuse_sheet.dart';
 import 'room_policy_error_text.dart';
 import 'share_utils.dart';
+import 'settings_group.dart';
+import 'apple_settings_row.dart';
 import 'wave1_l10n.dart';
+import 'widgets/apple_menu.dart';
 import 'widgets/conversation_media_gallery.dart';
 import 'widgets/secretly_glass_sheet.dart';
 import 'widgets/avatar_initials.dart';
@@ -43,6 +52,14 @@ import 'widgets/broken_media_box.dart';
 import 'disappearing_messages_ui.dart';
 import '../messages/disappearing_flags.dart' show DisappearingPeerSupport;
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
+import 'widgets/elite_badge_mark.dart';
+import 'profile/profile_motion.dart';
+import 'profile/key_fingerprint.dart';
+import 'media_viewer/media_flight.dart' show MediaFlightAnchor;
+import 'animations/avatar_bridge_route.dart';
+import '../storage/file_exists_cache.dart';
 
 class ContactDetailsScreen extends StatefulWidget {
   const ContactDetailsScreen({
@@ -52,6 +69,10 @@ class ContactDetailsScreen extends StatefulWidget {
     this.convoId,
     this.initialTitle,
     this.initialAvatarPath,
+    this.initialFrameId,
+    this.initialCoverId,
+    this.initialEmojiStatus,
+    this.initialPremiumBadge = false,
     this.heroTag,
     this.openChatByPush = false,
   });
@@ -61,6 +82,14 @@ class ContactDetailsScreen extends StatefulWidget {
   final String? convoId;
   final String? initialTitle;
   final String? initialAvatarPath;
+
+  /// Рамка, обложка, эмодзи-статус и знак собеседника, которые список уже
+  /// знает (23.11.2026): первый кадр сразу с ними, а не «без рамки и с
+  /// чужой обложкой» до загрузки профиля.
+  final String? initialFrameId;
+  final String? initialCoverId;
+  final String? initialEmojiStatus;
+  final bool initialPremiumBadge;
   final String? heroTag;
 
   /// When true (opened from a room member tap), the "Chat" action opens a real
@@ -73,22 +102,77 @@ class ContactDetailsScreen extends StatefulWidget {
 }
 
 class _ContactDetailsScreenState extends State<ContactDetailsScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const String _favoritesNoteAssetPath =
       AppAssetPaths.favoritesNotebookSvg;
   final ScrollController _scrollController = ScrollController();
-  bool _collapseGestureActive = false;
-  double _pullExpand = 0;
-  double _avatarPullPx = 0;
-  double _avatarFullscreenPullPx = 0;
-  bool _avatarWasFullyExpanded = false;
+  // Движение шапки — общий двигатель макета «Profile Motion» (21.11.2026).
+  late final ProfileHeroDriver _hero = ProfileHeroDriver(
+    vsync: this,
+    onChanged: _onHeroChanged,
+    maxPx: _avatarPullMaxPx,
+    snap: _avatarSnapThreshold,
+    hapticsEnabled: () => widget.controller.appHapticsEnabled,
+  );
+  double get _pullExpand => _hero.expand;
+
+  void _onHeroChanged() {
+    if (!mounted) return;
+    _syncHeroAway();
+    // Кадр движения шапки — только перерисовка, без перезагрузки профиля.
+    _heroFrame = true;
+    try {
+      setState(() {});
+    } finally {
+      _heroFrame = false;
+    }
+  }
+
+  /// «Мост аватара»: пока профиль прокручен и аватар летит в остров шапки,
+  /// перелёт при закрытии берёт летящий аватар, а не уехавший из вида.
+  final ValueNotifier<bool> _heroAway = ValueNotifier<bool>(false);
+
+  void _syncHeroAway() {
+    _heroAway.value = _hero.scroll.value > 0 && _hero.expand <= 0.001;
+  }
+
+  bool _heroFrame = false;
+
+  /// 🔴 Прежде профиль перезагружался в КАЖДОЙ сборке (`future: _loadVm()`
+  /// прямо в build) — так и подхватывались изменения после действий
+  /// (`setState(() {})` после блокировки, правки и т. п.). Теперь будущее
+  /// одно, а перезагрузку даёт любой setState, кроме кадров движения шапки.
+  @override
+  void setState(VoidCallback fn) {
+    if (_heroFrame) {
+      super.setState(fn);
+      return;
+    }
+    super.setState(() {
+      fn();
+      _vmFuture = _loadVm();
+    });
+  }
+
+  /// Отпечаток ключа собеседника — обложка по умолчанию, если он своей не
+  /// выбрал (тот же узор он видит у себя в профиле).
+  List<int>? _contactKeyBytes;
+  // Магнитная привязка страницы (шапка → имя в шапке → галерея у шапки).
+  late final ProfileScrollSnapper _snap = ProfileScrollSnapper(
+    controller: _scrollController,
+    hapticsEnabled: () => widget.controller.appHapticsEnabled,
+  );
+
+  void _onHeroScroll() {
+    if (!_scrollController.hasClients) return;
+    _hero.setScroll(_scrollController.offset);
+    _syncHeroAway();
+  }
   bool _avatarViewerOpening = false;
   // 240px finger travel for a full open → the photo expands at half the finger
   // speed (2× slower / more gradual) than a 1:1 drag.
   static const double _avatarPullMaxPx = 240;
   static const double _avatarSnapThreshold = 0.45;
-  static const double _avatarFullscreenPullThreshold = 28;
-  late final AnimationController _pullSnapController;
 
   // Memoized profile VM (agent audit 2026-07-23). _loadVm() awaits several DB
   // reads + file-exists checks (and a network fetch for unknown peers); it used
@@ -99,30 +183,83 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
   // reload never flashes the shimmer.
   Future<_ContactDetailsVm>? _vmFuture;
   _ContactDetailsVm? _lastVm;
+
+  /// Над обложкой собеседника тёмная сцена (живая обложка или фото) —
+  /// значки строки состояния светлые и в светлой теме (24.11.2026).
+  bool _coverLightStatusBar = false;
   int _vmReloadAtMs = 0;
   StreamSubscription<void>? _changedSub;
+  Timer? _vmReloadTimer;
   static const int _vmReloadThrottleMs = 1500;
-  Animation<double>? _pullSnapAnimation;
+
+  /// Профиль из того, что список уже знает (имя, фото): первый кадр сразу
+  /// с аватаром — Hero находит пару, полёт начинается (макет «Peer Profile
+  /// Transition», 22.11.2026). Без рубильника — прежний шиммер.
+  /// Последний собранный профиль и ключ по собеседнику — на время работы
+  /// приложения (23.11.2026). Повторный вход в профиль сразу показывает всё
+  /// как было, без мигания рамки, обложки и пустой шапки.
+  static final Map<String, _ContactDetailsVm> _vmByPeer = {};
+  static final Map<String, List<int>> _keyByPeer = {};
+
+  _ContactDetailsVm? _seedVm() {
+    final cached = _vmByPeer[widget.peerProfileId];
+    if (cached != null) return cached;
+    if (!kAvatarBridgeTransition) return null;
+    final title = widget.initialTitle?.trim() ?? '';
+    final path = widget.initialAvatarPath?.trim() ?? '';
+    final name = title.isEmpty ? widget.peerProfileId : title;
+    final username = name
+        .toLowerCase()
+        .replaceAll(RegExp(r'\s+'), '')
+        .replaceAll(RegExp(r'[^a-z0-9_]'), '');
+    final pid = widget.peerProfileId;
+    // Список уже держит беседу в памяти — рамка, обложка, статус оттуда.
+    final known =
+        widget.controller.cachedConversation(widget.convoId ?? pid) ??
+        widget.controller.cachedConversation(pid);
+    return _ContactDetailsVm(
+      isSeed: true,
+      profileId: pid,
+      title: name,
+      avatarPath: path.isNotEmpty && FileExistsCache.exists(path) ? path : null,
+      aboutText: null,
+      isVerified: false,
+      isBlocked: false,
+      // «Добавить в контакты» пусть появится, а не мелькнёт и исчезнет.
+      isContact: true,
+      isOnline: false,
+      lastSeenAtMs: null,
+      usernameText: username.isEmpty
+          ? '@${pid.length > 8 ? pid.substring(0, 8) : pid}'
+          : '@$username',
+      resolvedConvoId: widget.convoId ?? pid,
+      autoDeleteSeconds: null,
+      emoji: null,
+      isFavoritesConvo: widget.controller.isSavedMessagesConvo(
+        widget.convoId ?? '',
+      ),
+      frameId: widget.initialFrameId ?? known?.frameId,
+      coverId: widget.initialCoverId ?? known?.coverId,
+      emojiStatus: widget.initialEmojiStatus ?? known?.emojiStatus,
+      premiumBadge: widget.initialPremiumBadge || (known?.premiumBadge ?? false),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
-    _pullSnapController =
-        AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 220),
-        )..addListener(() {
-          final animation = _pullSnapAnimation;
-          if (animation == null || !mounted) return;
-          setState(() {
-            _pullExpand = animation.value;
-            _avatarPullPx = (_pullExpand * _avatarPullMaxPx).clamp(
-              0.0,
-              _avatarPullMaxPx,
-            );
-          });
-          _updateAvatarPhotoFeedback();
-        });
+    _lastVm = _seedVm();
+    _contactKeyBytes = _keyByPeer[widget.peerProfileId];
+    _scrollController.addListener(_onHeroScroll);
+    unawaited(
+      contactFingerprintKey(widget.controller, widget.peerProfileId).then((v) {
+        if (v == null) return;
+        _keyByPeer[widget.peerProfileId] = v;
+        if (mounted && !listEquals(v, _contactKeyBytes)) {
+          setState(() => _contactKeyBytes = v);
+        }
+      }),
+    );
     _vmFuture = _loadVm();
     _changedSub = widget.controller.changed.listen((_) => _maybeReloadVm());
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -135,11 +272,17 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
   void _maybeReloadVm() {
     if (!mounted) return;
     final now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _vmReloadAtMs < _vmReloadThrottleMs) return;
+    final wait = _vmReloadThrottleMs - (now - _vmReloadAtMs);
+    if (wait > 0) {
+      // Последнее изменение в окне не теряется: перезагрузка — по его концу.
+      _vmReloadTimer ??= Timer(Duration(milliseconds: wait), () {
+        _vmReloadTimer = null;
+        _maybeReloadVm();
+      });
+      return;
+    }
     _vmReloadAtMs = now;
-    setState(() {
-      _vmFuture = _loadVm();
-    });
+    setState(() {}); // перезагружает vm (см. setState)
   }
 
   Future<void> _refreshPeerProfileMeta() async {
@@ -157,29 +300,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
   @override
   void dispose() {
     _changedSub?.cancel();
+    _vmReloadTimer?.cancel();
+    _heroAway.dispose();
+    _scrollController.removeListener(_onHeroScroll);
     _scrollController.dispose();
-    _pullSnapController.dispose();
+    _hero.dispose();
+    _snap.dispose();
     super.dispose();
-  }
-
-  void _stopPullSnap() {
-    if (_pullSnapController.isAnimating) {
-      _pullSnapController.stop();
-    }
-  }
-
-  void _updateAvatarPhotoFeedback() {
-    final fullyOpen = _pullExpand >= 0.995;
-    final fullyClosed = _pullExpand <= 0.001;
-    if (fullyOpen && !_avatarWasFullyExpanded) {
-      _avatarWasFullyExpanded = true;
-      unawaited(widget.controller.triggerUiHaptic());
-      return;
-    }
-    if (fullyClosed && _avatarWasFullyExpanded) {
-      _avatarWasFullyExpanded = false;
-      unawaited(widget.controller.triggerUiHaptic());
-    }
   }
 
   Future<void> _openAvatarFullScreen(String? avatarPath, String title) async {
@@ -187,7 +314,15 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
     if (existingPath == null || _avatarViewerOpening) {
       return;
     }
-    _avatarFullscreenPullPx = 0;
+    // «Мост аватара»: просмотр фото под той же меткой — только когда
+    // страница доехала, иначе два перелёта одного аватара наложатся.
+    final routeAnimation = ModalRoute.of(context)?.animation;
+    if (kAvatarBridgeTransition &&
+        routeAnimation != null &&
+        !routeAnimation.isCompleted) {
+      return;
+    }
+    _hero.releaseStretch();
     _avatarViewerOpening = true;
     try {
       await openFullscreenImageViewer(
@@ -199,80 +334,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
     } finally {
       _avatarViewerOpening = false;
     }
-  }
-
-  void _handleAvatarSurfaceDragUpdate(
-    DragUpdateDetails details, {
-    required String? avatarPath,
-    required String title,
-  }) {
-    final delta = details.delta.dy;
-    if (_pullExpand >= 0.995 && delta > 0) {
-      _avatarFullscreenPullPx += delta;
-      if (_avatarFullscreenPullPx >= _avatarFullscreenPullThreshold) {
-        _avatarFullscreenPullPx = 0;
-        unawaited(_openAvatarFullScreen(avatarPath, title));
-        return;
-      }
-    } else {
-      _avatarFullscreenPullPx = 0;
-    }
-
-    _stopPullSnap();
-    setState(() {
-      _avatarPullPx = (_avatarPullPx + delta).clamp(0.0, _avatarPullMaxPx);
-      _pullExpand = (_avatarPullPx / _avatarPullMaxPx).clamp(0.0, 1.0);
-    });
-    _updateAvatarPhotoFeedback();
-  }
-
-  void _handleAvatarSurfaceDragEnd(DragEndDetails _) {
-    _avatarFullscreenPullPx = 0;
-    _animatePullTo(_pullExpand >= _avatarSnapThreshold ? 1.0 : 0.0);
-  }
-
-  void _animatePullTo(double target) {
-    final clamped = target.clamp(0.0, 1.0);
-    if ((_pullExpand - clamped).abs() < 0.001) {
-      setState(() {
-        _pullExpand = clamped;
-        _avatarPullPx = (_pullExpand * _avatarPullMaxPx).clamp(
-          0.0,
-          _avatarPullMaxPx,
-        );
-      });
-      _updateAvatarPhotoFeedback();
-      return;
-    }
-    _stopPullSnap();
-    _pullSnapAnimation = Tween<double>(begin: _pullExpand, end: clamped)
-        .animate(
-          CurvedAnimation(
-            parent: _pullSnapController,
-            curve: Curves.easeOutCubic,
-          ),
-        );
-    _pullSnapController
-      ..reset()
-      ..forward();
-  }
-
-  void _handleCollapseDrag(DragUpdateDetails details) {
-    _stopPullSnap();
-    _collapseGestureActive = true;
-    setState(() {
-      _avatarPullPx = (_avatarPullPx + details.delta.dy).clamp(
-        0.0,
-        _avatarPullMaxPx,
-      );
-      _pullExpand = (_avatarPullPx / _avatarPullMaxPx).clamp(0.0, 1.0);
-    });
-    _updateAvatarPhotoFeedback();
-  }
-
-  void _handleCollapseDragEnd(DragEndDetails _) {
-    _collapseGestureActive = false;
-    _animatePullTo(_pullExpand >= _avatarSnapThreshold ? 1.0 : 0.0);
   }
 
   String? _existingAvatarPath(String? rawPath) {
@@ -333,63 +394,33 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
   bool _handleAvatarPull(ScrollNotification notification) {
     if (notification.metrics.axis != Axis.vertical) return false;
     if (notification.depth != 0) return false;
-
-    final atTop =
-        notification.metrics.pixels <= 0.5 &&
-        notification.metrics.extentBefore <= 0.5;
-
-    if (notification is OverscrollNotification) {
-      if (notification.dragDetails == null) return false;
-      final delta = notification.overscroll;
-      if (atTop && delta < 0) {
-        _stopPullSnap();
-        setState(() {
-          _avatarPullPx = (_avatarPullPx + (-delta)).clamp(
-            0.0,
-            _avatarPullMaxPx,
-          );
-          _pullExpand = (_avatarPullPx / _avatarPullMaxPx).clamp(0.0, 1.0);
-        });
-        _updateAvatarPhotoFeedback();
-      }
-      return false;
+    // Фото тянет и ведёт слой пальца (ProfileHeroGestureLayer); здесь —
+    // только магнитная привязка страницы, когда фото не «в игре».
+    if (notification is ScrollEndNotification && !_hero.heroActive) {
+      _snap.onScrollEnd();
     }
-
-    if (notification is ScrollUpdateNotification) {
-      if (notification.dragDetails == null) return false;
-      final delta = notification.scrollDelta ?? 0;
-      if (atTop && delta < 0) {
-        _stopPullSnap();
-        setState(() {
-          _avatarPullPx = (_avatarPullPx + (-delta)).clamp(
-            0.0,
-            _avatarPullMaxPx,
-          );
-          _pullExpand = (_avatarPullPx / _avatarPullMaxPx).clamp(0.0, 1.0);
-        });
-        _updateAvatarPhotoFeedback();
-      }
-      return false;
-    }
-
-    if (notification is ScrollEndNotification) {
-      // Always settle to the nearest end on finger-up. dragDetails is usually
-      // null here (the drag has already ended), so gating the snap on it left the
-      // avatar frozen mid-zoom when released early.
-      if (_avatarPullPx > 0.001) {
-        _animatePullTo(_pullExpand >= _avatarSnapThreshold ? 1.0 : 0.0);
-      }
-      return false;
-    }
-
     return false;
   }
+
+  /// Остров шапки. Пока страница въезжает «мостом» (Android) — сплошная
+  /// плашка без размытия: размытие под кругом раскрытия — пропущенные кадры.
+  Widget _bridgeIsland({required Widget child}) => AvatarBridgeEntrance(
+    child: child,
+    builder: (context, settled, child) => FrostedHeaderIsland(
+      radius: 24,
+      height: 48,
+      frosted: settled ? null : false,
+      child: child!,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
 
-    return Scaffold(
+    return Stack(
+      children: [
+        Scaffold(
       extendBodyBehindAppBar: true,
       appBar: frostedAppBar(
         // No full top bar — it cropped the cover/photo. Suppress frostedAppBar's
@@ -397,23 +428,27 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
         // so the cover/photo shows through behind them.
         flexibleSpace: const SizedBox.shrink(),
         automaticallyImplyLeading: false,
+        systemOverlayStyle: _coverLightStatusBar
+            ? const SystemUiOverlayStyle(
+                statusBarIconBrightness: Brightness.light,
+                statusBarBrightness: Brightness.dark,
+              )
+            : null,
         leadingWidth: 64,
         leading: Opacity(
           opacity: (1.0 - _pullExpand * 2.0).clamp(0.0, 1.0),
           child: Padding(
             padding: const EdgeInsets.only(left: 8, top: 4, bottom: 4),
-            child: FrostedHeaderIsland(
-              radius: 24,
-              height: 48,
+            child: _bridgeIsland(
               child: SizedBox(
                 width: 48,
                 height: 48,
-                child: IconButton(
+                child: PressFeedback(child: IconButton(
                   padding: EdgeInsets.zero,
                   tooltip: MaterialLocalizations.of(context).backButtonTooltip,
-                  icon: Icon(appleBackIcon(Icons.arrow_back)),
+                  icon: Icon(appleBackIcon(AdaptiveIcons.arrow_back)),
                   onPressed: () => Navigator.of(context).maybePop(),
-                ),
+                )),
               ),
             ),
           ),
@@ -436,23 +471,21 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                 future: _vmFuture,
                 builder: (context, snap) {
                   final vm = snap.data;
-                  if (vm?.isFavoritesConvo == true) {
+                  if ((vm ?? _lastVm)?.isFavoritesConvo == true) {
                     return const SizedBox.shrink();
                   }
-                  return FrostedHeaderIsland(
-                    radius: 24,
-                    height: 48,
+                  return _bridgeIsland(
                     child: SizedBox(
                       width: 48,
                       height: 48,
-                      child: IconButton(
+                      child: PressFeedback(child: IconButton(
                         padding: EdgeInsets.zero,
                         tooltip: context.l10n.more,
                         onPressed: (vm == null || vm.isFavoritesConvo)
                             ? null
                             : () => _showFrostedMenu(vm),
                         icon: const Icon(AppIcons.moreVert, size: 23),
-                      ),
+                      )),
                     ),
                   );
                 },
@@ -465,11 +498,15 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
         stream: widget.controller.changed,
         builder: (context, _) {
           return FutureBuilder<_ContactDetailsVm>(
-            future: _loadVm(),
+            future: _vmFuture,
+            initialData: _lastVm,
             builder: (context, infoSnap) {
               // Retain the last resolved VM so a throttled reload never drops
               // back to the shimmer while the fresh query is in flight.
               final vm = infoSnap.data ?? _lastVm;
+              if (vm != null && !vm.isSeed) {
+                _vmByPeer[widget.peerProfileId] = vm;
+              }
               if (vm == null) {
                 return const ShimmerContactDetails();
               }
@@ -487,9 +524,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
               // live in a single Stack(Clip.none) whose positions/sizes lerp
               // on _pullExpand (0 collapsed → 1 fully-expanded photo).
               final avatarSize = lerpDouble(112, screenW, _pullExpand)!;
+              // Раскрытое фото тянется вниз за пальцем и возвращается.
               final avatarHeight = lerpDouble(
                 112,
-                expandedImageHeight,
+                expandedImageHeight + _hero.stretchPx,
                 _pullExpand,
               )!;
               final avatarRadius = lerpDouble(56, 0, _pullExpand)!;
@@ -543,14 +581,29 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                   !vm.isFavoritesConvo &&
                   !(heroPhoto != null &&
                       heroPhoto.isNotEmpty &&
-                      File(heroPhoto).existsSync()) &&
+                      FileExistsCache.exists(heroPhoto)) &&
                   AvatarInitials.fillIsLight(
                     context,
                     seed: vm.profileId.trim().isNotEmpty
                         ? vm.profileId.trim()
                         : vm.title,
                   );
-              final heroTextWhite = _pullExpand > 0.35 && !heroOnLightFallback;
+              // 24.11.2026: ночная живая обложка (или своё фото) — тёмная
+              // сцена в любой теме: имя на ней белое. Дневные обложки в
+              // светлой теме светлые — на них имя остаётся тёмным.
+              final liveCoverText =
+                  !vm.isFavoritesConvo &&
+                  vm.coverId != kNoProfileCoverId &&
+                  (coverIsNightScene(vm.coverId) ||
+                      (vm.coverImagePath ?? '').isNotEmpty);
+              final heroTextWhite =
+                  (_pullExpand > 0.35 && !heroOnLightFallback) || liveCoverText;
+              if (liveCoverText != _coverLightStatusBar) {
+                _coverLightStatusBar = liveCoverText;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) setState(() {});
+                });
+              }
               // Back/front cover split (black hole): the peer's photo must
               // sit INSIDE the scene exactly like on the own-profile page —
               // back layer under the photo, near disk edge drawn over it.
@@ -558,7 +611,15 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
               // прожектор) должны знать, где портрет стоит на самом деле —
               // так же, как в своём профиле. Доли — от полосы обложки.
               final coverH = collapsedButtonsTop + 66;
-              final cover = vm.isFavoritesConvo
+              _hero.fadeY = buttonsTop + 6;
+              _snap
+                ..dockAt = kProfileScrollCollapse // магнит: аватар целиком в острове
+                ..headerBottom = safeTop;
+              final coverAvatarCenter = Offset(
+                0.5,
+                (avatarTop + avatarSize / 2) / coverH,
+              );
+              final pickedCover = vm.isFavoritesConvo
                   ? null
                   : coverBackWidgetFor(
                       vm.coverId,
@@ -568,7 +629,32 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                         (avatarTop + avatarSize / 2) / coverH,
                       ),
                       avatarRadius: avatarSize / 2 / screenW,
+                      // Обложки команды видны всем — но только в профиле со
+                      // знаком команды (23.11.2026).
+                      ownerProfileId: widget.peerProfileId,
                     );
+              // Своей обложки нет — «Отпечаток ключа» из его ключа. 🔴 Только
+              // когда ключ известен: без него рисовался один и тот же
+              // образец у всех, и при сверке «узоры не совпали» выглядело бы
+              // как подмена, которой нет (разбор 22.11.2026).
+              final cover =
+                  vm.isFavoritesConvo || vm.coverId == kNoProfileCoverId
+                  ? null
+                  : (pickedCover ??
+                        // Обложки нет — «Отпечаток S» (23.11.2026).
+                        (kSPrintDefaultCover
+                            ? coverBackWidgetFor(
+                                kDefaultProfileCoverId,
+                                avatarCenter: coverAvatarCenter,
+                                avatarRadius: avatarSize / 2 / screenW,
+                              )
+                            : _contactKeyBytes == null
+                            ? null
+                            : coverBackWidgetFor(
+                          kKeyFingerprintCoverId,
+                          avatarCenter: coverAvatarCenter,
+                          avatarRadius: avatarSize / 2 / screenW,
+                        )));
               final coverFront = vm.isFavoritesConvo
                   ? null
                   : coverFrontWidgetFor(
@@ -585,29 +671,39 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
 
               final bottomInset = MediaQuery.of(context).padding.bottom;
 
-              return GestureDetector(
+              return Stack(
+                children: [
+                  ProfileHeroGestureLayer(
+  driver: _hero,
+  scrollController: _scrollController,
+  // У «Избранного» раскрывающейся шапки нет: потягивание прятало «назад»
+  // и заголовок, а страница не листалась (разбор 22.11.2026).
+  enabled: !vm.isFavoritesConvo,
+  onPullToFullscreen: () => _openAvatarFullScreen(vm.avatarPath, vm.title),
+  child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
-                onVerticalDragUpdate:
-                    (_pullExpand >= 1.0 || _collapseGestureActive)
-                    ? _handleCollapseDrag
-                    : null,
-                onVerticalDragEnd:
-                    (_pullExpand >= 1.0 || _collapseGestureActive)
-                    ? _handleCollapseDragEnd
-                    : null,
-                child: NotificationListener<ScrollNotification>(
-                  onNotification: _handleAvatarPull,
+                onVerticalDragUpdate: null,
+                onVerticalDragEnd: null,
+                // 🔴 23.11.2026: вкладка галереи стала короче («Файлы» →
+                // «Нет файлов») — список сам подвинулся вверх, но слушатель
+                // прокрутки об этом не узнаёт. Шапка оставалась «свёрнутой»
+                // при почти верхнем положении: обложка и рамка пропадали,
+                // страница дёргалась. Размеры поменялись — сверяем шапку.
+                child: NotificationListener<Notification>(
+                  onNotification: (n) {
+                    if (n is ScrollMetricsNotification) {
+                      _onHeroScroll();
+                      return false;
+                    }
+                    return n is ScrollNotification && _handleAvatarPull(n);
+                  },
                   child: ListView(
                     controller: _scrollController,
-                    physics: (_pullExpand >= 1.0 || _collapseGestureActive)
-                        ? const NeverScrollableScrollPhysics()
-                        // Match own-profile's smooth pull: explicit clamping +
-                        // always-scrollable so overscroll at the top feeds the
-                        // avatar-expand instead of the iOS gesture arena freezing
-                        // the scroll mid-swipe.
-                        : const ClampingScrollPhysics(
-                            parent: AlwaysScrollableScrollPhysics(),
-                          ),
+                    // Пока фото «в игре», страница стоит — палец ведёт фото.
+                physics: ProfileHeroScrollPhysics(
+                  frozen: () => _hero.freezesScroll,
+                  parent: secretlyProfileScrollPhysics(),
+                ),
                     padding: EdgeInsets.only(top: 0, bottom: 12 + bottomInset),
                     children: [
                       if (vm.isFavoritesConvo) ...[
@@ -621,6 +717,11 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                             fallbackId: widget.peerProfileId,
                             isFavoritesConvo: true,
                             favoritesAssetPath: _favoritesNoteAssetPath,
+                            // «Мост аватара»: «Избранное» тоже летит из
+                            // строки списка.
+                            heroTag: kAvatarBridgeTransition
+                                ? widget.heroTag
+                                : null,
                             width: 112,
                             height: 112,
                             borderRadius: 56,
@@ -693,8 +794,37 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                       ),
                                       // Showcase: the banner is the biggest thing on this page,
                                       // so it rasterises at full resolution here.
-                                      child: CoverBottomFade(
-                                        child: CosmeticShowcaseScope(child: cover),
+                                      child: ProfileCoverParallax(
+                                        driver: _hero,
+                                        child: CoverBottomFade(
+                                          coverId: vm.coverId,
+                                          child: CosmeticShowcaseScope(
+                                            child: CoverAvatarGeometry(
+                                              center: coverAvatarCenter,
+                                              radius: avatarSize / 2 / screenW,
+                                              child: ProfileMotionScope(
+                                                motion: _hero.motion,
+                                                tint: AvatarInitials.accentColor(
+                                                  seed: vm.profileId,
+                                                ),
+                                                child: PatternCoverKey(
+                                                  keyBytes: _contactKeyBytes,
+                                                  // Живая обложка не тикает,
+                                                  // пока страница въезжает.
+                                                  child: AvatarBridgeEntrance(
+                                                    child: cover,
+                                                    builder:
+                                                        (context, settled, c) =>
+                                                            TickerMode(
+                                                              enabled: settled,
+                                                              child: c!,
+                                                            ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -707,25 +837,20 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                               Positioned(
                                 top: avatarTop,
                                 left: (screenW - avatarSize) / 2,
-                                child: GestureDetector(
+                                child: ProfileHideWhileFlying(driver: _hero, child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
                                   onTap: () => _openAvatarFullScreen(
                                     vm.avatarPath,
                                     vm.title,
                                   ),
-                                  onVerticalDragUpdate: (details) =>
-                                      _handleAvatarSurfaceDragUpdate(
-                                        details,
-                                        avatarPath: vm.avatarPath,
-                                        title: vm.title,
-                                      ),
-                                  onVerticalDragEnd:
-                                      _handleAvatarSurfaceDragEnd,
+                                  onVerticalDragUpdate: null,
+                                  onVerticalDragEnd: null,
                                   child: _LargeAvatar(
                                     avatarPath: vm.avatarPath,
                                     fallbackTitle: vm.title,
                                     fallbackId: vm.profileId,
                                     heroTag: widget.heroTag,
+                                    heroAway: _heroAway,
                                     isFavoritesConvo: vm.isFavoritesConvo,
                                     favoritesAssetPath: _favoritesNoteAssetPath,
                                     width: avatarSize,
@@ -737,7 +862,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                       _pullExpand,
                                     )!,
                                   ),
-                                ),
+                                )),
                               ),
                               if (frame != null)
                                 // Frame ring encircles the photo: box =
@@ -748,7 +873,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                       avatarHeight / 2 -
                                       (avatarSize / 0.86) / 2,
                                   left: (screenW - avatarSize / 0.86) / 2,
-                                  child: IgnorePointer(
+                                  child: ProfileHideWhileFlying(driver: _hero, frame: true, child: IgnorePointer(
                                     child: Opacity(
                                       opacity: (1.0 - _pullExpand * 3.0).clamp(
                                         0.0,
@@ -761,11 +886,19 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                   // full resolution and one frame per vsync,
                                   // instead of the list-sized baked texture.
                                   child: CosmeticShowcaseScope(
-                                    child: frame.builder(avatarSize / 0.86),
+                                    child: AvatarBridgeEntrance(
+                                      builder: (context, settled, _) =>
+                                          TickerMode(
+                                            enabled: settled,
+                                            child: frame.builder(
+                                              avatarSize / 0.86,
+                                            ),
+                                          ),
+                                    ),
                                   ),
                                       ),
                                     ),
-                                  ),
+                                  )),
                                 ),
                               if (coverFront != null)
                                 // Foreground cover pass (black hole's near
@@ -777,7 +910,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                   left: 0,
                                   right: 0,
                                   height: collapsedButtonsTop + 66,
-                                  child: IgnorePointer(
+                                  child: ProfileAvatarScroll(driver: _hero, child: IgnorePointer(
                                     child: Opacity(
                                       opacity: (1.0 - _pullExpand * 2.0).clamp(
                                         0.0,
@@ -785,13 +918,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                       ),
                                       child: coverFront,
                                     ),
-                                  ),
+                                  )),
                                 ),
                               Positioned(
                                 top: nameTop,
                                 left: 24,
                                 right: 24,
-                                child: Align(
+                                child: ProfileHideWhileFlying(driver: _hero, child: Align(
                                   alignment: Alignment.lerp(
                                     Alignment.topCenter,
                                     Alignment.topLeft,
@@ -839,32 +972,24 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                             size: 24,
                                           ),
                                         ],
-                                        if (vm.premiumBadge) ...[
-                                          const SizedBox(width: 6),
-                                          const Icon(
-                                            Icons.star_rounded,
-                                            size: 20,
-                                            color: Color(0xFFE8A33D),
-                                          ),
-                                        ],
-                                        if (vm.isVerified) ...[
-                                          const SizedBox(width: 8),
-                                          Icon(
-                                            AppIcons.verified,
-                                            color: Colors.green.shade500,
-                                            size: 22,
-                                          ),
-                                        ],
+                                        // Звёздочку премиума убрали; знак
+                                        // «важного» — H2 (21.11.2026). Зелёная
+                                        // галочка проверки — у имени
+                                        // пользователя над ID (ниже).
+                                        EliteBadgeMark(
+                                          profileId: vm.profileId,
+                                          size: 22,
+                                        ),
                                       ],
                                     ),
                                   ),
-                                ),
+                                )),
                               ),
                               Positioned(
                                 top: statusTop,
                                 left: 24,
                                 right: 24,
-                                child: Align(
+                                child: ProfileTextCollapse(driver: _hero, status: true, child: Align(
                                   alignment: Alignment.lerp(
                                     Alignment.topCenter,
                                     Alignment.topLeft,
@@ -896,7 +1021,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                           ),
                                     ),
                                   ),
-                                ),
+                                )),
                               ),
                               // 🔴 Кнопка «разбудить» — и на странице
                               // СОБЕСЕДНИКА, если у него живая рамка: его
@@ -921,7 +1046,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                 // Four equal-width action chips (chat / sound /
                                 // call / video) — same chips/onTaps as before,
                                 // now animating with the hero.
-                                child: Row(
+                                child: ProfileFadeUnderHeader(driver: _hero, restTop: collapsedButtonsTop, line: safeTop - kToolbarHeight + 52, child: Row(
                                   children: [
                                     Expanded(
                                       child: _ActionChip(
@@ -964,7 +1089,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                       ),
                                     ),
                                   ],
-                                ),
+                                )),
                               ),
                             ],
                           ),
@@ -998,12 +1123,34 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                             children: [
                               _InfoRow(
                                 icon: AppIcons.tag,
+                                tint: SettingsRowTint.teal,
                                 title: vm.usernameText,
                                 subtitle: l10n.contactDetailsUsernameLabel,
+                                // Зелёная галочка проверки — справа от имени
+                                // пользователя, сразу над ID (21.11.2026;
+                                // раньше стояла у имени в шапке).
+                                titleSuffix: vm.isVerified
+                                    ? Padding(
+                                        key: const ValueKey(
+                                          'contact-verified-check',
+                                        ),
+                                        padding:
+                                            const EdgeInsetsDirectional.only(
+                                              start: 6,
+                                            ),
+                                        child: Icon(
+                                          AppIcons.verified,
+                                          color: Colors.green.shade500,
+                                          size: 18,
+                                          semanticLabel: l10n.verifiedLower,
+                                        ),
+                                      )
+                                    : null,
                               ),
                               const Divider(height: 1),
                               _InfoRow(
                                 icon: AppIcons.badge,
+                                tint: SettingsRowTint.grey,
                                 title: vm.profileId,
                                 subtitle: l10n.secretlyIdLabel,
                                 trailing: Row(
@@ -1012,33 +1159,27 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                     SizedBox(
                                       width: 40,
                                       height: 40,
-                                      child: FilledButton.tonal(
-                                        style: FilledButton.styleFrom(
-                                          shape: const CircleBorder(),
-                                          padding: EdgeInsets.zero,
-                                        ),
+                                      child: PressFeedback(child: FilledButton.tonal(
+                                        style: _idButtonStyle(context),
                                         onPressed: () => _shareContactId(vm),
                                         child: Icon(
-                                          appleShareIcon(Icons.share_outlined),
+                                          appleShareIcon(AdaptiveIcons.share_outlined),
                                           size: 18,
                                         ),
-                                      ),
+                                      )),
                                     ),
                                     const SizedBox(width: 8),
                                     SizedBox(
                                       width: 40,
                                       height: 40,
-                                      child: FilledButton.tonal(
-                                        style: FilledButton.styleFrom(
-                                          shape: const CircleBorder(),
-                                          padding: EdgeInsets.zero,
-                                        ),
+                                      child: PressFeedback(child: FilledButton.tonal(
+                                        style: _idButtonStyle(context),
                                         onPressed: () => _copyContactId(vm),
                                         child: const Icon(
-                                          Icons.copy_rounded,
+                                          AdaptiveIcons.copy_rounded,
                                           size: 18,
                                         ),
-                                      ),
+                                      )),
                                     ),
                                   ],
                                 ),
@@ -1046,6 +1187,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                               const Divider(height: 1),
                               _InfoRow(
                                 icon: AppIcons.call,
+                                tint: SettingsRowTint.green,
                                 title: wave1Text(
                                   context,
                                   ru: 'История звонков',
@@ -1101,9 +1243,19 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                                 children: [
                                   SwitchListTile.adaptive(
                                     value: allowed,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                    ),
+                                    // Android: отступы и цветной квадрат —
+                                    // как у строк настроек (23.11.2026).
+                                    contentPadding: settingsAndroidPanels
+                                        ? null
+                                        : const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                          ),
+                                    secondary: settingsAndroidPanels
+                                        ? const AppleRowIcon(
+                                            tint: SettingsRowTint.indigo,
+                                            icon: AppIcons.callAlt,
+                                          )
+                                        : null,
                                     title: Text(
                                       wave1Text(
                                         context,
@@ -1150,7 +1302,11 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                           child: _InfoBlock(
                             children: [
                               ListTile(
-                                leading: const Icon(AppIcons.personAdd),
+                                leading: settingsRowLeading(
+                                  icon: AppIcons.personAdd,
+                                  tint: SettingsRowTint.green,
+                                  fallback: const Icon(AppIcons.personAdd),
+                                ),
                                 title: Text(l10n.contactDetailsAddToContacts),
                                 onTap: () async {
                                   await widget.controller.addContact(
@@ -1171,20 +1327,163 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
                       // to be written twice; the copy had silently fallen
                       // behind, opening photos in a bare dialog and ignoring
                       // taps on video outright.
-                      ConversationMediaGallerySection(
-                        controller: widget.controller,
-                        convoId: vm.resolvedConvoId,
-                        title: vm.title,
+                      SizedBox(key: _snap.galleryKey, height: 0),
+// Галерея строится, когда страница доехала (и данные
+                      // настоящие, а не затравка из списка).
+                      AvatarBridgeEntrance(
+                        // 23.11.2026: галерее нужен только id беседы — он
+                        // известен и у затравки из списка; ждать полной
+                        // загрузки профиля (секунды) незачем.
+                        builder: (context, settled, _) =>
+                            settled &&
+                                (!vm.isSeed || (widget.convoId ?? '').isNotEmpty)
+                            ? ConversationMediaGallerySection(
+                                controller: widget.controller,
+                                convoId: vm.resolvedConvoId,
+                                title: vm.title,
+                              )
+                            : const SizedBox(height: 160),
                       ),
                       const SizedBox(height: 12),
-                    ],
+                    ProfileSnapSpacer(snapper: _snap),
+],
                   ),
                 ),
+              ),
+),
+                  // Шапка при прокрутке: фон проявляется, имя причаливает
+                  // заголовком (макет «Profile Motion»).
+                  if (!vm.isFavoritesConvo)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: ProfileTopFade(driver: _hero),
+                    ),
+                    if (!vm.isFavoritesConvo) Positioned(
+                      top: MediaQuery.paddingOf(context).top - kToolbarHeight + (kToolbarHeight - 48) / 2,
+                      left: kProfileMiniIslandLeft,
+                      right: 112,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: ProfileMiniIsland(
+                          driver: _hero,
+                          scrollController: _scrollController,
+                          child: ProfileMiniIdentity(
+                          name: vm.title,
+                          ghost: true,
+                          reserve: 22,
+                          avatar: const SizedBox.shrink(),
+                          trailing: [
+                            if (vm.emojiStatus != null &&
+                                vm.emojiStatus!.isNotEmpty) ...[
+                              const SizedBox(width: 4),
+                              NotoStatusEmoji(emoji: vm.emojiStatus!, size: 16),
+                            ],
+                            EliteBadgeMark(
+                              profileId: vm.profileId,
+                              size: 15,
+                              gap: 4,
+                            ),
+                          ],
+                        ),
+                        ),
+                      ),
+                    ),
+                ],
               );
             },
           );
         },
       ),
+    ),
+        // Один аватар летит ПОВЕРХ шапки в остров рядом с «назад».
+        Positioned.fill(
+          child: Builder(
+            builder: (context) {
+              final mq = MediaQuery.of(context);
+              final safeTop = mq.padding.top;
+              final vm = _lastVm;
+              if (vm == null || vm.isFavoritesConvo) {
+                return const SizedBox.shrink();
+              }
+              final label = ProfileFlyingLabel(
+                driver: _hero,
+                restTop: safeTop + kToolbarHeight + 8 + 112 + 18,
+                restCenterX: mq.size.width / 2,
+                targetLeft: kProfileMiniIslandLeft + 7 + 34 + 8,
+                targetCenterY: safeTop + kToolbarHeight / 2,
+                targetMaxWidth: mq.size.width - kProfileMiniIslandLeft - 112 - 49 - 14,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        vm.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                      ),
+                    ),
+                    if (vm.emojiStatus != null &&
+                        vm.emojiStatus!.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      NotoStatusEmoji(emoji: vm.emojiStatus!, size: 24),
+                    ],
+                    EliteBadgeMark(profileId: vm.profileId, size: 20),
+                  ],
+                ),
+              );
+              final avatar = ProfileFlyingAvatar(
+                driver: _hero,
+                restCenter: Offset(
+                  mq.size.width / 2,
+                  safeTop + kToolbarHeight + 8 + 56,
+                ),
+                islandCenter: Offset(kProfileMiniIslandLeft + 7 + 17, safeTop + kToolbarHeight / 2),
+                child: _flyingBridge(
+                  vm,
+                  ProfileMiniPhoto(
+                    path: vm.avatarPath,
+                    seed: vm.profileId,
+                    name: vm.title,
+                  ),
+                ),
+              );
+              return Stack(children: [avatar, label]);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Летящий в остров аватар несёт Hero, пока аватар страницы «в стороне»
+  /// ([_heroAway]): возврат в список начинается оттуда, где аватар виден.
+  Widget _flyingBridge(_ContactDetailsVm vm, Widget child) {
+    final tag = widget.heroTag;
+    if (!kAvatarBridgeTransition || tag == null) return child;
+    final px = (112 * MediaQuery.devicePixelRatioOf(context)).round();
+    final p = vm.avatarPath;
+    return AvatarBridgeHero(
+      tag: tag,
+      side: AvatarBridgeSide.destination,
+      spec: AvatarBridgeSpec(
+        seed: vm.profileId,
+        name: vm.title,
+        fallbackId: vm.profileId,
+        imagePath: p != null && p.isNotEmpty && FileExistsCache.exists(p)
+            ? p
+            : null,
+        decodeWidth: px,
+        decodeHeight: px,
+        labelFraction: 0.34,
+      ),
+      child: child,
     );
   }
 
@@ -1339,10 +1638,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
     if (lastSeenAtMs == null || lastSeenAtMs <= 0) {
       return l10n.contactDetailsStatusRecently;
     }
-    final dt = DateTime.fromMillisecondsSinceEpoch(lastSeenAtMs);
-    final hh = dt.hour.toString().padLeft(2, '0');
-    final mm = dt.minute.toString().padLeft(2, '0');
-    return l10n.contactDetailsStatusAt('$hh:$mm');
+    // Та же подпись, что в шапке чата: «был(а) в 14:32» только сегодня,
+    // дальше — «вчера в …» или дата (раньше здесь всегда было одно время).
+    return chatLastSeenText(
+      context,
+      timestampMs: lastSeenAtMs,
+      now: DateTime.now(),
+    );
   }
 
   /// "Chat" action. From a 1:1 this screen sits on top of the peer's chat, so
@@ -1581,6 +1883,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
         .getChatNotificationPrivacyOverride(widget.peerProfileId.trim());
     if (!mounted) return;
     final selected = await showModalBottomSheet<int>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) {
@@ -1888,39 +2191,21 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
     Color? iconColor,
     Color? textColor,
   }) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
+    return AppMenuRow(
+      title: title,
+      icon: icon,
+      trailing: trailing,
+      iconColor: iconColor,
+      textColor: textColor,
+      destructive: textColor != null || iconColor != null,
       onTap: () => Navigator.of(context).pop(value),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: iconColor ?? cs.onSurface.withValues(alpha: 0.92),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                title,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: textColor,
-                ),
-              ),
-            ),
-            if (trailing != null) trailing,
-          ],
-        ),
-      ),
     );
   }
 
   Future<void> _deleteContact(_ContactDetailsVm vm) async {
     if (!vm.isContact) return;
     final l10n = context.l10n;
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (context) {
         return SecretlyAlertDialog(
@@ -1955,7 +2240,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen>
       (secs: 30 * 24 * 60 * 60, label: l10n.contactAutoDelete30Days),
     ];
 
-    final selected = await showDialog<int?>(
+    final selected = await showAppDialog<int?>(
       context: context,
       builder: (context) {
         return SimpleDialog(
@@ -2050,7 +2335,11 @@ class _ContactDetailsVm {
     this.premiumBadge = false,
     this.disappearingVisible = false,
     this.disappearSeconds,
+    this.isSeed = false,
   });
+
+  /// Затравка из списка до первой загрузки (см. `_seedVm`).
+  final bool isSeed;
 
   final String profileId;
   final String title;
@@ -2092,6 +2381,7 @@ class _LargeAvatar extends StatelessWidget {
     required this.fallbackTitle,
     this.fallbackId,
     this.heroTag,
+    this.heroAway,
     required this.isFavoritesConvo,
     required this.favoritesAssetPath,
     this.width = 112,
@@ -2104,6 +2394,9 @@ class _LargeAvatar extends StatelessWidget {
   final String fallbackTitle;
   final String? fallbackId;
   final String? heroTag;
+
+  /// `true` — Hero сейчас несёт летящий в остров аватар; этот «в стороне».
+  final ValueListenable<bool>? heroAway;
   final bool isFavoritesConvo;
   final String favoritesAssetPath;
   final double width;
@@ -2114,7 +2407,7 @@ class _LargeAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = avatarPath;
-    final has = p != null && p.isNotEmpty && File(p).existsSync();
+    final has = p != null && p.isNotEmpty && FileExistsCache.exists(p);
     final cs = Theme.of(context).colorScheme;
     // Decode the peer photo at DISPLAY resolution, not its native size. This
     // avatar lerps up to the full screen width on pull-expand, and a 2000×2000
@@ -2186,7 +2479,52 @@ class _LargeAvatar extends StatelessWidget {
             ),
     );
     if (heroTag != null) {
-      avatar = Hero(tag: heroTag!, child: avatar);
+      final tag = heroTag!;
+      if (kAvatarBridgeTransition) {
+        final shortest = width < height ? width : height;
+        final spec = AvatarBridgeSpec(
+          seed: seed,
+          name: fallbackTitle,
+          fallbackId: fallbackId,
+          imagePath: has && !isFavoritesConvo ? p : null,
+          decodeWidth: decodeW,
+          decodeHeight: decodeH,
+          cornerFraction: shortest <= 0
+              ? 0.5
+              : (borderRadius / shortest).clamp(0.0, 0.5),
+          labelFraction: shortest <= 0
+              ? 0.23
+              : fallbackIconSize * 0.62 / shortest,
+          favoritesAsset: isFavoritesConvo ? favoritesAssetPath : null,
+        );
+        final inner = avatar;
+        final away = heroAway;
+        avatar = away == null
+            ? AvatarBridgeHero(
+                tag: tag,
+                spec: spec,
+                side: AvatarBridgeSide.destination,
+                child: inner,
+              )
+            : ValueListenableBuilder<bool>(
+                valueListenable: away,
+                child: inner,
+                builder: (context, isAway, child) => AvatarBridgeHero(
+                  tag: isAway ? AvatarBridgeParkedTag(tag) : tag,
+                  spec: spec,
+                  side: AvatarBridgeSide.destination,
+                  child: child!,
+                ),
+              );
+      } else {
+        avatar = Hero(tag: tag, child: avatar);
+      }
+      // Точка перелёта просмотра фото (тот же ключ, что у Hero).
+      avatar = MediaFlightAnchor(
+        tag: tag,
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: avatar,
+      );
     }
     return avatar;
   }
@@ -2210,7 +2548,8 @@ class _ActionChip extends StatelessWidget {
     // island, icon + label tinted with colorScheme.onSurface (theme-aware,
     // not hard white). Horizontal padding kept at 8 so four chips fit a row
     // without overflow; other metrics (radius 18, icon 22, w600) match own.
-    return FrostedHeaderIsland(
+    // Кнопка-островок сжимается при нажатии, как в профиле Telegram.
+    return PressFeedback(child: FrostedHeaderIsland(
       radius: 18,
       child: Material(
         color: Colors.transparent,
@@ -2239,8 +2578,23 @@ class _ActionChip extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
+}
+
+/// Круглые кнопки «Поделиться» и «Копировать» у ID. Android (23.11.2026,
+/// владелец: «значки ещё и синие»): нейтральные — серая подложка и значок
+/// цвета текста, без цвета темы. iPhone и компьютер — прежние.
+ButtonStyle _idButtonStyle(BuildContext context) {
+  final cs = Theme.of(context).colorScheme;
+  return FilledButton.styleFrom(
+    shape: const CircleBorder(),
+    padding: EdgeInsets.zero,
+    backgroundColor: settingsAndroidPanels
+        ? cs.onSurface.withValues(alpha: 0.08)
+        : null,
+    foregroundColor: settingsAndroidPanels ? cs.onSurface : null,
+  );
 }
 
 class _InfoBlock extends StatelessWidget {
@@ -2250,13 +2604,20 @@ class _InfoBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Android (23.11.2026, владелец: «плашки и строки везде как в
+    // настройках; прозрачность — настройкой»): та же панель и те же строки,
+    // что в настройках, без линий между строками.
+    if (settingsAndroidPanels) return SettingsRowsPanel(children: children);
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return DecoratedBox(
-      decoration: BoxDecoration(
+      decoration: appleGlassDecorationOr(
+        context,
+        BoxDecoration(
         color: theme.cardTheme.color ?? cs.surfaceContainerHigh,
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.34)),
         borderRadius: BorderRadius.circular(18),
+      ),
       ),
       child: Column(children: children),
     );
@@ -2269,21 +2630,37 @@ class _InfoRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.trailing,
+    this.titleSuffix,
     this.onTap,
+    this.tint = SettingsRowTint.blue,
   });
 
   final IconData icon;
+
+  /// Цвет квадрата значка на Android.
+  final Color tint;
   final String title;
   final String subtitle;
   final Widget? trailing;
+
+  /// Значок сразу справа от заголовка (галочка проверки у имени пользователя).
+  final Widget? titleSuffix;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final text = Text(title, maxLines: 1, overflow: TextOverflow.ellipsis);
+    final suffix = titleSuffix;
     return ListTile(
-      leading: Icon(icon, color: cs.primary.withValues(alpha: 0.9)),
-      title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis),
+      leading: settingsRowLeading(
+        icon: icon,
+        tint: tint,
+        fallback: Icon(icon, color: cs.primary.withValues(alpha: 0.9)),
+      ),
+      title: suffix == null
+          ? text
+          : Row(children: [Flexible(child: text), suffix]),
       subtitle: Text(subtitle),
       trailing: trailing,
       onTap: onTap,

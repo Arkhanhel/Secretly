@@ -17,7 +17,10 @@ import '../rooms/call_e2ee/call_e2ee_protocol.dart';
 import '../rooms/call_e2ee/room_call_e2ee_status.dart';
 import '../rooms/call_e2ee/room_call_join_plan.dart';
 import '../rooms/room_call_media_controller.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// С чем входить в созвон и написать ли в чат «обновитесь».
 class RoomCallJoinDecision {
@@ -110,7 +113,7 @@ Future<({bool encrypted, bool notify})?> showRoomCallCreatorChoiceDialog(
 ) {
   final l10n = AppLocalizations.of(context)!;
   var notify = true;
-  return showDialog<({bool encrypted, bool notify})>(
+  return showAppDialog<({bool encrypted, bool notify})>(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setState) => SecretlyAlertDialog(
@@ -121,7 +124,7 @@ Future<({bool encrypted, bool notify})?> showRoomCallCreatorChoiceDialog(
           children: [
             Text(l10n.roomCallStartChoiceBody(names)),
             const SizedBox(height: 12),
-            CheckboxListTile(
+            CheckboxListTile.adaptive(
               value: notify,
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
@@ -140,11 +143,11 @@ Future<({bool encrypted, bool notify})?> showRoomCallCreatorChoiceDialog(
                 Navigator.of(ctx).pop((encrypted: false, notify: false)),
             child: Text(l10n.roomCallStartOpen),
           ),
-          FilledButton(
+          PressFeedback(child: FilledButton(
             onPressed: () =>
                 Navigator.of(ctx).pop((encrypted: true, notify: notify)),
             child: Text(l10n.roomCallStartEncrypted),
-          ),
+          )),
         ],
       ),
     ),
@@ -154,7 +157,7 @@ Future<({bool encrypted, bool notify})?> showRoomCallCreatorChoiceDialog(
 /// Окно перед входом в открытый созвон, пока идёт раскатка шифрования.
 Future<bool> showRoomCallOpenJoinDialog(BuildContext context) async {
   final l10n = AppLocalizations.of(context)!;
-  final ok = await showDialog<bool>(
+  final ok = await showAppDialog<bool>(
     context: context,
     builder: (ctx) => SecretlyAlertDialog(
       title: Text(l10n.roomCallJoinOpenTitle),
@@ -164,10 +167,10 @@ Future<bool> showRoomCallOpenJoinDialog(BuildContext context) async {
           onPressed: () => Navigator.of(ctx).pop(false),
           child: Text(l10n.cancel),
         ),
-        FilledButton(
+        PressFeedback(child: FilledButton(
           onPressed: () => Navigator.of(ctx).pop(true),
           child: Text(l10n.roomCallJoinOpenAction),
-        ),
+        )),
       ],
     ),
   );
@@ -220,7 +223,7 @@ RoomCallE2eeMark? roomCallE2eeMark(
   if (status == null) {
     return showOpenWarning
         ? RoomCallE2eeMark(
-            icon: Icons.lock_open_rounded,
+            icon: AdaptiveIcons.lock_open_rounded,
             color: _kMarkRed,
             title: l10n.roomCallOpenBanner,
           )
@@ -231,19 +234,19 @@ RoomCallE2eeMark? roomCallE2eeMark(
       : null;
   return switch (status.own) {
     RoomCallE2eeOwnState.encrypting => RoomCallE2eeMark(
-      icon: Icons.lock_rounded,
+      icon: AdaptiveIcons.lock_rounded,
       color: unknown == null ? _kMarkGreen : _kMarkAmber,
       title: l10n.roomCallE2eeOn,
       detail: unknown ?? l10n.roomCallE2eeOnHint,
     ),
     RoomCallE2eeOwnState.connecting => RoomCallE2eeMark(
-      icon: Icons.lock_clock_rounded,
+      icon: AdaptiveIcons.lock_clock_rounded,
       color: _kMarkGrey,
       title: l10n.roomCallE2eeConnecting,
       detail: unknown,
     ),
     RoomCallE2eeOwnState.failed => RoomCallE2eeMark(
-      icon: Icons.no_encryption_gmailerrorred_rounded,
+      icon: AdaptiveIcons.no_encryption_gmailerrorred_rounded,
       color: _kMarkRed,
       title: status.errorCode == 'platform_unsupported'
           ? l10n.roomCallE2eeUnsupported
@@ -292,6 +295,7 @@ Future<void> showRoomCallE2eeDetails(
   RoomCallE2eeMark mark,
 ) {
   return showModalBottomSheet<void>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     backgroundColor: const Color(0xFF1C1C1E),
     showDragHandle: true,

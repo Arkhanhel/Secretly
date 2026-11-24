@@ -31,6 +31,7 @@ import 'app_runtime_lifecycle.dart'
         AppRuntimeResetResult,
         DesktopUnauthenticatedModeResult;
 import 'message_command_utils.dart';
+import 'chat_pins_logic.dart';
 import 'nack_burst_gate.dart';
 import 'onboarding_state.dart';
 import 'profile_icon_gradients.dart';
@@ -87,6 +88,11 @@ import '../entitlements/feature_gate.dart';
 import '../calls/call_signal_codec.dart';
 import '../calls/call_signal_transport.dart';
 import '../attachments/attachment_service.dart';
+import '../attachments/streaming_attachment_decrypt.dart';
+import '../media/image_header_dims.dart';
+import '../media/decrypted_temp_cleanup.dart';
+import '../media/progressive_playback.dart';
+import '../media/video_header_dims.dart';
 import '../cosmetics/cosmetics_catalog_service.dart';
 import '../attachments/attachment_failure.dart'
     show
@@ -197,9 +203,11 @@ import '../ui/app_asset_paths.dart';
 import '../ui/widgets/island_backdrop.dart';
 import '../ui/widgets/attachment_actions.dart' show isVoiceAttachmentMime;
 import '../ui/chat_wallpapers.dart';
+import '../ui/app_backdrop.dart' show kAppBackdropTheme, isValidAppBackdropId;
 import '../ui/voice/voice_transcription.dart' show VoiceTranscriptionService;
 import '../ui/premium/app_icon_picker.dart' show AppIconService;
 import '../ui/theme_presets.dart';
+import '../ui/theme_presets.dart' as theme_presets show kDefaultAppThemePresetId, kDefaultBubbleStylePresetId, kDefaultIndicatorColorPresetId;
 import '../ui/wave1_l10n.dart';
 import '../version/app_package_info.dart';
 export 'desktop_link_flow.dart'
@@ -458,6 +466,17 @@ class ChatFocusRequest {
 }
 
 enum SharedAudioTrackKind { attachment, profile }
+
+/// Выключатель: островок плеера закрывается, когда доиграло вложение из чата
+/// (голосовое, аудиофайл) и очередь кончилась. `false` — висит на паузе.
+const bool kCloseChatAudioPlayerOnEnd = true;
+
+/// Закрывать ли плеер, когда очередь доиграла: да — для вложений из чата,
+/// нет — для музыки профиля (её слушают и переслушивают со страницы).
+bool sharedAudioClosesAtQueueEnd(SharedAudioTrack? track) =>
+    kCloseChatAudioPlayerOnEnd &&
+    track != null &&
+    track.kind == SharedAudioTrackKind.attachment;
 
 class AttachmentFileSendRequest {
   const AttachmentFileSendRequest({
@@ -727,6 +746,9 @@ class SilenceRecoveryPlanner {
     if (id.isEmpty) return false;
     if (id.startsWith('group:')) return false;
     if (id.startsWith('dev:')) return false;
+    // Демо-собеседника нет на сервере — восстанавливать нечего (23.11.2026;
+    // журнал Xiaomi: «восстановление» demo:use по кругу).
+    if (id.startsWith('demo:') || id == 'demo') return false;
     return true;
   }
 
@@ -1180,6 +1202,16 @@ class AppController {
   int _pushTokenBootstrapAttempts = 0;
   bool _pendingReceiptFlushInFlight = false;
   bool _pendingReceiptFlushQueued = false;
+
+  /// Пауза после неудачной попытки зашифровать отчёт для пары «профиль +
+  /// устройство» (23.11.2026). Очередь перебирается раз в секунду: без паузы
+  /// отчёт, который не шифруется (нет сессии), пробовался каждую секунду —
+  /// журнал Xiaomi: 96 попыток за 3 минуты, лишняя работа и рывки кадров.
+  final Map<String, ({int retryAtMs, int failures})> _receiptBatchBackoff =
+      <String, ({int retryAtMs, int failures})>{};
+
+  @visibleForTesting
+  int get receiptFlushFailureCountForTesting => _receiptFlushFailureCount;
   // 25.09.2026: срок жизни строки очереди отчётов, которую сброс раз за разом
   // не может отправить, и редкая сводка, когда слать нечего, — вместо строки
   // на каждый такт качалки.
@@ -1914,6 +1946,13 @@ class AppController {
   static const _prefsKeepMediaDaysKey = 'keep_media_days_v1';
   static const _prefsHideAddressInCallsKey = 'hide_address_in_calls_v1';
   static const _prefsDarkModeKey = 'dark_mode_v1';
+  // «Авто» в «Оформлении» (20.11.2026): тема следует светлой/тёмной теме
+  // системы. Сборки, которые ключа не знают, видят обычный `dark_mode_v1` —
+  // его продолжает писать [setDarkMode], так что откат безопасен.
+  static const _prefsFollowSystemThemeKey = 'follow_system_theme_v1';
+  // «Фон» в «Оформлении» (20.11.2026): мягкий фон страниц. `theme` (по
+  // умолчанию) — прежний градиент темы; старые сборки ключа не знают.
+  static const _prefsAppBackdropKey = 'app_backdrop_v1';
   static const _prefsAppLocaleKey = 'app_locale_v1';
   static const _prefsMyNicknameKey = 'my_nickname_v1';
   static const _prefsMyBioKey = 'settings_account_bio_v1';
@@ -1923,6 +1962,11 @@ class AppController {
   static const _prefsMyCoverIdKey = 'secretly_my_cover_id';
   static const _prefsMyCoverImageKey = 'secretly_my_cover_image_path';
   static const _prefsMyCoverVideoKey = 'secretly_my_cover_video_path';
+  // 🔴 23.11.2026: «своя правка ещё не дошла до сервера» — переживает
+  // перезапуск. Новый ключ: старые сборки его не читают и не пишут, а без
+  // него поведение прежнее (см. [_ownProfileMetaHasUnpublishedEdit]).
+  static const _prefsMyProfileMetaUnpublishedKey =
+      'secretly_my_profile_meta_unpublished_v1';
   static const _prefsShareNicknameInQrKey = 'share_nickname_in_qr_v1';
   static const _prefsDiscoverableByNicknameKey = 'discoverable_by_nickname_v1';
   static const _prefsAllowNicknameLookupKey = 'allow_nickname_lookup_v1';
@@ -1986,10 +2030,31 @@ class AppController {
     await prefs.setBool(_prefsFrostedPanelsKey, enabled);
   }
 
+  // 23.11.2026 (владелец: «сделай настройку, чтобы можно было переключить
+  // прозрачные плашки на непрозрачные такого же цвета»). Включено —
+  // прозрачные панели (заливка 8 %, тонкая кромка); выключено — плотные
+  // карточки, как были на странице своего профиля. Цвет всех плашек берётся
+  // из `cardTheme` (main.dart), поэтому переключатель меняет всё разом.
+  static const _prefsTranslucentCardsKey = 'translucent_cards_enabled_v1';
+  bool _translucentCardsEnabled = true;
+  bool get translucentCardsEnabled => _translucentCardsEnabled;
+
+  Future<void> setTranslucentCardsEnabled(bool enabled) async {
+    if (_translucentCardsEnabled == enabled) return;
+    _translucentCardsEnabled = enabled;
+    PanelPrefs.translucentCards.value = enabled;
+    _changed.add(null);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_prefsTranslucentCardsKey, enabled);
+  }
+
   void _loadPowerSettings(SharedPreferences prefs) {
     _bubbleGlassEnabled = prefs.getBool(_prefsBubbleGlassKey) ?? true;
     _frostedPanelsEnabled = prefs.getBool(_prefsFrostedPanelsKey) ?? true;
     PanelPrefs.frostedEnabled.value = _frostedPanelsEnabled;
+    _translucentCardsEnabled =
+        prefs.getBool(_prefsTranslucentCardsKey) ?? true;
+    PanelPrefs.translucentCards.value = _translucentCardsEnabled;
   }
 
   static const _prefsPeerCosmeticAnimKey = 'peer_cosmetic_anim_enabled_v1';
@@ -2444,6 +2509,33 @@ class AppController {
   int _lastMyMetaFetchAtMs = 0;
   bool _myProfileMetaPublishInFlight = false;
   bool _myProfileMetaPublishRequested = false;
+
+  /// 🔴 РАМКА/ОБЛОЖКА ВОЗВРАЩАЛИСЬ К СТАРЫМ ПОСЛЕ ПЕРЕЗАПУСКА (23.11.2026).
+  ///
+  /// [_adoptMyPublishedProfileMeta] принимает опубликованное значение, если
+  /// своей неотправленной правки нет. Но «неотправленная правка» жила только
+  /// в двух флагах памяти выше: публикация не успела дойти (приложение
+  /// закрыли сразу после выбора, сеть моргнула) — после перезапуска флаги
+  /// пусты, первый же обход забирает с сервера ПРЕЖНЮЮ рамку, принимает её
+  /// поверх только что выбранной и тут же публикует обратно.
+  ///
+  /// Теперь правка считается неотправленной, пока не прошла публикация,
+  /// НАЧАТАЯ после неё, и эта отметка лежит в настройках
+  /// ([_prefsMyProfileMetaUnpublishedKey]). Счётчики, а не время: часы
+  /// устройства могут прыгнуть, счётчик — нет.
+  int _myProfileMetaEditGen = 0;
+  int _myProfileMetaPublishedGen = 0;
+
+  /// Сколько публикаций своих метаданных идёт прямо сейчас, и сколько их
+  /// было начато всего. Часть публикаций (при запуске, по возвращении
+  /// ключей, раз в десять минут) идёт мимо очереди и флагов выше — без этих
+  /// счётчиков ответ сервера, запрошенный ДО такой публикации, принимался бы
+  /// ПОСЛЕ неё и откатывал только что опубликованное.
+  int _myProfileMetaPublishActive = 0;
+  int _myProfileMetaPublishSeq = 0;
+
+  bool get _ownProfileMetaHasUnpublishedEdit =>
+      _myProfileMetaEditGen != _myProfileMetaPublishedGen;
   int _lastPresenceHeartbeatAtMs = 0;
   int _lastProfileInactivitySyncAtMs = 0;
 
@@ -2585,6 +2677,17 @@ class AppController {
   bool _darkMode = true;
   bool get darkMode => _darkMode;
 
+  bool _followSystemTheme = false;
+
+  String _appBackdropId = kAppBackdropTheme;
+
+  /// Фон страниц из «Оформления»; [kAppBackdropTheme] — прежний градиент.
+  String get appBackdropId => _appBackdropId;
+
+  /// Тема следует системе («Авто»). Явный выбор «Светлая»/«Тёмная» в
+  /// «Оформлении» это выключает.
+  bool get followSystemTheme => _followSystemTheme;
+
   String _appLocalePreference = '';
   String get appLocalePreference => _appLocalePreference;
   Locale? get appLocaleOverride =>
@@ -2603,7 +2706,15 @@ class AppController {
   // kept, so re-subscribing restores the choice. When monetization is off the
   // gate is open (fail-open) → cosmetics show for everyone, as today.
   bool get _cosmeticsUnlocked =>
+      _cosmeticsUnlockedOverrideForTesting ??
       FeatureGate.isUnlocked(entitlementStateNow, GatedFeature.cosmetic);
+
+  /// Только для тестов: подменяет ответ замка украшений. В приложении всегда
+  /// null — работает настоящая проверка подписки.
+  bool? _cosmeticsUnlockedOverrideForTesting;
+  @visibleForTesting
+  set cosmeticsUnlockedOverrideForTesting(bool? value) =>
+      _cosmeticsUnlockedOverrideForTesting = value;
 
   /// Same gate, readable from the UI so a picker can SHOW the locked options
   /// with a PRO mark instead of pretending they do not exist.
@@ -2640,10 +2751,14 @@ class AppController {
       : null;
 
   String? _myCoverId;
+  // Обложки команды (23.11.2026) подпиской не открываются и не закрываются:
+  // выбрать их можно только со знаком команды, а у собеседников они видны
+  // только в профиле со знаком — проверка при показе (`TeamCoverGate`).
   String? get myCoverId =>
       (_cosmeticsUnlocked ||
           (_myCoverId != null &&
-              isCosmeticFree(CosmeticKind.profileCover, _myCoverId!)))
+              (isCosmeticFree(CosmeticKind.profileCover, _myCoverId!) ||
+                  isStaffCoverId(_myCoverId!))))
       ? _myCoverId
       : null;
 
@@ -2673,6 +2788,11 @@ class AppController {
     if (!entitlementStateNow.monetizationEnabled) return value; // fail open
     if (kind != null && isCosmeticFree(kind, value)) {
       return value; // free preset
+    }
+    // Обложка команды: не премиум — пропускаем, а покажет её только профиль
+    // со знаком команды (`TeamCoverGate` при показе, 23.11.2026).
+    if (kind == CosmeticKind.profileCover && isStaffCoverId(value)) {
+      return value;
     }
     return peerHasBadge ? value : null;
   }
@@ -2804,19 +2924,32 @@ class AppController {
   bool cosmeticWallpaperUsable(String id) =>
       _cosmeticsUnlocked || isCosmeticFree(CosmeticKind.wallpaper, id);
 
-  String _appThemePresetId = 'flutter_dash';
+  /// Тема по умолчанию — «Графит» (решение владельца 20.11.2026; до этого —
+  /// «Flutter Dash»). Действует для тех, кто тему не выбирал.
+  static const String kDefaultAppThemePresetId =
+      theme_presets.kDefaultAppThemePresetId;
+
+  /// Пузыри по умолчанию — «Туманность», как было у «Flutter Dash».
+  /// 🔴 НЕ «Графит»: пузыри «Графит» платные (`kFreeBubbleStyleIds`), а
+  /// значение по умолчанию — ещё и запасное для истёкшей подписки, значит
+  /// обязано быть бесплатным. Premium, выбравший тему «Графит», получает её
+  /// пузыри через [kThemeToBubbleDefaults], как и раньше.
+  static const String kDefaultBubbleStylePresetId =
+      theme_presets.kDefaultBubbleStylePresetId;
+
+  String _appThemePresetId = kDefaultAppThemePresetId;
   String get appThemePresetId =>
       (_cosmeticsUnlocked ||
           isCosmeticFree(CosmeticKind.theme, _appThemePresetId))
       ? _appThemePresetId
-      : 'flutter_dash';
+      : kDefaultAppThemePresetId;
 
-  String _chatBubbleStylePresetId = 'flutter_dash';
+  String _chatBubbleStylePresetId = kDefaultBubbleStylePresetId;
   String get chatBubbleStylePresetId =>
       (_cosmeticsUnlocked ||
           isCosmeticFree(CosmeticKind.bubbleStyle, _chatBubbleStylePresetId))
       ? _chatBubbleStylePresetId
-      : 'flutter_dash';
+      : kDefaultBubbleStylePresetId;
 
   bool _bubbleColorIsManual = false;
   bool get bubbleColorIsManual => _bubbleColorIsManual;
@@ -2827,12 +2960,13 @@ class AppController {
   String get nicknameStylePresetId => _nicknameStylePresetId;
 
   // PR-J — id from kIndicatorColorPresets. 'theme' = follow active theme.
-  String _indicatorColorPresetId = 'theme';
+  String _indicatorColorPresetId =
+      theme_presets.kDefaultIndicatorColorPresetId;
   String get indicatorColorPresetId =>
       (_cosmeticsUnlocked ||
           isCosmeticFree(CosmeticKind.indicatorColor, _indicatorColorPresetId))
       ? _indicatorColorPresetId
-      : 'theme';
+      : theme_presets.kDefaultIndicatorColorPresetId;
 
   bool _desktopRightPaneVisible = true;
   bool get desktopRightPaneVisible => _desktopRightPaneVisible;
@@ -3083,6 +3217,13 @@ class AppController {
             _sharedAudioAdvancing = false;
           }
         }());
+      } else if (sharedAudioClosesAtQueueEnd(
+        _sharedAudioPlayback.value.currentTrack,
+      )) {
+        // 23.11.2026 (владелец): голосовое/аудио из чата доиграло, дальше
+        // нечего — островок плеера закрывается сам, как у Telegram. Раньше
+        // он оставался висеть на паузе в начале трека.
+        unawaited(stopSharedAudio());
       } else {
         unawaited(_sharedAudioPlayer.pause());
         unawaited(_sharedAudioPlayer.seek(Duration.zero));
@@ -4373,7 +4514,10 @@ class AppController {
                   if (ok) {
                     _foregroundLeaseUntilMs = hbNowMs + _decryptLeaseTtlMs;
                   }
-                }),
+                })
+                // База занята — продлим на следующем тике; без catch ошибка
+                // уходила в зону необработанной (23.11.2026).
+                .catchError((Object _) {}),
           );
         }
       } catch (_) {
@@ -4449,7 +4593,15 @@ class AppController {
       // manual restart. Its own 8 s gate is unchanged by the adaptive period:
       // when we poll every 15 s, every poll simply forces.
       final pumpNowMs = DateTime.now().millisecondsSinceEpoch;
-      final forcePump = pumpNowMs - _lastForcePumpAtMs >= 8000;
+      // 23.11.2026: раз в 8 с — только в рискованные моменты (первая минута
+      // после выхода на экран, звонок). В спокойном режиме — раз в 20 с:
+      // полуоткрытый вебсокет и так ловит свой пинг (8 с тишины → пинг, без
+      // ответа → переподключение). Журнал Xiaomi: 26 пустых выборок за
+      // 3 минуты с каждого открытого приложения.
+      final riskyWindow =
+          _pumpInCallHint || pumpNowMs - _lastForegroundAtMs < 60 * 1000;
+      final forceEveryMs = riskyWindow ? 8000 : kRelayQuietForcePumpMs;
+      final forcePump = pumpNowMs - _lastForcePumpAtMs >= forceEveryMs;
       if (forcePump) _lastForcePumpAtMs = pumpNowMs;
       await _relay?.pumpInbox(force: forcePump);
       // Fire any group messages whose scheduled time has arrived. This also
@@ -4485,6 +4637,9 @@ class AppController {
   Timer? _mainAliveHeartbeatTimer;
 
   int _lastForcePumpAtMs = 0;
+
+  /// Когда приложение последний раз вышло на экран (23.11.2026).
+  int _lastForegroundAtMs = 0;
   int _lastBackgroundWatchdogAtMs = 0;
 
   Set<String> _personalConvoIds = <String>{};
@@ -4560,6 +4715,22 @@ class AppController {
     _keys = keys;
     _prefs = prefs ?? _prefs;
   }
+
+  /// «Перезапуск» для тестов: те же строки, что читает init() — рамка,
+  /// обложка, эмодзи-статус и отметка неотправленной правки.
+  @visibleForTesting
+  void loadOwnCosmeticsFromPrefsForTesting(SharedPreferences prefs) {
+    _prefs = prefs;
+    _myFrameId = _normalizeCosmeticId(prefs.getString(_prefsMyFrameIdKey));
+    _myEmojiStatus = prefs.getString(_prefsMyEmojiStatusKey);
+    _myCoverId = _normalizeCosmeticId(prefs.getString(_prefsMyCoverIdKey));
+    _loadOwnProfileMetaUnpublishedMark(prefs);
+  }
+
+  /// Публикация своих метаданных так, как её делает запуск приложения.
+  @visibleForTesting
+  Future<bool> publishMyProfileMetaForTesting() =>
+      _publishMyProfileMetaBestEffort();
 
   /// Wire a headless controller for the background inbox isolate: exactly the
   /// runtime `_handleDelivered` needs (db, crypto, ratchet, keys, identity),
@@ -4823,7 +4994,57 @@ class AppController {
       pending,
     );
     _pokePendingUploads(pending.convoId);
+    _primePendingImageDims(pending);
     _enqueueUploadJob(pending.convoId, () => _runPendingPhotoUpload(pending));
+  }
+
+  /// М3 (разбор медиа 22.11.2026): размеры снимка по заголовку — заготовка
+  /// занимает итоговую коробку сразу, без 0,62 и полного декода исходника.
+  /// Чтение заголовка — миллисекунды; по готовности — тик заготовок (не вся
+  /// лента).
+  void _primePendingImageDims(PendingPhotoUpload pending, {String? convoId}) {
+    if (!kPendingSwapV2 || pending.asFile) return;
+    final mime = pending.mime.toLowerCase();
+    // М3 для роликов: размеры из `tkhd` в `moov` (MP4/MOV), без ffprobe.
+    final isVideo =
+        kPendingVideoHeaderDims &&
+        mime.startsWith('video/') &&
+        !pending.videoNote;
+    if (!mime.startsWith('image/') && !isVideo) return;
+    if (pending.width != null && pending.height != null) return;
+    unawaited(
+      (isVideo
+              ? readVideoHeaderDims(pending.filePath)
+              : readImageHeaderDims(pending.filePath))
+          .then((dims) {
+        if (dims == null) return;
+        pending
+          ..width = dims.width
+          ..height = dims.height;
+        _pokePendingUploads(convoId ?? pending.convoId);
+      }),
+    );
+  }
+
+  /// М1 (разбор медиа 22.11.2026): сообщить заготовке номер сообщения прямо
+  /// перед записью вложения в историю. Синхронно перед `insertEvent`: лента
+  /// увидит строку уже скрытой под заготовкой, а не вторым пузырём. Сбой
+  /// обратного вызова отправку не срывает.
+  Future<void> _announceLocalAttachmentRow(
+    LocalAttachmentRowCallback? callback, {
+    required String payloadEventId,
+    required String blobId,
+    required String? mime,
+  }) async {
+    if (callback == null) return;
+    String? cachePath;
+    try {
+      final f = await _attachmentCacheFile(blobId: blobId, mime: mime);
+      if (await f.exists()) cachePath = f.path;
+    } catch (_) {}
+    try {
+      callback(payloadEventId, blobId, cachePath);
+    } catch (_) {}
   }
 
   /// О10 (разбор медиа 15.11.2026): кадр ролика → его пропорции и размытая
@@ -4841,6 +5062,8 @@ class AppController {
             'send_${path.hashCode.toUnsigned(32)}_${stat.size}_'
             '${stat.modified.millisecondsSinceEpoch}',
         videoPath: path,
+        // В-3 (22.11.2026): отправка не ждёт очереди кадров ленты и галереи.
+        priority: kPendingSwapV2,
       );
       if (thumb == null) return null;
       final bytes = await thumb.file.readAsBytes();
@@ -4922,6 +5145,7 @@ class AppController {
     }
     _pokePendingUploads(convoId);
     for (final p in pendings) {
+      _primePendingImageDims(p, convoId: convoId);
       _enqueueUploadJob(convoId, () => _runPendingPhotoUpload(p));
     }
   }
@@ -5260,6 +5484,15 @@ class AppController {
       // another send; cancellation is explicit via cancelToken.
       // О10: пропорции и размытый кадр ролика — получателю до загрузки.
       final hints = isVideo ? await _videoSendHints(sendPath) : null;
+      // М1 (22.11.2026): номер — заготовке до записи в историю.
+      final LocalAttachmentRowCallback? onRowInserting = kPendingSwapV2
+          ? (eventId, blobId, cachePath) {
+              pending
+                ..payloadEventId = eventId
+                ..sentBlobId = blobId
+                ..sentCachePath = cachePath;
+            }
+          : null;
       final payloadEventId = await (pending.isGroup
           ? sendGroupAttachmentFile(
               groupId: pending.convoId,
@@ -5280,8 +5513,10 @@ class AppController {
               waveform: pending.waveform,
               durationMs: pending.durationMs,
               videoNote: pending.videoNote,
+              onLocalRowInserting: onRowInserting,
             )
           : sendAttachmentFile(
+              onLocalRowInserting: onRowInserting,
               peerProfileId: pending.targetId,
               filePath: sendPath,
               width: hints?.width,
@@ -5414,6 +5649,22 @@ class AppController {
       // пропущенных человеку сообщается после отправки.
       final skipped = <Object>[];
       void onItemFailed(int index, Object error) => skipped.add(error);
+      // М1 (22.11.2026): номер каждого снимка — заготовке альбома до его
+      // записи в историю.
+      final LocalAlbumRowCallback? onRowInserting = kPendingSwapV2
+          ? (index, eventId, blobId, cachePath) {
+              album.payloadEventIds = <String>[
+                ...album.payloadEventIds,
+                eventId,
+              ];
+              if (index >= 0 && index < album.items.length) {
+                album.items[index]
+                  ..payloadEventId = eventId
+                  ..sentBlobId = blobId
+                  ..sentCachePath = cachePath;
+              }
+            }
+          : null;
       final eventIds = await (album.isGroup
           ? sendGroupAttachmentFiles(
               groupId: album.convoId,
@@ -5428,6 +5679,7 @@ class AppController {
               // альбом, а здесь она терялась — и альбом из темы уходил в
               // «Общий», хотя одиночный снимок из той же темы шёл куда надо.
               topicId: album.topicId,
+              onLocalRowInserting: onRowInserting,
             )
           : sendAttachmentFiles(
               peerProfileId: album.targetId,
@@ -5438,6 +5690,7 @@ class AppController {
               caption: albumCaption,
               onUploadProgress: onProgress,
               onItemFailed: onItemFailed,
+              onLocalRowInserting: onRowInserting,
             ));
 
       album.payloadEventIds = eventIds;
@@ -5639,6 +5892,10 @@ class AppController {
       final musicFilename = isVoiceAttachmentMime(pending.mime)
           ? null
           : p.basename(pending.filePath);
+      // М1 (22.11.2026): номер — заготовке до записи в историю.
+      final LocalAttachmentRowCallback? audioRowInserting = kPendingSwapV2
+          ? (eventId, _, _) => pending.payloadEventId = eventId
+          : null;
       final payloadEventId = await (pending.isGroup
           ? sendGroupAttachmentFile(
               groupId: pending.convoId,
@@ -5652,6 +5909,7 @@ class AppController {
               musicArtist: musicArtist,
               filename: musicFilename,
               onUploadProgress: onProgress,
+              onLocalRowInserting: audioRowInserting,
             )
           : sendAttachmentFile(
               peerProfileId: pending.targetId,
@@ -5664,6 +5922,7 @@ class AppController {
               musicArtist: musicArtist,
               filename: musicFilename,
               onUploadProgress: onProgress,
+              onLocalRowInserting: audioRowInserting,
             ));
 
       pending.payloadEventId = payloadEventId;
@@ -6100,6 +6359,7 @@ class AppController {
         unawaited(_flushOutboundOnResume());
         unawaited(_healTransportProxyOnResume());
       }
+      _lastForegroundAtMs = DateTime.now().millisecondsSinceEpoch;
       DiagLog.event('lifecycle', 'foreground', const <String, Object?>{});
     } else {
       unawaited(_publishPresenceHeartbeatBestEffort(force: true));
@@ -11659,7 +11919,7 @@ class AppController {
       _relayHttpReachable = true; // WS up => relay reachable (clear the banner)
       await _syncPushTokenBestEffort();
       unawaited(_syncVoipTokenBestEffort());
-      unawaited(_syncStickerCatalog(force: true));
+      _scheduleStickerCatalogSync();
     } catch (_) {
       _relayOnline = false;
     }
@@ -13057,6 +13317,7 @@ class AppController {
       _drainSessionResetRetryQueue();
       unawaited(getCallIceConfig(forceRefresh: true));
       unawaited(_resyncKnownRelayStateBestEffort());
+      unawaited(_resendUndeliveredChatPins());
     }
     _relayConnectionChanges.add(connected);
     _maybeClearStartupWarning();
@@ -13425,6 +13686,13 @@ class AppController {
           }
           continue;
         }
+        // Демо-собеседник (обучение, ролик) — отчёт не уйдёт никогда: адресата
+        // нет на сервере. Убрать сразу, а не через неделю (23.11.2026).
+        if (_isDemoConvoId(peerProfileId) ||
+            peerDeviceId.startsWith('demo')) {
+          dropOwnOnly.add(record);
+          continue;
+        }
         // FIX-C3 (delivery): address the receipt to the peer's CURRENT live
         // devices, not only the (possibly stale/zombie) device that sent the
         // original message. learn-on-receive keeps `contact_devices` pointed at
@@ -13513,6 +13781,10 @@ class AppController {
         if (peerProfileId.isEmpty || peerDeviceId.isEmpty) {
           continue;
         }
+        final backoff = _receiptBatchBackoff[batchKey];
+        if (backoff != null && now < backoff.retryAtMs) {
+          continue; // недавно не вышло — ждём паузу
+        }
         // П-2: эпохи непрочитанных проводов для заявок — заранее, сборка ниже
         // синхронная.
         final nackSe = <String, int>{};
@@ -13577,6 +13849,7 @@ class AppController {
             convoId: groupedConvoIds[batchKey],
           );
           queuedCount += records.length;
+          _receiptBatchBackoff.remove(batchKey);
           DiagLog.event('receipt', 'queued', {
             'peer': DiagLog.pfx(peerProfileId),
             'to_dev': DiagLog.pfx(peerDeviceId),
@@ -13586,6 +13859,12 @@ class AppController {
           _lastReceiptFlushFailureAtMs = DateTime.now().millisecondsSinceEpoch;
           _receiptFlushFailureCount += 1;
           _lastReceiptFlushFailureSummary = _summarizeDiagnosticError(error);
+          final failures = (_receiptBatchBackoff[batchKey]?.failures ?? 0) + 1;
+          final waitMs = math.min(5 * 60 * 1000, 5000 * (1 << math.min(failures - 1, 6)));
+          _receiptBatchBackoff[batchKey] = (
+            retryAtMs: DateTime.now().millisecondsSinceEpoch + waitMs,
+            failures: failures,
+          );
           DiagLog.event('receipt', 'queue_fail', {
             'peer': DiagLog.pfx(peerProfileId),
             'to_dev': DiagLog.pfx(peerDeviceId),
@@ -15789,6 +16068,19 @@ class AppController {
     final prefs = await SharedPreferences.getInstance();
     _prefs = prefs;
     _startupMark('prefs');
+    // 🔴 23.11.2026 (журнал Xiaomi: вход из уведомления 26 с): приложение
+    // открыли — фоновые проходы по пушам должны СРАЗУ отдать базу. Раньше
+    // отметка «главный жив» ставилась только после открытия базы, а та
+    // ждала фоновые проходы (db_open_call 18,9 с). Ставим её первой; фоновый
+    // проход проверяет её перед каждым сообщением и уступает.
+    if (!_isDesktopOrWebPlatform) {
+      unawaited(
+        prefs.setInt(
+          BackgroundInboxFetcher.prefsMainIsolateAliveAtMsKey,
+          DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
+    }
     // И-4 (2026-07-24): surface the session-reset gate states at startup so a
     // field-proof build's flags are verifiable the moment the app opens — no
     // desync test needed. These read the --dart-define via a const (see the flag
@@ -16029,6 +16321,15 @@ class AppController {
     );
     if (_keepMediaDays > 0) unawaited(_sweepMediaOlderThanKeep());
     _darkMode = prefs.getBool(_prefsDarkModeKey) ?? true;
+    _followSystemTheme = prefs.getBool(_prefsFollowSystemThemeKey) ?? false;
+    final savedBackdrop = prefs.getString(_prefsAppBackdropKey);
+    _appBackdropId = savedBackdrop != null && isValidAppBackdropId(savedBackdrop)
+        ? savedBackdrop
+        : kAppBackdropTheme;
+    if (_followSystemTheme) {
+      _darkMode =
+          PlatformDispatcher.instance.platformBrightness == ui.Brightness.dark;
+    }
     _appLocalePreference = _normalizeAppLocalePreference(
       prefs.getString(_prefsAppLocaleKey),
     );
@@ -16047,6 +16348,7 @@ class AppController {
     _myCoverId = _normalizeCosmeticId(prefs.getString(_prefsMyCoverIdKey));
     _myCoverImagePath = prefs.getString(_prefsMyCoverImageKey);
     _myCoverVideoPath = prefs.getString(_prefsMyCoverVideoKey);
+    _loadOwnProfileMetaUnpublishedMark(prefs);
     _shareNicknameInQr = prefs.getBool(_prefsShareNicknameInQrKey) ?? false;
     _safeBackupAutoEnabled =
         prefs.getBool(_prefsSafeBackupAutoEnabledKey) ?? false;
@@ -16121,19 +16423,20 @@ class AppController {
     _peerCosmeticAnimEnabled = prefs.getBool(_prefsPeerCosmeticAnimKey) ?? true;
     _loadPowerSettings(prefs);
     final savedAppThemePresetId =
-        prefs.getString(_prefsAppThemePresetIdKey) ?? 'flutter_dash';
+        prefs.getString(_prefsAppThemePresetIdKey) ?? kDefaultAppThemePresetId;
     _appThemePresetId = isValidAppThemePresetId(savedAppThemePresetId)
         ? savedAppThemePresetId
-        : 'flutter_dash';
+        : kDefaultAppThemePresetId;
     final savedChatBubbleStylePresetId =
-        prefs.getString(_prefsChatBubbleStylePresetIdKey) ?? 'flutter_dash';
+        prefs.getString(_prefsChatBubbleStylePresetIdKey) ??
+        kDefaultBubbleStylePresetId;
     final normalizedBubblePresetId = normalizeChatBubbleStylePresetId(
       savedChatBubbleStylePresetId,
     );
     _chatBubbleStylePresetId =
         isValidChatBubbleStylePresetId(normalizedBubblePresetId)
         ? normalizedBubblePresetId
-        : 'flutter_dash';
+        : kDefaultBubbleStylePresetId;
     _bubbleColorIsManual = prefs.getBool(_prefsBubbleColorIsManualKey) ?? false;
     _desktopRightPaneVisible =
         prefs.getBool(_prefsDesktopRightPaneVisibleKey) ?? true;
@@ -16145,11 +16448,12 @@ class AppController {
         : 'accent';
     // PR-J — indicator (accent) colour preset.
     final savedIndicatorColorPresetId =
-        prefs.getString(_prefsIndicatorColorPresetIdKey) ?? 'theme';
+        prefs.getString(_prefsIndicatorColorPresetIdKey) ??
+        theme_presets.kDefaultIndicatorColorPresetId;
     _indicatorColorPresetId =
         isValidIndicatorColorPresetId(savedIndicatorColorPresetId)
         ? savedIndicatorColorPresetId
-        : 'theme';
+        : theme_presets.kDefaultIndicatorColorPresetId;
     _personalConvoIds =
         (prefs.getStringList(_prefsPersonalConvoIdsKey) ?? const <String>[])
             .map((e) => e.trim())
@@ -16887,7 +17191,7 @@ class AppController {
               _relayOnline = true;
               _relayHttpReachable = true; // WS up => relay reachable
               unawaited(_syncPushTokenBestEffort());
-              unawaited(_syncStickerCatalog(force: true));
+              _scheduleStickerCatalogSync();
               unawaited(
                 relay
                     .healthStatus(clientProtocolVersion: clientProtocolVersion)
@@ -17173,8 +17477,7 @@ class AppController {
                   (now - _lastMyMetaFetchAtMs) >= 10 * 60 * 1000) {
                 _lastMyMetaFetchAtMs = now;
                 try {
-                  await refreshProfileMeta(profileId);
-                  await _adoptMyPublishedProfileMeta();
+                  await _refreshAndAdoptMyPublishedProfileMeta(profileId);
                 } catch (_) {
                   // ignore
                 }
@@ -17205,7 +17508,9 @@ class AppController {
                 await _metaRefreshTick(
                   keysOk: keysOk,
                   nowMs: now,
-                  maxFetches: _appInForeground ? 3 : 1,
+                  // Свёрнуто — никто не видит ни имён, ни «был в»: не тянуть
+                  // сервер (23.11.2026). На экране — обход снова.
+                  maxFetches: _appInForeground ? 3 : 0,
                 );
               } catch (_) {
                 // ignore
@@ -17631,7 +17936,7 @@ class AppController {
           );
           _relayOnline = true;
           _relayHttpReachable = true; // WS up => relay reachable
-          unawaited(_syncStickerCatalog(force: true));
+          _scheduleStickerCatalogSync();
           _maybeClearStartupWarning();
           if (!requiresDesktopProfileSelection) {
             _setAuthFlowState(AuthFlowState.authenticated);
@@ -22001,6 +22306,87 @@ class AppController {
     _changed.add(null);
   }
 
+  /// Включить или выключить «Авто». При включении тема сразу встаёт по
+  /// системе; дальше её ведёт [syncSystemBrightness].
+  Future<void> setFollowSystemTheme(
+    bool value, {
+    ui.Brightness? systemBrightness,
+  }) async {
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
+    _followSystemTheme = value;
+    await prefs.setBool(_prefsFollowSystemThemeKey, value);
+    if (value) {
+      final dark =
+          (systemBrightness ??
+              PlatformDispatcher.instance.platformBrightness) ==
+          ui.Brightness.dark;
+      if (dark != _darkMode) {
+        await setDarkMode(dark);
+        return;
+      }
+    }
+    _changed.add(null);
+  }
+
+  Future<void> setAppBackdropId(String id) async {
+    if (!isValidAppBackdropId(id) || id == _appBackdropId) return;
+    _appBackdropId = id;
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
+    if (id == kAppBackdropTheme) {
+      await prefs.remove(_prefsAppBackdropKey);
+    } else {
+      await prefs.setString(_prefsAppBackdropKey, id);
+    }
+    _changed.add(null);
+  }
+
+  /// «Сбросить» в «Оформлении»: режим, фон, тема, обои, пузыри, цвета ников и
+  /// индикаторов — как у нового профиля. Настройки безопасности
+  /// (неподтверждённые собеседники, скрытие экрана) НЕ трогает: кнопка
+  /// оформления не должна молча ослаблять защиту.
+  Future<void> resetAppearance() async {
+    final prefs = _prefs ?? await SharedPreferences.getInstance();
+    _prefs = prefs;
+    _followSystemTheme = false;
+    await prefs.setBool(_prefsFollowSystemThemeKey, false);
+    _appBackdropId = kAppBackdropTheme;
+    await prefs.remove(_prefsAppBackdropKey);
+    _nicknameStylePresetId = 'accent';
+    await prefs.setString(_prefsNicknameStylePresetIdKey, 'accent');
+    _indicatorColorPresetId = theme_presets.kDefaultIndicatorColorPresetId;
+    await prefs.setString(
+      _prefsIndicatorColorPresetIdKey,
+      theme_presets.kDefaultIndicatorColorPresetId,
+    );
+    // Без явного выбора обои снова идут за темой (см. [setDarkMode]).
+    await prefs.remove(_prefsDefaultChatWallpaperKey);
+    _defaultChatWallpaperId = themeStandardChatWallpaperId(darkMode: _darkMode);
+    // Тема по умолчанию сама вернёт пузыри к её паре.
+    await setAppThemePresetId(kDefaultAppThemePresetId);
+    if (!_darkMode) await setDarkMode(true);
+  }
+
+  /// Тему выбрал человек (переключатель, меню списка чатов): «Авто»
+  /// выключается, иначе следующая смена темы системы молча отменила бы выбор.
+  Future<void> setDarkModeByUser(bool value) async {
+    if (_followSystemTheme) {
+      _followSystemTheme = false;
+      final prefs = _prefs ?? await SharedPreferences.getInstance();
+      _prefs = prefs;
+      await prefs.setBool(_prefsFollowSystemThemeKey, false);
+    }
+    await setDarkMode(value);
+  }
+
+  /// Система сменила светлую/тёмную тему. Действует только в режиме «Авто».
+  Future<void> syncSystemBrightness(ui.Brightness brightness) async {
+    if (!_followSystemTheme) return;
+    final dark = brightness == ui.Brightness.dark;
+    if (dark != _darkMode) await setDarkMode(dark);
+  }
+
   Future<void> setAppLocalePreference(String? value) async {
     final normalized = _normalizeAppLocalePreference(value);
     if (_appLocalePreference == normalized) return;
@@ -22855,8 +23241,63 @@ class AppController {
   int _myProfileMetaDirtyAtMs = 0;
   int _myProfileMetaPublishOkAtMs = 0;
 
+  /// Подхватить при запуске отметку «своя правка не дошла до сервера»
+  /// (см. [_myProfileMetaEditGen]). Нет ключа — правок в пути нет, как и
+  /// раньше; значит данные старых сборок читаются без изменений.
+  void _loadOwnProfileMetaUnpublishedMark(SharedPreferences prefs) {
+    bool pending = false;
+    try {
+      pending = prefs.getBool(_prefsMyProfileMetaUnpublishedKey) ?? false;
+    } catch (_) {
+      pending = false;
+    }
+    if (pending && !_ownProfileMetaHasUnpublishedEdit) {
+      _myProfileMetaEditGen = _myProfileMetaPublishedGen + 1;
+    }
+  }
+
+  void _markOwnProfileMetaEdited() {
+    _myProfileMetaEditGen++;
+    final prefs = _prefs;
+    if (prefs != null) {
+      unawaited(
+        prefs
+            .setBool(_prefsMyProfileMetaUnpublishedKey, true)
+            .then((_) {}, onError: (_) {}),
+      );
+      return;
+    }
+    unawaited(
+      SharedPreferences.getInstance()
+          .then((p) {
+            _prefs ??= p;
+            return p.setBool(_prefsMyProfileMetaUnpublishedKey, true);
+          })
+          .then((_) {}, onError: (_) {}),
+    );
+  }
+
+  /// Публикация, начатая при правке [editGen], прошла: всё, что было выбрано
+  /// к её началу, на сервере.
+  Future<void> _markOwnProfileMetaPublished(int editGen) async {
+    if (editGen > _myProfileMetaPublishedGen) {
+      _myProfileMetaPublishedGen = editGen;
+    }
+    if (_ownProfileMetaHasUnpublishedEdit) return;
+    try {
+      final prefs = _prefs ?? await SharedPreferences.getInstance();
+      _prefs = prefs;
+      // Пока шла запись, могла случиться новая правка — её отметку не трогаем.
+      if (_ownProfileMetaHasUnpublishedEdit) return;
+      await prefs.remove(_prefsMyProfileMetaUnpublishedKey);
+    } catch (_) {
+      // Отметка останется — значит лишний раз подождём следующей публикации.
+    }
+  }
+
   void _scheduleMyProfileMetaPublish() {
     _myProfileMetaDirtyAtMs = DateTime.now().millisecondsSinceEpoch;
+    _markOwnProfileMetaEdited();
     _myProfileMetaPublishRequested = true;
     if (_myProfileMetaPublishInFlight) {
       return;
@@ -23255,6 +23696,9 @@ class AppController {
   static const Duration _sendTempFileMaxAge = Duration(hours: 6);
 
   Future<void> _sweepStaleSendTempFiles() async {
+    // С-13: расшифрованные копии просмотра медиа (буфер обмена Android,
+    // выгрузки правленых снимков) — старше получаса.
+    unawaited(sweepDecryptedTempCopies());
     try {
       final tmp = await getTemporaryDirectory();
       if (!tmp.existsSync()) return;
@@ -23916,7 +24360,26 @@ class AppController {
     await _applyProfileInactivityStatus(status);
   }
 
+  /// Every own-meta publish goes through here — the queued one and the direct
+  /// ones (startup, keys back, the ten-minute tick). It records which local
+  /// edit the publish carried and that a publish is in the air, so
+  /// [_adoptMyPublishedProfileMeta] never takes a server answer older than it.
   Future<bool> _publishMyProfileMetaBestEffort() async {
+    // Captured BEFORE the values are read: whatever was chosen by now rides
+    // this publish (frame/cover/nickname are read before the first await).
+    final editGen = _myProfileMetaEditGen;
+    _myProfileMetaPublishSeq++;
+    _myProfileMetaPublishActive++;
+    try {
+      final ok = await _publishMyProfileMetaOnce();
+      if (ok) await _markOwnProfileMetaPublished(editGen);
+      return ok;
+    } finally {
+      _myProfileMetaPublishActive--;
+    }
+  }
+
+  Future<bool> _publishMyProfileMetaOnce() async {
     final keys = _keys;
     final pid = _profileId;
     final did = _deviceId;
@@ -24132,8 +24595,7 @@ class AppController {
     final pid = _profileId;
     if (pid == null || pid.isEmpty || _transportBlocked) return;
     try {
-      await refreshProfileMeta(pid);
-      await _adoptMyPublishedProfileMeta();
+      await _refreshAndAdoptMyPublishedProfileMeta(pid);
     } catch (_) {
       // Молча: это освежение, а не действие человека. Не вышло — останется
       // то, что было, и следующий обход попробует снова.
@@ -24179,12 +24641,38 @@ class AppController {
     return true;
   }
 
+  /// Забрать свои опубликованные метаданные и принять их — но только если
+  /// забрать УДАЛОСЬ и пока шёл запрос не случилось ни своей правки, ни своей
+  /// публикации.
+  ///
+  /// 🔴 23.11.2026. Раньше приём шёл и после неудачного запроса: из местного
+  /// кэша, а кэш своей строки публикация не обновляет — там лежала рамка,
+  /// какой она была ДО выбора. Сеть моргнула при запуске — и выбранная рамка
+  /// менялась на прежнюю. Так же откатывал ответ, запрошенный до публикации,
+  /// а пришедший после неё.
+  Future<void> _refreshAndAdoptMyPublishedProfileMeta(String profileId) async {
+    final editGen = _myProfileMetaEditGen;
+    final publishSeq = _myProfileMetaPublishSeq;
+    final result = await _refreshProfileMetaInternal(profileId);
+    if (!result.ok) return;
+    if (editGen != _myProfileMetaEditGen ||
+        publishSeq != _myProfileMetaPublishSeq) {
+      return;
+    }
+    await _adoptMyPublishedProfileMeta();
+  }
+
   Future<void> _adoptMyPublishedProfileMeta() async {
     final pid = _profileId;
     final db = _db;
     if (pid == null || pid.isEmpty || db == null) return;
     // Своя правка ещё в пути — чужое значение подождёт.
     if (_myProfileMetaPublishRequested || _myProfileMetaPublishInFlight) return;
+    // Публикация мимо очереди (запуск, возврат ключей, обход) — тоже в пути.
+    if (_myProfileMetaPublishActive > 0) return;
+    // Своя правка ещё не дошла до сервера — в том числе сделанная ДО
+    // перезапуска. Иначе первый обход вернул бы прежнюю рамку и обложку.
+    if (_ownProfileMetaHasUnpublishedEdit) return;
 
     Map<String, Object?>? meta;
     try {
@@ -24204,10 +24692,17 @@ class AppController {
       required String? current,
       required String prefsKey,
       required void Function(String? value) apply,
+      String? publishable,
+      bool gated = false,
     }) async {
       final published = _trimmedMetaString(row, field);
       final next = (published ?? '').isEmpty ? null : published;
       if (next == current) return;
+      // 🔴 23.11.2026: пустота на сервере, которую объясняет НАШ ЖЕ замок
+      // подписки (премиальная рамка выбрана, но публикуется пустой), — не
+      // чужой выбор. Принять её значило бы стереть сохранённую рамку, а
+      // она должна вернуться сама, когда подписка снова активна.
+      if (gated && next == null && publishable == null) return;
       apply(next);
       if (next == null) {
         await prefs.remove(prefsKey);
@@ -24222,18 +24717,24 @@ class AppController {
       current: _myFrameId,
       prefsKey: _prefsMyFrameIdKey,
       apply: (v) => _myFrameId = v,
+      publishable: myFrameId,
+      gated: true,
     );
     await adoptString(
       field: 'cover_id',
       current: _myCoverId,
       prefsKey: _prefsMyCoverIdKey,
       apply: (v) => _myCoverId = v,
+      publishable: myCoverId,
+      gated: true,
     );
     await adoptString(
       field: 'emoji_status',
       current: _myEmojiStatus,
       prefsKey: _prefsMyEmojiStatusKey,
       apply: (v) => _myEmojiStatus = v,
+      publishable: myEmojiStatus,
+      gated: true,
     );
     // Никнейм и описание сервер сливает через COALESCE: пустое значение там
     // означает «мнения нет», а не «пусто». Очищать их по пустому ответу
@@ -24311,8 +24812,7 @@ class AppController {
             if (r.ok) {
               st.failCount = 0;
               st.lastSuccessAtMs = doneMs;
-              st.nextAttemptAtMs =
-                  doneMs + ((r.hasNickname && r.hasAvatar) ? 20000 : 8000);
+              st.nextAttemptAtMs = doneMs + kMetaRefreshIntervalMs;
             } else {
               st.failCount = (st.failCount + 1).clamp(1, 10).toInt();
               st.nextAttemptAtMs = doneMs + _metaBackoffMs(st.failCount);
@@ -24320,6 +24820,17 @@ class AppController {
           })
           .catchError((_) {}),
     );
+  }
+
+  /// Одно уведомление экранам на пачку мелких изменений (не чаще раза в
+  /// 2 с): «был в сети» не срочный, а перестройка всех экранов — дорогая.
+  Timer? _coalescedChangedTimer;
+
+  void _emitChangedCoalesced() {
+    if (_coalescedChangedTimer?.isActive ?? false) return;
+    _coalescedChangedTimer = Timer(const Duration(seconds: 2), () {
+      if (!_changed.isClosed) _changed.add(null);
+    });
   }
 
   Future<_ProfileMetaRefreshResult> _refreshProfileMetaInternal(
@@ -24553,8 +25064,15 @@ class AppController {
         _prefsLastMetaRefreshAtMsKey,
         DateTime.now().millisecondsSinceEpoch,
       );
-      if (metaChanged || shouldUpdateLastSeen) {
+      if (metaChanged) {
         _changed.add(null);
+        _scheduleManagedDeviceContactSync();
+      } else if (shouldUpdateLastSeen) {
+        // Изменилось только «был в сети» — экраны обновятся одним разом
+        // (23.11.2026: после запуска профили обновляются подряд, и каждое
+        // такое обновление перестраивало весь интерфейс — подтормаживания
+        // при 60 к/с).
+        _emitChangedCoalesced();
         _scheduleManagedDeviceContactSync();
       }
       return _ProfileMetaRefreshResult(
@@ -24634,6 +25152,8 @@ class AppController {
           if (cid.startsWith('group:') || cid.startsWith('dev:')) continue;
           toRefresh.add(cid);
         }
+        // Демо-собеседник — его нет на сервере; запрос всегда неудачен.
+        toRefresh.removeWhere(_isDemoConvoId);
       } catch (_) {
         // best-effort
       }
@@ -24641,8 +25161,9 @@ class AppController {
       final next = toRefresh.toList()..sort();
       _metaRefreshTargets = next;
       _metaRefreshTargetCursor = 0;
-      // Rebuild frequently so newly added contacts start refreshing quickly.
-      _metaRefreshTargetsNextRebuildAtMs = nowMs + 10 * 1000;
+      // 23.11.2026: раз в минуту, а не каждые 10 с (три запроса к базе до
+      // 700 строк). Новый контакт и так обновляется сразу (_refreshProfileMetaSoon).
+      _metaRefreshTargetsNextRebuildAtMs = nowMs + 60 * 1000;
 
       // Prune state for removed targets.
       final keep = toRefresh;
@@ -24650,6 +25171,39 @@ class AppController {
     }
 
     if (_metaRefreshTargets.isEmpty) return;
+
+    // Собеседник открытого чата — чаще (15 с): его «в сети / был в» видно в
+    // шапке прямо сейчас (23.11.2026; остальным хватает 45 с).
+    final active = (_activeConvoId ?? '').trim();
+    if (maxFetches > 0 &&
+        active.isNotEmpty &&
+        !active.startsWith('group:') &&
+        !active.startsWith('dev:') &&
+        !_isDemoConvoId(active)) {
+      final st = _metaRefreshStateByProfileId.putIfAbsent(
+        active,
+        () => _MetaRefreshState(),
+      );
+      final due = st.failCount == 0
+          ? nowMs - st.lastSuccessAtMs >= kMetaRefreshActiveChatMs
+          : nowMs >= st.nextAttemptAtMs; // после ошибки — её пауза
+      if (due) {
+        final r = await _refreshProfileMetaInternal(active);
+        if (r.ok) {
+          st.failCount = 0;
+          st.lastSuccessAtMs = nowMs;
+          st.nextAttemptAtMs = nowMs + kMetaRefreshIntervalMs;
+        } else {
+          st.failCount = (st.failCount + 1).clamp(1, 10).toInt();
+          st.nextAttemptAtMs = nowMs + _metaBackoffMs(st.failCount);
+        }
+        maxFetches -= 1;
+        if (maxFetches < 1) {
+          _metaRefreshNextFetchAllowedAtMs = nowMs + 1000;
+          return;
+        }
+      }
+    }
 
     // Rotate over targets to find the next eligible profiles.
     final count = _metaRefreshTargets.length;
@@ -24679,9 +25233,10 @@ class AppController {
         st.failCount = 0;
         st.lastSuccessAtMs = nowMs;
         // If meta is incomplete (missing nick or avatar), retry sooner so changes propagate quickly.
-        st.nextAttemptAtMs = (r.hasNickname && r.hasAvatar)
-            ? (nowMs + 20 * 1000)
-            : (nowMs + 8 * 1000);
+        // 23.11.2026: 45 с всем. Раньше 20 с, а «неполным» (без фото —
+        // многие его просто не ставили) — 8 с, бесконечно: журнал Xiaomi —
+        // 98 запросов к серверу ключей за 3 минуты с одного телефона.
+        st.nextAttemptAtMs = nowMs + kMetaRefreshIntervalMs;
       } else {
         st.failCount = (st.failCount + 1);
         if (st.failCount < 1) st.failCount = 1;
@@ -24887,6 +25442,12 @@ class AppController {
     return null;
   }
 
+  /// Последний загруженный список бесед — НЕ сбрасывается при изменениях
+  /// (23.11.2026). Новый экран списка рисует его с первого кадра, пока идёт
+  /// свежий запрос, вместо пустого экрана.
+  List<Conversation> _lastKnownConversations = const <Conversation>[];
+  List<Conversation> get lastKnownConversations => _lastKnownConversations;
+
   Future<List<Conversation>> listConversations() async {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final cached = _listConversationsCache;
@@ -24903,6 +25464,7 @@ class AppController {
     try {
       final conversations = await future;
       _listConversationsCache = conversations;
+      _lastKnownConversations = conversations;
       _listConversationsCacheAtMs = DateTime.now().millisecondsSinceEpoch;
       return conversations;
     } finally {
@@ -25355,8 +25917,13 @@ class AppController {
   Future<void> acknowledgeMissedCalls({String? convoId}) async {
     final db = _db;
     if (db == null) return;
-    await db.callJournalMarkMissedAcknowledged(convoId: convoId);
-    _changed.add(null);
+    final changed = await db.callJournalMarkMissedAcknowledged(
+      convoId: convoId,
+    );
+    // Сообщать «всё изменилось» только если что-то отметили: иначе каждое
+    // открытие чата перечитывало переписку и список чатов прямо во время
+    // перехода (заметный рывок на Android).
+    if (changed > 0) _changed.add(null);
   }
 
   Future<String> createGroup({
@@ -31615,12 +32182,16 @@ class AppController {
     List<MsgMentionV1> mentions = const <MsgMentionV1>[],
     String? topicId,
     LinkPreviewV1? linkPreview,
+    // Служебная рассылка с собственным правом (список закреплённых — право
+    // закреплять, 21.11.2026): «писать запрещено» и медленный режим к ней
+    // не относятся.
+    RoomAction gateAction = RoomAction.sendText,
   }) async {
     final db = _db;
     final did = _deviceId;
     final crypto = _crypto;
     if (db == null || did == null || crypto == null) return 0;
-    await _ensureRoomActionAllowed(groupId, RoomAction.sendText);
+    await _ensureRoomActionAllowed(groupId, gateAction);
     // К-3 v2: удалённое «у всех» не повторяется — его провод стирается сразу.
     if (isDeleteForAllCommandText(text)) {
       await db.roomOutboundWiresDelete(parseDeleteForAllCommand(text));
@@ -32119,7 +32690,138 @@ class AppController {
     required String groupId,
     required List<({String eventId, String previewText, int pinnedAtMs})> pins,
   }) async {
-    await _ensureRoomActionAllowed(groupId, RoomAction.pinMessage);
+    await broadcastChatPins(convoId: groupId, pins: pins);
+  }
+
+  // ───────────── Закреплённые: хранение, рассылка, приём (21.11.2026) ───────
+  //
+  // 🔴 Жалоба владельца: «закреплённые то показываются, то нет у собеседников,
+  // а после удаления аккаунта и восстановления не восстанавливаются».
+  // Причины: в личном чате список вообще не уходил собеседнику; в комнате его
+  // принимал только открытый экран из последних двухсот событий ленты (как
+  // было с темами до 15.09); ошибка рассылки глоталась молча; свежесть
+  // сравнивалась с часами получателя.
+  //
+  // Теперь: список и его ревизия — в настройках телефона (тот же ключ, что
+  // у экрана, едет в копию); принимается сразу при получении, в личном чате
+  // и в комнате; рассылка — с ревизией; не дошло или у собеседника сменились
+  // устройства (восстановление) — список повторяется при открытии чата.
+
+  static const String _kPrefsChatPinsPrefix = 'chat_pinned_messages_v1_';
+  static const String _kPrefsChatPinsRevPrefix = 'chat_pins_rev_v1_';
+  static const String _kvChatPinsSentPrefix = 'chat_pins_sent_v1:';
+  final Set<String> _chatPinsResendInFlight = <String>{};
+
+  /// Сохранённый список закреплённых чата (новые сверху), до 50.
+  Future<List<PinnedRef>> loadChatPins(String convoId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return decodeStoredChatPins(
+        prefs.getString('$_kPrefsChatPinsPrefix${convoId.trim()}'),
+      );
+    } catch (_) {
+      return const <PinnedRef>[];
+    }
+  }
+
+  /// Ревизия сохранённого списка (0 — неизвестна).
+  Future<int> chatPinsRevision(String convoId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getInt('$_kPrefsChatPinsRevPrefix${convoId.trim()}') ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Запоминает список и его ревизию. Пустой список — ключ стирается, а
+  /// ревизия остаётся: иначе старое «закреплено» вернулось бы повтором.
+  Future<void> rememberChatPins({
+    required String convoId,
+    required List<PinnedRef> pins,
+    required int revision,
+  }) async {
+    final id = convoId.trim();
+    if (id.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    if (pins.isEmpty) {
+      await prefs.remove('$_kPrefsChatPinsPrefix$id');
+    } else {
+      await prefs.setString(
+        '$_kPrefsChatPinsPrefix$id',
+        encodeStoredChatPins(pins),
+      );
+    }
+    await prefs.setInt('$_kPrefsChatPinsRevPrefix$id', revision);
+  }
+
+  /// 🔴 Закреплённые стёртых у себя сообщений (очистка истории, удаление
+  /// чата, автоудаление) — убираются у себя (аудит 23.11.2026). Иначе плашка
+  /// показывала текст удалённого и он лежал в настройках, а те едут в копию:
+  /// для исчезающих сообщений это утечка. Убирается закреплённое, чьё
+  /// сообщение старше [cutoffMs], а если сообщения здесь нет — закреплённое
+  /// до [cutoffMs] (сообщение тогда тем более старше). Ревизия та же, список
+  /// никому не рассылается: у собеседника своя очистка.
+  Future<void> dropLocalChatPinsBefore(String convoId, int cutoffMs) async {
+    final base = convoId.trim();
+    if (base.isEmpty) return;
+    final ids = <String>{base, _stripRequestConvoPrefix(base)};
+    if (!base.startsWith('group:')) {
+      try {
+        final n = await _normalizeDirectPeerProfileId(base);
+        if (n != null && n.isNotEmpty) ids.add(n);
+      } catch (_) {}
+    }
+    ids.removeWhere((id) => id.isEmpty);
+    final db = _db;
+    var changed = false;
+    for (final id in ids) {
+      try {
+        final pins = await loadChatPins(id);
+        if (pins.isEmpty) continue;
+        final keep = <PinnedRef>[];
+        for (final pin in pins) {
+          int? at;
+          if (db != null) {
+            for (final cid in ids) {
+              at = await db.payloadEventCreatedAtMs(
+                convoId: cid,
+                payloadEventId: pin.eventId,
+              );
+              if (at != null) break;
+            }
+          }
+          final gone = at != null ? at < cutoffMs : pin.pinnedAtMs <= cutoffMs;
+          if (!gone) keep.add(pin);
+        }
+        if (keep.length == pins.length) continue;
+        await rememberChatPins(
+          convoId: id,
+          pins: keep,
+          revision: await chatPinsRevision(id),
+        );
+        changed = true;
+        DiagLog.event('pins', 'local_drop', {
+          'convo': DiagLog.pfx(id),
+          'dropped': pins.length - keep.length,
+        });
+      } catch (_) {}
+    }
+    if (changed) _changed.add(null);
+  }
+
+  /// Правка списка закреплённых — в личном чате и в комнате. Список
+  /// запоминается сразу (решение человека не зависит от сети) и уходит
+  /// собеседнику (всем его устройствам, через очередь) и своим устройствам
+  /// либо всей комнате. Возвращает ревизию.
+  Future<int> broadcastChatPins({
+    required String convoId,
+    required List<({String eventId, String previewText, int pinnedAtMs})> pins,
+  }) async {
+    final isGroup = convoId.startsWith('group:');
+    if (isGroup) {
+      await _ensureRoomActionAllowed(convoId, RoomAction.pinMessage);
+    }
     final refs = pins
         .where((pin) => pin.eventId.trim().isNotEmpty)
         .map(
@@ -32129,9 +32831,311 @@ class AppController {
             pinnedAtMs: pin.pinnedAtMs,
           ),
         )
+        .take(50)
         .toList(growable: false);
-    final commandText = buildPinSyncCommand(refs);
-    await sendGroupMessage(groupId: groupId, text: commandText);
+    final id = isGroup
+        ? convoId.trim()
+        : (await _normalizeDirectPeerProfileId(convoId.trim()) ??
+              convoId.trim());
+    // Ревизия всегда растёт, даже если часы этого телефона отстают.
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final previous = await chatPinsRevision(id);
+    final revision = now > previous ? now : previous + 1;
+    await rememberChatPins(convoId: id, pins: refs, revision: revision);
+    // G-2 (22.11.2026): экран читает список по СВОЕМУ id чата. Если он не
+    // совпадает с нормализованным (старый id собеседника), копия и под ним —
+    // иначе после перезахода экран показывал бы прежний список.
+    final screenId = _stripRequestConvoPrefix(convoId.trim());
+    if (kPinSyncChecksV2 && !isGroup && screenId.isNotEmpty && screenId != id) {
+      try {
+        await rememberChatPins(
+          convoId: screenId,
+          pins: refs,
+          revision: revision,
+        );
+      } catch (_) {}
+    }
+    _changed.add(null);
+    unawaited(
+      _sendChatPinsCommand(
+        convoId: id,
+        pins: refs,
+        revision: revision,
+      ),
+    );
+    return revision;
+  }
+
+  /// Рассылает список и отмечает, при каком составе получателей и всем ли
+  /// дошло. Ошибка не глотается молча: в журнал и отметку «не дошло» — по
+  /// ней список повторится.
+  Future<void> _sendChatPinsCommand({
+    required String convoId,
+    required List<PinnedRef> pins,
+    required int revision,
+  }) async {
+    final isGroup = convoId.startsWith('group:');
+    final command = buildPinSyncCommand(
+      pins,
+      revision: revision,
+      convoId: isGroup ? '' : convoId,
+    );
+    var partial = false;
+    var recipientsKey = '';
+    try {
+      recipientsKey = await _chatPinsRecipientsKey(convoId);
+      if (isGroup) {
+        if (_isDemoConvoId(convoId)) {
+          await sendGroupMessage(groupId: convoId, text: command);
+        } else {
+          final failed = await _dispatchGroupMessageNow(
+            groupId: convoId,
+            text: command,
+            gateAction: RoomAction.pinMessage,
+          );
+          partial = failed > 0;
+        }
+      } else {
+        await sendControlMessage(
+          peerProfileId: convoId,
+          controlText: command,
+          strict: false,
+          queueIfNoDevices: true,
+          ttlSeconds: _convoTimerCommandTtlSeconds,
+        );
+        try {
+          await _sendSelfMirrorControl(command);
+        } catch (_) {
+          // Свои устройства догонят следующим списком.
+        }
+      }
+    } catch (e) {
+      partial = true;
+      DiagLog.event('pins', 'send_failed', {
+        'convo': DiagLog.pfx(convoId),
+        'reason': _classifyShortReason(e),
+      });
+    }
+    try {
+      await _db?.localKvSet(
+        '$_kvChatPinsSentPrefix$convoId',
+        jsonEncode(<String, Object?>{
+          'rev': revision,
+          'at': DateTime.now().millisecondsSinceEpoch,
+          'partial': partial,
+          'to': recipientsKey,
+        }),
+      );
+    } catch (_) {}
+  }
+
+  /// Кому уходит список, одной строкой: в комнате — состав, в личном чате —
+  /// устройства собеседника (восстановление = новое устройство → повтор).
+  Future<String> _chatPinsRecipientsKey(String convoId) async {
+    if (convoId.startsWith('group:')) {
+      return _roomTopicsMembersKey(convoId);
+    }
+    final db = _db;
+    if (db == null) return '';
+    final devices = (await db.contactDevicesList(convoId))
+        .map((row) => ((row['device_id'] as String?) ?? '').trim())
+        .where((d) => d.isNotEmpty)
+        .toList()
+      ..sort();
+    return crypto.sha256
+        .convert(utf8.encode(devices.join(',')))
+        .toString()
+        .substring(0, 16);
+  }
+
+  /// Повтор списка при открытии чата: не дошёл (через 10 минут), сменились
+  /// получатели (новый участник, восстановленный собеседник) или список
+  /// новее отправленного. Ревизия — та же: повтор не перебивает правку,
+  /// сделанную позже кем-то другим.
+  Future<void> maybeResendChatPins(String convoId) async {
+    final id = convoId.trim();
+    final db = _db;
+    if (id.isEmpty || db == null || _isDemoConvoId(id)) return;
+    if (!_chatPinsResendInFlight.add(id)) return;
+    try {
+      final pins = await loadChatPins(id);
+      final revision = await chatPinsRevision(id);
+      // Д-5 (22.11.2026): пустой список — тоже список. Последнее открепление
+      // раньше не повторялось, и у собеседника оставалось «закреплено».
+      if (revision <= 0) return;
+      if (pins.isEmpty && !kPinSyncChecksV2) return;
+      final sentRaw = await db.localKvGet('$_kvChatPinsSentPrefix$id');
+      if (id.startsWith('group:')) {
+        // В комнате повторяет тот, кто рассылал список сам (или владелец):
+        // иначе каждый открывший комнату слал бы его всем.
+        final settings = await getRoomSettings(id);
+        if (sentRaw == null && settings.ownerProfileId != profileId) return;
+        final policy = await getRoomPolicyState(id);
+        if (!policy.canPinMessages && settings.ownerProfileId != profileId) {
+          return;
+        }
+      }
+      final sent = sentRaw == null
+          ? const <String, Object?>{}
+          : (jsonDecode(sentRaw) as Map).cast<String, Object?>();
+      final key = await _chatPinsRecipientsKey(id);
+      final resend = shouldResendChatPins(
+        nowMs: DateTime.now().millisecondsSinceEpoch,
+        revision: revision,
+        sentRevision: (sent['rev'] as num?)?.toInt() ?? 0,
+        sentAtMs: (sent['at'] as num?)?.toInt() ?? 0,
+        sentPartially: sent['partial'] == true,
+        recipientsKey: key,
+        sentRecipientsKey: (sent['to'] as String?) ?? '',
+      );
+      if (!resend) return;
+      DiagLog.event('pins', 'resend', {
+        'convo': DiagLog.pfx(id),
+        'pins': pins.length,
+      });
+      await _sendChatPinsCommand(convoId: id, pins: pins, revision: revision);
+    } catch (e) {
+      DiagLog.event('pins', 'resend_failed', {
+        'convo': DiagLog.pfx(id),
+        'reason': _classifyShortReason(e),
+      });
+    } finally {
+      _chatPinsResendInFlight.remove(id);
+    }
+  }
+
+  /// Связь вернулась — списки закреплённых, что не дошли, уходят снова
+  /// (аудит 23.11.2026: раньше повтор был только при открытии того чата, и
+  /// закреплённое без сети собеседник мог не увидеть никогда).
+  Future<void> _resendUndeliveredChatPins() async {
+    final db = _db;
+    if (db == null) return;
+    try {
+      final keys = await db.localKvKeysWithPrefix(_kvChatPinsSentPrefix);
+      for (final key in keys.take(50)) {
+        final raw = await db.localKvGet(key);
+        if (raw == null) continue;
+        final sent = (jsonDecode(raw) as Map).cast<String, Object?>();
+        if (sent['partial'] != true) continue;
+        await maybeResendChatPins(key.substring(_kvChatPinsSentPrefix.length));
+      }
+    } catch (_) {
+      // Повторится при открытии чата.
+    }
+  }
+
+  /// Принимает пришедший список сразу (а не только с открытого экрана).
+  /// Свежесть — по ревизии списка, без неё — по времени сообщения.
+  Future<bool> _adoptInboundChatPins({
+    required String convoId,
+    required PinSyncCommand command,
+    required int atMs,
+    bool isOwn = false,
+    String senderProfileId = '',
+  }) async {
+    // G-3: ревизия «из будущего» обрезается до «сейчас + 5 минут».
+    final fresh = trustedPinFreshnessMs(
+      command.freshnessMs(atMs),
+      DateTime.now().millisecondsSinceEpoch,
+      messageAtMs: atMs,
+    );
+    final localRevision = await chatPinsRevision(convoId);
+    if (fresh <= localRevision) return false;
+    final isGroup = convoId.startsWith('group:');
+    // Д-6: в комнате список принимается только от того, кто вправе
+    // закреплять (как таймер исчезающих).
+    if (isGroup &&
+        !await canRoomMemberPin(
+          groupId: convoId,
+          senderProfileId: senderProfileId,
+          isOwn: isOwn,
+        )) {
+      DiagLog.event('pins', 'author_not_allowed', {
+        'convo': DiagLog.pfx(convoId),
+        'known_author': senderProfileId.trim().isNotEmpty,
+      });
+      return false;
+    }
+    // Д-7: первый список после обновления в личном чате не стирает свои
+    // закрепления, заведённые до обновления (ревизия 0), — объединяем.
+    var pins = command.pins;
+    var mergedExtra = false;
+    final localPins = isGroup ? const <PinnedRef>[] : await loadChatPins(convoId);
+    if (needsFirstAdoptionMerge(
+      isGroup: isGroup,
+      localRevision: localRevision,
+      localPins: localPins,
+    )) {
+      pins = mergeChatPins(local: localPins, inbound: command.pins);
+      mergedExtra = mergeAddsPins(pins, command.pins);
+    }
+    var revision = fresh;
+    if (mergedExtra) {
+      // Объединённый список новее пришедшего — и уходит обратно.
+      final now = DateTime.now().millisecondsSinceEpoch;
+      revision = now > fresh ? now : fresh + 1;
+    }
+    await rememberChatPins(convoId: convoId, pins: pins, revision: revision);
+    DiagLog.event('pins', 'adopted', {
+      'convo': DiagLog.pfx(convoId),
+      'pins': pins.length,
+      'merged': mergedExtra,
+    });
+    _changed.add(null);
+    if (mergedExtra) {
+      unawaited(
+        _sendChatPinsCommand(convoId: convoId, pins: pins, revision: revision),
+      );
+    }
+    return true;
+  }
+
+  /// Может ли автор списка закреплённых комнаты закреплять (Д-6): своё
+  /// устройство — да; чужой — по роли в МОЁМ знании о составе.
+  Future<bool> canRoomMemberPin({
+    required String groupId,
+    required String senderProfileId,
+    required bool isOwn,
+  }) async {
+    if (!kPinSyncChecksV2 || isOwn) return true;
+    final pid = senderProfileId.trim();
+    if (pid.isEmpty) return false;
+    if (pid == profileId.trim()) return true;
+    try {
+      final role = await getRoomMemberRole(groupId, profileIdOverride: pid);
+      final settings = await getRoomSettings(groupId);
+      return roomPinAuthorAllowed(
+        isOwn: false,
+        authorRole: role,
+        settings: settings,
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Есть ли сообщение в переписке на этом устройстве (Д-1): по
+  /// логическому id, а для строк без него — по id строки.
+  Future<bool> chatEventExists({
+    required String convoId,
+    required String eventId,
+  }) async {
+    final db = _db;
+    final id = eventId.trim();
+    if (db == null || id.isEmpty) return false;
+    try {
+      if (await db.eventExistsForPayload(
+        convoId: convoId,
+        payloadEventId: id,
+      )) {
+        return true;
+      }
+      final row = await db.eventGet(id);
+      return row != null && (row['convo_id'] as String?) == convoId;
+    } catch (_) {
+      // Не знаем — пусть экран попробует расширить окно.
+      return true;
+    }
   }
 
   // ── Topics / threads (room feature) ──────────────────────────────────────
@@ -33234,6 +34238,8 @@ class AppController {
     int? width,
     int? height,
     String? thumbB64,
+    // М1 (22.11.2026): номер сообщения — заготовке до записи в историю.
+    LocalAttachmentRowCallback? onLocalRowInserting,
   }) async {
     // Список тем — раньше сообщения в тему (см. [shouldResendRoomTopics]).
     unawaited(_maybeResendRoomTopics(groupId, topicId));
@@ -33492,6 +34498,12 @@ class AppController {
       senderDisplayName: myNickname,
       convoTitle: groupTitle,
       previewText: _pushTransportPreviewForAttachment(uploaded.mime),
+    );
+    await _announceLocalAttachmentRow(
+      onLocalRowInserting,
+      payloadEventId: msgEventId,
+      blobId: uploaded.blobId,
+      mime: uploaded.mime,
     );
     _attachmentLocalInsertSeq++; // О2: сообщение уже в истории
     await db.insertEvent(
@@ -34295,6 +35307,7 @@ class AppController {
         convoId: convoId,
         cutoffCreatedAtMs: cutoff,
       );
+      await dropLocalChatPinsBefore(convoId, cutoff);
     }
     await _applyRoomHistoryVisibilityRetentionForConvo(convoId);
   }
@@ -35726,6 +36739,7 @@ class AppController {
         cutoffCreatedAtMs: effectiveCutoffCreatedAtMs,
       );
     }
+    await dropLocalChatPinsBefore(cleanedConvoId, effectiveCutoffCreatedAtMs);
     _changed.add(null);
   }
 
@@ -35879,6 +36893,11 @@ class AppController {
       }
     }
 
+    // Закреплённые удалённого чата — тоже (сначала: им нужна лента).
+    await dropLocalChatPinsBefore(
+      convoId,
+      DateTime.now().millisecondsSinceEpoch + 1,
+    );
     await db.deleteConversationData(
       convoId: convoId,
       keepConversationRow: false,
@@ -36063,6 +37082,31 @@ class AppController {
       ),
       premiumBadge: peerHasBadge,
     );
+  }
+
+  /// Непрочитанные входящие переписки, новые первыми (до [limit]) — чтобы
+  /// экран открылся на ПЕРВОМ непрочитанном (23.11.2026). Те же условия, что
+  /// у счётчика непрочитанных и у [markChatRead].
+  Future<List<({String eventId, String payloadEventId, int createdAtMs})>>
+  unreadIncomingForConvo(String convoId, {int limit = 1000}) async {
+    final db = _db;
+    final did = _deviceId;
+    final cid = convoId.trim();
+    if (db == null || did == null || cid.isEmpty) return const [];
+    final rows = await db.listUnreadIncomingForConvo(
+      convoId: cid,
+      selfDeviceId: did,
+      excludedSenderDeviceIds: _ownDeviceIdsForUnreadQueries(),
+      limit: limit,
+    );
+    return [
+      for (final r in rows)
+        (
+          eventId: ((r['event_id'] as String?) ?? '').trim(),
+          payloadEventId: ((r['payload_event_id'] as String?) ?? '').trim(),
+          createdAtMs: ((r['created_at_ms'] as num?) ?? 0).toInt(),
+        ),
+    ];
   }
 
   Future<int> unreadCountForConvo(String convoId) async {
@@ -37665,6 +38709,8 @@ class AppController {
   /// for active peers. The verification itself is cheap (one keys-server
   /// fetch + a local identity-key comparison inside `contactDeviceUpsert`).
   static const _bundleRevalidationIntervalMs = 24 * 60 * 60 * 1000; // 24 h
+  static const _bundleReverifyRetryMs = 60 * 60 * 1000; // попытка — раз в час
+  final Map<String, int> _bundleReverifyLastTryAtMs = <String, int>{};
 
   /// Sprint 2 C1 — minimum spacing between watchdog ticks. The watchdog
   /// itself runs from `_pumpTimer` so this is a per-process throttle.
@@ -37744,6 +38790,14 @@ class AppController {
       if ((now - lastOk) < _bundleRevalidationIntervalMs) {
         continue;
       }
+      // 🔴 23.11.2026: у обновления устройств есть ранние выходы без отметки
+      // «успешно» — и обход (раз в минуту) брал тех же собеседников снова и
+      // снова, бесконечно: журнал Xiaomi — 4 запроса к серверу ключей каждую
+      // минуту. Попытка — не чаще раза в час на собеседника.
+      if (convoId.startsWith('demo:')) continue;
+      final lastTry = _bundleReverifyLastTryAtMs[convoId] ?? 0;
+      if (now - lastTry < _bundleReverifyRetryMs) continue;
+      _bundleReverifyLastTryAtMs[convoId] = now;
       dispatched++;
       DiagLog.event('peer', 'bundle_reverify_dispatch', {
         'peer': DiagLog.pfx(convoId),
@@ -41669,6 +42723,36 @@ class AppController {
     return n;
   }
 
+  /// Открытый ключ личности СВОЕГО аккаунта (AIK, base64) — только чтение.
+  /// `null`, если сида ещё нет (его создаёт публикация связки).
+  ///
+  /// 🔴 Именно `loadSeedB64`, не `ensureSeedB64`: экран не имеет права
+  /// рождать ключ аккаунта (см. К-17 в `AccountIdentity`). Нужен узору
+  /// «Отпечаток ключа» (lib/ui/profile/key_fingerprint.dart).
+  Future<String?> ownAccountIdentityPubB64() async {
+    final pid = _profileId;
+    if (pid == null || pid.isEmpty) return null;
+    try {
+      final seed = await AccountIdentity.create().loadSeedB64(profileId: pid);
+      if (seed == null) return null;
+      return await AccountIdentity.publicKeyB64FromSeed(seed);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Закреплённый (TOFU) ключ личности аккаунта контакта (AIK, base64) —
+  /// только чтение. `null`, если сборка контакта его не присылала.
+  Future<String?> contactAccountIdentityPubB64(String peerProfileId) async {
+    final db = _db;
+    if (db == null) return null;
+    try {
+      return await db.contactAccountIdentityPinned(peerProfileId);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<List<ContactDevice>> listContactDevices(String peerProfileId) async {
     final db = _db;
     if (db == null) return const [];
@@ -42469,6 +43553,42 @@ class AppController {
     }
   }
 
+  /// Обновить каталог стикеров после подключения к реле (23.11.2026).
+  ///
+  /// 🔴 Раньше каждое подключение (и каждый возврат в приложение с
+  /// переподключением) звало синхронизацию принудительно: манифест,
+  /// проверка подписи и ПОЛНАЯ перезапись ~12 тыс. строк каталога в базе —
+  /// база одна, и лента открытого чата ждала своей очереди (открытие из
+  /// уведомления — секунды). Теперь: не раньше [_kStickerSyncStartupDelay]
+  /// после запуска, не чаще раза в 10 минут, и база переписывается, только
+  /// если каталог на сервере изменился ([_syncStickerCatalog]).
+  static const Duration _kStickerSyncStartupDelay = Duration(seconds: 15);
+  final DateTime _stickerSyncCreatedAt = DateTime.now();
+  Timer? _stickerSyncDelayTimer;
+
+  void _scheduleStickerCatalogSync() {
+    final sinceStart = DateTime.now().difference(_stickerSyncCreatedAt);
+    final wait = _kStickerSyncStartupDelay - sinceStart;
+    if (wait <= Duration.zero) {
+      unawaited(_syncStickerCatalog());
+      return;
+    }
+    if (_stickerSyncDelayTimer?.isActive ?? false) return;
+    _stickerSyncDelayTimer = Timer(wait, () {
+      unawaited(_syncStickerCatalog());
+    });
+  }
+
+  static const _prefsStickerCatalogAppliedKey = 'sticker_catalog_applied_v1';
+
+  /// Отпечаток манифеста: время сборки, наборы с версиями и числом стикеров.
+  static String _stickerManifestFingerprint(
+    RemoteStickerCatalogManifest m,
+  ) => [
+    m.generatedAtMs,
+    for (final p in m.packs) '${p.packId}@${p.packVersion}#${p.stickers.length}',
+  ].join('|');
+
   Future<void> _syncStickerCatalog({bool force = false}) async {
     final db = _db;
     final client = _stickerCatalogClient;
@@ -42481,6 +43601,24 @@ class AppController {
     _lastStickerCatalogSyncAtMs = now;
     try {
       final manifest = await client.fetchManifest();
+      // Каталог не менялся и в базе те же наборы — переписывать нечего.
+      final fingerprint = _stickerManifestFingerprint(manifest);
+      final prefs = _prefs ?? await SharedPreferences.getInstance();
+      if (prefs.getString(_prefsStickerCatalogAppliedKey) == fingerprint) {
+        final have = {
+          for (final p in await db.listStickerCatalogPacks())
+            if (!p.packId.startsWith('user:')) '${p.packId}@${p.packVersion}',
+        };
+        final want = {
+          for (final p in manifest.packs) '${p.packId}@${p.packVersion}',
+        };
+        if (have.length == want.length && have.containsAll(want)) {
+          DiagLog.event('stickers', 'catalog_unchanged', {
+            'packs': want.length,
+          });
+          return;
+        }
+      }
       await _pruneStaleStickerCatalogPacks(manifest: manifest);
       final effectiveUpdatedAtMs = manifest.generatedAtMs > 0
           ? manifest.generatedAtMs
@@ -42524,6 +43662,7 @@ class AppController {
         );
       }
       await _loadStickerCatalogFromDb();
+      await prefs.setString(_prefsStickerCatalogAppliedKey, fingerprint);
       if (!_changed.isClosed) {
         _changed.add(null);
       }
@@ -43207,6 +44346,19 @@ class AppController {
       ),
     );
     var downloaded = false;
+    // В-1 (разбор медиа 22.11.2026): расшифровка частями следом за
+    // скачиванием. Изолят поднимается с первым пришедшим куском (после
+    // проверки ответа сервера) и читает тот же файл-кусок с начала. Не вышло
+    // — ниже расшифровка целиком, как раньше.
+    StreamingAttachmentDecrypt? streaming;
+    // В-2: растущий файл открытого текста для плеера (только ролики
+    // MP4/MOV на телефонах; иначе `null`).
+    ProgressiveMediaFeed? progressiveFeed;
+    var streamingTried = false;
+    final streamingAllowed =
+        kStreamingDecrypt &&
+        !kIsWeb &&
+        a.sizeBytes >= kStreamingDecryptMinBytes;
     try {
       if (await tempOutput.exists()) {
         await tempOutput.delete();
@@ -43215,22 +44367,77 @@ class AppController {
         a.blobId,
         outputFile: ciphertextFile,
         accessTokenB64: accessTokenB64,
-        onProgress: onProgress,
+        onProgress: (received, total) {
+          if (streamingAllowed) {
+            if (!streamingTried) {
+              streamingTried = true;
+              progressiveFeed = ProgressiveMediaFeeds.begin(
+                blobId: a.blobId,
+                mime: a.mime,
+                path: tempOutput.path,
+                declaredBytes: a.sizeBytes,
+              );
+              streaming = StreamingAttachmentDecrypt.start(
+                partPath: ciphertextFile.path,
+                outPath: tempOutput.path,
+                fileKeyB64: a.fileKeyB64,
+                onDecrypted: progressiveFeed?.reportDecrypted,
+                onFailed: progressiveFeed?.fail,
+              );
+              if (streaming == null) progressiveFeed?.fail();
+            }
+            progressiveFeed?.reportCiphertextTotal(total);
+            streaming?.notifyAvailable(received);
+          }
+          onProgress?.call(received, total);
+        },
         resume: true,
       );
       downloaded = true;
-      await attachments.decryptDownloadedFileToFile(
-        ciphertextFile,
-        fileKeyB64: a.fileKeyB64,
-        outputFile: tempOutput,
-      );
+      var decrypted = false;
+      final session = streaming;
+      if (session != null) {
+        final sw = Stopwatch()..start();
+        final r = await session.finish(await ciphertextFile.length());
+        streaming = null;
+        decrypted = r.ok;
+        // В-2: дальше файл пишется целиком заново — плееру его не отдаём.
+        if (!r.ok) progressiveFeed?.fail();
+        DiagLog.event('attachment', 'stream_decrypt', {
+          'ok': r.ok,
+          if (r.reason != null) 'reason': r.reason,
+          'chunks': r.chunks,
+          'tail_ms': sw.elapsedMilliseconds,
+        });
+      }
+      if (!decrypted) {
+        await attachments.decryptDownloadedFileToFile(
+          ciphertextFile,
+          fileKeyB64: a.fileKeyB64,
+          outputFile: tempOutput,
+        );
+      }
       await _noteAttachmentSizeMismatch(a, tempOutput);
       if (await outputFile.exists()) {
         await outputFile.delete();
       }
       await tempOutput.rename(outputFile.path);
+      // В-2: плеер дочитывает уже из кэша.
+      final feed = progressiveFeed;
+      if (feed != null) {
+        int? length;
+        try {
+          length = await outputFile.length();
+        } catch (_) {}
+        feed.complete(outputFile.path, length: length);
+      }
       return outputFile;
     } catch (_) {
+      progressiveFeed?.fail();
+      // В-1: изолят закрывает свой выходной файл раньше, чем его удалим.
+      final session = streaming;
+      streaming = null;
+      if (session != null) await session.abort();
       try {
         if (await tempOutput.exists()) {
           await tempOutput.delete();
@@ -43379,6 +44586,10 @@ class AppController {
       key,
       () => ValueNotifier<double?>(null),
     );
+    // П-1 (22.11.2026): знак скачивания в пузыре держится на этом ходе, а не
+    // на ожидании файла, — он виден с первой секунды скачивания (0 —
+    // крутящееся кольцо до первого куска) и не мигает от перерисовок ленты.
+    if (kMediaPreviewV2 && progress.value == null) progress.value = 0;
     final future = () async {
       final out = await _attachmentCacheFile(blobId: a.blobId, mime: a.mime);
       final file = await downloadAndDecryptAttachmentToFile(
@@ -46675,6 +47886,8 @@ class AppController {
     // исчезал, а фото всё равно доходило собеседнику.
     BlobUploadCancelToken? cancelToken,
     void Function(int sentBytes, int totalBytes)? onUploadProgress,
+    // М1 (22.11.2026): номер сообщения — заготовке до записи в историю.
+    LocalAttachmentRowCallback? onLocalRowInserting,
   }) async {
     // Keep bytes-based API for web/tests/small payloads.
     _throwIfAttachmentTooLarge(bytes.length);
@@ -46783,6 +47996,12 @@ class AppController {
       );
       final localCipher = await crypto.encrypt(payload.encode());
       if (includeInLocalHistory) {
+        await _announceLocalAttachmentRow(
+          onLocalRowInserting,
+          payloadEventId: eventId,
+          blobId: blobId,
+          mime: resolvedMime,
+        );
         await _retryDbBusy(() async {
           await db.insertEvent(
             eventId: 'local:$eventId',
@@ -46926,6 +48145,12 @@ class AppController {
       final localCipher = await crypto.encrypt(payload.encode());
       final localB64 = base64Encode(localCipher);
       localEventId = 'local:$eventId';
+      await _announceLocalAttachmentRow(
+        onLocalRowInserting,
+        payloadEventId: eventId,
+        blobId: uploaded.blobId,
+        mime: uploaded.mime,
+      );
       _attachmentLocalInsertSeq++; // О2: сообщение уже в истории
       await _retryDbBusy(() async {
         await db.insertEvent(
@@ -47268,6 +48493,8 @@ class AppController {
     int? width,
     int? height,
     String? thumbB64,
+    // М1 (22.11.2026): номер сообщения — заготовке до записи в историю.
+    LocalAttachmentRowCallback? onLocalRowInserting,
   }) async {
     var file = File(filePath);
     if (!await file.exists()) {
@@ -47379,6 +48606,7 @@ class AppController {
         thumbB64: inlineThumbB64 ?? thumbB64,
         cancelToken: cancelToken,
         onUploadProgress: onUploadProgress,
+        onLocalRowInserting: onLocalRowInserting,
       );
     }
 
@@ -47471,6 +48699,12 @@ class AppController {
         ],
       );
       final localCipher = await crypto.encrypt(payload.encode());
+      await _announceLocalAttachmentRow(
+        onLocalRowInserting,
+        payloadEventId: eventId,
+        blobId: blobId,
+        mime: resolvedMime,
+      );
       await db.insertEvent(
         eventId: 'local:$eventId',
         convoId: resolvedPeerProfileId,
@@ -47619,6 +48853,12 @@ class AppController {
       senderProfileId: pid,
       senderDisplayName: myNickname,
       previewText: _pushTransportPreviewForAttachment(uploaded.mime),
+    );
+    await _announceLocalAttachmentRow(
+      onLocalRowInserting,
+      payloadEventId: eventId,
+      blobId: uploaded.blobId,
+      mime: uploaded.mime,
     );
     _attachmentLocalInsertSeq++; // О2: сообщение уже в истории
     await db.insertEvent(
@@ -48396,6 +49636,8 @@ class AppController {
     // остальное уходит. Не задан — как раньше: сбой любого срывает всё.
     void Function(int index, Object error)? onItemFailed,
     String? caption,
+    // М1 (22.11.2026): номер каждого снимка — заготовке до записи в историю.
+    LocalAlbumRowCallback? onLocalRowInserting,
   }) async {
     final validated = await _validateAttachmentFileRequests(files);
     // Album caption is attached to the FIRST item only (Telegram-style). An
@@ -48486,6 +49728,16 @@ class AppController {
           ],
         );
         final localCipher = await crypto.encrypt(payload.encode());
+        final selfIndex = index;
+        await _announceLocalAttachmentRow(
+          onLocalRowInserting == null
+              ? null
+              : (id, blob, cache) =>
+                    onLocalRowInserting(selfIndex, id, blob, cache),
+          payloadEventId: eventId,
+          blobId: blobId,
+          mime: input.mime,
+        );
         await db.insertEvent(
           eventId: 'local:$eventId',
           convoId: resolvedPeerProfileId,
@@ -48631,6 +49883,16 @@ class AppController {
         senderProfileId: pid,
         senderDisplayName: myNickname,
         previewText: _pushTransportPreviewForAttachment(uploaded.mime),
+      );
+      final albumIndex = index;
+      await _announceLocalAttachmentRow(
+        onLocalRowInserting == null
+            ? null
+            : (id, blob, cache) =>
+                  onLocalRowInserting(albumIndex, id, blob, cache),
+        payloadEventId: eventId,
+        blobId: uploaded.blobId,
+        mime: uploaded.mime,
       );
       await db.insertEvent(
         eventId: localEventId,
@@ -48833,6 +50095,8 @@ class AppController {
     // Тема комнаты — как у одиночной отправки ([sendGroupAttachmentFile]):
     // альбом телефона и пачка компьютера уходят в открытую тему.
     String? topicId,
+    // М1 (22.11.2026): номер каждого снимка — заготовке до записи в историю.
+    LocalAlbumRowCallback? onLocalRowInserting,
   }) async {
     // Список тем — раньше сообщения в тему (см. [shouldResendRoomTopics]).
     unawaited(_maybeResendRoomTopics(groupId, topicId));
@@ -49013,6 +50277,16 @@ class AppController {
         convoTitle: groupTitle,
         previewText: _pushTransportPreviewForAttachment(uploaded.mime),
       );
+      final albumIndex = index;
+      await _announceLocalAttachmentRow(
+        onLocalRowInserting == null
+            ? null
+            : (id, blob, cache) =>
+                  onLocalRowInserting(albumIndex, id, blob, cache),
+        payloadEventId: messageId,
+        blobId: uploaded.blobId,
+        mime: uploaded.mime,
+      );
       await db.insertEvent(
         eventId: localEventId,
         convoId: groupId,
@@ -49148,7 +50422,56 @@ class AppController {
     _changed.add(null);
   }
 
-  Future<void> markChatRead({required String peerProfileId}) async {
+  /// [upToCreatedAtMs] — пометить только входящие не новее этого времени
+  /// отправителя: экран открыт на первом непрочитанном и человек листает
+  /// вниз — прочитанным становится то, что он увидел (23.11.2026). `null` —
+  /// весь чат, как раньше.
+  /// Пометки «прочитано» — по одной на переписку за раз (23.11.2026, журнал
+  /// Xiaomi: при пачке входящих чат звал пометку 5–8 раз подряд, каждая
+  /// заново читала непрочитанные, ставила квитанции и ходила в базу —
+  /// лента в это время ждала очереди). Пока идёт пометка, новые просьбы
+  /// копятся в одну (самую широкую) и выполняются сразу после.
+  final Map<String, Future<void>> _markReadRunning = {};
+
+  /// Отложенная просьба: −1 — «всё», иначе «до этого времени».
+  final Map<String, int> _markReadQueued = {};
+
+  Future<void> markChatRead({
+    required String peerProfileId,
+    int? upToCreatedAtMs,
+  }) {
+    final key = peerProfileId;
+    final want = upToCreatedAtMs ?? -1;
+    final running = _markReadRunning[key];
+    if (running != null) {
+      final q = _markReadQueued[key];
+      _markReadQueued[key] = q == null
+          ? want
+          : (q == -1 || want == -1 ? -1 : math.max(q, want));
+      return running;
+    }
+    final run = () async {
+      var next = want;
+      while (true) {
+        await _markChatReadOnce(
+          peerProfileId: peerProfileId,
+          upToCreatedAtMs: next == -1 ? null : next,
+        );
+        final q = _markReadQueued.remove(key);
+        if (q == null) break;
+        next = q;
+      }
+    }();
+    _markReadRunning[key] = run;
+    return run.whenComplete(() {
+      if (identical(_markReadRunning[key], run)) _markReadRunning.remove(key);
+    });
+  }
+
+  Future<void> _markChatReadOnce({
+    required String peerProfileId,
+    int? upToCreatedAtMs,
+  }) async {
     final db = _db;
     final did = _deviceId;
     if (db == null || did == null) {
@@ -49168,9 +50491,16 @@ class AppController {
         );
         if (unreadLocal.isNotEmpty) {
           final nowLocal = DateTime.now().millisecondsSinceEpoch;
+          final upToLocal = upToCreatedAtMs;
           final ids = unreadLocal
+              .where(
+                (r) =>
+                    upToLocal == null ||
+                    ((r['created_at_ms'] as num?) ?? 0).toInt() <= upToLocal,
+              )
               .map((r) => r['event_id'] as String)
               .toList(growable: false);
+          if (ids.isEmpty) return;
           await db.markEventsReadByIds(ids, readAtMs: nowLocal);
           try {
             await _nativeMsgNotifChannel.invokeMethod(
@@ -49195,13 +50525,22 @@ class AppController {
     final skipReadReceiptSend =
         isDemoConvo ||
         !isGroupConvo && myPid.isNotEmpty && effectivePeerProfileId == myPid;
-    final unread = await db.listUnreadIncomingForConvo(
+    final unreadAll = await db.listUnreadIncomingForConvo(
       convoId: effectivePeerProfileId,
       selfDeviceId: did,
       excludedSenderDeviceIds: _ownDeviceIdsForUnreadQueries(),
       limit: 500,
     );
+    final upTo = upToCreatedAtMs;
+    final unread = upTo == null
+        ? unreadAll
+        : [
+            for (final r in unreadAll)
+              if (((r['created_at_ms'] as num?) ?? 0).toInt() <= upTo) r,
+          ];
     if (unread.isEmpty) return;
+    // Часть чата ещё не прочитана — уведомления о ней не снимаем.
+    final partialRead = unread.length != unreadAll.length;
 
     final now = DateTime.now().millisecondsSinceEpoch;
     final eventIds = <String>[];
@@ -49291,16 +50630,19 @@ class AppController {
     if (!_transportBlocked) {
       _kickRelayOutbox(relay);
     }
-    try {
-      await _nativeMsgNotifChannel.invokeMethod('cancel', <String, dynamic>{
-        'convoId': effectivePeerProfileId,
-      });
-      DiagLog.event('notif', 'cancel_request', {
-        'convo': DiagLog.pfx(effectivePeerProfileId),
-        'reason': 'mark_read',
-      });
-    } catch (_) {}
+    if (!partialRead) {
+      try {
+        await _nativeMsgNotifChannel.invokeMethod('cancel', <String, dynamic>{
+          'convoId': effectivePeerProfileId,
+        });
+        DiagLog.event('notif', 'cancel_request', {
+          'convo': DiagLog.pfx(effectivePeerProfileId),
+          'reason': 'mark_read',
+        });
+      } catch (_) {}
+    }
     DiagLog.event('read', 'mark_chat_read', {
+      'partial': partialRead,
       'convo': DiagLog.pfx(effectivePeerProfileId),
       'group': isGroupConvo,
       'unread_count': eventIds.length,
@@ -53892,6 +55234,39 @@ class AppController {
         continue;
       }
 
+      // Закреплённые в личном чате (21.11.2026) — от собеседника или от
+      // своего устройства. Команда несёт профиль собеседника отправителя.
+      final pinCmd = parsePinSyncCommand(msgEvent.text);
+      if (pinCmd != null) {
+        final myPid = (_profileId ?? '').trim();
+        final senderDid = (senderDeviceId ?? '').trim();
+        final spid = (senderProfileId ?? '').trim();
+        final senderIsOwn =
+            (senderDid.isNotEmpty && isOwnDeviceId(senderDid)) ||
+            (spid == myPid && myPid.isNotEmpty);
+        final target = senderIsOwn ? pinCmd.convoId : spid;
+        final addressedToMe =
+            senderIsOwn || pinCmd.convoId.isEmpty || pinCmd.convoId == myPid;
+        if (target.isNotEmpty &&
+            !target.startsWith('group:') &&
+            addressedToMe) {
+          try {
+            await _adoptInboundChatPins(
+              convoId: target,
+              command: pinCmd,
+              atMs: now,
+            );
+          } catch (_) {}
+        } else {
+          DiagLog.event('pins', 'cmd_ignored', {
+            'own': senderIsOwn,
+            'has_target': target.isNotEmpty,
+          });
+        }
+        handledCommand = true;
+        continue;
+      }
+
       // Исчезающие сообщения: смена таймера чата (ТЗ 22.10.2026, §2.1) — от
       // собеседника в 1:1 или от своего устройства.
       final timerCmd = parseConvoTimerCommand(msgEvent.text);
@@ -55441,6 +56816,26 @@ class AppController {
                 text: bodyText,
                 atMs: groupCreatedAtMs,
               );
+            }
+            // Список закреплённых — сразу при получении (21.11.2026).
+            if (kind != 'attachment' &&
+                kind != 'sticker' &&
+                kind != 'system' &&
+                isPinSyncCommandText(bodyText)) {
+              final pinCmd = parsePinSyncCommand(bodyText);
+              if (pinCmd != null) {
+                try {
+                  await _adoptInboundChatPins(
+                    convoId: groupId,
+                    command: pinCmd,
+                    atMs: groupCreatedAtMs,
+                    isOwn: inboundIsOwnSend,
+                    senderProfileId: senderProfile,
+                  );
+                } catch (_) {
+                  // Экран примет из ленты, как раньше.
+                }
+              }
             }
             // ROOM DELIVERED RECEIPT (2026-07-30). Until now a room emitted no
             // `delivered` receipt at all — only `read`, and only when the user
@@ -59839,7 +61234,9 @@ class AppController {
 
   Future<void> dispose() async {
     _disappearingSweepTimer?.cancel();
+    _coalescedChangedTimer?.cancel();
     _disappearingSweepTimer = null;
+    _stickerSyncDelayTimer?.cancel();
     await _shutdownTransportPaths();
     _pumpTimer?.cancel();
     _mainAliveHeartbeatTimer?.cancel();
@@ -61822,3 +63219,13 @@ enum RoomWireOutcome {
   /// Local storage failed while opening.
   storeError,
 }
+
+/// Интервал фонового обновления чужого профиля (имя, фото, «был в»), 23.11.2026.
+const int kMetaRefreshIntervalMs = 45 * 1000;
+
+/// Собеседник открытого чата обновляется чаще — его «в сети» видно сейчас.
+const int kMetaRefreshActiveChatMs = 15 * 1000;
+
+/// Принудительная HTTP-выборка входящих в спокойном режиме (23.11.2026); в
+/// первую минуту на экране и в звонке — по-прежнему раз в 8 с.
+const int kRelayQuietForcePumpMs = 20 * 1000;

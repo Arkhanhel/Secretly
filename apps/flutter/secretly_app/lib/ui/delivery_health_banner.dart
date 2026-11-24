@@ -8,6 +8,7 @@ import 'delivery_reliability_screen.dart';
 import 'haptics.dart';
 import 'animations/page_transitions.dart';
 import 'wave1_l10n.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Полоса-предупреждение над списком чатов: система мешает доставке.
 ///
@@ -95,7 +96,7 @@ class _DeliveryHealthBannerState extends State<DeliveryHealthBanner>
             child: Row(
               children: [
                 Icon(
-                  Icons.notifications_off_rounded,
+                  AdaptiveIcons.notifications_off_rounded,
                   size: 20,
                   color: scheme.onErrorContainer,
                 ),
@@ -144,7 +145,7 @@ class _DeliveryHealthBannerState extends State<DeliveryHealthBanner>
                   ),
                 ),
                 Icon(
-                  Icons.chevron_right_rounded,
+                  AdaptiveIcons.chevron_right_rounded,
                   size: 20,
                   color: scheme.onErrorContainer.withValues(alpha: 0.7),
                 ),

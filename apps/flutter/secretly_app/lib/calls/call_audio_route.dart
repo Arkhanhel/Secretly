@@ -568,6 +568,10 @@ class CallAudioRouteController {
     required String routeId,
     required bool preferSpeakerByDefault,
     required String reason,
+    /// `false` — выбор сделало само приложение (громкая видеозвонка при
+    /// соединении), а не человек: подключённые позже наушники/Bluetooth
+    /// по-прежнему перехватывают звук (разбор 22.11.2026).
+    bool byUser = true,
   }) async {
     if (_disposed) {
       return;
@@ -580,7 +584,7 @@ class CallAudioRouteController {
       preferSpeakerByDefault: preferSpeakerByDefault,
       reason: reason,
       forceApplyCurrentRoute: true,
-      userSelectionActive: true,
+      userSelectionActive: byUser,
     );
   }
 

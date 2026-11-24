@@ -15,6 +15,8 @@ import '../app/app_controller.dart';
 import '../diagnostics/diag_log.dart';
 import 'app_asset_paths.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'qr_scan_screen.dart';
 import 'wave1_l10n.dart';
 import 'welcome/welcome_style.dart';
@@ -22,6 +24,10 @@ import 'widgets/frosted_top_bar.dart';
 import 'paywall_screen.dart';
 import '../billing/show_paywall.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_settings_row.dart';
+import 'apple_glass.dart' show AppleGlassPanel;
+import 'settings_group.dart' show SettingsPanel, SettingsRowTint, settingsRowsGroup;
 
 class DevicesAuthScreen extends StatefulWidget {
   const DevicesAuthScreen({super.key, required this.controller});
@@ -274,7 +280,7 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
     final successTextEn = 'Device session ended.';
     final useRu = _label(context, ru: 'ru', en: 'en') == 'ru';
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (dialogCtx) {
         return SecretlyAlertDialog(
@@ -629,7 +635,7 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
   }
 
   Future<void> _resetForNewUser() async {
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (context) => SecretlyAlertDialog(
         title: Text(_label(context, ru: 'Новый пользователь', en: 'New user')),
@@ -649,7 +655,7 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
             onPressed: () => Navigator.of(context).pop(false),
             child: Text(_label(context, ru: 'Отмена', en: 'Cancel')),
           ),
-          FilledButton(
+          PressFeedback(child: FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: Text(
               _label(
@@ -658,7 +664,7 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
                 en: _isDesktopOrWeb ? 'Continue' : 'Create',
               ),
             ),
-          ),
+          )),
         ],
       ),
     );
@@ -812,7 +818,9 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final topInset = MediaQuery.of(context).padding.top + kToolbarHeight + 12;
 
-    return Scaffold(
+    // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
       extendBodyBehindAppBar: true,
       appBar: frostedAppBar(
         title: Text(_label(context, ru: 'Устройства', en: 'Devices')),
@@ -833,17 +841,20 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
           );
         },
       ),
+    ),
     );
   }
 
   List<Widget> _buildMobileContent(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // 23.11.2026 (владелец: «плашки на странице „Устройства“ забыл»): те же
+    // панели, что во всех настройках (вид — по «Прозрачным плашкам»), и
+    // цветные квадратные значки строк вместо синих.
     return [
-      Card(
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+      SettingsPanel(
+        margin: EdgeInsets.zero,
+        padding: const EdgeInsets.all(16),
+        child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               SizedBox(
@@ -860,9 +871,9 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
               const SizedBox(height: 14),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton.icon(
+                child: PressFeedback(child: FilledButton.icon(
                   onPressed: _busy ? null : _scanDesktopQrOnPhone,
-                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  icon: const Icon(AdaptiveIcons.qr_code_scanner_rounded),
                   label: Text(
                     _label(
                       context,
@@ -870,16 +881,18 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
                       en: 'Connect device',
                     ),
                   ),
-                ),
+                )),
               ),
             ],
           ),
-        ),
       ),
       const SizedBox(height: 12),
-      Card(
-        child: ListTile(
-          leading: Icon(Icons.fingerprint, color: cs.primary),
+      settingsRowsGroup(margin: EdgeInsets.zero, [
+        ListTile(
+          leading: const AppleRowIcon(
+            tint: SettingsRowTint.green,
+            icon: AdaptiveIcons.fingerprint,
+          ),
           title: Text(
             _label(
               context,
@@ -895,7 +908,7 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
             ),
           ),
         ),
-      ),
+      ]),
       const SizedBox(height: 12),
       // PR-C (Bug 11): live list of devices registered to this profile on
       // the keys server. The «Это устройство» row marks the current handset;
@@ -1098,7 +1111,7 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
+                    child: PressFeedback(child: OutlinedButton.icon(
                       onPressed: _busy
                           ? null
                           : (req != null
@@ -1106,8 +1119,8 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
                                 : _resetForNewUser),
                       icon: Icon(
                         req != null
-                            ? Icons.close_rounded
-                            : Icons.person_add_alt_1_rounded,
+                            ? AdaptiveIcons.close_rounded
+                            : AdaptiveIcons.person_add_alt_1_rounded,
                       ),
                       label: Text(
                         req != null
@@ -1122,16 +1135,16 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
                                 en: 'New user',
                               ),
                       ),
-                    ),
+                    )),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: FilledButton.icon(
+                    child: PressFeedback(child: FilledButton.icon(
                       onPressed: _busy ? null : _generateDesktopQr,
                       icon: Icon(
                         req != null
-                            ? Icons.refresh_rounded
-                            : Icons.qr_code_2_rounded,
+                            ? AdaptiveIcons.refresh_rounded
+                            : AdaptiveIcons.qr_code_2_rounded,
                       ),
                       label: Text(
                         req != null
@@ -1146,7 +1159,7 @@ class _DevicesAuthScreenState extends State<DevicesAuthScreen> {
                                 en: 'Sign in via QR',
                               ),
                       ),
-                    ),
+                    )),
                   ),
                 ],
               ),
@@ -1256,7 +1269,7 @@ required String deviceLabel,
                       children: [
                         ExcludeSemantics(
                           child: Icon(
-                            Icons.laptop_rounded,
+                            AdaptiveIcons.laptop_rounded,
                             size: 40,
                             color: s.text.withValues(alpha: 0.6),
                           ),
@@ -1460,7 +1473,7 @@ class _MobileDevicesCard extends StatelessWidget {
     } else if (error != null && deviceIds.isEmpty) {
       body.add(
         ListTile(
-          leading: Icon(Icons.error_outline_rounded, color: cs.error),
+          leading: Icon(AdaptiveIcons.error_outline_rounded, color: cs.error),
           title: Text(labelErrorTitle),
           subtitle: Text(error!, maxLines: 3, overflow: TextOverflow.ellipsis),
           trailing: TextButton(
@@ -1473,7 +1486,7 @@ class _MobileDevicesCard extends StatelessWidget {
       body.add(
         ListTile(
           leading: Icon(
-            Icons.phonelink_off_rounded,
+            AdaptiveIcons.phonelink_off_rounded,
             color: cs.onSurfaceVariant,
           ),
           title: Text(labelEmpty),
@@ -1487,11 +1500,11 @@ class _MobileDevicesCard extends StatelessWidget {
         final isBusy = endingDeviceId == id;
         body.add(
           ListTile(
-            leading: Icon(
-              isThis
-                  ? Icons.smartphone_rounded
-                  : Icons.devices_other_rounded,
-              color: isThis ? accentColor : cs.onSurfaceVariant,
+            leading: AppleRowIcon(
+              tint: isThis ? SettingsRowTint.blue : SettingsRowTint.grey,
+              icon: isThis
+                  ? AdaptiveIcons.smartphone_rounded
+                  : AdaptiveIcons.devices_other_rounded,
             ),
             title: Text(
               isThis ? labelThisDevice : labelOtherDevice,
@@ -1531,8 +1544,8 @@ class _MobileDevicesCard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Card(
-          clipBehavior: Clip.antiAlias,
+        AppleGlassPanel(
+          padding: const EdgeInsets.only(bottom: 2),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1562,13 +1575,16 @@ class _MobileDevicesCard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        Card(
-          child: ListTile(
-            leading: Icon(Icons.refresh_rounded, color: cs.onSurfaceVariant),
+        settingsRowsGroup(margin: EdgeInsets.zero, [
+          ListTile(
+            leading: const AppleRowIcon(
+              tint: SettingsRowTint.grey,
+              icon: AdaptiveIcons.refresh_rounded,
+            ),
             title: Text(labelRefresh),
             onTap: loading ? null : () => unawaited(onRefresh()),
           ),
-        ),
+        ]),
       ],
     );
   }

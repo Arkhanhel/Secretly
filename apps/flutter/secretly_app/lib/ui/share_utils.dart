@@ -66,6 +66,11 @@ String buildInviteFriendShareText({
     }
   }
   final nameSuffix = name.isNotEmpty ? ' - $name' : '';
+  // 23.11.2026 (владелец): сразу под ID — ссылка на профиль: одно касание —
+  // и приложение открывает профиль с вопросом «Добавить в контакты?».
+  final profileLink = profileId.isEmpty
+      ? ''
+      : buildProfileShareLink(profileId: profileId);
 
   return wave1TextForLocale(
     tag,
@@ -75,48 +80,56 @@ String buildInviteFriendShareText({
       'Скачать: https://www.secretlyapp.com/download',
       'Добавь меня в контакты.',
       if (profileId.isNotEmpty) 'Мой ID в Secretly: $profileId',
+      if (profileLink.isNotEmpty) profileLink,
     ].join('\n'),
     en: <String>[
       'Let\'s chat on Secretly$nameSuffix',
       'A private messenger with E2EE encryption, secure chats, and protected calls.',
       'Download the app: https://www.secretlyapp.com/download',
       if (profileId.isNotEmpty) 'My Secretly ID: $profileId',
+      if (profileLink.isNotEmpty) profileLink,
     ].join('\n'),
     uk: <String>[
       'Привіт! Я користуюся Secretly$nameSuffix.',
       'Це приватний месенджер з E2EE, захищеними чатами і дзвінками.',
       'Завантажити: https://www.secretlyapp.com/download',
       if (profileId.isNotEmpty) 'Мій ID у Secretly: $profileId',
+      if (profileLink.isNotEmpty) profileLink,
     ].join('\n'),
     es: <String>[
       'Hablemos en Secretly$nameSuffix.',
       'Un mensajero privado con cifrado E2EE, chats seguros y llamadas protegidas.',
       'Descarga la app: https://www.secretlyapp.com/download',
       if (profileId.isNotEmpty) 'Mi ID de Secretly: $profileId',
+      if (profileLink.isNotEmpty) profileLink,
     ].join('\n'),
     pt: <String>[
       'Vamos conversar no Secretly$nameSuffix.',
       'Um mensageiro privado com cifragem E2EE, chats seguros e chamadas protegidas.',
       'Descarregar a app: https://www.secretlyapp.com/download',
       if (profileId.isNotEmpty) 'O meu ID Secretly: $profileId',
+      if (profileLink.isNotEmpty) profileLink,
     ].join('\n'),
     ptBr: <String>[
       'Vamos conversar no Secretly$nameSuffix.',
       'Um mensageiro privado com criptografia E2EE, conversas seguras e chamadas protegidas.',
       'Baixe o app: https://www.secretlyapp.com/download',
       if (profileId.isNotEmpty) 'Meu ID no Secretly: $profileId',
+      if (profileLink.isNotEmpty) profileLink,
     ].join('\n'),
     fr: <String>[
       'Discutons sur Secretly$nameSuffix.',
       'Une messagerie privee avec chiffrement E2EE, chats securises et appels proteges.',
       'Telecharger l app : https://www.secretlyapp.com/download',
       if (profileId.isNotEmpty) 'Mon ID Secretly : $profileId',
+      if (profileLink.isNotEmpty) profileLink,
     ].join('\n'),
     de: <String>[
       'Lass uns auf Secretly chatten$nameSuffix.',
       'Ein privater Messenger mit E2EE, sicheren Chats und geschutzten Anrufen.',
       'App herunterladen: https://www.secretlyapp.com/download',
       if (profileId.isNotEmpty) 'Meine Secretly-ID: $profileId',
+      if (profileLink.isNotEmpty) profileLink,
     ].join('\n'),
   );
 }

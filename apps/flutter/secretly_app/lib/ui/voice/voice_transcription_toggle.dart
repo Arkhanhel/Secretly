@@ -15,6 +15,7 @@ import '../chat_screen_l10n.dart';
 import '../paywall_screen.dart' show PaywallTrigger;
 import 'voice_transcription.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Telegram-style voice-to-text affordance.
 ///
@@ -154,16 +155,16 @@ class VoiceTranscriptionIconButton extends StatelessWidget {
         final String tooltip;
         if (tx.text != null) {
           icon = tx.expanded
-              ? Icons.expand_less_rounded
-              : Icons.subtitles_outlined;
+              ? AdaptiveIcons.expand_less_rounded
+              : AdaptiveIcons.subtitles_outlined;
           tooltip = tx.expanded
               ? chatText(context, ru: 'Скрыть текст', en: 'Hide text', uk: 'Сховати текст', es: 'Ocultar texto', pt: 'Ocultar texto', ptBr: 'Ocultar texto', fr: 'Masquer le texte', de: 'Text ausblenden')
               : chatText(context, ru: 'Показать текст', en: 'Show text', uk: 'Показати текст', es: 'Mostrar texto', pt: 'Mostrar texto', ptBr: 'Mostrar texto', fr: 'Afficher le texte', de: 'Text anzeigen');
         } else if (tx.state == VoiceTxState.failed) {
-          icon = Icons.error_outline_rounded;
+          icon = AdaptiveIcons.error_outline_rounded;
           tooltip = chatText(context, ru: 'Не удалось распознать', en: "Couldn't transcribe", uk: 'Не вдалося розпізнати', es: 'No se pudo transcribir', pt: 'Não foi possível transcrever', ptBr: 'Não foi possível transcrever', fr: 'Transcription impossible', de: 'Transkription fehlgeschlagen');
         } else {
-          icon = Icons.subtitles_outlined;
+          icon = AdaptiveIcons.subtitles_outlined;
           tooltip = chatText(context, ru: 'Показать текст', en: 'Show text', uk: 'Показати текст', es: 'Mostrar texto', pt: 'Mostrar texto', ptBr: 'Mostrar texto', fr: 'Afficher le texte', de: 'Text anzeigen');
         }
         return Semantics(
@@ -191,7 +192,7 @@ class VoiceTranscriptionIconButton extends StatelessWidget {
                         right: -3,
                         top: -3,
                         child: Icon(
-                          Icons.lock_rounded,
+                          AdaptiveIcons.lock_rounded,
                           size: 9,
                           color: kPremiumGold,
                         ),

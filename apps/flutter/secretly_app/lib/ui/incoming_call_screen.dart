@@ -4,6 +4,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'motion/motion.dart';
 import 'wave1_l10n.dart';
 
 import '../calls/call_manager.dart';
@@ -176,7 +177,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen>
                         end: Offset.zero,
                       ).animate(CurvedAnimation(
                         parent: _slideCtrl,
-                        curve: Curves.easeOutCubic,
+                        curve: Motion.standard,
                       )),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 40),

@@ -12,7 +12,10 @@ import 'package:flutter/services.dart';
 import '../app/app_controller.dart' show AppController;
 import '../l10n/app_localizations.dart';
 import '../messages/disappearing_flags.dart';
+import 'motion/app_dialogs.dart';
+import 'widgets/apple_menu.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Срок человеческим языком: «30 с», «5 мин», «8 ч», «30 дн», «1 нед».
 ///
@@ -87,7 +90,7 @@ Future<DisappearChoice?> showDisappearingTimerPicker(
   final show =
       dialogShower ??
       <T>({required BuildContext context, required WidgetBuilder builder}) =>
-          showDialog<T>(context: context, builder: builder);
+          showAppDialog<T>(context: context, builder: builder);
   final presets = AppController.disappearPresetSeconds;
   // Отрицательное — «своего значения нет» (тема наследует таймер комнаты).
   final isCustomCurrent =
@@ -106,7 +109,7 @@ Future<DisappearChoice?> showDisappearingTimerPicker(
         return ListTile(
           dense: true,
           title: Text(label, style: TextStyle(color: fg)),
-          trailing: selected ? Icon(Icons.check, color: accent) : null,
+          trailing: selected ? Icon(AdaptiveIcons.check, color: accent) : null,
           onTap: () => Navigator.of(ctx).pop(result),
         );
       }
@@ -287,7 +290,7 @@ class _CustomDurationDialogState extends State<_CustomDurationDialog> {
                 ),
               ),
               const SizedBox(width: 12),
-              DropdownButton<int>(
+              AppDropdownButton<int>(
                 value: _unit,
                 dropdownColor: widget.backgroundColor,
                 items: [

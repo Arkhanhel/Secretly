@@ -8554,4 +8554,1144 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get chatSwipeUnmute => 'Зі звуком';
+
+  @override
+  String get iconStyleClassic => 'Класика';
+
+  @override
+  String get iconStyleGlossy => 'Глянець';
+
+  @override
+  String get iconStyleClay => 'Об’єм';
+
+  @override
+  String get iconStyleFrost => 'Матове скло';
+
+  @override
+  String get iconStylePastel => 'Пастель';
+
+  @override
+  String get iconStyleNeon => 'Неон';
+
+  @override
+  String get iconStyleAurora => 'Аврора';
+
+  @override
+  String get iconStyleCircles => 'Кола';
+
+  @override
+  String get iconStyleStickers => 'Стікери';
+
+  @override
+  String get iconStyleMono => 'Моноліт';
+
+  @override
+  String get iconStyleGlass => 'Liquid Glass';
+
+  @override
+  String get settingsRowReliability => 'Надійність';
+
+  @override
+  String get settingsRowNeedsAttention => 'Потребує уваги';
+
+  @override
+  String get settingsRowPower => 'Енергоспоживання';
+
+  @override
+  String get settingsRowPowerSub => 'Менше нагрівання та витрати батареї';
+
+  @override
+  String get settingsRowSystemNotice => 'Є системне повідомлення';
+
+  @override
+  String get settingsRowInvite => 'Запросити друзів';
+
+  @override
+  String get settingsRowDonate => 'Підтримати Secretly';
+
+  @override
+  String get settingsRowSupport => 'Підтримка';
+
+  @override
+  String get settingsRowPolicy => 'Політика конфіденційності';
+
+  @override
+  String get settingsRowAbout => 'Про Secretly';
+
+  @override
+  String get settingsProfileCardSub => 'Secretly ID, QR-профіль';
+
+  @override
+  String get settingsProfileQr => 'QR-код профілю';
+
+  @override
+  String settingsSearchNoResults(String query) {
+    return 'За запитом «$query» нічого не знайдено';
+  }
+
+  @override
+  String get settingsPremiumTeaser => 'Більше лімітів, теми, рамки й багато іншого';
+
+  @override
+  String get appearanceTitle => 'Оформлення';
+
+  @override
+  String get appearanceResetTitle => 'Скинути оформлення?';
+
+  @override
+  String get appearanceResetBody => 'Режим, тема, тло, шпалери, бульбашки, розмір тексту, кольори та стиль значків повернуться до стандартних. Налаштування захисту та значок застосунку не зміняться.';
+
+  @override
+  String get appearanceTabTheme => 'Тема';
+
+  @override
+  String get appearanceTabThemeDesc => 'Режим і кольори інтерфейсу';
+
+  @override
+  String get appearanceTabWallpaper => 'Шпалери';
+
+  @override
+  String get appearanceTabWallpaperDesc => 'Тло всередині листування';
+
+  @override
+  String get appearanceTabBubbles => 'Бульбашки';
+
+  @override
+  String get appearanceTabIcons => 'Іконки';
+
+  @override
+  String get appearanceTabIconsDesc => 'Стиль значків у налаштуваннях';
+
+  @override
+  String get appearanceTabAppIcon => 'Значок';
+
+  @override
+  String get appearanceTabAppIconDesc => 'Значок на головному екрані';
+
+  @override
+  String get appearanceTabBehavior => 'Поведінка';
+
+  @override
+  String get appearanceTabBehaviorDesc => 'Захист і видимість';
+
+  @override
+  String get appearanceModeLight => 'Світла';
+
+  @override
+  String get appearanceModeDark => 'Темна';
+
+  @override
+  String get appearanceModeAuto => 'Авто';
+
+  @override
+  String get appearanceAllWallpapers => 'Ще';
+
+  @override
+  String get appearanceNickColors => 'Колір імен у відповідях';
+
+  @override
+  String get appearanceIndicatorColors => 'Колір галочок та індикаторів';
+
+  @override
+  String appearanceTabPosition(int current, int total) {
+    return 'Категорія $current з $total';
+  }
+
+  @override
+  String get appearancePrevTab => 'Попередня категорія';
+
+  @override
+  String get appearanceNextTab => 'Наступна категорія';
+
+  @override
+  String get appearanceModified => 'змінено';
+
+  @override
+  String get appearanceHideScreen => 'Приховувати вміст екрана';
+
+  @override
+  String get appearanceHideScreenAndroid => 'Знімок і запис екрана недоступні, у списку застосунків порожньо. Демонстрація екрана та частина засобів доступності перестануть працювати.';
+
+  @override
+  String get appearanceHideScreenIos => 'Вміст приховано у списку застосунків. Заборонити знімки екрана iOS застосункам не дозволяє.';
+
+  @override
+  String get appearanceHideScreenRefused => 'Система не прийняла налаштування — вміст екрана не приховано.';
+
+  @override
+  String get appearanceAppIconAndroidNote => 'Значок зміниться, коли оновиться головний екран, — це може зайняти кілька секунд.';
+
+  @override
+  String get desktopAppearanceIconStyle => 'Стиль значків';
+
+  @override
+  String get desktopAppearanceIconStyleHint => 'Значки розділів налаштувань. Кожен пристрій пам’ятає свій вибір.';
+
+  @override
+  String get appearanceTabText => 'Текст';
+
+  @override
+  String get appearanceTabTextDesc => 'Розмір, імена, галочки';
+
+  @override
+  String get appearanceTabBackground => 'Тло';
+
+  @override
+  String get appearanceTabBackgroundDesc => 'М’які розмиті тла для темної та світлої теми';
+
+  @override
+  String get appearanceTabBubblesShapeDesc => 'Колір і форма повідомлень';
+
+  @override
+  String get appearanceTextSize => 'Розмір тексту';
+
+  @override
+  String get appearanceBubbleRadius => 'Заокруглення кутів';
+
+  @override
+  String get appBackdropTheme => 'За темою';
+
+  @override
+  String get appBackdropDusk => 'Сутінки';
+
+  @override
+  String get appBackdropOcean => 'Океан';
+
+  @override
+  String get appBackdropSunset => 'Захід';
+
+  @override
+  String get appBackdropMint => 'М’ята';
+
+  @override
+  String get appBackdropLavender => 'Лаванда';
+
+  @override
+  String get appBackdropPeach => 'Персик';
+
+  @override
+  String get appBackdropAurora => 'Аврора';
+
+  @override
+  String get appBackdropBerry => 'Ягоди';
+
+  @override
+  String get appBackdropAmber => 'Бурштин';
+
+  @override
+  String mvCounter(int current, int total) {
+    return '$current з $total';
+  }
+
+  @override
+  String get mvReply => 'Відповісти';
+
+  @override
+  String get mvForward => 'Переслати';
+
+  @override
+  String get mvEdit => 'Змінити';
+
+  @override
+  String get mvShare => 'Поділитися';
+
+  @override
+  String get mvDelete => 'Видалити';
+
+  @override
+  String get mvMenu => 'Ще';
+
+  @override
+  String get mvSaveToGallery => 'Зберегти в галерею';
+
+  @override
+  String get mvSaveAsFile => 'Зберегти як файл';
+
+  @override
+  String get mvShowInChat => 'Показати в чаті';
+
+  @override
+  String get mvAllMedia => 'Усі медіа';
+
+  @override
+  String mvAllMediaCount(int count) {
+    return 'Усі медіа · $count';
+  }
+
+  @override
+  String get mvCopy => 'Копіювати';
+
+  @override
+  String get mvCopied => 'Скопійовано';
+
+  @override
+  String get mvShowFullCaption => 'Показати повністю';
+
+  @override
+  String get mvDeletePhotoTitle => 'Видалити фото?';
+
+  @override
+  String get mvDeleteVideoTitle => 'Видалити відео?';
+
+  @override
+  String get mvDeleteOwnHint => 'Можна видалити лише в себе або одразу в обох.';
+
+  @override
+  String get mvDeleteOwnGroupHint => 'Можна видалити лише в себе або одразу в усіх.';
+
+  @override
+  String get mvDeleteTheirsHint => 'Чужі фото й відео видаляються лише у вас.';
+
+  @override
+  String get mvDeleteLocalHint => 'Видалиться лише на цьому пристрої.';
+
+  @override
+  String mvDeleteForBoth(String name) {
+    return 'Видалити в мене і в співрозмовника';
+  }
+
+  @override
+  String get mvDeleteForEveryone => 'Видалити в усіх';
+
+  @override
+  String get mvDeleteForMeOnly => 'Видалити лише в мене';
+
+  @override
+  String get mvDeleteForMe => 'Видалити в мене';
+
+  @override
+  String get mvPhotoDeleted => 'Фото видалено';
+
+  @override
+  String get mvVideoDeleted => 'Відео видалено';
+
+  @override
+  String get mvSavedToGallery => 'Збережено в галерею';
+
+  @override
+  String get mvChangesSaved => 'Зміни збережено';
+
+  @override
+  String get mvYou => 'Ви';
+
+  @override
+  String get mvPlay => 'Відтворити';
+
+  @override
+  String get mvPause => 'Пауза';
+
+  @override
+  String get mvReplay => 'Дивитися знову';
+
+  @override
+  String get mvMute => 'Вимкнути звук';
+
+  @override
+  String get mvUnmute => 'Увімкнути звук';
+
+  @override
+  String get mvSpeed => 'Швидкість';
+
+  @override
+  String get mvSeekBack => '−5 с';
+
+  @override
+  String get mvSeekForward => '+5 с';
+
+  @override
+  String get meDone => 'Готово';
+
+  @override
+  String get meTabCrop => 'Кадр';
+
+  @override
+  String get meTabDraw => 'Малюнок';
+
+  @override
+  String get meTabAdjust => 'Корекція';
+
+  @override
+  String get meAspectFree => 'Вільно';
+
+  @override
+  String get meAspectOriginal => 'Оригінал';
+
+  @override
+  String get meReset => 'Скинути';
+
+  @override
+  String get meRotate => 'Повернути';
+
+  @override
+  String get meFlip => 'Віддзеркалити';
+
+  @override
+  String get meStraighten => 'Вирівняти';
+
+  @override
+  String get meToolPen => 'Ручка';
+
+  @override
+  String get meToolMarker => 'Маркер';
+
+  @override
+  String get meToolNeon => 'Неон';
+
+  @override
+  String get meToolEraser => 'Гумка';
+
+  @override
+  String get meToolText => 'Текст';
+
+  @override
+  String get meBrushSize => 'Товщина';
+
+  @override
+  String get meHintDraw => 'Малюйте пальцем просто по фото';
+
+  @override
+  String get meHintText => 'Торкніться фото, щоб додати текст';
+
+  @override
+  String get meHintEraser => 'Проведіть по лінії, щоб стерти її';
+
+  @override
+  String get meTextPlaceholder => 'Введіть текст';
+
+  @override
+  String get meTextBackground => 'Підкладка';
+
+  @override
+  String get meTextHelp => 'Текст можна перетягнути по фото. Дотик до нього — редагування.';
+
+  @override
+  String get meBrightness => 'Яскравість';
+
+  @override
+  String get meContrast => 'Контраст';
+
+  @override
+  String get meSaturation => 'Насиченість';
+
+  @override
+  String get meWarmth => 'Тепло';
+
+  @override
+  String get meVignette => 'Віньєтка';
+
+  @override
+  String get meCompare => 'Порівняти';
+
+  @override
+  String get meUndo => 'Скасувати';
+
+  @override
+  String get meRedo => 'Повторити';
+
+  @override
+  String get meDiscardTitle => 'Скасувати зміни?';
+
+  @override
+  String get meDiscardBody => 'Зміни цього фото не збережуться.';
+
+  @override
+  String get meDiscardAction => 'Скасувати зміни';
+
+  @override
+  String mvDateToday(String time) {
+    return 'сьогодні, $time';
+  }
+
+  @override
+  String mvDateYesterday(String time) {
+    return 'учора, $time';
+  }
+
+  @override
+  String get vnZoom => 'Наближення';
+
+  @override
+  String vnNoteTitle(String name) {
+    return '$name · відеонотатка';
+  }
+
+  @override
+  String get vnScrubHint => 'Тягніть убік, щоб перемотати';
+
+  @override
+  String get composerEmoji => 'Емодзі, стікери та GIF';
+
+  @override
+  String get emojiPanelKeyboard => 'Клавіатура';
+
+  @override
+  String get emojiPanelExpand => 'Розгорнути панель';
+
+  @override
+  String get emojiPanelSearchHint => 'Пошук емодзі: сміх, кіт, кава';
+
+  @override
+  String get emojiPanelResults => 'Результати';
+
+  @override
+  String get emojiPanelNothingFound => 'Нічого не знайшлося. Спробуйте «сміх», «кіт» або «кава».';
+
+  @override
+  String get emojiPanelFavoritesEmpty => 'Утримуйте стікер і додайте його в обране';
+
+  @override
+  String get emojiPanelPreviewHint => 'Ведіть по стікерах, відпустіть — з’явиться меню';
+
+  @override
+  String get emojiPanelGifTrending => 'У тренді';
+
+  @override
+  String get emojiPanelGifNotFound => 'GIF не знайдено';
+
+  @override
+  String get emojiPanelGifLaugh => 'Сміх';
+
+  @override
+  String get emojiPanelGifLove => 'Кохання';
+
+  @override
+  String get emojiPanelGifApproval => 'Схвалення';
+
+  @override
+  String get emojiPanelGifHello => 'Привіт';
+
+  @override
+  String get emojiPanelGifHug => 'Обійми';
+
+  @override
+  String get emojiPanelGifCrying => 'Сльози';
+
+  @override
+  String get emojiPanelGifExcited => 'Захват';
+
+  @override
+  String get emojiPanelGifThinking => 'Роздуми';
+
+  @override
+  String get emojiPanelGifSleepy => 'Сон';
+
+  @override
+  String get emojiPanelGifAngry => 'Злість';
+
+  @override
+  String get emojiPanelGifShocked => 'Шок';
+
+  @override
+  String get emojiPanelGifDance => 'Танці';
+
+  @override
+  String get emojiPanelGifParty => 'Свято';
+
+  @override
+  String get emojiPanelGifCats => 'Коти';
+
+  @override
+  String get emojiPanelGifDogs => 'Собаки';
+
+  @override
+  String get emojiPanelGifFire => 'Вогонь';
+
+  @override
+  String get emojiPanelGifFood => 'Їжа';
+
+  @override
+  String get emojiPanelGifSport => 'Спорт';
+
+  @override
+  String emojiPanelStickerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count стікера',
+      many: '$count стікерів',
+      few: '$count стікери',
+      one: '$count стікер',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chatListTimeNow => 'зараз';
+
+  @override
+  String chatListTimeMinutes(int count) {
+    return '$count хв';
+  }
+
+  @override
+  String get chatListCallInProgress => 'Триває дзвінок';
+
+  @override
+  String get chatListCallRinging => 'Дзвінок…';
+
+  @override
+  String get eliteBadgeTeamTitle => 'Команда Secretly';
+
+  @override
+  String get eliteBadgeTeamBody => 'Ця галочка підтверджує, що користувач входить до складу розробників Secretly.';
+
+  @override
+  String get eliteBadgeStatusLabel => 'Статус';
+
+  @override
+  String get eliteBadgeRoleFounder => 'Засновник';
+
+  @override
+  String get eliteBadgeRoleTester => 'Тестувальник';
+
+  @override
+  String get mvEditedTitle => 'Відредаговане фото';
+
+  @override
+  String get mvEditedHint => 'Оригінал не зміниться — надішлеться копія з правками.';
+
+  @override
+  String get mvEditedSend => 'Надіслати копію';
+
+  @override
+  String get mvEditedDiscard => 'Скасувати правки';
+
+  @override
+  String get mvEditedSent => 'Відредаговане фото надіслано';
+
+  @override
+  String get chatTranslateMenuItem => 'Переклад';
+
+  @override
+  String get chatTranslateSheetTitle => 'Переклад у цьому чаті';
+
+  @override
+  String get chatTranslateModeLabel => 'Режим';
+
+  @override
+  String get chatTranslateModeInherit => 'Як у налаштуваннях';
+
+  @override
+  String get chatTranslateModeOff => 'Вимкнено';
+
+  @override
+  String get chatTranslateModeButton => 'Кнопка «Перекласти»';
+
+  @override
+  String get chatTranslateModeAuto => 'Перекладати автоматично';
+
+  @override
+  String get chatTranslateFrom => 'Перекладати з мови';
+
+  @override
+  String get chatTranslateTo => 'Перекладати на мову';
+
+  @override
+  String get chatTranslateAutoDetect => 'Визначати автоматично';
+
+  @override
+  String get chatTranslateAppLanguage => 'Мова застосунку';
+
+  @override
+  String get chatTranslateReset => 'Скинути до налаштувань';
+
+  @override
+  String get chatTranslateSameLanguagePair => 'Мови «з» і «на» збігаються';
+
+  @override
+  String get chatTranslateAllLanguages => 'Усі мови';
+
+  @override
+  String get chatTranslatePrivacyNote => 'Переклад виконується на телефоні — текст нікуди не надсилається. Мовний пакет завантажується один раз.';
+
+  @override
+  String get pinnedMessageUnavailable => 'Повідомлення недоступне на цьому пристрої';
+
+  @override
+  String get reactionAllEmoji => 'Усі емодзі';
+
+  @override
+  String get composerRecordVoice => 'Голосове повідомлення';
+
+  @override
+  String get composerRecordVideo => 'Відеоповідомлення';
+
+  @override
+  String get composerRecordHint => 'Утримуйте для запису, дотик — перемкнути';
+
+  @override
+  String get videoNoteHintTooShort => 'Занадто коротко — утримуйте довше';
+
+  @override
+  String get videoNoteHintLimitReached => 'Досягнуто ліміту — 1 хвилина';
+
+  @override
+  String get videoNoteHintRetake => 'Утримуйте кнопку, щоб зняти знову';
+
+  @override
+  String get videoNoteHintNoPermission => 'Для відео потрібні камера та мікрофон';
+
+  @override
+  String get videoNoteHintCameraFailed => 'Камера недоступна — спробуйте ще раз';
+
+  @override
+  String get videoNoteRecSlideToCancel => 'Вліво — скасувати';
+
+  @override
+  String get videoNoteRecReleaseToDelete => 'Відпустіть — видалити';
+
+  @override
+  String get videoNoteRecPause => 'Пауза';
+
+  @override
+  String get videoNoteRecResume => 'Продовжити';
+
+  @override
+  String get videoNoteRecStop => 'Зупинити й переглянути';
+
+  @override
+  String get videoNoteRecDelete => 'Видалити';
+
+  @override
+  String get videoNoteRecRetake => 'Перезняти';
+
+  @override
+  String get videoNoteRecLooped => 'по колу';
+
+  @override
+  String get videoNoteRecFlip => 'Змінити камеру';
+
+  @override
+  String get videoNoteRecLight => 'Підсвітка';
+
+  @override
+  String get videoNoteRecPlay => 'Дивитися';
+
+  @override
+  String get videoNoteRecTrimStart => 'Початок ролика';
+
+  @override
+  String get videoNoteRecTrimEnd => 'Кінець ролика';
+
+  @override
+  String get videoNoteRecCameraUnavailable => 'Камера недоступна';
+
+  @override
+  String get voiceHintHoldToRecord => 'Утримуйте, щоб записати голосове';
+
+  @override
+  String get voiceHintTooShort => 'Занадто коротко — утримуйте довше';
+
+  @override
+  String get voiceHintNoPermission => 'Немає доступу до мікрофона';
+
+  @override
+  String get voiceHintFailed => 'Не вдалося записати голосове';
+
+  @override
+  String get voiceRecSlideToCancel => 'Вліво — скасувати';
+
+  @override
+  String get voiceRecReleaseToDelete => 'Відпустіть — видалити';
+
+  @override
+  String get voiceRecDeleted => 'Запис видалено';
+
+  @override
+  String get voiceRecStop => 'Зупинити й прослухати';
+
+  @override
+  String get voiceRecPlay => 'Прослухати';
+
+  @override
+  String get voiceRecPause => 'Пауза';
+
+  @override
+  String get emojiCategorySmileys => 'Смайли та емоції';
+
+  @override
+  String get emojiCategoryPeople => 'Люди та жести';
+
+  @override
+  String get emojiCategoryAnimals => 'Тварини та природа';
+
+  @override
+  String get emojiCategoryFood => 'Їжа та напої';
+
+  @override
+  String get emojiCategoryTravel => 'Подорожі та місця';
+
+  @override
+  String get emojiCategoryActivities => 'Активності';
+
+  @override
+  String get emojiCategoryObjects => 'Об’єкти';
+
+  @override
+  String get emojiCategorySymbols => 'Символи';
+
+  @override
+  String get emojiCategoryFlags => 'Прапори';
+
+  @override
+  String get voicePlaybackSpeed => 'Швидкість відтворення';
+
+  @override
+  String get mvVideoOpenFailed => 'Не вдалося відкрити відео';
+
+  @override
+  String get mvRetry => 'Повторити';
+
+  @override
+  String get mvVideoBuffering => 'Відео завантажується…';
+
+  @override
+  String get appIconChangeFailed => 'Не вдалося змінити значок застосунку. Спробуйте ще раз.';
+
+  @override
+  String get chatUnreadMessagesDivider => 'Непрочитані повідомлення';
+
+  @override
+  String get premiumHubTitle => 'Premium';
+
+  @override
+  String get premiumHubRestore => 'Відновити';
+
+  @override
+  String get premiumHubChipFree => 'Безкоштовний тариф';
+
+  @override
+  String get premiumHubChipActive => 'Premium активний';
+
+  @override
+  String get premiumHubHeroFree => 'Secretly Premium';
+
+  @override
+  String get premiumHubHeroPremium => 'Вітаємо!';
+
+  @override
+  String get premiumHubSubFree => 'Рамки, живі шпалери, розшифрування голосових і великі ліміти. Ось що відкриє підписка.';
+
+  @override
+  String get premiumHubSubPremium => 'Усі функції нижче вже відкриті. Дякуємо, що підтримуєте Secretly.';
+
+  @override
+  String get premiumHubSeenAs => 'Так вас бачать у чатах';
+
+  @override
+  String get premiumHubPlan => 'Тариф';
+
+  @override
+  String get premiumHubPlanPremium => 'Premium';
+
+  @override
+  String get premiumHubPlanLifetime => 'Premium · Назавжди';
+
+  @override
+  String get premiumHubPlanTeam => 'Premium · Команда';
+
+  @override
+  String get premiumHubPlanLegacy => 'Premium · Рання підтримка';
+
+  @override
+  String get premiumHubRenews => 'Наступне продовження';
+
+  @override
+  String get premiumHubPayment => 'Оплата';
+
+  @override
+  String get premiumHubOneTime => 'разовий платіж';
+
+  @override
+  String get premiumHubManage => 'Керувати підпискою';
+
+  @override
+  String get premiumHubFramesCovers => 'РАМКИ ТА ОБКЛАДИНКИ';
+
+  @override
+  String get premiumHubAll => 'Усі';
+
+  @override
+  String get premiumHubFramesNote => 'Частина рамок і обкладинок безкоштовна. Решту відкриє Premium.';
+
+  @override
+  String get premiumHubGroupProfile => 'ПРОФІЛЬ';
+
+  @override
+  String get premiumHubGroupChats => 'ЧАТИ Й ОФОРМЛЕННЯ';
+
+  @override
+  String get premiumHubGroupFeatures => 'МОЖЛИВОСТІ';
+
+  @override
+  String get premiumHubStatusName => 'Емодзі-статус';
+
+  @override
+  String get premiumHubStatusDesc => 'Емодзі поруч з іменем у чатах і профілі';
+
+  @override
+  String get premiumHubBadgeName => 'Значок Premium';
+
+  @override
+  String get premiumHubBadgeDesc => 'Знак Premium поруч із вашим іменем';
+
+  @override
+  String get premiumHubVideoName => 'Відеоаватар';
+
+  @override
+  String get premiumHubVideoDesc => 'Коротке відео замість фото';
+
+  @override
+  String get premiumHubCoverName => 'Своя обкладинка';
+
+  @override
+  String get premiumHubCoverDesc => 'Фото або відео на обкладинці профілю';
+
+  @override
+  String get premiumHubWallpaperName => 'Живі шпалери';
+
+  @override
+  String get premiumHubWallpaperDesc => 'Анімовані шпалери й преміум-теми';
+
+  @override
+  String get premiumHubStickersName => 'Преміум-стікери';
+
+  @override
+  String get premiumHubStickersDesc => 'Преміум-набори стікерів';
+
+  @override
+  String get premiumHubAppIconName => 'Іконка застосунку';
+
+  @override
+  String get premiumHubAppIconDesc => 'Преміум-іконки на головному екрані';
+
+  @override
+  String get premiumHubRingtonesName => 'Рингтони';
+
+  @override
+  String get premiumHubRingtonesDesc => 'Власні звуки виклику й повідомлень';
+
+  @override
+  String get premiumHubVoiceName => 'ШІ: голос у текст';
+
+  @override
+  String get premiumHubVoiceDesc => 'Розшифрування голосових прямо на пристрої';
+
+  @override
+  String get premiumHubVoiceSample => 'Буду о 7';
+
+  @override
+  String get premiumHubDevicesName => 'Кілька пристроїв';
+
+  @override
+  String get premiumHubDevicesDesc => 'Secretly на комп’ютері та інших пристроях';
+
+  @override
+  String premiumHubFilesName(String size) {
+    return 'Файли до $size';
+  }
+
+  @override
+  String premiumHubFilesDesc(String size) {
+    return 'Замість $size на безкоштовному тарифі';
+  }
+
+  @override
+  String premiumHubCallsName(int count) {
+    return 'Дзвінки до $count учасників';
+  }
+
+  @override
+  String premiumHubCallsDesc(int count) {
+    return 'Замість $count на безкоштовному тарифі';
+  }
+
+  @override
+  String get premiumHubGroupsName => 'Більше власних груп і кімнат';
+
+  @override
+  String premiumHubGroupsDesc(int premium, int free) {
+    return 'До $premium замість $free, участь без ліміту';
+  }
+
+  @override
+  String get premiumHubLimits => 'ЛІМІТИ: FREE І PREMIUM';
+
+  @override
+  String get premiumHubColFree => 'Free';
+
+  @override
+  String get premiumHubColPremium => 'Premium';
+
+  @override
+  String get premiumHubLimitFiles => 'Файли';
+
+  @override
+  String get premiumHubLimitCalls => 'Учасники дзвінка';
+
+  @override
+  String get premiumHubLimitOwnGroups => 'Власні групи й кімнати';
+
+  @override
+  String get premiumHubLimitJoinedGroups => 'Групи, де ви учасник';
+
+  @override
+  String get premiumHubLimitDevices => 'Пристрої';
+
+  @override
+  String get premiumHubLimitCosmetics => 'Рамки та обкладинки';
+
+  @override
+  String get premiumHubUnlimited => 'без ліміту';
+
+  @override
+  String get premiumHubSeveral => 'кілька';
+
+  @override
+  String get premiumHubSome => 'частина';
+
+  @override
+  String get premiumHubAllValue => 'усі';
+
+  @override
+  String get premiumHubSoon => 'НЕЗАБАРОМ У PREMIUM';
+
+  @override
+  String get premiumHubSoonChip => 'Незабаром';
+
+  @override
+  String get premiumHubSoonSpaces => 'Spaces — канали та спільноти';
+
+  @override
+  String get premiumHubSoonStickers => 'Власні стікерпаки й створення стікерів';
+
+  @override
+  String get premiumHubSoonStories => 'Історії, що зникають';
+
+  @override
+  String get premiumHubSoonWatch => 'Спільний перегляд відео у дзвінках';
+
+  @override
+  String get premiumHubSoonHd => 'HD-відеодзвінки й шумозаглушення';
+
+  @override
+  String get premiumHubGet => 'Отримати Premium';
+
+  @override
+  String premiumHubSizeMb(int n) {
+    return '$n МБ';
+  }
+
+  @override
+  String premiumHubSizeGb(int n) {
+    return '$n ГБ';
+  }
+
+  @override
+  String get premiumHubLogoHint => 'Знак Secretly зі світлячків. Нахиляйте пальцем.';
+
+  @override
+  String get translucentCardsTitle => 'Прозорі плашки';
+
+  @override
+  String get translucentCardsSubtitle => 'Плашки налаштувань, профілів і вікон злегка просвічують тло. Вимкніть — стануть щільними.';
+
+  @override
+  String get teamCoversTitle => 'Команда Secretly';
+
+  @override
+  String get teamCoversSubtitle => 'Закриті обкладинки. Їх немає в каталозі: вибрати можна лише зі знаком команди, а бачать їх усі — у вашому профілі.';
+
+  @override
+  String get settingsStyleSection => 'Стиль';
+
+  @override
+  String get whatsNewTitle => 'Зустрічайте Secretly 1.9';
+
+  @override
+  String get whatsNewSubtitle => 'Швидше, тихіше й ще професійніше.';
+
+  @override
+  String get whatsNewOpen => 'Що нового';
+
+  @override
+  String get whatsNewLater => 'Пізніше';
+
+  @override
+  String get whatsNewHeader => 'Що нового в 1.9';
+
+  @override
+  String get whatsNewNext => 'Далі';
+
+  @override
+  String get whatsNewStart => 'Почати';
+
+  @override
+  String get whatsNewClose => 'Закрити';
+
+  @override
+  String get whatsNewCard1Title => 'Миттєво зі сповіщення';
+
+  @override
+  String get whatsNewCard1Body => 'Натиснули на сповіщення — чат відкрито на першому непрочитаному.';
+
+  @override
+  String get whatsNewCard2Title => 'Новий вигляд';
+
+  @override
+  String get whatsNewCard2Body => 'Острівці, панелі й смуга папок — спокійніше й чистіше.';
+
+  @override
+  String get whatsNewCard3Title => 'Ваш стиль';
+
+  @override
+  String get whatsNewCard3Body => 'Тема, фон, бульбашки й значок — у розділі «Стиль».';
+
+  @override
+  String get whatsNewCard4Title => 'Профіль, що живе';
+
+  @override
+  String get whatsNewCard4Body => 'Живі обкладинки й рамки, перехід у профіль одним рухом.';
+
+  @override
+  String get whatsNewCard5Title => 'Повідомлення';
+
+  @override
+  String get whatsNewCard5Body => 'Нове поле вводу, емодзі, голосові, кружечки й редактор фото.';
+
+  @override
+  String get whatsNewCard6Title => 'Емоції';
+
+  @override
+  String get whatsNewCard6Body => 'Реакції з польотом і 63 емодзі з ефектом на весь екран.';
+
+  @override
+  String get whatsNewDemoSender => 'Аліса';
+
+  @override
+  String get whatsNewDemoMessage => 'Подивишся ввечері?';
+
+  @override
+  String get whatsNewDemoNow => 'зараз';
+
+  @override
+  String get whatsNewSettingsRow => 'Що нового в 1.9';
+
+  @override
+  String get penHintSearch => 'Пошук за ніком і контактами';
+
+  @override
+  String get penHintStyle => 'Тема, фон, бульбашки, значок';
+
+  @override
+  String get penHintPanels => 'Прозоро чи щільно';
+
+  @override
+  String get penHintCovers => 'Живі обкладинки';
+
+  @override
+  String get penHintEmoji => 'Емодзі, стікери, GIF';
+
+  @override
+  String get penHintReactions => 'Реакції — довгим натисканням';
 }

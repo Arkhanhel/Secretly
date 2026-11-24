@@ -34,7 +34,9 @@ import '../wave1_l10n.dart';
 import 'cosmetic_animation_scope.dart';
 import 'cosmetic_motion_gate.dart';
 import 'decoration_clock.dart';
+import '../motion/decoration_pacer.dart';
 import 'profile_fx.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 // 🔴 Наружу отдаём только то, чем пользуется приложение, и БЕЗ `AvatarFrame`:
 // так называется и перечисление набора, и наш класс записи каталога. Две
@@ -88,8 +90,10 @@ const List<String> kClassicFrameIds = <String>[
 
 /// Эксклюзивная коллекция рамок (13.11.2026, `profile_fx/frames/collection.dart`).
 /// Старые сборки этих id не знают и рисуют портрет без рамки — не ломаются.
+/// 'flow' («Поток») убрана 23.11.2026 по решению владельца: у кого выбрана,
+/// портрет рисуется без рамки, как у неизвестного id.
 const List<String> kCollectionFrameIds = <String>[
-  'dragon', 'ferro', 'jelly', 'beads', 'liquid', 'gears', 'flow', 'flock', 'pwave', 'spiro',
+  'dragon', 'ferro', 'jelly', 'beads', 'liquid', 'gears', 'flock', 'pwave', 'spiro',
 ];
 
 List<String> get kLiveFrameIds => <String>[
@@ -430,7 +434,7 @@ class LiveFrameView extends StatefulWidget {
 }
 
 class _LiveFrameViewState extends State<LiveFrameView>
-    with SingleTickerProviderStateMixin {
+    with PacedTickerProviderStateMixin {
   // Не `late final`: тикер, созданный лениво, был бы построен уже внутри
   // dispose(), а createTicker смотрит TickerMode на умершем элементе.
   Ticker? _ticker;
@@ -640,6 +644,20 @@ class LiveFramePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Светлая тема (24.11.2026): «дневной тон» набора + слой насыщенности,
+    // см. `profile_fx/util.dart`. Фотографию рисует вызывающая сторона — в слой
+    // она не попадает.
+    final day = kFxDayTone && !palette.dark;
+    if (!day) {
+      _paintLive(canvas, size);
+      return;
+    }
+    canvas.saveLayer((Offset.zero & size).inflate(size.width), fxDayLayerPaint);
+    paintFxDay(true, () => _paintLive(canvas, size));
+    canvas.restore();
+  }
+
+  void _paintLive(Canvas canvas, Size size) {
     final k = (size.width * avatarFraction / 2) / sim.av;
     canvas.save();
     if (ringOnly) {
@@ -752,7 +770,7 @@ class LiveFrameWakeButton extends StatelessWidget {
                   // 🔴 Значок НЕ меняется на «паузу», когда выходка идёт.
                   // Пауза обещала бы, что нажатие её остановит, а она
                   // заканчивается сама — обещание было бы ложным.
-                  Icon(Icons.bolt_rounded, size: 14, color: ink),
+                  Icon(AdaptiveIcons.bolt_rounded, size: 14, color: ink),
                   const SizedBox(width: 4),
                   Text(
                     label,

@@ -35,6 +35,7 @@
 // populate, so an emoji downloaded once by chat animates here for free (and
 // vice-versa).
 
+import '../motion/decoration_pacer.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -125,9 +126,40 @@ class NotoStatusEmoji extends StatefulWidget {
   State<NotoStatusEmoji> createState() => _NotoStatusEmojiState();
 }
 
-class _NotoStatusEmojiState extends State<NotoStatusEmoji> {
+class _NotoStatusEmojiState extends State<NotoStatusEmoji>
+    // 23.11.2026: свой контроллер на размеренном тикере. Внутренний
+    // контроллер Lottie просил кадр на каждое обновление экрана (120 Гц), и
+    // `FrameRate(30)` этого не меняет — он лишь округляет картинку.
+    with PacedTickerProviderStateMixin {
   File? _lottie;
   int _loadGeneration = 0;
+  late final AnimationController _ctrl = AnimationController(vsync: this);
+  bool _loaded = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  /// Настройка «анимировать украшения собеседников» и сам виджет.
+  bool get _animate => widget.animate && CosmeticAnimationScope.of(context);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncLoop(_animate);
+  }
+
+  void _syncLoop(bool animate) {
+    if (!_loaded) return;
+    if (animate) {
+      if (!_ctrl.isAnimating) _ctrl.repeat();
+    } else if (_ctrl.isAnimating) {
+      _ctrl.stop();
+      _ctrl.value = 0;
+    }
+  }
 
   @override
   void initState() {
@@ -140,8 +172,13 @@ class _NotoStatusEmojiState extends State<NotoStatusEmoji> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.emoji != widget.emoji) {
       setState(() => _lottie = null);
+      _loaded = false;
+      _ctrl
+        ..stop()
+        ..value = 0;
       _resolve(widget.emoji);
     }
+    if (oldWidget.animate != widget.animate) _syncLoop(_animate);
   }
 
   void _resolve(String emoji) {
@@ -170,7 +207,7 @@ class _NotoStatusEmojiState extends State<NotoStatusEmoji> {
     // Owner setting: inside a disabled CosmeticAnimationScope (chat/room lists
     // + in-chat when "animate peers' cosmetics" is off) render the first frame
     // only — zero per-frame load. Profile pages have no scope → always animate.
-    final animate = widget.animate && CosmeticAnimationScope.of(context);
+    final animate = _animate;
     if (lottie != null) {
       // Explicit `animate` + `repeat` so the auto-animation loops deterministically
       // (relying on Lottie's `animate: null` auto-detect can resolve to false on
@@ -185,8 +222,12 @@ class _NotoStatusEmojiState extends State<NotoStatusEmoji> {
             lottie,
             width: size,
             height: size,
-            repeat: animate,
-            animate: animate,
+            controller: _ctrl,
+            onLoaded: (composition) {
+              _ctrl.duration = composition.duration;
+              _loaded = true;
+              _syncLoop(animate);
+            },
             fit: BoxFit.contain,
             // A screenful of premium status emoji otherwise CPU-rasterises N
             // looping Lotties on every display frame — the "many animated
@@ -198,7 +239,14 @@ class _NotoStatusEmojiState extends State<NotoStatusEmoji> {
             // distinct frames + tick work. Visually identical for these small,
             // slow loops. Applies on iOS and Android alike.
             frameRate: const FrameRate(30),
-            renderCache: RenderCache.raster,
+            // 🔴 23.11.2026: НЕ RenderCache.raster. Тот держит кадры
+            // картинками видеокарты (toImageSync) в общем кеше на 50 МБ и сам
+            // их уничтожает, когда строка списка уходит или меняет размер, —
+            // на iPhone (Impeller) такие кадры рисовались розово-фиолетовыми
+            // квадратами и «моргали» при каждом круге анимации. Кеш команд
+            // рисования (Picture) не держит текстур — того же выигрыша по
+            // процессору хватает для маленьких статусов.
+            renderCache: RenderCache.drawingCommands,
             errorBuilder: (_, __, ___) => _glyph(size),
           ),
         ),

@@ -91,6 +91,9 @@ class BackgroundInboundProcessor {
     ///
     /// `null` — не подтверждать вовсе (прежнее поведение).
     Future<bool> Function({required int seq, required String msgId})? ack,
+    /// Спрашивается перед каждым сообщением: `true` — немедленно прекратить
+    /// проход и отдать базу (приложение открыли, время прохода вышло).
+    Future<bool> Function()? shouldYield,
   }) async {
     var applied = 0;
     var staged = 0;
@@ -133,6 +136,15 @@ class BackgroundInboundProcessor {
     }
 
     for (final w in wires) {
+      // Приложение открыли (или проход отработал своё время) — сразу отдаём
+      // базу. Необработанное не подтверждено: реле отдаст его приложению.
+      if (shouldYield != null && await shouldYield()) {
+        DiagLog.event('push', 'bg_decrypt_yield_mid_pass', {
+          'applied': applied,
+          'left': wires.length - applied - staged - skipped,
+        });
+        break;
+      }
       final msgId = w.msgId.trim();
       final cipher = w.ciphertextB64;
       if (msgId.isEmpty || cipher.isEmpty) continue;

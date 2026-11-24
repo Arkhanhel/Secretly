@@ -12,8 +12,12 @@ import '../security/app_security_manager.dart';
 import 'animations/animations.dart';
 import 'app_asset_paths.dart';
 import 'l10n.dart';
+import 'motion/press_feedback.dart';
 import 'wave1_l10n.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/apple_style.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
 
 String _securityLockLabel(
   BuildContext context, {
@@ -533,7 +537,10 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
     final bannerHeight = size.width < 380 ? 172.0 : 196.0;
     return Container(
       height: bannerHeight,
-      decoration: BoxDecoration(
+      decoration: appleGlassDecorationOr(
+        androidToo: false,
+        context,
+        BoxDecoration(
         color: scheme.surface.withValues(alpha: 0.96),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
@@ -547,6 +554,7 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
             scheme.surface.withValues(alpha: 0.90),
           ],
         ),
+      ),
       ),
       child: Stack(
         children: [
@@ -575,7 +583,7 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
                 fit: BoxFit.contain,
                 frameRate: FrameRate.max,
                 errorBuilder: (_, __, ___) => Icon(
-                  Icons.fingerprint_rounded,
+                  AdaptiveIcons.fingerprint_rounded,
                   size: 86,
                   color: scheme.primary,
                 ),
@@ -603,9 +611,12 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
           ru: 'Введите пароль для входа',
           en: 'Enter your password to continue',
         ),
-        prefixIcon: Icon(Icons.lock_outline_rounded, color: scheme.primary),
+        prefixIcon: Icon(AdaptiveIcons.lock_outline_rounded, color: scheme.primary),
         filled: true,
-        fillColor: scheme.surface.withValues(alpha: 0.66),
+        fillColor: appleFieldFillOr(
+          context,
+          scheme.surface.withValues(alpha: 0.66),
+        ),
       ),
     );
   }
@@ -656,7 +667,7 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
             ),
           )
         : Icon(
-            Icons.fingerprint_rounded,
+            AdaptiveIcons.fingerprint_rounded,
             size: 20,
             color: filled
                 ? theme.colorScheme.onSecondaryContainer
@@ -668,7 +679,7 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
       maxLines: 2,
     );
     if (filled) {
-      return FilledButton.tonalIcon(
+      return PressFeedback(child: FilledButton.tonalIcon(
         onPressed: _submitting ? null : _attemptBiometric,
         icon: child,
         label: label,
@@ -679,9 +690,9 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
             borderRadius: BorderRadius.circular(18),
           ),
         ),
-      );
+      ));
     }
-    return OutlinedButton.icon(
+    return PressFeedback(child: OutlinedButton.icon(
       onPressed: _submitting ? null : _attemptBiometric,
       icon: child,
       label: label,
@@ -690,11 +701,11 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
-    );
+    ));
   }
 
   Widget _buildPasswordActionButton(ThemeData theme) {
-    return OutlinedButton.icon(
+    return PressFeedback(child: OutlinedButton.icon(
       onPressed: _submitting ? null : _handlePasswordAction,
       icon: _submitting
           ? SizedBox(
@@ -706,7 +717,7 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
               ),
             )
           : Icon(
-              Icons.password_rounded,
+              AdaptiveIcons.password_rounded,
               size: 20,
               color: theme.colorScheme.primary,
             ),
@@ -720,7 +731,7 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
-    );
+    ));
   }
 
   Widget _buildPasswordActions(ThemeData theme, SecurityScopeConfig config) {
@@ -732,7 +743,7 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
         ],
       );
     }
-    return FilledButton.icon(
+    return PressFeedback(child: FilledButton.icon(
       onPressed: _submitting ? null : _handlePasswordAction,
       icon: _submitting
           ? const SizedBox(
@@ -740,17 +751,17 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
               height: 18,
               child: SecretlySpinner(strokeWidth: 2),
             )
-          : const Icon(Icons.password_rounded),
+          : const Icon(AdaptiveIcons.password_rounded),
       label: Text(_label(ru: 'Войти с помощью пароля', en: 'Use password')),
       style: FilledButton.styleFrom(
         minimumSize: const Size.fromHeight(56),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
-    );
+    ));
   }
 
   Widget _buildPatternActions(ThemeData theme, SecurityScopeConfig config) {
-    final clearButton = OutlinedButton.icon(
+    final clearButton = PressFeedback(child: OutlinedButton.icon(
       onPressed: _submitting
           ? null
           : () {
@@ -759,7 +770,7 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
                 _errorText = '';
               });
             },
-      icon: const Icon(Icons.refresh_rounded, size: 20),
+      icon: const Icon(AdaptiveIcons.refresh_rounded, size: 20),
       label: Text(
         _label(ru: 'Сбросить ключ', en: 'Clear pattern'),
         textAlign: TextAlign.center,
@@ -770,7 +781,7 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
-    );
+    ));
     if (!config.allowsBiometricUnlock) {
       return clearButton;
     }
@@ -808,7 +819,10 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
     final body = ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 440),
       child: DecoratedBox(
-        decoration: BoxDecoration(
+        decoration: appleGlassDecorationOr(
+        androidToo: false,
+        context,
+        BoxDecoration(
           color: scheme.surface.withValues(alpha: 0.88),
           borderRadius: BorderRadius.circular(32),
           border: Border.all(
@@ -822,6 +836,7 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
             ),
           ],
         ),
+      ),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
           child: Stack(
@@ -830,14 +845,14 @@ class _SecurityUnlockSurfaceState extends State<_SecurityUnlockSurface> {
                 Positioned(
                   top: 0,
                   right: 0,
-                  child: IconButton(
+                  child: PressFeedback(child: IconButton(
                     tooltip: _label(ru: 'Закрыть', en: 'Close'),
                     onPressed: () => Navigator.of(context).pop(false),
                     style: IconButton.styleFrom(
                       backgroundColor: scheme.surface.withValues(alpha: 0.82),
                     ),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
+                    icon: const Icon(AdaptiveIcons.close_rounded),
+                  )),
                 ),
               Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1032,7 +1047,7 @@ class _PasswordSetupScreenState extends State<_PasswordSetupScreen> {
               autocorrect: false,
               decoration: InputDecoration(
                 labelText: _label(ru: 'Новый пароль', en: 'New password'),
-                prefixIcon: const Icon(Icons.password_rounded),
+                prefixIcon: const Icon(AdaptiveIcons.password_rounded),
               ),
             ),
             const SizedBox(height: 14),
@@ -1047,7 +1062,7 @@ class _PasswordSetupScreenState extends State<_PasswordSetupScreen> {
                   ru: 'Повторите пароль',
                   en: 'Repeat password',
                 ),
-                prefixIcon: const Icon(Icons.verified_user_rounded),
+                prefixIcon: const Icon(AdaptiveIcons.verified_user_rounded),
               ),
             ),
             if (_errorText.isNotEmpty) ...[
@@ -1061,10 +1076,10 @@ class _PasswordSetupScreenState extends State<_PasswordSetupScreen> {
               ),
             ],
             const SizedBox(height: 24),
-            FilledButton(
+            PressFeedback(child: FilledButton(
               onPressed: _submit,
               child: Text(_label(ru: 'Сохранить пароль', en: 'Save password')),
-            ),
+            )),
           ],
         ),
       ),
@@ -1179,7 +1194,7 @@ class _PatternSetupScreenState extends State<_PatternSetupScreen> {
                   _errorText = '';
                 });
               },
-              icon: const Icon(Icons.refresh_rounded),
+              icon: const Icon(AdaptiveIcons.refresh_rounded),
               label: Text(_label(ru: 'Начать заново', en: 'Start over')),
             ),
             if (_errorText.isNotEmpty) ...[

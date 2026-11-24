@@ -665,7 +665,11 @@ void main() {
       );
       final enqueue = src.substring(
         src.indexOf('  Future<void> _enqueuePendingAudioFile({'),
-        src.indexOf('  Future<void> _startVoiceRecording() async {'),
+        // Конец метода — следующий за ним раздел (запись голосового переехала
+        // в chat/voice_recorder_*.dart).
+        src.indexOf(
+          '  Future<void> _enqueuePendingAudioFile({',
+        ) + src.substring(src.indexOf('  Future<void> _enqueuePendingAudioFile({')).indexOf('\n  }\n') + 4,
       );
       expect(
         enqueue.indexOf('pending.tagsReady = '),

@@ -211,6 +211,10 @@ class CallManager {
       CallAudioRouteController(logTag: 'CallAudio');
   WebRtcCallSession? _session;
   WebRtcCallSession? get session => _session;
+
+  /// Видеозвонок хочет громкую — включится, когда звонок соединится (см.
+  /// [_applySpeakerPreference]). Наушники и Bluetooth важнее.
+  bool _speakerWantedOnConnect = false;
   // r11: dedup parallel session creation (prewarm + accept may race).
   Future<WebRtcCallSession>? _sessionInFlight;
   // r11: track which call we've already prewarmed so we don't prewarm twice
@@ -2766,6 +2770,7 @@ class CallManager {
         isSpeaker: video,
         isUiMinimized: false,
       );
+      _speakerWantedOnConnect = video;
       _pushCallScreen();
       // FIX (2026-07-13, call avatar): if the launching surface had no avatar
       // path (e.g. a non-contact conversation whose avatarPath was null),
@@ -2970,7 +2975,8 @@ class CallManager {
       // Reuses the prewarmed session that was kicked off when the invite
       // arrived; falls back to creating one if prewarm failed/was skipped.
       final session = await _createSession();
-      await session.setSpeakerEnabled(s.isVideo);
+      _speakerWantedOnConnect = state.value.isVideo;
+      await _applySpeakerPreference(session, reason: 'accept_incoming');
 
       // Process buffered offer that arrived while we were ringing.
       final pendingSdp = _pendingOfferSdp;
@@ -3193,6 +3199,17 @@ class CallManager {
   }
 
   Future<void> toggleSpeaker() async {
+    // До соединения — только желание (оно исполнится при соединении): громкая,
+    // включённая раньше, чем система подняла звук звонка, и ломала звук
+    // видеозвонка (21.11.2026, см. [_applySpeakerPreference]).
+    final before = state.value;
+    if (before.connectedAtMs == null && before.isActive) {
+      final next = !before.isSpeaker;
+      _speakerWantedOnConnect = next;
+      state.value = before.copyWith(isSpeaker: next);
+      callLog('CallManager', '[OP] event=speaker_wish_before_connect want=$next');
+      return;
+    }
     final routeState = _audioRouteController.state.value;
     final speakerRoute = routeState.speakerRoute;
     final privateRoute = routeState.preferredPrivateRoute;
@@ -3232,7 +3249,7 @@ class CallManager {
     state.value = s.copyWith(isSpeaker: next);
   }
 
-  Future<void> selectAudioRoute(String routeId) async {
+  Future<void> selectAudioRoute(String routeId, {bool byUser = true}) async {
     final current = state.value;
     if (!current.isActive) {
       return;
@@ -3240,7 +3257,8 @@ class CallManager {
     await _audioRouteController.selectRoute(
       routeId: routeId,
       preferSpeakerByDefault: current.isVideo,
-      reason: 'call_ui_route_select',
+      reason: byUser ? 'call_ui_route_select' : 'auto_speaker_on_connect',
+      byUser: byUser,
     );
   }
 
@@ -3353,6 +3371,15 @@ class CallManager {
           reason: 'upgrade_to_video',
           reapplyCurrentRoute: false,
         );
+        // 21.11.2026: экран показывал «громкая», а звук оставался в трубке —
+        // маршрут не менялся. Живой звонок: громкая включается тем же путём,
+        // что и кнопкой (наушники и Bluetooth важнее).
+        if (state.value.connectedAtMs != null) {
+          _speakerWantedOnConnect = true;
+          await _applySpeakerOnConnect();
+        } else {
+          _speakerWantedOnConnect = true;
+        }
       }
       callOpLog(
         'CallManager',
@@ -3841,7 +3868,20 @@ class CallManager {
             isCameraOff: true,
             isSpeaker: true,
           );
-          await _session?.setSpeakerEnabled(true);
+          if (state.value.connectedAtMs == null) {
+            _speakerWantedOnConnect = true;
+            final live = _session;
+            if (live != null) {
+              await _applySpeakerPreference(live, reason: 'remote_video_offer');
+            }
+          } else {
+            // 🔴 22.11.2026 (разбор): звонок уже идёт — громкая тем же путём,
+            // что кнопка и соединение (маршрут вывода, наушники важнее).
+            // Прямое setSpeakerEnabled давало «на кнопке громкая, звук в
+            // трубке».
+            _speakerWantedOnConnect = true;
+            unawaited(_applySpeakerOnConnect());
+          }
         }
         // Ignore remote offer only when we are the side currently awaiting answer
         // for our own local offer (caller path). On incoming path we can be in
@@ -4783,7 +4823,8 @@ class CallManager {
       });
     }
     session.onScreenShareStopped = _handleSessionScreenShareStopped;
-    await session.setSpeakerEnabled(state.value.isSpeaker);
+    session.speakerOwnedByManager = true;
+    await _applySpeakerPreference(session, reason: 'session_created');
     _session = session;
     _bindConnectionListener(session);
     return session;
@@ -4841,7 +4882,7 @@ class CallManager {
     CallState snapshot,
   ) async {
     try {
-      await session.setSpeakerEnabled(snapshot.isSpeaker);
+      await _applySpeakerPreference(session, reason: 'recovery_restore');
     } catch (e) {
       callLog('CallManager', 'recovery speaker restore failed: $e');
     }
@@ -4877,8 +4918,10 @@ class CallManager {
     if (!current.isActive) {
       return;
     }
+    // До соединения — без громкой по умолчанию (см. [_applySpeakerPreference]).
+    final connected = current.connectedAtMs != null;
     await _audioRouteController.ensureReady(
-      preferSpeakerByDefault: current.isVideo,
+      preferSpeakerByDefault: current.isVideo && connected,
       reason: reason,
       reapplySelectedRoute: reapplyCurrentRoute,
     );
@@ -5031,6 +5074,11 @@ class CallManager {
         // check above, so whichever connected path fires first is the only one
         // that reasserts (no double restart).
         _reassertIosCallAudio();
+        // 🔴 22.11.2026: громкая видеозвонка — и на ЭТОМ пути соединения.
+        // Раньше она включалась только в `_markConnectedFromSession`, а
+        // какой путь сработает первым — дело случая (ответ с экрана
+        // блокировки идёт сюда): видеозвонок оставался в трубке.
+        unawaited(_applySpeakerOnConnect());
       }
     }
 
@@ -5611,6 +5659,9 @@ class CallManager {
 
   Future<void> _endCall(CallEndReason reason, {CallFailure? failure}) async {
     _incomingScreenRequested = false;
+    // Желание «громкая при соединении» не переживает звонок (иначе громкая
+    // включилась бы сама в следующем или при переподключении).
+    _speakerWantedOnConnect = false;
     final endingSnapshot = state.value;
     final endingCallAttemptId = endingSnapshot.callAttemptId.isEmpty
         ? endingSnapshot.callId
@@ -6177,6 +6228,74 @@ class CallManager {
       // side does a single bounce; the route observer no longer loops on it, so
       // no delayed retries / churn are needed.
       _reassertIosCallAudio();
+      // Громкая — только теперь, когда звук звонка поднят (см.
+      // [_applySpeakerPreference]).
+      unawaited(_applySpeakerOnConnect());
+    }
+  }
+
+  /// 🔴 ГРОМКАЯ ВКЛЮЧАЕТСЯ ТОЛЬКО У СОЕДИНЁННОГО ЗВОНКА (21.11.2026).
+  ///
+  /// Жалоба: «звонишь голосовым и переключаешься на видео — всё слышно;
+  /// звонишь сразу видеозвонком — не слышно никого». Звуковая часть у обоих
+  /// путей одинакова; различалось ОДНО: у видеозвонка громкая включалась ещё
+  /// ДО того, как система подняла звук звонка (при создании соединения, при
+  /// приёме, в самом соединении). На iPhone это меняло то, как CallKit
+  /// собирает звуковую сессию при активации, на Android — маршрут
+  /// выставлялся до режима разговора. Рабочий путь «голосовой → видео»
+  /// включает громкую уже в живом звонке — только маршрутом вывода.
+  ///
+  /// Теперь так у всех: до соединения — трубка (как у голосового), желание
+  /// «громкая» хранится в состоянии и применяется в [_markConnectedFromSession].
+  Future<void> _applySpeakerPreference(
+    WebRtcCallSession session, {
+    required String reason,
+  }) async {
+    final s = state.value;
+    final connected =
+        s.connectedAtMs != null &&
+        (s.phase == CallPhase.connected || s.phase == CallPhase.reconnecting);
+    final enabled = connected && s.isSpeaker;
+    callLog(
+      'CallManager',
+      '[OP] event=speaker_preference reason=$reason want=${s.isSpeaker} '
+          'connected=$connected applied=$enabled',
+    );
+    await session.setSpeakerEnabled(enabled);
+  }
+
+  /// Звонок соединился: желание «громкая» видеозвонка исполняется тем же
+  /// путём, что и кнопка громкой в живом звонке.
+  Future<void> _applySpeakerOnConnect() async {
+    final want = _speakerWantedOnConnect;
+    _speakerWantedOnConnect = false;
+    if (!want) return;
+    try {
+      await _syncAudioRoutesForCurrentCall(reason: 'connected');
+      final rs = _audioRouteController.state.value;
+      final external = rs.availableRoutes.any(
+        (r) =>
+            r.kind == CallAudioRouteKind.bluetooth ||
+            r.kind == CallAudioRouteKind.wiredHeadset,
+      );
+      callLog(
+        'CallManager',
+        '[OP] event=speaker_on_connect external=$external '
+            'routes=${rs.availableRoutes.length} '
+            'hasSpeakerRoute=${rs.speakerRoute != null}',
+      );
+      if (external) return; // наушники важнее громкой
+      final speaker = rs.speakerRoute;
+      if (speaker != null) {
+        await selectAudioRoute(speaker.deviceId, byUser: false);
+        return;
+      }
+      final session = _session;
+      if (session == null) return;
+      await session.setSpeakerEnabled(true);
+      state.value = state.value.copyWith(isSpeaker: true);
+    } catch (e) {
+      callLog('CallManager', 'speaker_on_connect failed: $e');
     }
   }
 

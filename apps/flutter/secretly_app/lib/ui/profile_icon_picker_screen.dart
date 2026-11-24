@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'glass/glass_category_strip.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -15,12 +16,15 @@ import '../entitlements/cosmetic_catalog.dart';
 import 'app_asset_paths.dart';
 import 'avatar_catalog.dart';
 import 'icons/app_icons.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'paywall_screen.dart';
 import 'profile_icon_asset_catalog.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_header_island.dart';
 import '../assets/on_demand_asset_image.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Prefix marking a server-hosted cosmetic icon selection (vs a bundled asset
 /// path). The suffix is the catalog item id.
@@ -438,7 +442,7 @@ class _ProfileIconPickerScreenState extends State<ProfileIconPickerScreen> {
                                 ),
                                 child: _selectedAsset == null
                                     ? const Icon(
-                                        Icons.emoji_emotions_outlined,
+                                        AdaptiveIcons.emoji_emotions_outlined,
                                         size: 52,
                                         color: Colors.white,
                                       )
@@ -467,7 +471,7 @@ class _ProfileIconPickerScreenState extends State<ProfileIconPickerScreen> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Icon(
-                                      Icons.text_fields,
+                                      AdaptiveIcons.text_fields,
                                       size: 16,
                                       color: cs.onSurfaceVariant,
                                     ),
@@ -682,7 +686,7 @@ class _ProfileIconPickerScreenState extends State<ProfileIconPickerScreen> {
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
-                          child: FilledButton(
+                          child: PressFeedback(child: FilledButton(
                             onPressed: _saving ? null : _applySelection,
                             child: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -690,7 +694,7 @@ class _ProfileIconPickerScreenState extends State<ProfileIconPickerScreen> {
                                   ? const SecretlySpinner()
                                   : Text(widget.applyButtonLabel),
                             ),
-                          ),
+                          )),
                         ),
                       ],
                     ),
@@ -700,7 +704,7 @@ class _ProfileIconPickerScreenState extends State<ProfileIconPickerScreen> {
                     top: 4,
                     left: 12,
                     child: _GlassIconIsland(
-                      icon: Icons.arrow_back_ios_new,
+                      icon: AdaptiveIcons.arrow_back_ios_new,
                       tooltip: 'Назад',
                       onTap: () => Navigator.of(context).maybePop(),
                     ),
@@ -709,7 +713,7 @@ class _ProfileIconPickerScreenState extends State<ProfileIconPickerScreen> {
                     top: 4,
                     right: 12,
                     child: _GlassIconIsland(
-                      icon: _searchOpen ? Icons.close : Icons.search,
+                      icon: _searchOpen ? AdaptiveIcons.close : AdaptiveIcons.search,
                       tooltip: 'Поиск',
                       onTap: () => setState(() {
                         _searchOpen = !_searchOpen;
@@ -774,7 +778,7 @@ class _GlassSearchField extends StatelessWidget {
       padding: const EdgeInsets.only(left: 14, right: 4),
       child: Row(
         children: [
-          Icon(Icons.search, size: 20, color: cs.onSurfaceVariant),
+          Icon(AdaptiveIcons.search, size: 20, color: cs.onSurfaceVariant),
           const SizedBox(width: 10),
           Expanded(
             child: TextField(
@@ -787,11 +791,11 @@ class _GlassSearchField extends StatelessWidget {
               ),
             ),
           ),
-          IconButton(
+          PressFeedback(child: IconButton(
             visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.close, size: 18),
+            icon: const Icon(AdaptiveIcons.close, size: 18),
             onPressed: onClose,
-          ),
+          )),
         ],
       ),
     );
@@ -943,7 +947,7 @@ class _PremiumLockBadge extends StatelessWidget {
           ),
         ],
       ),
-      child: const Icon(Icons.lock, size: 10, color: Colors.white),
+      child: const Icon(AdaptiveIcons.lock, size: 10, color: Colors.white),
     );
   }
 }
@@ -965,6 +969,25 @@ class _CategorySwitcher extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 23.11.2026 (план стекла): полоса во всю ширину с каплей.
+    if (kGlassCategoryStrip) {
+      return GlassCategoryStrip(
+        items: [
+          GlassStripItem(
+            label: iconsLabel,
+            icon: AdaptiveIcons.grid_view_rounded,
+          ),
+          GlassStripItem(
+            label: avatarsLabel,
+            icon: AdaptiveIcons.face_retouching_natural,
+          ),
+        ],
+        selected: category == _PickerCategory.icons ? 0 : 1,
+        onSelect: (i) =>
+            onSelect(i == 0 ? _PickerCategory.icons : _PickerCategory.avatars),
+        margin: EdgeInsets.zero,
+      );
+    }
     return FrostedHeaderIsland(
       radius: 16,
       padding: const EdgeInsets.all(4),
@@ -973,7 +996,7 @@ class _CategorySwitcher extends StatelessWidget {
           Expanded(
             child: _CategorySegment(
               label: iconsLabel,
-              icon: Icons.grid_view_rounded,
+              icon: AdaptiveIcons.grid_view_rounded,
               selected: category == _PickerCategory.icons,
               onTap: () => onSelect(_PickerCategory.icons),
             ),
@@ -982,7 +1005,7 @@ class _CategorySwitcher extends StatelessWidget {
           Expanded(
             child: _CategorySegment(
               label: avatarsLabel,
-              icon: Icons.face_retouching_natural,
+              icon: AdaptiveIcons.face_retouching_natural,
               selected: category == _PickerCategory.avatars,
               onTap: () => onSelect(_PickerCategory.avatars),
             ),
@@ -1014,7 +1037,7 @@ class _CategorySegment extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
+        curve: Motion.fade,
         padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),

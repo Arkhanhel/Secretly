@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'glass/glass_category_strip.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'chat_screen_l10n.dart';
 import 'icons/app_icons.dart';
 import 'widgets/avatar_initials.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/apple_style.dart';
 
 /// Full-screen «Переслать…» target picker. Returns the chosen [Conversation]
 /// (or null if cancelled). Tabs: «Чаты» (all non-archived), «Комнаты» (groups),
@@ -100,7 +102,17 @@ class _ForwardTargetPickerScreenState extends State<ForwardTargetPickerScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(chatText(context, ru: 'Переслать…', en: 'Forward to…')),
-        bottom: TabBar(
+        bottom: kGlassCategoryStrip
+            // 23.11.2026 (план стекла): полоса во всю ширину с каплей.
+            ? GlassTabControllerStrip(
+                controller: _tabs,
+                labels: [
+                  chatText(context, ru: 'Чаты', en: 'Chats'),
+                  chatText(context, ru: 'Комнаты', en: 'Rooms'),
+                  chatText(context, ru: 'Личные', en: 'Personal'),
+                ],
+              )
+            : TabBar(
           controller: _tabs,
           tabs: <Widget>[
             Tab(text: chatText(context, ru: 'Чаты', en: 'Chats')),
@@ -124,7 +136,10 @@ class _ForwardTargetPickerScreenState extends State<ForwardTargetPickerScreen>
                   en: 'Search chats',
                 ),
                 filled: true,
-                fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                fillColor: appleFieldFillOr(
+                  context,
+                  cs.surfaceContainerHighest.withValues(alpha: 0.5),
+                ),
                 isDense: true,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),

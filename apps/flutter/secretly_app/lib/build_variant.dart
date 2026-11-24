@@ -33,5 +33,11 @@ const bool kVideoToolsAvailable = !kLiteBuild;
 /// Доступен ли перевод сообщений на устройстве (ML Kit).
 const bool kTranslationAvailable = !kLiteBuild;
 
+/// «Голос в текст» (диктовка в поле ввода и расшифровка голосовых) —
+/// УБРАН из приложения решением владельца 20.11.2026: кнопок нет, модель
+/// распознавания (~140 МБ) не скачивается, в Premium функция не обещается.
+/// Уже скачанную модель можно удалить в «Хранилище». `true` возвращает всё.
+const bool kVoiceToTextEnabled = false;
+
 /// Доступна ли расшифровка голосовых сообщений на устройстве (whisper).
-const bool kVoiceTranscriptionAvailable = !kLiteBuild;
+const bool kVoiceTranscriptionAvailable = !kLiteBuild && kVoiceToTextEnabled;

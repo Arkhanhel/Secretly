@@ -14,11 +14,14 @@ import 'animations/animations.dart';
 import 'cover_crop_screen.dart';
 import 'icons/app_icons.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
 import 'profile_icon_picker_screen.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'widgets/secretly_glass_sheet.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
+import 'settings_group.dart';
 
 String _editContactText(
   BuildContext context, {
@@ -108,6 +111,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
   Future<void> _setPhoto() async {
     if (_updatingPhoto) return;
     final selected = await showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) {
@@ -404,11 +408,7 @@ class _EditContactScreenState extends State<EditContactScreen> {
       body: ListView(
         padding: EdgeInsets.fromLTRB(12, topInset, 12, 20),
         children: [
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              color: Theme.of(context).colorScheme.surfaceContainerHigh,
-            ),
+          _EditContactBlock(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
             child: Column(
               children: [
@@ -459,15 +459,17 @@ class _EditContactScreenState extends State<EditContactScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              color: Theme.of(context).colorScheme.surfaceContainerHigh,
-            ),
+          _EditContactBlock(
+            rows: true,
             child: Column(
               children: [
                 ListTile(
-                  leading: const Icon(AppIcons.addPhoto),
+                  // Android: цветной квадрат, как у строк настроек.
+                  leading: settingsRowLeading(
+                    icon: AppIcons.addPhoto,
+                    tint: SettingsRowTint.blue,
+                    fallback: const Icon(AppIcons.addPhoto),
+                  ),
                   title: Text(l10n.contactEditSetPhoto),
                   subtitle: Text(photoSubtitle),
                   trailing: _updatingPhoto
@@ -483,22 +485,23 @@ class _EditContactScreenState extends State<EditContactScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
-              color: Theme.of(context).colorScheme.surfaceContainerHigh,
-            ),
+          _EditContactBlock(
+            rows: true,
             child: ListTile(
-              leading: Icon(
-                AppIcons.delete,
-                color: Theme.of(context).colorScheme.error,
+              leading: settingsRowLeading(
+                icon: AppIcons.delete,
+                tint: SettingsRowTint.red,
+                fallback: Icon(
+                  AppIcons.delete,
+                  color: Theme.of(context).colorScheme.error,
+                ),
               ),
               title: Text(
                 l10n.contactDetailsDeleteContact,
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
               onTap: () async {
-                final ok = await showDialog<bool>(
+                final ok = await showAppDialog<bool>(
                   context: context,
                   builder: (context) => SecretlyAlertDialog(
                     title: Text(l10n.contactDetailsDeleteConfirmTitle),
@@ -529,6 +532,45 @@ class _EditContactScreenState extends State<EditContactScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Блок страницы правки контакта. Android (23.11.2026, владелец: «плашки и
+/// строки везде как в настройках; прозрачность — настройкой»): та же панель,
+/// что в настройках, строки [rows] — в теме строк настроек, без линий.
+/// iPhone и компьютер — прежняя плашка.
+class _EditContactBlock extends StatelessWidget {
+  const _EditContactBlock({
+    required this.child,
+    this.padding,
+    this.rows = false,
+  });
+
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+  final bool rows;
+
+  @override
+  Widget build(BuildContext context) {
+    if (settingsAndroidPanels) {
+      if (rows) return SettingsRowsPanel(children: [child]);
+      return SettingsPanel(
+        margin: EdgeInsets.zero,
+        padding: padding ?? EdgeInsets.zero,
+        child: child,
+      );
+    }
+    return Container(
+      decoration: appleGlassDecorationOr(
+        context,
+        BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        ),
+      ),
+      padding: padding,
+      child: child,
     );
   }
 }

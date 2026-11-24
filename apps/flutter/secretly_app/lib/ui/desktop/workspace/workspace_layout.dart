@@ -12,6 +12,8 @@ import '../design/tokens.dart';
 import '../primitives/context_menu.dart';
 import '../primitives/hover_listener.dart';
 import '../primitives/motion_widgets.dart';
+import '../../settings_icons/settings_glyph_tile.dart';
+import '../../settings_icons/settings_glyphs.dart';
 import 'settings_kit.dart';
 import 'settings_style.dart';
 
@@ -87,9 +89,14 @@ class WorkspaceSection {
     this.tint,
     this.contentMaxWidth,
     this.ownHeader = false,
+    this.glyph,
   });
   final String id;
   final IconData icon;
+
+  /// Знак раздела в выбранном стиле значков (`settings_icons`) — общий с
+  /// телефоном. `null` — прежний значок [icon] без плитки.
+  final SettingsGlyph? glyph;
   final String label;
   final String? subtitle;
   final WidgetBuilder builder;
@@ -493,6 +500,7 @@ class _WorkspaceLayoutState extends State<WorkspaceLayout> {
                   subtitle: section.subtitle,
                   icon: section.icon,
                   tint: section.dangerous ? p.danger : section.tint,
+                  glyph: section.glyph,
                   trailing: widget.trailing,
                   maxWidth: maxWidth,
                 ),
@@ -645,9 +653,14 @@ class WorkspaceIconPlate extends StatelessWidget {
     this.size = 19,
     this.selected = false,
     this.plain = true,
+    this.glyph,
   });
 
   final IconData icon;
+
+  /// Знак в стиле, выбранном в «Оформлении» (20.11.2026, «иконки для всех
+  /// приложений»). Задан — рисуется плитка этого стиля вместо [icon].
+  final SettingsGlyph? glyph;
 
   /// `null` — знак цвета подписи.
   final Color? tint;
@@ -665,6 +678,12 @@ class WorkspaceIconPlate extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = SettingsScope.paletteOf(context);
     final tint = this.tint;
+    final sectionGlyph = this.glyph;
+    if (sectionGlyph != null) {
+      // В строке колонки знак был 19 — плитка чуть крупнее, чтобы знак внутри
+      // не стал мельче прежнего.
+      return SettingsSectionIcon(sectionGlyph, size: plain ? 24 : size);
+    }
     if (plain) {
       return Icon(
         icon,
@@ -726,6 +745,7 @@ class _SectionRow extends StatelessWidget {
                   icon: section.icon,
                   tint: section.dangerous ? p.danger : section.tint,
                   selected: active,
+                  glyph: section.glyph,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -770,10 +790,12 @@ class WorkspaceContentHeader extends StatelessWidget {
     this.trailing,
     this.bottom,
     this.maxWidth,
+    this.glyph,
   });
   final String title;
   final String? subtitle;
   final IconData? icon;
+  final SettingsGlyph? glyph;
   final Color? tint;
   final Widget? trailing;
   final Widget? bottom;
@@ -789,7 +811,13 @@ class WorkspaceContentHeader extends StatelessWidget {
         // попал туда, куда целился, — одинаковый цвет отвечает на это
         // быстрее, чем совпадение подписей.
         if (icon != null) ...[
-          WorkspaceIconPlate(icon: icon!, tint: tint, size: 36, plain: false),
+          WorkspaceIconPlate(
+            icon: icon!,
+            tint: tint,
+            size: 36,
+            plain: false,
+            glyph: glyph,
+          ),
           const SizedBox(width: 12),
         ],
         Expanded(

@@ -109,7 +109,34 @@ void main() {
     final ms = DateTime(2026, 7, 28, 21, 40).millisecondsSinceEpoch;
     expect(
       await render(tester, timestampMs: ms, now: now),
-      'был(а) 28.07 21:40',
+      'был(а) 28.07 в 21:40',
+    );
+  });
+
+  /// 🔴 Жалоба владельца 22.11.2026: вчерашнее время без дня читалось как
+  /// сегодняшнее.
+  testWidgets('🔴 вчера — словом «вчера», а не одним временем', (tester) async {
+    final ms = DateTime(2026, 8, 2, 23, 10).millisecondsSinceEpoch;
+    expect(
+      await render(tester, timestampMs: ms, now: now),
+      'был(а) вчера в 23:10',
+    );
+    expect(
+      await render(
+        tester,
+        timestampMs: ms,
+        now: now,
+        locale: const Locale('en'),
+      ),
+      'last seen yesterday at 23:10',
+    );
+  });
+
+  testWidgets('прошлый год — только дата', (tester) async {
+    final ms = DateTime(2025, 10, 18, 9, 0).millisecondsSinceEpoch;
+    expect(
+      await render(tester, timestampMs: ms, now: now),
+      'был(а) 18.10.25',
     );
   });
 }

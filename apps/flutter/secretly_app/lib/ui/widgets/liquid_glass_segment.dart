@@ -6,6 +6,8 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 
+import '../motion/motion.dart';
+import '../motion/press_feedback.dart';
 import 'frosted_header_island.dart';
 
 /// Android island geometry — deliberately identical to the music island
@@ -129,8 +131,11 @@ class LiquidGlassSegment extends StatelessWidget {
                 child: IgnorePointer(
                   child: TweenAnimationBuilder<double>(
                     tween: Tween<double>(begin: targetX, end: targetX),
-                    duration: const Duration(milliseconds: 380),
-                    curve: Curves.easeOutBack,
+                    // М5: Telegram — щелчок по вкладке 0,45 с фирменной кривой.
+                    duration: kTelegramMotion
+                        ? const Duration(milliseconds: 450)
+                        : const Duration(milliseconds: 380),
+                    curve: Motion.pop,
                     builder: (context, x, _) => Stack(
                       children: [
                         AnimatedGlassIndicator(
@@ -173,8 +178,11 @@ class LiquidGlassSegment extends StatelessWidget {
                   begin: Alignment(targetX, 0),
                   end: Alignment(targetX, 0),
                 ),
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
+                // М5: Telegram Android — 320 мс EASE_OUT_QUINT.
+                duration: kTelegramMotion
+                    ? const Duration(milliseconds: 320)
+                    : const Duration(milliseconds: 300),
+                curve: Motion.standard,
                 builder: (context, alignment, _) => Align(
                   alignment: alignment,
                   child: FractionallySizedBox(
@@ -214,9 +222,7 @@ class LiquidGlassSegment extends StatelessWidget {
         foregroundPainter: GlassHighlightBorderPainter(
           radius: _kIslandRadius,
           strokeWidth: 1.2,
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.22)
-              : Colors.white.withValues(alpha: 0.40),
+          color: MatteIslandLook.highlight(isDark),
         ),
         child: ClipRRect(
           borderRadius: br,
@@ -265,7 +271,28 @@ class LiquidGlassSegment extends StatelessWidget {
           );
           final inner = Stack(
             children: [
-              if (active)
+              // М5: выбранная «пилюля» не появляется рывком — проявляется
+              // и чуть вырастает (0,25 с), у прежней — гаснет.
+              if (kTelegramMotion)
+                Positioned.fill(
+                  child: AnimatedOpacity(
+                    opacity: active ? 1 : 0,
+                    duration: const Duration(milliseconds: 250),
+                    curve: Motion.fade,
+                    child: AnimatedScale(
+                      scale: active ? 1 : 0.85,
+                      duration: const Duration(milliseconds: 250),
+                      curve: Motion.standard,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: liquidGlassIslandsEnabled
+                            ? _darkPill(isDark)
+                            : _accentPill(cs, _kIslandRadius - 4),
+                      ),
+                    ),
+                  ),
+                )
+              else if (active)
                 Positioned.fill(
                   child: Padding(
                     padding: const EdgeInsets.all(4),
@@ -277,7 +304,7 @@ class LiquidGlassSegment extends StatelessWidget {
               Center(child: label),
             ],
           );
-          final pill = GestureDetector(
+          final pill = PressFeedback(child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => onSelect(i),
             onLongPress: onLongPress == null ? null : () => onLongPress!(i),
@@ -290,7 +317,7 @@ class LiquidGlassSegment extends StatelessWidget {
                 // Android: each folder chip is its own island, same material
                 // and size as the music island.
                 : _androidIsland(context, child: inner),
-          );
+          ));
           return SizedBox(
             height: liquidGlassIslandsEnabled ? height : _kIslandHeight,
             child: pill,
@@ -301,7 +328,13 @@ class LiquidGlassSegment extends StatelessWidget {
   }
 
   Widget _accentPill(ColorScheme cs, double pillRadius) => DecoratedBox(
-    decoration: BoxDecoration(
+    // 23.11.2026: ползунок без цвета темы — общий для всех островков.
+    decoration: kNeutralSelectedPill
+        ? islandSelectedPillDecoration(
+            isDark: cs.brightness == Brightness.dark,
+            radius: pillRadius,
+          )
+        : BoxDecoration(
       color: cs.primary.withValues(alpha: 0.22),
       borderRadius: BorderRadius.circular(pillRadius),
       border: Border.all(

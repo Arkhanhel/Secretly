@@ -49,6 +49,8 @@ class BackgroundDecrypt {
     required int nowMs,
     /// Подтверждает приём реле. `null` — не подтверждать (прежнее поведение).
     Future<bool> Function({required int seq, required String msgId})? ack,
+    /// Перед каждым сообщением: `true` — прекратить и отдать базу.
+    Future<bool> Function()? shouldYield,
   }) async {
     final keysBase = Uri.tryParse(keysBaseUrlRaw.trim());
     if (keysBase == null || !keysBase.hasScheme) {
@@ -140,6 +142,7 @@ class BackgroundDecrypt {
         decrypt: controller.handleDeliveredInBackground,
         ack: ack,
         nowMs: nowMs,
+        shouldYield: shouldYield,
       );
     } catch (e) {
       DiagLog.event('push', 'bg_decrypt_error', {'err': e.runtimeType.toString()});

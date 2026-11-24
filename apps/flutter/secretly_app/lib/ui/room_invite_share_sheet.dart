@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'glass/glass_category_strip.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -8,6 +9,8 @@ import 'package:flutter/material.dart';
 import '../app/app_controller.dart';
 import 'icons/app_icons.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'wave1_l10n.dart';
 import 'widgets/avatar_initials.dart';
 import 'widgets/secretly_glass_sheet.dart';
@@ -46,6 +49,7 @@ Future<Conversation?> showRoomInviteShareSheet(
   String? avatarPath,
 }) {
   return showModalBottomSheet<Conversation>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
@@ -145,13 +149,13 @@ class _RoomInviteShareSheetState extends State<_RoomInviteShareSheet>
                       ),
                       Align(
                         alignment: Alignment.topRight,
-                        child: IconButton(
+                        child: PressFeedback(child: IconButton(
                           tooltip: MaterialLocalizations.of(
                             context,
                           ).closeButtonTooltip,
                           onPressed: () => Navigator.of(context).maybePop(),
                           icon: const Icon(AppIcons.close),
-                        ),
+                        )),
                       ),
                     ],
                   ),
@@ -294,6 +298,17 @@ class _RoomInviteTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 23.11.2026 (план стекла): полоса во всю ширину с каплей.
+    if (kGlassCategoryStrip) {
+      return GlassTabControllerStrip(
+        controller: tabController,
+        padding: EdgeInsets.zero,
+        labels: [
+          _roomInviteText(context, ru: 'Чаты', en: 'Chats'),
+          _roomInviteText(context, ru: 'Комнаты', en: 'Rooms'),
+        ],
+      );
+    }
     return Container(
       height: 42,
       decoration: BoxDecoration(

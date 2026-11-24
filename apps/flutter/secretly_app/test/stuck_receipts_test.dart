@@ -148,6 +148,50 @@ void main() {
       expect(await db.outboxDue(limit: 10), isEmpty, reason: 'и никуда не ушла');
     });
 
+    test('🔴 23.11.2026: отчёт демо-собеседнику убирается сразу', () async {
+      // Журнал Xiaomi (сборка 726): отчёт для demo:use пробовался раз в
+      // секунду — 96 раз за 3 минуты — и уходил бы только через неделю.
+      final (controller, db) = await runtime();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await db.pendingReceiptUpsert(
+        peerDeviceId: 'demo_dev',
+        peerProfileId: 'demo:use',
+        payloadEventId: 'demo-evt',
+        convoId: 'demo:use',
+        status: MessageReceiptState.read,
+        createdAtMs: now,
+        updatedAtMs: now,
+      );
+      await controller.forceOutboxPump();
+      expect(await db.pendingReceiptCount(), 0);
+      expect(await db.outboxDue(limit: 10), isEmpty);
+    });
+
+    test('23.11.2026: не зашифровался — следующий проход его не трогает', () async {
+      final (controller, db) = await runtime();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await db.pendingReceiptUpsert(
+        peerDeviceId: 'peer-dev-no-session',
+        peerProfileId: 'peer-no-session',
+        payloadEventId: 'evt-1',
+        convoId: 'peer-no-session',
+        status: MessageReceiptState.read,
+        createdAtMs: now,
+        updatedAtMs: now,
+      );
+      await controller.forceOutboxPump();
+      final failsBefore = controller.receiptFlushFailureCountForTesting;
+      expect(failsBefore, greaterThan(0), reason: 'сессии нет — не шифруется');
+      await controller.forceOutboxPump();
+      await controller.forceOutboxPump();
+      expect(
+        controller.receiptFlushFailureCountForTesting,
+        failsBefore,
+        reason: 'в паузе после неудачи пакет не пробуется',
+      );
+      expect(await db.pendingReceiptCount(), 1, reason: 'и не теряется');
+    });
+
     test('B: без адресата старое убирается, свежее ждёт', () async {
       final (controller, db) = await runtime();
       final now = DateTime.now().millisecondsSinceEpoch;

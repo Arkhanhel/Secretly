@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'package:flutter/material.dart';
+import '../motion/motion.dart';
 
 /// Wraps a single list item with a staggered fade+slide-up entrance animation.
 ///
@@ -45,13 +46,13 @@ class _StaggeredListItemState extends State<StaggeredListItem>
 
     final curved = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeOutCubic,
+      curve: Motion.standard,
     );
 
     _opacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.0, 0.7, curve: Curves.easeOut),
+        curve: const Interval(0.0, 0.7, curve: Motion.fade),
       ),
     );
 
@@ -122,14 +123,14 @@ class _AnimatedFabState extends State<AnimatedFab>
 
     final curved = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeOutCubic,
+      curve: Motion.standard,
       reverseCurve: Curves.easeInOutCubic,
     );
 
     _opacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.0, 0.88, curve: Curves.easeOutCubic),
+        curve: const Interval(0.0, 0.88, curve: Motion.standard),
         reverseCurve: const Interval(0.0, 0.7, curve: Curves.easeInCubic),
       ),
     );
@@ -185,7 +186,7 @@ double mobileBottomNavSettingsFabShiftX(
   double fabSize = 56,
   double endFloatMargin = 16,
 }) {
-  final screenWidth = MediaQuery.of(context).size.width;
+  final screenWidth = MediaQuery.sizeOf(context).width;
   final slotWidth = (screenWidth - (navHorizontalInset * 2)) / navItemCount;
   final settingsCenterX =
       navHorizontalInset + (slotWidth * (navItemCount - 0.5));
@@ -215,7 +216,7 @@ class AnimatedNavIcon extends StatelessWidget {
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 1.0, end: selected ? 1.15 : 1.0),
       duration: duration,
-      curve: selected ? Curves.elasticOut : Curves.easeOutCubic,
+      curve: selected ? Motion.popElastic : Motion.standard,
       builder: (context, scale, child) {
         return Transform.scale(scale: scale, child: child);
       },
@@ -245,7 +246,7 @@ class AnimatedNavIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: duration,
-      curve: Curves.easeOutCubic,
+      curve: Motion.standard,
       width: selected ? width : 0,
       height: height,
       decoration: BoxDecoration(
@@ -271,7 +272,7 @@ class AnimatedTabBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedSwitcher(
       duration: duration,
-      switchInCurve: Curves.easeOutCubic,
+      switchInCurve: Motion.standard,
       switchOutCurve: Curves.easeInCubic,
       transitionBuilder: (child, animation) {
         return FadeTransition(opacity: animation, child: child);

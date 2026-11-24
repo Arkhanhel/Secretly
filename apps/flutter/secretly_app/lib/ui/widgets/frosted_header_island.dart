@@ -11,9 +11,61 @@ import '../liquid_glass_flags.dart';
 import '../thermal_guard.dart';
 import 'app_background.dart';
 import 'island_backdrop.dart';
+import '../apple_glass.dart';
 
 /// True when island surfaces should render as liquid glass (iOS + flag; the
 /// live thermal check happens per-build via [ThermalGuard.effectsAllowed]).
+/// Выключатель «матовые островки как в чате»: `false` — прежние числа
+/// (кант 22–24 %, вуаль 13→7 %, насыщенный фон).
+const bool kMatteIslandsLikeChat = true;
+
+/// Матовые островки (Android; iPhone без стекла) — ОДИН рецепт на всё
+/// приложение, тот же, что у островков внутри чата (23.11.2026, владелец:
+/// «сильно большие блики и сильно бледные островки везде — сделай как
+/// внутри чата»). Тёмная тема: вуаль 6 → 3 % белого, кант 8 %; светлая:
+/// 65 → 55 %, кант 42 %. Прежде у главной, полос, нижней панели и плеера
+/// были свои числа: кант 22–24 % («блики») и вуаль 13 → 7 % («бледные»).
+abstract final class MatteIslandLook {
+  static Color fillTop(bool dark) => kMatteIslandsLikeChat
+      ? (dark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.65))
+      : (dark ? Colors.white.withValues(alpha: 0.13) : Colors.white.withValues(alpha: 0.50));
+
+  static Color fillBottom(bool dark) => kMatteIslandsLikeChat
+      ? (dark ? Colors.white.withValues(alpha: 0.03) : Colors.white.withValues(alpha: 0.55))
+      : (dark ? Colors.white.withValues(alpha: 0.07) : Colors.white.withValues(alpha: 0.40));
+
+  /// Сплошная вуаль (где пластина одним цветом) — середина градиента.
+  static Color flatFill(bool dark) => kMatteIslandsLikeChat
+      ? (dark ? Colors.white.withValues(alpha: 0.045) : Colors.white.withValues(alpha: 0.60))
+      : (dark ? const Color(0x14FFFFFF) : const Color(0xBFFFFFFF));
+
+  /// Светлый кант по верхнему краю.
+  static Color highlight(bool dark) => kMatteIslandsLikeChat
+      ? (dark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.42))
+      : (dark ? Colors.white.withValues(alpha: 0.24) : Colors.white.withValues(alpha: 0.42));
+}
+
+/// Выключатель нейтрального ползунка: `false` — без стекла ползунок снова
+/// окрашивается цветом темы.
+const bool kNeutralSelectedPill = true;
+
+/// Ползунок выбранного пункта на островке — ОДИН на всё приложение
+/// (23.11.2026, владелец: «бесит, что фон ползунка красится в цвет темы —
+/// пусть будет чуть темнее по оттенку»). Тёмно-серый чуть темнее пластины,
+/// как у нижней панели «Чаты / Комнаты»; тонкая светлая кромка. Без цвета
+/// темы — и со стеклом, и без него.
+BoxDecoration islandSelectedPillDecoration({
+  required bool isDark,
+  required double radius,
+}) => BoxDecoration(
+  color: isDark ? const Color(0x73303030) : const Color(0x1F000000),
+  borderRadius: BorderRadius.circular(radius),
+  border: Border.all(
+    color: Colors.white.withValues(alpha: isDark ? 0.10 : 0.06),
+    width: 0.8,
+  ),
+);
+
 bool get liquidGlassIslandsEnabled =>
     kLiquidGlassNavBar && Platform.isIOS && GlassPrefs.enabled.value;
 
@@ -392,6 +444,7 @@ class FrostedHeaderIsland extends StatelessWidget {
     this.padding = EdgeInsets.zero,
     this.showHighlight = true,
     this.blurSigma = 24,
+    this.frosted,
   });
 
   final Widget child;
@@ -400,6 +453,11 @@ class FrostedHeaderIsland extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final bool showHighlight;
   final double blurSigma;
+
+  /// `false` — сплошная плашка без размытия, как при выключенном «стекле»
+  /// (страница ещё въезжает «мостом аватара» на Android). `null` — по
+  /// настройке, как всегда.
+  final bool? frosted;
 
   @override
   Widget build(BuildContext context) {
@@ -434,18 +492,10 @@ class FrostedHeaderIsland extends StatelessWidget {
     // alpha 0.07–0.13 — enough to take the dirtiness off a blurred backdrop and
     // visually nothing on their own. With the blur off the island must paint a
     // SOLID plate instead, or it disappears (field report 2026-08-01).
-    final frosted = PanelPrefs.frostedEnabled.value;
+    final frosted = this.frosted ?? PanelPrefs.frostedEnabled.value;
     final solid = opaquePanelFill(context);
-    final fillTop = !frosted
-        ? solid
-        : isDark
-        ? Colors.white.withValues(alpha: 0.13)
-        : Colors.white.withValues(alpha: 0.50);
-    final fillBottom = !frosted
-        ? solid
-        : isDark
-        ? Colors.white.withValues(alpha: 0.07)
-        : Colors.white.withValues(alpha: 0.40);
+    final fillTop = !frosted ? solid : MatteIslandLook.fillTop(isDark);
+    final fillBottom = !frosted ? solid : MatteIslandLook.fillBottom(isDark);
     final br = BorderRadius.circular(radius);
     Widget island = ClipRRect(
       borderRadius: br,
@@ -465,16 +515,19 @@ class FrostedHeaderIsland extends StatelessWidget {
           // they are dark in light mode and light in dark mode (explicit colors
           // still win). Fixes white-on-white island controls in light theme.
           child: IconTheme.merge(
-            data: IconThemeData(color: cs.onSurface),
+            // iPhone: значки островка — чисто белые/чёрные, как в iOS.
+            data: IconThemeData(
+              color: appleGlassPanelsEnabled
+                  ? (isDark ? Colors.white : Colors.black)
+                  : cs.onSurface,
+            ),
             child: Padding(padding: padding, child: child),
           ),
         ),
       ),
     );
     if (showHighlight) {
-      final highlight = isDark
-          ? Colors.white.withValues(alpha: 0.24)
-          : Colors.white.withValues(alpha: 0.42);
+      final highlight = MatteIslandLook.highlight(isDark);
       island = CustomPaint(
         foregroundPainter: GlassHighlightBorderPainter(
           radius: radius,
@@ -513,9 +566,15 @@ class FrostedIslandRowGroup extends StatelessWidget {
     this.rowHeight = 38,
     this.rowHeights,
     this.radius = 16,
+    this.rowIds,
   });
 
   final List<Widget> rows;
+
+  /// Постоянные имена строк («music», «call», …). Заданы — строки
+  /// появляются и уходят «жидко» ([LiquidIslandRows]): новая вытекает из шва,
+  /// ушедшая втягивается, пластина растёт и сжимается плавно (23.11.2026).
+  final List<String>? rowIds;
   final double rowHeight;
 
   /// Per-row heights, when the rows are not all the same size (the call row is
@@ -548,11 +607,25 @@ class FrostedIslandRowGroup extends StatelessWidget {
     return _buildClassic(context);
   }
 
+  Widget? _liquidColumn(Color seamColor) {
+    final ids = rowIds;
+    if (ids == null || ids.length != rows.length) return null;
+    return LiquidIslandRows(
+      seamColor: seamColor,
+      rows: [
+        for (var i = 0; i < rows.length; i++)
+          LiquidIslandRow(id: ids[i], height: _heightAt(i), child: rows[i]),
+      ],
+    );
+  }
+
   Widget _buildRowsColumn(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final seamColor = isDark
         ? Colors.white.withValues(alpha: 0.10)
         : Colors.black.withValues(alpha: 0.07);
+    final liquid = _liquidColumn(seamColor);
+    if (liquid != null) return liquid;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -578,7 +651,7 @@ class FrostedIslandRowGroup extends StatelessWidget {
         : Colors.black.withValues(alpha: 0.07);
     final br = BorderRadius.circular(radius);
 
-    final column = Column(
+    final column = _liquidColumn(seamColor) ?? Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         for (var i = 0; i < rows.length; i++) ...[
@@ -592,9 +665,7 @@ class FrostedIslandRowGroup extends StatelessWidget {
       foregroundPainter: GlassHighlightBorderPainter(
         radius: radius,
         strokeWidth: 1.3,
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.24)
-            : Colors.white.withValues(alpha: 0.42),
+        color: MatteIslandLook.highlight(isDark),
       ),
       child: ClipRRect(
         borderRadius: br,
@@ -641,4 +712,192 @@ Widget _maybeBlur({
     filter: islandBackdropFilter(sigmaX: sigma, sigmaY: sigma),
     child: child,
   );
+}
+
+
+// ── Жидкое слияние островков (23.11.2026) ─────────────────────────────────
+
+/// Строка общей пластины островков: постоянное имя, высота, содержимое.
+@immutable
+class LiquidIslandRow {
+  const LiquidIslandRow({
+    required this.id,
+    required this.height,
+    required this.child,
+  });
+
+  final String id;
+  final double height;
+  final Widget child;
+}
+
+/// Выключатель жидкого слияния: `false` — строки появляются и исчезают
+/// сразу, как раньше.
+const bool kLiquidIslandMerge = true;
+
+/// Строки одной пластины островков с «жидкой» сменой (владелец, 23.11.2026:
+/// «если любой островок встречается с другим — они объединяются, как на
+/// айфоне»). Новая строка вытекает из шва с лёгким перелётом пружины,
+/// ушедшая втягивается; пластина вокруг растёт и сжимается вместе с ними.
+/// Строки опознаются по [LiquidIslandRow.id], порядок задаёт вызывающий.
+class LiquidIslandRows extends StatefulWidget {
+  const LiquidIslandRows({
+    super.key,
+    required this.rows,
+    required this.seamColor,
+    this.seam = 0.5,
+  });
+
+  final List<LiquidIslandRow> rows;
+  final Color seamColor;
+  final double seam;
+
+  @override
+  State<LiquidIslandRows> createState() => _LiquidIslandRowsState();
+}
+
+class _LiquidEntry {
+  _LiquidEntry(this.row, this.controller)
+    : size = CurvedAnimation(
+        parent: controller,
+        curve: _LiquidIslandRowsState._inCurve,
+        reverseCurve: _LiquidIslandRowsState._outCurve,
+      ),
+      opacity = CurvedAnimation(
+        parent: controller,
+        curve: const Interval(0.25, 1, curve: Curves.easeOut),
+        reverseCurve: const Interval(0, 0.6, curve: Curves.easeIn),
+      );
+  LiquidIslandRow row;
+  final AnimationController controller;
+  // Кривые — один раз на строку: CurvedAnimation подписывается на
+  // контроллер, создавать её в каждом build — копить подписки.
+  final CurvedAnimation size;
+  final CurvedAnimation opacity;
+  bool leaving = false;
+
+  void dispose() {
+    size.dispose();
+    opacity.dispose();
+    controller.dispose();
+  }
+}
+
+class _LiquidIslandRowsState extends State<LiquidIslandRows>
+    with TickerProviderStateMixin {
+  static const Duration _in = Duration(milliseconds: 380);
+  static const Duration _out = Duration(milliseconds: 240);
+
+  /// Вытекание — с лёгким перелётом (жидкость), втягивание — без.
+  static const Curve _inCurve = Cubic(0.25, 1.25, 0.45, 1);
+  static const Curve _outCurve = Curves.easeInCubic;
+
+  final List<_LiquidEntry> _entries = [];
+
+  AnimationController _controller({required bool shown}) =>
+      AnimationController(
+        vsync: this,
+        duration: _in,
+        reverseDuration: _out,
+        value: shown ? 1 : 0,
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    for (final r in widget.rows) {
+      _entries.add(_LiquidEntry(r, _controller(shown: true)));
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant LiquidIslandRows old) {
+    super.didUpdateWidget(old);
+    final next = {for (final r in widget.rows) r.id: r};
+    // Ушедшие — втягиваются и пропадают.
+    final dropNow = <_LiquidEntry>[];
+    for (final e in _entries) {
+      final upd = next[e.row.id];
+      if (upd != null) {
+        e.row = upd;
+        if (e.leaving) {
+          e.leaving = false;
+          e.controller.forward();
+        }
+      } else if (!e.leaving) {
+        e.leaving = true;
+        if (!kLiquidIslandMerge ||
+            (MediaQuery.maybeDisableAnimationsOf(context) ?? false)) {
+          e.controller.value = 0;
+          dropNow.add(e);
+        } else {
+          e.controller.reverse().whenComplete(() => _drop(e));
+        }
+      }
+    }
+    // Сразу убранные — после обхода (сборка кадра и так впереди).
+    for (final e in dropNow) {
+      _entries.remove(e);
+      e.dispose();
+    }
+    // Новые — на своё место по порядку вызывающего, вытекают из шва.
+    final have = {for (final e in _entries) e.row.id};
+    for (var i = 0; i < widget.rows.length; i++) {
+      final r = widget.rows[i];
+      if (have.contains(r.id)) continue;
+      final instant =
+          !kLiquidIslandMerge ||
+          (MediaQuery.maybeDisableAnimationsOf(context) ?? false);
+      final entry = _LiquidEntry(r, _controller(shown: instant));
+      // Вставить после строки, что стоит перед ней в новом порядке.
+      var at = 0;
+      if (i > 0) {
+        final prevId = widget.rows[i - 1].id;
+        final idx = _entries.indexWhere((e) => e.row.id == prevId);
+        at = idx < 0 ? _entries.length : idx + 1;
+      }
+      _entries.insert(at, entry);
+      if (!instant) entry.controller.forward();
+    }
+  }
+
+  void _drop(_LiquidEntry e) {
+    if (!mounted || !e.leaving) return;
+    setState(() => _entries.remove(e));
+    e.dispose();
+  }
+
+  @override
+  void dispose() {
+    for (final e in _entries) {
+      e.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final children = <Widget>[];
+    for (var i = 0; i < _entries.length; i++) {
+      final e = _entries[i];
+      children.add(
+        SizeTransition(
+          key: ValueKey<String>('liquid-row-${e.row.id}'),
+          sizeFactor: e.size,
+          axisAlignment: -1,
+          child: FadeTransition(
+            opacity: e.opacity,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (i > 0) Container(height: widget.seam, color: widget.seamColor),
+                SizedBox(height: e.row.height, child: e.row.child),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    return Column(mainAxisSize: MainAxisSize.min, children: children);
+  }
 }

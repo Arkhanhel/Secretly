@@ -9,6 +9,8 @@ import '../app/app_controller.dart';
 import '../calls/call_manager.dart';
 import '../calls/call_state.dart';
 import 'icons/app_icons.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'widgets/call_return_banner.dart';
 import 'l10n.dart';
 import 'thermal_guard.dart';
@@ -20,6 +22,7 @@ Future<void> showSharedAudioPlayerSheet(
   required AppController controller,
 }) async {
   await showModalBottomSheet<void>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -46,6 +49,11 @@ const double kSharedAudioIslandRowHeight = 38;
 /// the music row — its content is a single line (name + status), so a full 38px
 /// read as a fat band next to the player.
 const double kSharedAudioCallRowHeight = 32;
+
+/// Высота закреплённой зелёной плашки звонка (без музыки) вместе с отступами.
+/// 21.11.2026: раньше плашка была строкой прокручиваемого списка и уезжала
+/// под верхние острова — теперь она закреплена под ними, как музыка.
+const double kPinnedCallIslandRowHeight = 36;
 
 /// Zero-height-when-idle spacer that mirrors [SharedAudioMiniPlayerBanner]'s
 /// footprint. Place this where the banner used to live inside a scrolling list
@@ -74,9 +82,18 @@ class SharedAudioMiniPlayerReserve extends StatelessWidget {
 /// time, call + music glued into ONE glass island (FrostedIslandRowGroup),
 /// exactly like the chat glues its pinned-message and now-playing strips.
 class SharedAudioTopIslands extends StatelessWidget {
-  const SharedAudioTopIslands({super.key, required this.controller});
+  const SharedAudioTopIslands({
+    super.key,
+    required this.controller,
+    this.roomCall,
+  });
 
   final AppController controller;
+
+  /// Плашка звонка в комнате («Идёт обсуждение») — нижней строкой той же
+  /// пластины (23.11.2026: островки под шапкой всегда сливаются в один).
+  /// `null` — звонка в комнате нет.
+  final Widget? roomCall;
 
   @override
   Widget build(BuildContext context) {
@@ -86,52 +103,93 @@ class SharedAudioTopIslands extends StatelessWidget {
         final musicActive = playback.currentTrack != null;
         final manager = CallManager.instance;
         if (manager == null) {
-          return musicActive
-              ? SharedAudioMiniPlayerBanner(controller: controller)
-              : const SizedBox.shrink();
+          return _group(musicActive: musicActive, callMinimized: false);
         }
         return ValueListenableBuilder<CallState>(
           valueListenable: manager.state,
-          builder: (context, call, _) {
-            final callMinimized = call.isActive && call.isUiMinimized;
-            if (musicActive && callMinimized) {
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
-                child: FrostedIslandRowGroup(
-                  // Порядок закреплён: музыка сверху, звонок ВСЕГДА нижней
-                  // строкой (уточнение 2026-07-17).
-                  rowHeights: const [
-                    kSharedAudioIslandRowHeight,
-                    kSharedAudioCallRowHeight,
-                  ],
-                  rows: [
-                    SharedAudioMiniPlayerBanner(
-                      controller: controller,
-                      merged: true,
-                    ),
-                    const CallReturnBanner(merged: true),
-                  ],
-                ),
-              );
-            }
-            if (musicActive) {
-              return SharedAudioMiniPlayerBanner(controller: controller);
-            }
-            return const SizedBox.shrink();
-          },
+          builder: (context, call, _) => _group(
+            musicActive: musicActive,
+            callMinimized: call.isActive && call.isUiMinimized,
+          ),
         );
       },
     );
   }
+
+  /// Одна пластина на все плашки (23.11.2026): строки приходят и уходят
+  /// «жидко», порядок закреплён — музыка, звонок, звонок в комнате.
+  Widget _group({required bool musicActive, required bool callMinimized}) {
+    final room = roomCall;
+    final ids = <String>[
+      if (musicActive) 'music',
+      if (callMinimized) 'call',
+      if (room != null) 'room_call',
+    ];
+    final rowCount = ids.length;
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 320),
+      curve: const Cubic(0.25, 1.1, 0.45, 1),
+      alignment: Alignment.topCenter,
+      child: rowCount == 0
+          ? const SizedBox(width: double.infinity)
+          : Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+              child: MediaQuery.withClampedTextScaling(
+                maxScaleFactor: 1.3,
+                child: FrostedIslandRowGroup(
+                  rowIds: ids,
+                  rowHeights: [
+                    for (final id in ids)
+                      sharedTopIslandRowHeight(id, rowCount: rowCount),
+                  ],
+                  rows: [
+                    if (musicActive)
+                      SharedAudioMiniPlayerBanner(
+                        controller: controller,
+                        merged: true,
+                      ),
+                    if (callMinimized) const CallReturnBanner(merged: true),
+                    ?room,
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
+}
+
+/// Высота строки общей пластины под шапкой. Одна строка звонка — своя
+/// капсула прежней высоты; в группе с музыкой — тоньше (как было).
+double sharedTopIslandRowHeight(String id, {required int rowCount}) =>
+    switch (id) {
+      'music' => kSharedAudioIslandRowHeight,
+      _ => rowCount == 1 ? kPinnedCallIslandRowHeight : kSharedAudioCallRowHeight,
+    };
+
+/// Полная высота пластины под шапкой (для места в списках).
+double sharedTopIslandsHeight(List<String> ids) {
+  if (ids.isEmpty) return 0;
+  var h = 8.0 + 6.0 + (ids.length - 1) * 0.5;
+  for (final id in ids) {
+    h += sharedTopIslandRowHeight(id, rowCount: ids.length);
+  }
+  return h;
 }
 
 /// Spacer mirroring [SharedAudioTopIslands]' footprint inside scrolling
 /// lists (music-only = banner height; merged call+music = two 38px rows +
 /// seam + margins).
 class SharedAudioTopIslandsReserve extends StatelessWidget {
-  const SharedAudioTopIslandsReserve({super.key, required this.controller});
+  const SharedAudioTopIslandsReserve({
+    super.key,
+    required this.controller,
+    this.roomCallVisible = false,
+  });
 
   final AppController controller;
+
+  /// Звонок в комнате — строкой той же пластины ([SharedAudioTopIslands]).
+  final bool roomCallVisible;
 
   @override
   Widget build(BuildContext context) {
@@ -139,50 +197,27 @@ class SharedAudioTopIslandsReserve extends StatelessWidget {
       valueListenable: controller.sharedAudioPlayback,
       builder: (context, playback, _) {
         final musicActive = playback.currentTrack != null;
-        if (!musicActive) return const SizedBox.shrink();
         final manager = CallManager.instance;
-        if (manager == null) {
-          return const SizedBox(height: kSharedAudioMiniPlayerBannerHeight);
-        }
+        Widget reserve(bool callMinimized) => AnimatedContainer(
+          duration: const Duration(milliseconds: 320),
+          curve: const Cubic(0.25, 1.1, 0.45, 1),
+          height: sharedTopIslandsHeight([
+            if (musicActive) 'music',
+            if (callMinimized) 'call',
+            if (roomCallVisible) 'room_call',
+          ]),
+        );
+        if (manager == null) return reserve(false);
         return ValueListenableBuilder<CallState>(
           valueListenable: manager.state,
-          builder: (context, call, _) {
-            final merged = call.isActive && call.isUiMinimized;
-            return SizedBox(
-              height: merged
-                  ? 8 +
-                        kSharedAudioIslandRowHeight +
-                        kSharedAudioCallRowHeight +
-                        0.5 +
-                        6
-                  : kSharedAudioMiniPlayerBannerHeight,
-            );
-          },
+          builder: (context, call, _) =>
+              reserve(call.isActive && call.isUiMinimized),
         );
       },
     );
   }
 }
 
-/// Standalone call banner for list headers that steps aside while the merged
-/// overlay owns the call row (music playing → the overlay renders either the
-/// merged group or nothing; a bare call banner here would double-render).
-class SharedAudioCallBannerGate extends StatelessWidget {
-  const SharedAudioCallBannerGate({super.key, required this.controller});
-
-  final AppController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return ValueListenableBuilder<SharedAudioPlaybackState>(
-      valueListenable: controller.sharedAudioPlayback,
-      builder: (context, playback, _) {
-        if (playback.currentTrack != null) return const SizedBox.shrink();
-        return const CallReturnBanner();
-      },
-    );
-  }
-}
 
 class SharedAudioMiniPlayerBanner extends StatelessWidget {
   const SharedAudioMiniPlayerBanner({
@@ -399,9 +434,7 @@ class _NowPlayingIsland extends StatelessWidget {
         foregroundPainter: GlassHighlightBorderPainter(
           radius: _radius,
           strokeWidth: 1.2,
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.22)
-              : Colors.white.withValues(alpha: 0.40),
+          color: MatteIslandLook.highlight(isDark),
         ),
         child: ClipRRect(
           borderRadius: br,
@@ -717,12 +750,12 @@ class _SharedAudioPlayerSheet extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    IconButton(
+                    PressFeedback(child: IconButton(
                       onPressed: controller.playPreviousSharedAudio,
                       icon: const Icon(AppIcons.skipPrev),
                       iconSize: 26,
                       color: cs.onSurface.withValues(alpha: 0.85),
-                    ),
+                    )),
                     const SizedBox(width: 18),
                     // Large primary play/pause disc.
                     GestureDetector(
@@ -757,12 +790,12 @@ class _SharedAudioPlayerSheet extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 18),
-                    IconButton(
+                    PressFeedback(child: IconButton(
                       onPressed: controller.playNextSharedAudio,
                       icon: const Icon(AppIcons.skipNext),
                       iconSize: 26,
                       color: cs.onSurface.withValues(alpha: 0.85),
-                    ),
+                    )),
                   ],
                 ),
                 const SizedBox(height: 14),

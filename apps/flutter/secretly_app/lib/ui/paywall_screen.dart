@@ -25,6 +25,8 @@ import '../billing/restore_outcome.dart';
 import '../entitlements/feature_gate.dart';
 import 'wave1_l10n.dart';
 import 'widgets/premium_glass.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/build_variant.dart';
 
 /// The reason the paywall was shown. 1:1 with [paywallTriggerFromFeature].
 enum PaywallTrigger { desktop, file, id, cosmetic, group, general }
@@ -374,46 +376,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
       ..clearSnackBars()
       ..showSnackBar(
         SnackBar(
-          content: Text(
-            outcome == RestoreOutcome.restored
-                ? wave1TextForLocale(
-                    localeTag,
-                    ru: 'Премиум восстановлен ✓',
-                    en: 'Premium restored ✓',
-                    uk: 'Преміум відновлено ✓',
-                    es: 'Premium restaurado ✓',
-                    pt: 'Premium restaurado ✓',
-                    ptBr: 'Premium restaurado ✓',
-                    fr: 'Premium restauré ✓',
-                    de: 'Premium wiederhergestellt ✓',
-                  )
-                : outcome == RestoreOutcome.purchaseNotApplied
-                    // The store DID return a purchase — never tell this person
-                    // there is nothing to restore; they paid and can see it in
-                    // their store account.
-                    ? wave1TextForLocale(
-                        localeTag,
-                        ru: 'Покупка найдена, но пока не применилась. Проверьте связь и повторите — если не поможет, напишите в поддержку.',
-                        en: 'Purchase found but not applied yet. Check your connection and retry — contact support if it persists.',
-                        uk: 'Покупку знайдено, але вона ще не застосувалася. Перевірте зв’язок і повторіть — якщо не допоможе, напишіть у підтримку.',
-                        es: 'Compra encontrada pero aún no aplicada. Revisa la conexión y reinténtalo; si persiste, contacta con soporte.',
-                        pt: 'Compra encontrada mas ainda não aplicada. Verifique a ligação e tente de novo; se persistir, contacte o suporte.',
-                        ptBr: 'Compra encontrada mas ainda não aplicada. Verifique a conexão e tente de novo; se persistir, contate o suporte.',
-                        fr: 'Achat trouvé mais pas encore appliqué. Vérifiez la connexion et réessayez ; si cela persiste, contactez le support.',
-                        de: 'Kauf gefunden, aber noch nicht angewendet. Verbindung prüfen und erneut versuchen — bei Bedarf den Support kontaktieren.',
-                      )
-                    : wave1TextForLocale(
-                    localeTag,
-                    ru: 'Покупок для восстановления не найдено. Если вы оплачивали — напишите в поддержку.',
-                    en: 'No purchases to restore. If you were charged, contact support.',
-                    uk: 'Покупок для відновлення не знайдено. Якщо ви платили — напишіть у підтримку.',
-                    es: 'No hay compras que restaurar. Si se te cobró, contacta con soporte.',
-                    pt: 'Nenhuma compra para restaurar. Se foi cobrado, contacte o suporte.',
-                    ptBr: 'Nenhuma compra para restaurar. Se foi cobrado, contate o suporte.',
-                    fr: "Aucun achat à restaurer. Si vous avez été débité, contactez le support.",
-                    de: 'Keine Käufe zum Wiederherstellen. Falls abgebucht, Support kontaktieren.',
-                  ),
-          ),
+          content: Text(restoreOutcomeMessage(localeTag, outcome)),
         ),
       );
     // On success, close the paywall — the unlocked UI is the confirmation.
@@ -464,14 +427,14 @@ class _PaywallScreenState extends State<PaywallScreen> {
       case PaywallTrigger.cosmetic:
         return wave1Text(
           context,
-          ru: 'Премиум-темы, обои, рамки и реакции',
-          en: 'Premium themes, wallpapers, frames and reactions',
-          uk: 'Преміум-теми, шпалери, рамки та реакції',
-          es: 'Temas, fondos, marcos y reacciones premium',
-          pt: 'Temas, fundos, molduras e reações premium',
-          ptBr: 'Temas, papéis de parede, molduras e reações premium',
-          fr: 'Thèmes, fonds d’écran, cadres et réactions premium',
-          de: 'Premium-Designs, Hintergründe, Rahmen und Reaktionen',
+          ru: 'Премиум-темы, обои, рамки и обложки',
+          en: 'Premium themes, wallpapers, frames and covers',
+          uk: 'Преміум-теми, шпалери, рамки та обкладинки',
+          es: 'Temas, fondos, marcos y portadas premium',
+          pt: 'Temas, fundos, molduras e capas premium',
+          ptBr: 'Temas, papéis de parede, molduras e capas premium',
+          fr: 'Thèmes, fonds d’écran, cadres et couvertures premium',
+          de: 'Premium-Designs, Hintergründe, Rahmen und Titelbilder',
         );
       case PaywallTrigger.group:
         return wave1Text(
@@ -509,7 +472,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
   List<(IconData, String, String?)> _currentPerks(BuildContext context) {
     return [
       (
-        Icons.devices_rounded,
+        AdaptiveIcons.devices_rounded,
         wave1Text(
           context,
           ru: 'Несколько устройств, включая компьютер',
@@ -524,7 +487,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         null,
       ),
       (
-        Icons.cloud_upload_rounded,
+        AdaptiveIcons.cloud_upload_rounded,
         wave1Text(
           context,
           ru: 'Файлы до 1 ГБ',
@@ -549,7 +512,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         ),
       ),
       (
-        Icons.groups_rounded,
+        AdaptiveIcons.groups_rounded,
         wave1Text(
           context,
           ru: 'Группы до 500 человек и звонки до 50 участников',
@@ -564,7 +527,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         null,
       ),
       (
-        Icons.workspaces_rounded,
+        AdaptiveIcons.workspaces_rounded,
         wave1Text(
           context,
           ru: 'Больше своих групп и комнат',
@@ -595,8 +558,10 @@ class _PaywallScreenState extends State<PaywallScreen> {
       // it must ship as an alias over a stable profile_id, never as a new one:
       // the ID anchors contacts, ratchet sessions and the entitlement itself,
       // so minting a fresh one would break all three at once.
+      // «Голос в текст» убран из приложения (build_variant.dart) — не обещаем.
+      if (kVoiceTranscriptionAvailable)
       (
-        Icons.record_voice_over_rounded,
+        AdaptiveIcons.record_voice_over_rounded,
         wave1Text(
           context,
           ru: 'ИИ: голосовые сообщения в текст',
@@ -611,7 +576,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         null,
       ),
       (
-        Icons.palette_rounded,
+        AdaptiveIcons.palette_rounded,
         wave1Text(
           context,
           ru: 'Премиум-косметика: иконки, обои, рингтоны, рамки и обложки профиля',
@@ -627,7 +592,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         null,
       ),
       (
-        Icons.auto_awesome_rounded,
+        AdaptiveIcons.auto_awesome_rounded,
         wave1Text(
           context,
           ru: 'Премиум-стикеры и эмодзи-статусы',
@@ -649,7 +614,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
   List<(IconData, String)> _comingPerks(BuildContext context) {
     return [
       (
-        Icons.workspaces_rounded,
+        AdaptiveIcons.workspaces_rounded,
         wave1Text(
           context,
           ru: 'Spaces — каналы и сообщества',
@@ -663,7 +628,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         ),
       ),
       (
-        Icons.emoji_emotions_rounded,
+        AdaptiveIcons.emoji_emotions_rounded,
         wave1Text(
           context,
           ru: 'Свои стикерпаки и создание стикеров',
@@ -677,7 +642,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         ),
       ),
       (
-        Icons.auto_stories_rounded,
+        AdaptiveIcons.auto_stories_rounded,
         wave1Text(
           context,
           ru: 'Истории, которые исчезают',
@@ -691,7 +656,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         ),
       ),
       (
-        Icons.smart_display_rounded,
+        AdaptiveIcons.smart_display_rounded,
         wave1Text(
           context,
           ru: 'Совместный просмотр видео в звонках',
@@ -705,7 +670,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         ),
       ),
       (
-        Icons.videocam_rounded,
+        AdaptiveIcons.videocam_rounded,
         wave1Text(
           context,
           ru: 'HD-видеозвонки и шумоподавление',
@@ -958,7 +923,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
                 child: Row(
                   children: [
                     _GlassIconButton(
-                      icon: Icons.close_rounded,
+                      icon: AdaptiveIcons.close_rounded,
                       tooltip: wave1Text(
                         context,
                         ru: 'Закрыть',
@@ -1092,7 +1057,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.schedule_rounded, size: 20, color: onGlass),
+              Icon(AdaptiveIcons.schedule_rounded, size: 20, color: onGlass),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -1462,7 +1427,7 @@ class _PlanRow extends StatelessWidget {
               ),
             const SizedBox(width: 6),
             Icon(
-              Icons.chevron_right_rounded,
+              AdaptiveIcons.chevron_right_rounded,
               size: 20,
               color: onVariant.withValues(alpha: 0.7),
             ),
@@ -1547,3 +1512,45 @@ class _GlassIconButton extends StatelessWidget {
     return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
   }
 }
+
+/// Текст после «Восстановить покупки» — общий для экрана оплаты и окна
+/// Premium (23.11.2026).
+String restoreOutcomeMessage(String localeTag, RestoreOutcome outcome) =>
+outcome == RestoreOutcome.restored
+                ? wave1TextForLocale(
+                    localeTag,
+                    ru: 'Премиум восстановлен ✓',
+                    en: 'Premium restored ✓',
+                    uk: 'Преміум відновлено ✓',
+                    es: 'Premium restaurado ✓',
+                    pt: 'Premium restaurado ✓',
+                    ptBr: 'Premium restaurado ✓',
+                    fr: 'Premium restauré ✓',
+                    de: 'Premium wiederhergestellt ✓',
+                  )
+                : outcome == RestoreOutcome.purchaseNotApplied
+                    // The store DID return a purchase — never tell this person
+                    // there is nothing to restore; they paid and can see it in
+                    // their store account.
+                    ? wave1TextForLocale(
+                        localeTag,
+                        ru: 'Покупка найдена, но пока не применилась. Проверьте связь и повторите — если не поможет, напишите в поддержку.',
+                        en: 'Purchase found but not applied yet. Check your connection and retry — contact support if it persists.',
+                        uk: 'Покупку знайдено, але вона ще не застосувалася. Перевірте зв’язок і повторіть — якщо не допоможе, напишіть у підтримку.',
+                        es: 'Compra encontrada pero aún no aplicada. Revisa la conexión y reinténtalo; si persiste, contacta con soporte.',
+                        pt: 'Compra encontrada mas ainda não aplicada. Verifique a ligação e tente de novo; se persistir, contacte o suporte.',
+                        ptBr: 'Compra encontrada mas ainda não aplicada. Verifique a conexão e tente de novo; se persistir, contate o suporte.',
+                        fr: 'Achat trouvé mais pas encore appliqué. Vérifiez la connexion et réessayez ; si cela persiste, contactez le support.',
+                        de: 'Kauf gefunden, aber noch nicht angewendet. Verbindung prüfen und erneut versuchen — bei Bedarf den Support kontaktieren.',
+                      )
+                    : wave1TextForLocale(
+                    localeTag,
+                    ru: 'Покупок для восстановления не найдено. Если вы оплачивали — напишите в поддержку.',
+                    en: 'No purchases to restore. If you were charged, contact support.',
+                    uk: 'Покупок для відновлення не знайдено. Якщо ви платили — напишіть у підтримку.',
+                    es: 'No hay compras que restaurar. Si se te cobró, contacta con soporte.',
+                    pt: 'Nenhuma compra para restaurar. Se foi cobrado, contacte o suporte.',
+                    ptBr: 'Nenhuma compra para restaurar. Se foi cobrado, contate o suporte.',
+                    fr: "Aucun achat à restaurer. Si vous avez été débité, contactez le support.",
+                    de: 'Keine Käufe zum Wiederherstellen. Falls abgebucht, Support kontaktieren.',
+                  );

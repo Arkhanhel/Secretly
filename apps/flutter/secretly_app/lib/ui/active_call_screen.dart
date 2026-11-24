@@ -2,41 +2,46 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:async';
-import 'scroll_feel.dart';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter/material.dart';
-import 'package:secretly_app/ui/secretly_snackbar.dart';
-import 'package:flutter/physics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:secretly_app/ui/secretly_snackbar.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
-import '../calls/call_manager.dart';
 import '../calls/call_audio_route.dart';
+import '../calls/call_manager.dart';
 import '../calls/call_state.dart';
 import '../calls/webrtc_call_session.dart';
 import '../l10n/app_localizations.dart';
-import 'call_error_text.dart';
 import 'android_picture_in_picture.dart';
-import 'icons/app_icons.dart';
+import 'call/call_parts.dart';
+import 'call_error_text.dart';
 import 'l10n.dart';
 import 'wave1_l10n.dart';
 import 'widgets/avatar_initials.dart';
 import 'widgets/system_bottom_fade.dart';
 
-const _kOneToOneCallBg = Color(0xFF0D0D0D);
-const _kOneToOneCallBgTop = Color(0xFF4B2368);
-const _kOneToOneCallBgMid = Color(0xFF2A4D94);
-
-/// Full-screen active-call UI (WhatsApp style).
+/// Экран звонка один на один (макет «Calls», 4b, 21.11.2026).
 ///
-/// Covers the full screen with:
-/// - Remote video (or gradient + avatar for audio calls)
-/// - Local camera PiP (draggable, top-right)
-/// - Status bar with encryption badge + connection status
-/// - Call duration timer (mm:ss)
-/// - Bottom control bar: mute, speaker, camera, switch-cam, hangup
-/// - Upgrade-to-video button for audio calls
+/// Один экран и одна панель на голосовой и видео: Микрофон, Звук, Камера,
+/// Ещё, Завершить. Камера в голосовом сразу включает видео — отдельной
+/// плашки нет. Выключенное — белая кнопка с тёмным знаком.
+///
+/// * «Звук»: нажатие переключает громкую; подключены наушники/Bluetooth —
+///   открывается список устройств с галочкой (долгое нажатие — всегда список).
+/// * «Ещё» раскрывает панель вверх: показ экрана, поворот камеры, ключ звонка.
+/// * Окно своей камеры тянется и прилипает к ближайшему углу, отступая от
+///   шапки и панели; к краю — прячется в язычок; двойное касание меняет
+///   местами. Через 4 секунды без касаний кнопки уходят, окно занимает угол.
+/// * Живой фон, кольцо вокруг портрета, когда собеседник говорит; таймер —
+///   спокойным белым (не зелёным).
+/// * Замок в шапке — ключ звонка: четыре знака, одинаковые у обоих.
+/// * Входящий: «Отклонить» и «Принять» по краям, нажатием или смахиванием.
 class ActiveCallScreen extends StatefulWidget {
   const ActiveCallScreen({super.key, required this.callManager});
 
@@ -46,64 +51,85 @@ class ActiveCallScreen extends StatefulWidget {
   State<ActiveCallScreen> createState() => _ActiveCallScreenState();
 }
 
+enum _PipCorner { topLeft, topRight, bottomLeft, bottomRight }
+
 class _ActiveCallScreenState extends State<ActiveCallScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
+  static const double _pipW = 104;
+  static const double _pipH = 148;
+  static const Duration _autoHide = Duration(seconds: 4);
+
   Timer? _durationTimer;
   String _durationText = '00:00';
-  late final AnimationController _controlsFadeCtrl;
-  bool _controlsVisible = true;
-  bool _showAudioRouteChoices = false;
 
-  // Local PiP drag position + spring animation
-  Offset _pipOffset = const Offset(16, 56);
-  bool _videoSwapped = false;
-  bool _pipDragging = false;
-  Size _lastScreenSize = const Size(393, 852);
-  static const double _pipW = 110;
-  static const double _pipH = 160;
-  AnimationController? _pipSpringX;
-  AnimationController? _pipSpringY;
+  // Панель и шапка: в видеозвонке уходят через 4 секунды без касаний.
+  bool _controlsVisible = true;
+  Timer? _hideTimer;
+  bool _moreOpen = false;
+  bool _routeOpen = false;
+  bool _keyOpen = false;
+
+  // Окно своей камеры.
+  _PipCorner _corner = _PipCorner.topRight;
+  bool? _pipHiddenLeft;
+  Offset? _pipDrag;
+  Offset _pipDragStart = Offset.zero;
+  Offset _pipFingerStart = Offset.zero;
+  bool _swapped = false;
+
+  // Громкость собеседника — кольцо «говорит».
+  final ValueNotifier<double> _remoteLevel = ValueNotifier(0);
+  Timer? _levelTimer;
+  bool _levelBusy = false;
+
+  // Ключ звонка.
+  Future<List<String>?>? _keyFuture;
+
   bool? _lastAndroidPipEnabled;
-  // Single persistent listener — avoids the leak where every snap adds listeners.
-  late final VoidCallback _pipSpringListener;
+
+  // Пока сессии нет — пустые источники (не создавать их в build).
+  static final ValueNotifier<RemoteVideoLifecycle> _noVideo = ValueNotifier(
+    const RemoteVideoLifecycle.notExpected(),
+  );
+  static final ValueNotifier<CallQualityMetrics> _noQuality = ValueNotifier(
+    const CallQualityMetrics.empty(),
+  );
+
+  CallManager get _cm => widget.callManager;
 
   @override
   void initState() {
     super.initState();
-    _controlsFadeCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-      value: 1.0,
-    );
-    widget.callManager.state.addListener(_onStateChange);
+    _cm.state.addListener(_onStateChange);
     _startDurationTimer();
-    _pipSpringX = AnimationController.unbounded(vsync: this);
-    _pipSpringY = AnimationController.unbounded(vsync: this);
-    _pipSpringListener = _onPipSpringTick;
-    _pipSpringX!.addListener(_pipSpringListener);
-    _pipSpringY!.addListener(_pipSpringListener);
     WidgetsBinding.instance.addObserver(this);
     unawaited(WakelockPlus.enable());
     _syncNativePictureInPicture();
+    _syncLevelSampling();
+    _armAutoHide();
   }
 
   void _onStateChange() {
-    final phase = widget.callManager.state.value.phase;
-    if (phase == CallPhase.ended || phase == CallPhase.idle) {
-      _showAudioRouteChoices = false;
-      // Let the end-call reason show briefly, then pop will happen
-      // automatically via CallManager._endCall (2s delay + popCallScreens).
+    final s = _cm.state.value;
+    if (s.phase == CallPhase.ended || s.phase == CallPhase.idle) {
+      _routeOpen = false;
+      _moreOpen = false;
+      // Лист ключа звонка тоже закрывается с концом звонка (разбор
+      // 22.11.2026).
+      _keyOpen = false;
+      // Длительность на экране «завершён» больше не растёт.
+      _durationTimer?.cancel();
     }
     _syncNativePictureInPicture();
+    _syncLevelSampling();
+    _armAutoHide();
     if (mounted) setState(() {});
   }
 
   void _syncNativePictureInPicture() {
-    final state = widget.callManager.state.value;
+    final state = _cm.state.value;
     final enabled = state.isActive && state.isVideo;
-    if (_lastAndroidPipEnabled == enabled) {
-      return;
-    }
+    if (_lastAndroidPipEnabled == enabled) return;
     _lastAndroidPipEnabled = enabled;
     unawaited(
       NativePictureInPicture.setAutoEnterEnabled(
@@ -139,155 +165,309 @@ class _ActiveCallScreenState extends State<ActiveCallScreen>
     }
   }
 
-  /// 🔴 ОБЫЧНОЕ НАЖАТИЕ ВСЕГДА ПЕРЕКЛЮЧАЕТ ГРОМКУЮ (12.08.2026).
-  ///
-  /// Жалоба, стоившая суток разбора: «кнопка нажимается, связь не меняется».
-  /// Здесь стояло `if (hasMultipleChoices) { показать список; return; }` — и при
-  /// трёх и более маршрутах (наушник + громкая + гарнитура) кнопка громкой
-  /// переставала быть переключателем и лишь разворачивала полоску выбора.
-  /// Человек жмёт «громкую», получает список, которого не просил, и звук не
-  /// меняется.
-  ///
-  /// В журнале это выглядело как ПОЛНАЯ тишина: `toggleSpeaker` не звался ни
-  /// разу. Поэтому весь разбор аудиослоя — устаревший `setSpeakerphoneOn`,
-  /// маршруты, нативный `setCommunicationDevice` — шёл по пути, который вообще
-  /// не исполнялся.
-  ///
-  /// 🔴 УРОК: начинать от КНОПКИ, а не от механизма, который она якобы дёргает.
-  /// Тот же класс, что три предыдущих провала этого дня: правка стояла не там,
-  /// где исполнение.
-  ///
-  /// Выбор маршрута не потерян — он переехал на ДОЛГОЕ нажатие.
-  Future<void> _handleAudioRoutePrimaryAction(
-    CallAudioRouteState routeState,
-  ) async {
-    await widget.callManager.toggleSpeaker();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _showAudioRouteChoices = false;
-    });
-  }
-
-  Future<void> _selectAudioRoute(String routeId) async {
-    await widget.callManager.selectAudioRoute(routeId);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _showAudioRouteChoices = false;
-    });
-  }
-
   void _startDurationTimer() {
     _durationTimer?.cancel();
-    _durationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _tickDuration(initial: true);
+    _durationTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _tickDuration(),
+    );
+  }
+
+  /// Длительность: считается сразу (без «00:00» в первом кадре) и замирает,
+  /// когда звонок завершён.
+  void _tickDuration({bool initial = false}) {
+    if (!mounted) return;
+    final s = _cm.state.value;
+    final ms = s.connectedAtMs;
+    if (ms == null) return;
+    if (s.phase == CallPhase.ended && !initial && _durationText != '00:00') {
+      return;
+    }
+    final total = (DateTime.now().millisecondsSinceEpoch - ms) ~/ 1000;
+    final text = _fmt(total);
+    if (text == _durationText) return;
+    if (initial) {
+      _durationText = text;
+    } else {
+      setState(() => _durationText = text);
+    }
+  }
+
+  static String _fmt(int totalSec) {
+    final h = totalSec ~/ 3600;
+    final m = (totalSec ~/ 60) % 60;
+    final s = totalSec % 60;
+    final mm = m.toString().padLeft(2, '0');
+    final ss = s.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
+  }
+
+  /// Кольцо «говорит» — только в голосовом соединённом звонке (в видео лицо
+  /// и так видно). Чтение статистики раз в 300 мс, плавно.
+  void _syncLevelSampling() {
+    final s = _cm.state.value;
+    final want =
+        !s.isVideo &&
+        (s.phase == CallPhase.connected || s.phase == CallPhase.reconnecting);
+    if (want && _levelTimer == null) {
+      _levelTimer = Timer.periodic(const Duration(milliseconds: 300), (_) {
+        unawaited(_sampleLevel());
+      });
+    } else if (!want && _levelTimer != null) {
+      _levelTimer?.cancel();
+      _levelTimer = null;
+      _remoteLevel.value = 0;
+    }
+  }
+
+  Future<void> _sampleLevel() async {
+    if (_levelBusy) return;
+    // В фоне кольцо «говорит» никто не видит — статистику не опрашиваем
+    // (разбор 22.11.2026).
+    final life = WidgetsBinding.instance.lifecycleState;
+    if (life != null && life != AppLifecycleState.resumed) return;
+    final session = _cm.session;
+    if (session == null) return;
+    _levelBusy = true;
+    try {
+      final raw = await session.sampleRemoteAudioLevel() ?? 0;
       if (!mounted) return;
-      final ms = widget.callManager.state.value.connectedAtMs;
-      if (ms != null) {
-        final elapsed = DateTime.now().millisecondsSinceEpoch - ms;
-        final totalSec = (elapsed / 1000).floor();
-        final min = totalSec ~/ 60;
-        final sec = totalSec % 60;
-        setState(() {
-          _durationText =
-              '${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
-        });
+      // Речь в статистике тихая (0,02…0,3) — растягиваем и сглаживаем.
+      final target = math.min(1.0, math.sqrt(raw) * 1.6);
+      final now = _remoteLevel.value;
+      _remoteLevel.value = now + (target - now) * (target > now ? 0.6 : 0.25);
+    } finally {
+      _levelBusy = false;
+    }
+  }
+
+  // ── Панель: показ и автоскрытие ─────────────────────────────────────────
+
+  bool get _autoHideAllowed {
+    final s = _cm.state.value;
+    return s.isVideo &&
+        s.phase == CallPhase.connected &&
+        !_moreOpen &&
+        !_routeOpen &&
+        !_keyOpen &&
+        _pipDrag == null;
+  }
+
+  void _armAutoHide() {
+    _hideTimer?.cancel();
+    if (!_autoHideAllowed) {
+      if (!_controlsVisible && !_cm.state.value.isVideo) {
+        _controlsVisible = true;
       }
+      return;
+    }
+    _hideTimer = Timer(_autoHide, () {
+      if (!mounted || !_autoHideAllowed) return;
+      setState(() => _controlsVisible = false);
     });
   }
 
-  void _onPipSpringTick() {
-    if (!mounted) return;
-    final sx = _pipSpringX;
-    final sy = _pipSpringY;
-    if (sx == null || sy == null) return;
-    setState(() {
-      _pipOffset = Offset(
-        sx.value.clamp(0.0, _lastScreenSize.width - _pipW),
-        sy.value.clamp(0.0, _lastScreenSize.height - _pipH),
-      );
-    });
+  /// Любое касание: кнопки возвращаются, таймер заново.
+  void _touch() {
+    if (!_controlsVisible) setState(() => _controlsVisible = true);
+    _armAutoHide();
+  }
+
+  void _onBackgroundTap() {
+    final s = _cm.state.value;
+    if (_moreOpen || _routeOpen) {
+      setState(() {
+        _moreOpen = false;
+        _routeOpen = false;
+      });
+      _armAutoHide();
+      return;
+    }
+    if (s.isVideo && s.isActive) {
+      setState(() => _controlsVisible = !_controlsVisible);
+      if (_controlsVisible) _armAutoHide();
+    }
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    widget.callManager.state.removeListener(_onStateChange);
+    _cm.state.removeListener(_onStateChange);
     _durationTimer?.cancel();
-    _controlsFadeCtrl.dispose();
-    _pipSpringX?.removeListener(_pipSpringListener);
-    _pipSpringY?.removeListener(_pipSpringListener);
-    _pipSpringX?.dispose();
-    _pipSpringY?.dispose();
+    _hideTimer?.cancel();
+    _levelTimer?.cancel();
+    _remoteLevel.dispose();
     unawaited(NativePictureInPicture.setAutoEnterEnabled(enabled: false));
     unawaited(WakelockPlus.disable());
     super.dispose();
   }
 
-  /// Snap PiP to the nearest corner with spring physics.
-  /// Listeners are registered once in initState — no per-call addListener.
-  void _snapPipToCorner(Size screenSize, {Offset velocity = Offset.zero}) {
-    _lastScreenSize = screenSize;
-    const margin = 12.0;
-    final maxRight = screenSize.width - _pipW - margin;
-    final maxBottom = screenSize.height - _pipH - margin;
+  // ── Звук ────────────────────────────────────────────────────────────────
 
-    final centerX = _pipOffset.dx + _pipW / 2;
-    final centerY = _pipOffset.dy + _pipH / 2;
-    final biasX = centerX - velocity.dx * 0.15;
-    final biasY = centerY + velocity.dy * 0.15;
+  bool _hasExternalRoute(CallAudioRouteState r) => r.availableRoutes.any(
+    (o) =>
+        o.kind == CallAudioRouteKind.bluetooth ||
+        o.kind == CallAudioRouteKind.wiredHeadset,
+  );
 
-    final targetRight = biasX < screenSize.width / 2 ? maxRight : margin;
-    final targetTop = biasY < screenSize.height / 2 ? margin + 56 : maxBottom;
-
-    const spring = SpringDescription(mass: 1, stiffness: 220, damping: 22);
-    _pipSpringX!.animateWith(
-      SpringSimulation(spring, _pipOffset.dx, targetRight, -velocity.dx),
-    );
-    _pipSpringY!.animateWith(
-      SpringSimulation(spring, _pipOffset.dy, targetTop, velocity.dy),
-    );
-  }
-
-  void _toggleControlsVisibility() {
-    setState(() {
-      _controlsVisible = !_controlsVisible;
-    });
-    if (_controlsVisible) {
-      _controlsFadeCtrl.forward();
-    } else {
-      _controlsFadeCtrl.reverse();
+  /// 🔴 ОБЫЧНОЕ НАЖАТИЕ ПЕРЕКЛЮЧАЕТ ГРОМКУЮ (12.08.2026), пока нет наушников.
+  ///
+  /// Раньше при трёх и более маршрутах кнопка лишь разворачивала полоску
+  /// выбора, и громкая не менялась — человек жал «громкую», а звук стоял.
+  /// По макету 4b список открывается ТОЛЬКО когда подключены наушники или
+  /// Bluetooth (тогда «переключить громкую» неоднозначно: куда — в трубку
+  /// или в наушники?), и это уже не полоска, а список с галочкой.
+  void _onSoundTap(CallAudioRouteState routeState) {
+    _touch();
+    if (_hasExternalRoute(routeState) && routeState.hasMultipleChoices) {
+      HapticFeedback.selectionClick();
+      setState(() {
+        _routeOpen = !_routeOpen;
+        _moreOpen = false;
+      });
+      _armAutoHide();
+      return;
     }
+    unawaited(_cm.toggleSpeaker());
   }
+
+  Future<void> _selectAudioRoute(String routeId) async {
+    await _cm.selectAudioRoute(routeId);
+    if (!mounted) return;
+    setState(() => _routeOpen = false);
+    _armAutoHide();
+  }
+
+  // ── Окно своей камеры ───────────────────────────────────────────────────
+
+  EdgeInsets _pipInsets(BuildContext context, CallState s, {bool? banner}) {
+    final pad = MediaQuery.paddingOf(context);
+    final showControls = _controlsVisible;
+    final top = showControls
+        ? pad.top + 64 + ((banner ?? false) ? 42 : 0) + 8
+        : pad.top + 12;
+    final moreRows = _moreOpen ? (_moreItems(s).length / 3).ceil() : 0;
+    final bottom = showControls
+        ? pad.bottom + 30 + 104 + (moreRows > 0 ? moreRows * 82 + 22 : 0) + 12
+        : pad.bottom + 24;
+    return EdgeInsets.fromLTRB(12, top, 12, bottom);
+  }
+
+  Offset _cornerPos(Size screen, EdgeInsets ins, _PipCorner c) {
+    final left = c == _PipCorner.topLeft || c == _PipCorner.bottomLeft;
+    final top = c == _PipCorner.topLeft || c == _PipCorner.topRight;
+    return Offset(
+      left ? ins.left : screen.width - ins.right - _pipW,
+      top ? ins.top : screen.height - ins.bottom - _pipH,
+    );
+  }
+
+  void _onPipPanStart(DragStartDetails d, Offset current) {
+    _hideTimer?.cancel();
+    setState(() {
+      _pipDragStart = current;
+      _pipFingerStart = d.globalPosition;
+      _pipDrag = current;
+    });
+  }
+
+  void _onPipPanUpdate(DragUpdateDetails d) {
+    setState(() {
+      _pipDrag = _pipDragStart + (d.globalPosition - _pipFingerStart);
+    });
+  }
+
+  void _onPipPanEnd(DragEndDetails d, Size screen) {
+    final g = _pipDrag;
+    if (g == null) return;
+    final v = d.velocity.pixelsPerSecond;
+    // Бросок учитывается: летим туда, куда толкнули.
+    final cx = g.dx + _pipW / 2 + v.dx * 0.12;
+    final cy = g.dy + _pipH / 2 + v.dy * 0.12;
+    bool? hidden;
+    if (g.dx < -_pipW * 0.35) hidden = true;
+    if (g.dx + _pipW > screen.width + _pipW * 0.35) hidden = false;
+    final topHalf = cy < screen.height / 2;
+    final leftHalf = hidden ?? (cx < screen.width / 2);
+    HapticFeedback.selectionClick();
+    setState(() {
+      _pipDrag = null;
+      _pipHiddenLeft = hidden;
+      _corner = topHalf
+          ? (leftHalf ? _PipCorner.topLeft : _PipCorner.topRight)
+          : (leftHalf ? _PipCorner.bottomLeft : _PipCorner.bottomRight);
+    });
+    _armAutoHide();
+  }
+
+  // ── Ключ звонка ─────────────────────────────────────────────────────────
+
+  Future<List<String>?> _loadKey() async {
+    final fps = await _cm.session?.mediaFingerprints();
+    if (fps == null) return null;
+    final digest = sha256.convert(utf8.encode(fps.join('|'))).bytes;
+    return callKeyEmoji(digest);
+  }
+
+  void _openKey() {
+    _touch();
+    HapticFeedback.selectionClick();
+    setState(() {
+      _keyOpen = true;
+      _moreOpen = false;
+      _routeOpen = false;
+      _keyFuture = _loadKey();
+    });
+    _hideTimer?.cancel();
+  }
+
+  void _closeSheets() {
+    setState(() => _keyOpen = false);
+    _armAutoHide();
+  }
+
+  // ── Сборка ──────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final screenSize = MediaQuery.of(context).size;
-
     return BottomSystemFadeVisibility(
       enabled: false,
       child: PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) {
-            widget.callManager.minimizeActiveCallUi();
+          if (didPop) return;
+          if (_keyOpen || _moreOpen || _routeOpen) {
+            setState(() {
+              _keyOpen = false;
+              _moreOpen = false;
+              _routeOpen = false;
+            });
+            return;
           }
+          _cm.minimizeActiveCallUi();
         },
         child: ValueListenableBuilder<CallState>(
-          valueListenable: widget.callManager.state,
+          valueListenable: _cm.state,
           builder: (context, state, _) {
             return ValueListenableBuilder<CallAudioRouteState>(
-              valueListenable: widget.callManager.audioRouteState,
+              valueListenable: _cm.audioRouteState,
               builder: (context, routeState, _) {
-                return _buildScaffold(
-                  context: context,
-                  state: state,
-                  screenSize: screenSize,
-                  l10n: l10n,
-                  routeState: routeState,
+                return ValueListenableBuilder<bool>(
+                  valueListenable: NativePictureInPicture.isInPipMode,
+                  // Качество связи живое: сигнал в шапке и плашка меняются
+                  // сами, без смены фазы звонка.
+                  builder: (context, isInPip, _) =>
+                      ValueListenableBuilder<CallQualityMetrics>(
+                        valueListenable:
+                            _cm.session?.qualityMetrics ?? _noQuality,
+                        builder: (context, _, _) => _buildScaffold(
+                          context: context,
+                          state: state,
+                          routeState: routeState,
+                          isInPip: isInPip,
+                        ),
+                      ),
                 );
               },
             );
@@ -297,191 +477,1080 @@ class _ActiveCallScreenState extends State<ActiveCallScreen>
     );
   }
 
+  String _peerTitle(BuildContext context, CallState state) =>
+      // 🔴 Пустое имя — не пустая строка на экране (22.08.2026). Имя
+      // приходит из контакта или метаданных профиля, и пока резолв не
+      // отработал (или собеседник неизвестен), показываем осмысленную
+      // подпись. Раньше сюда подставлялся сырой profile_id — владелец
+      // видел «3XBC-F5DJ-…» вместо имени.
+      state.peerName.trim().isNotEmpty
+      ? state.peerName
+      : wave1Text(
+          context,
+          ru: 'Звонок',
+          en: 'Call',
+          uk: 'Дзвінок',
+          es: 'Llamada',
+          pt: 'Chamada',
+          ptBr: 'Chamada',
+          fr: 'Appel',
+          de: 'Anruf',
+        );
+
+  // 🔴 ЗАГЛУШКА — ОБЩАЯ С ОСТАЛЬНЫМ ПРИЛОЖЕНИЕМ И С КОМПЬЮТЕРОМ (17.09.2026).
+  // Ключ цвета — профиль собеседника, буквы — общий счётчик.
+  Widget _avatar(BuildContext context, CallState state, double size) {
+    Widget letters() => AvatarInitials.fallbackBubble(
+      context: context,
+      radius: size / 2,
+      seed: state.peerProfileId.trim().isNotEmpty
+          ? state.peerProfileId.trim()
+          : state.peerName,
+      displayName: state.peerName,
+    );
+    final path = state.peerAvatarPath;
+    if (path == null || path.isEmpty) return letters();
+    return Image.file(
+      File(path),
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => letters(),
+    );
+  }
+
+  bool _remoteVideoShown(WebRtcCallSession? session) {
+    if (session == null) return false;
+    if (session.remoteVideoLifecycle.value.isRenderable) return true;
+    final stream = session.remoteRenderer.srcObject;
+    return stream != null && stream.getVideoTracks().isNotEmpty;
+  }
+
   Widget _buildScaffold({
     required BuildContext context,
     required CallState state,
-    required Size screenSize,
-    required AppLocalizations l10n,
     required CallAudioRouteState routeState,
+    required bool isInPip,
   }) {
-    final isVideo = state.isVideo;
-    final session = widget.callManager.session;
+    final l10n = context.l10n;
+    final session = _cm.session;
     final phase = state.phase;
     final isEnded = phase == CallPhase.ended;
+    final incoming =
+        phase == CallPhase.ringingIncoming &&
+        state.direction == CallDirection.incoming;
+    final outgoing =
+        phase == CallPhase.ringingOutgoing ||
+        (phase == CallPhase.connecting &&
+            state.direction == CallDirection.outgoing &&
+            state.connectedAtMs == null);
+    final videoCall = state.isVideo && session != null && !incoming;
+    final quality = session?.qualityMetrics.value.qualityLevel;
+    final poor =
+        phase == CallPhase.reconnecting || quality == CallQualityLevel.poor;
+    final screen = MediaQuery.sizeOf(context);
+    final pad = MediaQuery.paddingOf(context);
+
+    // Окно ОС (PiP): только видео собеседника, без надстроек.
+    if (isInPip && videoCall) {
+      return Scaffold(
+        backgroundColor: kCallBg,
+        body: _RemoteVideoSurface(session: session, animateAmbient: false),
+      );
+    }
+
+    final banner = _banner(context, state, poor);
+    // Плашка «Слабая связь · переподключаемся» важнее автоскрытия: пока она
+    // есть, шапка видна (разбор 22.11.2026).
+    final chrome = !videoCall || _controlsVisible || banner != null;
+    final insets = _pipInsets(context, state, banner: banner != null);
+
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: ValueListenableBuilder<bool>(
-        valueListenable: NativePictureInPicture.isInPipMode,
-        builder: (context, isInPip, _) {
-          return GestureDetector(
-            // Disable controls toggle while in PiP — the OS owns the window.
-            onTap: (isVideo && !isInPip) ? _toggleControlsVisibility : null,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // ── Background (remote video or gradient) ──────
-                // While the system shows the PiP mini-window we ALWAYS render
-                // the remote-video surface full-bleed and suppress every
-                // overlay so only the peer's video is captured by the OS PiP
-                // host.
-                if (isVideo && session != null)
-                  if (isInPip)
-                    _RemoteVideoSurface(
-                      session: session,
-                      peerName: state.peerName,
-                      peerProfileId: state.peerProfileId,
-                      peerAvatarPath: state.peerAvatarPath,
-                      l10n: l10n,
-                    )
-                  else if (_videoSwapped)
-                    _FullscreenLocalVideo(
-                      session: session,
-                      mirror:
-                          state.isFrontCamera && !state.isScreenSharing,
-                    )
-                  else
-                    _RemoteVideoSurface(
-                      session: session,
-                      peerName: state.peerName,
-                      peerProfileId: state.peerProfileId,
-                      peerAvatarPath: state.peerAvatarPath,
-                      l10n: l10n,
-                    )
-                else
-                  _AudioCallBackground(
-                    name: state.peerName,
-                    seed: state.peerProfileId,
-                    avatarPath: state.peerAvatarPath,
-                  ),
-
-                // ── Local-cam PiP (in-app overlay) — hidden in OS PiP ──
-                if (!isInPip &&
-                    isVideo &&
-                    session != null &&
-                    !state.isCameraOff)
-                  Positioned(
-                    right: _pipOffset.dx,
-                    top: _pipOffset.dy,
-                    child: GestureDetector(
-                      // Tap swaps local/remote only if the user didn't drag.
-                      onTap: () {
-                        if (!_pipDragging) {
-                          setState(() => _videoSwapped = !_videoSwapped);
-                        }
-                        _pipDragging = false;
-                      },
-                      onPanStart: (_) {
-                        _pipDragging = false;
-                        _pipSpringX?.stop();
-                        _pipSpringY?.stop();
-                      },
-                      onPanUpdate: (details) {
-                        _pipDragging = true;
-                        _lastScreenSize = screenSize;
-                        setState(() {
-                          _pipOffset = Offset(
-                            (_pipOffset.dx - details.delta.dx).clamp(
-                              0,
-                              screenSize.width - _pipW,
-                            ),
-                            (_pipOffset.dy + details.delta.dy).clamp(
-                              0,
-                              screenSize.height - _pipH,
-                            ),
-                          );
-                        });
-                      },
-                      onPanEnd: (details) {
-                        _snapPipToCorner(
-                          screenSize,
-                          velocity: details.velocity.pixelsPerSecond,
-                        );
-                      },
-                      child: _videoSwapped
-                          ? _RemotePip(session: session)
-                          : _LocalPip(
+      backgroundColor: kCallBg,
+      body: ValueListenableBuilder<RemoteVideoLifecycle>(
+        valueListenable: session?.remoteVideoLifecycle ?? _noVideo,
+        builder: (context, _, _) {
+          final remoteShown = videoCall && _remoteVideoShown(session);
+          // Конец звонка — всегда портрет с причиной («Звонок завершён ·
+          // 04:12», «Отклонён»), и у видеозвонка тоже: иначе ~2 с висел
+          // застывший кадр без объяснения (разбор 22.11.2026).
+          final showIdentity =
+              isEnded || !videoCall || (!remoteShown && !_swapped);
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              // ── Фон: видео или живое свечение ─────────────────────────
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _onBackgroundTap,
+                child: videoCall
+                    ? (_swapped && !state.isCameraOff
+                          ? _FullscreenLocalVideo(
                               session: session,
-                              mirror: state.isFrontCamera &&
+                              mirror:
+                                  state.isFrontCamera &&
                                   !state.isScreenSharing,
-                            ),
-                    ),
-                  ),
-
-                // ── Top status bar (hidden in OS PiP) ─────────
-                if (!isInPip)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: FadeTransition(
-                      opacity: _controlsFadeCtrl,
-                      child: _TopStatusBar(
-                        state: state,
-                        durationText: _durationText,
-                        l10n: l10n,
-                        onMinimize:
-                            widget.callManager.minimizeActiveCallUi,
-                      ),
-                    ),
-                  ),
-
-                // ── "Call ended" overlay (hidden in OS PiP) ──
-                if (!isInPip && isEnded)
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 20,
-                      ),
+                            )
+                          : _RemoteVideoSurface(
+                              session: session,
+                              animateAmbient: !remoteShown,
+                              warn: poor,
+                            ))
+                    : CallAmbientBackground(warn: poor),
+              ),
+              if (videoCall && remoteShown && !_swapped)
+                // Затемнение под шапкой и панелью — белое читается на любом
+                // кадре.
+                IgnorePointer(
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 300),
+                    opacity: chrome ? 1 : 0,
+                    child: const DecoratedBox(
                       decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Text(
-                        _endReasonText(context, state, l10n),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Color(0x66080C11),
+                            Color(0x00080C11),
+                            Color(0x00080C11),
+                            Color(0x8C080C11),
+                          ],
+                          stops: [0, 0.22, 0.7, 1],
                         ),
                       ),
                     ),
                   ),
+                ),
 
-                // ── Bottom controls (hidden in OS PiP) ───────
-                if (!isInPip && !isEnded)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: FadeTransition(
-                      opacity: _controlsFadeCtrl,
-                      child: _BottomControls(
-                        state: state,
-                        callManager: widget.callManager,
-                        l10n: l10n,
-                        routeState: routeState,
-                        showAudioRouteChoices: _showAudioRouteChoices,
-                        onAudioRoutePrimaryTap: () => unawaited(
-                          _handleAudioRoutePrimaryAction(routeState),
-                        ),
-                        onAudioRouteLongPress: routeState.hasMultipleChoices
-                            ? () => setState(() {
-                                _showAudioRouteChoices =
-                                    !_showAudioRouteChoices;
-                              })
-                            : null,
-                        onSelectAudioRoute: (routeId) =>
-                            unawaited(_selectAudioRoute(routeId)),
-                      ),
+              // ── Портрет (голосовой, вызов, камера собеседника выкл.) ──
+              if (showIdentity)
+                Positioned(
+                  top: math.max(pad.top + 120, screen.height * 0.23),
+                  left: 0,
+                  right: 0,
+                  child: IgnorePointer(
+                    child: _identity(
+                      context,
+                      state,
+                      incoming: incoming,
+                      outgoing: outgoing,
+                      ended: isEnded,
+                      videoCamOff: videoCall && !remoteShown,
                     ),
                   ),
-              ],
-            ),
+                ),
+
+              // ── Окно своей камеры ──────────────────────────────────────
+              if (videoCall && !isEnded) ..._pip(context, state, session, screen, insets),
+
+              // ── Шапка ─────────────────────────────────────────────────
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: _Chrome(
+                  visible: chrome,
+                  offset: const Offset(0, -20),
+                  child: Padding(
+                    padding: EdgeInsets.only(top: pad.top + 10),
+                    child: _topBar(context, state, l10n, poor, banner,
+                        incoming: incoming),
+                  ),
+                ),
+              ),
+
+              // ── Панель ────────────────────────────────────────────────
+              if (!incoming && !isEnded)
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: pad.bottom + 30,
+                  child: _Chrome(
+                    visible: chrome,
+                    offset: const Offset(0, 30),
+                    child: _dock(context, state, routeState, l10n,
+                        outgoing: outgoing),
+                  ),
+                ),
+
+              // ── Входящий ──────────────────────────────────────────────
+              if (incoming)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: pad.bottom + 44,
+                  child: _IncomingCallControls(
+                    video: state.isVideo,
+                    onAccept: () => unawaited(_cm.acceptIncoming()),
+                    onDecline: () => unawaited(_cm.declineIncoming()),
+                  ),
+                ),
+
+              // ── Ключ звонка ───────────────────────────────────────────
+              if (_keyOpen) ..._keySheet(context, state),
+            ],
           );
         },
       ),
     );
+  }
+
+  Widget _identity(
+    BuildContext context,
+    CallState state, {
+    required bool incoming,
+    required bool outgoing,
+    required bool ended,
+    required bool videoCamOff,
+  }) {
+    final l10n = context.l10n;
+    final size = incoming || outgoing ? 132.0 : (ended ? 104.0 : 148.0);
+    String status;
+    if (incoming) {
+      status = state.isVideo
+          ? wave1Text(
+              context,
+              ru: 'Входящий видеозвонок',
+              en: 'Incoming video call',
+              uk: 'Вхідний відеодзвінок',
+              es: 'Videollamada entrante',
+              pt: 'Videochamada recebida',
+              ptBr: 'Chamada de vídeo recebida',
+              fr: 'Appel vidéo entrant',
+              de: 'Eingehender Videoanruf',
+            )
+          : wave1Text(
+              context,
+              ru: 'Входящий звонок',
+              en: 'Incoming call',
+              uk: 'Вхідний дзвінок',
+              es: 'Llamada entrante',
+              pt: 'Chamada recebida',
+              ptBr: 'Chamada recebida',
+              fr: 'Appel entrant',
+              de: 'Eingehender Anruf',
+            );
+    } else if (ended) {
+      final reason = _endReasonText(context, state, l10n);
+      status = state.connectedAtMs != null
+          ? '$reason · $_durationText'
+          : reason;
+    } else {
+      switch (state.phase) {
+        case CallPhase.ringingOutgoing:
+          status = l10n.callStatusCalling;
+        case CallPhase.connecting:
+          status = l10n.callStatusConnecting;
+        case CallPhase.reconnecting:
+          status = '${l10n.callStatusReconnecting} · $_durationText';
+        case CallPhase.connected:
+          status = videoCamOff
+              ? '${wave1Text(context, ru: 'камера выключена', en: 'camera off', uk: 'камера вимкнена', es: 'cámara apagada', pt: 'câmara desligada', ptBr: 'câmera desligada', fr: 'caméra éteinte', de: 'Kamera aus')} · $_durationText'
+              : _durationText;
+        default:
+          status = '';
+      }
+    }
+    final connected = state.phase == CallPhase.connected;
+    return CallIdentity(
+      name: _peerTitle(context, state),
+      avatar: _avatar(context, state, size),
+      status: status,
+      size: size,
+      ringing: incoming || outgoing,
+      level: connected && !state.isVideo ? _remoteLevel : null,
+    );
+  }
+
+  ({String text, IconData icon, Color bg, Color fg, bool spin})? _banner(
+    BuildContext context,
+    CallState state,
+    bool poor,
+  ) {
+    if (state.phase == CallPhase.reconnecting) {
+      return (
+        text: wave1Text(
+          context,
+          ru: 'Слабая связь · переподключаемся',
+          en: 'Weak connection · reconnecting',
+          uk: 'Слабкий зв’язок · перепідключаємося',
+          es: 'Conexión débil · reconectando',
+          pt: 'Ligação fraca · a religar',
+          ptBr: 'Conexão fraca · reconectando',
+          fr: 'Connexion faible · reconnexion',
+          de: 'Schwache Verbindung · verbinde neu',
+        ),
+        icon: CallIcons.spin,
+        bg: const Color(0xEBE09A2B),
+        fg: const Color(0xFF1B1405),
+        spin: true,
+      );
+    }
+    if (poor && state.phase == CallPhase.connected) {
+      return (
+        text: wave1Text(
+          context,
+          ru: 'Слабая связь',
+          en: 'Weak connection',
+          uk: 'Слабкий зв’язок',
+          es: 'Conexión débil',
+          pt: 'Ligação fraca',
+          ptBr: 'Conexão fraca',
+          fr: 'Connexion faible',
+          de: 'Schwache Verbindung',
+        ),
+        icon: CallIcons.signalWeak,
+        bg: const Color(0xEBE09A2B),
+        fg: const Color(0xFF1B1405),
+        spin: false,
+      );
+    }
+    if (state.isScreenSharing) {
+      return (
+        text: wave1Text(
+          context,
+          ru: 'Идёт показ экрана',
+          en: 'Sharing your screen',
+          uk: 'Показ екрана',
+          es: 'Compartiendo pantalla',
+          pt: 'A partilhar o ecrã',
+          ptBr: 'Compartilhando a tela',
+          fr: 'Partage d’écran en cours',
+          de: 'Bildschirm wird geteilt',
+        ),
+        icon: CallIcons.screen,
+        bg: const Color(0xB3141A22),
+        fg: Colors.white,
+        spin: false,
+      );
+    }
+    return null;
+  }
+
+  Widget _topBar(
+    BuildContext context,
+    CallState state,
+    AppLocalizations l10n,
+    bool poor,
+    ({String text, IconData icon, Color bg, Color fg, bool spin})? banner, {
+    required bool incoming,
+  }) {
+    final videoTitle =
+        state.isVideo && state.phase == CallPhase.connected;
+    final title = videoTitle
+        ? '${_peerTitle(context, state)} · $_durationText'
+        : l10n.callEncryptedBadge;
+    final showSide = !incoming && state.phase != CallPhase.ended;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 44,
+                child: showSide
+                    ? CallHeaderButton(
+                        icon: CallIcons.minimize,
+                        size: 24,
+                        label: l10n.callMinimize,
+                        onTap: _cm.minimizeActiveCallUi,
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Center(
+                  child: Semantics(
+                    button: true,
+                    label: title,
+                    excludeSemantics: true,
+                    child: GestureDetector(
+                      onTap: state.isActive ? _openKey : null,
+                      child: CallGlass(
+                        radius: 18,
+                        color: const Color(0x73141A22),
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        child: SizedBox(
+                          height: 36,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                CallIcons.lock,
+                                size: 14,
+                                color: kCallSafe,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                // Длинные языки — чуть мельче, а не обрезка.
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                  title,
+                                  maxLines: 1,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                    fontFeatures: [
+                                      FontFeature.tabularFigures(),
+                                    ],
+                                  ),
+                                ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 44,
+                child: showSide
+                    ? CallHeaderButton(
+                        icon: poor ? CallIcons.signalWeak : CallIcons.signal,
+                        color: poor ? kCallWarn : kCallSafe,
+                        label: poor
+                            ? wave1Text(
+                                context,
+                                ru: 'Слабая связь',
+                                en: 'Weak connection',
+                              )
+                            : wave1Text(
+                                context,
+                                ru: 'Хорошая связь',
+                                en: 'Good connection',
+                              ),
+                      )
+                    : null,
+              ),
+            ],
+          ),
+        ),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          transitionBuilder: (child, a) => FadeTransition(
+            opacity: a,
+            child: SizeTransition(sizeFactor: a, child: child),
+          ),
+          child: banner == null
+              ? const SizedBox(key: ValueKey('none'), width: double.infinity)
+              : Padding(
+                  key: ValueKey(banner.text),
+                  padding: const EdgeInsets.only(top: 10),
+                  child: CallBanner(
+                    text: banner.text,
+                    icon: banner.icon,
+                    background: banner.bg,
+                    foreground: banner.fg,
+                    spinning: banner.spin,
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  List<({IconData icon, String label, bool active, VoidCallback onTap})>
+  _moreItems(CallState state) {
+    final live =
+        state.phase == CallPhase.connected ||
+        state.phase == CallPhase.connecting ||
+        state.phase == CallPhase.reconnecting;
+    final ctx = context;
+    final l10n = ctx.l10n;
+    return [
+      if (state.isVideo && live)
+        (
+          icon: CallIcons.screen,
+          label: state.isScreenSharing
+              ? wave1Text(ctx, ru: 'Идёт показ', en: 'Sharing')
+              : l10n.callControlShare,
+          active: state.isScreenSharing,
+          onTap: () => unawaited(_toggleScreenShare()),
+        ),
+      if (state.isVideo && !state.isCameraOff && !state.isScreenSharing)
+        (
+          icon: CallIcons.flip,
+          label: l10n.callControlFlip,
+          active: false,
+          onTap: () {
+            _touch();
+            HapticFeedback.selectionClick();
+            unawaited(_cm.switchCamera());
+          },
+        ),
+      (
+        icon: CallIcons.key,
+        label: wave1Text(
+          ctx,
+          ru: 'Ключ звонка',
+          en: 'Call key',
+          uk: 'Ключ дзвінка',
+          es: 'Clave',
+          pt: 'Chave',
+          ptBr: 'Chave',
+          fr: 'Clé d’appel',
+          de: 'Anrufschlüssel',
+        ),
+        active: false,
+        onTap: _openKey,
+      ),
+    ];
+  }
+
+  Future<void> _toggleScreenShare() async {
+    _touch();
+    final messenger = ScaffoldMessenger.of(context);
+    final denied = wave1Text(
+      context,
+      ru: 'Нет разрешения на демонстрацию экрана',
+      en: 'Screen share permission denied',
+      uk: 'Немає дозволу на демонстрацію екрана',
+      es: 'Permiso de compartir pantalla denegado',
+      pt: 'Permissão de partilha de ecrã negada',
+      ptBr: 'Permissão para compartilhar tela negada',
+      fr: 'Autorisation de partage d’écran refusée',
+      de: 'Berechtigung zur Bildschirmfreigabe verweigert',
+    );
+    final ok = await _cm.toggleScreenShare();
+    if (!ok) {
+      messenger.showSnackBar(SecretlySnackBar(content: Text(denied)));
+    }
+  }
+
+  Widget _dock(
+    BuildContext context,
+    CallState state,
+    CallAudioRouteState routeState,
+    AppLocalizations l10n, {
+    required bool outgoing,
+  }) {
+    // До соединения маршрут ещё «трубка», а нажатие «Звук» — желание
+    // (исполнится при соединении): показываем желание, иначе нажатие не
+    // меняло экран, а второе его отменяло (разбор 22.11.2026).
+    final route = (routeState.selectedRoute == null ||
+            (state.connectedAtMs == null &&
+                routeState.selectedRouteKind != CallAudioRouteKind.bluetooth &&
+                routeState.selectedRouteKind !=
+                    CallAudioRouteKind.wiredHeadset))
+        ? (state.isSpeaker
+              ? CallAudioRouteKind.speaker
+              : CallAudioRouteKind.earpiece)
+        : routeState.selectedRouteKind;
+    final routeIcon = _routeIcon(route);
+    final routeLabel = switch (route) {
+      CallAudioRouteKind.speaker => l10n.callControlSpeaker,
+      CallAudioRouteKind.bluetooth =>
+        (routeState.selectedRoute?.label.isNotEmpty ?? false)
+            ? routeState.selectedRoute!.label
+            : 'Bluetooth',
+      CallAudioRouteKind.wiredHeadset => wave1Text(
+        context,
+        ru: 'Наушники',
+        en: 'Headset',
+      ),
+      _ => wave1Text(
+        context,
+        ru: 'Звук',
+        en: 'Audio',
+        uk: 'Звук',
+        es: 'Audio',
+        pt: 'Áudio',
+        ptBr: 'Áudio',
+        fr: 'Son',
+        de: 'Ton',
+      ),
+    };
+    final cameraOn = state.isVideo && !state.isCameraOff;
+    final canUpgrade =
+        state.phase == CallPhase.connected ||
+        state.phase == CallPhase.connecting;
+    final more = _moreItems(state);
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        CallGlass(
+          radius: 30,
+          blur: 28,
+          shadow: true,
+          padding: const EdgeInsets.fromLTRB(6, 14, 6, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedSize(
+                duration: const Duration(milliseconds: 260),
+                curve: const Cubic(0.2, 0.9, 0.3, 1),
+                alignment: Alignment.bottomCenter,
+                child: _moreOpen
+                    ? Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.fromLTRB(8, 2, 8, 14),
+                        decoration: const BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: Color(0x14FFFFFF)),
+                          ),
+                        ),
+                        child: _MoreGrid(items: more),
+                      )
+                    : const SizedBox(width: double.infinity),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: CallDockButton(
+                      icon: state.isMuted ? CallIcons.micOff : CallIcons.mic,
+                      label: state.isMuted
+                          ? wave1Text(
+                              context,
+                              ru: 'Без звука',
+                              en: 'Muted',
+                              uk: 'Без звуку',
+                              es: 'Silencio',
+                              pt: 'Sem som',
+                              ptBr: 'Mudo',
+                              fr: 'Muet',
+                              de: 'Stumm',
+                            )
+                          : l10n.callControlMute,
+                      inverted: state.isMuted,
+                      semanticOn: !state.isMuted,
+                      onTap: () {
+                        _touch();
+                        HapticFeedback.selectionClick();
+                        unawaited(_cm.toggleMute());
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: CallDockButton(
+                      icon: routeIcon,
+                      label: routeLabel,
+                      inverted: route != CallAudioRouteKind.earpiece,
+                      onTap: () => _onSoundTap(routeState),
+                      onLongPress: routeState.hasMultipleChoices
+                          ? () {
+                              HapticFeedback.selectionClick();
+                              setState(() {
+                                _routeOpen = !_routeOpen;
+                                _moreOpen = false;
+                              });
+                              _armAutoHide();
+                            }
+                          : null,
+                    ),
+                  ),
+                  Expanded(
+                    child: CallDockButton(
+                      icon: cameraOn ? CallIcons.camera : CallIcons.cameraOff,
+                      label: l10n.callControlCamera,
+                      inverted: !cameraOn,
+                      semanticOn: cameraOn,
+                      onTap: () {
+                        _touch();
+                        HapticFeedback.selectionClick();
+                        if (!state.isVideo) {
+                          // Камера в голосовом сразу включает видео.
+                          if (canUpgrade) unawaited(_cm.upgradeToVideo());
+                        } else {
+                          unawaited(_cm.toggleCamera());
+                        }
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: CallDockButton(
+                      icon: _moreOpen ? CallIcons.close : CallIcons.more,
+                      label: wave1Text(
+                        context,
+                        ru: 'Ещё',
+                        en: 'More',
+                        uk: 'Ще',
+                        es: 'Más',
+                        pt: 'Mais',
+                        ptBr: 'Mais',
+                        fr: 'Plus',
+                        de: 'Mehr',
+                      ),
+                      inverted: _moreOpen,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          _moreOpen = !_moreOpen;
+                          _routeOpen = false;
+                        });
+                        _touch();
+                      },
+                    ),
+                  ),
+                  Expanded(
+                    child: CallDockButton(
+                      icon: CallIcons.end,
+                      label: outgoing ? l10n.cancel : l10n.callControlEnd,
+                      danger: true,
+                      onTap: () {
+                        HapticFeedback.mediumImpact();
+                        unawaited(_cm.hangup());
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        // Список устройств — над кнопкой «Звук».
+        if (_routeOpen)
+          Positioned(
+            left: 48,
+            bottom: 122,
+            width: 236,
+            child: RecordPop(
+              child: CallGlass(
+                radius: 20,
+                blur: 24,
+                shadow: true,
+                color: const Color(0xEB181F28),
+                padding: const EdgeInsets.all(6),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final r in routeState.availableRoutes)
+                      CallRouteRow(
+                        icon: _routeIcon(r.kind),
+                        label: _routeName(context, r, l10n),
+                        selected: r.deviceId == routeState.selectedRouteId,
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          unawaited(_selectAudioRoute(r.deviceId));
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  List<Widget> _pip(
+    BuildContext context,
+    CallState state,
+    WebRtcCallSession session,
+    Size screen,
+    EdgeInsets insets,
+  ) {
+    final hidden = _pipHiddenLeft;
+    final resting = _cornerPos(screen, insets, _corner);
+    final drag = _pipDrag;
+    final pos = drag ??
+        (hidden == null
+            ? resting
+            : Offset(hidden ? -_pipW - 16 : screen.width + 16, resting.dy));
+    final dragging = drag != null;
+    return [
+      AnimatedPositioned(
+        duration: dragging
+            ? Duration.zero
+            : const Duration(milliseconds: 420),
+        curve: const Cubic(0.2, 0.9, 0.25, 1.08),
+        left: pos.dx,
+        top: pos.dy,
+        width: _pipW,
+        height: _pipH,
+        child: GestureDetector(
+          onPanStart: (d) => _onPipPanStart(d, pos),
+          onPanUpdate: _onPipPanUpdate,
+          onPanEnd: (d) => _onPipPanEnd(d, screen),
+          onDoubleTap: () {
+            HapticFeedback.selectionClick();
+            setState(() => _swapped = !_swapped);
+            _touch();
+          },
+          child: AnimatedScale(
+            duration: const Duration(milliseconds: 150),
+            scale: dragging ? 1.04 : 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x73000000),
+                    blurRadius: 30,
+                    offset: Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    const ColoredBox(color: Color(0xFF25303C)),
+                    if (_swapped)
+                      _RemoteVideoView(session: session)
+                    else if (state.isCameraOff)
+                      const Center(
+                        child: Icon(
+                          CallIcons.cameraOff,
+                          size: 26,
+                          color: Color(0xFF8FA3B7),
+                        ),
+                      )
+                    else
+                      _LocalVideoView(
+                        session: session,
+                        mirror: state.isFrontCamera && !state.isScreenSharing,
+                      ),
+                    if (state.isMuted && !_swapped)
+                      Positioned(
+                        left: 6,
+                        bottom: 6,
+                        child: Container(
+                          width: 22,
+                          height: 22,
+                          decoration: const BoxDecoration(
+                            color: Color(0xA60A0E13),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            CallIcons.micOff,
+                            size: 13,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    const IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.all(Radius.circular(20)),
+                          border: Border.fromBorderSide(
+                            BorderSide(color: Color(0x24FFFFFF)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      // Язычок спрятанного окна.
+      if (hidden != null && drag == null)
+        Positioned(
+          left: hidden ? 0 : screen.width - 24,
+          top: resting.dy + 38,
+          child: RecordPop(
+            child: Semantics(
+              button: true,
+              label: wave1Text(context, ru: 'Показать камеру', en: 'Show camera'),
+              child: GestureDetector(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  setState(() => _pipHiddenLeft = null);
+                  _touch();
+                },
+                child: ClipRRect(
+                  borderRadius: hidden
+                      ? const BorderRadius.horizontal(
+                          right: Radius.circular(14),
+                        )
+                      : const BorderRadius.horizontal(
+                          left: Radius.circular(14),
+                        ),
+                  child: CallGlass(
+                    radius: 0,
+                    blur: 16,
+                    color: const Color(0xB3141A22),
+                    child: SizedBox(
+                      width: 24,
+                      height: 72,
+                      child: Icon(
+                        hidden ? CallIcons.chevronRight : CallIcons.chevronLeft,
+                        size: 20,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+    ];
+  }
+
+  List<Widget> _keySheet(BuildContext context, CallState state) {
+    final name = _peerTitle(context, state);
+    return [
+      Positioned.fill(
+        child: GestureDetector(
+          onTap: _closeSheets,
+          child: const ColoredBox(color: Color(0x73000000)),
+        ),
+      ),
+      Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: RecordPop(
+            child: CallGlass(
+              radius: 28,
+              blur: 30,
+              shadow: true,
+              color: const Color(0xF5181F28),
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 18),
+              child: FutureBuilder<List<String>?>(
+                future: _keyFuture,
+                builder: (context, snap) {
+                  final emoji = snap.data;
+                  final ready = emoji != null && emoji.length == 4;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(CallIcons.key, size: 30, color: kCallSafe),
+                      const SizedBox(height: 14),
+                      Text(
+                        wave1Text(
+                          context,
+                          ru: 'Ключ этого звонка',
+                          en: 'This call’s key',
+                          uk: 'Ключ цього дзвінка',
+                          es: 'Clave de esta llamada',
+                          pt: 'Chave desta chamada',
+                          ptBr: 'Chave desta chamada',
+                          fr: 'Clé de cet appel',
+                          de: 'Schlüssel dieses Anrufs',
+                        ),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      if (ready)
+                        Row(
+                          children: [
+                            for (final e in emoji)
+                              Expanded(
+                                child: Container(
+                                  height: 56,
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0x1A9BE3B0),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Text(
+                                    e,
+                                    style: const TextStyle(fontSize: 28),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        )
+                      else
+                        SizedBox(
+                          height: 56,
+                          child: Center(
+                            child: snap.connectionState ==
+                                    ConnectionState.done
+                                ? Text(
+                                    wave1Text(
+                                      context,
+                                      ru: 'Ключ появится, когда звонок соединится',
+                                      en: 'The key appears once the call connects',
+                                    ),
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                      color: Color(0xFFA9B8C6),
+                                      fontSize: 13.5,
+                                    ),
+                                  )
+                                : const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: kCallSafe,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      const SizedBox(height: 14),
+                      Text(
+                        wave1Text(
+                          context,
+                          ru: 'Если у собеседника ($name) на экране те же четыре знака, разговор слышите только вы двое.',
+                          en: 'If $name sees the same four symbols, only the two of you can hear this call.',
+                          uk: 'Якщо співрозмовник ($name) бачить ті самі чотири знаки, розмову чуєте лише ви двоє.',
+                          es: 'Si $name ve los mismos cuatro símbolos, solo vosotros dos oís la llamada.',
+                          pt: 'Se $name vir os mesmos quatro símbolos, só vocês os dois ouvem a chamada.',
+                          ptBr: 'Se $name vir os mesmos quatro símbolos, só vocês dois ouvem a chamada.',
+                          fr: 'Si $name voit les mêmes quatre symboles, vous seuls entendez l’appel.',
+                          de: 'Sieht $name dieselben vier Symbole, hört nur ihr beide das Gespräch.',
+                        ),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFFA9B8C6),
+                          fontSize: 13.5,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Semantics(
+                        button: true,
+                        child: GestureDetector(
+                          onTap: _closeSheets,
+                          child: Container(
+                            height: 48,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: const Color(0x14FFFFFF),
+                              borderRadius: BorderRadius.circular(24),
+                            ),
+                            child: Text(
+                              wave1Text(
+                                context,
+                                ru: 'Понятно',
+                                en: 'Got it',
+                                uk: 'Зрозуміло',
+                                es: 'Entendido',
+                                pt: 'Percebi',
+                                ptBr: 'Entendi',
+                                fr: 'Compris',
+                                de: 'Verstanden',
+                              ),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    ];
   }
 
   String _endReasonText(
@@ -512,200 +1581,207 @@ class _ActiveCallScreenState extends State<ActiveCallScreen>
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//   Remote video (full-screen)
-// ═══════════════════════════════════════════════════════════════════════════
+IconData _routeIcon(CallAudioRouteKind kind) => switch (kind) {
+  CallAudioRouteKind.bluetooth => CallIcons.bluetooth,
+  CallAudioRouteKind.wiredHeadset => CallIcons.headphones,
+  CallAudioRouteKind.earpiece => CallIcons.earpiece,
+  CallAudioRouteKind.speaker => CallIcons.speaker,
+  CallAudioRouteKind.unknown => CallIcons.speaker,
+};
 
-class _RemoteVideoView extends StatelessWidget {
-  const _RemoteVideoView({required this.session, required this.viewToken});
+String _routeName(
+  BuildContext context,
+  CallAudioRouteOption route,
+  AppLocalizations l10n,
+) {
+  switch (route.kind) {
+    case CallAudioRouteKind.bluetooth:
+      return route.label.isNotEmpty ? route.label : 'Bluetooth';
+    case CallAudioRouteKind.wiredHeadset:
+      return wave1Text(context, ru: 'Наушники', en: 'Headset');
+    case CallAudioRouteKind.earpiece:
+      return Platform.isIOS
+          ? 'iPhone'
+          : wave1Text(context, ru: 'Телефон', en: 'Phone');
+    case CallAudioRouteKind.speaker:
+      return l10n.callControlSpeaker;
+    case CallAudioRouteKind.unknown:
+      return route.label.isNotEmpty
+          ? route.label
+          : wave1Text(context, ru: 'Аудио', en: 'Audio');
+  }
+}
 
-  final WebRtcCallSession session;
-  final String viewToken;
+/// Шапка и панель: уходят и возвращаются вместе (прозрачность + сдвиг).
+class _Chrome extends StatelessWidget {
+  const _Chrome({
+    required this.visible,
+    required this.offset,
+    required this.child,
+  });
+
+  final bool visible;
+  final Offset offset;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: !visible,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 300),
+        opacity: visible ? 1 : 0,
+        child: AnimatedSlide(
+          duration: const Duration(milliseconds: 350),
+          curve: const Cubic(0.2, 0.9, 0.3, 1),
+          offset: visible ? Offset.zero : Offset(0, offset.dy / 100),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _MoreGrid extends StatelessWidget {
+  const _MoreGrid({required this.items});
+  final List<({IconData icon, String label, bool active, VoidCallback onTap})>
+  items;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <Widget>[];
+    for (var i = 0; i < items.length; i += 3) {
+      final slice = items.skip(i).take(3).toList();
+      rows.add(
+        Padding(
+          padding: EdgeInsets.only(top: i == 0 ? 0 : 8),
+          child: Row(
+            children: [
+              for (var j = 0; j < 3; j++) ...[
+                if (j > 0) const SizedBox(width: 8),
+                Expanded(
+                  child: j < slice.length
+                      ? CallMoreTile(
+                          icon: slice[j].icon,
+                          label: slice[j].label,
+                          active: slice[j].active,
+                          onTap: slice[j].onTap,
+                        )
+                      : const SizedBox(),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+    return Column(mainAxisSize: MainAxisSize.min, children: rows);
+  }
+}
+
+/// Появление пружинкой (листы, язычок).
+class RecordPop extends StatelessWidget {
+  const RecordPop({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+      builder: (context, t, child) => Opacity(
+        opacity: t,
+        child: Transform.translate(
+          offset: Offset(0, 24 * (1 - t)),
+          child: Transform.scale(scale: 0.98 + 0.02 * t, child: child),
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//   Видео
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _RemoteVideoView extends StatelessWidget {
+  const _RemoteVideoView({required this.session});
+
+  final WebRtcCallSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    final token =
+        'remote:${session.hashCode}:${_videoRendererBindingToken(session.remoteRenderer)}';
     return RTCVideoView(
-      key: ValueKey('remote-video:$viewToken'),
+      key: ValueKey(token),
       session.remoteRenderer,
       objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
     );
   }
 }
 
+/// Видео собеседника во весь экран; пока кадров нет — живой фон.
 class _RemoteVideoSurface extends StatelessWidget {
   const _RemoteVideoSurface({
     required this.session,
-    required this.peerName,
-    required this.peerProfileId,
-    required this.peerAvatarPath,
-    required this.l10n,
+    this.animateAmbient = true,
+    this.warn = false,
   });
 
   final WebRtcCallSession session;
-  final String peerName;
-  final String peerProfileId;
-  final String? peerAvatarPath;
-  final AppLocalizations l10n;
+  final bool animateAmbient;
+  final bool warn;
 
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<RemoteVideoLifecycle>(
       valueListenable: session.remoteVideoLifecycle,
       builder: (context, lifecycle, _) {
-        final shouldMountRemoteView = _shouldMountRemoteView(lifecycle);
+        final stream = session.remoteRenderer.srcObject;
+        final mount =
+            lifecycle.isRenderable ||
+            (stream != null && stream.getVideoTracks().isNotEmpty);
         return Stack(
           fit: StackFit.expand,
           children: [
-            _AudioCallBackground(
-              name: peerName,
-              seed: peerProfileId,
-              avatarPath: peerAvatarPath,
-            ),
-            if (shouldMountRemoteView)
-              _RemoteVideoView(
-                session: session,
-                viewToken:
-                    '${session.hashCode}:${lifecycle.state.name}:${_videoRendererBindingToken(session.remoteRenderer)}',
+            CallAmbientBackground(warn: warn, animate: animateAmbient),
+            if (mount)
+              RTCVideoView(
+                key: ValueKey(
+                  'remote-video:${session.hashCode}:${lifecycle.state.name}:${_videoRendererBindingToken(session.remoteRenderer)}',
+                ),
+                session.remoteRenderer,
+                objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
               ),
           ],
         );
       },
     );
   }
-
-  bool _shouldMountRemoteView(RemoteVideoLifecycle lifecycle) {
-    if (lifecycle.isRenderable) {
-      return true;
-    }
-    final stream = session.remoteRenderer.srcObject;
-    return stream != null && stream.getVideoTracks().isNotEmpty;
-  }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//   Audio call background (gradient + large avatar)
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _AudioCallBackground extends StatelessWidget {
-  const _AudioCallBackground({
-    required this.name,
-    required this.seed,
-    this.avatarPath,
-  });
-
-  final String name;
-
-  /// Ключ цвета заглушки — профиль собеседника, тот же, что в списке чатов.
-  final String seed;
-
-  final String? avatarPath;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomCenter,
-          colors: [_kOneToOneCallBgTop, _kOneToOneCallBgMid, _kOneToOneCallBg],
-          stops: [0.0, 0.38, 1.0],
-        ),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildAvatar(context),
-            const SizedBox(height: 24),
-            Text(
-              name,
-              style: const TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAvatar(BuildContext context) {
-    const size = 130.0;
-    if (avatarPath != null && avatarPath!.isNotEmpty) {
-      return ClipOval(
-        child: Image.file(
-          File(avatarPath!),
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _letterCircle(context, size),
-        ),
-      );
-    }
-    return _letterCircle(context, size);
-  }
-
-  // 🔴 ЗАГЛУШКА — ОБЩАЯ С ОСТАЛЬНЫМ ПРИЛОЖЕНИЕМ И С КОМПЬЮТЕРОМ (17.09.2026).
-  //
-  // Здесь был свой оттенок из `name.hashCode` и одна буква `name[0]`: цвет не
-  // совпадал со списком чатов, а имя с эмодзи в начале резалось посреди
-  // символа. Теперь ключ, буквы и цвета — те же, что везде. Заливка считается
-  // от середины градиента экрана: портрет стоит в центре, где синий уже
-  // уходит в чёрный.
-  Widget _letterCircle(BuildContext context, double size) =>
-      AvatarInitials.fallbackBubble(
-        context: context,
-        radius: size / 2,
-        seed: seed.trim().isNotEmpty ? seed.trim() : name,
-        displayName: name,
-        background: Color.lerp(_kOneToOneCallBgMid, _kOneToOneCallBg, 0.25)!,
-      );
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//   Local PiP (draggable, rounded)
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _LocalPip extends StatelessWidget {
-  const _LocalPip({required this.session, required this.mirror});
+class _LocalVideoView extends StatelessWidget {
+  const _LocalVideoView({required this.session, required this.mirror});
 
   final WebRtcCallSession session;
   final bool mirror;
 
   @override
   Widget build(BuildContext context) {
-    final viewToken =
-        '${session.hashCode}:${_videoRendererBindingToken(session.localRenderer)}';
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        width: 110,
-        height: 160,
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.2),
-            width: 1,
-          ),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(13),
-          child: RTCVideoView(
-            key: ValueKey('local-video:$viewToken'),
-            session.localRenderer,
-            mirror: mirror,
-            objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-          ),
-        ),
-      ),
+    final token =
+        'local:${session.hashCode}:${_videoRendererBindingToken(session.localRenderer)}';
+    return RTCVideoView(
+      key: ValueKey(token),
+      session.localRenderer,
+      mirror: mirror,
+      objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
     );
   }
 }
 
-// Full-screen local video (when user swaps local/remote positions).
 class _FullscreenLocalVideo extends StatelessWidget {
   const _FullscreenLocalVideo({required this.session, required this.mirror});
 
@@ -714,10 +1790,10 @@ class _FullscreenLocalVideo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final viewToken =
+    final token =
         'local-fs:${session.hashCode}:${_videoRendererBindingToken(session.localRenderer)}';
     return RTCVideoView(
-      key: ValueKey(viewToken),
+      key: ValueKey(token),
       session.localRenderer,
       mirror: mirror,
       objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
@@ -725,721 +1801,49 @@ class _FullscreenLocalVideo extends StatelessWidget {
   }
 }
 
-// Remote video in PiP size (when user swaps local/remote positions).
-class _RemotePip extends StatelessWidget {
-  const _RemotePip({required this.session});
-
-  final WebRtcCallSession session;
-
-  @override
-  Widget build(BuildContext context) {
-    final viewToken =
-        'remote-pip:${session.hashCode}:${_videoRendererBindingToken(session.remoteRenderer)}';
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        width: 110,
-        height: 160,
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.2),
-            width: 1,
-          ),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(13),
-          child: RTCVideoView(
-            key: ValueKey(viewToken),
-            session.remoteRenderer,
-            objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 String _videoRendererBindingToken(RTCVideoRenderer renderer) {
   final stream = renderer.srcObject;
-  if (stream == null) {
-    return 'stream:none';
-  }
+  if (stream == null) return 'stream:none';
   try {
-    final trackIds = stream.getVideoTracks().map((track) => track.id).join(',');
-    return 'stream:${stream.id}|tracks:${trackIds.isEmpty ? 'none' : trackIds}';
+    final ids = stream.getVideoTracks().map((t) => t.id).join(',');
+    return 'stream:${stream.id}|tracks:${ids.isEmpty ? 'none' : ids}';
   } catch (_) {
     return 'stream:${stream.id}|tracks:error';
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//   Top status bar (encryption badge + status + duration)
+//   Входящий
 // ═══════════════════════════════════════════════════════════════════════════
 
-class _TopStatusBar extends StatelessWidget {
-  const _TopStatusBar({
-    required this.state,
-    required this.durationText,
-    required this.l10n,
-    required this.onMinimize,
-  });
-
-  final CallState state;
-  final String durationText;
-  final AppLocalizations l10n;
-  final VoidCallback onMinimize;
-
-  @override
-  Widget build(BuildContext context) {
-    final safeTop = MediaQuery.of(context).padding.top;
-    return Container(
-      padding: EdgeInsets.only(
-        top: safeTop + 8,
-        left: 16,
-        right: 16,
-        bottom: 12,
-      ),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            _kOneToOneCallBgTop.withValues(alpha: 0.42),
-            _kOneToOneCallBgMid.withValues(alpha: 0.16),
-            Colors.transparent,
-          ],
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Row(
-            children: [
-              IconButton(
-                tooltip: l10n.callMinimize,
-                onPressed: onMinimize,
-                icon: const Icon(
-                  Icons.keyboard_arrow_down,
-                  color: Colors.white,
-                ),
-              ),
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      AppIcons.lock,
-                      size: 12,
-                      color: Colors.white.withValues(alpha: 0.6),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      l10n.callEncryptedBadge,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.white.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 48),
-            ],
-          ),
-          // Encryption badge
-          const SizedBox(height: 6),
-          // Name
-          Text(
-            // 🔴 Пустое имя — не пустая строка на экране (22.08.2026). Имя
-            // приходит из контакта или метаданных профиля, и пока резолв не
-            // отработал (или собеседник неизвестен), показываем осмысленную
-            // подпись. Раньше сюда подставлялся сырой profile_id — владелец
-            // видел «3XBC-F5DJ-…» вместо имени.
-            state.peerName.trim().isNotEmpty
-                ? state.peerName
-                : wave1Text(
-                    context,
-                    ru: 'Звонок',
-                    en: 'Call',
-                    uk: 'Дзвінок',
-                    es: 'Llamada',
-                    pt: 'Chamada',
-                    ptBr: 'Chamada',
-                    fr: 'Appel',
-                    de: 'Anruf',
-                  ),
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 2),
-          // Status / duration text
-          Text(
-            _statusText(),
-            style: TextStyle(fontSize: 14, color: _statusColor()),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _statusText() {
-    switch (state.phase) {
-      case CallPhase.ringingOutgoing:
-        return l10n.callStatusCalling;
-      case CallPhase.ringingIncoming:
-        return l10n.callStatusIncoming;
-      case CallPhase.connecting:
-        return l10n.callStatusConnecting;
-      case CallPhase.connected:
-        return durationText;
-      case CallPhase.reconnecting:
-        return l10n.callStatusReconnecting;
-      case CallPhase.ended:
-        return l10n.callStatusEnded;
-      case CallPhase.idle:
-        return '';
-    }
-  }
-
-  Color _statusColor() {
-    switch (state.phase) {
-      case CallPhase.connected:
-        return const Color(0xFF4CAF50);
-      case CallPhase.reconnecting:
-        return Colors.white70;
-      case CallPhase.ended:
-        return const Color(0xFFE53935);
-      default:
-        return Colors.white70;
-    }
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//   Bottom control bar
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _BottomControls extends StatelessWidget {
-  const _BottomControls({
-    required this.state,
-    required this.callManager,
-    required this.l10n,
-    required this.routeState,
-    required this.showAudioRouteChoices,
-    required this.onAudioRoutePrimaryTap,
-    this.onAudioRouteLongPress,
-    required this.onSelectAudioRoute,
-  });
-
-  final CallState state;
-  final CallManager callManager;
-  final AppLocalizations l10n;
-  final CallAudioRouteState routeState;
-  final bool showAudioRouteChoices;
-  final VoidCallback onAudioRoutePrimaryTap;
-
-  /// Выбор маршрута — долгим нажатием. Обычное обязано переключать громкую.
-  final VoidCallback? onAudioRouteLongPress;
-  final ValueChanged<String> onSelectAudioRoute;
-
-  @override
-  Widget build(BuildContext context) {
-    // PR-H+2 (2026-05-20): gradient must extend ALL the way to the bottom
-    // of the screen (behind the home-indicator) so there is no visible
-    // "strip" of un-dimmed pixels between the bottom of the controls and
-    // the screen edge. The previous layout wrapped a SafeArea around the
-    // gradient Container, which pushed the gradient up by `bottomInset`,
-    // leaving the home-indicator region untouched.
-    //
-    // New layout:
-    //   Container(decoration: gradient)   ← covers full bar incl. inset
-    //     └── SafeArea(bottom: true)      ← inset baked into padding
-    //          └── Padding                ← buttons keep clear of indicator
-    //               └── Column(controls…)
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Colors.black.withValues(alpha: 0.7), Colors.transparent],
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        left: false,
-        right: false,
-        child: Padding(
-          padding: const EdgeInsets.only(
-            top: 20,
-            bottom: 12,
-            left: 16,
-            right: 16,
-          ),
-          child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (showAudioRouteChoices && routeState.hasMultipleChoices)
-              // PR-H+1: route chips on a horizontal scroller so they stay
-              // on one row on iPhone 11 / SE and don't push the control
-              // bar past the home-indicator. Chips remain centred when
-              // they fit; if they don't, the user scrolls horizontally.
-              Padding(
-                padding: const EdgeInsets.only(bottom: 18),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  physics: secretlyListPhysics(),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (var i = 0; i < routeState.availableRoutes.length; i++)
-                        Padding(
-                          padding: EdgeInsets.only(
-                            left: i == 0 ? 0 : 10,
-                          ),
-                          child: _AudioRouteChoiceButton(
-                            icon: _audioRouteIcon(
-                              routeState.availableRoutes[i].kind,
-                            ),
-                            label: _audioRouteLabel(
-                              context: context,
-                              route: routeState.availableRoutes[i],
-                              speakerLabel: l10n.callControlSpeaker,
-                            ),
-                            active: routeState.availableRoutes[i].deviceId ==
-                                routeState.selectedRouteId,
-                            onTap: () => onSelectAudioRoute(
-                              routeState.availableRoutes[i].deviceId,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            // Upgrade to video (audio-only calls)
-            if (!state.isVideo &&
-                (state.phase == CallPhase.connected ||
-                    state.phase == CallPhase.connecting))
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: TextButton.icon(
-                  onPressed: () => callManager.upgradeToVideo(),
-                  icon: const Icon(AppIcons.video, color: Colors.white),
-                  label: Text(
-                    l10n.callVideoCall,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.white.withValues(alpha: 0.15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 10,
-                    ),
-                  ),
-                ),
-              ),
-            // Main control buttons.
-            //
-            // PR-H+1b (2026-05-20, revised after user feedback): keep
-            // ALL buttons on ONE row with even spacing across every
-            // screen size. LayoutBuilder computes the button size
-            // dynamically — Pro Max keeps the 56 dp legacy buttons with
-            // wide gaps, iPhone 11 (375 dp) gets ~46 dp buttons with
-            // ~14 dp gaps, iPhone SE (320 dp) bottoms out at 44 dp
-            // (Apple HIG min tap target) with ~5 dp gaps.
-            //
-            // The previous Wrap-based fix put hangup alone in a second
-            // row — visually unbalanced. This revision restores the
-            // single-row layout the user expects while keeping spacing
-            // mathematically even.
-            LayoutBuilder(
-              builder: (context, constraints) {
-                // 🔴 ВХОДЯЩИЙ ЗВОНОК: ДВЕ КНОПКИ, А НЕ ОДИН СБРОС (13.08.2026).
-                //
-                // Пока трубка не взята, обычная панель бессмысленна и ОПАСНА: в
-                // ней единственное действие со звонком — отбой. 12.08 я направил
-                // сюда нажатие на уведомление, и человек, жавший «ответить»,
-                // сбрасывал себе звонок. Правка откачена, и порядок теперь
-                // обратный: сначала кнопки, потом маршрут.
-                //
-                // Здесь ровно то, что человек вправе ожидать: видно, кто звонит,
-                // и два решения рядом — принять или отклонить.
-                final incoming =
-                    state.phase == CallPhase.ringingIncoming &&
-                    state.direction == CallDirection.incoming;
-                if (incoming) {
-                  return _IncomingCallControls(
-                    onAccept: () => unawaited(callManager.acceptIncoming()),
-                    onDecline: () => unawaited(callManager.declineIncoming()),
-                  );
-                }
-                final children = <_ControlButton>[
-                  _ControlButton(
-                    icon: state.isMuted ? AppIcons.micOff : AppIcons.mic,
-                    label: l10n.callControlMute,
-                    active: !state.isMuted,
-                    onTap: () => callManager.toggleMute(),
-                  ),
-                  // 🔴 15.11.2026: после обновления LiveKit (13.10) на Android
-                  // список маршрутов приходит пустым, и маршрут остаётся «не
-                  // выбран» — звук переключался запасным путём, а кнопка не
-                  // менялась. Без выбранного маршрута — вид по [state.isSpeaker],
-                  // как в созвоне комнаты.
-                  _ControlButton(
-                    icon: routeState.selectedRoute == null
-                        ? (state.isSpeaker
-                              ? _audioRouteIcon(CallAudioRouteKind.speaker)
-                              : _audioRouteIcon(CallAudioRouteKind.earpiece))
-                        : _audioRouteIcon(routeState.selectedRouteKind),
-                    label: l10n.callControlSpeaker,
-                    active: routeState.selectedRoute == null
-                        ? state.isSpeaker
-                        : routeState.isSpeakerSelected,
-                    onTap: onAudioRoutePrimaryTap,
-                    onLongPress: onAudioRouteLongPress,
-                  ),
-                  if (state.isVideo)
-                    _ControlButton(
-                      icon: state.isCameraOff
-                          ? AppIcons.videoOff
-                          : AppIcons.video,
-                      label: l10n.callControlCamera,
-                      active: !state.isCameraOff,
-                      onTap: () => callManager.toggleCamera(),
-                    ),
-                  if (state.isVideo)
-                    _ControlButton(
-                      icon: AppIcons.cameraSwitch,
-                      label: l10n.callControlFlip,
-                      active: true,
-                      onTap: () => callManager.switchCamera(),
-                    ),
-                  if (state.isVideo &&
-                      (state.phase == CallPhase.connected ||
-                          state.phase == CallPhase.connecting ||
-                          state.phase == CallPhase.reconnecting))
-                    _ControlButton(
-                      icon: state.isScreenSharing
-                          ? AppIcons.screenShareOff
-                          : AppIcons.screenShare,
-                      label: state.isScreenSharing
-                          ? l10n.callControlStop
-                          : l10n.callControlShare,
-                      active: state.isScreenSharing,
-                      onTap: () async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final permissionDeniedText = wave1Text(
-                          context,
-                          ru: 'Нет разрешения на демонстрацию экрана',
-                          en: 'Screen share permission denied',
-                          uk: 'Немає дозволу на демонстрацію екрана',
-                          es: 'Permiso de compartir pantalla denegado',
-                          pt: 'Permissão de partilha de ecrã negada',
-                          ptBr: 'Permissão para compartilhar tela negada',
-                          fr: 'Autorisation de partage d’écran refusée',
-                          de: 'Berechtigung zur Bildschirmfreigabe verweigert',
-                        );
-                        final ok = await callManager.toggleScreenShare();
-                        if (!ok) {
-                          messenger.showSnackBar(
-                            SecretlySnackBar(
-                              content: Text(permissionDeniedText),
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  _ControlButton(
-                    icon: AppIcons.callEnd,
-                    label: l10n.callControlEnd,
-                    active: true,
-                    danger: true,
-                    onTap: () => callManager.hangup(),
-                  ),
-                ];
-
-                // Solve N*size + (N-1)*gap = avail for size.
-                // Targets a 14 dp gap and lets the button shrink between
-                // 44 (Apple HIG min tap target) and 56 (legacy default).
-                // If width is so narrow that 44 dp buttons + 14 dp gaps
-                // still overflow, we squeeze the gap down to >= 4 dp.
-                final n = children.length;
-                final avail = constraints.maxWidth;
-                const desiredGap = 14.0;
-                const minGap = 4.0;
-                const maxBtn = 56.0;
-                const minBtn = 44.0;
-
-                final rawSize = (avail - desiredGap * (n - 1)) / n;
-                double btnSize = rawSize.clamp(minBtn, maxBtn);
-                double gap = desiredGap;
-                if (rawSize < minBtn) {
-                  btnSize = minBtn;
-                  gap = ((avail - btnSize * n) / (n - 1))
-                      .clamp(minGap, desiredGap);
-                }
-
-                // PR-H+2 (2026-05-20): hard-constrain each control to
-                // `btnSize` width, otherwise the Column's natural width is
-                // max(circleWidth, labelTextWidth) — Russian labels like
-                // "Завершить" / "Демонстрация" stretch the column past
-                // `btnSize`, breaking the math and pushing the rightmost
-                // button (hangup) off-screen on small phones.
-                final row = <Widget>[];
-                for (var i = 0; i < children.length; i++) {
-                  final c = children[i];
-                  row.add(
-                    SizedBox(
-                      width: btnSize,
-                      child: _ControlButton(
-                        icon: c.icon,
-                        label: c.label,
-                        active: c.active,
-                        danger: c.danger,
-                        accept: c.accept,
-                        onTap: c.onTap,
-                        size: btnSize,
-                      ),
-                    ),
-                  );
-                  if (i < children.length - 1) {
-                    row.add(SizedBox(width: gap));
-                  }
-                }
-
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.max,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: row,
-                );
-              },
-            ),
-          ],
-        ),
-        ),
-      ),
-    );
-  }
-}
-
-IconData _audioRouteIcon(CallAudioRouteKind kind) {
-  switch (kind) {
-    case CallAudioRouteKind.bluetooth:
-      return AppIcons.bluetoothAudio;
-    case CallAudioRouteKind.wiredHeadset:
-      return AppIcons.headphones;
-    case CallAudioRouteKind.earpiece:
-      return AppIcons.call;
-    case CallAudioRouteKind.speaker:
-      return AppIcons.volumeUp;
-    case CallAudioRouteKind.unknown:
-      return AppIcons.volumeDown;
-  }
-}
-
-String _audioRouteLabel({
-  required BuildContext context,
-  required CallAudioRouteOption route,
-  required String speakerLabel,
-}) {
-  switch (route.kind) {
-    case CallAudioRouteKind.bluetooth:
-      return route.label.isNotEmpty ? route.label : 'Bluetooth';
-    case CallAudioRouteKind.wiredHeadset:
-      return wave1Text(context, ru: 'Наушники', en: 'Headset');
-    case CallAudioRouteKind.earpiece:
-      return wave1Text(context, ru: 'Телефон', en: 'Earpiece');
-    case CallAudioRouteKind.speaker:
-      return speakerLabel;
-    case CallAudioRouteKind.unknown:
-      return route.label.isNotEmpty
-          ? route.label
-          : wave1Text(context, ru: 'Аудио', en: 'Audio');
-  }
-}
-
-class _AudioRouteChoiceButton extends StatelessWidget {
-  const _AudioRouteChoiceButton({
-    required this.icon,
-    required this.label,
-    required this.active,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: active
-              ? Colors.white.withValues(alpha: 0.22)
-              : Colors.white.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: active
-                ? Colors.white.withValues(alpha: 0.36)
-                : Colors.white.withValues(alpha: 0.10),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//   Single control button
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _ControlButton extends StatelessWidget {
-  const _ControlButton({
-    required this.icon,
-    required this.label,
-    required this.active,
-    required this.onTap,
-    this.onLongPress,
-    this.danger = false,
-    this.accept = false,
-    this.size = 56.0,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool active;
-  final bool danger;
-
-  /// Зелёная кнопка приёма звонка. Отдельно от [danger], чтобы «принять» и
-  /// «отклонить» нельзя было перепутать ни в коде, ни глазами.
-  final bool accept;
-  final VoidCallback onTap;
-
-  /// Долгое нажатие. У громкой связи это выбор маршрута: раньше он
-  /// забирал ОБЫЧНОЕ нажатие, и кнопка переставала быть переключателем.
-  final VoidCallback? onLongPress;
-  // PR-H+1b (2026-05-20): parameterized so the parent LayoutBuilder can
-  // shrink the button on small screens. Icon and label scale with size to
-  // preserve proportions. Default 56 matches the legacy hard-coded value.
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = danger
-        ? const Color(0xFFE53935)
-        : accept
-        ? const Color(0xFF2FA66A)
-        : active
-        ? Colors.white.withValues(alpha: 0.2)
-        : Colors.white.withValues(alpha: 0.08);
-    final fg = danger || accept || active ? Colors.white : Colors.white54;
-    final double buttonSize = size;
-    final double iconSize = (size * 26.0 / 56.0).clamp(20.0, 28.0);
-    const labelGap = 6.0;
-    const labelSize = 11.0;
-
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: buttonSize,
-            height: buttonSize,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: bg,
-              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-            ),
-            alignment: Alignment.center,
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              transitionBuilder: (child, anim) =>
-                  ScaleTransition(scale: anim, child: child),
-              child: Icon(icon, key: ValueKey(icon), color: fg, size: iconSize),
-            ),
-          ),
-          SizedBox(height: labelGap),
-          // PR-H+2 (2026-05-20): one line, ellipsis on overflow, centred.
-          // Parent SizedBox(width: btnSize) constrains the column width so
-          // long Russian labels can't push the row over the screen edge.
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: labelSize,
-              color: fg,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-
-/// Управление входящим звонком: две большие кнопки, как в профессиональных
-/// мессенджерах.
+/// Управление входящим звонком: две большие кнопки, разнесённые по краям.
 ///
-/// 🔴 ПОЧЕМУ ОТДЕЛЬНЫЙ УЗЕЛ, А НЕ ДВА `_ControlButton`. Обычная панель
-/// рассчитана на пять мелких кнопок в ряд и делит ширину между ними. Для
-/// решения «принять или отклонить» это неверно: кнопки должны быть КРУПНЫМИ и
-/// РАЗНЕСЁННЫМИ, чтобы в спешке нельзя было промахнуться и сбросить звонок
-/// вместо ответа. Промах здесь стоит дорого — 12.08 человек именно так и
-/// сбрасывал себе вызовы.
+/// 🔴 ПОЧЕМУ ОТДЕЛЬНЫЙ УЗЕЛ, А НЕ КНОПКИ ПАНЕЛИ. Для решения «принять или
+/// отклонить» кнопки должны быть КРУПНЫМИ и РАЗНЕСЁННЫМИ, чтобы в спешке нельзя
+/// было промахнуться и сбросить звонок вместо ответа (12.08 человек именно так
+/// и сбрасывал себе вызовы).
 class _IncomingCallControls extends StatelessWidget {
   const _IncomingCallControls({
+    required this.video,
     required this.onAccept,
     required this.onDecline,
   });
 
+  final bool video;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      // Широкие поля разносят кнопки к краям — палец не перепутает.
-      padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 40),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _IncomingActionButton(
-            icon: AppIcons.callEnd,
-            color: const Color(0xFFE53935),
+            icon: CallIcons.end,
+            color: kCallRed,
             label: wave1Text(
               context,
               ru: 'Отклонить',
@@ -1451,23 +1855,12 @@ class _IncomingCallControls extends StatelessWidget {
               fr: 'Refuser',
               de: 'Ablehnen',
             ),
-            hint: wave1Text(
-              context,
-              ru: 'смахните вверх',
-              en: 'swipe up',
-              uk: 'проведіть вгору',
-              es: 'desliza arriba',
-              pt: 'deslize para cima',
-              ptBr: 'deslize para cima',
-              fr: 'glissez vers le haut',
-              de: 'nach oben wischen',
-            ),
             pulse: false,
             onTrigger: onDecline,
           ),
           _IncomingActionButton(
-            icon: AppIcons.call,
-            color: const Color(0xFF2FA66A),
+            icon: video ? CallIcons.camera : CallIcons.accept,
+            color: kCallGreen,
             label: wave1Text(
               context,
               ru: 'Принять',
@@ -1478,17 +1871,6 @@ class _IncomingCallControls extends StatelessWidget {
               ptBr: 'Atender',
               fr: 'Répondre',
               de: 'Annehmen',
-            ),
-            hint: wave1Text(
-              context,
-              ru: 'смахните вверх',
-              en: 'swipe up',
-              uk: 'проведіть вгору',
-              es: 'desliza arriba',
-              pt: 'deslize para cima',
-              ptBr: 'deslize para cima',
-              fr: 'glissez vers le haut',
-              de: 'nach oben wischen',
             ),
             pulse: true,
             onTrigger: onAccept,
@@ -1501,16 +1883,13 @@ class _IncomingCallControls extends StatelessWidget {
 
 /// Одна кнопка входящего звонка: нажатие ИЛИ смахивание вверх.
 ///
-/// 🔴 ОБА ЖЕСТА, А НЕ ТОЛЬКО СМАХИВАНИЕ. Смахивание — привычка из Telegram, но
-/// оставить ТОЛЬКО его значит отобрать звонок у тех, кто им не владеет: у людей
-/// с трясущимися руками, в перчатках, с крупной моторикой. Нажатие остаётся
-/// полноценным путём.
+/// 🔴 ОБА ЖЕСТА, А НЕ ТОЛЬКО СМАХИВАНИЕ: нажатие остаётся полноценным путём
+/// для людей с трясущимися руками, в перчатках, с крупной моторикой.
 class _IncomingActionButton extends StatefulWidget {
   const _IncomingActionButton({
     required this.icon,
     required this.color,
     required this.label,
-    required this.hint,
     required this.pulse,
     required this.onTrigger,
   });
@@ -1518,10 +1897,8 @@ class _IncomingActionButton extends StatefulWidget {
   final IconData icon;
   final Color color;
   final String label;
-  final String hint;
 
-  /// Лёгкое «дыхание» у кнопки приёма — она главная. У отклонения его нет:
-  /// две пульсирующие кнопки рядом соревнуются за внимание и мешают решать.
+  /// Лёгкое «дыхание» у кнопки приёма — она главная.
   final bool pulse;
   final VoidCallback onTrigger;
 
@@ -1531,10 +1908,9 @@ class _IncomingActionButton extends StatefulWidget {
 
 class _IncomingActionButtonState extends State<_IncomingActionButton>
     with SingleTickerProviderStateMixin {
-  static const double _size = 72;
+  static const double _size = 76;
 
-  /// Порог смахивания. Меньше — и кнопка срабатывала бы от случайного дёрганья
-  /// при поднесении телефона к уху.
+  /// Порог смахивания: меньше — сработало бы от случайного движения у уха.
   static const double _triggerDy = 56;
 
   late final AnimationController _breath = AnimationController(
@@ -1559,91 +1935,91 @@ class _IncomingActionButtonState extends State<_IncomingActionButton>
   void _fire() {
     if (_fired) return;
     _fired = true;
+    HapticFeedback.mediumImpact();
     widget.onTrigger();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Прогресс смахивания: и подсветка, и подъём кнопки под пальцем.
     final progress = (_dragDy.abs() / _triggerDy).clamp(0.0, 1.0);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _fire,
-      onVerticalDragUpdate: (d) {
-        // Вниз не считаем: жест только вверх, иначе сработает от прокрутки.
-        final next = (_dragDy + d.delta.dy).clamp(-_triggerDy * 1.4, 0.0);
-        setState(() => _dragDy = next);
-      },
-      onVerticalDragEnd: (_) {
-        if (_dragDy.abs() >= _triggerDy) {
-          _fire();
-        }
-        setState(() => _dragDy = 0);
-      },
-      onVerticalDragCancel: () => setState(() => _dragDy = 0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Подсказка проявляется по мере смахивания — не мозолит глаза сразу.
-          AnimatedOpacity(
-            opacity: 0.35 + 0.65 * progress,
-            duration: const Duration(milliseconds: 120),
-            child: Icon(
-              Icons.keyboard_arrow_up_rounded,
-              size: 18,
-              color: Colors.white.withValues(alpha: 0.7),
-            ),
-          ),
-          AnimatedBuilder(
-            animation: _breath,
-            builder: (context, child) {
-              // Дыхание слабое (4 %) и гаснет, как только палец повёл кнопку:
-              // два движения одновременно читаются как дребезг.
-              final breath = widget.pulse
-                  ? 1 + 0.04 * _breath.value * (1 - progress)
-                  : 1.0;
-              return Transform.translate(
-                offset: Offset(0, _dragDy * 0.6),
-                child: Transform.scale(scale: breath, child: child),
-              );
-            },
-            child: Container(
-              width: _size,
-              height: _size,
-              decoration: BoxDecoration(
-                color: widget.color,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: widget.color.withValues(
-                      alpha: 0.30 + 0.35 * progress,
-                    ),
-                    blurRadius: 16 + 14 * progress,
-                    spreadRadius: 1 + 2 * progress,
-                  ),
-                ],
+    return Semantics(
+      button: true,
+      label: widget.label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _fire,
+        onVerticalDragUpdate: (d) {
+          final next = (_dragDy + d.delta.dy).clamp(-_triggerDy * 1.4, 0.0);
+          setState(() => _dragDy = next);
+        },
+        onVerticalDragEnd: (_) {
+          if (_dragDy.abs() >= _triggerDy) _fire();
+          setState(() => _dragDy = 0);
+        },
+        onVerticalDragCancel: () => setState(() => _dragDy = 0),
+        child: SizedBox(
+          width: 88,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedOpacity(
+                opacity: 0.25 + 0.75 * progress,
+                duration: const Duration(milliseconds: 120),
+                child: Icon(
+                  CallIcons.up,
+                  size: 18,
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
               ),
-              child: Icon(widget.icon, color: Colors.white, size: 30),
-            ),
+              const SizedBox(height: 4),
+              AnimatedBuilder(
+                animation: _breath,
+                builder: (context, child) {
+                  final breath = widget.pulse
+                      ? 1 +
+                            0.05 *
+                                Curves.easeInOut.transform(_breath.value) *
+                                (1 - progress)
+                      : 1.0;
+                  return Transform.translate(
+                    offset: Offset(0, _dragDy * 0.6),
+                    child: Transform.scale(scale: breath, child: child),
+                  );
+                },
+                child: Container(
+                  width: _size,
+                  height: _size,
+                  decoration: BoxDecoration(
+                    color: widget.color,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: widget.color.withValues(
+                          alpha: 0.38 + 0.3 * progress,
+                        ),
+                        blurRadius: 30 + 10 * progress,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Icon(widget.icon, color: Colors.white, size: 34),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                widget.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            widget.label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            widget.hint,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.45),
-              fontSize: 10.5,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

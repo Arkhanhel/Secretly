@@ -45,6 +45,9 @@ void main() {
     expect(
       ctrl.contains(
         'bool get _cosmeticsUnlocked =>\n'
+        // 23.11.2026: тестовая подмена — в приложении всегда null, решает
+        // по-прежнему проверка подписки.
+        '      _cosmeticsUnlockedOverrideForTesting ??\n'
         '      FeatureGate.isUnlocked(entitlementStateNow, GatedFeature.cosmetic);',
       ),
       isTrue,

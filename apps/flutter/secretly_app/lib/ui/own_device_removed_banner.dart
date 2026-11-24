@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../app/app_controller.dart';
 import 'wave1_l10n.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// У-1 (17.09.2026): регистрацию этого устройства сняли на сервере.
 ///
@@ -42,7 +43,7 @@ class OwnDeviceRemovedBanner extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               child: Row(
                 children: [
-                  Icon(Icons.link_off_rounded, color: scheme.onErrorContainer),
+                  Icon(AdaptiveIcons.link_off_rounded, color: scheme.onErrorContainer),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(

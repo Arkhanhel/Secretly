@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'whats_new/pen_mark.dart';
+import 'scroll_feel.dart';
+import 'glass/glass_category_strip.dart';
+import 'dart:math' as math;
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
@@ -29,6 +33,8 @@ import 'chat_screen.dart';
 import 'fullscreen_image_viewer.dart';
 import 'l10n.dart';
 import 'local_image_gallery_dialog.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'my_secretly_id_screen.dart';
 import 'premium/cosmetic_animation_scope.dart';
 import 'premium/cosmetics_catalog.dart';
@@ -41,6 +47,7 @@ import 'cover_crop_screen.dart';
 import 'emoji/emoji_status_picker.dart';
 import 'emoji/noto_status_emoji.dart';
 import 'paywall_screen.dart' show PaywallTrigger;
+import 'premium/premium_hub_screen.dart';
 import 'profile_cosmetics_screen.dart';
 import 'profile_icon_picker_screen.dart';
 import 'room_policy_error_text.dart';
@@ -48,18 +55,37 @@ import 'security_lock_flow.dart';
 import 'share_utils.dart';
 import 'settings_screen.dart';
 import 'wave1_l10n.dart';
+import 'widgets/apple_menu.dart';
 import 'widgets/avatar_initials.dart';
-import 'liquid_glass_flags.dart';
 import 'widgets/frosted_header_island.dart';
 import 'widgets/liquid_pressable.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'widgets/premium_glass.dart';
-import 'widgets/secretly_glass_fab.dart';
 import 'widgets/secretly_glass_sheet.dart';
 import '../security/app_security_manager.dart';
 import 'widgets/broken_media_box.dart';
 import '../media/h264_encoder.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
+import 'package:secretly_app/ui/apple_settings_row.dart';
+import 'settings_group.dart';
+import 'widgets/elite_badge_mark.dart';
+import 'profile/profile_motion.dart';
+import 'profile/avatar_radial_menu.dart';
+import 'profile/key_fingerprint.dart';
+import 'profile/profile_tabs.dart';
+import 'media_viewer/media_flight.dart' show MediaFlightAnchor;
+import 'media_viewer/media_viewer_screen.dart'
+    show
+        MediaDeleteScope,
+        MediaViewerActions,
+        MediaViewerDeleteInfo,
+        MediaViewerEntry,
+        MediaViewerKind,
+        openMediaViewer;
+import 'media_viewer/media_viewer_tokens.dart' show mediaViewerV2Enabled;
+import '../app/elite_badges.dart';
 
 /// A profile top-island action button: jelly press on liquid glass (iOS),
 /// standard IconButton elsewhere. Icon colour follows the theme icon colour so
@@ -81,11 +107,11 @@ Widget _profileIslandButton(
       color: color,
     );
   }
-  return IconButton(
+  return PressFeedback(child: IconButton(
     tooltip: tooltip,
     icon: Icon(icon, size: size),
     onPressed: onPressed,
-  );
+  ));
 }
 
 class ProfileScreen extends StatefulWidget {
@@ -268,6 +294,19 @@ class _ProfileConversationPickerSheet extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 14),
+                  if (kGlassCategoryStrip)
+                    // 23.11.2026 (план стекла): полоса во всю ширину с каплей.
+                    Builder(
+                      builder: (tabCtx) => GlassTabControllerStrip(
+                        controller: DefaultTabController.of(tabCtx),
+                        padding: EdgeInsets.zero,
+                        labels: [
+                          context.l10n.tabChats,
+                          context.l10n.tabGroups,
+                        ],
+                      ),
+                    )
+                  else
                   TabBar(
                     tabs: [
                       Tab(text: context.l10n.tabChats),
@@ -381,7 +420,10 @@ class _ProfileConversationPickerList extends StatelessWidget {
               color: colors.outlineVariant.withValues(alpha: 0.28),
             ),
           ),
-          tileColor: colors.surfaceContainerLow,
+          tileColor: appleGlassFillOr(
+          context,
+          colors.surfaceContainerLow,
+        ),
           leading: _ProfileConversationAvatar(conversation: conversation),
           title: Text(
             conversation.title,
@@ -468,23 +510,70 @@ class _ProfileScreenState extends State<ProfileScreen>
   // [_addAnchorKey] marks the inline button's slot (a zero-height marker placed
   // just below the media panes); we measure its global Y on every scroll tick.
   final GlobalKey _addAnchorKey = GlobalKey();
-  bool _addFabFloating = true;
-  bool _collapseGestureActive = false;
-  double _pullExpand = 0;
-  double _profilePullPx = 0;
-  double _profileFullscreenPullPx = 0;
-  bool _profilePhotoWasFullyExpanded = false;
+  // Движение шапки — общий двигатель макета «Profile Motion» (21.11.2026):
+  // резинка, раскрытие на пороге пружиной, растяжение, свайп вверх 50 px.
+  late final ProfileHeroDriver _hero = ProfileHeroDriver(
+    vsync: this,
+    onChanged: _onHeroChanged,
+    maxPx: _profilePullMaxPx,
+    snap: _profileSnapThreshold,
+    hapticsEnabled: () => widget.controller.appHapticsEnabled,
+  );
+  double get _pullExpand => _hero.expand;
+
+  /// Открыто меню долгого нажатия на аватар — палец выбирает пункт, фото
+  /// не тянется.
+  bool _avatarMenuOpen = false;
+
+  void _onHeroChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Острова шапки уступают место прилипшим вкладкам галереи: уходят вверх
+  /// с затуханием и возвращаются обратно.
+  Widget _hideWhenTabsPinned(Widget child) => ValueListenableBuilder<bool>(
+    valueListenable: _tabsPinned,
+    child: child,
+    builder: (context, pinned, child) => IgnorePointer(
+      ignoring: pinned,
+      child: AnimatedSlide(
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        offset: pinned ? const Offset(0, -0.35) : Offset.zero,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 200),
+          opacity: pinned ? 0 : 1,
+          child: child,
+        ),
+      ),
+    ),
+  );
+  // Магнитная привязка страницы (шапка → имя в шапке → галерея у шапки).
+  late final ProfileScrollSnapper _snap = ProfileScrollSnapper(
+    controller: _scrollController,
+    hapticsEnabled: () => widget.controller.appHapticsEnabled,
+  );
   bool _profileViewerOpening = false;
   // 240px finger travel for a full open → photo expands at half the finger speed
   // (2× slower / more gradual) than a 1:1 drag.
   static const double _profilePullMaxPx = 240;
   static const double _profileSnapThreshold = 0.45;
-  static const double _profileFullscreenPullThreshold = 28;
-  late final AnimationController _pullSnapController;
   late final AnimationController _copyIconController;
-  late final TabController _mediaTabController;
+  // Вкладки мини-галереи (макет «Profile Redesign»): остров с подложкой-
+  // «гусеницей», листание пальцем, прилипание под шапкой.
+  late final ProfileTabsController _mediaTabs = ProfileTabsController(
+    vsync: this,
+    length: 3,
+    onChanged: (_) {
+      if (mounted) setState(() {});
+    },
+    hapticsEnabled: () => widget.controller.appHapticsEnabled,
+  );
+  final GlobalKey _mediaTabsKey = GlobalKey();
+
+  /// Вкладки галереи заняли место островов шапки.
+  final ValueNotifier<bool> _tabsPinned = ValueNotifier<bool>(false);
   final ImagePicker _imagePicker = ImagePicker();
-  Animation<double>? _pullSnapAnimation;
   final Map<String, Future<_ProfileMusicMetadata?>>
   _profileMusicMetadataFutures = <String, Future<_ProfileMusicMetadata?>>{};
 
@@ -520,37 +609,21 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   void initState() {
     super.initState();
+    unawaited(
+      ownFingerprintKey(widget.controller).then((v) {
+        if (mounted && v != null) setState(() => _ownKeyBytes = v);
+      }),
+    );
     _nick.text = widget.controller.myNickname;
-    _pullSnapController =
-        AnimationController(
-          vsync: this,
-          duration: const Duration(milliseconds: 220),
-        )..addListener(() {
-          final animation = _pullSnapAnimation;
-          if (animation == null || !mounted) return;
-          setState(() {
-            _pullExpand = animation.value;
-            _profilePullPx = (_pullExpand * _profilePullMaxPx).clamp(
-              0.0,
-              _profilePullMaxPx,
-            );
-          });
-          _updateProfilePhotoFeedback();
-        });
     _copyIconController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _mediaTabController = TabController(length: 3, vsync: this)
-      ..addListener(() {
-        if (!mounted || _mediaTabController.indexIsChanging) return;
-        setState(() {});
-      });
     widget.controller.sharedAudioPlayback.addListener(
       _handleSharedAudioPlaybackChanged,
     );
-    _scrollController.addListener(_updateAddFabDock);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _updateAddFabDock());
+    _scrollController.addListener(_onHeroScroll);
+    _mediaTabs.addListener(() => _tabsPinned.value = _mediaTabs.pinned);
   }
 
   /// Decides whether the round "+" add-media button should float (pinned at the
@@ -559,30 +632,6 @@ class _ProfileScreenState extends State<ProfileScreen>
   /// slot; while that slot is still below the dock line (≈ the top edge of the
   /// floating bottom nav bar) the FAB floats; once the slot scrolls up past the
   /// dock line the FAB hides and the identical inline button takes over.
-  void _updateAddFabDock() {
-    if (!mounted) return;
-    final ctx = _addAnchorKey.currentContext;
-    bool floating = _addFabFloating;
-    if (ctx == null) {
-      // Anchor not laid out yet (e.g. very top of a tall list) → float.
-      floating = true;
-    } else {
-      final box = ctx.findRenderObject();
-      if (box is! RenderBox || !box.hasSize) {
-        return;
-      }
-      final anchorTop = box.localToGlobal(Offset.zero).dy;
-      final media = MediaQuery.of(context);
-      // Dock line = top of the reserved nav-bar zone (mirrors the ListView's
-      // `bottom: 112 + bottomInset` padding and the floating pill height).
-      final dockLineY = media.size.height - (media.padding.bottom + 112);
-      floating = anchorTop > dockLineY;
-    }
-    if (floating != _addFabFloating) {
-      setState(() => _addFabFloating = floating);
-    }
-  }
-
   @override
   void dispose() {
     _debounce?.cancel();
@@ -591,13 +640,26 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
     _nick.dispose();
     _nickFocus.dispose();
-    _scrollController.removeListener(_updateAddFabDock);
+    _scrollController.removeListener(_onHeroScroll);
     _scrollController.dispose();
-    _pullSnapController.dispose();
+    _hero.dispose();
+    _snap.dispose();
     _copyIconController.dispose();
-    _mediaTabController.dispose();
+    _idCopiedTimer?.cancel();
+    _mediaTabs.dispose();
+    _tabsPinned.dispose();
     super.dispose();
   }
+
+  /// «Скопировано» вместо ID на 1,6 с и галочка вместо значка (макет
+  /// «Profile Redesign»).
+  bool _idCopied = false;
+
+  /// Отпечаток своего ключа шифрования для обложки «Отпечаток ключа»
+  /// (обложка по умолчанию, макет «Profile Redesign»). `null` — ключа ещё
+  /// нет: тогда узор-образец и без подсказки про ключ.
+  List<int>? _ownKeyBytes;
+  Timer? _idCopiedTimer;
 
   Future<void> _copyProfileId() async {
     final id = widget.controller.profileId.trim();
@@ -605,6 +667,12 @@ class _ProfileScreenState extends State<ProfileScreen>
     await Clipboard.setData(ClipboardData(text: id));
     if (!mounted) return;
     _copyIconController.forward(from: 0);
+    if (widget.controller.appHapticsEnabled) HapticFeedback.lightImpact();
+    setState(() => _idCopied = true);
+    _idCopiedTimer?.cancel();
+    _idCopiedTimer = Timer(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => _idCopied = false);
+    });
     final msg = _label(
       context,
       ru: 'ID профиля скопирован',
@@ -626,32 +694,19 @@ class _ProfileScreenState extends State<ProfileScreen>
     await shareTextExternally(text: text);
   }
 
-  void _stopPullSnap() {
-    if (_pullSnapController.isAnimating) {
-      _pullSnapController.stop();
-    }
+  void _onHeroScroll() {
+    if (!_scrollController.hasClients) return;
+    _hero.setScroll(_scrollController.offset);
   }
 
-  void _updateProfilePhotoFeedback() {
-    final fullyOpen = _pullExpand >= 0.995;
-    final fullyClosed = _pullExpand <= 0.001;
-    if (fullyOpen && !_profilePhotoWasFullyExpanded) {
-      _profilePhotoWasFullyExpanded = true;
-      unawaited(widget.controller.triggerUiHaptic());
-      return;
-    }
-    if (fullyClosed && _profilePhotoWasFullyExpanded) {
-      _profilePhotoWasFullyExpanded = false;
-      unawaited(widget.controller.triggerUiHaptic());
-    }
-  }
+
 
   Future<void> _openProfileAvatarFullScreen(String? avatarPath) async {
     final path = (avatarPath ?? '').trim();
     if (path.isEmpty || !File(path).existsSync() || _profileViewerOpening) {
       return;
     }
-    _profileFullscreenPullPx = 0;
+    _hero.releaseStretch();
     _profileViewerOpening = true;
     try {
       await openFullscreenImageViewer(
@@ -663,61 +718,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     } finally {
       _profileViewerOpening = false;
     }
-  }
-
-  void _handleProfileAvatarSurfaceDragUpdate(
-    DragUpdateDetails details,
-    String? avatarPath,
-  ) {
-    final delta = details.delta.dy;
-    if (_pullExpand >= 0.995 && delta > 0) {
-      _profileFullscreenPullPx += delta;
-      if (_profileFullscreenPullPx >= _profileFullscreenPullThreshold) {
-        _profileFullscreenPullPx = 0;
-        unawaited(_openProfileAvatarFullScreen(avatarPath));
-        return;
-      }
-    } else {
-      _profileFullscreenPullPx = 0;
-    }
-
-    _stopPullSnap();
-    setState(() {
-      _profilePullPx = (_profilePullPx + delta).clamp(0.0, _profilePullMaxPx);
-      _pullExpand = (_profilePullPx / _profilePullMaxPx).clamp(0.0, 1.0);
-    });
-    _updateProfilePhotoFeedback();
-  }
-
-  void _handleProfileAvatarSurfaceDragEnd(DragEndDetails _) {
-    _profileFullscreenPullPx = 0;
-    _animatePullTo(_pullExpand >= _profileSnapThreshold ? 1.0 : 0.0);
-  }
-
-  void _animatePullTo(double target) {
-    final clamped = target.clamp(0.0, 1.0);
-    if ((_pullExpand - clamped).abs() < 0.001) {
-      setState(() {
-        _pullExpand = clamped;
-        _profilePullPx = (_pullExpand * _profilePullMaxPx).clamp(
-          0.0,
-          _profilePullMaxPx,
-        );
-      });
-      _updateProfilePhotoFeedback();
-      return;
-    }
-    _stopPullSnap();
-    _pullSnapAnimation = Tween<double>(begin: _pullExpand, end: clamped)
-        .animate(
-          CurvedAnimation(
-            parent: _pullSnapController,
-            curve: Curves.easeOutCubic,
-          ),
-        );
-    _pullSnapController
-      ..reset()
-      ..forward();
   }
 
   void _scheduleSave(String v) {
@@ -778,6 +778,7 @@ class _ProfileScreenState extends State<ProfileScreen>
 
   Future<void> _showAvatarSourceSheet() async {
     final selected = await showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -832,7 +833,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     borderRadius: BorderRadius.circular(16),
                   ),
                   tileColor: cs.surface.withValues(alpha: 0.35),
-                  leading: const Icon(Icons.movie_creation_rounded),
+                  leading: const Icon(AdaptiveIcons.movie_creation_rounded),
                   title: Text(
                     wave1Text(
                       context,
@@ -940,7 +941,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                     tileColor: cs.surface.withValues(alpha: 0.35),
                     leading: Icon(
-                      Icons.delete_outline_rounded,
+                      AdaptiveIcons.delete_outline_rounded,
                       color: cs.error,
                     ),
                     title: Text(
@@ -994,7 +995,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     if (!await _ensureCosmeticAccess()) return;
     final x = await ImagePicker().pickVideo(source: ImageSource.gallery);
     if (x == null || !mounted) return;
-    showDialog<void>(
+    showAppDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (_) => const Center(child: SecretlySpinner()),
@@ -1051,11 +1052,10 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   Future<void> _showProfileMoreMenu() async {
-    final cs = Theme.of(context).colorScheme;
-    final selected = await showDialog<String>(
+    // Меню «⋯» — общий показ всплывающих меню (на iPhone — как iOS).
+    final selected = await showFrostedPopup<String>(
       context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.black.withValues(alpha: 0.16),
+      alignment: Alignment.topRight,
       builder: (context) {
         final safeTop = MediaQuery.of(context).padding.top;
         return Material(
@@ -1085,114 +1085,33 @@ class _ProfileScreenState extends State<ProfileScreen>
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          InkWell(
-                            onTap: () => Navigator.of(context).pop('edit-name'),
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                14,
-                                12,
-                                14,
-                                12,
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    AppIcons.badge,
-                                    size: 22,
-                                    color: cs.onSurface.withValues(alpha: 0.92),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Text(
-                                      _label(
+                          AppMenuRow(
+                            icon: AppIcons.badge,
+                            title: _label(
                                         context,
                                         ru: 'Изменить имя',
                                         en: 'Change name',
                                       ),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            onTap: () => Navigator.of(context).pop('edit-name'),
                           ),
-                          InkWell(
-                            onTap: () => Navigator.of(context).pop('copy-link'),
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                14,
-                                12,
-                                14,
-                                12,
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    appleShareIcon(Icons.share_outlined),
-                                    size: 22,
-                                    color: cs.onSurface.withValues(alpha: 0.92),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Text(
-                                      _label(
+                          AppMenuRow(
+                            icon: appleShareIcon(AdaptiveIcons.share_outlined),
+                            title: _label(
                                         context,
                                         ru: 'Поделиться профилем',
                                         en: 'Share profile',
                                       ),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            onTap: () => Navigator.of(context).pop('copy-link'),
                           ),
-                          InkWell(
-                            onTap: () =>
-                                Navigator.of(context).pop('remove-avatar'),
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                14,
-                                12,
-                                14,
-                                12,
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    AppIcons.delete,
-                                    size: 22,
-                                    color: cs.onSurface.withValues(alpha: 0.92),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Text(
-                                      _label(
+                          AppMenuRow(
+                            icon: AppIcons.delete,
+                            title: _label(
                                         context,
                                         ru: 'Удалить',
                                         en: 'Delete',
                                       ),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleMedium
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            onTap: () =>
+                                Navigator.of(context).pop('remove-avatar'),
                           ),
                         ],
                       ),
@@ -1727,35 +1646,41 @@ class _ProfileScreenState extends State<ProfileScreen>
     required String category,
     required List<String> paths,
   }) {
+    // Макет «Profile Redesign»: галерея — сетка 3×, фоны — 2×; после фото
+    // плитка «+» (пунктир) и пустые рамки под будущие фото, чтобы сетка
+    // никогда не была пустой («Пока пусто» больше нет).
+    final gallery = category == 'gallery';
+    final columns = gallery ? 3 : 2;
+    final frames = math.max(0, (gallery ? 5 : 3) - paths.length);
+    final cells = paths.length + 1 + frames;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (paths.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 28),
-            child: Center(
-              child: Text(
-                _label(context, ru: 'Пока пусто', en: 'Empty for now'),
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-          )
-        else
           GridView.builder(
             padding: const EdgeInsets.fromLTRB(0, 2, 0, 6),
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-              childAspectRatio: 0.98,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              crossAxisSpacing: 6,
+              mainAxisSpacing: 6,
+              childAspectRatio: gallery ? 1 : 1.45,
             ),
-            itemCount: paths.length,
+            itemCount: cells,
             itemBuilder: (context, index) {
+              if (index == paths.length) {
+                return ProfileGalleryAddTile(
+                  tooltip: _label(context, ru: 'Добавить', en: 'Add'),
+                  onTap: () => _pickAndAddMedia(category),
+                );
+              }
+              if (index > paths.length) return const ProfileGalleryEmptyTile();
               final path = paths[index];
-              return ClipRRect(
-                borderRadius: BorderRadius.circular(16),
+              return MediaFlightAnchor(
+                tag: path,
+                borderRadius: BorderRadius.circular(12),
+                child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
@@ -1770,29 +1695,35 @@ class _ProfileScreenState extends State<ProfileScreen>
                         Image.file(
                           File(path),
                           fit: BoxFit.cover,
+                          // Плитка — не больше половины экрана: раскрывать
+                          // снимок под неё, а не в полном размере (разбор
+                          // 22.11.2026 — риск памяти на слабом Android).
+                          cacheWidth: (MediaQuery.sizeOf(context).width *
+                                  MediaQuery.devicePixelRatioOf(context) /
+                                  2)
+                              .round(),
+                          gaplessPlayback: true,
                           errorBuilder: (_, _, _) => const BrokenMediaBox(),
                         ),
                         Positioned(
                           top: 8,
                           right: 8,
-                          child: IconButton.filledTonal(
+                          child: PressFeedback(child: IconButton.filledTonal(
                             visualDensity: VisualDensity.compact,
                             onPressed: () => _removeMediaAt(
                               category: category,
                               index: index,
                             ),
                             icon: const Icon(AppIcons.close, size: 16),
-                          ),
+                          )),
                         ),
                       ],
                     ),
                   ),
                 ),
-              );
+              ));
             },
           ),
-        const SizedBox(height: 6),
-        _inlineAddMediaButton(category),
       ],
     );
   }
@@ -1802,36 +1733,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   /// (floating) this inline button is invisible but still reserves its slot, so
   /// the handoff between floating ⇄ docked is seamless (no layout jump). Always
   /// right-aligned so its on-screen X matches the end-float FAB.
-  Widget _inlineAddMediaButton(String category) {
-    final button = _addMediaFabButton(category);
-    return Align(
-      alignment: Alignment.centerRight,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 180),
-        opacity: _addFabFloating ? 0.0 : 1.0,
-        child: IgnorePointer(ignoring: _addFabFloating, child: button),
-      ),
-    );
-  }
-
   /// The shared round gold "+" button visual (used both inline and floating).
-  Widget _addMediaFabButton(String category) {
-    return SecretlyGlassFabButton(
-      tooltip: _label(context, ru: 'Добавить', en: 'Add'),
-      dimension: 52,
-      cornerRadius: 26,
-      icon: const Icon(AppIcons.add, size: 24),
-      onPressed: () => _pickAndAddMedia(category),
-    );
-  }
-
   /// Maps the currently-selected mini-gallery tab to its media category so the
   /// floating FAB adds to whatever pane the user is viewing.
-  String get _activeMediaCategory => switch (_mediaTabController.index) {
-    1 => 'backgrounds',
-    2 => 'music',
-    _ => 'gallery',
-  };
 
   String? _profileImageMime(String filePath) {
     switch (p.extension(filePath).trim().toLowerCase()) {
@@ -1915,6 +1819,46 @@ class _ProfileScreenState extends State<ProfileScreen>
     required int initialIndex,
   }) async {
     if (paths.isEmpty) return;
+    // Новый просмотр (22.11.2026): перелёт из плитки, жесты как в чате.
+    // Своё — значит «Удалить» убирает из профиля без вопроса «у кого».
+    if (mediaViewerV2Enabled) {
+      final title = _categoryLabel(category);
+      await openMediaViewer(
+        context,
+        entries: [
+          for (final path in paths)
+            MediaViewerEntry(
+              id: path,
+              kind: MediaViewerKind.photo,
+              loadFile: () async => File(path),
+              cachedFile: () async => File(path),
+              title: title,
+              time: _profileMediaTimestamp(path),
+              own: true,
+            ),
+        ],
+        initialIndex: initialIndex,
+        title: title,
+        hapticsEnabled: () => widget.controller.appHapticsEnabled,
+        actions: MediaViewerActions(
+          onShare: (e) async {
+            await _shareProfileImageExternally(e.id);
+            return null;
+          },
+          deleteInfo: (e) => const MediaViewerDeleteInfo(own: true),
+          onDelete: (e, MediaDeleteScope _) async {
+            final index = _mediaPathsForCategory(category).indexOf(e.id);
+            if (index < 0) return false;
+            await widget.controller.removeProfileMediaAt(
+              category: category,
+              index: index,
+            );
+            return true;
+          },
+        ),
+      );
+      return;
+    }
     final items = paths
         .map(
           (path) => LocalImageGalleryItem(
@@ -1924,7 +1868,7 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         )
         .toList(growable: false);
-    await showDialog<void>(
+    await showAppDialog<void>(
       context: context,
       builder: (context) {
         return Dialog.fullscreen(
@@ -1987,13 +1931,16 @@ class _ProfileScreenState extends State<ProfileScreen>
                       ? '${artist.isEmpty ? _unknownMusicArtistLabel() : artist} • ${_formatProfileMusicDuration(position)} / ${_formatProfileMusicDuration(duration)}'
                       : artist;
                   return DecoratedBox(
-                    decoration: BoxDecoration(
+                    decoration: appleGlassDecorationOr(
+        context,
+        BoxDecoration(
                       color: cs.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(
                         color: cs.outlineVariant.withValues(alpha: 0.32),
                       ),
                     ),
+      ),
                     child: Material(
                       color: Colors.transparent,
                       child: InkWell(
@@ -2108,7 +2055,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   ),
                                 ),
                               ),
-                              PopupMenuButton<_ProfileMusicMenuAction>(
+                              AppPopupMenuButton<_ProfileMusicMenuAction>(
                                 tooltip: _label(
                                   context,
                                   ru: 'Действия с музыкой',
@@ -2184,7 +2131,14 @@ class _ProfileScreenState extends State<ProfileScreen>
             },
           ),
         const SizedBox(height: 6),
-        _inlineAddMediaButton('music'),
+        // Музыка: та же пунктирная «+», строкой во всю ширину.
+        SizedBox(
+          height: 56,
+          child: ProfileGalleryAddTile(
+            tooltip: _label(context, ru: 'Добавить музыку', en: 'Add music'),
+            onTap: () => _pickAndAddMedia('music'),
+          ),
+        ),
       ],
     );
   }
@@ -2360,6 +2314,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   Future<Conversation?> _pickConversationForMusicAction(String path) {
     final title = p.basenameWithoutExtension(path).trim();
     return showModalBottomSheet<Conversation>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -2482,74 +2437,13 @@ class _ProfileScreenState extends State<ProfileScreen>
     }
   }
 
-  void _handleCollapseDrag(DragUpdateDetails details) {
-    _stopPullSnap();
-    _collapseGestureActive = true;
-    setState(() {
-      _profilePullPx = (_profilePullPx + details.delta.dy).clamp(
-        0.0,
-        _profilePullMaxPx,
-      );
-      _pullExpand = (_profilePullPx / _profilePullMaxPx).clamp(0.0, 1.0);
-    });
-    _updateProfilePhotoFeedback();
-  }
-
-  void _handleCollapseDragEnd(DragEndDetails _) {
-    _collapseGestureActive = false;
-    _animatePullTo(_pullExpand >= _profileSnapThreshold ? 1.0 : 0.0);
-  }
-
   bool _handleProfilePull(ScrollNotification notification) {
     if (notification.metrics.axis != Axis.vertical) return false;
-
-    final atTop =
-        notification.metrics.pixels <= 0.5 &&
-        notification.metrics.extentBefore <= 0.5;
-
-    if (notification is OverscrollNotification) {
-      if (notification.dragDetails == null) return false;
-      final delta = notification.overscroll;
-      if (atTop && delta < 0) {
-        _stopPullSnap();
-        setState(() {
-          _profilePullPx = (_profilePullPx + (-delta)).clamp(
-            0.0,
-            _profilePullMaxPx,
-          );
-          _pullExpand = (_profilePullPx / _profilePullMaxPx).clamp(0.0, 1.0);
-        });
-        _updateProfilePhotoFeedback();
-      }
-      return false;
+    // Фото тянет и ведёт слой пальца (ProfileHeroGestureLayer); здесь —
+    // только магнитная привязка страницы, когда фото не «в игре».
+    if (notification is ScrollEndNotification && !_hero.heroActive) {
+      _snap.onScrollEnd();
     }
-
-    if (notification is ScrollUpdateNotification) {
-      if (notification.dragDetails == null) return false;
-      final delta = notification.scrollDelta ?? 0;
-      if (atTop && delta < 0) {
-        _stopPullSnap();
-        setState(() {
-          _profilePullPx = (_profilePullPx + (-delta)).clamp(
-            0.0,
-            _profilePullMaxPx,
-          );
-          _pullExpand = (_profilePullPx / _profilePullMaxPx).clamp(0.0, 1.0);
-        });
-        _updateProfilePhotoFeedback();
-      }
-      return false;
-    }
-
-    if (notification is ScrollEndNotification) {
-      // Always settle on finger-up; dragDetails is usually null at scroll end, so
-      // gating on it left the avatar frozen mid-zoom when released early.
-      if (_profilePullPx > 0.001) {
-        _animatePullTo(_pullExpand >= _profileSnapThreshold ? 1.0 : 0.0);
-      }
-      return false;
-    }
-
     return false;
   }
 
@@ -2572,7 +2466,7 @@ class _ProfileScreenState extends State<ProfileScreen>
   /// status picker (premium-gated); shows a faint "add" icon when none is set.
   Widget _buildEmojiStatusButton(AppController controller) {
     final status = controller.myEmojiStatus;
-    return GestureDetector(
+    return PressFeedback(child: GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () async {
         if (!await _ensureCosmeticAccess()) return;
@@ -2589,13 +2483,13 @@ class _ProfileScreenState extends State<ProfileScreen>
           // non-animating emoji even though the icon is animatable.
           ? NotoStatusEmoji(emoji: status, size: 24)
           : Icon(
-              Icons.add_reaction_outlined,
+              AdaptiveIcons.add_reaction_outlined,
               size: 20,
               color: Theme.of(
                 context,
               ).colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
             ),
-    );
+    ));
   }
 
   Widget _circleAction({
@@ -2607,7 +2501,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     final cs = Theme.of(context).colorScheme;
     // Semi-square glass island with icon + label (matches the contact-details
     // action chips: frosted glass + specular highlight).
-    return FrostedHeaderIsland(
+    // Кнопка-островок сжимается при нажатии, как в профиле Telegram.
+    return PressFeedback(child: FrostedHeaderIsland(
       radius: 18,
       child: Material(
         color: Colors.transparent,
@@ -2636,7 +2531,18 @@ class _ProfileScreenState extends State<ProfileScreen>
           ),
         ),
       ),
-    );
+    ));
+  }
+
+  /// Своя обложка — тёмная сцена (живая обложка, своё фото или видео):
+  /// текст и значки над ней светлые в любой теме (24.11.2026).
+  bool _ownCoverWantsLightText(AppController c) {
+    if (c.myCoverId == kNoProfileCoverId) return false;
+    // Только ночная сцена тёмная в любой теме; дневные обложки в светлой
+    // теме светлые сами (дизайн 24.11.2026) — на них текст тёмный.
+    return coverIsNightScene(c.myCoverId) ||
+        (c.myCoverImagePath ?? '').isNotEmpty ||
+        (c.myCoverVideoPath ?? '').isNotEmpty;
   }
 
   @override
@@ -2651,61 +2557,71 @@ class _ProfileScreenState extends State<ProfileScreen>
     // Was the Android formula unconditionally, so on iOS — where the glass
     // pill ignores the home-indicator inset — this sat ~62px above the bar
     // instead of the 28px every other screen uses. Same helper now.
-    final addFabBottomOffset = fabBottomOffsetFor(context);
 
-    return Scaffold(
+    return Stack(
+      children: [
+        Scaffold(
       extendBodyBehindAppBar: true,
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: Padding(
-        padding: EdgeInsets.only(bottom: addFabBottomOffset + 4),
-        child: AnimatedFab(
-          visible: _addFabFloating,
-          child: _addMediaFabButton(_activeMediaCategory),
-        ),
-      ),
+      // Круглой плавающей «+» больше нет (21.11.2026, владелец): добавляют
+      // пунктирной плиткой «+» в самой галерее.
       appBar: frostedAppBar(
         automaticallyImplyLeading: false,
-        leadingWidth: 176,
-        // Top-left island: premium frames & covers editor.
-        leading: Builder(
+        // Над живой обложкой значки строки состояния — светлые (24.11.2026).
+        systemOverlayStyle: _ownCoverWantsLightText(widget.controller)
+            ? const SystemUiOverlayStyle(
+                statusBarIconBrightness: Brightness.light,
+                statusBarBrightness: Brightness.dark,
+              )
+            : null,
+        // Шире, чем «Premium»: при прокрутке остров вырастает в аватар + имя.
+        leadingWidth: MediaQuery.sizeOf(context).width * 0.66,
+        // Top-left island: the Premium hub (23.11.2026).
+        leading: _hideWhenTabsPinned(Builder(
           builder: (context) {
             final canPop = Navigator.of(context).canPop();
             return Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (canPop)
-                  IconButton(
-                    icon: Icon(appleBackIcon(Icons.arrow_back)),
+                  PressFeedback(child: IconButton(
+                    icon: Icon(appleBackIcon(AdaptiveIcons.arrow_back)),
                     onPressed: () => Navigator.of(context).maybePop(),
-                  )
+                  ))
                 else
                   const SizedBox(width: 6),
                 Opacity(
                   opacity: (1.0 - _pullExpand * 2.0).clamp(0.0, 1.0),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: FrostedHeaderIsland(
+                    child: PressFeedback(child: FrostedHeaderIsland(
                       radius: 24,
                       height: 48,
                       padding: EdgeInsets.zero,
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(22),
-                          onTap: () => Navigator.of(context).push(
+                      // Макет «Profile Redesign»: при прокрутке «Premium»
+                      // уступает место аватару 34 и имени 16 — профиль
+                      // сворачивается в свой остров, как шапка чата.
+                      child: ValueListenableBuilder<double>(
+                        valueListenable: _hero.scroll,
+                        builder: (context, offset, _) {
+                          // 23.11.2026 (макет «Premium Hub»): островок
+                          // открывает окно Premium; рамки и обложки — на
+                          // кнопке «Обложки» и в меню портрета.
+                          void openCosmetics() => Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => ProfileCosmeticsScreen(
-                                controller: controller,
-                              ),
+                              builder: (_) => kPremiumHubFromProfile
+                                  ? PremiumHubScreen(controller: controller)
+                                  : ProfileCosmeticsScreen(
+                                      controller: controller,
+                                    ),
                             ),
-                          ),
-                          child: Padding(
+                          );
+                          final premium = Padding(
                             padding: const EdgeInsets.fromLTRB(10, 7, 12, 7),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  Icons.auto_awesome,
+                                  AdaptiveIcons.auto_awesome,
                                   size: 17,
                                   color: Theme.of(context).colorScheme.primary,
                                 ),
@@ -2721,19 +2637,122 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ),
                               ],
                             ),
-                          ),
-                        ),
+                          );
+                          final c = profileCollapse(offset);
+                          final mk = profileSmooth(0.35, 1, c);
+                          if (mk <= 0.001) {
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(22),
+                                onTap: openCosmetics,
+                                child: premium,
+                              ),
+                            );
+                          }
+                          final name = controller.myNickname.trim().isNotEmpty
+                              ? controller.myNickname.trim()
+                              : context.l10n.secretlyUser;
+                          final emoji = controller.myEmojiStatus ?? '';
+                          final maxW =
+                              MediaQuery.sizeOf(context).width * 0.66 -
+                              (Navigator.of(context).canPop() ? 48 : 6);
+                          final miniW = math.min(
+                            maxW,
+                            ProfileMiniIdentity.widthFor(
+                              context,
+                              name,
+                              extras: emoji.isNotEmpty ? 2 : 1,
+                            ),
+                          );
+                          const premiumW = 112.0;
+                          final w = premiumW + (miniW - premiumW) * mk;
+                          return Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(22),
+                              // Свёрнутый остров — наверх страницы.
+                              onTap: mk > 0.5
+                                  ? () => _scrollController.animateTo(
+                                      0,
+                                      duration: const Duration(
+                                        milliseconds: 420,
+                                      ),
+                                      curve: Curves.easeOutCubic,
+                                    )
+                                  : openCosmetics,
+                              child: SizedBox(
+                                width: w,
+                                height: 48,
+                                child: ClipRect(
+                                  child: Stack(
+                                    alignment: Alignment.centerLeft,
+                                    children: [
+                                      Opacity(
+                                        opacity: (1 - profileSmooth(0, 0.45, c))
+                                            .clamp(0.0, 1.0),
+                                        child: OverflowBox(
+                                          alignment: Alignment.centerLeft,
+                                          maxWidth: double.infinity,
+                                          child: premium,
+                                        ),
+                                      ),
+                                      Opacity(
+                                        opacity: mk.clamp(0.0, 1.0),
+                                        child: OverflowBox(
+                                          alignment: Alignment.centerLeft,
+                                          maxWidth: miniW,
+                                          minWidth: miniW,
+                                          child: ProfileMiniIdentity(
+                                            name: name,
+                                            // Место: аватар, имя и знаки
+                                            // прилетают сюда поверх шапки.
+                                            ghost: true,
+                                            reserve:
+                                                (emoji.isNotEmpty ? 22 : 0) +
+                                                (EliteBadges.instance.badgeOf(
+                                                          controller.profileId,
+                                                        ) !=
+                                                        null
+                                                    ? 20
+                                                    : 0),
+                                            avatar: const SizedBox.shrink(),
+                                            trailing: [
+                                              if (emoji.isNotEmpty) ...[
+                                                const SizedBox(width: 4),
+                                                NotoStatusEmoji(
+                                                  emoji: emoji,
+                                                  size: 16,
+                                                ),
+                                              ],
+                                              EliteBadgeMark(
+                                                profileId:
+                                                    controller.profileId,
+                                                size: 15,
+                                                gap: 4,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                    ),
+                    )),
                   ),
                 ),
               ],
             );
           },
-        ),
+        )),
         flexibleSpace: const SizedBox.shrink(),
         actions: [
-          Opacity(
+          _hideWhenTabsPinned(Opacity(
             opacity: (1.0 - _pullExpand * 2.0).clamp(0.0, 1.0),
             child: Padding(
               padding: const EdgeInsets.only(right: 8, top: 4, bottom: 4),
@@ -2744,6 +2763,44 @@ class _ProfileScreenState extends State<ProfileScreen>
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Кнопки под именем ушли под шапку — в правый остров
+                    // въезжает шестерёнка (макет «Profile Redesign»).
+                    ValueListenableBuilder<double>(
+                      valueListenable: _hero.scroll,
+                      builder: (context, offset, _) {
+                        final safeTop = MediaQuery.paddingOf(context).top;
+                        final show = ProfileFadeUnderHeader.hidden(
+                          offset,
+                          safeTop + kToolbarHeight + 218,
+                          safeTop + 52,
+                        );
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 340),
+                          curve: show ? Curves.easeOutBack : Curves.easeIn,
+                          width: show ? 40 : 0,
+                          child: ClipRect(
+                            child: OverflowBox(
+                              maxWidth: 48,
+                              child: AnimatedOpacity(
+                                duration: const Duration(milliseconds: 200),
+                                opacity: show ? 1 : 0,
+                                child: _profileIslandButton(
+                                  context,
+                                  tooltip: _label(
+                                    context,
+                                    ru: 'Настройки',
+                                    en: 'Settings',
+                                  ),
+                                  icon: AppIcons.settings,
+                                  size: 23,
+                                  onPressed: _openSettings,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                     _profileIslandButton(
                       context,
                       tooltip: _label(
@@ -2766,18 +2823,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                 ),
               ),
             ),
-          ),
+          )),
         ],
       ),
       body: StreamBuilder<void>(
         stream: controller.changed,
         builder: (context, _) {
-          // Content height can change (media added/removed, tab switched)
-          // without a scroll event, shifting the inline anchor — re-evaluate
-          // the dock state after this frame lays out.
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _updateAddFabDock(),
-          );
           final current = controller.myNickname;
           if (!_nickFocus.hasFocus && !_syncing && _nick.text != current) {
             _syncing = true;
@@ -2821,9 +2872,10 @@ class _ProfileScreenState extends State<ProfileScreen>
             520.0,
           );
           final avatarSize = lerpDouble(112, screenW, _pullExpand)!;
+          // Раскрытое фото тянется вниз за пальцем (резинка) и возвращается.
           final avatarHeight = lerpDouble(
             112,
-            expandedImageHeight,
+            expandedImageHeight + _hero.stretchPx,
             _pullExpand,
           )!;
           final avatarRadius = lerpDouble(56, 0, _pullExpand)!;
@@ -2883,6 +2935,13 @@ class _ProfileScreenState extends State<ProfileScreen>
           // `avatarSize` по центру на высоте `avatarTop`. Доли считаем от
           // ЭТОЙ полосы, а не от экрана: у сцены своя система координат.
           final coverH = collapsedButtonsTop + 66;
+          // Узор обложки гаснет над кнопками.
+          _hero.fadeY = buttonsTop + 6;
+          // Имя упирается в шапку на этой прокрутке.
+          // Магнит: вкладки галереи доезжают ровно в ряд островов шапки.
+          _snap
+            ..dockAt = kProfileScrollCollapse // магнит: аватар целиком в острове
+            ..headerBottom = safeTop - kToolbarHeight + (kToolbarHeight - 44) / 2;
           final avatarCenter = Offset(0.5, (avatarTop + avatarSize / 2) / coverH);
           final coverAvatarRadius = avatarSize / 2 / screenW;
           final myCover = coverBackWidgetFor(
@@ -2891,30 +2950,67 @@ class _ProfileScreenState extends State<ProfileScreen>
             customVideoPath: controller.myCoverVideoPath,
             avatarCenter: avatarCenter,
             avatarRadius: coverAvatarRadius,
+            // Обложки команды — только со знаком команды (23.11.2026).
+            ownerProfileId: controller.profileId,
           );
+          // Обложка не выбрана — «Отпечаток S» (23.11.2026; раньше —
+          // «Отпечаток ключа» из своего ключа). Явно выбранное «Без
+          // обложки» — без узора.
+          final noCover = controller.myCoverId == kNoProfileCoverId;
+          final defaultCover = myCover == null && !noCover;
+          // 24.11.2026: живая обложка — тёмная сцена в любой теме, на ней имя
+          // и «в сети» белые (в светлой теме они были чёрными и пропадали).
+          final liveCoverText = _ownCoverWantsLightText(controller);
+          final keyCover = defaultCover && !kSPrintDefaultCover;
+          final shownCover = noCover
+              ? null
+              : myCover ??
+                    coverBackWidgetFor(
+                      kSPrintDefaultCover
+                          ? kDefaultProfileCoverId
+                          : kKeyFingerprintCoverId,
+                      avatarCenter: avatarCenter,
+                      avatarRadius: coverAvatarRadius,
+                    );
           final myCoverFront = coverFrontWidgetFor(
             controller.myCoverId,
             customImagePath: controller.myCoverImagePath,
             customVideoPath: controller.myCoverVideoPath,
           );
 
-          return GestureDetector(
+          return Stack(
+            children: [
+              ProfileHeroGestureLayer(
+  driver: _hero,
+  scrollController: _scrollController,
+  blocked: () => _avatarMenuOpen,
+  onPullToFullscreen: () => _openProfileAvatarFullScreen(fullscreenAvatarPath),
+  child: GestureDetector(
             behavior: HitTestBehavior.translucent,
-            onVerticalDragUpdate: (_pullExpand >= 1.0 || _collapseGestureActive)
-                ? _handleCollapseDrag
-                : null,
-            onVerticalDragEnd: (_pullExpand >= 1.0 || _collapseGestureActive)
-                ? _handleCollapseDragEnd
-                : null,
-            child: NotificationListener<ScrollNotification>(
-              onNotification: _handleProfilePull,
-              child: ListView(
+            onVerticalDragUpdate: null,
+            onVerticalDragEnd: null,
+            child: NotificationListener<Notification>(
+              // 🔴 Прокрутка профиля не уходит наверх, в оболочку: иначе
+              // нижние острова сворачивались в «поиск», а фото застревало
+              // на полпути (жалоба владельца 21.11.2026).
+              onNotification: (n) {
+                // Размеры списка поменялись (вкладка галереи короче) —
+                // сверить шапку с настоящим положением (23.11.2026).
+                if (n is ScrollMetricsNotification) {
+                  _onHeroScroll();
+                  return true;
+                }
+                if (n is! ScrollNotification) return false;
+                _handleProfilePull(n);
+                return true;
+              },
+              child: Theme(data: profileCardTheme(context), child: ListView(
                 controller: _scrollController,
-                physics: (_pullExpand >= 1.0 || _collapseGestureActive)
-                    ? const NeverScrollableScrollPhysics()
-                    : const ClampingScrollPhysics(
-                        parent: AlwaysScrollableScrollPhysics(),
-                      ),
+                // Пока фото «в игре», страница стоит — палец ведёт фото.
+                physics: ProfileHeroScrollPhysics(
+                  frozen: () => _hero.freezesScroll,
+                  parent: secretlyProfileScrollPhysics(),
+                ),
                 padding: EdgeInsets.only(top: 0, bottom: 112 + bottomInset),
                 children: [
                   // 🔴 Держатель нажатия — НАД всей шапкой. Кнопка «Погладить»
@@ -2931,7 +3027,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                       children: [
                         // Cover image and its shading are SEPARATE layers so the
                         // shading can extend lower without moving the cover.
-                        if (myCover != null) ...[
+                        if (shownCover != null) ...[
                           // 1) The cover image — stays at its place: bottom aligned
                           //    to the action buttons. Never moves with the shading.
                           Positioned(
@@ -2951,9 +3047,21 @@ class _ProfileScreenState extends State<ProfileScreen>
                             // участвует в разборе жестов, поэтому потягивание
                             // шапки и прокрутка списка продолжают работать —
                             // они живут выше по дереву.
-                            child: LiveCoverTouch(
+                            child: KeyFingerprintTapHint(
+                              // Узор из ключа — касание объясняет, как сверить.
+                              enabled:
+                                  (keyCover ||
+                                      isKeyFingerprintCover(
+                                        controller.myCoverId,
+                                      )) &&
+                                  _ownKeyBytes != null,
+                              child: LiveCoverTouch(
                               listen:
-                                  isLiveCoverId(controller.myCoverId) &&
+                                  isLiveCoverId(
+                                    defaultCover && kSPrintDefaultCover
+                                        ? kDefaultProfileCoverId
+                                        : controller.myCoverId,
+                                  ) &&
                                   (controller.myCoverImagePath ?? '').isEmpty &&
                                   (controller.myCoverVideoPath ?? '').isEmpty,
                               child: Opacity(
@@ -2963,11 +3071,32 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ),
                                 // Showcase: the banner is the biggest thing on this page,
                                 // so it rasterises at full resolution here.
-                                child: CoverBottomFade(
-                                  child: CosmeticShowcaseScope(child: myCover),
+                                child: ProfileCoverParallax(
+                                  driver: _hero,
+                                  child: CoverBottomFade(
+                                    coverId: defaultCover && kSPrintDefaultCover
+                                        ? kDefaultProfileCoverId
+                                        : controller.myCoverId,
+                                    child: CosmeticShowcaseScope(
+                                      child: CoverAvatarGeometry(
+                                        center: avatarCenter,
+                                        radius: coverAvatarRadius,
+                                        child: ProfileMotionScope(
+                                          motion: _hero.motion,
+                                          tint: AvatarInitials.accentColor(
+                                            seed: controller.profileId,
+                                          ),
+                                          child: PatternCoverKey(
+                                            keyBytes: _ownKeyBytes,
+                                            child: shownCover,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
+                            )),
                           ),
                           // 🔴 Плашки «под цвет страницы» здесь больше нет: низ
                           // обложки сам уходит в прозрачность (`CoverBottomFade`),
@@ -2977,22 +3106,58 @@ class _ProfileScreenState extends State<ProfileScreen>
                         Positioned(
                           top: avatarTop,
                           left: (screenW - avatarSize) / 2,
-                          child: GestureDetector(
+                          child: ProfileHideWhileFlying(driver: _hero, child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: hasAvatar
                                 ? () => _openProfileAvatarFullScreen(
                                     fullscreenAvatarPath,
                                   )
                                 : null,
-                            onVerticalDragUpdate: (details) =>
-                                _handleProfileAvatarSurfaceDragUpdate(
-                                  details,
-                                  fullscreenAvatarPath,
+                            onVerticalDragUpdate: null,
+                            onVerticalDragEnd: null,
+                            child: AvatarRadialMenu(
+                              // Долгое нажатие — фото, рамка, обложка (макет
+                              // «Profile Redesign»). Только в покое.
+                              enabled: _pullExpand < 0.1,
+                              onOpenChanged: (open) => _avatarMenuOpen = open,
+                              hapticsEnabled: () =>
+                                  controller.appHapticsEnabled,
+                              items: [
+                                AvatarMenuItem(
+                                  icon: AppIcons.camera,
+                                  label: _label(context, ru: 'Фото', en: 'Photo'),
+                                  onSelected: _showAvatarSourceSheet,
                                 ),
-                            onVerticalDragEnd:
-                                _handleProfileAvatarSurfaceDragEnd,
-                            child: Hero(
+                                AvatarMenuItem(
+                                  icon: AdaptiveIcons.radio_button_unchecked,
+                                  label: _label(context, ru: 'Рамка', en: 'Frame'),
+                                  onSelected: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ProfileCosmeticsScreen(
+                                        controller: controller,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                AvatarMenuItem(
+                                  icon: AdaptiveIcons.wallpaper_rounded,
+                                  label: _label(context, ru: 'Обложка', en: 'Cover'),
+                                  onSelected: () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => ProfileCosmeticsScreen(
+                                        controller: controller,
+                                        initialTab: 1,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              child: Hero(
                               tag: _profileAvatarHeroTag,
+                              // Точка перелёта просмотра фото (22.11.2026).
+                              child: MediaFlightAnchor(
+                              tag: _profileAvatarHeroTag,
+                              borderRadius: BorderRadius.circular(avatarRadius),
                               child: Container(
                                 width: avatarSize,
                                 height: avatarHeight,
@@ -3095,9 +3260,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                     ),
                                   ],
                                 ),
-                              ),
-                            ),
-                          ),
+                              )),
+                            )),
+                          )),
                         ),
                         if (myFrame != null)
                           // Frame ring must ENCIRCLE the photo: the catalog ring
@@ -3110,7 +3275,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 avatarHeight / 2 -
                                 (avatarSize / 0.86) / 2,
                             left: (screenW - avatarSize / 0.86) / 2,
-                            child: IgnorePointer(
+                            child: ProfileHideWhileFlying(driver: _hero, frame: true, child: IgnorePointer(
                               child: Opacity(
                                 opacity: (1.0 - _pullExpand * 3.0).clamp(
                                   0.0,
@@ -3127,7 +3292,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   ),
                                 ),
                               ),
-                            ),
+                            )),
                           ),
                         if (myCoverFront != null)
                           // Foreground cover pass (black hole's near disk edge)
@@ -3139,7 +3304,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                             left: 0,
                             right: 0,
                             height: collapsedButtonsTop + 66,
-                            child: IgnorePointer(
+                            child: ProfileAvatarScroll(driver: _hero, child: IgnorePointer(
                               child: Opacity(
                                 opacity: (1.0 - _pullExpand * 2.0).clamp(
                                   0.0,
@@ -3147,13 +3312,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ),
                                 child: myCoverFront,
                               ),
-                            ),
+                            )),
                           ),
                         Positioned(
                           top: nameTop,
                           left: 24,
                           right: 24,
-                          child: Align(
+                          child: ProfileHideWhileFlying(driver: _hero, child: Align(
                             alignment: Alignment.lerp(
                               Alignment.topCenter,
                               Alignment.topLeft,
@@ -3177,8 +3342,17 @@ class _ProfileScreenState extends State<ProfileScreen>
                                           .textTheme
                                           .headlineSmall
                                           ?.copyWith(
-                                            color: _pullExpand > 0.35
+                                            color: _pullExpand > 0.35 ||
+                                                    liveCoverText
                                                 ? Colors.white
+                                                : null,
+                                            shadows: liveCoverText
+                                                ? const [
+                                                    Shadow(
+                                                      color: Color(0x66000000),
+                                                      blurRadius: 8,
+                                                    ),
+                                                  ]
                                                 : null,
                                           ),
                                     ),
@@ -3186,24 +3360,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   // Order: name → emoji status → premium star.
                                   const SizedBox(width: 8),
                                   _buildEmojiStatusButton(controller),
-                                  if (controller.myPremiumBadge) ...[
-                                    const SizedBox(width: 6),
-                                    const Icon(
-                                      Icons.star_rounded,
-                                      size: 18,
-                                      color: Color(0xFFE8A33D),
-                                    ),
-                                  ],
+                                  // Звёздочку премиума убрали (21.11.2026);
+                                  // знак «важного» — если выдан.
+                                  EliteBadgeMark(
+                                    profileId: controller.profileId,
+                                    size: 20,
+                                  ),
                                 ],
                               ),
                             ),
-                          ),
+                          )),
                         ),
                         Positioned(
                           top: statusTop,
                           left: 24,
                           right: 24,
-                          child: Align(
+                          child: ProfileTextCollapse(driver: _hero, status: true, child: Align(
                             alignment: Alignment.lerp(
                               Alignment.topCenter,
                               Alignment.topLeft,
@@ -3219,7 +3391,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                     : TextAlign.center,
                                 style: Theme.of(context).textTheme.bodyMedium
                                     ?.copyWith(
-                                      color: _pullExpand > 0.35
+                                      color: _pullExpand > 0.35 || liveCoverText
                                           ? Colors.white.withValues(alpha: 0.9)
                                           : Theme.of(
                                               context,
@@ -3227,7 +3399,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                     ),
                               ),
                             ),
-                          ),
+                          )),
                         ),
                         // 🔴 Кнопка, которая будит персонажа рамки. Справа в
                         // углу от строки присутствия — решение владельца от
@@ -3251,7 +3423,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                           left: 24,
                           right: 24,
                           // Three equal-width action chips (Expanded thirds).
-                          child: Row(
+                          child: ProfileFadeUnderHeader(driver: _hero, restTop: collapsedButtonsTop, line: safeTop - kToolbarHeight + 52, child: Row(
                             children: [
                               Expanded(
                                 child: _circleAction(
@@ -3267,9 +3439,12 @@ class _ProfileScreenState extends State<ProfileScreen>
                               ),
                               const SizedBox(width: 12),
                               Expanded(
-                                child: _circleAction(
+                                // «Что нового 1.9»: перо вокруг «Обложки».
+                                child: PenMark(
+                                  hint: PenHint.covers,
+                                  child: _circleAction(
                                   context: context,
-                                  icon: Icons.wallpaper_rounded,
+                                  icon: AdaptiveIcons.wallpaper_rounded,
                                   // L10N FIX (2026-07-17): full locale set —
                                   // matches the cosmetics screen's tab labels.
                                   label: wave1Text(
@@ -3292,6 +3467,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                     ),
                                   ),
                                 ),
+                                ),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -3307,7 +3483,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 ),
                               ),
                             ],
-                          ),
+                          )),
                         ),
                       ],
                     ),
@@ -3316,12 +3492,21 @@ class _ProfileScreenState extends State<ProfileScreen>
                   const SizedBox(height: 16),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Card(
+                    // Компактная строка ID — та же тема, что у блока ниже.
+                    child: AppleSettingsPageTheme(
+                      child: Card(
+                      margin: EdgeInsets.zero,
                       clipBehavior: Clip.antiAlias,
                       child: Column(
                         children: [
                           ListTile(
-                            leading: const Icon(AppIcons.linkedDevices),
+                            // Android: цветной квадрат, как у строк настроек
+                            // (23.11.2026).
+                            leading: settingsRowLeading(
+                              icon: AppIcons.linkedDevices,
+                              tint: SettingsRowTint.grey,
+                              fallback: const Icon(AppIcons.linkedDevices),
+                            ),
                             title: Text(
                               _label(
                                 context,
@@ -3329,61 +3514,97 @@ class _ProfileScreenState extends State<ProfileScreen>
                                 en: 'Profile ID',
                               ),
                             ),
-                            subtitle: Text(controller.profileId),
+                            subtitle: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 180),
+                              child: Text(
+                                _idCopied
+                                    ? _label(
+                                        context,
+                                        ru: 'Скопировано',
+                                        en: 'Copied',
+                                      )
+                                    : controller.profileId,
+                                key: ValueKey(_idCopied),
+                                style: _idCopied
+                                    ? TextStyle(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                      )
+                                    : null,
+                              ),
+                            ),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 SizedBox(
-                                  width: 42,
-                                  height: 42,
-                                  child: FilledButton.tonal(
-                                    style: FilledButton.styleFrom(
-                                      shape: const CircleBorder(),
-                                      padding: EdgeInsets.zero,
-                                    ),
+                                  width: 38,
+                                  height: 38,
+                                  child: PressFeedback(child: FilledButton.tonal(
+                                    style: _idButtonStyle(context),
                                     onPressed: _shareProfileLink,
                                     child: Icon(
-                                      appleShareIcon(Icons.share_outlined),
+                                      appleShareIcon(AdaptiveIcons.share_outlined),
                                       size: 18,
                                     ),
-                                  ),
+                                  )),
                                 ),
                                 const SizedBox(width: 8),
                                 SizedBox(
-                                  width: 42,
-                                  height: 42,
-                                  child: FilledButton.tonal(
-                                    style: FilledButton.styleFrom(
-                                      shape: const CircleBorder(),
-                                      padding: EdgeInsets.zero,
-                                    ),
+                                  width: 38,
+                                  height: 38,
+                                  child: PressFeedback(child: FilledButton.tonal(
+                                    style: _idButtonStyle(context),
                                     onPressed: _copyProfileId,
-                                    child: ColorFiltered(
-                                      colorFilter: const ColorFilter.mode(
-                                        Colors.white,
-                                        BlendMode.srcIn,
-                                      ),
-                                      child: Lottie.asset(
-                                        _copyIconAssetPath,
-                                        controller: _copyIconController,
-                                        repeat: false,
-                                        animate: false,
-                                        width: 20,
-                                        height: 20,
-                                        fit: BoxFit.contain,
-                                        onLoaded: (composition) {
-                                          _copyIconController.duration =
-                                              composition.duration;
-                                        },
-                                        errorBuilder: (_, __, ___) =>
-                                            const Icon(
-                                              AppIcons.copyOutline,
-                                              size: 18,
-                                              color: Colors.white,
-                                            ),
-                                      ),
+                                    // 🔴 Значок — цвет самой кнопки, как у
+                                    // «Поделиться» рядом (24.11.2026: в светлой
+                                    // теме на синей кнопке был чёрным —
+                                    // цвет задавался вручную, мимо кнопки).
+                                    // Скопировал — галочка.
+                                    child: Builder(
+                                      builder: (btn) {
+                                        final ink = IconTheme.of(btn).color;
+                                        if (_idCopied) {
+                                          return Icon(
+                                            AppIcons.check,
+                                            size: 18,
+                                            // Android: «скопировано» —
+                                            // зелёный, не цвет темы.
+                                            color: settingsAndroidPanels
+                                                ? SettingsRowTint.green
+                                                : ink,
+                                          );
+                                        }
+                                        final fallback = Icon(
+                                          AppIcons.copyOutline,
+                                          size: 18,
+                                          color: ink,
+                                        );
+                                        if (ink == null) return fallback;
+                                        return ColorFiltered(
+                                          colorFilter: ColorFilter.mode(
+                                            ink,
+                                            BlendMode.srcIn,
+                                          ),
+                                          child: Lottie.asset(
+                                            _copyIconAssetPath,
+                                            controller: _copyIconController,
+                                            repeat: false,
+                                            animate: false,
+                                            width: 20,
+                                            height: 20,
+                                            fit: BoxFit.contain,
+                                            onLoaded: (composition) {
+                                              _copyIconController.duration =
+                                                  composition.duration;
+                                            },
+                                            errorBuilder: (_, __, ___) =>
+                                                fallback,
+                                          ),
+                                        );
+                                      },
                                     ),
-                                  ),
+                                  )),
                                 ),
                               ],
                             ),
@@ -3391,31 +3612,40 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ],
                       ),
                     ),
+                    ),
                   ),
                   const SizedBox(height: 16),
+                  // Блок «Профиль» компактный (20.11.2026): строки — в общей
+                  // теме страниц настроек (iPhone — iOS, Android — плотный
+                  // Material), поле ника — без контура, отступы меньше.
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Card(
+                    child: AppleSettingsPageTheme(
+                      child: Card(
+                      margin: EdgeInsets.zero,
                       clipBehavior: Clip.antiAlias,
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                        padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
                               l10n.profileSectionTitle,
-                              style: Theme.of(context).textTheme.titleMedium,
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w700),
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 8),
                             TextField(
                               controller: _nick,
                               focusNode: _nickFocus,
-                              decoration: InputDecoration(
-                                labelText: l10n.myNicknameLabel,
-                                hintText: l10n.myNicknameHint,
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
+                              decoration: kQuietNicknameField &&
+                                      !Platform.isIOS
+                                  ? _quietNicknameDecoration(context)
+                                  : InputDecoration(
+                                      labelText: l10n.myNicknameLabel,
+                                      hintText: l10n.myNicknameHint,
+                                      isDense: true,
+                                    ),
                               textInputAction: TextInputAction.done,
                               onChanged: _scheduleSave,
                               onSubmitted: (v) => controller.setMyNickname(v),
@@ -3423,10 +3653,20 @@ class _ProfileScreenState extends State<ProfileScreen>
                             const SizedBox(height: 6),
                             SecretlySwitchListTile(
                               contentPadding: EdgeInsets.zero,
+                              // Android: квадрат значка и подпись — как у
+                              // строк настроек (23.11.2026).
+                              secondary: settingsAndroidPanels
+                                  ? const AppleRowIcon(
+                                      tint: SettingsRowTint.indigo,
+                                      icon: AppIcons.qrCode,
+                                    )
+                                  : null,
                               title: Text(l10n.includeNicknameInQr),
                               subtitle: Text(
                                 l10n.includeNicknameInQrSubtitle,
-                                style: Theme.of(context).textTheme.bodySmall
+                                style: settingsAndroidPanels
+                                    ? null
+                                    : Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
                                       color: Theme.of(context)
                                           .colorScheme
@@ -3435,11 +3675,19 @@ class _ProfileScreenState extends State<ProfileScreen>
                                     ),
                               ),
                               value: controller.shareNicknameInQr,
-                              onChanged: (v) =>
-                                  controller.setShareNicknameInQr(v),
+                              onChanged: (v) {
+                                    if (controller.appHapticsEnabled) HapticFeedback.lightImpact();
+                                    controller.setShareNicknameInQr(v);
+                                  },
                             ),
                             SecretlySwitchListTile(
                               contentPadding: EdgeInsets.zero,
+                              secondary: settingsAndroidPanels
+                                  ? const AppleRowIcon(
+                                      tint: SettingsRowTint.blue,
+                                      icon: AppIcons.search,
+                                    )
+                                  : null,
                               title: Text(
                                 _label(
                                   context,
@@ -3453,7 +3701,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   ru: 'Если выключено, другие пользователи не найдут вас по нику.',
                                   en: 'If off, other users cannot find you by nickname.',
                                 ),
-                                style: Theme.of(context).textTheme.bodySmall
+                                style: settingsAndroidPanels
+                                    ? null
+                                    : Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
                                       color: Theme.of(context)
                                           .colorScheme
@@ -3462,11 +3712,19 @@ class _ProfileScreenState extends State<ProfileScreen>
                                     ),
                               ),
                               value: controller.discoverableByNickname,
-                              onChanged: (v) =>
-                                  controller.setDiscoverableByNickname(v),
+                              onChanged: (v) {
+                                    if (controller.appHapticsEnabled) HapticFeedback.lightImpact();
+                                    controller.setDiscoverableByNickname(v);
+                                  },
                             ),
                             SecretlySwitchListTile(
                               contentPadding: EdgeInsets.zero,
+                              secondary: settingsAndroidPanels
+                                  ? const AppleRowIcon(
+                                      tint: SettingsRowTint.green,
+                                      icon: AppIcons.verified,
+                                    )
+                                  : null,
                               title: Text(
                                 _label(
                                   context,
@@ -3480,7 +3738,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                                   ru: 'Блокировать отправку на непроверенные устройства контактов. В личной переписке; на группы не распространяется.',
                                   en: 'Block sending to unverified contact devices. In one-to-one chats; does not apply to groups.',
                                 ),
-                                style: Theme.of(context).textTheme.bodySmall
+                                style: settingsAndroidPanels
+                                    ? null
+                                    : Theme.of(context).textTheme.bodySmall
                                     ?.copyWith(
                                       color: Theme.of(context)
                                           .colorScheme
@@ -3489,12 +3749,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                                     ),
                               ),
                               value: controller.blockUnverified,
-                              onChanged: (v) =>
-                                  controller.setBlockUnverified(v),
+                              onChanged: (v) {
+                                    if (controller.appHapticsEnabled) HapticFeedback.lightImpact();
+                                    controller.setBlockUnverified(v);
+                                  },
                             ),
                           ],
                         ),
                       ),
+                    ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -3512,39 +3775,44 @@ class _ProfileScreenState extends State<ProfileScreen>
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: 10),
-                        TabBar(
-                          controller: _mediaTabController,
-                          isScrollable: false,
-                          tabs: [
-                            Tab(text: _categoryLabel('gallery')),
-                            Tab(text: _categoryLabel('backgrounds')),
-                            Tab(text: _categoryLabel('music')),
-                          ],
-                        ),
                       ],
+                    ),
+                  ),
+                  SizedBox(key: _snap.galleryKey, height: 0),
+                  // 23.11.2026: полоса вне отступа страницы — её поля те же,
+                  // что у папок на главной (14 пт от края экрана).
+                  Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: kProfileTabsAsStrip ? 0 : 16,
+                    ),
+                    child: ProfileTabsBar(
+                      key: _mediaTabsKey,
+                      controller: _mediaTabs,
+                      labels: [
+                        _categoryLabel('gallery'),
+                        _categoryLabel('backgrounds'),
+                        _categoryLabel('music'),
+                      ],
+                      hideWhenPinned: true,
                     ),
                   ),
                   const SizedBox(height: 12),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      child: KeyedSubtree(
-                        key: ValueKey<int>(_mediaTabController.index),
-                        child: switch (_mediaTabController.index) {
-                          1 => _buildImageCategoryPane(
-                            category: 'backgrounds',
-                            paths: backgroundPaths,
-                          ),
-                          2 => _buildMusicCategoryPane(musicPaths),
-                          _ => _buildImageCategoryPane(
-                            category: 'gallery',
-                            paths: galleryPaths,
-                          ),
-                        },
-                      ),
+                    // Страницы листаются пальцем вбок (макет).
+                    child: ProfileTabsPager(
+                      controller: _mediaTabs,
+                      pages: [
+                        _buildImageCategoryPane(
+                          category: 'gallery',
+                          paths: galleryPaths,
+                        ),
+                        _buildImageCategoryPane(
+                          category: 'backgrounds',
+                          paths: backgroundPaths,
+                        ),
+                        _buildMusicCategoryPane(musicPaths),
+                      ],
                     ),
                   ),
                   // Zero-height marker just below the inline "Add" button. Its
@@ -3565,12 +3833,193 @@ class _ProfileScreenState extends State<ProfileScreen>
                       ),
                     ),
                   ),
-                ],
-              ),
+                ProfileSnapSpacer(snapper: _snap),
+],
+              )),
             ),
+          ),
+),
+              // Шапка при прокрутке: фон проявляется, имя причаливает
+              // заголовком (макет «Profile Motion»). Кнопки шапки — над ней.
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: ProfileTopFade(driver: _hero),
+              ),
+              // Вкладки галереи прилипают под шапкой островом.
+              // Вкладки галереи, упёршись в шапку, ЗАНИМАЮТ место её
+              // островов (острова уходят), обратно — в обратном порядке.
+              Positioned(
+                // Отступ страницы = статус-бар + шапка: ряд островов выше.
+                top: MediaQuery.paddingOf(context).top -
+                    kToolbarHeight +
+                    (kToolbarHeight - 44) / 2,
+                left: kProfileTabsAsStrip ? 0 : 16,
+                right: kProfileTabsAsStrip ? 0 : 16,
+                child: ProfileStickyTabs(
+                  controller: _mediaTabs,
+                  labels: [
+                    _categoryLabel('gallery'),
+                    _categoryLabel('backgrounds'),
+                    _categoryLabel('music'),
+                  ],
+                  inListKey: _mediaTabsKey,
+                  headerBottom:
+                      MediaQuery.paddingOf(context).top -
+                      kToolbarHeight +
+                      (kToolbarHeight - 44) / 2,
+                  scroll: _scrollController,
+                ),
+              ),
+            ],
           );
         },
       ),
+    ),
+        // Один аватар: при прокрутке он летит ПОВЕРХ шапки и садится в
+        // левый остров (раньше уходил под остров, а в острове был второй).
+        Positioned.fill(
+          child: Builder(
+            builder: (context) {
+              final mq = MediaQuery.of(context);
+              final safeTop = mq.padding.top;
+              final canPop = Navigator.of(context).canPop();
+              final path = controller.myAvatarPath;
+              final hasPhoto =
+                  path != null && path.isNotEmpty && File(path).existsSync();
+              final name = controller.myNickname.trim().isNotEmpty
+                  ? controller.myNickname.trim()
+                  : context.l10n.secretlyUser;
+              final x0 = canPop ? 48.0 : 6.0;
+              final islandMax = mq.size.width * 0.66 - x0;
+              final emoji = controller.myEmojiStatus ?? '';
+              final label = ProfileFlyingLabel(
+                driver: _hero,
+                hidden: _tabsPinned,
+                restTop: safeTop + kToolbarHeight + 8 + 112 + 18,
+                restCenterX: mq.size.width / 2,
+                targetLeft: x0 + 7 + 34 + 8,
+                targetCenterY: safeTop + kToolbarHeight / 2,
+                targetMaxWidth: islandMax - 49 - 14,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                      ),
+                    ),
+                    if (emoji.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      NotoStatusEmoji(emoji: emoji, size: 24),
+                    ],
+                    EliteBadgeMark(
+                      profileId: controller.profileId,
+                      size: 20,
+                    ),
+                  ],
+                ),
+              );
+              final avatar = ProfileFlyingAvatar(
+                driver: _hero,
+                hidden: _tabsPinned,
+                // Аватар в странице стоит под шапкой: статус-бар + шапка + 8.
+                restCenter: Offset(
+                  mq.size.width / 2,
+                  safeTop + kToolbarHeight + 8 + 56,
+                ),
+                islandCenter: Offset(
+                  (canPop ? 48.0 : 6.0) + 7 + 17,
+                  safeTop + kToolbarHeight / 2,
+                ),
+                child: hasPhoto
+                    ? Image.file(
+                        File(path),
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                      )
+                    : ProfileMiniPhoto(
+                        path: null,
+                        seed: controller.profileId,
+                        name: name,
+                      ),
+              );
+              return Stack(children: [avatar, label]);
+            },
+          ),
+        ),
+      ],
     );
   }
+}
+
+/// Круглые кнопки «Поделиться» и «Копировать» у ID профиля. Android
+/// (23.11.2026, владелец: «значки ещё и синие»): нейтральные — серая
+/// подложка и значок цвета текста. iPhone и компьютер — прежние.
+ButtonStyle _idButtonStyle(BuildContext context) {
+  final cs = Theme.of(context).colorScheme;
+  return FilledButton.styleFrom(
+    shape: const CircleBorder(),
+    padding: EdgeInsets.zero,
+    backgroundColor: settingsAndroidPanels
+        ? cs.onSurface.withValues(alpha: 0.08)
+        : null,
+    foregroundColor: settingsAndroidPanels ? cs.onSurface : null,
+  );
+}
+
+/// Островок «Premium» в шапке профиля открывает окно Premium (макет
+/// «Premium Hub», 23.11.2026). `false` — прежний экран рамок и обложек.
+const bool kPremiumHubFromProfile = true;
+
+
+/// Поле ника на Android (23.11.2026, владелец: «бесит цветное поле и
+/// заголовок „Мой ник“ на краю поля»). Спокойное поле без цвета темы и без
+/// подписи на рамке: мягкая подложка чуть светлее карточки, скругление,
+/// значок человека слева, подсказка внутри. Что это за поле — говорит
+/// заголовок «Профиль» над ним и подсказка. `false` — прежнее поле Material.
+const bool kQuietNicknameField = true;
+
+InputDecoration _quietNicknameDecoration(BuildContext context) {
+  final cs = Theme.of(context).colorScheme;
+  final dark = Theme.of(context).brightness == Brightness.dark;
+  final fill = dark
+      ? Colors.white.withValues(alpha: 0.06)
+      : Colors.black.withValues(alpha: 0.04);
+  final shape = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(12),
+    borderSide: BorderSide.none,
+  );
+  return InputDecoration(
+    hintText: context.l10n.myNicknameLabel,
+    hintStyle: TextStyle(color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
+    filled: true,
+    fillColor: fill,
+    isDense: true,
+    prefixIcon: Icon(
+      AppIcons.personOutline,
+      size: 20,
+      color: cs.onSurfaceVariant,
+    ),
+    prefixIconConstraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+    border: shape,
+    enabledBorder: shape,
+    disabledBorder: shape,
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(
+        color: cs.onSurface.withValues(alpha: 0.18),
+        width: 1,
+      ),
+    ),
+  );
 }

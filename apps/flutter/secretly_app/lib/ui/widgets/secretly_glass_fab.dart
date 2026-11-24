@@ -4,6 +4,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import '../motion/press_feedback.dart';
 
 class SecretlyGlassFabButton extends StatelessWidget {
   const SecretlyGlassFabButton({
@@ -29,8 +30,9 @@ class SecretlyGlassFabButton extends StatelessWidget {
 
     return SizedBox.square(
       dimension: dimension,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(cornerRadius),
+      // Кнопка — круг, и размытие обрезается по кругу: со скруглённым
+      // квадратом (26 при 56) по углам вокруг круга был светлый ореол.
+      child: ClipOval(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
           child: DecoratedBox(
@@ -49,12 +51,12 @@ class SecretlyGlassFabButton extends StatelessWidget {
                 ),
               ],
             ),
-            child: IconButton(
+            child: PressFeedback(child: IconButton(
               tooltip: tooltip,
               color: colors.onPrimary,
               onPressed: onPressed,
               icon: icon,
-            ),
+            )),
           ),
         ),
       ),

@@ -1,25 +1,41 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'motion/decoration_pacer.dart';
 import 'dart:async';
 import 'dart:io';
 
 import 'package:animations/animations.dart' as material_motion;
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:lottie/lottie.dart';
 
 import '../app/app_controller.dart';
 import '../rooms/room_call_state.dart';
+import '../storage/file_exists_cache.dart';
 import 'app_asset_paths.dart';
 import 'animations/animations.dart';
+import 'apple_glass.dart';
+import 'app_brand_logo.dart';
+import 'chat/chat_list_row_parts.dart';
 import 'chat_screen.dart';
+import 'chats_screen.dart' show showHomeMainMenu;
+import 'home/home_islands.dart';
+import 'home/home_shell_scope.dart';
+import 'home/home_top_islands.dart';
+import 'room_invite_join_screen.dart';
 import 'icons/app_icons.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'new_group_screen.dart';
 import 'wave1_l10n.dart';
 import 'room_call_screen.dart';
 import 'shared_audio_controls.dart';
+import 'widgets/apple_menu.dart';
 import 'widgets/avatar_initials.dart';
 import 'widgets/chat_list_subtitle_preview.dart';
 import 'widgets/content_edge_fade.dart';
@@ -31,6 +47,7 @@ import 'widgets/secretly_glass_fab.dart';
 import 'widgets/room_call_presence.dart';
 import 'widgets/room_call_return_banner.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 class GroupsScreen extends StatefulWidget {
   const GroupsScreen({super.key, required this.controller});
@@ -60,7 +77,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
   // the cached list instantly instead of flashing empty for ~1 s while the next
   // DB reload is in flight. The resolved future always overwrites the cache, so
   // data correctness is unchanged.
-  List<Conversation> _lastConvos = const <Conversation>[];
+  // С первого кадра — последний известный список (23.11.2026): новый экран
+  // не стоит пустым, пока идёт запрос к базе.
+  late List<Conversation> _lastConvos = widget.controller.lastKnownConversations;
   // COLD START (2026-07-28): same fix as the Chats tab — the list falls back to
   // the (empty on a cold start) cache while the first query is in flight, so an
   // unfinished load rendered the "nothing here yet" placeholder. Show a spinner
@@ -136,7 +155,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
   }
 
   Future<String?> _pickArchiveDestination() async {
-    return showDialog<String>(
+    return showAppDialog<String>(
       context: context,
       builder: (context) {
         return SecretlyAlertDialog(
@@ -154,12 +173,12 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 _menuLabel(context, ru: 'В Личные', en: 'Move to Personal'),
               ),
             ),
-            FilledButton(
+            PressFeedback(child: FilledButton(
               onPressed: () => Navigator.of(context).pop('archive'),
               child: Text(
                 _menuLabel(context, ru: 'В Архив', en: 'Move to Archive'),
               ),
-            ),
+            )),
           ],
         );
       },
@@ -197,6 +216,174 @@ class _GroupsScreenState extends State<GroupsScreen> {
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  // ── Острова v3 ─────────────────────────────────────────────────────────
+
+  bool _titleMenuOpen = false;
+
+  Future<void> _openTitleMenu() async {
+    setState(() => _titleMenuOpen = true);
+    try {
+      await showHomeMainMenu(context, widget.controller, anchorLeft: true);
+    } finally {
+      if (mounted) setState(() => _titleMenuOpen = false);
+    }
+  }
+
+  String _tr({
+    required String ru,
+    required String en,
+    required String uk,
+    required String es,
+    required String pt,
+    required String fr,
+    required String de,
+  }) => wave1Text(
+    context,
+    ru: ru,
+    en: en,
+    uk: uk,
+    es: es,
+    pt: pt,
+    ptBr: pt,
+    fr: fr,
+    de: de,
+  );
+
+  List<HomePlusAction> _homePlusActions() => [
+    HomePlusAction(
+      label: _tr(
+        ru: 'Создать комнату',
+        en: 'Create room',
+        uk: 'Створити кімнату',
+        es: 'Crear sala',
+        pt: 'Criar sala',
+        fr: 'Créer un salon',
+        de: 'Raum erstellen',
+      ),
+      icon: AppIcons.createGroup,
+      onTap: () async {
+        final groupId = await Navigator.of(context).push<String>(
+          SecretlyPageRoute(
+            builder: (_) => NewGroupScreen(controller: widget.controller),
+          ),
+        );
+        await _openCreatedGroupChat(
+          controller: widget.controller,
+          groupId: groupId,
+        );
+      },
+    ),
+    HomePlusAction(
+      label: _tr(
+        ru: 'Войти по приглашению',
+        en: 'Join by invite link',
+        uk: 'Увійти за запрошенням',
+        es: 'Unirse con enlace',
+        pt: 'Entrar por convite',
+        fr: 'Rejoindre par lien',
+        de: 'Per Einladung beitreten',
+      ),
+      icon: CupertinoIcons.link,
+      onTap: _joinByInvite,
+    ),
+  ];
+
+  /// Вставить ссылку-приглашение: если она уже в буфере — подставлена.
+  Future<void> _joinByInvite() async {
+    String initial = '';
+    try {
+      final clip = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = (clip?.text ?? '').trim();
+      final uri = Uri.tryParse(text);
+      if (uri != null && tryParseRoomInviteUri(uri) != null) initial = text;
+    } catch (_) {}
+    if (!mounted) return;
+    final field = TextEditingController(text: initial);
+    final link = await showAppDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(
+          _tr(
+            ru: 'Вход по приглашению',
+            en: 'Join by invite',
+            uk: 'Вхід за запрошенням',
+            es: 'Unirse con invitación',
+            pt: 'Entrar por convite',
+            fr: 'Rejoindre par invitation',
+            de: 'Per Einladung beitreten',
+          ),
+        ),
+        content: TextField(
+          controller: field,
+          autofocus: initial.isEmpty,
+          keyboardType: TextInputType.url,
+          decoration: InputDecoration(
+            hintText: _tr(
+              ru: 'Вставьте ссылку на комнату',
+              en: 'Paste the room link',
+              uk: 'Вставте посилання на кімнату',
+              es: 'Pega el enlace de la sala',
+              pt: 'Cole o link da sala',
+              fr: 'Collez le lien du salon',
+              de: 'Raum-Link einfügen',
+            ),
+          ),
+          onSubmitted: (v) => Navigator.of(dialogContext).pop(v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(context.l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(field.text),
+            child: Text(
+              _tr(
+                ru: 'Открыть',
+                en: 'Open',
+                uk: 'Відкрити',
+                es: 'Abrir',
+                pt: 'Abrir',
+                fr: 'Ouvrir',
+                de: 'Öffnen',
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    field.dispose();
+    if (!mounted || link == null || link.trim().isEmpty) return;
+    final uri = Uri.tryParse(link.trim());
+    final target = uri == null ? null : tryParseRoomInviteUri(uri);
+    if (target == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _tr(
+              ru: 'Это не ссылка-приглашение в комнату',
+              en: 'This is not a room invite link',
+              uk: 'Це не посилання-запрошення до кімнати',
+              es: 'No es un enlace de invitación a una sala',
+              pt: 'Este não é um link de convite para sala',
+              fr: 'Ce n’est pas un lien d’invitation à un salon',
+              de: 'Das ist kein Raum-Einladungslink',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    await Navigator.of(context).push(
+      SecretlyPageRoute(
+        builder: (_) => RoomInviteJoinScreen(
+          controller: widget.controller,
+          target: target,
+        ),
+      ),
+    );
   }
 
   Future<void> _openCreatedGroupChat({
@@ -312,7 +499,20 @@ class _GroupsScreenState extends State<GroupsScreen> {
               // BUBBLE MORPH (seamless): content layers for the two PERSISTENT
               // frosted frames rendered by MorphingSelectionIslands in the single
               // return below.
-              final Widget titleContent = Align(
+              final home = HomeShellScope.maybeOf(context);
+              final Widget titleContent = home != null
+                  ? HomeTitleIslandContent(
+                      brand: AppBrandLogo(
+                        controller: controller,
+                        showPremiumBadge: false,
+                        titleSize: 18,
+                        tight: true,
+                      ),
+                      menuOpen: _titleMenuOpen,
+                      onTap: _openTitleMenu,
+                      semanticLabel: l10n.more,
+                    )
+                  : Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   _roomsLabel(context),
@@ -323,11 +523,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 ),
               );
               final Widget compactSearchContent = Center(
-                child: IconButton(
+                child: PressFeedback(child: IconButton(
                   tooltip: l10n.search,
                   icon: const Icon(AppIcons.search),
                   onPressed: _toggleSearch,
-                ),
+                )),
               );
               final Widget searchFieldContent = Row(
                 children: [
@@ -354,11 +554,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
                       },
                     ),
                   ),
-                  IconButton(
+                  PressFeedback(child: IconButton(
                     tooltip: l10n.cancel,
                     icon: const Icon(AppIcons.close),
                     onPressed: _toggleSearch,
-                  ),
+                  )),
                 ],
               );
 
@@ -380,11 +580,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
               final Widget selCountContent = Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
+                  PressFeedback(child: IconButton(
                     tooltip: l10n.cancelSelection,
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(AdaptiveIcons.close),
                     onPressed: _clearSelection,
-                  ),
+                  )),
                   Padding(
                     padding: const EdgeInsets.only(right: 10, left: 2),
                     child: Text(
@@ -400,13 +600,13 @@ class _GroupsScreenState extends State<GroupsScreen> {
               final Widget selActionsContent = Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
+                  PressFeedback(child: IconButton(
                     tooltip: l10n.delete,
-                    icon: const Icon(Icons.delete_outline_rounded),
+                    icon: const Icon(AdaptiveIcons.delete_outline_rounded),
                     onPressed: selectedConvos.isEmpty
                         ? null
                         : () async {
-                            final ok = await showDialog<bool>(
+                            final ok = await showAppDialog<bool>(
                               context: context,
                               builder: (context) {
                                 return SecretlyAlertDialog(
@@ -442,13 +642,13 @@ class _GroupsScreenState extends State<GroupsScreen> {
                             }
                             _clearSelection();
                           },
-                  ),
-                  IconButton(
+                  )),
+                  PressFeedback(child: IconButton(
                     tooltip: shouldArchive ? l10n.archive : l10n.unarchive,
                     icon: Icon(
                       shouldArchive
-                          ? Icons.archive_outlined
-                          : Icons.unarchive_outlined,
+                          ? AdaptiveIcons.archive_outlined
+                          : AdaptiveIcons.unarchive_outlined,
                     ),
                     onPressed: selectedConvos.isEmpty
                         ? null
@@ -498,15 +698,15 @@ class _GroupsScreenState extends State<GroupsScreen> {
                             }
                             _clearSelection();
                           },
-                  ),
-                  IconButton(
+                  )),
+                  PressFeedback(child: IconButton(
                     tooltip: shouldMute
                         ? l10n.muteNotifications
                         : l10n.unmuteNotifications,
                     icon: Icon(
                       shouldMute
-                          ? Icons.notifications_off_outlined
-                          : Icons.notifications_outlined,
+                          ? AdaptiveIcons.notifications_off_outlined
+                          : AdaptiveIcons.notifications_outlined,
                     ),
                     onPressed: selectedConvos.isEmpty
                         ? null
@@ -519,8 +719,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                             }
                             _clearSelection();
                           },
-                  ),
-                  IconButton(
+                  )),
+                  PressFeedback(child: IconButton(
                     tooltip: shouldPersonal
                         ? _menuLabel(
                             context,
@@ -534,8 +734,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                           ),
                     icon: Icon(
                       shouldPersonal
-                          ? Icons.person_add_outlined
-                          : Icons.person_remove_outlined,
+                          ? AdaptiveIcons.person_add_outlined
+                          : AdaptiveIcons.person_remove_outlined,
                     ),
                     onPressed: selectedConvos.isEmpty
                         ? null
@@ -547,8 +747,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
                             if (!mounted) return;
                             _clearSelection();
                           },
-                  ),
-                  PopupMenuButton<String>(
+                  )),
+                  AppPopupMenuButton<String>(
                     tooltip: l10n.more,
                     onSelected: (value) async {
                       if (value == 'pin') {
@@ -560,7 +760,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         }
                         _clearSelection();
                       } else if (value == 'clear') {
-                        final ok = await showDialog<bool>(
+                        final ok = await showAppDialog<bool>(
                           context: context,
                           builder: (context) {
                             return SecretlyAlertDialog(
@@ -622,26 +822,49 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         duration: Duration(
                           milliseconds: _selectionMode ? 360 : 240,
                         ),
-                        curve: Curves.easeOutBack,
+                        curve: Motion.pop,
                         builder: (context, sel, _) {
                           return TweenAnimationBuilder<double>(
                             tween: Tween<double>(end: _searchOpen ? 1.0 : 0.0),
                             duration: const Duration(milliseconds: 260),
-                            curve: Curves.easeOutCubic,
+                            curve: Motion.standard,
                             builder: (context, s, _) {
                               return MorphingSelectionIslands(
                                 searchReveal: s,
                                 selectionReveal: sel,
                                 leftNormalContent: titleContent,
                                 leftSelectionContent: selCountContent,
-                                rightCompactContent: compactSearchContent,
+                                rightCompactContent: home != null
+                                    ? HomeTopActionsContent(
+                                        plus: _homePlusActions(),
+                                        contactsActive: false,
+                                        onContacts: () =>
+                                            home.select(HomeTab.contacts),
+                                        plusLabel: _tr(
+                                          ru: 'Создать',
+                                          en: 'Create',
+                                          uk: 'Створити',
+                                          es: 'Crear',
+                                          pt: 'Criar',
+                                          fr: 'Créer',
+                                          de: 'Erstellen',
+                                        ),
+                                        contactsLabel: l10n.tabContacts,
+                                      )
+                                    : compactSearchContent,
                                 rightSearchContent: searchFieldContent,
                                 rightSelectionContent: selActionsContent,
                                 islandRadius: _kListIslandRadius,
                                 islandHeight: _kListIslandHeight,
-                                leftPadding: 18,
-                                compactRightWidth: _kListActionsIslandWidth,
+                                leftPadding: home != null ? 10 : 18,
+                                compactRightWidth: home != null
+                                    ? kHomeTopActionsWidth
+                                    : _kListActionsIslandWidth,
                                 centerLeftNormal: false,
+                                compactLeft: home != null,
+                                centerTitle: home != null
+                                    ? _roomsLabel(context)
+                                    : null,
                               );
                             },
                           );
@@ -670,6 +893,8 @@ class _GroupsScreenState extends State<GroupsScreen> {
               if (call == null) return const SizedBox.shrink();
               final sp = call.selfParticipant;
               return RuntimeAwareRoomCallReturnBanner(
+                // Строка общей пластины островков (23.11.2026).
+                merged: true,
                 title: title,
                 call: call,
                 onMicTap: sp != null && sp.isJoined
@@ -710,9 +935,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
                 // Music island is rendered as a pinned overlay (see Stack at the
                 // call site) so it no longer scrolls with the list — reserve its
                 // height here.
-                SharedAudioTopIslandsReserve(controller: widget.controller),
-                SharedAudioCallBannerGate(controller: widget.controller),
-                buildRoomCallBanner(roomCall, roomCallTitle),
+                // Звонок в комнате — строкой той же пластины (23.11.2026).
+                SharedAudioTopIslandsReserve(
+                  controller: widget.controller,
+                  roomCallVisible: roomCall != null,
+                ),
                 const SizedBox(height: 8),
               ];
 
@@ -773,7 +1000,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
                     final hasAvatar =
                         avatarPath != null &&
                         avatarPath.isNotEmpty &&
-                        File(avatarPath).existsSync();
+                        FileExistsCache.exists(avatarPath);
                     final fallbackId = c.convoId;
                     final seed = fallbackId.isNotEmpty ? fallbackId : c.title;
                     final avatar = hasAvatar
@@ -841,7 +1068,14 @@ class _GroupsScreenState extends State<GroupsScreen> {
                             ),
                           )
                         : defaultLeading;
-                    return InkWell(
+                    // Макет 3b, как в «Чатах»: после закреплённых — зазор 6.
+                    final gi = i - headerItems.length;
+                    final gapAfterPinned =
+                        kChatListRowV2 &&
+                        c.pinnedAtMs != null &&
+                        gi + 1 < groups.length &&
+                        groups[gi + 1].pinnedAtMs == null;
+                    final row = InkWell(
                       onLongPress: () => _toggleSelected(c.convoId),
                       onTap: () {
                         if (_selectionMode) {
@@ -855,7 +1089,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
                             ? Theme.of(context).colorScheme.secondaryContainer
                                   .withValues(alpha: 0.45)
                             : Colors.transparent,
-                        child: Padding(
+                        child: ChatListRowFlash(
+                          stamp: c.lastEventAtMs,
+                          unread: c.unreadCount,
+                          child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 12,
@@ -867,7 +1104,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: SizedBox(
-                                  height: 52,
+                                  // Крупный шрифт: строка растёт вместе с
+                                  // текстом (при обычном — прежние 52).
+                                  height: MediaQuery.textScalerOf(context)
+                                      .scale(52)
+                                      .clamp(52.0, 96.0),
                                   child: Column(
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
@@ -892,7 +1133,10 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                               ),
                                             ),
                                             const SizedBox(width: 8),
-                                            if (c.pinnedAtMs != null) ...[
+                                            if (c.pinnedAtMs != null &&
+                                                kChatListRowV2)
+                                              const ChatListPinGlyph()
+                                            else if (c.pinnedAtMs != null) ...[
                                               Icon(
                                                 AppIcons.pin,
                                                 size: 12,
@@ -906,6 +1150,13 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                             activeRoomCall != null
                                                 ? _ActiveRoomCallPill(
                                                     call: activeRoomCall,
+                                                  )
+                                                : kChatListRowV2
+                                                ? ChatListTime(
+                                                    ms: c.lastEventAtMs,
+                                                    highlight:
+                                                        c.unreadCount > 0 &&
+                                                        !c.muted,
                                                   )
                                                 : _TimePill(
                                                     ms: c.lastEventAtMs,
@@ -944,7 +1195,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                                                 FontWeight.w600,
                                                           ),
                                                     )
-                                                  : ChatListSubtitlePreview(
+                                                  : ChatListRowSubtitle(
+                                                    // Черновик комнаты — как
+                                                    // во вкладке «Чаты».
+                                                    draftKey: c.convoId,
+                                                    preview: ChatListSubtitlePreview(
                                                       key: ValueKey<String>(
                                                         'room-subtitle-${c.convoId}',
                                                       ),
@@ -964,13 +1219,23 @@ class _GroupsScreenState extends State<GroupsScreen> {
                                                               ),
                                                       subtitleFallback:
                                                           c.convoId,
+                                                      rowV2: kChatListRowV2,
+                                                      unreadCount:
+                                                          c.unreadCount,
                                                     ),
+                                                  ),
                                             ),
                                             if (c.unreadCount > 0) ...[
                                               const SizedBox(width: 6),
-                                              _UnreadBadge(
-                                                count: c.unreadCount,
-                                              ),
+                                              if (kChatListRowV2)
+                                                ChatListUnreadBadge(
+                                                  count: c.unreadCount,
+                                                  muted: c.muted,
+                                                )
+                                              else
+                                                _UnreadBadge(
+                                                  count: c.unreadCount,
+                                                ),
                                             ],
                                           ],
                                         ),
@@ -982,8 +1247,15 @@ class _GroupsScreenState extends State<GroupsScreen> {
                             ],
                           ),
                         ),
+                        ),
                       ),
                     );
+                    return gapAfterPinned
+                        ? Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: row,
+                          )
+                        : row;
                   },
                 ),
               );
@@ -993,7 +1265,9 @@ class _GroupsScreenState extends State<GroupsScreen> {
             return Scaffold(
               extendBodyBehindAppBar: true,
               appBar: buildAppBar(),
-              floatingActionButton: !_selectionMode
+              // Острова v3: «Создать комнату» — в «+» верхнего островка.
+              floatingActionButton:
+                  !_selectionMode && HomeShellScope.maybeOf(context) == null
                   ? Padding(
                       padding: EdgeInsets.only(bottom: fabBottomOffset + 4),
                       child: AnimatedFab(
@@ -1070,8 +1344,13 @@ class _GroupsScreenState extends State<GroupsScreen> {
                         top: appBarInset,
                         left: 0,
                         right: 0,
+                        // Музыка, звонок и звонок в комнате — одна «жидкая»
+                        // пластина (23.11.2026).
                         child: SharedAudioTopIslands(
                           controller: widget.controller,
+                          roomCall: roomCall == null
+                              ? null
+                              : buildRoomCallBanner(roomCall, roomCallTitle),
                         ),
                       ),
                     ],
@@ -1130,6 +1409,20 @@ class _TimePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // iPhone: время — просто текст цвета `secondaryLabel`, как в списках
+    // iOS/Telegram. Серая «таблетка» с текстом 38 % (≈ 2,2 : 1) читалась
+    // плохо в светлой теме.
+    if (appleGlassPanelsEnabled) {
+      return Text(
+        _formatTime(ms),
+        style: TextStyle(
+          color: AppleGlass.secondaryLabel(isDark),
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          height: 1.2,
+        ),
+      );
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
@@ -1142,8 +1435,8 @@ class _TimePill extends StatelessWidget {
         _formatTime(ms),
         style: TextStyle(
           color: isDark
-              ? Colors.white.withValues(alpha: 0.45)
-              : Colors.black.withValues(alpha: 0.38),
+              ? Colors.white.withValues(alpha: 0.6)
+              : Colors.black.withValues(alpha: 0.6),
           fontSize: 11,
           fontWeight: FontWeight.w500,
           height: 1.2,
@@ -1193,10 +1486,29 @@ class _ActiveRoomCallPill extends StatelessWidget {
   }
 }
 
-class _RoomsFabIcon extends StatelessWidget {
+class _RoomsFabIcon extends StatefulWidget {
   const _RoomsFabIcon({required this.assetPath});
 
   final String assetPath;
+
+  @override
+  State<_RoomsFabIcon> createState() => _RoomsFabIconState();
+}
+
+/// 23.11.2026: вечная анимация значка «Комнаты» шла внутренним контроллером
+/// Lottie на каждое обновление экрана (замер Xiaomi: список комнат в покое
+/// ~73 кадра в секунду). Свой контроллер на размеренном тикере — не чаще 60.
+class _RoomsFabIconState extends State<_RoomsFabIcon>
+    with PacedTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(vsync: this);
+
+  String get assetPath => widget.assetPath;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1215,8 +1527,12 @@ class _RoomsFabIcon extends StatelessWidget {
               ),
               child: Lottie.asset(
                 assetPath,
-                repeat: true,
-                animate: true,
+                controller: _ctrl,
+                onLoaded: (composition) {
+                  _ctrl
+                    ..duration = composition.duration
+                    ..repeat();
+                },
                 fit: BoxFit.contain,
                 frameRate: FrameRate.max,
                 errorBuilder: (_, __, ___) => const Icon(

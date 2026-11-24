@@ -301,4 +301,26 @@ void main() {
     expect(res.ackFailed, 0);
     await db.close();
   });
+
+  test('🔴 приложение открыли — проход сразу отдаёт базу (23.11.2026)', () async {
+    final db = await AppDb.openForTesting();
+    var asked = 0;
+    final decrypted = <String>[];
+    final res = await BackgroundInboundProcessor.applyWires(
+      db: db,
+      wires: [wire('a1'), wire('a2'), wire('a3'), wire('a4')],
+      decrypt: ({required msgId, required ciphertextB64}) async {
+        decrypted.add(msgId);
+        return true;
+      },
+      nowMs: 1000,
+      // Первое сообщение — до открытия приложения, дальше — уже открыто.
+      shouldYield: () async => asked++ >= 1,
+    );
+    expect(decrypted, ['a1'], reason: 'после открытия ничего не трогаем');
+    expect(res.applied, 1);
+    expect(res.staged, 0, reason: 'необработанное не складывается — его заберёт приложение');
+    expect(await db.inboxHasSeen('a2'), isFalse);
+    await db.close();
+  });
 }

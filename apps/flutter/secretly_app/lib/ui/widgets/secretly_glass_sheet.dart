@@ -6,6 +6,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'island_backdrop.dart';
+import '../apple_glass.dart';
 
 class SecretlyGlassSheetHandle extends StatelessWidget {
   const SecretlyGlassSheetHandle({super.key});
@@ -69,9 +70,27 @@ class SecretlyGlassSheetSurface extends StatelessWidget {
     final borderColor = isDark
         ? Colors.white.withValues(alpha: 0.10)
         : Colors.white.withValues(alpha: 0.56);
-    final border = flushToEdges
-        ? Border(top: BorderSide(color: borderColor))
-        : Border.all(color: borderColor);
+    // На iPhone (20.11.2026) край листа — та же кромка Liquid Glass, что у
+    // панелей (`apple_glass.dart`): светлый блик сверху и тонкий ободок.
+    final resolved = borderRadius.resolve(Directionality.maybeOf(context));
+    final Border? border = appleGlassPanelsEnabled
+        ? null
+        : (flushToEdges
+              ? Border(top: BorderSide(color: borderColor))
+              : Border.all(color: borderColor));
+    Widget withGlassEdge(Widget child) => appleGlassPanelsEnabled
+        ? DecoratedBox(
+            position: DecorationPosition.foreground,
+            decoration: ShapeDecoration(
+              shape: AppleGlassBorder(
+                radius: resolved.topLeft.x,
+                dark: isDark,
+                topOnly: resolved.bottomLeft.x == 0,
+              ),
+            ),
+            child: child,
+          )
+        : child;
 
     // Стекло выключено — рисуем плиту без блюра, как это делают островки. Это
     // ещё и самая дешёвая поверхность: один непрозрачный прямоугольник.
@@ -95,7 +114,9 @@ class SecretlyGlassSheetSurface extends StatelessWidget {
               border: border,
               borderRadius: borderRadius,
             ),
-            child: Material(color: Colors.transparent, child: child),
+            child: withGlassEdge(
+              Material(color: Colors.transparent, child: child),
+            ),
           ),
         ),
       );
@@ -129,7 +150,9 @@ class SecretlyGlassSheetSurface extends StatelessWidget {
               border: border,
               borderRadius: borderRadius,
             ),
-            child: Material(color: Colors.transparent, child: child),
+            child: withGlassEdge(
+              Material(color: Colors.transparent, child: child),
+            ),
           ),
         ),
       ),

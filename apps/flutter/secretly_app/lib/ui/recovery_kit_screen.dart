@@ -9,7 +9,9 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'animations/animations.dart';
 import 'icons/app_icons.dart';
 import 'l10n.dart';
+import 'motion/press_feedback.dart';
 import 'widgets/frosted_top_bar.dart';
+import 'package:secretly_app/ui/apple_settings_row.dart';
 
 class RecoveryKitScreen extends StatelessWidget {
   const RecoveryKitScreen({super.key, required this.payload});
@@ -20,7 +22,9 @@ class RecoveryKitScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final topPad = MediaQuery.of(context).padding.top + kToolbarHeight;
-    return Scaffold(
+    // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
       extendBodyBehindAppBar: true,
       appBar: frostedAppBar(title: Text(l10n.recoveryKit)),
       body: ListView(
@@ -38,7 +42,7 @@ class RecoveryKitScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          FilledButton.icon(
+          PressFeedback(child: FilledButton.icon(
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: payload));
               if (!context.mounted) return;
@@ -48,11 +52,12 @@ class RecoveryKitScreen extends StatelessWidget {
             },
             icon: const Icon(AppIcons.copy),
             label: Text(l10n.copy),
-          ),
+          )),
           const SizedBox(height: 12),
           Text(payload, style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
+    ),
     );
   }
 }

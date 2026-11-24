@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'motion/decoration_pacer.dart';
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 
@@ -8,14 +9,33 @@ import '../app/app_controller.dart';
 import '../entitlements/entitlement_models.dart';
 import 'app_asset_paths.dart';
 import 'icons/app_icons.dart';
+import 'motion/press_feedback.dart';
 import 'premium_features_sheet.dart';
 import 'widgets/premium_glass.dart';
 
 class AppBrandLogo extends StatefulWidget {
-  const AppBrandLogo({super.key, this.compact = false, this.controller});
+  const AppBrandLogo({
+    super.key,
+    this.compact = false,
+    this.controller,
+    this.showPremiumBadge = true,
+    this.titleSize,
+    this.tight = false,
+  });
 
   final bool compact;
   final AppController? controller;
+
+  /// Острова v3: метка «Premium» у названия не показывается (решение
+  /// владельца 21.11) — место нужно островку с названием раздела.
+  final bool showPremiumBadge;
+
+  /// Размер надписи «Secretly»; `null` — прежний (headlineSmall).
+  final double? titleSize;
+
+  /// Острова v3: знак чуть меньше и ближе к надписи — шапке нужно место под
+  /// островок с названием раздела.
+  final bool tight;
 
   static const String _fingerprintAssetPath = AppAssetPaths.fingerprintLottie;
 
@@ -24,7 +44,7 @@ class AppBrandLogo extends StatefulWidget {
 }
 
 class _AppBrandLogoState extends State<AppBrandLogo>
-    with SingleTickerProviderStateMixin {
+    with PacedTickerProviderStateMixin {
   late final AnimationController _fingerprintController;
   Duration? _compositionDuration;
 
@@ -68,9 +88,10 @@ class _AppBrandLogoState extends State<AppBrandLogo>
       color: cs.onSurface,
       fontWeight: FontWeight.w700,
       letterSpacing: 0.2,
+      fontSize: widget.titleSize,
     );
 
-    final markSize = widget.compact ? 28.0 : 34.0;
+    final markSize = widget.compact ? 28.0 : (widget.tight ? 30.0 : 34.0);
     final ctrl = widget.controller;
     // The fingerprint pulses ONLY when the device loses its network path; it
     // stays calm whenever there is connectivity. Server health-check flaps
@@ -121,7 +142,7 @@ class _AppBrandLogoState extends State<AppBrandLogo>
       mainAxisSize: MainAxisSize.min,
       children: [
         mark,
-        const SizedBox(width: 10),
+        SizedBox(width: widget.tight ? 6 : 10),
         Flexible(
           child: FittedBox(
             fit: BoxFit.scaleDown,
@@ -130,7 +151,8 @@ class _AppBrandLogoState extends State<AppBrandLogo>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text('Secretly', style: titleStyle, maxLines: 1),
-                if (ctrl != null) _PremiumBadgeSlot(controller: ctrl),
+                if (ctrl != null && widget.showPremiumBadge)
+                  _PremiumBadgeSlot(controller: ctrl),
               ],
             ),
           ),
@@ -153,13 +175,13 @@ class _PremiumBadgeSlot extends StatelessWidget {
     Widget slot(bool paid) => paid
         ? Padding(
             padding: const EdgeInsets.only(left: 8),
-            child: GestureDetector(
+            child: PressFeedback(child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               // Premium users tap the badge to see everything their plan
               // includes (localized features + short descriptions).
               onTap: () => showPremiumFeaturesSheet(context),
               child: const GoldPremiumBadge(),
-            ),
+            )),
           )
         : const SizedBox.shrink();
     final listenable = controller.entitlements;

@@ -3,6 +3,8 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'package:flutter/material.dart';
 
+import '../app_backdrop.dart';
+
 /// Carries the app's global background gradient down the widget tree so that
 /// pushed routes can paint it themselves.
 ///
@@ -20,9 +22,20 @@ class AppBackground extends InheritedWidget {
     super.key,
     required this.gradient,
     required super.child,
+    this.backdrop,
+    this.dark = true,
   });
 
   final Gradient gradient;
+
+  /// Мягкий фон из «Оформления» (`app_backdrop.dart`); `null` — прежний
+  /// градиент [gradient]. Когда задан, [gradient] — его базовый цвет, чтобы
+  /// затемнения по краям ([scrimColorOf]) растворялись в настоящем фоне.
+  final AppBackdropPreset? backdrop;
+  final bool dark;
+
+  static AppBackground? _scope(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppBackground>();
 
   static Gradient? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<AppBackground>()?.gradient;
@@ -47,7 +60,9 @@ class AppBackground extends InheritedWidget {
 
   @override
   bool updateShouldNotify(AppBackground oldWidget) =>
-      oldWidget.gradient != gradient;
+      oldWidget.gradient != gradient ||
+      oldWidget.backdrop?.id != backdrop?.id ||
+      oldWidget.dark != dark;
 }
 
 /// Paints the inherited [AppBackground] gradient behind [child]. No-op when no
@@ -60,8 +75,13 @@ class AppGradientBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final gradient = AppBackground.maybeOf(context);
-    if (gradient == null) return child;
+    final scope = AppBackground._scope(context);
+    if (scope == null) return child;
+    final backdrop = scope.backdrop;
+    if (backdrop != null) {
+      return AppBackdropLayer(preset: backdrop, dark: scope.dark, child: child);
+    }
+    final gradient = scope.gradient;
     return DecoratedBox(
       decoration: BoxDecoration(gradient: gradient),
       child: child,

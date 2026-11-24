@@ -4,6 +4,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
 
 class HorizontalQuickActionButton extends StatelessWidget {
   const HorizontalQuickActionButton({
@@ -47,7 +48,10 @@ class HorizontalQuickActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Material(
-      color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.92),
+      color: appleGlassFillOr(
+          context,
+          theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.92),
+        ),
       borderRadius: BorderRadius.circular(22),
       child: InkWell(
         borderRadius: BorderRadius.circular(22),

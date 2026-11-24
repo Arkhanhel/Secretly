@@ -8528,4 +8528,1142 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get chatSwipeUnmute => 'Son';
+
+  @override
+  String get iconStyleClassic => 'Classique';
+
+  @override
+  String get iconStyleGlossy => 'Brillant';
+
+  @override
+  String get iconStyleClay => 'Argile';
+
+  @override
+  String get iconStyleFrost => 'Givré';
+
+  @override
+  String get iconStylePastel => 'Pastel';
+
+  @override
+  String get iconStyleNeon => 'Néon';
+
+  @override
+  String get iconStyleAurora => 'Aurore';
+
+  @override
+  String get iconStyleCircles => 'Cercles';
+
+  @override
+  String get iconStyleStickers => 'Autocollants';
+
+  @override
+  String get iconStyleMono => 'Monolithe';
+
+  @override
+  String get iconStyleGlass => 'Liquid Glass';
+
+  @override
+  String get settingsRowReliability => 'Fiabilité';
+
+  @override
+  String get settingsRowNeedsAttention => 'Nécessite votre attention';
+
+  @override
+  String get settingsRowPower => 'Énergie';
+
+  @override
+  String get settingsRowPowerSub => 'Moins de chauffe et d’usure de la batterie';
+
+  @override
+  String get settingsRowSystemNotice => 'Un message système est disponible';
+
+  @override
+  String get settingsRowInvite => 'Inviter des amis';
+
+  @override
+  String get settingsRowDonate => 'Soutenir Secretly';
+
+  @override
+  String get settingsRowSupport => 'Assistance';
+
+  @override
+  String get settingsRowPolicy => 'Politique de confidentialité';
+
+  @override
+  String get settingsRowAbout => 'À propos de Secretly';
+
+  @override
+  String get settingsProfileCardSub => 'Secretly ID, profil QR';
+
+  @override
+  String get settingsProfileQr => 'Code QR du profil';
+
+  @override
+  String settingsSearchNoResults(String query) {
+    return 'Aucun résultat pour « $query »';
+  }
+
+  @override
+  String get settingsPremiumTeaser => 'Plus de limites, de thèmes, de cadres et plus encore';
+
+  @override
+  String get appearanceTitle => 'Apparence';
+
+  @override
+  String get appearanceResetTitle => 'Réinitialiser l’apparence ?';
+
+  @override
+  String get appearanceResetBody => 'Le mode, le thème, l’arrière-plan, le fond des conversations, les bulles, la taille du texte, les couleurs et le style des icônes reviennent aux valeurs par défaut. Les réglages de protection et l’icône de l’app ne changent pas.';
+
+  @override
+  String get appearanceTabTheme => 'Thème';
+
+  @override
+  String get appearanceTabThemeDesc => 'Mode et couleurs de l’interface';
+
+  @override
+  String get appearanceTabWallpaper => 'Fond';
+
+  @override
+  String get appearanceTabWallpaperDesc => 'Arrière-plan des conversations';
+
+  @override
+  String get appearanceTabBubbles => 'Bulles';
+
+  @override
+  String get appearanceTabIcons => 'Icônes';
+
+  @override
+  String get appearanceTabIconsDesc => 'Style des icônes des réglages';
+
+  @override
+  String get appearanceTabAppIcon => 'Icône';
+
+  @override
+  String get appearanceTabAppIconDesc => 'Icône sur l’écran d’accueil';
+
+  @override
+  String get appearanceTabBehavior => 'Comportement';
+
+  @override
+  String get appearanceTabBehaviorDesc => 'Protection et visibilité';
+
+  @override
+  String get appearanceModeLight => 'Clair';
+
+  @override
+  String get appearanceModeDark => 'Sombre';
+
+  @override
+  String get appearanceModeAuto => 'Auto';
+
+  @override
+  String get appearanceAllWallpapers => 'Plus';
+
+  @override
+  String get appearanceNickColors => 'Couleur des noms dans les réponses';
+
+  @override
+  String get appearanceIndicatorColors => 'Couleur des coches et indicateurs';
+
+  @override
+  String appearanceTabPosition(int current, int total) {
+    return 'Catégorie $current sur $total';
+  }
+
+  @override
+  String get appearancePrevTab => 'Catégorie précédente';
+
+  @override
+  String get appearanceNextTab => 'Catégorie suivante';
+
+  @override
+  String get appearanceModified => 'modifié';
+
+  @override
+  String get appearanceHideScreen => 'Masquer le contenu de l’écran';
+
+  @override
+  String get appearanceHideScreenAndroid => 'Les captures et l’enregistrement d’écran sont bloqués, et l’aperçu de l’app est vide. Le partage d’écran et certains outils d’accessibilité ne fonctionneront plus.';
+
+  @override
+  String get appearanceHideScreenIos => 'Le contenu est masqué dans le sélecteur d’apps. iOS ne permet pas aux apps de bloquer les captures d’écran.';
+
+  @override
+  String get appearanceHideScreenRefused => 'Le système a refusé le réglage : le contenu de l’écran n’est pas masqué.';
+
+  @override
+  String get appearanceAppIconAndroidNote => 'L’icône change dès que l’écran d’accueil s’actualise ; cela peut prendre quelques secondes.';
+
+  @override
+  String get desktopAppearanceIconStyle => 'Style des icônes';
+
+  @override
+  String get desktopAppearanceIconStyleHint => 'Icônes des sections de réglages. Chaque appareil garde son propre choix.';
+
+  @override
+  String get appearanceTabText => 'Texte';
+
+  @override
+  String get appearanceTabTextDesc => 'Taille, noms, coches';
+
+  @override
+  String get appearanceTabBackground => 'Arrière-plan';
+
+  @override
+  String get appearanceTabBackgroundDesc => 'Arrière-plans doux et flous pour les thèmes sombre et clair';
+
+  @override
+  String get appearanceTabBubblesShapeDesc => 'Couleur et forme des messages';
+
+  @override
+  String get appearanceTextSize => 'Taille du texte';
+
+  @override
+  String get appearanceBubbleRadius => 'Arrondi des angles';
+
+  @override
+  String get appBackdropTheme => 'Selon le thème';
+
+  @override
+  String get appBackdropDusk => 'Crépuscule';
+
+  @override
+  String get appBackdropOcean => 'Océan';
+
+  @override
+  String get appBackdropSunset => 'Couchant';
+
+  @override
+  String get appBackdropMint => 'Menthe';
+
+  @override
+  String get appBackdropLavender => 'Lavande';
+
+  @override
+  String get appBackdropPeach => 'Pêche';
+
+  @override
+  String get appBackdropAurora => 'Aurore';
+
+  @override
+  String get appBackdropBerry => 'Baies';
+
+  @override
+  String get appBackdropAmber => 'Ambre';
+
+  @override
+  String mvCounter(int current, int total) {
+    return '$current sur $total';
+  }
+
+  @override
+  String get mvReply => 'Répondre';
+
+  @override
+  String get mvForward => 'Transférer';
+
+  @override
+  String get mvEdit => 'Modifier';
+
+  @override
+  String get mvShare => 'Partager';
+
+  @override
+  String get mvDelete => 'Supprimer';
+
+  @override
+  String get mvMenu => 'Plus';
+
+  @override
+  String get mvSaveToGallery => 'Enregistrer dans la galerie';
+
+  @override
+  String get mvSaveAsFile => 'Enregistrer comme fichier';
+
+  @override
+  String get mvShowInChat => 'Afficher dans le chat';
+
+  @override
+  String get mvAllMedia => 'Tous les médias';
+
+  @override
+  String mvAllMediaCount(int count) {
+    return 'Tous les médias · $count';
+  }
+
+  @override
+  String get mvCopy => 'Copier';
+
+  @override
+  String get mvCopied => 'Copié';
+
+  @override
+  String get mvShowFullCaption => 'Afficher tout';
+
+  @override
+  String get mvDeletePhotoTitle => 'Supprimer la photo ?';
+
+  @override
+  String get mvDeleteVideoTitle => 'Supprimer la vidéo ?';
+
+  @override
+  String get mvDeleteOwnHint => 'Vous pouvez le supprimer pour vous seul ou pour vous deux.';
+
+  @override
+  String get mvDeleteOwnGroupHint => 'Vous pouvez le supprimer pour vous seul ou pour tout le monde.';
+
+  @override
+  String get mvDeleteTheirsHint => 'Les photos et vidéos des autres sont supprimées uniquement chez vous.';
+
+  @override
+  String get mvDeleteLocalHint => 'Il sera supprimé uniquement sur cet appareil.';
+
+  @override
+  String mvDeleteForBoth(String name) {
+    return 'Supprimer pour moi et pour $name';
+  }
+
+  @override
+  String get mvDeleteForEveryone => 'Supprimer pour tous';
+
+  @override
+  String get mvDeleteForMeOnly => 'Supprimer pour moi seulement';
+
+  @override
+  String get mvDeleteForMe => 'Supprimer pour moi';
+
+  @override
+  String get mvPhotoDeleted => 'Photo supprimée';
+
+  @override
+  String get mvVideoDeleted => 'Vidéo supprimée';
+
+  @override
+  String get mvSavedToGallery => 'Enregistré dans la galerie';
+
+  @override
+  String get mvChangesSaved => 'Modifications enregistrées';
+
+  @override
+  String get mvYou => 'Vous';
+
+  @override
+  String get mvPlay => 'Lire';
+
+  @override
+  String get mvPause => 'Pause';
+
+  @override
+  String get mvReplay => 'Revoir';
+
+  @override
+  String get mvMute => 'Couper le son';
+
+  @override
+  String get mvUnmute => 'Activer le son';
+
+  @override
+  String get mvSpeed => 'Vitesse';
+
+  @override
+  String get mvSeekBack => '−5 s';
+
+  @override
+  String get mvSeekForward => '+5 s';
+
+  @override
+  String get meDone => 'Terminé';
+
+  @override
+  String get meTabCrop => 'Recadrer';
+
+  @override
+  String get meTabDraw => 'Dessin';
+
+  @override
+  String get meTabAdjust => 'Réglages';
+
+  @override
+  String get meAspectFree => 'Libre';
+
+  @override
+  String get meAspectOriginal => 'Original';
+
+  @override
+  String get meReset => 'Réinitialiser';
+
+  @override
+  String get meRotate => 'Pivoter';
+
+  @override
+  String get meFlip => 'Retourner';
+
+  @override
+  String get meStraighten => 'Redresser';
+
+  @override
+  String get meToolPen => 'Stylo';
+
+  @override
+  String get meToolMarker => 'Surligneur';
+
+  @override
+  String get meToolNeon => 'Néon';
+
+  @override
+  String get meToolEraser => 'Gomme';
+
+  @override
+  String get meToolText => 'Texte';
+
+  @override
+  String get meBrushSize => 'Épaisseur';
+
+  @override
+  String get meHintDraw => 'Dessinez avec le doigt sur la photo';
+
+  @override
+  String get meHintText => 'Touchez la photo pour ajouter du texte';
+
+  @override
+  String get meHintEraser => 'Glissez sur un trait pour l\'effacer';
+
+  @override
+  String get meTextPlaceholder => 'Saisissez du texte';
+
+  @override
+  String get meTextBackground => 'Fond';
+
+  @override
+  String get meTextHelp => 'Le texte peut être déplacé sur la photo. Touchez-le pour le modifier.';
+
+  @override
+  String get meBrightness => 'Luminosité';
+
+  @override
+  String get meContrast => 'Contraste';
+
+  @override
+  String get meSaturation => 'Saturation';
+
+  @override
+  String get meWarmth => 'Chaleur';
+
+  @override
+  String get meVignette => 'Vignette';
+
+  @override
+  String get meCompare => 'Comparer';
+
+  @override
+  String get meUndo => 'Annuler';
+
+  @override
+  String get meRedo => 'Rétablir';
+
+  @override
+  String get meDiscardTitle => 'Annuler les modifications ?';
+
+  @override
+  String get meDiscardBody => 'Les modifications de cette photo ne seront pas enregistrées.';
+
+  @override
+  String get meDiscardAction => 'Annuler les modifications';
+
+  @override
+  String mvDateToday(String time) {
+    return 'aujourd\'hui, $time';
+  }
+
+  @override
+  String mvDateYesterday(String time) {
+    return 'hier, $time';
+  }
+
+  @override
+  String get vnZoom => 'Zoom';
+
+  @override
+  String vnNoteTitle(String name) {
+    return '$name · note vidéo';
+  }
+
+  @override
+  String get vnScrubHint => 'Glissez sur le côté pour rembobiner';
+
+  @override
+  String get composerEmoji => 'Émojis, stickers et GIF';
+
+  @override
+  String get emojiPanelKeyboard => 'Clavier';
+
+  @override
+  String get emojiPanelExpand => 'Agrandir le panneau';
+
+  @override
+  String get emojiPanelSearchHint => 'Rechercher : rire, chat, café';
+
+  @override
+  String get emojiPanelResults => 'Résultats';
+
+  @override
+  String get emojiPanelNothingFound => 'Aucun résultat. Essayez « rire », « chat » ou « café ».';
+
+  @override
+  String get emojiPanelFavoritesEmpty => 'Maintenez un sticker pour l’ajouter aux favoris';
+
+  @override
+  String get emojiPanelPreviewHint => 'Glissez sur les stickers, relâchez pour le menu';
+
+  @override
+  String get emojiPanelGifTrending => 'Tendances';
+
+  @override
+  String get emojiPanelGifNotFound => 'Aucun GIF trouvé';
+
+  @override
+  String get emojiPanelGifLaugh => 'Rire';
+
+  @override
+  String get emojiPanelGifLove => 'Amour';
+
+  @override
+  String get emojiPanelGifApproval => 'Approbation';
+
+  @override
+  String get emojiPanelGifHello => 'Salut';
+
+  @override
+  String get emojiPanelGifHug => 'Câlin';
+
+  @override
+  String get emojiPanelGifCrying => 'Larmes';
+
+  @override
+  String get emojiPanelGifExcited => 'Enthousiasme';
+
+  @override
+  String get emojiPanelGifThinking => 'Réflexion';
+
+  @override
+  String get emojiPanelGifSleepy => 'Sommeil';
+
+  @override
+  String get emojiPanelGifAngry => 'Colère';
+
+  @override
+  String get emojiPanelGifShocked => 'Choc';
+
+  @override
+  String get emojiPanelGifDance => 'Danse';
+
+  @override
+  String get emojiPanelGifParty => 'Fête';
+
+  @override
+  String get emojiPanelGifCats => 'Chats';
+
+  @override
+  String get emojiPanelGifDogs => 'Chiens';
+
+  @override
+  String get emojiPanelGifFire => 'Feu';
+
+  @override
+  String get emojiPanelGifFood => 'Nourriture';
+
+  @override
+  String get emojiPanelGifSport => 'Sport';
+
+  @override
+  String emojiPanelStickerCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count stickers',
+      one: '$count sticker',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chatListTimeNow => 'à l’instant';
+
+  @override
+  String chatListTimeMinutes(int count) {
+    return '$count min';
+  }
+
+  @override
+  String get chatListCallInProgress => 'Appel en cours';
+
+  @override
+  String get chatListCallRinging => 'Appel…';
+
+  @override
+  String get eliteBadgeTeamTitle => 'Équipe Secretly';
+
+  @override
+  String get eliteBadgeTeamBody => 'Cette coche confirme que l’utilisateur fait partie de l’équipe de développement de Secretly.';
+
+  @override
+  String get eliteBadgeStatusLabel => 'Statut';
+
+  @override
+  String get eliteBadgeRoleFounder => 'Fondateur';
+
+  @override
+  String get eliteBadgeRoleTester => 'Testeur';
+
+  @override
+  String get mvEditedTitle => 'Photo modifiée';
+
+  @override
+  String get mvEditedHint => 'L’original ne change pas — une copie modifiée sera envoyée.';
+
+  @override
+  String get mvEditedSend => 'Envoyer la copie';
+
+  @override
+  String get mvEditedDiscard => 'Annuler les modifications';
+
+  @override
+  String get mvEditedSent => 'Photo modifiée envoyée';
+
+  @override
+  String get chatTranslateMenuItem => 'Traduction';
+
+  @override
+  String get chatTranslateSheetTitle => 'Traduction dans cette discussion';
+
+  @override
+  String get chatTranslateModeLabel => 'Mode';
+
+  @override
+  String get chatTranslateModeInherit => 'Comme dans les Réglages';
+
+  @override
+  String get chatTranslateModeOff => 'Désactivée';
+
+  @override
+  String get chatTranslateModeButton => 'Bouton « Traduire »';
+
+  @override
+  String get chatTranslateModeAuto => 'Traduire automatiquement';
+
+  @override
+  String get chatTranslateFrom => 'Traduire depuis';
+
+  @override
+  String get chatTranslateTo => 'Traduire vers';
+
+  @override
+  String get chatTranslateAutoDetect => 'Détecter automatiquement';
+
+  @override
+  String get chatTranslateAppLanguage => 'Langue de l’application';
+
+  @override
+  String get chatTranslateReset => 'Rétablir les Réglages';
+
+  @override
+  String get chatTranslateSameLanguagePair => 'Les langues source et cible sont identiques';
+
+  @override
+  String get chatTranslateAllLanguages => 'Toutes les langues';
+
+  @override
+  String get chatTranslatePrivacyNote => 'La traduction se fait sur le téléphone — le texte n’est envoyé nulle part. Le pack de langue se télécharge une seule fois.';
+
+  @override
+  String get pinnedMessageUnavailable => 'Message indisponible sur cet appareil';
+
+  @override
+  String get reactionAllEmoji => 'Tous les emojis';
+
+  @override
+  String get composerRecordVoice => 'Message vocal';
+
+  @override
+  String get composerRecordVideo => 'Message vidéo';
+
+  @override
+  String get composerRecordHint => 'Maintenez pour enregistrer, touchez pour changer';
+
+  @override
+  String get videoNoteHintTooShort => 'Trop court — maintenez plus longtemps';
+
+  @override
+  String get videoNoteHintLimitReached => 'Limite atteinte — 1 minute';
+
+  @override
+  String get videoNoteHintRetake => 'Maintenez le bouton pour refilmer';
+
+  @override
+  String get videoNoteHintNoPermission => 'La vidéo nécessite la caméra et le micro';
+
+  @override
+  String get videoNoteHintCameraFailed => 'Caméra indisponible — réessayez';
+
+  @override
+  String get videoNoteRecSlideToCancel => 'Glissez à gauche pour annuler';
+
+  @override
+  String get videoNoteRecReleaseToDelete => 'Relâchez pour supprimer';
+
+  @override
+  String get videoNoteRecPause => 'Pause';
+
+  @override
+  String get videoNoteRecResume => 'Reprendre';
+
+  @override
+  String get videoNoteRecStop => 'Arrêter et revoir';
+
+  @override
+  String get videoNoteRecDelete => 'Supprimer';
+
+  @override
+  String get videoNoteRecRetake => 'Refaire';
+
+  @override
+  String get videoNoteRecLooped => 'en boucle';
+
+  @override
+  String get videoNoteRecFlip => 'Changer de caméra';
+
+  @override
+  String get videoNoteRecLight => 'Lumière';
+
+  @override
+  String get videoNoteRecPlay => 'Lire';
+
+  @override
+  String get videoNoteRecTrimStart => 'Début du clip';
+
+  @override
+  String get videoNoteRecTrimEnd => 'Fin du clip';
+
+  @override
+  String get videoNoteRecCameraUnavailable => 'Caméra indisponible';
+
+  @override
+  String get voiceHintHoldToRecord => 'Maintenez pour enregistrer un vocal';
+
+  @override
+  String get voiceHintTooShort => 'Trop court — maintenez plus longtemps';
+
+  @override
+  String get voiceHintNoPermission => 'Accès au microphone indisponible';
+
+  @override
+  String get voiceHintFailed => 'Impossible d’enregistrer le vocal';
+
+  @override
+  String get voiceRecSlideToCancel => 'Glissez pour annuler';
+
+  @override
+  String get voiceRecReleaseToDelete => 'Relâchez pour supprimer';
+
+  @override
+  String get voiceRecDeleted => 'Enregistrement supprimé';
+
+  @override
+  String get voiceRecStop => 'Arrêter et écouter';
+
+  @override
+  String get voiceRecPlay => 'Lire';
+
+  @override
+  String get voiceRecPause => 'Pause';
+
+  @override
+  String get emojiCategorySmileys => 'Émoticônes';
+
+  @override
+  String get emojiCategoryPeople => 'Personnes';
+
+  @override
+  String get emojiCategoryAnimals => 'Animaux et nature';
+
+  @override
+  String get emojiCategoryFood => 'Nourriture et boissons';
+
+  @override
+  String get emojiCategoryTravel => 'Voyages et lieux';
+
+  @override
+  String get emojiCategoryActivities => 'Activités';
+
+  @override
+  String get emojiCategoryObjects => 'Objets';
+
+  @override
+  String get emojiCategorySymbols => 'Symboles';
+
+  @override
+  String get emojiCategoryFlags => 'Drapeaux';
+
+  @override
+  String get voicePlaybackSpeed => 'Vitesse de lecture';
+
+  @override
+  String get mvVideoOpenFailed => 'Impossible d’ouvrir la vidéo';
+
+  @override
+  String get mvRetry => 'Réessayer';
+
+  @override
+  String get mvVideoBuffering => 'Chargement de la vidéo…';
+
+  @override
+  String get appIconChangeFailed => 'Impossible de changer l’icône de l’app. Réessayez.';
+
+  @override
+  String get chatUnreadMessagesDivider => 'Messages non lus';
+
+  @override
+  String get premiumHubTitle => 'Premium';
+
+  @override
+  String get premiumHubRestore => 'Restaurer';
+
+  @override
+  String get premiumHubChipFree => 'Offre gratuite';
+
+  @override
+  String get premiumHubChipActive => 'Premium actif';
+
+  @override
+  String get premiumHubHeroFree => 'Secretly Premium';
+
+  @override
+  String get premiumHubHeroPremium => 'Félicitations !';
+
+  @override
+  String get premiumHubSubFree => 'Cadres, fonds animés, transcription des vocaux et limites plus élevées. Voici ce que débloque l’abonnement.';
+
+  @override
+  String get premiumHubSubPremium => 'Tout ce qui suit est déjà débloqué. Merci de soutenir Secretly.';
+
+  @override
+  String get premiumHubSeenAs => 'Ce que voient vos contacts';
+
+  @override
+  String get premiumHubPlan => 'Offre';
+
+  @override
+  String get premiumHubPlanPremium => 'Premium';
+
+  @override
+  String get premiumHubPlanLifetime => 'Premium · À vie';
+
+  @override
+  String get premiumHubPlanTeam => 'Premium · Équipe';
+
+  @override
+  String get premiumHubPlanLegacy => 'Premium · Premier soutien';
+
+  @override
+  String get premiumHubRenews => 'Prochain renouvellement';
+
+  @override
+  String get premiumHubPayment => 'Paiement';
+
+  @override
+  String get premiumHubOneTime => 'paiement unique';
+
+  @override
+  String get premiumHubManage => 'Gérer l’abonnement';
+
+  @override
+  String get premiumHubFramesCovers => 'CADRES ET COUVERTURES';
+
+  @override
+  String get premiumHubAll => 'Tout';
+
+  @override
+  String get premiumHubFramesNote => 'Certains cadres et couvertures sont gratuits. Premium débloque le reste.';
+
+  @override
+  String get premiumHubGroupProfile => 'PROFIL';
+
+  @override
+  String get premiumHubGroupChats => 'CHATS ET STYLE';
+
+  @override
+  String get premiumHubGroupFeatures => 'FONCTIONS';
+
+  @override
+  String get premiumHubStatusName => 'Statut emoji';
+
+  @override
+  String get premiumHubStatusDesc => 'Un emoji à côté de votre nom dans les chats et le profil';
+
+  @override
+  String get premiumHubBadgeName => 'Badge Premium';
+
+  @override
+  String get premiumHubBadgeDesc => 'Une marque Premium à côté de votre nom';
+
+  @override
+  String get premiumHubVideoName => 'Avatar vidéo';
+
+  @override
+  String get premiumHubVideoDesc => 'Une courte vidéo au lieu d’une photo';
+
+  @override
+  String get premiumHubCoverName => 'Couverture personnalisée';
+
+  @override
+  String get premiumHubCoverDesc => 'Une photo ou vidéo en couverture du profil';
+
+  @override
+  String get premiumHubWallpaperName => 'Fonds animés';
+
+  @override
+  String get premiumHubWallpaperDesc => 'Fonds animés et thèmes premium';
+
+  @override
+  String get premiumHubStickersName => 'Stickers premium';
+
+  @override
+  String get premiumHubStickersDesc => 'Packs de stickers premium';
+
+  @override
+  String get premiumHubAppIconName => 'Icône de l’app';
+
+  @override
+  String get premiumHubAppIconDesc => 'Icônes premium sur l’écran d’accueil';
+
+  @override
+  String get premiumHubRingtonesName => 'Sonneries';
+
+  @override
+  String get premiumHubRingtonesDesc => 'Vos propres sons d’appel et de message';
+
+  @override
+  String get premiumHubVoiceName => 'IA : voix en texte';
+
+  @override
+  String get premiumHubVoiceDesc => 'Transcription des vocaux directement sur l’appareil';
+
+  @override
+  String get premiumHubVoiceSample => 'Je serai là à 7 h';
+
+  @override
+  String get premiumHubDevicesName => 'Plusieurs appareils';
+
+  @override
+  String get premiumHubDevicesDesc => 'Secretly sur votre ordinateur et d’autres appareils';
+
+  @override
+  String premiumHubFilesName(String size) {
+    return 'Fichiers jusqu’à $size';
+  }
+
+  @override
+  String premiumHubFilesDesc(String size) {
+    return 'Au lieu de $size avec l’offre gratuite';
+  }
+
+  @override
+  String premiumHubCallsName(int count) {
+    return 'Appels jusqu’à $count personnes';
+  }
+
+  @override
+  String premiumHubCallsDesc(int count) {
+    return 'Au lieu de $count avec l’offre gratuite';
+  }
+
+  @override
+  String get premiumHubGroupsName => 'Plus de groupes et salons à vous';
+
+  @override
+  String premiumHubGroupsDesc(int premium, int free) {
+    return 'Jusqu’à $premium au lieu de $free, sans limite pour rejoindre';
+  }
+
+  @override
+  String get premiumHubLimits => 'LIMITES : FREE ET PREMIUM';
+
+  @override
+  String get premiumHubColFree => 'Free';
+
+  @override
+  String get premiumHubColPremium => 'Premium';
+
+  @override
+  String get premiumHubLimitFiles => 'Fichiers';
+
+  @override
+  String get premiumHubLimitCalls => 'Participants à un appel';
+
+  @override
+  String get premiumHubLimitOwnGroups => 'Vos groupes et salons';
+
+  @override
+  String get premiumHubLimitJoinedGroups => 'Groupes dont vous êtes membre';
+
+  @override
+  String get premiumHubLimitDevices => 'Appareils';
+
+  @override
+  String get premiumHubLimitCosmetics => 'Cadres et couvertures';
+
+  @override
+  String get premiumHubUnlimited => 'illimité';
+
+  @override
+  String get premiumHubSeveral => 'plusieurs';
+
+  @override
+  String get premiumHubSome => 'une partie';
+
+  @override
+  String get premiumHubAllValue => 'tous';
+
+  @override
+  String get premiumHubSoon => 'BIENTÔT DANS PREMIUM';
+
+  @override
+  String get premiumHubSoonChip => 'Bientôt';
+
+  @override
+  String get premiumHubSoonSpaces => 'Spaces : chaînes et communautés';
+
+  @override
+  String get premiumHubSoonStickers => 'Vos propres packs de stickers';
+
+  @override
+  String get premiumHubSoonStories => 'Stories éphémères';
+
+  @override
+  String get premiumHubSoonWatch => 'Regarder des vidéos ensemble en appel';
+
+  @override
+  String get premiumHubSoonHd => 'Appels vidéo HD et suppression du bruit';
+
+  @override
+  String get premiumHubGet => 'Obtenir Premium';
+
+  @override
+  String premiumHubSizeMb(int n) {
+    return '$n Mo';
+  }
+
+  @override
+  String premiumHubSizeGb(int n) {
+    return '$n Go';
+  }
+
+  @override
+  String get premiumHubLogoHint => 'Logo Secretly en lucioles. Faites glisser pour l’incliner.';
+
+  @override
+  String get translucentCardsTitle => 'Cartes translucides';
+
+  @override
+  String get translucentCardsSubtitle => 'Les cartes des réglages, profils et fenêtres laissent voir l’arrière-plan. Désactivez pour des cartes opaques.';
+
+  @override
+  String get teamCoversTitle => 'Équipe Secretly';
+
+  @override
+  String get teamCoversSubtitle => 'Couvertures privées. Absentes du catalogue : seule l’équipe peut les choisir, et tout le monde les voit sur votre profil.';
+
+  @override
+  String get settingsStyleSection => 'Style';
+
+  @override
+  String get whatsNewTitle => 'Découvrez Secretly 1.9';
+
+  @override
+  String get whatsNewSubtitle => 'Plus rapide, plus discret et encore plus professionnel.';
+
+  @override
+  String get whatsNewOpen => 'Nouveautés';
+
+  @override
+  String get whatsNewLater => 'Plus tard';
+
+  @override
+  String get whatsNewHeader => 'Nouveautés de la 1.9';
+
+  @override
+  String get whatsNewNext => 'Suivant';
+
+  @override
+  String get whatsNewStart => 'Commencer';
+
+  @override
+  String get whatsNewClose => 'Fermer';
+
+  @override
+  String get whatsNewCard1Title => 'Directement depuis la notification';
+
+  @override
+  String get whatsNewCard1Body => 'Touchez une notification : la discussion s’ouvre au premier message non lu.';
+
+  @override
+  String get whatsNewCard2Title => 'Un nouveau look';
+
+  @override
+  String get whatsNewCard2Body => 'Îlots, panneaux et barre de dossiers : plus calme et plus net.';
+
+  @override
+  String get whatsNewCard3Title => 'Votre style';
+
+  @override
+  String get whatsNewCard3Body => 'Thème, fond, bulles et icône : tout est dans « Style ».';
+
+  @override
+  String get whatsNewCard4Title => 'Un profil vivant';
+
+  @override
+  String get whatsNewCard4Body => 'Couvertures et cadres animés, et un seul geste pour entrer dans le profil.';
+
+  @override
+  String get whatsNewCard5Title => 'Messages';
+
+  @override
+  String get whatsNewCard5Body => 'Nouveau champ de saisie, emoji, messages vocaux et vidéo, éditeur photo.';
+
+  @override
+  String get whatsNewCard6Title => 'Émotions';
+
+  @override
+  String get whatsNewCard6Body => 'Des réactions qui s’envolent et 63 emoji avec effet plein écran.';
+
+  @override
+  String get whatsNewDemoSender => 'Alice';
+
+  @override
+  String get whatsNewDemoMessage => 'Tu peux regarder ce soir ?';
+
+  @override
+  String get whatsNewDemoNow => 'maintenant';
+
+  @override
+  String get whatsNewSettingsRow => 'Nouveautés de la 1.9';
+
+  @override
+  String get penHintSearch => 'Recherche par pseudo et contacts';
+
+  @override
+  String get penHintStyle => 'Thème, fond, bulles, icône';
+
+  @override
+  String get penHintPanels => 'Transparent ou opaque';
+
+  @override
+  String get penHintCovers => 'Couvertures animées';
+
+  @override
+  String get penHintEmoji => 'Emoji, stickers, GIF';
+
+  @override
+  String get penHintReactions => 'Appui long pour réagir';
 }

@@ -6,6 +6,8 @@
 //
 // Отдельно от `live_frames.dart` по той же причине, по какой рамки отделены от
 // атласа: здесь другой предмет. Общее — только правило про тикер.
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../thermal_guard.dart';
@@ -86,6 +88,20 @@ const Map<String, fx.ProfileCoverStyle> kLiveCoverKinds =
 List<String> get kLiveCoverIds => kLiveCoverKinds.keys.toList(growable: false);
 
 bool isLiveCoverId(String? id) => id != null && kLiveCoverKinds.containsKey(id);
+
+/// Ночная живая обложка: тёмная в любой теме (`ProfileCoverStyle.isNightScene`).
+bool coverIsNightScene(String? id) =>
+    id != null && (kLiveCoverKinds[id]?.isNightScene ?? false);
+
+/// Высота перехода обложки в страницу: у ночной сцены в светлой теме —
+/// не больше 24 pt (дизайн 24.11.2026).
+double coverBottomFadeHeight(
+  Brightness brightness,
+  String? coverId, [
+  double fade = 56,
+]) => brightness == Brightness.light && coverIsNightScene(coverId)
+    ? math.min(fade, 24.0)
+    : fade;
 
 /// Сцена построена ВОКРУГ фотографии: портрет в ней — луна, камень, предмет
 /// под прожектором. Такой сцене нужно знать, где стоит аватар.
@@ -192,15 +208,29 @@ class LiveCoverView extends StatelessWidget {
 /// Ширина перехода задана в ТОЧКАХ, а не долей высоты: обложки бывают разной
 /// высоты, а переход должен выглядеть одинаково — мягким, но коротким.
 class CoverBottomFade extends StatelessWidget {
-  const CoverBottomFade({super.key, required this.child, this.fade = 56});
+  const CoverBottomFade({
+    super.key,
+    required this.child,
+    this.fade = 56,
+    this.coverId,
+  });
 
   final Widget child;
 
   /// Высота перехода в логических точках.
   final double fade;
 
+  /// Обложка под переходом. Ночная сцена (космос, салют, гроза…) остаётся
+  /// тёмной и в светлой теме — её длинный переход в светлую страницу шёл
+  /// серой полосой, поэтому там он короче (24 pt, дизайн 24.11.2026).
+  final String? coverId;
+
   @override
-  Widget build(BuildContext context) => ShaderMask(
+  Widget build(BuildContext context) => _fade(
+    coverBottomFadeHeight(Theme.of(context).brightness, coverId, fade),
+  );
+
+  Widget _fade(double fade) => ShaderMask(
     blendMode: BlendMode.dstIn,
     shaderCallback: (bounds) {
       final h = bounds.height <= 0 ? 1.0 : bounds.height;

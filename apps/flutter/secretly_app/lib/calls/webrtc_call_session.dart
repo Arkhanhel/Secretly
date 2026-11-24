@@ -265,6 +265,14 @@ class WebRtcCallSession {
   bool _isVideoEnabled = false;
   bool _expectsRemoteVideo = false;
   bool _speakerEnabled = false;
+
+  /// 🔴 ГРОМКАЯ — ПОСЛЕ СОЕДИНЕНИЯ (21.11.2026, «сразу видеозвонок — никого
+  /// не слышно»). Владелец звонка ([CallManager]) ставит `true`: тогда
+  /// [startOutgoing]/[startIncomingFromOffer] НЕ включают громкую сами, до
+  /// того как система подняла звук звонка. Громкую включает менеджер, когда
+  /// звонок соединился — тем же путём, что и рабочий переход
+  /// «голосовой → видео». Без владельца (старые места) — прежнее поведение.
+  bool speakerOwnedByManager = false;
   bool _remoteDescriptionSet = false;
   bool _hasRemoteVideoTrack = false;
   bool _remoteRendererHasVisibleFrame = false;
@@ -681,8 +689,10 @@ class WebRtcCallSession {
       onOffer: onOffer,
       iceRestart: false,
     );
-    _speakerEnabled = video;
-    await _applySpeakerRoute();
+    if (!speakerOwnedByManager) {
+      _speakerEnabled = video;
+      await _applySpeakerRoute();
+    }
   }
 
   Future<void> startIncomingFromOffer({
@@ -790,8 +800,10 @@ class WebRtcCallSession {
         answer.sdp ??
         '';
     callLog('WebRTC', 'local description set (answer)');
-    _speakerEnabled = video || remoteOffersSendingVideo;
-    await _applySpeakerRoute();
+    if (!speakerOwnedByManager) {
+      _speakerEnabled = video || remoteOffersSendingVideo;
+      await _applySpeakerRoute();
+    }
     await onAnswer(answerSdp);
     callLog('WebRTC', '[OP] event=incoming_offer_processing_done');
     callLog('WebRTC', 'startIncomingFromOffer done');
@@ -1060,10 +1072,20 @@ class WebRtcCallSession {
     //     renegotiation), _expectsRemoteVideo=true + !_rendererHasRemoteVideo()
     //     will trigger the recovery below, finding the track via the transceiver
     //     receiver path.
-    if (!_expectsRemoteVideo &&
+    final answerSendsVideo =
         hasVideoMLine &&
-        remoteDescriptionRequestsSendingVideo(normalizedAnswerSdp)) {
+        remoteDescriptionRequestsSendingVideo(normalizedAnswerSdp);
+    if (!_expectsRemoteVideo && answerSendsVideo) {
       _setRemoteVideoExpectation(true);
+    } else if (_expectsRemoteVideo && !answerSendsVideo) {
+      // 🔴 21.11.2026: видеозвонок сразу — собеседник принимает с выключенной
+      // камерой (ответ «только принимаю видео»). Ждать его видео было нечего:
+      // через 3 с «нет кадров» запускало лестницу восстановления (повторная
+      // привязка → перезапуск ICE → переподключение → обрыв), а каждый
+      // перезапуск ещё и дёргал звук. Включит камеру — придёт новое
+      // предложение, и ожидание выставится там.
+      callLog('WebRTC', '[OP] event=remote_answer_no_video_expected');
+      _setRemoteVideoExpectation(false);
     }
 
     if (_expectsRemoteVideo && !_rendererHasRemoteVideo()) {
@@ -2908,6 +2930,54 @@ class WebRtcCallSession {
       currentPreset: _videoPreset,
       consecutivePoorSamples: _consecutivePoorVideoSamples,
     );
+  }
+
+  /// Громкость собеседника 0…1 — для кольца «говорит» на экране звонка.
+  /// Только чтение статистики: на звук и соединение не влияет.
+  Future<double?> sampleRemoteAudioLevel() async {
+    final pc = _peerConnection;
+    if (pc == null) return null;
+    try {
+      final dynamic dynPc = pc;
+      final dynamic reports = await dynPc.getStats();
+      if (reports is! Iterable) return null;
+      for (final report in reports) {
+        if (_reportType(report) != 'inbound-rtp') continue;
+        final values = _extractValuesMap(report);
+        final kind = (values['kind'] ?? values['mediaType'] ?? '')
+            .toString()
+            .toLowerCase();
+        if (kind != 'audio') continue;
+        final level = _toDouble(values['audioLevel']);
+        if (level != null) return level.clamp(0.0, 1.0).toDouble();
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// Отпечатки шифрования обеих сторон (DTLS, из описаний соединения),
+  /// упорядоченные — у обоих собеседников одинаковые. Основа «ключа звонка»:
+  /// подменённое по пути соединение даёт другие отпечатки и другие знаки.
+  Future<List<String>?> mediaFingerprints() async {
+    final pc = _peerConnection;
+    if (pc == null) return null;
+    String? fingerprintOf(String? sdp) {
+      if (sdp == null) return null;
+      final m = RegExp(
+        r'a=fingerprint:(\S+)\s+([0-9A-Fa-f:]+)',
+      ).firstMatch(sdp);
+      if (m == null) return null;
+      return '${m.group(1)!.toLowerCase()} ${m.group(2)!.toUpperCase()}';
+    }
+
+    try {
+      final local = fingerprintOf((await pc.getLocalDescription())?.sdp);
+      final remote = fingerprintOf((await pc.getRemoteDescription())?.sdp);
+      if (local == null || remote == null) return null;
+      return [local, remote]..sort();
+    } catch (_) {
+      return null;
+    }
   }
 
   bool _isVideoStats(Map<String, dynamic> values) {

@@ -3,16 +3,20 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/app_controller.dart';
+import '../../l10n/app_localizations.dart';
 import '../../billing/show_paywall.dart';
 import '../../entitlements/cosmetic_catalog.dart';
+import '../motion/app_dialogs.dart';
 import '../paywall_screen.dart' show PaywallTrigger;
 import '../wave1_l10n.dart';
 import '../widgets/secretly_glass_sheet.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// One selectable launcher-icon style. [key] is the cross-platform identifier:
 ///  • iOS  → resolves to the `AltIcon{Key}` asset-catalog set
@@ -32,6 +36,7 @@ const List<AppIconOption> kAppIconOptions = <AppIconOption>[
   AppIconOption('sunset', 'assets/app_icons/sunset.png'),
   AppIconOption('emerald', 'assets/app_icons/emerald.png'),
   AppIconOption('graphite', 'assets/app_icons/graphite.png'),
+  AppIconOption('light', 'assets/app_icons/light.png'),
 ];
 
 /// Thin wrapper over the `secretly/app_icon` MethodChannel (AppDelegate.swift /
@@ -46,7 +51,15 @@ class AppIconService {
   /// safe-backup restore. Must match the key used by the backup collector.
   static const String prefsIconKey = 'secretly_app_icon_key_v1';
 
-  static bool get isSupportedPlatform => Platform.isIOS || Platform.isAndroid;
+  // `defaultTargetPlatform`, а не `dart:io`: в приложении это одно и то же,
+  // а тесты могут нарисовать экран выбора в виде телефона.
+  static bool get isSupportedPlatform =>
+      defaultTargetPlatform == TargetPlatform.iOS ||
+      defaultTargetPlatform == TargetPlatform.android;
+
+  /// Значок, стоящий сейчас, — для превью «главного экрана» в «Оформлении»,
+  /// чтобы оно менялось вместе с выбором, где бы его ни сделали.
+  static final ValueNotifier<String> current = ValueNotifier<String>('default');
 
   static String _capitalise(String s) =>
       s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
@@ -62,6 +75,12 @@ class AppIconService {
   }
 
   static Future<String> currentIconKey() async {
+    final key = await _readCurrentIconKey();
+    current.value = key;
+    return key;
+  }
+
+  static Future<String> _readCurrentIconKey() async {
     if (!isSupportedPlatform) return 'default';
     try {
       final value =
@@ -73,7 +92,7 @@ class AppIconService {
         return await _savedIconKeyOrDefault();
       }
       String key;
-      if (Platform.isIOS) {
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
         // 'AltIconMidnight' -> 'midnight'
         final stripped = value.startsWith('AltIcon')
             ? value.substring(7)
@@ -109,18 +128,27 @@ class AppIconService {
     final String? name;
     if (key == 'default') {
       name = null; // revert to the primary icon
-    } else if (Platform.isIOS) {
+    } else if (defaultTargetPlatform == TargetPlatform.iOS) {
       name = 'AltIcon${_capitalise(key)}';
     } else {
       name = key;
     }
+    // iPhone иногда отвечает отказом, если вызвать во время смены экрана
+    // (лист ещё анимируется), а ответ системы может не прийти вовсе — одна
+    // повторная попытка и предел ожидания (22.11.2026).
+    Future<bool> attempt() async =>
+        (await _channel
+            .invokeMethod<bool>('setAlternateIcon', {'name': name})
+            .timeout(const Duration(seconds: 8))) ??
+        false;
     try {
-      final ok =
-          (await _channel.invokeMethod<bool>('setAlternateIcon', {
-            'name': name,
-          })) ??
-          false;
+      var ok = await attempt();
+      if (!ok && defaultTargetPlatform == TargetPlatform.iOS) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        ok = await attempt();
+      }
       if (ok) {
+        current.value = key;
         // Persist so the choice survives a safe-backup restore. Best-effort:
         // a launcher icon is cosmetic and never security-critical.
         try {
@@ -146,6 +174,7 @@ Future<void> showAppIconPicker(
 ) async {
   if (!AppIconService.isSupportedPlatform) return;
   await showModalBottomSheet<void>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -196,6 +225,7 @@ class _AppIconCarouselState extends State<AppIconCarousel> {
       _busy = false;
       if (ok) _current = option.key;
     });
+    if (!ok) _showIconFailed(context);
   }
 
   @override
@@ -220,6 +250,72 @@ class _AppIconCarouselState extends State<AppIconCarousel> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Сетка значков приложения в три колонки — вкладка «Значок» экрана
+/// «Оформление». Логика выбора та же, что у ленты [AppIconCarousel]:
+/// стандартный значок доступен всегда, остальные — с Premium.
+class AppIconGrid extends StatefulWidget {
+  const AppIconGrid({super.key, required this.controller});
+  final AppController controller;
+
+  @override
+  State<AppIconGrid> createState() => _AppIconGridState();
+}
+
+class _AppIconGridState extends State<AppIconGrid> {
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    AppIconService.currentIconKey();
+  }
+
+  bool get _unlocked => isCosmeticAllowed(
+    widget.controller.entitlementStateNow,
+    CosmeticKind.avatarFrame,
+    'x',
+  );
+
+  Future<void> _select(AppIconOption option) async {
+    if (_busy || option.key == AppIconService.current.value) return;
+    if (option.key != 'default' && !_unlocked) {
+      await showPaywall(context, PaywallTrigger.cosmetic);
+      if (!mounted || !_unlocked) return;
+    }
+    setState(() => _busy = true);
+    final ok = await AppIconService.setIcon(option.key);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (!ok) _showIconFailed(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<String>(
+      valueListenable: AppIconService.current,
+      builder: (context, current, _) => GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: EdgeInsets.zero,
+        crossAxisCount: 3,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 0.78,
+        children: [
+          for (final option in kAppIconOptions)
+            _AppIconTile(
+              option: option,
+              selected: option.key == current,
+              locked: option.key != 'default' && !_unlocked,
+              label: _labelFor(context, option.key),
+              onTap: _busy ? null : () => _select(option),
+            ),
+        ],
       ),
     );
   }
@@ -265,6 +361,7 @@ class _AppIconPickerSheetState extends State<_AppIconPickerSheet> {
       _busy = false;
       if (ok) _current = option.key;
     });
+    if (!ok) _showIconFailed(context);
   }
 
   @override
@@ -339,7 +436,7 @@ class _AppIconPickerSheetState extends State<_AppIconPickerSheet> {
                   Row(
                     children: [
                       Icon(
-                        Icons.info_outline_rounded,
+                        AdaptiveIcons.info_outline_rounded,
                         size: 15,
                         color: cs.onSurfaceVariant,
                       ),
@@ -447,6 +544,18 @@ String _labelFor(BuildContext context, String key) {
         fr: 'Graphite',
         de: 'Graphit',
       );
+    case 'light':
+      return wave1Text(
+        context,
+        ru: 'Светлая',
+        en: 'Light',
+        uk: 'Світла',
+        es: 'Clara',
+        pt: 'Clara',
+        ptBr: 'Clara',
+        fr: 'Claire',
+        de: 'Hell',
+      );
     default:
       return key;
   }
@@ -518,7 +627,7 @@ class _AppIconTile extends StatelessWidget {
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
-                        Icons.check_rounded,
+                        AdaptiveIcons.check_rounded,
                         size: 14,
                         color: Colors.black,
                       ),
@@ -535,7 +644,7 @@ class _AppIconTile extends StatelessWidget {
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
-                        Icons.lock_rounded,
+                        AdaptiveIcons.lock_rounded,
                         size: 13,
                         color: gold,
                       ),
@@ -561,3 +670,14 @@ class _AppIconTile extends StatelessWidget {
     );
   }
 }
+
+/// Система не сменила значок — сказать, а не молчать (раньше выбор просто
+/// не менялся, и было непонятно, что произошло).
+void _showIconFailed(BuildContext context) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) return;
+  messenger.showSnackBar(
+    SnackBar(content: Text(AppLocalizations.of(context)!.appIconChangeFailed)),
+  );
+}
+

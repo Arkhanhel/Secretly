@@ -11,6 +11,7 @@ import '../app/app_controller.dart';
 import '../models/e2e_payload_v1.dart';
 import '../rooms/room_call_state.dart';
 import 'app_asset_paths.dart';
+import 'motion/motion.dart';
 import 'window_title.dart';
 import 'chat_screen.dart';
 import 'contact_details_screen.dart';
@@ -624,7 +625,7 @@ class _DesktopChatsWorkspaceState extends State<DesktopChatsWorkspace> {
                             width: listWidth,
                             child: AnimatedSwitcher(
                               duration: const Duration(milliseconds: 280),
-                              switchInCurve: Curves.easeOutCubic,
+                              switchInCurve: Motion.standard,
                               switchOutCurve: Curves.easeInCubic,
                               transitionBuilder: (child, animation) {
                                 final slide = Tween<Offset>(
@@ -796,7 +797,7 @@ class _DesktopChatsWorkspaceState extends State<DesktopChatsWorkspace> {
                                         duration: const Duration(
                                           milliseconds: 220,
                                         ),
-                                        switchInCurve: Curves.easeOutCubic,
+                                        switchInCurve: Motion.standard,
                                         switchOutCurve: Curves.easeInCubic,
                                         transitionBuilder: (child, animation) =>
                                             FadeTransition(
@@ -1211,7 +1212,7 @@ class _FilterChip extends StatelessWidget {
             onTap: onTap,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
+              curve: Motion.standard,
               constraints: const BoxConstraints(minHeight: _kFilterChipH),
               padding: const EdgeInsets.symmetric(horizontal: _kChipHPad),
               alignment: Alignment.center,
@@ -1493,7 +1494,7 @@ class _DesktopChatListItemState extends State<_DesktopChatListItem> {
           onSecondaryTapUp: (d) => _showContextMenu(context, d.globalPosition),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 140),
-            curve: Curves.easeOutCubic,
+            curve: Motion.standard,
             decoration: BoxDecoration(
               color: widget.selected
                   ? cs.primaryContainer.withValues(alpha: 0.44)
@@ -2839,7 +2840,7 @@ class _VerticalResizeHandleState extends State<_VerticalResizeHandle> {
           child: Center(
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
-              curve: Curves.easeOutCubic,
+              curve: Motion.standard,
               width: _hovered ? 3 : 2,
               height: _hovered ? 52 : 32,
               decoration: BoxDecoration(
@@ -3080,7 +3081,7 @@ class _QuickSwitcherDialogState extends State<_QuickSwitcherDialog> {
     _scroll.animateTo(
       offset,
       duration: const Duration(milliseconds: 120),
-      curve: Curves.easeOut,
+      curve: Motion.fade,
     );
   }
 
@@ -3723,11 +3724,11 @@ class _DesktopModalShellState extends State<_DesktopModalShell>
     _scale = Tween<double>(
       begin: 0.93,
       end: 1.0,
-    ).animate(CurvedAnimation(parent: _ac, curve: Curves.easeOutCubic));
+    ).animate(CurvedAnimation(parent: _ac, curve: Motion.standard));
     _fade = Tween<double>(
       begin: 0.0,
       end: 1.0,
-    ).animate(CurvedAnimation(parent: _ac, curve: Curves.easeOut));
+    ).animate(CurvedAnimation(parent: _ac, curve: Motion.fade));
     _ac.forward();
   }
 
@@ -3983,7 +3984,7 @@ class _DesktopSearchBarState extends State<_DesktopSearchBar> {
     final cs = Theme.of(context).colorScheme;
     return AnimatedContainer(
       duration: const Duration(milliseconds: 170),
-      curve: Curves.easeOutCubic,
+      curve: Motion.standard,
       height: _kSearchHeight,
       decoration: BoxDecoration(
         color: cs.surfaceContainerHighest.withValues(

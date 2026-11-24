@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../transport/response_signature.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Б3 Э2 (25.10.2026): ответ сервера с ключами или составом не прошёл
 /// проверку подписи, а отказ на этом устройстве включён
@@ -44,7 +45,7 @@ class ServerAuthAlertBanner extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.gpp_maybe_rounded, color: fg, size: compact ? 18 : 24),
+                    Icon(AdaptiveIcons.gpp_maybe_rounded, color: fg, size: compact ? 18 : 24),
                     SizedBox(width: compact ? 8 : 10),
                     Expanded(
                       child: Column(

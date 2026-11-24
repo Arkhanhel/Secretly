@@ -161,7 +161,7 @@ packages:
     source: hosted
     version: "1.4.1"
   clock:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: clock
       sha256: fddb70d9b5277016c77a80201021d40a2247104d9f4aa7bab7157b7e3f05b84b
@@ -1114,7 +1114,7 @@ packages:
     source: hosted
     version: "1.9.1"
   path_parsing:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: path_parsing
       sha256: "883402936929eac138ee0a45da5b0f2c80f89913e6dc3bf77eb65b84b409c6ca"
@@ -1242,7 +1242,7 @@ packages:
     source: hosted
     version: "3.1.6"
   plugin_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: plugin_platform_interface
       sha256: "4820fbfdb9478b1ebae27888254d445073732dae3d6ea81f0b7e06d5dedc3f02"
@@ -1813,7 +1813,7 @@ packages:
     source: hosted
     version: "2.9.3"
   video_player_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: video_player_platform_interface
       sha256: "57c5d73173f76d801129d0531c2774052c5a7c11ccb962f1830630decd9f24ec"

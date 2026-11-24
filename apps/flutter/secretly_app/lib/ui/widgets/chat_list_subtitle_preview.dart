@@ -6,6 +6,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../app/app_controller.dart';
+import '../../messages/message_delivery_state.dart';
+import '../chat/chat_list_row_parts.dart';
 import '../icons/app_icons.dart';
 import '../wave1_l10n.dart';
 import 'broken_media_box.dart';
@@ -17,12 +19,22 @@ class ChatListSubtitlePreview extends StatefulWidget {
     required this.convoId,
     required this.previewVersion,
     required this.subtitleFallback,
+    this.rowV2 = false,
+    this.unreadCount = 0,
   });
 
   final AppController controller;
   final String convoId;
   final int previewVersion;
   final String subtitleFallback;
+
+  /// Строка по макету 3b (22.11.2026): 14,5, светлее при новом, галочки в
+  /// начале своего последнего сообщения, квадратная миниатюра фото.
+  /// `false` — прежний вид.
+  final bool rowV2;
+
+  /// Непрочитанные строки: при них превью светлее и без галочек.
+  final int unreadCount;
 
   @override
   State<ChatListSubtitlePreview> createState() =>
@@ -153,6 +165,104 @@ class _ChatListSubtitlePreviewState extends State<ChatListSubtitlePreview> {
     }
   }
 
+  /// Галочка своего последнего сообщения (только без непрочитанных: иначе
+  /// последним писал не ты).
+  ChatListTick _tickFor(ChatListPreview p) {
+    if (widget.unreadCount > 0) return ChatListTick.none;
+    final dev = (p.senderDeviceId ?? '').trim();
+    if (dev.isEmpty || !widget.controller.isOwnDeviceId(dev)) {
+      return ChatListTick.none;
+    }
+    final st = MessageLocalState.normalize(p.senderLocalState ?? '');
+    switch (st) {
+      case MessageLocalState.read:
+        return ChatListTick.read;
+      case MessageLocalState.delivered:
+      case MessageLocalState.deliveredToAnyDevice:
+      case MessageLocalState.deliveredToAllKnownDevices:
+        return ChatListTick.delivered;
+      case MessageLocalState.sent:
+      case MessageLocalState.sentToServer:
+      case MessageLocalState.queuedRemote:
+        return ChatListTick.sent;
+      default:
+        return ChatListTick.none;
+    }
+  }
+
+  Widget _buildV2(BuildContext context, ChatListPreview? preview) {
+    final c = chatListColors(context);
+    final unread = widget.unreadCount > 0;
+    final textStyle = TextStyle(
+      fontSize: 14.5,
+      color: unread ? c.previewOn : c.previewOff,
+    );
+    if (preview == null || preview.kind == ChatListPreviewKind.empty) {
+      return Text(
+        widget.subtitleFallback,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: textStyle,
+      );
+    }
+    final label = _formatLabel(context, preview);
+    final text = label.isNotEmpty ? label : widget.subtitleFallback;
+    final sn = (preview.senderName ?? '').trim();
+    final isRoom = widget.convoId.startsWith('group:');
+    final tick = _tickFor(preview);
+    Widget? leading;
+    if (preview.kind == ChatListPreviewKind.photo &&
+        preview.imageBlobIds.isNotEmpty) {
+      leading = _PhotoMiniCircle(
+        controller: widget.controller,
+        blobId: preview.imageBlobIds.first,
+        size: 18,
+        square: true,
+      );
+    } else if (preview.kind != ChatListPreviewKind.text) {
+      leading = Icon(
+        switch (preview.kind) {
+          ChatListPreviewKind.voice => AppIcons.mic,
+          ChatListPreviewKind.music => AppIcons.musicNote,
+          ChatListPreviewKind.file => AppIcons.fileOutline,
+          ChatListPreviewKind.photo => AppIcons.photo,
+          _ => AppIcons.attach,
+        },
+        size: 16,
+        color: c.accent,
+      );
+    }
+    return Row(
+      children: [
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          child: ChatListTickGlyph(key: ValueKey(tick), tick: tick),
+        ),
+        if (leading != null) ...[leading, const SizedBox(width: 4)],
+        Expanded(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                if (isRoom && sn.isNotEmpty)
+                  TextSpan(
+                    text: '$sn: ',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: unread ? c.name : c.previewOn,
+                    ),
+                  ),
+                TextSpan(text: text),
+              ],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: textStyle,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<ChatListPreview>(
@@ -160,6 +270,7 @@ class _ChatListSubtitlePreviewState extends State<ChatListSubtitlePreview> {
       initialData: _preview,
       builder: (context, snap) {
         final preview = snap.data;
+        if (widget.rowV2) return _buildV2(context, preview);
         final subStyle = TextStyle(
           fontSize: 14,
           color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -312,11 +423,15 @@ class _PhotoMiniCircle extends StatefulWidget {
     required this.controller,
     required this.blobId,
     required this.size,
+    this.square = false,
   });
 
   final AppController controller;
   final String blobId;
   final double size;
+
+  /// Макет 3b: квадрат со скруглением 5 вместо кружка.
+  final bool square;
 
   @override
   State<_PhotoMiniCircle> createState() => _PhotoMiniCircleState();
@@ -365,14 +480,18 @@ class _PhotoMiniCircleState extends State<_PhotoMiniCircle> {
       height: widget.size,
       padding: const EdgeInsets.all(0.45),
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
+        shape: widget.square ? BoxShape.rectangle : BoxShape.circle,
+        borderRadius: widget.square ? BorderRadius.circular(5) : null,
         color: cs.surface.withValues(alpha: 0.96),
         border: Border.all(
           color: cs.outlineVariant.withValues(alpha: 0.42),
           width: 0.5,
         ),
       ),
-      child: ClipOval(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(
+          widget.square ? 4.5 : widget.size / 2,
+        ),
         child: FutureBuilder<File?>(
           future: _future,
           initialData: _file,

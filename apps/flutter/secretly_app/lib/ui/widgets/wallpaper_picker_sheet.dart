@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 
 import '../chat_wallpapers.dart';
 import '../icons/app_icons.dart';
+import '../motion/app_dialogs.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
 
 /// Telegram-style wallpaper picker: a tall, draggable, scrollable grid sheet.
 ///
@@ -27,6 +30,7 @@ Future<String?> showWallpaperPickerSheet(
   Future<String?> Function(BuildContext ctx, String id)? onAnimatedUnlockedTap,
 }) {
   return showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
@@ -42,7 +46,10 @@ Future<String?> showWallpaperPickerSheet(
           return ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             child: Material(
-              color: cs.surface.withValues(alpha: 0.98),
+              color: appleSheetFillOr(
+          context,
+          cs.surface.withValues(alpha: 0.98),
+        ),
               child: SafeArea(
                 top: false,
                 child: Column(
@@ -125,7 +132,7 @@ Future<String?> showWallpaperPickerSheet(
                                     top: 8,
                                     left: 8,
                                     child: Icon(
-                                      Icons.lock_outline,
+                                      AdaptiveIcons.lock_outline,
                                       size: 18,
                                       color: Color(0xFFD4A11E),
                                     ),
@@ -154,7 +161,7 @@ Future<String?> showWallpaperPickerSheet(
                                         shape: BoxShape.circle,
                                       ),
                                       child: const Icon(
-                                        Icons.motion_photos_on,
+                                        AdaptiveIcons.motion_photos_on,
                                         size: 15,
                                         color: Colors.white,
                                       ),

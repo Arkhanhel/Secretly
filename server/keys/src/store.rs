@@ -121,6 +121,24 @@ pub(crate) fn device_liveness_window_ms_from_days(days: Option<i64>) -> i64 {
 mod tests {
     use super::*;
 
+    /// 21.11.2026: знак «важного пользователя» — выдача, снятие, чужой профиль.
+    #[tokio::test]
+    async fn profile_badge_is_granted_and_revoked_only_for_known_profiles() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = KeysStore::open(&dir.path().join("keys.db")).await.unwrap();
+        store.insert_profile("P-1", 1_000, None).await.unwrap();
+        assert_eq!(store.profile_badge_get("P-1").await.unwrap(), None);
+        assert!(store.profile_badge_set("P-1", Some("h2".into()), 2_000).await.unwrap());
+        assert_eq!(store.profile_badge_get("P-1").await.unwrap().as_deref(), Some("h2"));
+        // Повтор — та же запись, без ошибок.
+        assert!(store.profile_badge_set("P-1", Some("h2".into()), 3_000).await.unwrap());
+        assert!(store.profile_badge_set("P-1", None, 4_000).await.unwrap());
+        assert_eq!(store.profile_badge_get("P-1").await.unwrap(), None);
+        // Неизвестный профиль — отказ, в таблицу ничего не пишется.
+        assert!(!store.profile_badge_set("P-none", Some("h2".into()), 5_000).await.unwrap());
+        assert_eq!(store.profile_badge_get("P-none").await.unwrap(), None);
+    }
+
     // AUTO-HYGIENE (2026-07-19): the liveness window is sibling-relative and
     // now defaults to 14 days. These pin the two behaviors that must never
     // regress: a rotated/abandoned sibling drops out automatically, and a
@@ -1281,6 +1299,15 @@ CREATE TABLE IF NOT EXISTS entitlements (
 CREATE UNIQUE INDEX IF NOT EXISTS entitlements_store_tx_idx
   ON entitlements(store_tx_id) WHERE store_tx_id IS NOT NULL;
 
+-- 21.11.2026: знак «важного пользователя» (галочка H2). Выдаёт только
+-- оператор (внутренний ключ). Отдельная таблица, а не столбец profile_meta:
+-- profile_meta перезаписывает сам клиент при каждой публикации и стёр бы знак.
+CREATE TABLE IF NOT EXISTS profile_badges (
+    profile_id TEXT PRIMARY KEY,
+    badge TEXT NOT NULL,
+    granted_at_ms INTEGER NOT NULL DEFAULT 0
+);
+
 -- П-5 (25.09.2026): надгробия отвязанных устройств. Новая таблица — только
 -- CREATE IF NOT EXISTS, он выполняется при каждом открытии: и свежая, и
 -- существующая база получают её одинаково.
@@ -1918,6 +1945,67 @@ ON CONFLICT(profile_id) DO UPDATE SET
             .await
             .map_err(|e| e.to_string())?;
         Ok(())
+    }
+
+    /// Знак «важного пользователя» (только оператор). `None` — нет знака.
+    pub async fn profile_badge_get(&self, profile_id: &str) -> Result<Option<String>, String> {
+        let pid = profile_id.to_string();
+        self.conn
+            .call(move |c| -> Result<Option<String>, rusqlite::Error> {
+                c.query_row(
+                    "SELECT badge FROM profile_badges WHERE profile_id = ?1",
+                    params![pid],
+                    |r| r.get(0),
+                )
+                .optional()
+            })
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Выдать (`Some`) или снять (`None`) знак. `false` — профиля нет.
+    /// Заодно двигает `profile_meta.updated_at_ms`, чтобы клиенты приняли и
+    /// снятие (они верят «пустому» только от более свежей записи).
+    pub async fn profile_badge_set(
+        &self,
+        profile_id: &str,
+        badge: Option<String>,
+        now_ms: i64,
+    ) -> Result<bool, String> {
+        let pid = profile_id.to_string();
+        self.conn
+            .call(move |c| -> Result<bool, rusqlite::Error> {
+                let exists: i64 = c.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM profiles WHERE profile_id = ?1)",
+                    params![pid.clone()],
+                    |row| row.get(0),
+                )?;
+                if exists == 0 {
+                    return Ok(false);
+                }
+                match badge {
+                    Some(b) => {
+                        c.execute(
+                            "INSERT INTO profile_badges(profile_id, badge, granted_at_ms) VALUES(?1, ?2, ?3) \
+                             ON CONFLICT(profile_id) DO UPDATE SET badge = excluded.badge, granted_at_ms = excluded.granted_at_ms",
+                            params![pid.clone(), b, now_ms],
+                        )?;
+                    }
+                    None => {
+                        c.execute(
+                            "DELETE FROM profile_badges WHERE profile_id = ?1",
+                            params![pid.clone()],
+                        )?;
+                    }
+                }
+                c.execute(
+                    "UPDATE profile_meta SET updated_at_ms = MAX(updated_at_ms + 1, ?2) WHERE profile_id = ?1",
+                    params![pid, now_ms],
+                )?;
+                Ok(true)
+            })
+            .await
+            .map_err(|e| e.to_string())
     }
 
     pub async fn profile_exists(&self, profile_id: &str) -> Result<bool, String> {

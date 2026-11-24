@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'secretly_snackbar.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Lets the user pan/zoom an image inside a banner-shaped frame and saves the
 /// framed result as a PNG. Returns the saved file path via [Navigator.pop].
@@ -110,7 +111,7 @@ class _CoverCropScreenState extends State<CoverCropScreen> {
                 fit: widget.circle ? BoxFit.contain : BoxFit.cover,
                 errorBuilder: (_, __, ___) => const Center(
                   child: Icon(
-                    Icons.broken_image_outlined,
+                    AdaptiveIcons.broken_image_outlined,
                     color: Colors.white38,
                     size: 40,
                   ),

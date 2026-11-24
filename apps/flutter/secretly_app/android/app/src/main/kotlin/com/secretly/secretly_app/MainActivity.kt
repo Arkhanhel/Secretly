@@ -199,8 +199,16 @@ class MainActivity : FlutterFragmentActivity() {
         "ocean" to "MainActivityOcean",
         "sunset" to "MainActivitySunset",
         "emerald" to "MainActivityEmerald",
-        "graphite" to "MainActivityGraphite"
+        "graphite" to "MainActivityGraphite",
+        "light" to "MainActivityLight"
     )
+
+    // 🔴 22.11.2026: полное имя ярлыка — от пакета КОДА (com.secretly.secretly_app),
+    // а не от applicationId. У тестовой сборки applicationId оканчивается на
+    // «.debug», ярлыков «…debug.MainActivityXxx» нет — смена значка падала
+    // и выбор молча не менялся.
+    private fun iconAliasClass(cls: String): String =
+        "${MainActivity::class.java.name.substringBeforeLast('.')}.$cls"
 
     private fun applyLauncherIcon(rawName: String?) {
         val requested = rawName?.takeIf { it.isNotBlank() } ?: "default"
@@ -208,7 +216,7 @@ class MainActivity : FlutterFragmentActivity() {
         val pm = applicationContext.packageManager
         val pkg = applicationContext.packageName
         for ((key, cls) in iconAliasComponents) {
-            val component = ComponentName(pkg, "$pkg.$cls")
+            val component = ComponentName(pkg, iconAliasClass(cls))
             val newState = if (key == targetKey) {
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED
             } else {
@@ -222,7 +230,7 @@ class MainActivity : FlutterFragmentActivity() {
         val pm = applicationContext.packageManager
         val pkg = applicationContext.packageName
         for ((key, cls) in iconAliasComponents) {
-            val component = ComponentName(pkg, "$pkg.$cls")
+            val component = ComponentName(pkg, iconAliasClass(cls))
             if (pm.getComponentEnabledSetting(component) ==
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED) {
                 return key

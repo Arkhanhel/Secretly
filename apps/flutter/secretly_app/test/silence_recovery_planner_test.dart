@@ -289,6 +289,9 @@ void main() {
 
     test('transient device stubs (dev:) are NEVER eligible', () {
       expect(SilenceRecoveryPlanner.isEligibleConvoId('dev:xyz'), isFalse);
+      // 23.11.2026: демо-собеседника нет на сервере — не восстанавливать.
+      expect(SilenceRecoveryPlanner.isEligibleConvoId('demo:use'), isFalse);
+      expect(SilenceRecoveryPlanner.isEligibleConvoId('UT5ZUIO2'), isTrue);
     });
 
     test('empty / whitespace ids are not eligible', () {

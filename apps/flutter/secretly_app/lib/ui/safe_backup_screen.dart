@@ -17,6 +17,8 @@ import '../security/safe_backup.dart';
 import 'animations/animations.dart';
 import 'icons/app_icons.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'recovery_kit_screen.dart';
 import 'safe_backup_file_io.dart';
 import 'security_lock_flow.dart';
@@ -25,6 +27,9 @@ import 'widgets/frosted_top_bar.dart';
 import 'backup_refusal_text.dart';
 import 'backup_error_text.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
+import 'package:secretly_app/ui/apple_settings_row.dart';
 
 class SafeBackupScreen extends StatefulWidget {
   const SafeBackupScreen({super.key, required this.controller});
@@ -309,7 +314,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     BuildContext context,
     Future<T> Function() action,
   ) async {
-    showDialog<void>(
+    showAppDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (_) => const Center(child: SecretlySpinner()),
@@ -430,7 +435,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
   ) async {
     final l10n = context.l10n;
     final lines = _safeBackupPreviewLines(context, plain);
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (context) {
         return SecretlyAlertDialog(
@@ -493,10 +498,10 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
               onPressed: () => Navigator.of(context).pop(false),
               child: Text(l10n.cancel),
             ),
-            FilledButton(
+            PressFeedback(child: FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
               child: Text(l10n.restore),
-            ),
+            )),
           ],
         );
       },
@@ -580,7 +585,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
   Future<_BackupCreateDestination?> _chooseBackupCreateDestination(
     BuildContext context,
   ) {
-    return showDialog<_BackupCreateDestination>(
+    return showAppDialog<_BackupCreateDestination>(
       context: context,
       builder: (context) => SecretlyAlertDialog(
         title: Text(
@@ -630,7 +635,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
   Future<_BackupRestoreSource?> _chooseBackupRestoreSource(
     BuildContext context,
   ) {
-    return showDialog<_BackupRestoreSource>(
+    return showAppDialog<_BackupRestoreSource>(
       context: context,
       builder: (context) => SecretlyAlertDialog(
         title: Text(
@@ -777,7 +782,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     final candidates = await discoverSafeBackupFilesOnDevice();
     if (!context.mounted) return null;
 
-    final action = await showDialog<Object>(
+    final action = await showAppDialog<Object>(
       context: context,
       builder: (context) {
         return SecretlyAlertDialog(
@@ -883,7 +888,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
 
   Future<int?> _pickFrequency(BuildContext context, int currentFreq) async {
     var selected = currentFreq;
-    return showDialog<int>(
+    return showAppDialog<int>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -923,10 +928,10 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
                   onPressed: () => Navigator.of(context).pop(),
                   child: Text(context.l10n.cancel),
                 ),
-                FilledButton(
+                PressFeedback(child: FilledButton(
                   onPressed: () => Navigator.of(context).pop(selected),
                   child: Text(_label(context, ru: 'Сохранить', en: 'Save')),
-                ),
+                )),
               ],
             );
           },
@@ -973,6 +978,12 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
         );
       }
       children.add(rows[i]);
+    }
+    // iPhone (20.11.2026): группа строк — стеклянная панель Liquid Glass.
+    if (settingsIosLayout) {
+      return AppleGlassPanel(
+        child: Column(mainAxisSize: MainAxisSize.min, children: children),
+      );
     }
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
@@ -1038,7 +1049,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
               Padding(
                 padding: const EdgeInsets.only(left: 4),
                 child: Icon(
-                  Icons.chevron_right_rounded,
+                  AdaptiveIcons.chevron_right_rounded,
                   size: 20,
                   color: cs.onSurface.withValues(alpha: 0.3),
                 ),
@@ -1109,7 +1120,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.lock_reset_rounded, size: 20, color: cs.primary),
+                Icon(AdaptiveIcons.lock_reset_rounded, size: 20, color: cs.primary),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -1152,27 +1163,27 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     final health = controller.safeBackupHealth;
     final (IconData icon, Color tint, String line) = switch (health) {
       SafeBackupHealth.ok => (
-        Icons.cloud_done_rounded,
+        AdaptiveIcons.cloud_done_rounded,
         cs.primary,
         context.l10n.backupStateProtected,
       ),
       SafeBackupHealth.off => (
-        Icons.cloud_off_rounded,
+        AdaptiveIcons.cloud_off_rounded,
         cs.onSurface.withValues(alpha: 0.4),
         context.l10n.backupStateUnprotected,
       ),
       SafeBackupHealth.failing => (
-        Icons.error_outline_rounded,
+        AdaptiveIcons.error_outline_rounded,
         cs.error,
         context.l10n.backupStateFailing,
       ),
       SafeBackupHealth.stale => (
-        Icons.cloud_queue_rounded,
+        AdaptiveIcons.cloud_queue_rounded,
         cs.onSurface.withValues(alpha: 0.55),
         context.l10n.backupStateStale,
       ),
       SafeBackupHealth.pending => (
-        Icons.cloud_queue_rounded,
+        AdaptiveIcons.cloud_queue_rounded,
         cs.onSurface.withValues(alpha: 0.55),
         context.l10n.backupStateNone,
       ),
@@ -1215,10 +1226,10 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
           if (health == SafeBackupHealth.failing &&
               _isPasswordAutoError(controller.safeBackupLastAutoError)) ...[
             const SizedBox(height: 12),
-            FilledButton(
+            PressFeedback(child: FilledButton(
               onPressed: () => _editAutoPassword(context),
               child: Text(context.l10n.desktopBackupSetPassword),
-            ),
+            )),
           ],
         ],
       ),
@@ -1248,7 +1259,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
   /// выключается, иначе следующая же положила бы копию обратно.
   Future<void> _deleteServerBackupFlow(BuildContext context) async {
     final l10n = context.l10n;
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (ctx) => SecretlyAlertDialog(
         title: Text(l10n.backupServerDeleteConfirmTitle),
@@ -1314,6 +1325,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
       (false, true, context.l10n.backupDestDeviceOnly),
     ];
     final picked = await showModalBottomSheet<int>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       showDragHandle: true,
       builder: (sheetContext) => SafeArea(
@@ -1326,7 +1338,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
                 trailing:
                     controller.safeBackupAutoServerEnabled == options[i].$1 &&
                         controller.safeBackupAutoDeviceEnabled == options[i].$2
-                    ? const Icon(Icons.check_rounded)
+                    ? const Icon(AdaptiveIcons.check_rounded)
                     : null,
                 onTap: () => Navigator.of(sheetContext).pop(i),
               ),
@@ -1350,6 +1362,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
 
     if (_passwordSet ?? false) {
       final replace = await showModalBottomSheet<bool>(
+  sheetAnimationStyle: appSheetAnimationStyle,
         context: context,
         showDragHandle: true,
         builder: (sheetContext) => SafeArea(
@@ -1429,7 +1442,9 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final cs = Theme.of(context).colorScheme;
-    return Scaffold(
+    // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
       extendBodyBehindAppBar: true,
       appBar: frostedAppBar(title: Text(l10n.safeBackupTitle)),
       body: StreamBuilder<void>(
@@ -1601,6 +1616,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
           );
         },
       ),
+    ),
     );
   }
 
@@ -1707,7 +1723,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     final f1 = FocusNode();
     final f2 = FocusNode();
 
-    final pw = await showDialog<String>(
+    final pw = await showAppDialog<String>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -1787,12 +1803,12 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
                   onPressed: () => Navigator.of(context).pop(null),
                   child: Text(l10n.cancel),
                 ),
-                FilledButton(
+                PressFeedback(child: FilledButton(
                   onPressed: canSubmit ? submit : null,
                   child: Text(
                     _label(context, ru: 'Продолжить', en: 'Continue'),
                   ),
-                ),
+                )),
               ],
             );
           },
@@ -1822,7 +1838,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     final f1 = FocusNode();
     final f2 = FocusNode();
 
-    final res = await showDialog<({String profileId, String password})>(
+    final res = await showAppDialog<({String profileId, String password})>(
       context: context,
       builder: (context) {
         return SecretlyAlertDialog(
@@ -1864,7 +1880,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
               onPressed: () => Navigator.of(context).pop(null),
               child: Text(l10n.cancel),
             ),
-            FilledButton(
+            PressFeedback(child: FilledButton(
               onPressed: () {
                 final pid = pidC.text.trim();
                 final pw = pwC.text;
@@ -1873,7 +1889,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
                 Navigator.of(context).pop((profileId: pid, password: pw));
               },
               child: Text(l10n.restore),
-            ),
+            )),
           ],
         );
       },
@@ -1984,7 +2000,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     final l10n = context.l10n;
     final c = TextEditingController();
     final f = FocusNode();
-    final pw = await showDialog<String>(
+    final pw = await showAppDialog<String>(
       context: context,
       builder: (context) {
         return SecretlyAlertDialog(
@@ -2013,7 +2029,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
               onPressed: () => Navigator.of(context).pop(null),
               child: Text(l10n.cancel),
             ),
-            FilledButton(
+            PressFeedback(child: FilledButton(
               onPressed: () {
                 final v = c.text;
                 if (v.isEmpty) return;
@@ -2021,7 +2037,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
                 Navigator.of(context).pop(v);
               },
               child: Text(l10n.restore),
-            ),
+            )),
           ],
         );
       },
@@ -2061,7 +2077,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     final payloadFocus = FocusNode();
     final passwordFocus = FocusNode();
 
-    final result = await showDialog<({String payload, String password})>(
+    final result = await showAppDialog<({String payload, String password})>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -2115,10 +2131,10 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
                   onPressed: () => Navigator.of(context).pop(null),
                   child: Text(l10n.cancel),
                 ),
-                FilledButton(
+                PressFeedback(child: FilledButton(
                   onPressed: canSubmit ? submit : null,
                   child: Text(l10n.restore),
-                ),
+                )),
               ],
             );
           },
@@ -2139,7 +2155,7 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
     if (input == null) return null;
     if (!context.mounted) return false;
 
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (context) {
         return SecretlyAlertDialog(
@@ -2150,10 +2166,10 @@ class _SafeBackupScreenState extends State<SafeBackupScreen> {
               onPressed: () => Navigator.of(context).pop(false),
               child: Text(l10n.cancel),
             ),
-            FilledButton(
+            PressFeedback(child: FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
               child: Text(l10n.restore),
-            ),
+            )),
           ],
         );
       },

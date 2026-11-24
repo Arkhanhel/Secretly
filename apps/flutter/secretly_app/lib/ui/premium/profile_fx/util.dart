@@ -73,9 +73,127 @@ Path _smoothOpen(List<Offset> p) {
   return path..lineTo(p.last.dx, p.last.dy);
 }
 
-Paint _fill(Color c) => Paint()..color = c;
+// ───────────── Светлая тема: «дневной тон» (24.11.2026) ─────────────
+//
+// 🔴 ПОЧЕМУ ЗДЕСЬ, А НЕ В КАЖДОЙ РАМКЕ. Рамки и обложки рисовались под тёмный
+// фон: свечения шли сложением света (`BlendMode.plus`), блики и пыль — белым,
+// подсветка — пастелью. На светлой странице сложение с почти белым ничего не
+// даёт (свечение пропадает или ложится серым пятном), белое исчезает, пастель
+// выглядит грязной. Все рисующие помощники проходят через [_day]/[_dayGlow],
+// поэтому одна правка чинит все 56 рамок и дневные обложки разом:
+// • цвет: насыщеннее, светлые пастели опущены к чистому среднему тону;
+//   серые, белые и почти чёрные не трогаются (ободок, глаза, контуры);
+// • свечение: не сложение света, а мягкая цветная тень — обычное наложение
+//   более глубоким тоном той же краски;
+// • блик: белый крест получает тонкую подложку, чтобы читаться на белом.
+// Включается только на время рисования в светлой теме ([paintFxDay]).
+// Откат одной строкой — [kFxDayTone].
+
+const bool kFxDayTone = true;
+
+/// Насыщенность слоя рамки/обложки в светлой теме (1 — как есть). Серые и
+/// белые цвета матрица не меняет, поэтому ободок цвета страницы остаётся
+/// своим (сдвиг на светлых тонированных страницах — 1–3 единицы канала).
+const double kFxDaySaturation = 1.18;
+
+bool _fxDay = false;
+
+/// Править ли и краску (не только свечения). Рамки — да: они рисовались под
+/// тёмный фон целиком. Обложки — нет: у дневных сцен светлая палитра своя,
+/// и трогать её фоны нельзя; там чинятся только свечения и сложение света.
+bool _fxInk = false;
+
+/// Рисует [paint] в «дневном тоне», если [day] (светлая тема). [ink] —
+/// править и краску (рамки). Вызывают художники рамок и обложек;
+/// вложенные вызовы безопасны.
+void paintFxDay(bool day, void Function() paint, {bool ink = true}) {
+  final prev = _fxDay, prevInk = _fxInk;
+  _fxDay = kFxDayTone && day;
+  _fxInk = _fxDay && ink;
+  try {
+    paint();
+  } finally {
+    _fxDay = prev;
+    _fxInk = prevInk;
+  }
+}
+
+/// Сейчас идёт рисование в дневном тоне.
+bool get fxDayActive => _fxDay;
+
+/// Матрица насыщенности (яркость по Rec. 709 сохраняется, серые неподвижны).
+ColorFilter fxDaySaturationFilter([double s = kFxDaySaturation]) {
+  const lr = 0.2126, lg = 0.7152, lb = 0.0722;
+  final r = (1 - s) * lr, g = (1 - s) * lg, b = (1 - s) * lb;
+  return ColorFilter.matrix(<double>[
+    r + s, g, b, 0, 0, //
+    r, g + s, b, 0, 0, //
+    r, g, b + s, 0, 0, //
+    0, 0, 0, 1, 0,
+  ]);
+}
+
+/// Кисть слоя: `saveLayer(bounds, fxDayLayerPaint)` вокруг рисования в
+/// светлой теме. Одна на всё приложение.
+final Paint fxDayLayerPaint = Paint()..colorFilter = fxDaySaturationFilter();
+
+final Map<int, int> _dayInkCache = <int, int>{};
+final Map<int, int> _dayGlowCache = <int, int>{};
+
+/// Хрома 0..1 (размах каналов). Насыщенность HSL для этого не годится: у почти
+/// белого фона вроде #FAF8F4 она 0.37, хотя цвета там нет.
+double _chroma(int argb) {
+  final r = (argb >> 16) & 0xFF, g = (argb >> 8) & 0xFF, b = argb & 0xFF;
+  return (math.max(r, math.max(g, b)) - math.min(r, math.min(g, b))) / 255;
+}
+
+/// Цвет краски в дневном тоне. Вне [paintFxDay] (или без `ink`) — без изменений.
+Color _day(Color c) {
+  if (!_fxInk) return c;
+  final k = c.toARGB32();
+  final hit = _dayInkCache[k];
+  if (hit != null) return Color(hit);
+  var out = c;
+  if (_chroma(k) >= 0.12) {
+    final hsl = HSLColor.fromColor(c);
+    final l = hsl.lightness;
+    // Пастель выше L 0.68 — к чистому тону: на белом она читается «грязью».
+    final l2 = l > 0.68 ? 0.68 + (l - 0.68) * 0.45 : l;
+    final s2 = math.min(1.0, hsl.saturation * 1.12 + 0.04);
+    out = hsl.withLightness(l2).withSaturation(s2).toColor();
+  }
+  if (_dayInkCache.length > 4096) _dayInkCache.clear();
+  _dayInkCache[k] = out.toARGB32();
+  return out;
+}
+
+/// Цвет свечения в дневном тоне: та же краска глубже — мягкая цветная тень
+/// вместо света. Белые и серые свечения остаются (на тонированных страницах
+/// они ещё видны и не должны становиться грязными).
+Color _dayGlow(Color c) {
+  if (!_fxDay) return c;
+  final k = c.toARGB32() | 0xFF000000;
+  final hit = _dayGlowCache[k];
+  if (hit != null) return Color(hit).withAlpha(c.toARGB32() >>> 24);
+  var out = Color(k);
+  if (_chroma(k) >= 0.08) {
+    final hsl = HSLColor.fromColor(out);
+    out = hsl
+        .withLightness(_clamp(hsl.lightness, 0.42, 0.6))
+        .withSaturation(math.min(1.0, hsl.saturation * 1.1 + 0.1))
+        .toColor();
+  }
+  if (_dayGlowCache.length > 1024) _dayGlowCache.clear();
+  _dayGlowCache[k] = out.toARGB32();
+  return out.withAlpha(c.toARGB32() >>> 24);
+}
+
+/// Множитель силы свечения в дневном тоне: тень мягче, чем свет.
+double get _dayGlowK => _fxDay ? 0.8 : 1.0;
+
+Paint _fill(Color c) => Paint()..color = _day(c);
 Paint _stroke(Color c, double w, [StrokeCap cap = StrokeCap.round]) => Paint()
-  ..color = c
+  ..color = _day(c)
   ..style = PaintingStyle.stroke
   ..strokeWidth = w
   ..strokeCap = cap
@@ -86,7 +204,7 @@ Color _op(Color c, double o) => c.withAlpha((255 * _clamp(o, 0, 1)).round());
 
 List<double> _even(int n) => List<double>.generate(n, (i) => n == 1 ? 0.0 : i / (n - 1));
 ui.Gradient _linG(Offset a, Offset b, List<Color> c, [List<double>? s]) =>
-    ui.Gradient.linear(a, b, c, s ?? _even(c.length));
+    ui.Gradient.linear(a, b, _fxInk ? c.map(_day).toList(growable: false) : c, s ?? _even(c.length));
 
 void _vFill(Canvas c, Size s, Color top, Color bottom) => c.drawRect(
     Offset.zero & s, Paint()..shader = _linG(Offset.zero, Offset(0, s.height), [top, bottom]));
@@ -94,6 +212,11 @@ void _vFill(Canvas c, Size s, Color top, Color bottom) => c.drawRect(
 /// Мягкое круглое свечение (аналог радиального спрайта).
 void _glow(Canvas c, Offset o, double r, Color col, double op, [BlendMode mode = BlendMode.srcOver]) {
   if (op <= 0.003 || r <= 0.5) return;
+  if (_fxDay) {
+    col = _dayGlow(col);
+    op *= _dayGlowK;
+    if (mode == BlendMode.plus || mode == BlendMode.screen) mode = BlendMode.srcOver;
+  }
   c.drawCircle(
       o,
       r,
@@ -168,14 +291,18 @@ String _fmtInt(int v) {
 /// остаются на `_glow` — их картинка не меняется.
 final Map<int, ui.Image> _glowSprites = <int, ui.Image>{};
 
+bool _glowSpritesGuarded = false;
+
 ui.Image _glowSprite(Color col) {
   final key = col.toARGB32() | 0xFF000000;
   final cached = _glowSprites[key];
   if (cached != null) return cached;
+  if (!_glowSpritesGuarded) {
+    _glowSpritesGuarded = true;
+    GpuImageGuard.register(_glowSprites.clear);
+  }
   if (_glowSprites.length > 64) {
-    for (final img in _glowSprites.values) {
-      img.dispose();
-    }
+    // Без dispose: спрайт может держать уже записанный кадр (23.11.2026).
     _glowSprites.clear();
   }
   final base = Color(key);
@@ -197,6 +324,11 @@ const Rect _kGlowSrc = Rect.fromLTWH(0, 0, 64, 64);
 /// То же, что [_glow], но спрайтом. [add] — сложение света (`'lighter'` в JS).
 void _glowS(Canvas c, Offset o, double r, Color col, double op, [bool add = false]) {
   if (op <= 0.003 || r <= 0.5) return;
+  if (_fxDay) {
+    col = _dayGlow(col);
+    op *= _dayGlowK;
+    add = false;
+  }
   final p = Paint()
     ..color = Color.fromRGBO(0, 0, 0, _clamp(op, 0, 1))
     ..filterQuality = FilterQuality.low;
@@ -207,6 +339,12 @@ void _glowS(Canvas c, Offset o, double r, Color col, double op, [bool add = fals
 /// Четырёхлучевой блик: крест из двух линий 0.9 длиной 2·[s] и точка 0.22·[s].
 void _glint(Canvas c, Offset o, double s, double a) {
   if (a <= 0.02) return;
+  if (_fxDay) {
+    // Белый крест на белом не виден: под ним тонкая холодная подложка.
+    final u = _stroke(Color.fromRGBO(70, 84, 120, _clamp(a * 0.28, 0, 1)), 1.8);
+    c.drawLine(Offset(o.dx - s, o.dy), Offset(o.dx + s, o.dy), u);
+    c.drawLine(Offset(o.dx, o.dy - s), Offset(o.dx, o.dy + s), u);
+  }
   final col = Color.fromRGBO(255, 255, 255, _clamp(a, 0, 1));
   final p = _stroke(col, 0.9);
   c.drawLine(Offset(o.dx - s, o.dy), Offset(o.dx + s, o.dy), p);

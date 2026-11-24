@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'whats_new/whats_new_flow.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'dart:io';
@@ -12,14 +13,23 @@ import '../billing/app_update_sheet.dart';
 import '../billing/premium_trial_sheet.dart';
 import '../rooms/room_call_state.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
+import '../storage/file_exists_cache.dart';
 import 'animations/animations.dart';
 import 'chat_screen.dart';
 import 'desktop_surface_policy.dart';
 import 'liquid_glass_flags.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'thermal_guard.dart';
 import 'chats_screen.dart';
 import 'widgets/avatar_initials.dart';
 import 'widgets/frosted_header_island.dart';
+import 'home/home_islands.dart';
+import 'home/home_search_panel.dart';
+import 'home/home_shell_scope.dart';
+import '../search/smart_search.dart';
+import 'widgets/app_background.dart';
 import 'widgets/island_backdrop.dart';
 import 'contacts_screen.dart';
 import 'groups_screen.dart';
@@ -35,6 +45,8 @@ import 'widgets/system_bottom_fade.dart';
 import 'widgets/support_badge.dart';
 import '../version/native_update_prompt.dart';
 import 'widgets/broken_media_box.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'home/home_back_guard.dart';
 
 /// Shared route name for a pushed [ChatScreen] so notification / deep-link
 /// opens can detect an already-open chat and bring it to the front instead of
@@ -165,7 +177,7 @@ class _AppShellState extends State<AppShell>
     _tabController = TabController(
       length: _tabCount,
       vsync: this,
-      initialIndex: _tab,
+      initialIndex: _pageOf(_tab).clamp(0, _tabCount - 1),
     )..addListener(_onTabControllerChanged);
     _bannerSub = widget.controller.inAppNotifications.listen(_showInAppBanner);
     // Premium upsell teaser. Self-throttles (skip first launch, cooldown, max
@@ -173,7 +185,12 @@ class _AppShellState extends State<AppShell>
     // monetization bootstrap (signed /v1/config + entitlement) has settled and
     // the home screen is calm before anything pops. Best-effort — never throws.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future<void>.delayed(const Duration(seconds: 4), () async {
+      Future<void>.delayed(const Duration(milliseconds: 1200), () async {
+        if (!mounted) return;
+        // «Встречайте Secretly 1.9» (24.11.2026) — раньше всех остальных
+        // окон; если показано, остальные подождут следующего запуска.
+        if (await maybeShowWhatsNew19(context)) return;
+        await Future<void>.delayed(const Duration(milliseconds: 2800));
         if (!mounted) return;
         // Higher priority than the upsell: if a newer build is available, nudge
         // first (dismissible). Sequential so the two sheets never stack.
@@ -202,6 +219,7 @@ class _AppShellState extends State<AppShell>
     _tabController
       ..removeListener(_onTabControllerChanged)
       ..dispose();
+    _islands.dispose();
     super.dispose();
   }
 
@@ -247,6 +265,9 @@ class _AppShellState extends State<AppShell>
                           event.convoId.startsWith('req:')
                       ? null
                       : event.convoId,
+                  // Баннер уведомления внутри приложения — так же, как
+                  // системное уведомление (23.11.2026).
+                  openedFromNotification: true,
                 ),
               ),
             );
@@ -297,7 +318,70 @@ class _AppShellState extends State<AppShell>
   /// экранов нельзя — листание бы исчезло.
   /// Число разделов нижней панели. Одно место на объявление контроллера и на
   /// список страниц — разойдутся, и `TabBarView` бросит на первом же переходе.
-  static const int _tabCount = 5;
+  static const int _tabCount = kHomeIslands ? 2 : 5;
+
+  // ── Острова v3 (20.11.2026) ──────────────────────────────────────────────
+  // `_tab` — ЛОГИЧЕСКИЙ раздел, как и раньше: 0 Чаты, 1 Комнаты, 2 Профиль,
+  // 3 Контакты, 4 Настройки (по нему живут раскладки планшета и ПК).
+  //
+  // На телефоне с островами свайпом листаются ТОЛЬКО Чаты ↔ Комнаты (ряд из
+  // двух страниц). Контакты (кнопка сверху) и Профиль (аватар внизу)
+  // открываются слоями поверх ряда, без пролистывания через соседей.
+  // Настройки — из профиля. -1 — раздел не в ряду.
+  static int _pageOf(int logical) {
+    if (!kHomeIslands) return logical;
+    return switch (logical) {
+      0 => 0,
+      1 => 1,
+      _ => -1,
+    };
+  }
+
+  static int _logicalOf(int page) {
+    if (!kHomeIslands) return page;
+    return page <= 0 ? 0 : 1;
+  }
+
+  /// Слои Контактов и Профиля строятся при первом заходе и дальше живут
+  /// (состояние, прокрутка), просто спрятанные.
+  bool _contactsBuilt = false;
+  bool _profileBuilt = false;
+
+  /// «Идёт звонок» в какой-нибудь комнате — зелёная точка на Комнатах.
+  int _liveRoomsVersion = -1;
+  Future<bool>? _liveRoomsFuture;
+
+  Future<bool> _liveRooms() {
+    final version = widget.controller.changeVersion;
+    final cached = _liveRoomsFuture;
+    if (cached != null && _liveRoomsVersion == version) return cached;
+    _liveRoomsVersion = version;
+    final future = widget.controller
+        .listCachedActiveRoomCalls()
+        .then((calls) => calls.isNotEmpty)
+        .catchError((_) => false);
+    _liveRoomsFuture = future;
+    return future;
+  }
+
+  final HomeIslandsController _islands = HomeIslandsController();
+  final HomeSearchSubmitBinding _searchSubmit = HomeSearchSubmitBinding();
+
+  HomeTab get _homeTab => switch (_tab) {
+    0 => HomeTab.chats,
+    1 => HomeTab.rooms,
+    3 => HomeTab.contacts,
+    _ => HomeTab.profile,
+  };
+
+  void _selectHomeTab(HomeTab tab) {
+    _setTab(switch (tab) {
+      HomeTab.chats => 0,
+      HomeTab.rooms => 1,
+      HomeTab.contacts => 3,
+      HomeTab.profile => 2,
+    });
+  }
 
   /// Смена раздела: и по нажатию на панель, и свайпом.
   ///
@@ -305,23 +389,66 @@ class _AppShellState extends State<AppShell>
   /// нажатию, и по завершении свайпа, — поэтому подсветка панели обновляется
   /// здесь одним местом.
   void _onTabControllerChanged() {
-    final index = _tabController.index;
+    final index = _logicalOf(_tabController.index);
     if (!mounted || index == _tab) return;
+    // Ряд сдвинулся, пока открыт слой Контактов/Профиля (переход назад в
+    // Чаты/Комнаты) — раздел ставит сам _setTab.
+    if (kHomeIslands && _pageOf(_tab) < 0) return;
     setState(() => _tab = index);
+    _islands.resetToIdle();
     _pulseNavLens();
   }
 
   void _setTab(int nextTab) {
-    if (nextTab == _tab || nextTab < 0 || nextTab >= _tabCount) return;
+    if (kHomeIslands) {
+      // Настройки живут в профиле.
+      if (nextTab == 4) nextTab = 2;
+      if (nextTab == _tab || nextTab < 0 || nextTab > 4) return;
+      final page = _pageOf(nextTab);
+      final fromRow = _pageOf(_tab) >= 0;
+      if (page >= 0 && fromRow) {
+        // Чаты ↔ Комнаты — пролистыванием (капля едет вместе с рядом).
+        _tabController.animateTo(
+          page,
+          duration: kTelegramMotion
+              ? MotionDurations.list
+              : const Duration(milliseconds: 300),
+          curve: Motion.standard,
+        );
+      } else if (page >= 0) {
+        // Из Контактов/Профиля в ряд — без пролистывания через соседей.
+        _tabController.index = page;
+      }
+      setState(() {
+        _tab = nextTab;
+        if (nextTab == 3) _contactsBuilt = true;
+        if (nextTab == 2) _profileBuilt = true;
+      });
+      _islands.resetToIdle();
+      _pulseNavLens();
+      return;
+    }
+    if (nextTab == _tab || nextTab < 0 || nextTab > 4) return;
+    final page = _pageOf(nextTab);
     // Всё движение — на совести `TabBarView`: через соседний раздел это обычное
     // пролистывание, через несколько — тот же один шаг, но без тех, что между.
-    _tabController.animateTo(nextTab);
+    // М5: переход между разделами — кривая Telegram (0,4 с), а не
+    // штатный Material `ease` за 0,3 с.
+    if (kTelegramMotion) {
+      _tabController.animateTo(
+        page,
+        duration: MotionDurations.list,
+        curve: Motion.standard,
+      );
+    } else {
+      _tabController.animateTo(page);
+    }
   }
 
   void _openDesktopProfileDialog(BuildContext context) {
     final mq = MediaQuery.of(context);
     final maxH = (mq.size.height * 0.88).clamp(400.0, 720.0);
-    showDialog<void>(
+    showAppDialog<void>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (dialogCtx) {
@@ -376,7 +503,7 @@ class _AppShellState extends State<AppShell>
                                   onTap: () => Navigator.of(dialogCtx).pop(),
                                   child: Center(
                                     child: Icon(
-                                      Icons.close,
+                                      AdaptiveIcons.close,
                                       size: 18,
                                       color: cs.onSurface.withValues(
                                         alpha: 0.55,
@@ -585,7 +712,8 @@ class _AppShellState extends State<AppShell>
   }
 
   Widget _glassCenterAvatar(String avatarPath) {
-    final hasAvatar = avatarPath.isNotEmpty && File(avatarPath).existsSync();
+    final hasAvatar =
+        avatarPath.isNotEmpty && FileExistsCache.exists(avatarPath);
     return SizedBox(
       width: 26,
       height: 26,
@@ -619,21 +747,41 @@ class _AppShellState extends State<AppShell>
     // Policy (incl. the desktop-OS opt-out) lives in one place —
     // see [useLegacyWideLayout].
     final isDesktopLike = useLegacyWideLayout(
-      MediaQuery.of(context).size.width,
+      MediaQuery.sizeOf(context).width,
     );
-    final pages = [
-      ChatsScreen(key: const ValueKey('tab-chats'), controller: controller),
-      GroupsScreen(key: const ValueKey('tab-groups'), controller: controller),
-      ProfileScreen(key: const ValueKey('tab-profile'), controller: controller),
-      ContactsScreen(
-        key: const ValueKey('tab-contacts'),
-        controller: controller,
-      ),
-      SettingsScreen(
-        key: const ValueKey('tab-settings'),
-        controller: controller,
-      ),
-    ];
+    final pages = kHomeIslands
+        ? [
+            ChatsScreen(
+              key: const ValueKey('tab-chats'),
+              controller: controller,
+            ),
+            GroupsScreen(
+              key: const ValueKey('tab-groups'),
+              controller: controller,
+            ),
+          ]
+        : [
+            ChatsScreen(
+              key: const ValueKey('tab-chats'),
+              controller: controller,
+            ),
+            GroupsScreen(
+              key: const ValueKey('tab-groups'),
+              controller: controller,
+            ),
+            ProfileScreen(
+              key: const ValueKey('tab-profile'),
+              controller: controller,
+            ),
+            ContactsScreen(
+              key: const ValueKey('tab-contacts'),
+              controller: controller,
+            ),
+            SettingsScreen(
+              key: const ValueKey('tab-settings'),
+              controller: controller,
+            ),
+          ];
     // Ряд держит `TabBarView`: он же даёт свайп пальцем и он же при переходе
     // через несколько разделов оставляет в ряду только два — откуда и куда.
     final pageView = TabBarView(
@@ -641,7 +789,7 @@ class _AppShellState extends State<AppShell>
       physics: const BouncingScrollPhysics(),
       children: pages,
     );
-    final mobileBottomInset = MediaQuery.of(context).viewPadding.bottom;
+    final mobileBottomInset = MediaQuery.viewPaddingOf(context).bottom;
     // Pill sits at `bottom: inset + 10`, so its bottom edge is `inset + 10`
     // above the screen bottom. Stop the fade exactly at that edge so it only
     // darkens the strip BELOW the pill (system gesture area) and never overlaps
@@ -811,6 +959,14 @@ class _AppShellState extends State<AppShell>
     // reporting serious/critical heat drops to the classic bar (the shader
     // both looks worse under GPU throttling and feeds the heat) and returns
     // to glass when it cools.
+    if (kHomeIslands) {
+      // Граница для подложки окна «Что нового 1.9» (снимок без размытия
+      // в каждом кадре).
+      return RepaintBoundary(
+        key: WhatsNew19.captureKey,
+        child: _buildIslandsShell(context, pageView, controller),
+      );
+    }
     if (kLiquidGlassNavBar && Platform.isIOS) {
       // Two reasons to drop to the classic matte bar, and they must BOTH count:
       //   * the user turned liquid glass OFF in Settings (GlassPrefs.enabled),
@@ -840,6 +996,255 @@ class _AppShellState extends State<AppShell>
     return _buildClassicShell(context, content, controller);
   }
 
+  // ── Острова v3: оболочка телефона ───────────────────────────────────────
+
+  String _homeSearchHint(BuildContext context) => switch (_homeTab) {
+    HomeTab.chats => wave1Text(
+      context,
+      ru: 'Поиск по чатам',
+      en: 'Search chats',
+      uk: 'Пошук у чатах',
+      es: 'Buscar chats',
+      pt: 'Pesquisar chats',
+      ptBr: 'Pesquisar chats',
+      fr: 'Rechercher',
+      de: 'Chats durchsuchen',
+    ),
+    HomeTab.rooms => wave1Text(
+      context,
+      ru: 'Поиск по комнатам',
+      en: 'Search rooms',
+      uk: 'Пошук у кімнатах',
+      es: 'Buscar salas',
+      pt: 'Pesquisar salas',
+      ptBr: 'Pesquisar salas',
+      fr: 'Rechercher des salons',
+      de: 'Räume durchsuchen',
+    ),
+    HomeTab.contacts => wave1Text(
+      context,
+      ru: 'Поиск контактов',
+      en: 'Search contacts',
+      uk: 'Пошук контактів',
+      es: 'Buscar contactos',
+      pt: 'Pesquisar contatos',
+      ptBr: 'Pesquisar contatos',
+      fr: 'Rechercher des contacts',
+      de: 'Kontakte durchsuchen',
+    ),
+    HomeTab.profile => context.l10n.search,
+  };
+
+  SmartSearchKind? get _searchBoost => switch (_homeTab) {
+    HomeTab.chats => SmartSearchKind.chat,
+    HomeTab.rooms => SmartSearchKind.room,
+    HomeTab.contacts => SmartSearchKind.contact,
+    HomeTab.profile => null,
+  };
+
+  /// Ряд Чаты|Комнаты и слои Контактов и Профиля поверх него. Спрятанный слой
+  /// не рисуется и не тикает (прозрачность 0 + TickerMode), но живёт.
+  Widget _homeLayers(Widget row, AppController controller) {
+    final rowOn = _pageOf(_tab) >= 0;
+    Widget layer({required bool on, required Widget child}) =>
+        HomeTabLayer(on: on, child: child);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        layer(on: rowOn, child: row),
+        if (_contactsBuilt)
+          layer(
+            on: _tab == 3,
+            child: ContactsScreen(
+              key: const ValueKey('tab-contacts'),
+              controller: controller,
+            ),
+          ),
+        if (_profileBuilt)
+          layer(
+            on: _tab == 2,
+            child: ProfileScreen(
+              key: const ValueKey('tab-profile'),
+              controller: controller,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildIslandsShell(
+    BuildContext context,
+    Widget pageView,
+    AppController controller,
+  ) {
+    final l10n = context.l10n;
+    final labels = HomeIslandsLabels(
+      profile: l10n.tabProfile,
+      search: l10n.search,
+      chats: l10n.tabChats,
+      rooms: _roomsLabel(context),
+      cancel: l10n.cancel,
+      clear: wave1Text(
+        context,
+        ru: 'Очистить',
+        en: 'Clear',
+        uk: 'Очистити',
+        es: 'Borrar',
+        pt: 'Limpar',
+        ptBr: 'Limpar',
+        fr: 'Effacer',
+        de: 'Löschen',
+      ),
+    );
+
+    Widget islands() => StreamBuilder<void>(
+      stream: controller.changed,
+      builder: (context, _) {
+        return FutureBuilder<List<Conversation>>(
+          future: _conversationsForNavBadges(),
+          initialData: controller.cachedConversations,
+          builder: (context, snapshot) {
+            final counts = _countUnreadNavBadges(
+              snapshot.data ?? const <Conversation>[],
+            );
+            return ValueListenableBuilder<bool>(
+              valueListenable: GlassPrefs.enabled,
+              builder: (context, glassOn, _) {
+                return ValueListenableBuilder<bool>(
+                  valueListenable: ThermalGuard.effectsAllowed,
+                  builder: (context, effectsAllowed, _) {
+                    // Стекло — только iPhone и только когда его не выключили
+                    // и телефон не перегрет. Иначе — сплошные острова.
+                    final glass = kLiquidGlassNavBar &&
+                        Platform.isIOS &&
+                        glassOn &&
+                        effectsAllowed;
+                    return FutureBuilder<bool>(
+                      future: _liveRooms(),
+                      initialData: false,
+                      builder: (context, live) => HomeBottomIslands(
+                      controller: _islands,
+                      tab: _homeTab,
+                      pagePosition: _tabController.animation,
+                      roomLive: live.data ?? false,
+                      onSelect: _selectHomeTab,
+                      glass: glass,
+                      searchHint: _homeSearchHint(context),
+                      chatsBadge: counts.chats,
+                      roomsBadge: counts.rooms,
+                      labels: labels,
+                      onSubmitSearch: _searchSubmit.submit,
+                      avatar: _IslandAvatar(
+                        path: controller.myAvatarPath,
+                        name: controller.myNickname,
+                      ),
+                      // Рамка профиля — в полный размер, за пределы острова.
+                      avatarFrame: frameById(controller.myFrameId)?.builder,
+                    ),
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+
+    return HomeShellScope(
+      tab: _homeTab,
+      select: _selectHomeTab,
+      islands: _islands,
+      child: ListenableBuilder(
+        listenable: _islands,
+        builder: (context, _) {
+          final searching = _islands.searching;
+          return PopScope(
+            // «Назад» в поиске закрывает поиск, а не приложение. Чаты —
+            // главная (21.11.2026): из Комнат, Контактов и Профиля «Назад»
+            // сперва возвращает в Чаты, выход — только из Чатов.
+            canPop: !searching && _tab == 0,
+            onPopInvokedWithResult: (didPop, _) {
+              if (didPop) return;
+              if (_islands.searching) {
+                _islands.closeSearch();
+                HomeBackGuard.markConsumed();
+              }
+              // Каждое нажатие проходит через проверку — она же сбрасывает
+              // отметку раздела, чтобы та не «съела» следующее нажатие.
+              HomeBackGuard.runIfUnclaimed(() {
+                if (mounted && _tab != 0) _setTab(0);
+              });
+            },
+            child: BottomSystemFadeVisibility(
+              enabled: false,
+              child: Scaffold(
+                resizeToAvoidBottomInset: false,
+                body: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: (n) {
+                          _islands.handleScroll(n);
+                          return false;
+                        },
+                        child: _homeLayers(pageView, controller),
+                      ),
+                    ),
+                    const Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: IgnorePointer(child: _IslandsBottomFade()),
+                    ),
+                    Positioned.fill(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 240),
+                        reverseDuration: const Duration(milliseconds: 180),
+                        switchInCurve: Motion.standard,
+                        switchOutCurve: Curves.easeInCubic,
+                        transitionBuilder: (child, animation) =>
+                            FadeTransition(
+                              opacity: animation,
+                              child: ScaleTransition(
+                                scale: Tween<double>(begin: 0.985, end: 1)
+                                    .animate(animation),
+                                child: child,
+                              ),
+                            ),
+                        child: searching
+                            ? HomeSearchPanel(
+                                key: const ValueKey('home-search-panel'),
+                                controller: controller,
+                                islands: _islands,
+                                boostKind: _searchBoost,
+                                bottomReserve: 96,
+                                submitBinding: _searchSubmit,
+                              )
+                            : const SizedBox.shrink(
+                                key: ValueKey('home-search-off'),
+                              ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: _IslandsKeyboardLift(
+                        searching: searching,
+                        child: islands(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildClassicShell(
     BuildContext context,
     Widget content,
@@ -867,7 +1272,7 @@ class _AppShellState extends State<AppShell>
               builder: (context, snapshot) {
                 final convos = snapshot.data ?? const <Conversation>[];
                 final counts = _countUnreadNavBadges(convos);
-                final bottomInset = MediaQuery.of(context).viewPadding.bottom;
+                final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
                 // Telegram-style matte glass (same recipe as the chat-header
                 // islands): big blur + a very light white gradient veil (the
                 // matte blur dominates) plus a specular top-edge highlight for
@@ -876,11 +1281,10 @@ class _AppShellState extends State<AppShell>
                     Theme.of(context).brightness == Brightness.dark;
                 // LIGHT theme: dense near-white plate like the main-page top
                 // islands (lifted by the outer shadow below). DARK unchanged.
-                final navTopAlpha = isDarkNav ? 0.06 : 0.50;
-                final navBottomAlpha = isDarkNav ? 0.03 : 0.40;
-                final navHighlight = isDarkNav
-                    ? Colors.white.withValues(alpha: 0.24)
-                    : Colors.white.withValues(alpha: 0.42);
+                final navTopAlpha = MatteIslandLook.fillTop(isDarkNav).a;
+                final navBottomAlpha = MatteIslandLook.fillBottom(isDarkNav).a;
+                // 23.11.2026: кант как у островков в чате (было 24 % — «блик»).
+                final navHighlight = MatteIslandLook.highlight(isDarkNav);
 
                 return Column(
                   mainAxisSize: MainAxisSize.min,
@@ -1143,7 +1547,7 @@ class _DesktopRailAvatarButtonState extends State<_DesktopRailAvatarButton> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final path = (widget.avatarPath ?? '').trim();
-    final hasAvatar = path.isNotEmpty && File(path).existsSync();
+    final hasAvatar = path.isNotEmpty && FileExistsCache.exists(path);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -1153,7 +1557,7 @@ class _DesktopRailAvatarButtonState extends State<_DesktopRailAvatarButton> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
+          curve: Motion.standard,
           width: 46,
           height: 46,
           decoration: BoxDecoration(
@@ -1221,7 +1625,7 @@ class _NavItem extends StatelessWidget {
         ? cs.primary
         : (isDark ? Colors.white : Colors.black);
     return Expanded(
-      child: InkWell(
+      child: PressFeedback(child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: onTap,
         child: SizedBox(
@@ -1279,7 +1683,7 @@ class _NavItem extends StatelessWidget {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
 }
@@ -1362,12 +1766,12 @@ class _CenterProfileNavItem extends StatelessWidget {
     final path = (avatarPath != null && avatarPath!.isNotEmpty)
         ? avatarPath!
         : '';
-    final hasAvatar = path.isNotEmpty && File(path).existsSync();
+    final hasAvatar = path.isNotEmpty && FileExistsCache.exists(path);
     final frame = frameById(frameId);
 
     return Expanded(
       flex: 1,
-      child: InkWell(
+      child: PressFeedback(child: InkWell(
         borderRadius: BorderRadius.circular(20),
         onTap: onTap,
         child: SizedBox(
@@ -1378,12 +1782,12 @@ class _CenterProfileNavItem extends StatelessWidget {
               TweenAnimationBuilder<double>(
                 tween: Tween<double>(begin: 1.0, end: selected ? 1.08 : 1.0),
                 duration: const Duration(milliseconds: 250),
-                curve: selected ? Curves.elasticOut : Curves.easeOutCubic,
+                curve: selected ? Motion.popElastic : Motion.standard,
                 builder: (context, scale, child) =>
                     Transform.scale(scale: scale, child: child),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
+                  curve: Motion.standard,
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
@@ -1455,7 +1859,7 @@ class _CenterProfileNavItem extends StatelessWidget {
             ],
           ),
         ),
-      ),
+      )),
     );
   }
 }
@@ -1495,7 +1899,7 @@ class _InAppNotifBannerWidgetState extends State<_InAppNotifBannerWidget>
     _slide = Tween<Offset>(
       begin: const Offset(0, -1),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Motion.standard));
     _ctrl.forward();
   }
 
@@ -1524,7 +1928,7 @@ class _InAppNotifBannerWidgetState extends State<_InAppNotifBannerWidget>
               key: ValueKey(widget.event.convoId),
               direction: DismissDirection.up,
               onDismissed: (_) => widget.onDismiss(),
-              child: GestureDetector(
+              child: PressFeedback(child: GestureDetector(
                 onTap: widget.onTap,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -1592,7 +1996,7 @@ class _InAppNotifBannerWidgetState extends State<_InAppNotifBannerWidget>
                     ),
                   ),
                 ),
-              ),
+              )),
             ),
           ),
         ),
@@ -1669,4 +2073,92 @@ Widget _navBlur({required bool frosted, required Widget child}) {
     filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
     child: child,
   );
+}
+
+/// Подъём островов: в поиске — над клавиатурой (следуя за ней кадр в кадр),
+/// иначе — над полоской «домой». Отдельный виджет: от клавиатуры
+/// перестраивается только он, а не вся оболочка.
+class _IslandsKeyboardLift extends StatelessWidget {
+  const _IslandsKeyboardLift({required this.searching, required this.child});
+
+  final bool searching;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final safe = MediaQuery.viewPaddingOf(context).bottom;
+    // Макет: 30 pt над краем на iPhone с полоской «домой» (34). Без полоски —
+    // 16, но не ниже 12.
+    final base = safe > 0 ? (safe - 4).clamp(12.0, 40.0) : 16.0;
+    final keyboard = searching ? MediaQuery.viewInsetsOf(context).bottom : 0.0;
+    final bottom = keyboard > 0 ? keyboard + 10 : base;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottom),
+      child: child,
+    );
+  }
+}
+
+/// Затемнение под островами — список растворяется к низу, острова читаются
+/// на любом содержимом. Простой градиент, без чтения фона.
+class _IslandsBottomFade extends StatelessWidget {
+  const _IslandsBottomFade();
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = AppBackground.scrimColorOf(context);
+    final safe = MediaQuery.viewPaddingOf(context).bottom;
+    return SizedBox(
+      height: 120 + safe,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              bg.withValues(alpha: 0),
+              bg.withValues(alpha: 0.88),
+              bg,
+            ],
+            stops: const [0, 0.55, 1],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Портрет в острове профиля.
+class _IslandAvatar extends StatelessWidget {
+  const _IslandAvatar({required this.path, required this.name});
+
+  final String? path;
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = (path ?? '').trim();
+    if (p.isNotEmpty && FileExistsCache.exists(p)) {
+      final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 3;
+      return Image(
+        image: ResizeImage(FileImage(File(p)), width: (58 * dpr).round()),
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+      );
+    }
+    final ink = AvatarInitials.colors(context, seed: name.isEmpty ? 'me' : name);
+    return ColoredBox(
+      color: ink.fill,
+      child: Center(
+        child: Text(
+          AvatarInitials.label(displayName: name, fallbackId: 'me'),
+          style: TextStyle(
+            color: ink.ink,
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
 }

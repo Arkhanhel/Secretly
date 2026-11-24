@@ -19,6 +19,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../gpu_image_guard.dart';
+import '../motion/decoration_pacer.dart';
+
 part 'profile_fx/util.dart';
 part 'profile_fx/bridge.dart';
 part 'profile_fx/extras.dart';

@@ -8,7 +8,12 @@ import 'package:flutter/material.dart';
 import 'animations/animations.dart';
 import 'icons/app_icons.dart';
 import 'l10n.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'widgets/full_bleed_zoom.dart';
+import 'media_viewer/media_viewer_screen.dart'
+    show MediaViewerEntry, MediaViewerKind, openMediaViewer;
+import 'media_viewer/media_viewer_tokens.dart' show mediaViewerV2Enabled;
 
 Future<void> openFullscreenImageViewer(
   BuildContext context, {
@@ -16,6 +21,25 @@ Future<void> openFullscreenImageViewer(
   String? title,
   String? heroTag,
 }) {
+  // Новый просмотр (22.11.2026): перелёт из аватара, жесты и затемнения те же,
+  // что у фото в чате. Действий у чужого аватара нет — как и прежде.
+  if (mediaViewerV2Enabled) {
+    return openMediaViewer(
+      context,
+      entries: [
+        MediaViewerEntry(
+          id: imagePath,
+          kind: MediaViewerKind.photo,
+          loadFile: () async => File(imagePath),
+          cachedFile: () async => File(imagePath),
+          title: title,
+          anchorTag: heroTag ?? imagePath,
+        ),
+      ],
+      initialIndex: 0,
+      title: title,
+    );
+  }
   return Navigator.of(context).push<void>(
     SecretlyFullscreenRoute(
       builder: (_) => FullscreenImageViewerScreen(
@@ -133,7 +157,7 @@ class _FullscreenImageViewerScreenState
               ignoring: !_chromeVisible,
               child: AnimatedSlide(
                 duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
+                curve: Motion.standard,
                 offset: _chromeVisible ? Offset.zero : const Offset(0, -0.16),
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 160),
@@ -144,14 +168,14 @@ class _FullscreenImageViewerScreenState
                       padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
                       child: Row(
                         children: [
-                          IconButton(
+                          PressFeedback(child: IconButton(
                             tooltip: context.l10n.close,
                             onPressed: () => Navigator.of(context).maybePop(),
                             icon: const Icon(
                               AppIcons.arrowBack,
                               color: Colors.white,
                             ),
-                          ),
+                          )),
                           Expanded(
                             child: Text(
                               titleText.isEmpty

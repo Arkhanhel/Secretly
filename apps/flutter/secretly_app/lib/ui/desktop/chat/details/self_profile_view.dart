@@ -10,15 +10,20 @@ import 'package:flutter/material.dart';
 import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 
 import '../../../../app/app_controller.dart';
+import '../../../../app/elite_badges.dart';
 import '../../../premium/cosmetics_catalog.dart'
     show
+        kDefaultProfileCoverId,
+        kSPrintDefaultCover,
         coverBackWidgetFor,
         coverFrontWidgetFor,
         coverWidgetFor,
         kAllAvatarFrames,
-        kAllProfileCovers;
+        kAllProfileCovers,
+        kStaffProfileCovers,
+        staffCoverById;
 import '../../../../entitlements/cosmetic_catalog.dart'
-    show CosmeticKind, isCosmeticAllowed;
+    show CosmeticKind, isCosmeticAllowed, isStaffCoverId, kNoProfileCoverId;
 import '../../design/tokens.dart';
 import '../../primitives/avatar.dart';
 import '../../primitives/context_menu.dart';
@@ -90,7 +95,11 @@ class _CosmeticPreview extends StatelessWidget {
     required this.frame,
     required this.name,
     required this.avatarPath,
+    this.ownerProfileId,
   });
+
+  /// Свой профиль — для обложек команды (23.11.2026).
+  final String? ownerProfileId;
 
   /// `null` — «без рамки» / «без обложки»: показываем голый портрет и пустую
   /// полоску, чтобы отказ тоже был виден глазом.
@@ -114,7 +123,7 @@ class _CosmeticPreview extends StatelessWidget {
         size: 54,
       );
     }
-    final cover = coverWidgetFor(id);
+    final cover = coverWidgetFor(id, ownerProfileId: ownerProfileId);
     return ClipRRect(
       borderRadius: BorderRadius.circular(DRadii.sm),
       child: SizedBox(
@@ -257,11 +266,14 @@ class _SelfProfileViewState extends State<SelfProfileView> {
   /// lapsed subscription simply stops rendering the choice rather than
   /// losing it.
   bool _cosmeticAllowed({required bool frame, required String id}) =>
-      isCosmeticAllowed(
-        _c.entitlementStateNow,
-        frame ? CosmeticKind.avatarFrame : CosmeticKind.profileCover,
-        id,
-      );
+      // Обложки команды не продаются: открыты только со знаком команды.
+      (!frame && isStaffCoverId(id))
+      ? EliteBadges.instance.isTeam(_c.profileId)
+      : isCosmeticAllowed(
+          _c.entitlementStateNow,
+          frame ? CosmeticKind.avatarFrame : CosmeticKind.profileCover,
+          id,
+        );
 
   Future<void> _pickCosmetic({required bool frame}) async {
     final currentId = frame ? _c.myFrameId : _c.myCoverId;
@@ -269,8 +281,12 @@ class _SelfProfileViewState extends State<SelfProfileView> {
     final display = name.isEmpty ? 'Secretly' : name;
     final avatarPath = (_avatarPath ?? '').trim();
     final hasAvatar = avatarPath.isNotEmpty;
+    // Закрытые обложки команды — сразу после «Без обложки», и только у
+    // человека со знаком команды (23.11.2026).
+    final team = !frame && EliteBadges.instance.isTeam(_c.profileId);
     final ids = <String?>[
       null, // «Без рамки» / «Без обложки» — removal must always be reachable
+      if (team) ...kStaffProfileCovers.map((c) => c.id),
       ...(frame
           ? kAllAvatarFrames.map((f) => f.id)
           : kAllProfileCovers.map((c) => c.id)),
@@ -305,8 +321,8 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                       ? kAllAvatarFrames
                             .firstWhere((f) => f.id == id)
                             .nameLocalized(ctx)
-                      : kAllProfileCovers
-                            .firstWhere((c) => c.id == id)
+                      : (staffCoverById(id) ??
+                                kAllProfileCovers.firstWhere((c) => c.id == id))
                             .nameLocalized(ctx));
             return HoverListener(
               // Sentinel: DesktopDialog.show returns null when DISMISSED, so
@@ -348,6 +364,7 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                           frame: frame,
                           name: display,
                           avatarPath: hasAvatar ? avatarPath : null,
+                          ownerProfileId: _c.profileId,
                         ),
                         if (locked)
                           Positioned(
@@ -566,7 +583,16 @@ class _SelfProfileViewState extends State<SelfProfileView> {
                   // портрет читается как находящийся внутри дыры, а не
                   // наклеенный на неё. Раньше слой был один.
                   avatarDiameter: 88,
-                  cover: coverBackWidgetFor(_c.myCoverId),
+                  // Обложки нет — «Отпечаток S», как на телефоне (23.11.2026).
+                  cover: _c.myCoverId == kNoProfileCoverId
+                      ? null
+                      : coverBackWidgetFor(
+                              _c.myCoverId,
+                              ownerProfileId: _c.profileId,
+                            ) ??
+                            (kSPrintDefaultCover
+                                ? coverBackWidgetFor(kDefaultProfileCoverId)
+                                : null),
                   coverFront: coverFrontWidgetFor(_c.myCoverId),
                   // 🔴 «Сменить обложку» — кнопка ПОВЕРХ самой обложки, как в
                   // макете. Раньше обложку меняли только из ряда действий

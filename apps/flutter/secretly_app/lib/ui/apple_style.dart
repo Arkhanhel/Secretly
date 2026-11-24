@@ -8,7 +8,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import 'motion/press_feedback.dart';
 import 'secretly_snackbar.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Стиль Apple на iPhone (решение владельца 17.11.2026): системный шрифт и
 /// короткие уведомления капсулой сверху, как iOS показывает подключение
@@ -42,11 +44,81 @@ const bool kAppleDialogs = true;
 /// (`apple_controls.dart`, `SecretlySwitch`, `SecretlySpinner`).
 const bool kAppleControls = true;
 
+/// Главный экран настроек iPhone по макету «iPhone · Liquid Glass»
+/// (решение владельца 20.11.2026): крупный заголовок, поиск, карточка
+/// профиля, стеклянные группы (`settings_apple_root.dart`).
+const bool kAppleSettingsLayout = true;
+
+/// Поля ввода iPhone полупрозрачные, как в iOS 26: без рамки, со стеклянной
+/// заливкой и бледной подсказкой (`main.dart`, тема полей ввода).
+const bool kAppleGlassFields = true;
+
+bool get appleSettingsLayoutEnabled =>
+    kAppleSettingsLayout && defaultTargetPlatform == TargetPlatform.iOS;
+
+bool get appleGlassFieldsEnabled =>
+    kAppleGlassFields && defaultTargetPlatform == TargetPlatform.iOS;
+
 bool get appleDialogsEnabled =>
     kAppleDialogs && defaultTargetPlatform == TargetPlatform.iOS;
 
 bool get appleControlsEnabled =>
     kAppleControls && defaultTargetPlatform == TargetPlatform.iOS;
+
+/// Заливка поля ввода iPhone: полупрозрачная системная (`tertiarySystemFill`
+/// iOS), сквозь неё видно стекло и фон — поле не выглядит плашкой.
+Color appleSystemFieldFill(Brightness brightness) =>
+    brightness == Brightness.dark
+    ? const Color(0x3D767680)
+    : const Color(0x1F767680);
+
+/// Цвет подсказки в поле iPhone — полупрозрачный вторичный текст iOS.
+Color appleFieldHintColor(Brightness brightness) =>
+    brightness == Brightness.dark
+    ? const Color(0x99EBEBF5)
+    : const Color(0x993C3C43);
+
+/// Заливка поля, заданная экраном вручную: на iPhone — полупрозрачная
+/// системная, на остальных платформах — прежняя [fallback].
+Color appleFieldFillOr(BuildContext context, Color fallback) =>
+    appleGlassFieldsEnabled
+    ? appleSystemFieldFill(Theme.of(context).brightness)
+    : fallback;
+
+/// Тема полей ввода iPhone: без рамки, полупрозрачная заливка, скругление 12,
+/// бледная подсказка. Фокус не подсвечивает поле — как в iOS.
+InputDecorationTheme appleGlassInputDecorationTheme({
+  required Brightness brightness,
+  required ColorScheme scheme,
+}) {
+  final hint = appleFieldHintColor(brightness);
+  final shape = OutlineInputBorder(
+    borderRadius: BorderRadius.circular(12),
+    borderSide: BorderSide.none,
+  );
+  return InputDecorationTheme(
+    filled: true,
+    fillColor: appleSystemFieldFill(brightness),
+    hintStyle: TextStyle(color: hint, fontWeight: FontWeight.w400),
+    labelStyle: TextStyle(color: hint),
+    floatingLabelStyle: TextStyle(
+      color: scheme.primary.withValues(alpha: 0.92),
+      fontWeight: FontWeight.w600,
+    ),
+    prefixIconColor: hint,
+    suffixIconColor: hint,
+    border: shape,
+    enabledBorder: shape,
+    focusedBorder: shape,
+    disabledBorder: shape,
+    errorBorder: shape.copyWith(
+      borderSide: BorderSide(color: scheme.error, width: 1),
+    ),
+    focusedErrorBorder: shape.copyWith(
+      borderSide: BorderSide(color: scheme.error, width: 1),
+    ),
+  );
+}
 
 /// Почтальон уведомлений для iPhone.
 ///
@@ -466,15 +538,15 @@ class AppleToastCapsule extends StatelessWidget {
           // и подсказке некуда было бы встать. Подпись — для диктора.
           Semantics(
             label: MaterialLocalizations.of(context).closeButtonTooltip,
-            child: IconButton(
+            child: PressFeedback(child: IconButton(
               onPressed: () => messenger?.hideCurrentSnackBar(
                 reason: SnackBarClosedReason.dismiss,
               ),
-              icon: const Icon(Icons.close_rounded),
+              icon: const Icon(AdaptiveIcons.close_rounded),
               iconSize: 18,
               color: textColor.withValues(alpha: 0.6),
               visualDensity: VisualDensity.compact,
-            ),
+            )),
           ),
         ],
       ],

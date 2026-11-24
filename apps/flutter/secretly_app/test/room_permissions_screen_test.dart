@@ -40,17 +40,19 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.text('Messages'), findsOneWidget);
-    expect(find.text('Joining'), findsOneWidget);
+    // Android (23.11.2026): заголовки групп — капсом над панелью, как в
+    // настройках.
+    expect(find.text('MESSAGES'), findsOneWidget);
+    expect(find.text('JOINING'), findsOneWidget);
     expect(find.text('Pin messages'), findsOneWidget);
     expect(find.text('Join only after approval'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.text('Privacy'), 240);
-    expect(find.text('Privacy'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('PRIVACY'), 240);
+    expect(find.text('PRIVACY'), findsOneWidget);
     expect(find.text('Show history to new members'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.text('Room profile'), 240);
-    expect(find.text('Room profile'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('ROOM PROFILE'), 240);
+    expect(find.text('ROOM PROFILE'), findsOneWidget);
     expect(find.text('Change room profile'), findsOneWidget);
     expect(find.text('Edit own room tag'), findsOneWidget);
   });

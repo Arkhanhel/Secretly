@@ -5,10 +5,13 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../motion/motion.dart';
+import '../motion/press_feedback.dart';
 import '../theme_presets.dart';
 import '../wave1_l10n.dart';
 import 'telegram_wallpaper.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Near-fullscreen preview of an animated wallpaper with a faithful mock chat on
 /// top and a frosted "island" control to pick the animation mode + apply.
@@ -34,7 +37,7 @@ Future<({ChatWallpaperAnimMode mode, bool conduct})?>
       initialConduct: initialConduct,
     ),
     transitionBuilder: (ctx, anim, _, child) {
-      final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
+      final curved = CurvedAnimation(parent: anim, curve: Motion.standard);
       return FadeTransition(
         opacity: curved,
         child: ScaleTransition(
@@ -152,7 +155,7 @@ class _AnimatedWallpaperPreviewState extends State<_AnimatedWallpaperPreview> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.motion_photos_on,
+                          const Icon(AdaptiveIcons.motion_photos_on,
                               size: 15, color: Colors.white),
                           const SizedBox(width: 6),
                           Text(
@@ -349,7 +352,7 @@ class _Bubble extends StatelessWidget {
                   if (outgoing) ...[
                     const SizedBox(width: 3),
                     Icon(
-                      Icons.done_all,
+                      AdaptiveIcons.done_all,
                       size: 14,
                       color: read
                           ? const Color(0xFF8FD6FF)
@@ -402,12 +405,12 @@ class _ControlIsland extends StatelessWidget {
               Row(
                 children: [
                   _segment(context, ChatWallpaperAnimMode.continuous,
-                      Icons.all_inclusive, wave1Text(context, ru: 'Всегда', en: 'Always')),
-                  _segment(context, ChatWallpaperAnimMode.onEnter, Icons.login,
+                      AdaptiveIcons.all_inclusive, wave1Text(context, ru: 'Всегда', en: 'Always')),
+                  _segment(context, ChatWallpaperAnimMode.onEnter, AdaptiveIcons.login,
                       wave1Text(context, ru: 'При входе', en: 'On open')),
-                  _segment(context, ChatWallpaperAnimMode.tap, Icons.touch_app,
+                  _segment(context, ChatWallpaperAnimMode.tap, AdaptiveIcons.touch_app,
                       wave1Text(context, ru: 'По тапу', en: 'On tap')),
-                  _segment(context, ChatWallpaperAnimMode.off, Icons.block,
+                  _segment(context, ChatWallpaperAnimMode.off, AdaptiveIcons.block,
                       wave1Text(context, ru: 'Без', en: 'Off')),
                 ],
               ),
@@ -416,7 +419,7 @@ class _ControlIsland extends StatelessWidget {
               const SizedBox(height: 10),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton(
+                child: PressFeedback(child: FilledButton(
                   onPressed: onApply,
                   style: FilledButton.styleFrom(
                     backgroundColor: cs.primary,
@@ -433,7 +436,7 @@ class _ControlIsland extends StatelessWidget {
                       fontSize: 15,
                     ),
                   ),
-                ),
+                )),
               ),
             ],
           ),
@@ -470,7 +473,7 @@ class _ControlIsland extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              Icons.electric_bolt,
+              AdaptiveIcons.electric_bolt,
               size: 18,
               color: conduct ? cs.primary : Colors.white,
             ),
@@ -629,7 +632,7 @@ class _CloseButton extends StatelessWidget {
             customBorder: const CircleBorder(),
             child: const Padding(
               padding: EdgeInsets.all(8),
-              child: Icon(Icons.close, size: 20, color: Colors.white),
+              child: Icon(AdaptiveIcons.close, size: 20, color: Colors.white),
             ),
           ),
         ),

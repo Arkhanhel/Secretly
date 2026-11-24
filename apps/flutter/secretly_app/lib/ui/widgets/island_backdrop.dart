@@ -17,7 +17,10 @@ import 'package:flutter/material.dart';
 /// Cost: the color matrix is a per-pixel linear transform fused into the SAME
 /// backdrop pass as the blur — the blur itself dominates; measured overhead is
 /// a few percent of an already-paid effect, no extra saveLayers.
-const double kIslandBackdropSaturation = 1.8;
+// 23.11.2026 (владелец): фон под островками — простое размытие, как у
+// островков в чате; насыщенность 1,8 делала островки «кричащими» и бледными
+// на фоне чата.
+const double kIslandBackdropSaturation = 1.0;
 
 /// Blur (+ optional saturation) filter for the frosted header islands.
 ImageFilter islandBackdropFilter({
@@ -77,6 +80,12 @@ class PanelPrefs {
   /// Kept in step with `AppController.frostedPanelsEnabled`, which owns the
   /// persisted value. Default ON so the look is unchanged until asked.
   static final ValueNotifier<bool> frostedEnabled = ValueNotifier<bool>(true);
+
+  /// «Прозрачные плашки» (23.11.2026): `false` — плотные карточки. Хозяин
+  /// значения — `AppController.translucentCardsEnabled`.
+  static final ValueNotifier<bool> translucentCards = ValueNotifier<bool>(
+    true,
+  );
 }
 
 /// The base plate for dark mode when the blur is off.

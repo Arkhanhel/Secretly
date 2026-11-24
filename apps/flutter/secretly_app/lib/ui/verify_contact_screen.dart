@@ -11,7 +11,9 @@ import '../app/app_controller.dart';
 import '../security/qr_payload.dart';
 import 'icons/app_icons.dart';
 import 'l10n.dart';
+import 'motion/press_feedback.dart';
 import 'qr_scan_screen.dart';
+import 'settings_group.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
 
@@ -80,7 +82,7 @@ class _VerifyContactScreenState extends State<VerifyContactScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
-          IconButton(
+          PressFeedback(child: IconButton(
             tooltip: l10n.scanQr,
             onPressed: () async {
               final raw = await QrScanScreen.scan(
@@ -191,8 +193,8 @@ class _VerifyContactScreenState extends State<VerifyContactScreen> {
               );
             },
             icon: const Icon(AppIcons.qrScanner),
-          ),
-          IconButton(
+          )),
+          PressFeedback(child: IconButton(
             tooltip: l10n.refreshKeys,
             onPressed: offline || _refreshing ? null : _refresh,
             icon: _refreshing
@@ -202,7 +204,7 @@ class _VerifyContactScreenState extends State<VerifyContactScreen> {
                     child: SecretlySpinner(strokeWidth: 2),
                   )
                 : const Icon(AppIcons.refresh),
-          ),
+          )),
         ],
       ),
       body: ListView(
@@ -242,16 +244,21 @@ class _VerifyContactScreenState extends State<VerifyContactScreen> {
                     return Text(l10n.noDeviceKeysCachedYet);
                   }
 
-                  return Column(
-                    children: devices
+                  final tiles = devices
                         .map((d) {
                           final verified = d.verifiedAtMs != null;
-                          return Card(
-                            child: ListTile(
-                              leading: Icon(
-                                verified
-                                    ? AppIcons.verifiedOutline
-                                    : AppIcons.shield,
+                          final deviceIcon = verified
+                              ? AppIcons.verifiedOutline
+                              : AppIcons.shield;
+                          return ListTile(
+                              // Android: цветной квадрат, как у строк
+                              // настроек: проверено — зелёный, нет — оранжевый.
+                              leading: settingsRowLeading(
+                                icon: deviceIcon,
+                                tint: verified
+                                    ? SettingsRowTint.green
+                                    : SettingsRowTint.orange,
+                                fallback: Icon(deviceIcon),
                               ),
                               title: Text(
                                 l10n.deviceTitle(d.deviceId),
@@ -288,10 +295,19 @@ class _VerifyContactScreenState extends State<VerifyContactScreen> {
                                       },
                                       child: Text(l10n.verify),
                                     ),
-                            ),
                           );
                         })
-                        .toList(growable: false),
+                        .toList(growable: false);
+                  // Android (23.11.2026, владелец: «плашки и строки везде как
+                  // в настройках»): устройства — одной группой строк без
+                  // линий, а не карточкой на каждое.
+                  if (settingsAndroidPanels) {
+                    return SettingsRowsPanel(children: tiles);
+                  }
+                  return Column(
+                    children: [
+                      for (final tile in tiles) Card(child: tile),
+                    ],
                   );
                 },
               );

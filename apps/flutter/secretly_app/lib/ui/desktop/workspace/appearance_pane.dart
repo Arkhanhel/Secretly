@@ -49,6 +49,9 @@ import 'settings_kit.dart';
 import 'settings_style.dart';
 import 'workspace_layout.dart';
 import '../primitives/motion_widgets.dart';
+import '../../settings_icons/settings_glyph_tile.dart';
+import '../../settings_icons/settings_glyphs.dart';
+import '../../settings_icons/settings_icon_style.dart';
 
 /// Ширина колонки настроек (с полями 32) и пределы колонки предпросмотра —
 /// из макета: `max-width: 760px` у содержимого, `360…460px` у предпросмотра.
@@ -106,11 +109,14 @@ class DesktopAppearancePreset {
 List<DesktopAppearancePreset> desktopAppearancePresets() => [
   DesktopAppearancePreset(
     id: 'classic',
-    themeId: 'flutter_dash',
+    // «Классика» = оформление по умолчанию (тема «Графит» с 20.11.2026).
+    themeId: kDefaultAppThemePresetId,
     wallpaperDark: themeStandardChatWallpaperId(darkMode: true),
     wallpaperLight: themeStandardChatWallpaperId(darkMode: false),
-    bubbleId: normalizeChatBubbleStylePresetId('flutter_dash'),
-    indicatorId: 'theme',
+    bubbleId: normalizeChatBubbleStylePresetId(
+      kDefaultBubbleStylePresetId,
+    ),
+    indicatorId: kDefaultIndicatorColorPresetId,
     names: 'person',
   ),
   DesktopAppearancePreset(
@@ -434,13 +440,13 @@ class _DesktopAppearancePaneState extends State<DesktopAppearancePane> {
       // Схема оформления возвращает и пузырь к своему по умолчанию — поэтому
       // пузырь отдельно не ставится: иначе он стал бы «выбранным вручную» и
       // перестал бы следовать за схемой.
-      await ctrl.setAppThemePresetId('flutter_dash');
+      await ctrl.setAppThemePresetId(kDefaultAppThemePresetId);
       await ctrl.setDefaultChatWallpaperId(
         themeStandardChatWallpaperId(darkMode: dark),
       );
       await ctrl.setChatWallpaperAnimMode(ChatWallpaperAnimMode.onEnter);
       await ctrl.setChatWallpaperConduct(false);
-      await ctrl.setIndicatorColorPresetId('theme');
+      await ctrl.setIndicatorColorPresetId(kDefaultIndicatorColorPresetId);
       await ctrl.setNicknameStylePresetId('accent');
     }
     await _setScheme('dark');
@@ -1135,6 +1141,27 @@ class _DesktopAppearancePaneState extends State<DesktopAppearancePane> {
               ],
             ),
           ],
+        ),
+      ),
+      // Стиль значков разделов настроек (20.11.2026) — тот же выбор, что в
+      // «Оформлении» телефона; хранится на каждом устройстве свой.
+      SettingsSection(
+        title: l10n.desktopAppearanceIconStyle,
+        description: l10n.desktopAppearanceIconStyleHint,
+        child: SettingsIconStyleBuilder(
+          builder: (context, current) => _AutoGrid(
+            minTileWidth: 92,
+            gap: 8,
+            children: [
+              for (final style in SettingsIconStyle.values)
+                _IconStyleTile(
+                  style: style,
+                  name: style.label(l10n),
+                  selected: style == current,
+                  onTap: () => unawaited(SettingsIconStylePrefs.set(style)),
+                ),
+            ],
+          ),
         ),
       ),
       _TwoColumns(
@@ -1995,6 +2022,82 @@ class _CustomAccentDot extends StatelessWidget {
 }
 
 /// Плитка стиля пузырей: сам пузырь в цветах набора и имя под ним.
+class _IconStyleTile extends StatelessWidget {
+  const _IconStyleTile({
+    required this.style,
+    required this.name,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final SettingsIconStyle style;
+  final String name;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = SettingsScope.paletteOf(context);
+    final app = SettingsScope.appColorsOf(context);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: name,
+      excludeSemantics: true,
+      child: HoverListener(
+        onTap: onTap,
+        cursor: SystemMouseCursors.click,
+        builder: (ctx, hovered, _) => AnimatedContainer(
+          duration: DMotion.fast,
+          padding: const EdgeInsets.fromLTRB(6, 10, 6, 7),
+          decoration: BoxDecoration(
+            color: selected ? p.sel : (hovered ? p.hover : p.card),
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: selected
+                ? [BoxShadow(color: app.accentPrimary, spreadRadius: 2)]
+                : null,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (final g in const [
+                    SettingsGlyph.account,
+                    SettingsGlyph.chats,
+                    SettingsGlyph.notifications,
+                  ]) ...[
+                    if (g != SettingsGlyph.account) const SizedBox(width: 4),
+                    SettingsGlyphTile(
+                      glyph: g,
+                      style: style,
+                      size: 22,
+                      brightness: app.isDark ? Brightness.dark : Brightness.light,
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 7),
+              Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: DType.family,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: selected ? p.head : p.muted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BubbleTile extends StatelessWidget {
   const _BubbleTile({
     required this.preset,

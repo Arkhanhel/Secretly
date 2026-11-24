@@ -56,10 +56,10 @@ const Color _cfWhite = Color(0xFFFFFFFF);
 final Paint _cfFill = Paint();
 final Paint _cfPenP = Paint()..style = PaintingStyle.stroke;
 
-Paint _cfInk(Color col) => _cfFill..color = col;
+Paint _cfInk(Color col) => _cfFill..color = _day(col);
 
 Paint _cfPen(Color col, double w, [StrokeCap cap = StrokeCap.butt, StrokeJoin join = StrokeJoin.miter]) => _cfPenP
-  ..color = col
+  ..color = _day(col)
   ..strokeWidth = w
   ..strokeCap = cap
   ..strokeJoin = join;
@@ -115,6 +115,10 @@ class _CfGlows {
 
   void add(Offset o, double r, Color col, double op) {
     if (op <= 0.003 || r <= 0.5) return;
+    if (_fxDay) {
+      col = _dayGlow(col);
+      op *= _dayGlowK;
+    }
     if (_n >= _col.length) _grow();
     final i = _n * 4;
     _xf[i] = r / 32;
@@ -140,7 +144,7 @@ class _CfGlows {
 
   void flush(Canvas c, [bool add = true]) {
     if (_n == 0) return;
-    _p.blendMode = add ? BlendMode.plus : BlendMode.srcOver;
+    _p.blendMode = add && !_fxDay ? BlendMode.plus : BlendMode.srcOver;
     c.drawRawAtlas(
         _glowSprite(_cfWhite),
         Float32List.sublistView(_xf, 0, _n * 4),
@@ -198,17 +202,19 @@ abstract class _CfSim extends FrameSim {
     return n;
   }
 
-  Paint? _ringPaint;
+  Paint? _ringPaint, _ringPaintDay;
 
-  /// Кольцо по умолчанию (`ringDraw` референса) — кисть с шейдером одна на рамку.
+  /// Кольцо по умолчанию (`ringDraw` референса) — кисть с шейдером одна на рамку
+  /// (и отдельная для дневного тона — тему можно сменить на ходу).
   @override
   void paintRing(Canvas c, [List<Color>? colors, double opacity = 1]) {
     if (colors != null || opacity < 1) {
       super.paintRing(c, colors, opacity);
       return;
     }
-    final p = _ringPaint ??= (_stroke(_cfWhite, ringWidth, StrokeCap.butt)
-      ..shader = _linG(const Offset(42, 42), const Offset(158, 158), ringColors));
+    Paint make() => _stroke(_cfWhite, ringWidth, StrokeCap.butt)
+      ..shader = _linG(const Offset(42, 42), const Offset(158, 158), ringColors);
+    final p = _fxDay ? (_ringPaintDay ??= make()) : (_ringPaint ??= make());
     c.drawPath(ringPath(), p);
   }
 }
@@ -385,7 +391,8 @@ class _CfOrbit extends _CfSim {
   final List<_CfOrb> _o = [];
 
   Offset _e(_CfOrb o, double th) {
-    final x = 85 * math.cos(th), y = 22 * math.sin(th), a = o.tilt + _pre, co = math.cos(a), si = math.sin(a);
+    // 23.11.2026: орбиты уже (было 85 × 22; малую ось 22 не трогать — иначе комета заходит на лицо).
+    final x = 70 * math.cos(th), y = 22 * math.sin(th), a = o.tilt + _pre, co = math.cos(a), si = math.sin(a);
     return Offset(100 + x * co - y * si, 100 + x * si + y * co);
   }
 
@@ -432,7 +439,7 @@ class _CfOrbit extends _CfSim {
 
   @override
   void back(Canvas c, FramePalette p) {
-    _glowS(c, _cfC, 90, const Color(0xFF4A6BFF), 0.18, true);
+    _glowS(c, _cfC, 76, const Color(0xFF4A6BFF), 0.18, true);
     _half(c, false);
   }
 
@@ -631,6 +638,9 @@ class _CfAurora extends _CfSim {
   @override
   void back(Canvas c, FramePalette p) {
     final k = 1 + _clamp(_st.x, -0.5, 2) * 0.55;
+    // Днём сложение света на белом ничего не рисует: лучи кладутся обычно и чуть плотнее.
+    _ln.blendMode = _fxDay ? BlendMode.srcOver : BlendMode.plus;
+    final ka = _fxDay ? 1.25 : 1.0;
     for (var i = 0; i < 100; i++) {
       final a = i / 100 * _tau;
       final n = _clamp(
@@ -643,11 +653,11 @@ class _CfAurora extends _CfSim {
       final p0 = _pt(100, 100, 59, a), p1 = _pt(100, 100, 59 + L * 0.55, a + bend * 0.5);
       final p2 = _pt(100, 100, 59 + L, a + bend);
       _ln
-        ..color = _op(col, 0.5 * n + 0.1)
+        ..color = _day(_op(col, (0.5 * n + 0.1) * ka))
         ..strokeWidth = 3.2;
       c.drawLine(p0, p1, _ln);
       _ln
-        ..color = _op(col, 0.2 * n + 0.04)
+        ..color = _day(_op(col, (0.2 * n + 0.04) * ka))
         ..strokeWidth = 2.4;
       c.drawLine(p1, p2, _ln);
     }

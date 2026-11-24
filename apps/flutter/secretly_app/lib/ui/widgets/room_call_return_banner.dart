@@ -7,6 +7,7 @@ import '../../rooms/room_call_manager.dart';
 import '../../rooms/room_call_media_state.dart';
 import '../../rooms/room_call_state.dart';
 import '../wave1_l10n.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 class ResolvedRoomCallReturnBannerState {
   const ResolvedRoomCallReturnBannerState({
@@ -126,6 +127,7 @@ class RuntimeAwareRoomCallReturnBanner extends StatelessWidget {
       onDeclineTap: onDeclineTap,
       statusText: statusText,
       margin: margin,
+      merged: merged,
     );
   }
 }
@@ -258,7 +260,7 @@ class RoomCallReturnBanner extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  isVideo ? Icons.videocam_rounded : Icons.call_rounded,
+                  isVideo ? AdaptiveIcons.videocam_rounded : AdaptiveIcons.call_rounded,
                   color: Colors.white,
                   size: 16,
                 ),
@@ -289,7 +291,7 @@ class RoomCallReturnBanner extends StatelessWidget {
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
-                          Icons.call_end_rounded,
+                          AdaptiveIcons.call_end_rounded,
                           color: Colors.white,
                           size: 16,
                         ),
@@ -303,7 +305,7 @@ class RoomCallReturnBanner extends StatelessWidget {
                     child: Padding(
                       padding: const EdgeInsets.only(left: 8),
                       child: Icon(
-                        selfMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                        selfMuted ? AdaptiveIcons.mic_off_rounded : AdaptiveIcons.mic_rounded,
                         color: Colors.white,
                         size: 18,
                       ),

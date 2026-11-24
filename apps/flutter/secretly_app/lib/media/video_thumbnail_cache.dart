@@ -68,9 +68,14 @@ class VideoThumbnailCache {
   ///
   /// Returns null when the frame can't be produced — a missing/rejected file is
   /// never memoised as a failure, so a later call retries once the blob lands.
+  ///
+  /// [priority] (В-3, 22.11.2026): мимо общей очереди на два места — для
+  /// подсказок отправки (пропорции и миниатюра ролика). Иначе отправка
+  /// ролика ждала, пока галерея или лента вынут свои кадры.
   static Future<VideoThumbnail?> forVideo({
     required String key,
     required String videoPath,
+    bool priority = false,
   }) {
     // Облегчённая сборка: кадр вынимать нечем. Вызывающие уже умеют жить без
     // миниатюры — плитка остаётся с заглушкой и кнопкой воспроизведения.
@@ -78,7 +83,40 @@ class VideoThumbnailCache {
     if (key.isEmpty || videoPath.isEmpty) {
       return Future<VideoThumbnail?>.value(null);
     }
-    return _memo.putIfAbsent(key, () => _resolve(key, videoPath));
+    return _memo.putIfAbsent(
+      key,
+      () => _resolve(key, videoPath, priority: priority),
+    );
+  }
+
+  /// М6 (22.11.2026): кадр, уже вынутый под ключом [fromKey] (заготовка
+  /// отправки — по имени исходного файла), служит и под ключом [key]
+  /// (blobId отправленного ролика). Готовый пузырь тогда не запускает ffmpeg
+  /// второй раз и рисует ТОТ ЖЕ файл кадра — без нового декода. Копия на
+  /// диск — в фоне, чтобы после перезапуска кадр нашёлся по [key].
+  /// `false` — кадра под [fromKey] нет (или [key] уже есть).
+  static bool alias({required String key, required String fromKey}) {
+    if (key.isEmpty || fromKey.isEmpty || key == fromKey) return false;
+    if (_done.containsKey(key)) return false;
+    final hit = _done[fromKey];
+    if (hit == null) return false;
+    _done[key] = hit;
+    _memo[key] = Future<VideoThumbnail?>.value(hit);
+    () async {
+      try {
+        final dir = await _cacheDir();
+        final safeKey = key.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+        final jpg = File(p.join(dir.path, '$safeKey.jpg'));
+        if (!await _isUsable(jpg)) await hit.file.copy(jpg.path);
+        final dur = hit.durationMs;
+        if (dur != null && dur > 0) {
+          await File(p.join(dir.path, '$safeKey.dur')).writeAsString('$dur');
+        }
+      } catch (_) {
+        // Нет копии — после перезапуска кадр вынется заново, как раньше.
+      }
+    }();
+    return true;
   }
 
   static Future<void> _acquire() {
@@ -110,7 +148,11 @@ class VideoThumbnailCache {
     return dir;
   }
 
-  static Future<VideoThumbnail?> _resolve(String key, String videoPath) async {
+  static Future<VideoThumbnail?> _resolve(
+    String key,
+    String videoPath, {
+    bool priority = false,
+  }) async {
     try {
       if (!File(videoPath).existsSync()) {
         _memo.remove(key); // blob not downloaded yet — allow a retry
@@ -129,7 +171,7 @@ class VideoThumbnailCache {
         return hit;
       }
 
-      await _acquire();
+      if (!priority) await _acquire();
       try {
         // Another cell may have produced it while we sat in the queue.
         if (await _isUsable(jpg)) {
@@ -167,7 +209,7 @@ class VideoThumbnailCache {
         _done[key] = made;
         return made;
       } finally {
-        _release();
+        if (!priority) _release();
       }
     } catch (_) {
       _memo.remove(key);

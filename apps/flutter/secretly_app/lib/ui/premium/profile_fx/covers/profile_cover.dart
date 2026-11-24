@@ -68,6 +68,26 @@ enum ProfileCoverStyle {
   const ProfileCoverStyle(this.title, [this.usesAvatar = false]);
   final String title;
 
+  /// Сцена по смыслу ночная и остаётся тёмной и в светлой теме (космос, салют,
+  /// метеоры, гроза…). Дневной тон к ней не применяется: её свет держится на
+  /// сложении света по тёмному небу. Экран профиля может по этому признаку
+  /// держать светлый текст поверх обложки и свой переход в страницу.
+  bool get isNightScene => const <ProfileCoverStyle>{
+        ProfileCoverStyle.classicSpace,
+        ProfileCoverStyle.classicFire,
+        ProfileCoverStyle.classicReef,
+        ProfileCoverStyle.classicFireworks,
+        ProfileCoverStyle.classicMeteors,
+        ProfileCoverStyle.classicFog,
+        ProfileCoverStyle.classicFireflies,
+        ProfileCoverStyle.classicGoldWillow,
+        ProfileCoverStyle.classicGalaxy,
+        ProfileCoverStyle.classicAuroraSky,
+        ProfileCoverStyle.orbits,
+        ProfileCoverStyle.storm,
+        ProfileCoverStyle.warp,
+      }.contains(this);
+
   /// true — сцена построена вокруг фото профиля (фото = луна, солнце, камень…).
   /// Передайте реальное положение аватара через [ProfileCover.avatarCenter] и [ProfileCover.avatarRadius].
   final bool usesAvatar;
@@ -170,7 +190,7 @@ class ProfileCover extends StatefulWidget {
   State<ProfileCover> createState() => _ProfileCoverState();
 }
 
-class _ProfileCoverState extends State<ProfileCover> with SingleTickerProviderStateMixin {
+class _ProfileCoverState extends State<ProfileCover> with PacedTickerProviderStateMixin {
   late CoverSim _sim = widget.style._create();
   late final Ticker _ticker = createTicker(_onTick);
   final _clock = ValueNotifier<int>(0);
@@ -212,7 +232,7 @@ class _ProfileCoverState extends State<ProfileCover> with SingleTickerProviderSt
     _sync();
   }
 
-  bool get _animating => widget.animate && !(MediaQuery.maybeOf(context)?.disableAnimations ?? false);
+  bool get _animating => widget.animate && !(MediaQuery.maybeDisableAnimationsOf(context) ?? false);
 
   void _sync() {
     if (_animating) {
@@ -253,10 +273,14 @@ class _ProfileCoverState extends State<ProfileCover> with SingleTickerProviderSt
     final ptr = tilt != null ? Offset((tilt.dx * 0.5 + 0.5) * size.width, (tilt.dy * 0.5 + 0.5) * size.height) : _ptr;
     final dt = _dt;
     _dt = 0;
+    // Светлая тема (24.11.2026): свечения и сложение света дневных сцен — в
+    // «дневном тоне» (util.dart). Краски и фоны сцен не трогаются (`ink: false`):
+    // у них своя светлая палитра. Ночные сцены рисуются как есть.
+    final day = kFxDayTone && !_dark && !widget.style.isNightScene;
     if (!s.persistent) {
       canvas.save();
       canvas.clipRect(Offset.zero & size);
-      s.draw(canvas, size, _t, dt, _dark, tap, ptr);
+      paintFxDay(day, () => s.draw(canvas, size, _t, dt, _dark, tap, ptr), ink: false);
       canvas.restore();
       return;
     }
@@ -269,7 +293,7 @@ class _ProfileCoverState extends State<ProfileCover> with SingleTickerProviderSt
     } else {
       s._first = true;
     }
-    s.draw(c, size, _t, dt, _dark, tap, ptr);
+    paintFxDay(day, () => s.draw(c, size, _t, dt, _dark, tap, ptr), ink: false);
     final img = rec.endRecording().toImageSync((size.width * _dpr).ceil(), (size.height * _dpr).ceil());
     prev?.dispose();
     _acc = img;

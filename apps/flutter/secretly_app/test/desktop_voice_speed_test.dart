@@ -7,8 +7,9 @@
 // полутора скоростях — это сорок секунд, а не минута.
 //
 // 🔴 ПРАВКА В ОБЩЕМ КОДЕ — УРОВНЯ 1: поле `speed` добавлено в состояние плеера
-// с прежним умолчанием, метод `setSharedAudioSpeed` добавочный. Мобильные
-// экраны ни поля, ни метода не знают — их вид не меняется ни на точку.
+// с прежним умолчанием, метод `setSharedAudioSpeed` добавочный. С 20.11.2026
+// экран чата телефона показывает чип скорости (пузыри «2a», решение
+// владельца); список чатов о скорости не знает.
 
 import 'dart:io';
 
@@ -25,11 +26,17 @@ void main() {
     expect(const SharedAudioPlaybackState().speed, 1.0);
   });
 
-  test('🔴 мобильные экраны о скорости не знают', () {
-    for (final path in const [
-      'lib/ui/chat_screen.dart',
-      'lib/ui/chats_screen.dart',
-    ]) {
+  // 20.11.2026 владелец утвердил пузыри голосовых «2a» и для телефона: чип
+  // скорости «1,5×» на играющем голосовом. С тех пор скорость знает экран
+  // чата (только чип играющего трека), а список чатов — по-прежнему нет.
+  test('экран чата: скорость только чипом на играющем голосовом', () {
+    final chat = File('lib/ui/chat_screen.dart').readAsStringSync();
+    expect('setSharedAudioSpeed('.allMatches(chat).length, 1);
+    expect(chat.contains('audioSpeed:'), isTrue);
+  });
+
+  test('🔴 список чатов о скорости не знает', () {
+    for (final path in const ['lib/ui/chats_screen.dart']) {
       final src = File(path).readAsStringSync();
       expect(src.contains('setSharedAudioSpeed'), isFalse, reason: path);
       // Именно поле состояния плеера: «.speed» само по себе совпадает с

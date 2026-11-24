@@ -13,12 +13,18 @@ import 'package:share_plus/share_plus.dart';
 import '../app/app_controller.dart';
 import '../l10n/app_localizations.dart';
 import '../transport/envelope_file.dart';
+import '../transport/transport_core.dart' show TransportStatus;
 import '../transport/transport_paths.dart';
 import 'animations/page_transitions.dart';
 import 'app_asset_paths.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'settings_group.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_settings_row.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
 
 /// Экран «Сеть» (Э1): каким путём приложение доходит до серверов, прокси
 /// волонтёра, SOCKS и Tor. Сообщения файлом — в [OfflineTransferScreen]. Подписи — из общих локализаций (ARB).
@@ -208,7 +214,25 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
     final enabled = c.transportPathsEnabled;
     final topPad = MediaQuery.of(context).padding.top + kToolbarHeight + 12;
     final bottomPad = MediaQuery.of(context).padding.bottom + 32;
-    return Scaffold(
+    if (settingsAndroidPanels) {
+      return AppleSettingsPageTheme(
+        child: Scaffold(
+          extendBodyBehindAppBar: true,
+          appBar: frostedAppBar(title: Text(l10n.netSettingsTitle)),
+          body: _buildAndroidList(
+            context,
+            l10n: l10n,
+            status: status,
+            enabled: enabled,
+            topPad: topPad,
+            bottomPad: bottomPad,
+          ),
+        ),
+      );
+    }
+    // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
       extendBodyBehindAppBar: true,
       appBar: frostedAppBar(title: Text(l10n.netSettingsTitle)),
       body: ListView(
@@ -240,10 +264,10 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
           Card(
             clipBehavior: Clip.antiAlias,
             child: ListTile(
-              leading: const Icon(Icons.help_outline_rounded),
+              leading: const Icon(AdaptiveIcons.help_outline_rounded),
               title: Text(l10n.netHowItWorksTitle),
               subtitle: Text(l10n.netHowItWorksSubtitle),
-              trailing: const Icon(Icons.chevron_right_rounded),
+              trailing: const Icon(AdaptiveIcons.chevron_right_rounded),
               onTap: () => Navigator.of(context).push(
                 SecretlyPageRoute<void>(
                   builder: (_) => const NetworkHowItWorksScreen(),
@@ -300,10 +324,10 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                     decoration: InputDecoration(
                       hintText: 'proxy.example.org',
                       border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.check_rounded),
+                      suffixIcon: PressFeedback(child: IconButton(
+                        icon: const Icon(AdaptiveIcons.check_rounded),
                         onPressed: enabled ? _saveProxy : null,
-                      ),
+                      )),
                     ),
                     onSubmitted: (_) => _saveProxy(),
                   ),
@@ -321,10 +345,10 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
                     decoration: InputDecoration(
                       hintText: '127.0.0.1:9050',
                       border: const OutlineInputBorder(),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.check_rounded),
+                      suffixIcon: PressFeedback(child: IconButton(
+                        icon: const Icon(AdaptiveIcons.check_rounded),
                         onPressed: enabled ? _saveSocks : null,
-                      ),
+                      )),
                     ),
                     onSubmitted: (_) => _saveSocks(),
                   ),
@@ -346,7 +370,7 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
             child: Column(
               children: <Widget>[
                 ListTile(
-                  leading: const Icon(Icons.shield_moon_rounded),
+                  leading: const Icon(AdaptiveIcons.shield_moon_rounded),
                   title: Text(l10n.netSettingsOrbotTitle),
                   subtitle: Text(l10n.netSettingsOrbotSubtitle),
                   onTap: enabled ? _useOrbot : null,
@@ -371,15 +395,223 @@ class _NetworkSettingsScreenState extends State<NetworkSettingsScreen> {
           Card(
             clipBehavior: Clip.antiAlias,
             child: ListTile(
-              leading: const Icon(Icons.outbox_rounded),
+              leading: const Icon(AdaptiveIcons.outbox_rounded),
               title: Text(l10n.settingsGroupOffline),
               subtitle: Text(l10n.settingsHubOfflineSub),
-              trailing: const Icon(Icons.chevron_right_rounded),
+              trailing: const Icon(AdaptiveIcons.chevron_right_rounded),
               onTap: () => openOfflineTransfer(context: context, controller: c),
             ),
           ),
         ],
       ),
+    ),
+    );
+  }
+}
+
+extension on _NetworkSettingsScreenState {
+  /// Android (23.11.2026, владелец: «доделай все категории, половина на
+  /// старом стиле»): состояние, переключатели и пути — строками групп, поля
+  /// адресов — в панели с плотными отступами. Сохранение и проверки те же.
+  Widget _buildAndroidList(
+    BuildContext context, {
+    required AppLocalizations l10n,
+    required TransportStatus? status,
+    required bool enabled,
+    required double topPad,
+    required double bottomPad,
+  }) {
+    final theme = Theme.of(context);
+    final secondary = AppleGlass.secondaryLabel(
+      theme.brightness == Brightness.dark,
+    );
+    InputDecoration field(String hint, VoidCallback onSave) => InputDecoration(
+      hintText: hint,
+      isDense: true,
+      border: const OutlineInputBorder(),
+      suffixIcon: PressFeedback(
+        child: IconButton(
+          icon: const Icon(AdaptiveIcons.check_rounded),
+          onPressed: enabled ? onSave : null,
+        ),
+      ),
+    );
+    final fieldTitle = TextStyle(
+      fontSize: 15,
+      fontWeight: FontWeight.w600,
+      color: theme.colorScheme.onSurface,
+    );
+    return ListView(
+      padding: EdgeInsets.only(top: topPad, bottom: bottomPad),
+      children: <Widget>[
+        SettingsPageIntro(
+          icon: Image.asset(
+            '${AppAssetPaths.settingsIconsDir}/privat/w11-block.png',
+            color: _networkAmber,
+            colorBlendMode: BlendMode.srcIn,
+          ),
+          color: _networkAmber,
+          text: l10n.settingsIntroNetwork,
+        ),
+        const SizedBox(height: 12),
+        // Состояние: зелёный значок, когда путь известен; серый, когда
+        // обходные пути выключены.
+        settingsRowsGroup(<Widget>[
+          AppleSettingsRow(
+            leading: AppleRowIcon(
+              tint: status != null
+                  ? const Color(0xFF34C759)
+                  : const Color(0xFF8E8E93),
+              icon: AdaptiveIcons.network_check_rounded,
+            ),
+            title: l10n.netSettingsPathToServersTitle,
+            subtitle: status == null ? l10n.netSettingsPathDirectOff : null,
+            trailing: status == null
+                ? null
+                : ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 160),
+                    child: Text(
+                      _pathLabel(l10n, status.currentKind),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: theme.brightness == Brightness.dark
+                            ? const Color(0xFF7CDCA4)
+                            : const Color(0xFF1E7A45),
+                      ),
+                    ),
+                  ),
+          ),
+          AppleSettingsRow(
+            leading: const AppleRowIcon(
+              tint: Color(0xFF0A84FF),
+              icon: AdaptiveIcons.help_outline_rounded,
+            ),
+            title: l10n.netHowItWorksTitle,
+            subtitle: l10n.netHowItWorksSubtitle,
+            onTap: () => Navigator.of(context).push(
+              SecretlyPageRoute<void>(
+                builder: (_) => const NetworkHowItWorksScreen(),
+              ),
+            ),
+          ),
+        ]),
+        SettingsGroupHeader(
+          l10n.settingsGroupBlocked,
+          help: SettingsHelp(
+            title: l10n.settingsGroupBlocked,
+            text: l10n.settingsCaptionBlocked,
+          ),
+        ),
+        settingsRowsGroup(<Widget>[
+          AppleSettingsRow(
+            leading: const AppleRowIcon(
+              tint: Color(0xFFFF9500),
+              icon: AdaptiveIcons.vpn_lock_rounded,
+            ),
+            title: l10n.netSettingsTryAlternativeTitle,
+            subtitle: l10n.netSettingsTryAlternativeSubtitle,
+            trailing: SecretlySwitch(
+              value: enabled,
+              onChanged: (v) => c.setTransportPathsEnabled(v),
+            ),
+            onTap: () => c.setTransportPathsEnabled(!enabled),
+          ),
+        ]),
+        SettingsGroupHeader(
+          l10n.settingsGroupManual,
+          help: SettingsHelp(
+            title: l10n.settingsGroupManual,
+            text: l10n.settingsHelpManual,
+          ),
+        ),
+        SettingsPanel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(l10n.netSettingsVolunteerProxyTitle, style: fieldTitle),
+              const SizedBox(height: 2),
+              Text(
+                l10n.netSettingsVolunteerProxyDescription,
+                style: TextStyle(fontSize: 13, height: 1.3, color: secondary),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _proxy,
+                enabled: enabled,
+                autocorrect: false,
+                keyboardType: TextInputType.url,
+                decoration: field('proxy.example.org', _saveProxy),
+                onSubmitted: (_) => _saveProxy(),
+              ),
+              const SizedBox(height: 12),
+              Text(l10n.netSettingsSocksTitle, style: fieldTitle),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _socks,
+                enabled: enabled,
+                autocorrect: false,
+                keyboardType: TextInputType.url,
+                decoration: field('127.0.0.1:9050', _saveSocks),
+                onSubmitted: (_) => _saveSocks(),
+              ),
+              if (_error.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 8),
+                Text(
+                  _error,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        settingsRowsGroup(<Widget>[
+          AppleSettingsRow(
+            leading: const AppleRowIcon(
+              tint: Color(0xFF7D4CDB),
+              icon: AdaptiveIcons.shield_moon_rounded,
+            ),
+            title: l10n.netSettingsOrbotTitle,
+            subtitle: l10n.netSettingsOrbotSubtitle,
+            showChevron: false,
+            onTap: enabled ? _useOrbot : null,
+          ),
+          if (c.transportTorOffered)
+            AppleSettingsRow(
+              leading: const AppleRowIcon(
+                tint: Color(0xFF5E5CE6),
+                icon: AdaptiveIcons.public_rounded,
+              ),
+              title: l10n.netSettingsTorTitle,
+              subtitle: l10n.netSettingsTorSubtitle,
+              trailing: SecretlySwitch(
+                value: c.transportTorAllowed,
+                onChanged: enabled ? (v) => c.setTransportTorAllowed(v) : null,
+              ),
+              onTap: enabled
+                  ? () => c.setTransportTorAllowed(!c.transportTorAllowed)
+                  : null,
+            ),
+        ]),
+        const SizedBox(height: 12),
+        // Короткая дорога в «Без интернета», как на iPhone.
+        settingsRowsGroup(<Widget>[
+          AppleSettingsRow(
+            leading: const AppleRowIcon(
+              tint: _offlineGreen,
+              icon: AdaptiveIcons.outbox_rounded,
+            ),
+            title: l10n.settingsGroupOffline,
+            subtitle: l10n.settingsHubOfflineSub,
+            onTap: () => openOfflineTransfer(context: context, controller: c),
+          ),
+        ]),
+      ],
     );
   }
 }
@@ -425,6 +657,7 @@ class _OfflineTransferScreenState extends State<OfflineTransferScreen> {
       return;
     }
     final picked = await showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       builder: (sheetCtx) => SafeArea(
         child: ListView(
@@ -486,7 +719,68 @@ class _OfflineTransferScreenState extends State<OfflineTransferScreen> {
     final l10n = AppLocalizations.of(context)!;
     final topPad = MediaQuery.of(context).padding.top + kToolbarHeight + 12;
     final bottomPad = MediaQuery.of(context).padding.bottom + 32;
-    return Scaffold(
+    // Android (23.11.2026): шаги — в панели, два действия — строками группы
+    // со значками и «›», как в «Настройках» iOS, без больших кнопок.
+    if (settingsAndroidPanels) {
+      return AppleSettingsPageTheme(
+        child: Scaffold(
+          extendBodyBehindAppBar: true,
+          appBar: frostedAppBar(title: Text(l10n.settingsGroupOffline)),
+          body: ListView(
+            padding: EdgeInsets.only(top: topPad, bottom: bottomPad),
+            children: <Widget>[
+              SettingsPageIntro(
+                icon: Image.asset(
+                  '${AppAssetPaths.settingsIconsDir}/w11-invite.png',
+                  color: _offlineGreen,
+                  colorBlendMode: BlendMode.srcIn,
+                ),
+                color: _offlineGreen,
+                text: l10n.settingsIntroOffline,
+              ),
+              SettingsGroupHeader(l10n.netHowItWorksTitle),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: SettingsStepsCard(
+                  steps: <(String, String)>[
+                    (l10n.offlineStep1Title, l10n.offlineStep1Body),
+                    (l10n.offlineStep2Title, l10n.offlineStep2Body),
+                    (l10n.offlineStep3Title, l10n.offlineStep3Body),
+                  ],
+                ),
+              ),
+              SettingsGroupHeader(l10n.settingsGroupSend),
+              settingsRowsGroup(<Widget>[
+                AppleSettingsRow(
+                  leading: const AppleRowIcon(
+                    tint: Color(0xFF0A84FF),
+                    icon: AdaptiveIcons.outbox_rounded,
+                  ),
+                  title: l10n.netSettingsSendWithoutNetworkTitle,
+                  onTap: _exportOffline,
+                ),
+              ]),
+              SettingsGroupCaption(l10n.settingsCaptionOffline),
+              SettingsGroupHeader(l10n.settingsGroupReceive),
+              settingsRowsGroup(<Widget>[
+                AppleSettingsRow(
+                  leading: const AppleRowIcon(
+                    tint: _offlineGreen,
+                    icon: AdaptiveIcons.move_to_inbox_rounded,
+                  ),
+                  title: l10n.netSettingsOpenMessageFileTitle,
+                  onTap: _importOffline,
+                ),
+              ]),
+              SettingsGroupCaption(l10n.netSettingsOpenMessageFileSubtitle),
+            ],
+          ),
+        ),
+      );
+    }
+    // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
       extendBodyBehindAppBar: true,
       appBar: frostedAppBar(title: Text(l10n.settingsGroupOffline)),
       body: ListView(
@@ -513,14 +807,14 @@ class _OfflineTransferScreenState extends State<OfflineTransferScreen> {
           SettingsGroupHeader(l10n.settingsGroupSend, inset: 16),
           SettingsActionButton(
             primary: true,
-            icon: Icons.outbox_rounded,
+            icon: AdaptiveIcons.outbox_rounded,
             label: l10n.netSettingsSendWithoutNetworkTitle,
             onPressed: _exportOffline,
           ),
           SettingsGroupCaption(l10n.settingsCaptionOffline, inset: 16),
           SettingsGroupHeader(l10n.settingsGroupReceive, inset: 16),
           SettingsActionButton(
-            icon: Icons.move_to_inbox_rounded,
+            icon: AdaptiveIcons.move_to_inbox_rounded,
             label: l10n.netSettingsOpenMessageFileTitle,
             onPressed: _importOffline,
           ),
@@ -530,6 +824,7 @@ class _OfflineTransferScreenState extends State<OfflineTransferScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 }
@@ -551,7 +846,22 @@ class NetworkHowItWorksScreen extends StatelessWidget {
       (l10n.netHowStep5Title, l10n.netHowStep5Body),
       (l10n.netHowStep6Title, l10n.netHowStep6Body),
     ];
-    return Scaffold(
+    // Android (23.11.2026): шесть шагов одной панелью с номерами, как шаги
+    // «Без интернета», а не шесть отдельных карточек.
+    if (settingsAndroidPanels) {
+      return AppleSettingsPageTheme(
+        child: Scaffold(
+          appBar: AppBar(title: Text(l10n.netHowItWorksTitle)),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: <Widget>[SettingsStepsCard(steps: steps)],
+          ),
+        ),
+      );
+    }
+    // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
       appBar: AppBar(title: Text(l10n.netHowItWorksTitle)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -602,6 +912,7 @@ class NetworkHowItWorksScreen extends StatelessWidget {
             ),
         ],
       ),
+    ),
     );
   }
 }

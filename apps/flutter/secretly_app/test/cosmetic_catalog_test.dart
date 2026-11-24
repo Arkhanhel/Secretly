@@ -53,13 +53,24 @@ void main() {
     });
 
     // Решение владельца 13.11.2026: 10 бесплатных — 6 рамок и 4 обложки.
-    test('6 free frames and 4 free covers, all of them real catalog ids', () {
+    test('6 free frames and 27 free covers, all of them real catalog ids', () {
       expect(kFreeAvatarFrameIds, hasLength(6));
-      expect(kFreeProfileCoverIds, hasLength(4));
+      // 4 прежних + 11 обложек-узоров (21.11.2026, с «Отпечатком ключа»)
+      // + «Без обложки» (22.11.2026) + 11 узоров второй волны (22.11.2026).
+      // Набор только растёт.
+      expect(kFreeProfileCoverIds, hasLength(27));
+      expect(
+        kFreeProfileCoverIds,
+        containsAll(<String>['space', 'waves', 'marks', 'goldhaze']),
+      );
       final frameIds = kAllAvatarFrames.map((f) => f.id).toSet();
       final coverIds = kAllProfileCovers.map((c) => c.id).toSet();
       expect(frameIds.containsAll(kFreeAvatarFrameIds), isTrue);
-      expect(coverIds.containsAll(kFreeProfileCoverIds), isTrue);
+      // «Без обложки» — выбор, а не обложка каталога.
+      expect(
+        coverIds.containsAll(kFreeProfileCoverIds.difference({kNoProfileCoverId})),
+        isTrue,
+      );
     });
 
     test('free frame/cover allowed on free tier, the rest is Premium', () {
@@ -143,5 +154,26 @@ void main() {
     test('kill-switch off (null state) allows premium call tones (fail open)', () {
       expect(isCallRingtoneAllowed(null, 'chime'), isTrue);
     });
+  });
+
+  test('23.11.2026: бесплатные рамки и обложки стоят первыми', () {
+    bool sorted(List<bool> free) {
+      final firstPaid = free.indexOf(false);
+      return firstPaid < 0 || !free.sublist(firstPaid).contains(true);
+    }
+
+    final frames = [
+      for (final f in kAllAvatarFrames)
+        isCosmeticFree(CosmeticKind.avatarFrame, f.id),
+    ];
+    final covers = [
+      for (final c in kAllProfileCovers)
+        isCosmeticFree(CosmeticKind.profileCover, c.id),
+    ];
+    expect(sorted(frames), isTrue);
+    expect(sorted(covers), isTrue);
+    expect(frames.where((f) => f).length, kFreeAvatarFrameIds.length);
+    expect(kFreeProfileCoverCount, covers.where((c) => c).length);
+    expect(kAllAvatarFrames.any((f) => f.id == 'flow'), isFalse);
   });
 }

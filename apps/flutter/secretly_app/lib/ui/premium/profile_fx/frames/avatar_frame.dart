@@ -90,14 +90,16 @@ class FramePalette {
   final bool dark;
   final Color bg;
   Color get ink => dark ? const Color(0xFFD8D8DE) : const Color(0xFF2A2A30);
-  Color get band => dark ? const Color(0xFF5A5A6C) : const Color(0xFF2C2C34);
-  Color get glove => const Color(0xFF2A2D3A);
-  Color get sleeve => dark ? const Color(0xFFFFA852) : const Color(0xFFFF9F43);
-  Color get track => dark ? const Color(0xFF2A2A30) : const Color(0xFFECEAE5);
-  Color get chip => dark ? const Color(0xFF2C2E3A) : const Color(0xFF1B1D27);
-  Color get cloud => dark ? const Color(0xFF6A7185) : const Color(0xFFD5DBE6);
-  double get shadow => dark ? 0.4 : 0.14;
-  double get bubbleAlpha => dark ? 0.18 : 0.12;
+  Color get band => dark ? const Color(0xFF5A5A6C) : const Color(0xFF3A3D4A);
+  // Светлая тема (24.11.2026): перчатки и плашки-чипы были почти чёрными
+  // кусками на белом — теперь глубокий графит с холодным оттенком.
+  Color get glove => dark ? const Color(0xFF2A2D3A) : const Color(0xFF454B5E);
+  Color get sleeve => dark ? const Color(0xFFFFA852) : const Color(0xFFFF9330);
+  Color get track => dark ? const Color(0xFF2A2A30) : const Color(0xFFE4E6EC);
+  Color get chip => dark ? const Color(0xFF2C2E3A) : const Color(0xFF353A4C);
+  Color get cloud => dark ? const Color(0xFF6A7185) : const Color(0xFFC9D2E2);
+  double get shadow => dark ? 0.4 : 0.16;
+  double get bubbleAlpha => dark ? 0.18 : 0.16;
 
   @override
   bool operator ==(Object other) =>
@@ -150,7 +152,7 @@ class AnimatedAvatarFrame extends StatefulWidget {
   State<AnimatedAvatarFrame> createState() => _AnimatedAvatarFrameState();
 }
 
-class _AnimatedAvatarFrameState extends State<AnimatedAvatarFrame> with SingleTickerProviderStateMixin {
+class _AnimatedAvatarFrameState extends State<AnimatedAvatarFrame> with PacedTickerProviderStateMixin {
   late FrameSim _sim = widget.frame._create();
   late final Ticker _ticker = createTicker(_onTick);
   Duration _last = Duration.zero;
@@ -173,7 +175,7 @@ class _AnimatedAvatarFrameState extends State<AnimatedAvatarFrame> with SingleTi
     _sync();
   }
 
-  bool get _animating => widget.animate && !(MediaQuery.maybeOf(context)?.disableAnimations ?? false);
+  bool get _animating => widget.animate && !(MediaQuery.maybeDisableAnimationsOf(context) ?? false);
 
   void _sync() {
     _sim
@@ -262,7 +264,14 @@ class _FramePainter extends CustomPainter {
   final FramePalette pal;
   final bool front;
   @override
-  void paint(Canvas c, Size size) => front ? sim.paintFront(c, pal) : sim.paintBack(c, pal);
+  void paint(Canvas c, Size size) {
+    // Светлая тема: «дневной тон» (util.dart) + слой насыщенности. Фото лежит
+    // между задним и передним художником и в слой не попадает.
+    final day = kFxDayTone && !pal.dark;
+    if (day) c.saveLayer(const Rect.fromLTRB(-200, -200, 400, 400), fxDayLayerPaint);
+    paintFxDay(day, () => front ? sim.paintFront(c, pal) : sim.paintBack(c, pal));
+    if (day) c.restore();
+  }
   @override
   bool shouldRepaint(_FramePainter o) => o.sim != sim || o.pal != pal || o.front != front;
 }

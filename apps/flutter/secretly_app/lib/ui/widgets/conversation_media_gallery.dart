@@ -8,6 +8,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 
+import '../glass/glass_category_strip.dart';
+
 import '../../diagnostics/diag_log.dart';
 import '../../app/app_controller.dart';
 import '../../media/music_tags.dart';
@@ -18,14 +20,24 @@ import '../chat_message_mentions.dart' show extractChatMessageLinks;
 import '../chat_screen_l10n.dart';
 import '../icons/app_icons.dart';
 import '../l10n.dart';
+import '../motion/app_dialogs.dart';
+import 'apple_menu.dart';
 import 'attachment_actions.dart';
 import 'attachment_open.dart';
 import 'media_viewer.dart';
+import '../media_viewer/edited_media_view.dart' show EditedMediaView;
+import '../media_viewer/media_edits.dart' show MediaEdits;
+import '../media_viewer/media_edits_store.dart' show MediaEditsStore;
+import '../media_viewer/media_flight.dart' show MediaFlightAnchor;
+import '../media_viewer/media_viewer_screen.dart'
+    show MediaViewerActions, MediaViewerEntry, MediaViewerKind, openMediaViewer;
+import '../media_viewer/media_viewer_tokens.dart' show mediaViewerV2Enabled;
 import '../secretly_snackbar.dart';
 import '../wave1_l10n.dart';
 import 'full_bleed_zoom.dart';
 import 'broken_media_box.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 class ConversationMediaGalleryVm {
   const ConversationMediaGalleryVm({
@@ -286,7 +298,7 @@ Future<void> openConversationAttachmentImage(
 ) async {
   final file = await loadConversationAttachmentFile(controller, attachment);
   if (!context.mounted || file == null || !file.existsSync()) return;
-  await showDialog<void>(
+  await showAppDialog<void>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.88),
     builder: (dialogCtx) {
@@ -322,6 +334,17 @@ Future<void> openConversationMediaViewer(
   required String convoId,
 }) async {
   if (items.isEmpty) return;
+  if (mediaViewerV2Enabled) {
+    await _openConversationMediaViewerV2(
+      context,
+      controller,
+      items: items,
+      index: index,
+      title: title,
+      convoId: convoId,
+    );
+    return;
+  }
   final viewerItems = items
       .map((i) => MediaViewerItem(event: i.event, attachment: i.attachment))
       .toList(growable: false);
@@ -346,7 +369,7 @@ Future<void> openConversationMediaViewer(
     }
   }
 
-  await showDialog<void>(
+  await showAppDialog<void>(
     context: context,
     useSafeArea: false,
     barrierColor: Colors.black.withValues(alpha: 0.92),
@@ -421,6 +444,115 @@ Future<void> openConversationMediaViewer(
               showPlayGlyph: !forStrip,
             ),
       ),
+    ),
+  );
+}
+
+/// Новый просмотр (макет «Просмотр медиа», 22.11.2026) для вкладки «Медиа»
+/// профиля собеседника и комнаты. Ответ, пересылка и удаление — как и прежде,
+/// только из самого чата: здесь мы не внутри него.
+Future<void> _openConversationMediaViewerV2(
+  BuildContext context,
+  AppController controller, {
+  required List<ConversationAttachmentItem> items,
+  required int index,
+  required String title,
+  required String convoId,
+}) async {
+  final l10n = context.l10n;
+  final entries = <MediaViewerEntry>[
+    for (final i in items)
+      () {
+        final att = i.attachment;
+        final isVideo = (att.mime ?? '').toLowerCase().startsWith('video/');
+        final own = controller.isOwnDeviceId(i.senderDeviceId);
+        final w = att.width, h = att.height;
+        return MediaViewerEntry(
+          id: att.blobId,
+          kind: isVideo ? MediaViewerKind.video : MediaViewerKind.photo,
+          loadFile: () async {
+            final f = await loadConversationAttachmentFile(controller, att);
+            if (f == null) throw StateError('attachment file unavailable');
+            return f;
+          },
+          cachedFile: () => cachedConversationAttachmentFile(controller, att),
+          title: own ? l10n.mvYou : title,
+          time: DateTime.fromMillisecondsSinceEpoch(i.createdAtMs),
+          caption: att.caption,
+          own: own,
+          knownAspect: isVideo && w != null && h != null && w > 0 && h > 0
+              ? w / h
+              : null,
+          duration: att.durationMs == null
+              ? null
+              : Duration(milliseconds: att.durationMs!),
+          exportName: att.filename,
+          payload: i,
+        );
+      }(),
+  ];
+  ConversationAttachmentItem itemOf(MediaViewerEntry e) =>
+      e.payload! as ConversationAttachmentItem;
+  Future<File> source(MediaViewerEntry e) =>
+      controller.ensureCachedAttachmentFile(itemOf(e).attachment);
+  await openMediaViewer(
+    context,
+    entries: entries,
+    initialIndex: index,
+    title: title,
+    hapticsEnabled: () => controller.appHapticsEnabled,
+    actions: MediaViewerActions(
+      // Правка — только из чата: там есть куда отправить копию (оригинал
+      // больше не правится поверх, 22.11.2026).
+      canEdit: false,
+      onShowInChat: (e) async {
+        if (!context.mounted) return;
+        await showAttachmentInChat(
+          context,
+          controller,
+          convoId,
+          itemOf(e).attachment,
+        );
+      },
+      onShare: (e) async {
+        final i = itemOf(e);
+        await shareAttachmentFile(
+          attachment: i.attachment,
+          createdAtMs: i.createdAtMs,
+          source: await source(e),
+        );
+        return null;
+      },
+      onSaveToGallery: (e) async {
+        final i = itemOf(e);
+        final f = await source(e);
+        final inGallery = await saveMediaToSystemGallery(
+          attachment: i.attachment,
+          createdAtMs: i.createdAtMs,
+          source: f,
+        );
+        if (inGallery) return l10n.mvSavedToGallery;
+        final saved = await saveAttachmentToDownloads(
+          attachment: i.attachment,
+          createdAtMs: i.createdAtMs,
+          source: f,
+        );
+        return l10n.savedTo(saved.path);
+      },
+      onSaveAsFile: (e) async {
+        final i = itemOf(e);
+        final f = await source(e);
+        final path = await saveAttachmentToUserVisibleLocation(
+          fileName: attachmentDownloadSuggestedName(
+            i.attachment,
+            i.createdAtMs,
+            f,
+          ),
+          source: f,
+          mime: i.attachment.mime,
+        );
+        return l10n.savedTo(path);
+      },
     ),
   );
 }
@@ -640,9 +772,13 @@ class _MediaGridCellState extends State<_MediaGridCell> {
     final failed = !_isVideo && _phase == _CellPhase.failed;
     return InkWell(
       onTap: failed ? () => unawaited(_resolve()) : widget.onTap,
-      child: ColoredBox(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-        child: _isVideo ? _buildVideo(context) : _buildImage(context),
+      // Точка перелёта нового просмотра; скрыта, пока её снимок открыт.
+      child: MediaFlightAnchor(
+        tag: widget.item.attachment.blobId,
+        child: ColoredBox(
+          color: Theme.of(context).colorScheme.surfaceContainerHigh,
+          child: _isVideo ? _buildVideo(context) : _buildImage(context),
+        ),
       ),
     );
   }
@@ -655,7 +791,7 @@ class _MediaGridCellState extends State<_MediaGridCell> {
       // Перечёркнутая картинка: файла больше нет, и нажимать некуда.
       return Center(
         child: Icon(
-          Icons.image_not_supported_outlined,
+          AdaptiveIcons.image_not_supported_outlined,
           color: cs.onSurfaceVariant.withValues(alpha: 0.55),
         ),
       );
@@ -678,7 +814,7 @@ class _MediaGridCellState extends State<_MediaGridCell> {
     // действие, и нажатие его выполняет.
     return Center(
       child: Icon(
-        Icons.download_rounded,
+        AdaptiveIcons.download_rounded,
         color: cs.onSurfaceVariant.withValues(alpha: 0.85),
       ),
     );
@@ -714,7 +850,7 @@ class _MediaGridCellState extends State<_MediaGridCell> {
               color: Colors.black.withValues(alpha: 0.42),
             ),
             child: const Icon(
-              Icons.play_arrow_rounded,
+              AdaptiveIcons.play_arrow_rounded,
               size: 20,
               color: Colors.white,
             ),
@@ -768,12 +904,32 @@ class _MediaGridCellState extends State<_MediaGridCell> {
         final cacheDim = longestEdge.isFinite && longestEdge > 0
             ? (longestEdge * dpr).round()
             : null;
-        return Image.file(
+        final plain = Image.file(
           f,
           fit: BoxFit.cover,
           cacheWidth: landscape ? null : cacheDim,
           cacheHeight: landscape ? cacheDim : null,
           errorBuilder: (_, _, _) => const BrokenMediaBox(),
+        );
+        if (_isVideo || !mediaViewerV2Enabled) return plain;
+        // Правки фото из просмотра — и в плитке.
+        return ValueListenableBuilder<MediaEdits?>(
+          valueListenable: MediaEditsStore.instance.listen(att.blobId),
+          child: plain,
+          builder: (context, edits, plain) {
+            if (edits == null || edits.isIdentity) return plain!;
+            return EditedMediaView(
+              image: cacheDim == null
+                  ? FileImage(f) as ImageProvider
+                  : ResizeImage(
+                      FileImage(f),
+                      width: landscape ? null : cacheDim,
+                      height: landscape ? cacheDim : null,
+                    ),
+              edits: edits,
+              cover: true,
+            );
+          },
         );
       },
     );
@@ -1075,7 +1231,7 @@ class ConversationMusicList extends StatelessWidget {
             style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
           ),
           onTap: () => _play(context, index),
-          trailing: PopupMenuButton<_MusicMenuAction>(
+          trailing: AppPopupMenuButton<_MusicMenuAction>(
             tooltip: wave1Text(
               context,
               ru: 'Действия',
@@ -1086,14 +1242,14 @@ class ConversationMusicList extends StatelessWidget {
               fr: 'Actions',
               de: 'Aktionen',
             ),
-            icon: Icon(appleMoreIcon(Icons.more_vert_rounded), color: cs.onSurfaceVariant),
+            icon: Icon(appleMoreIcon(AdaptiveIcons.more_vert_rounded), color: cs.onSurfaceVariant),
             onSelected: (action) => _handle(context, action, index),
             itemBuilder: (context) => [
               PopupMenuItem<_MusicMenuAction>(
                 value: _MusicMenuAction.play,
                 child: Row(
                   children: [
-                    const Icon(Icons.play_arrow_rounded, size: 18),
+                    const Icon(AdaptiveIcons.play_arrow_rounded, size: 18),
                     const SizedBox(width: 10),
                     Text(
                       wave1Text(
@@ -1116,7 +1272,7 @@ class ConversationMusicList extends StatelessWidget {
                   child: Row(
                     children: [
                       // Same glyph the fullscreen viewer uses for this action.
-                      const Icon(Icons.visibility_outlined, size: 18),
+                      const Icon(AdaptiveIcons.visibility_outlined, size: 18),
                       const SizedBox(width: 10),
                       Text(
                         wave1Text(
@@ -1158,7 +1314,7 @@ class ConversationMusicList extends StatelessWidget {
                 value: _MusicMenuAction.share,
                 child: Row(
                   children: [
-                    Icon(appleShareIcon(Icons.share_outlined), size: 18),
+                    Icon(appleShareIcon(AdaptiveIcons.share_outlined), size: 18),
                     const SizedBox(width: 10),
                     Text(
                       wave1Text(
@@ -1248,52 +1404,63 @@ class _ConversationMediaGallerySectionState
     final l10n = context.l10n;
     final controller = widget.controller;
     final convoId = widget.convoId;
+    final tabLabels = <String>[
+      wave1Text(
+        context,
+        ru: 'Фото',
+        en: 'Photos',
+        uk: 'Фото',
+        es: 'Fotos',
+        pt: 'Fotos',
+        fr: 'Photos',
+        de: 'Fotos',
+      ),
+      wave1Text(
+        context,
+        ru: 'Видео',
+        en: 'Videos',
+        uk: 'Відео',
+        es: 'Vídeos',
+        pt: 'Videos',
+        fr: 'Vidéos',
+        de: 'Videos',
+      ),
+      l10n.contactDetailsFilesTab,
+      wave1Text(
+        context,
+        ru: 'Музыка',
+        en: 'Music',
+        uk: 'Музика',
+        es: 'Música',
+        pt: 'Música',
+        fr: 'Musique',
+        de: 'Musik',
+      ),
+    ];
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        TabBar(
-          controller: _tabs,
-          isScrollable: true,
-          tabs: [
-            Tab(
-              text: wave1Text(
-                context,
-                ru: 'Фото',
-                en: 'Photos',
-                uk: 'Фото',
-                es: 'Fotos',
-                pt: 'Fotos',
-                fr: 'Photos',
-                de: 'Fotos',
+        // 23.11.2026 (план стекла): одна полоса во всю ширину, четыре равные
+        // доли, капля переливается за вкладкой (TabController.animation).
+        if (kGlassCategoryStrip)
+          Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 6),
+            child: ListenableBuilder(
+              listenable: _tabs,
+              builder: (context, _) => GlassCategoryStrip(
+                items: [for (final l in tabLabels) GlassStripItem(label: l)],
+                selected: _tabs.index,
+                position: _tabs.animation,
+                onSelect: _tabs.animateTo,
               ),
             ),
-            Tab(
-              text: wave1Text(
-                context,
-                ru: 'Видео',
-                en: 'Videos',
-                uk: 'Відео',
-                es: 'Vídeos',
-                pt: 'Videos',
-                fr: 'Vidéos',
-                de: 'Videos',
-              ),
-            ),
-            Tab(text: l10n.contactDetailsFilesTab),
-            Tab(
-              text: wave1Text(
-                context,
-                ru: 'Музыка',
-                en: 'Music',
-                uk: 'Музика',
-                es: 'Música',
-                pt: 'Música',
-                fr: 'Musique',
-                de: 'Musik',
-              ),
-            ),
-          ],
-        ),
+          )
+        else
+          TabBar(
+            controller: _tabs,
+            isScrollable: true,
+            tabs: [for (final l in tabLabels) Tab(text: l)],
+          ),
         FutureBuilder<ConversationMediaGalleryVm>(
           future: _vmFor(convoId),
           builder: (context, snap) {

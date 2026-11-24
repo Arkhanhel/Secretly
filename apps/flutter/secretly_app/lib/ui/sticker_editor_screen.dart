@@ -13,9 +13,13 @@ import 'package:path_provider/path_provider.dart';
 import '../app/app_controller.dart';
 import '../stickers/sticker_segmentation_service.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'secretly_snackbar.dart';
 import 'sticker_preview_screen.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Telegram-parity sticker editor — ONE screen, everything at once:
 ///  • photo in a fixed SQUARE frame (pan / pinch-zoom / rotate, two fingers);
@@ -495,6 +499,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
   // ───────────────────────────────────────────────────────── layers ──
   Future<void> _addEmoji() async {
     final e = await showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       backgroundColor: const Color(0xFF1C1C1E),
       builder: (_) => const _EmojiSheet(),
@@ -677,10 +682,10 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
     }
 
     return <Widget>[
-      handle(del, Icons.close_rounded, onTap: _deleteActive),
+      handle(del, AdaptiveIcons.close_rounded, onTap: _deleteActive),
       handle(
         sr,
-        Icons.open_in_full_rounded,
+        AdaptiveIcons.open_in_full_rounded,
         onPan: (d) => _handleScaleRotate(d, size),
       ),
     ];
@@ -782,15 +787,15 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
         leading: _selecting
-            ? IconButton(
-                icon: const Icon(Icons.close_rounded),
+            ? PressFeedback(child: IconButton(
+                icon: const Icon(AdaptiveIcons.close_rounded),
                 onPressed: _busy ? null : _cancelCutout,
-              )
+              ))
             : (_editingText
-                  ? IconButton(
-                      icon: const Icon(Icons.close_rounded),
+                  ? PressFeedback(child: IconButton(
+                      icon: const Icon(AdaptiveIcons.close_rounded),
                       onPressed: _cancelTextEdit,
-                    )
+                    ))
                   : null),
         title: Text(
           _editingText
@@ -801,35 +806,35 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
         ),
         actions: [
           if (!_selecting && !_editingText) ...[
-            IconButton(
+            PressFeedback(child: IconButton(
               tooltip: context.l10n.stickerEditorUndo,
-              icon: const Icon(Icons.undo_rounded),
+              icon: const Icon(AdaptiveIcons.undo_rounded),
               onPressed: _undoStack.isEmpty ? null : _undo,
-            ),
-            IconButton(
+            )),
+            PressFeedback(child: IconButton(
               tooltip: context.l10n.stickerEditorRedo,
-              icon: const Icon(Icons.redo_rounded),
+              icon: const Icon(AdaptiveIcons.redo_rounded),
               onPressed: _redoStack.isEmpty ? null : _redo,
-            ),
+            )),
           ],
           if (!_selecting && !_editingText && _active >= 0)
-            IconButton(
+            PressFeedback(child: IconButton(
               tooltip: context.l10n.stickerEditorDelete,
-              icon: const Icon(Icons.delete_outline_rounded),
+              icon: const Icon(AdaptiveIcons.delete_outline_rounded),
               onPressed: _deleteActive,
-            ),
+            )),
           if (_editingText)
-            IconButton(
+            PressFeedback(child: IconButton(
               tooltip: context.l10n.stickerEditorDone,
-              icon: const Icon(Icons.check_rounded),
+              icon: const Icon(AdaptiveIcons.check_rounded),
               onPressed: _commitTextEdit,
-            )
+            ))
           else if (!_selecting)
-            IconButton(
+            PressFeedback(child: IconButton(
               tooltip: context.l10n.stickerEditorDone,
-              icon: const Icon(Icons.check_rounded),
+              icon: const Icon(AdaptiveIcons.check_rounded),
               onPressed: _busy ? null : _confirm,
-            ),
+            )),
         ],
       ),
       body: _editingText
@@ -1500,7 +1505,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(
-                  Icons.auto_fix_high_rounded,
+                  AdaptiveIcons.auto_fix_high_rounded,
                   color: Colors.white,
                   size: 20,
                 ),
@@ -1553,7 +1558,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
         child: Row(
           children: [
             _compactTabButton(
-              Icons.brush_rounded,
+              AdaptiveIcons.brush_rounded,
               context.l10n.stickerEditorDraw,
               _panel == _Panel.draw,
               () => setState(
@@ -1562,7 +1567,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
               ),
             ),
             _compactTabButton(
-              Icons.tune_rounded,
+              AdaptiveIcons.tune_rounded,
               context.l10n.stickerEditorAdjust,
               _panel == _Panel.adjust,
               () => setState(
@@ -1572,7 +1577,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
               ),
             ),
             _compactTabButton(
-              Icons.format_color_fill_rounded,
+              AdaptiveIcons.format_color_fill_rounded,
               context.l10n.stickerEditorBackground,
               _panel == _Panel.bg,
               () => setState(
@@ -1580,7 +1585,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
               ),
             ),
             _compactTabButton(
-              Icons.title_rounded,
+              AdaptiveIcons.title_rounded,
               context.l10n.stickerEditorText,
               false,
               () {
@@ -1589,7 +1594,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
               },
             ),
             _compactTabButton(
-              Icons.emoji_emotions_outlined,
+              AdaptiveIcons.emoji_emotions_outlined,
               context.l10n.stickerEditorEmoji,
               false,
               () {
@@ -1639,7 +1644,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
       borderRadius: BorderRadius.circular(16),
       child: AnimatedSize(
         duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
+        curve: Motion.standard,
         child: switch (_panel) {
           _Panel.draw => _compactDrawTools(),
           _Panel.adjust => _compactAdjustTools(),
@@ -1683,16 +1688,16 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
           const SizedBox(width: 12),
           _toolDivider(),
           const SizedBox(width: 12),
-          brushToggle(_Brush.pen, Icons.edit_rounded),
-          brushToggle(_Brush.marker, Icons.highlight_rounded),
-          brushToggle(_Brush.neon, Icons.auto_awesome_rounded),
-          brushToggle(_Brush.eraser, Icons.cleaning_services_rounded),
+          brushToggle(_Brush.pen, AdaptiveIcons.edit_rounded),
+          brushToggle(_Brush.marker, AdaptiveIcons.highlight_rounded),
+          brushToggle(_Brush.neon, AdaptiveIcons.auto_awesome_rounded),
+          brushToggle(_Brush.eraser, AdaptiveIcons.cleaning_services_rounded),
           const SizedBox(width: 12),
           _toolDivider(),
           const SizedBox(width: 12),
           // White sticker-border outline (Telegram-style). Width + colour are
           // set with the left/right sliders while it's active.
-          _compactToolToggle(Icons.border_outer_rounded, _contour, () {
+          _compactToolToggle(AdaptiveIcons.border_outer_rounded, _contour, () {
             HapticFeedback.selectionClick();
             setState(() => _contour = !_contour);
           }),
@@ -1756,7 +1761,7 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
                   ),
                   child: c == null
                       ? const Icon(
-                          Icons.block_rounded,
+                          AdaptiveIcons.block_rounded,
                           size: 16,
                           color: Colors.white54,
                         )
@@ -1871,16 +1876,16 @@ class _StickerEditorScreenState extends State<StickerEditorScreen>
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
-              child: FilledButton.icon(
+              child: PressFeedback(child: FilledButton.icon(
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFF4DA3FF),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 13),
                 ),
                 onPressed: _busy ? null : _applyCutout,
-                icon: const Icon(Icons.content_cut_rounded),
+                icon: const Icon(AdaptiveIcons.content_cut_rounded),
                 label: Text(context.l10n.stickerEditorCut),
-              ),
+              )),
             ),
           ],
         ),

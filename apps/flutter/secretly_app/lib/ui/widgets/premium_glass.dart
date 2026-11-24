@@ -2,9 +2,11 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:math' as math;
+import '../motion/decoration_pacer.dart';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Shared premium visual language (TZ-MONETIZE-01 §C-4 polish):
 /// — [ShimmerGoldText] : slowly-flowing molten-gold text (Premium wordmark),
@@ -59,7 +61,7 @@ class ShimmerGoldText extends StatefulWidget {
 }
 
 class _ShimmerGoldTextState extends State<ShimmerGoldText>
-    with SingleTickerProviderStateMixin {
+    with PacedTickerProviderStateMixin {
   late final AnimationController _c =
       AnimationController(vsync: this, duration: widget.period)..repeat();
 
@@ -125,7 +127,7 @@ class GoldPremiumBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.auto_awesome, size: fontSize, color: c),
+          Icon(AdaptiveIcons.auto_awesome, size: fontSize, color: c),
           const SizedBox(width: 4),
           ShimmerGoldText(
             'Premium',
@@ -148,7 +150,7 @@ class GetPremiumChip extends StatelessWidget {
     super.key,
     required this.onTap,
     this.label,
-    this.icon = Icons.workspace_premium_rounded,
+    this.icon = AdaptiveIcons.workspace_premium_rounded,
     this.dense = false,
   });
 
@@ -387,7 +389,7 @@ class CosmicDustField extends StatefulWidget {
 }
 
 class _CosmicDustFieldState extends State<CosmicDustField>
-    with SingleTickerProviderStateMixin {
+    with PacedTickerProviderStateMixin {
   late final AnimationController _c =
       AnimationController(vsync: this, duration: const Duration(seconds: 18))
         ..repeat();

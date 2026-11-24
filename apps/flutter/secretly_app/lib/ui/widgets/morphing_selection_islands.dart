@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'dart:math' as math;
 import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 
+import '../home/home_top_islands.dart' show HomeSectionIsland;
 import 'frosted_header_island.dart';
 
 /// Seamless "bubble morph" for the top list app-bar islands.
@@ -36,6 +38,8 @@ class MorphingSelectionIslands extends StatelessWidget {
     this.compactRightWidth = 56,
     this.selectionActionsWidth = 256,
     this.centerLeftNormal = true,
+    this.compactLeft = false,
+    this.centerTitle,
   });
 
   final double searchReveal;
@@ -71,6 +75,14 @@ class MorphingSelectionIslands extends StatelessWidget {
   /// Whether the normal left content is centered (logo) vs left-aligned (title).
   final bool centerLeftNormal;
 
+  /// Острова v3: левый островок по размеру содержимого (название приложения),
+  /// правый прижат вправо. `false` — прежняя раскладка во всю ширину.
+  final bool compactLeft;
+
+  /// Острова v3: название раздела в отдельном островке посередине (только
+  /// при [compactLeft]). Гаснет в поиске и выделении.
+  final String? centerTitle;
+
   @override
   Widget build(BuildContext context) {
     final s = searchReveal.clamp(0.0, 1.0);
@@ -82,16 +94,44 @@ class MorphingSelectionIslands extends StatelessWidget {
         final normalRightW = hasSearch
             ? lerpDouble(compactRightWidth, total, s)!
             : compactRightWidth;
+        // 🔴 22.11.2026: место слева под «✕ + число» (≈92) на любом экране.
+        final selRightW = compactLeft
+            ? math.min(selectionActionsWidth, total - 92)
+            : selectionActionsWidth;
         final rightW = lerpDouble(
           normalRightW,
-          selectionActionsWidth,
+          selRightW,
           selO,
         )!.clamp(0.0, total);
+        // 🔴 21.11.2026: левому островку — только то, что ОСТАЛОСЬ от правого
+        // (не больше половины). Раньше «до половины» без оглядки на правый:
+        // в выделении правый растёт до ширины действий, и вместе они не
+        // помещались — острова переставали перетекать друг в друга.
+        final leftMax = math.max(
+          0.0,
+          math.min(total * 0.5, total - rightW - 8),
+        );
+        Widget leftFrame(Widget frame) => compactLeft
+            // Левый островок — по содержимому, но не больше оставшегося.
+            ? ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: leftMax),
+                child: frame,
+              )
+            : Expanded(child: frame);
+        // Сжимаемое содержимое левого островка обрезается, а не «вылезает».
+        Widget fit(Widget child) => compactLeft
+            ? UnconstrainedBox(
+                alignment: Alignment.centerLeft,
+                constrainedAxis: Axis.vertical,
+                clipBehavior: Clip.hardEdge,
+                child: child,
+              )
+            : child;
+        final centerFade = ((1 - s) * (1 - selO)).clamp(0.0, 1.0);
         return Row(
           children: [
             // LEFT frame — persistent (logo/title ⇄ ✕count).
-            Expanded(
-              child: FrostedHeaderIsland(
+            leftFrame(FrostedHeaderIsland(
                 radius: islandRadius,
                 height: islandHeight,
                 padding: EdgeInsets.symmetric(horizontal: leftPadding),
@@ -102,23 +142,53 @@ class MorphingSelectionIslands extends StatelessWidget {
                       opacity: ((1 - s) * (1 - selO)).clamp(0.0, 1.0),
                       child: IgnorePointer(
                         ignoring: selO > 0.5,
-                        child: centerLeftNormal
-                            ? Center(child: leftNormalContent)
-                            : leftNormalContent,
+                        // Обычное состояние: надпись сжимается, а не
+                        // обрезается (обрезка — только у слоя выделения).
+                        child: compactLeft
+                            ? Align(
+                                alignment: Alignment.centerLeft,
+                                widthFactor: 1,
+                                child: leftNormalContent,
+                              )
+                            : (centerLeftNormal
+                                  ? Center(child: leftNormalContent)
+                                  : leftNormalContent),
                       ),
                     ),
                     Opacity(
                       opacity: selO,
                       child: IgnorePointer(
                         ignoring: selO < 0.5,
-                        child: leftSelectionContent,
+                        child: fit(leftSelectionContent),
                       ),
                     ),
                   ],
                 ),
-              ),
-            ),
-            SizedBox(width: 8 * (1 - s)),
+              )),
+            if (compactLeft)
+              Expanded(
+                child: centerTitle == null || centerFade <= 0.01
+                    ? const SizedBox.shrink()
+                    : Opacity(
+                        opacity: centerFade,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: HomeSectionIsland(
+                            title: centerTitle!,
+                            island: (child) => FrostedHeaderIsland(
+                              radius: islandRadius,
+                              height: islandHeight,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              child: child,
+                            ),
+                          ),
+                        ),
+                      ),
+              )
+            else
+              SizedBox(width: 8 * (1 - s)),
             // RIGHT frame — persistent (search/menu ⇄ actions); width morphs.
             SizedBox(
               width: rightW,
@@ -149,7 +219,23 @@ class MorphingSelectionIslands extends StatelessWidget {
                       opacity: selO,
                       child: IgnorePointer(
                         ignoring: selO < 0.5,
-                        child: rightSelectionContent,
+                        // Пока остров растёт — действия обрезаются, а не
+                        // «вылезают» за край.
+                        child: UnconstrainedBox(
+                          alignment: Alignment.centerRight,
+                          constrainedAxis: Axis.vertical,
+                          clipBehavior: Clip.hardEdge,
+                          child: compactLeft
+                              ? SizedBox(
+                                  width: math.max(0.0, selRightW - 12),
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerRight,
+                                    child: rightSelectionContent,
+                                  ),
+                                )
+                              : rightSelectionContent,
+                        ),
                       ),
                     ),
                   ],

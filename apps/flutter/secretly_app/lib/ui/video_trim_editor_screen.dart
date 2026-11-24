@@ -12,8 +12,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:video_player/video_player.dart';
 import '../build_variant.dart';
 import '../media/h264_encoder.dart';
+import 'motion/press_feedback.dart';
 import 'widgets/broken_media_box.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Result returned by [VideoTrimEditorScreen]: the (possibly re-encoded) output
 /// path plus the final duration in milliseconds.
@@ -399,10 +401,10 @@ class _VideoTrimEditorScreenState extends State<VideoTrimEditorScreen>
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: <Widget>[
-          IconButton(
+          PressFeedback(child: IconButton(
             onPressed: _exporting ? null : () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.close, color: Colors.white),
-          ),
+            icon: const Icon(AdaptiveIcons.close, color: Colors.white),
+          )),
           const Spacer(),
           Text(
             _formatDuration(selMs),
@@ -413,17 +415,17 @@ class _VideoTrimEditorScreenState extends State<VideoTrimEditorScreen>
             ),
           ),
           const Spacer(),
-          IconButton(
+          PressFeedback(child: IconButton(
             tooltip: _t('Кадрировать', 'Crop'),
             onPressed: _exporting
                 ? null
                 : () => setState(() => _cropMode = !_cropMode),
             icon: Icon(
-              Icons.crop,
+              AdaptiveIcons.crop,
               color: _cropMode ? Theme.of(context).colorScheme.primary
                   : Colors.white,
             ),
-          ),
+          )),
         ],
       ),
     );
@@ -447,16 +449,16 @@ class _VideoTrimEditorScreenState extends State<VideoTrimEditorScreen>
           const SizedBox(height: 16),
           Row(
             children: <Widget>[
-              IconButton(
+              PressFeedback(child: IconButton(
                 onPressed: _togglePlay,
                 icon: Icon(
                   (_controller?.value.isPlaying ?? false)
-                      ? Icons.pause
-                      : Icons.play_arrow,
+                      ? AdaptiveIcons.pause
+                      : AdaptiveIcons.play_arrow,
                   color: Colors.white,
                   size: 30,
                 ),
-              ),
+              )),
               const Spacer(),
               _SendButton(
                 onTap: _exporting ? null : _export,
@@ -482,7 +484,7 @@ class _PlayBadge extends StatelessWidget {
         color: Colors.black.withValues(alpha: 0.45),
         shape: BoxShape.circle,
       ),
-      child: const Icon(Icons.play_arrow, color: Colors.white, size: 40),
+      child: const Icon(AdaptiveIcons.play_arrow, color: Colors.white, size: 40),
     );
   }
 }
@@ -519,7 +521,7 @@ class _SendButton extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(Icons.send, color: Colors.white, size: 18),
+              const Icon(AdaptiveIcons.send, color: Colors.white, size: 18),
             ],
           ),
         ),
@@ -691,7 +693,7 @@ class VideoTrimTrack extends StatelessWidget {
             ),
           ),
           child: const Center(
-            child: Icon(Icons.drag_indicator, color: Colors.white, size: 14),
+            child: Icon(AdaptiveIcons.drag_indicator, color: Colors.white, size: 14),
           ),
         ),
       ),

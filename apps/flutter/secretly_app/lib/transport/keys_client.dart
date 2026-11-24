@@ -11,6 +11,7 @@ import 'server_clock.dart';
 import 'resilient_http_client.dart';
 import 'response_signature.dart';
 import 'service_health_status.dart';
+import '../app/elite_badges.dart';
 import '../diagnostics/diag_log.dart';
 
 enum KeysDeviceClass { mobile, desktop, web }
@@ -902,6 +903,16 @@ class KeysClient {
       );
     }
     final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    // Знак «важного пользователя» (21.11.2026): только оператор, отдельно от
+    // подписанных полей. Старый сервер поля не шлёт — запомненное не трогаем.
+    if (json['exists'] == true) {
+      final elite = json['elite_badge'];
+      EliteBadges.instance.record(
+        json['profile_id'] as String? ?? profileId,
+        elite is String ? elite : null,
+        present: json.containsKey('elite_badge'),
+      );
+    }
     return ProfileMeta(
       exists: json['exists'] == true,
       profileId: json['profile_id'] as String? ?? profileId,

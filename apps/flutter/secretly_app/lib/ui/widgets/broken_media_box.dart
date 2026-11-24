@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'package:flutter/material.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Видимая заглушка на месте картинки, которую не удалось открыть.
 ///
@@ -48,7 +49,7 @@ class BrokenMediaBox extends StatelessWidget {
       ),
       child: Center(
         child: Icon(
-          Icons.broken_image_outlined,
+          AdaptiveIcons.broken_image_outlined,
           size: iconSize,
           color: ink,
         ),

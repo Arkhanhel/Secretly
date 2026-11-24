@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../apple_controls.dart';
+import '../motion/app_dialogs.dart';
+import '../motion/motion.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Стиль приветственных экранов и окна «Новый вход» по макету «Secretly Kit»
 /// (17.11.2026).
@@ -723,7 +726,7 @@ class WelcomeBackButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = WelcomeStyle.of(context);
     final icon = Icon(
-      s.material ? Icons.arrow_back_rounded : Icons.arrow_back_ios_new_rounded,
+      s.material ? AdaptiveIcons.arrow_back_rounded : AdaptiveIcons.arrow_back_ios_new_rounded,
       size: s.material ? 22 : 17,
       color: s.text,
     );
@@ -921,7 +924,7 @@ class WelcomeChoiceRow extends StatelessWidget {
               const SizedBox(width: 12),
               ExcludeSemantics(
                 child: Icon(
-                  Icons.chevron_right_rounded,
+                  AdaptiveIcons.chevron_right_rounded,
                   color: s.textTertiary,
                   size: 22,
                 ),
@@ -1329,7 +1332,7 @@ class WelcomeSegmented<T> extends StatelessWidget {
               onTap: onChanged == null ? null : () => onChanged!(v),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
+                curve: Motion.standard,
                 height: s.material ? 40 : 38,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
@@ -1352,7 +1355,7 @@ class WelcomeSegmented<T> extends StatelessWidget {
                   children: [
                     if (selected && s.material) ...[
                       Icon(
-                        Icons.check_rounded,
+                        AdaptiveIcons.check_rounded,
                         size: 18,
                         color: s.segmentSelectedText,
                       ),
@@ -1447,6 +1450,7 @@ Future<T?> showWelcomeSheet<T>({
 }) {
   final s = WelcomeStyle.of(context);
   return showModalBottomSheet<T>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     isScrollControlled: true,
     isDismissible: isDismissible,

@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'package:flutter/widgets.dart';
+import '../motion/motion.dart';
 
 /// Плавная смена значка внутри кнопки, которая САМА не меняет размер.
 ///
@@ -48,7 +49,7 @@ class ComposerGlyphMorph extends StatelessWidget {
         reverseDuration: const Duration(milliseconds: 200),
         // 🔴 БЕЗ `easeOutBack`. Кривые с перелётом — ровно то, из-за чего
         // кнопка «меняла размер».
-        switchInCurve: Curves.easeOutCubic,
+        switchInCurve: Motion.standard,
         switchOutCurve: Curves.easeInCubic,
         // Уходящий и входящий стоят друг на друге по центру. Иначе уходящий
         // остаётся в потоке и на миг раздвигает кнопку.

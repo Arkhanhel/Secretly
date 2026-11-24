@@ -3,6 +3,35 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'package:flutter/material.dart';
 
+/// Тема по умолчанию — «Графит» (решение владельца 20.11.2026). Здесь, а не
+/// в контроллере: её читают и экраны компьютера, которым контроллер напрямую
+/// не положен (`desktop_controller_seam_ratchet_test`).
+const String kDefaultAppThemePresetId = 'graphite';
+
+// 🔴 24.11.2026 — СВЕТЛЫЕ СТРАНИЦЫ. Раньше светлый фон собирался из
+// поверхности темы с подмесом её вторичного цвета (main.dart) — выходил
+// серо-мутный тон, на котором любая цветная рамка выглядела грязно. Теперь у
+// каждой темы свой чистый лёгкий оттенок (lightBgTop/Mid/Bottom). Числа
+// подобраны С УЧЁТОМ того, что main.dart ещё смешивает их с белым
+// (0.48 / 0.40 / 0.32); на экране получается:
+//   Flutter Dash  #F4F8FC → #EEF4FA → #E8F0F8
+//   Океан         #F1F8FA → #EAF4F7 → #E3F0F4
+//   Графит        #F2F2F7 ровно (как группы iOS)
+//   Аметист       #F6F3FC → #F1EDFA → #ECE6F8
+//   Сансет        #FCF5F1 → #FAEFEA → #F8E8E2
+//   Аврора        #F0F9F6 → #E9F5F1 → #E2F1EC
+//   Роузвуд       #FBF3F6 → #F8ECF1 → #F5E5EC
+//   Ночь на Марсе #F9F3EF → #F5ECE6 → #F1E5DE
+// «Топленое молоко» оставлено своим (тёплая бумага — его характер).
+
+/// Цвет индикаторов по умолчанию (23.11.2026, владелец: «по стандарту тема
+/// Графит, но индикаторы синие»). Бесплатный (kFreeIndicatorColorIds).
+/// Кто выбирал цвет сам — остаётся при своём.
+const String kDefaultIndicatorColorPresetId = 'blue';
+
+/// Пузыри по умолчанию — «Туманность» (бесплатные; см. `AppController`).
+const String kDefaultBubbleStylePresetId = 'nebula';
+
 class AppThemePreset {
   const AppThemePreset({
     required this.id,
@@ -174,6 +203,9 @@ const List<AppThemePreset> kAppThemePresets = [
     lightPrimary: Color(0xFF2AABEE),
     lightSecondary: Color(0xFF4F95C8),
     lightSurface: Color(0xFFF1F4F7),
+    lightBgTop: Color(0xFFEAF2F9),
+    lightBgMid: Color(0xFFE3EDF7),
+    lightBgBottom: Color(0xFFDDE9F5),
     darkPrimary: Color(0xFF3390EC),
     darkSecondary: Color(0xFF84B9E3),
     darkSurface: Color(0xFF232E3C),
@@ -199,6 +231,9 @@ const List<AppThemePreset> kAppThemePresets = [
     lightPrimary: Color(0xFF148CB4),
     lightSecondary: Color(0xFF2EA9BE),
     lightSurface: Color(0xFFF0F6FA),
+    lightBgTop: Color(0xFFE4F2F5),
+    lightBgMid: Color(0xFFDCEDF2),
+    lightBgBottom: Color(0xFFD6E9EF),
     darkPrimary: Color(0xFF28C0E3),
     darkSecondary: Color(0xFF37D3BE),
     darkSurface: Color(0xFF0A1A29),
@@ -221,6 +256,9 @@ const List<AppThemePreset> kAppThemePresets = [
     lightPrimary: Color(0xFF4E5966),
     lightSecondary: Color(0xFF6F7A88),
     lightSurface: Color(0xFFF4F5F7),
+    lightBgTop: Color(0xFFE6E6F0),
+    lightBgMid: Color(0xFFE9E9F2),
+    lightBgBottom: Color(0xFFECECF3),
     darkPrimary: Color(0xFF98A3B2),
     darkSecondary: Color(0xFF7D8898),
     darkSurface: Color(0xFF141821),
@@ -240,6 +278,9 @@ const List<AppThemePreset> kAppThemePresets = [
     lightPrimary: Color(0xFF664DE6),
     lightSecondary: Color(0xFFA37DFF),
     lightSurface: Color(0xFFF6F1FF),
+    lightBgTop: Color(0xFFEEE8F9),
+    lightBgMid: Color(0xFFE8E1F7),
+    lightBgBottom: Color(0xFFE3DAF5),
     darkPrimary: Color(0xFFB39BFF),
     darkSecondary: Color(0xFF8D72F5),
     darkSurface: Color(0xFF1F1739),
@@ -259,6 +300,9 @@ const List<AppThemePreset> kAppThemePresets = [
     lightPrimary: Color(0xFFE35C2F),
     lightSecondary: Color(0xFFFFB07D),
     lightSurface: Color(0xFFFFF3ED),
+    lightBgTop: Color(0xFFF9ECE4),
+    lightBgMid: Color(0xFFF7E4DC),
+    lightBgBottom: Color(0xFFF5DDD4),
     darkPrimary: Color(0xFFFFA981),
     darkSecondary: Color(0xFFFF7FC3),
     darkSurface: Color(0xFF351818),
@@ -278,6 +322,9 @@ const List<AppThemePreset> kAppThemePresets = [
     lightPrimary: Color(0xFF1D9E86),
     lightSecondary: Color(0xFF48D8C7),
     lightSurface: Color(0xFFF0FAF8),
+    lightBgTop: Color(0xFFE2F3EE),
+    lightBgMid: Color(0xFFDAEEE8),
+    lightBgBottom: Color(0xFFD4EAE3),
     darkPrimary: Color(0xFF59E4CD),
     darkSecondary: Color(0xFF46B7FF),
     darkSurface: Color(0xFF122832),
@@ -297,6 +344,9 @@ const List<AppThemePreset> kAppThemePresets = [
     lightPrimary: Color(0xFFB94D74),
     lightSecondary: Color(0xFFE08BA9),
     lightSurface: Color(0xFFFFF1F5),
+    lightBgTop: Color(0xFFF7E8EE),
+    lightBgMid: Color(0xFFF3DFE8),
+    lightBgBottom: Color(0xFFF0D9E3),
     darkPrimary: Color(0xFFFF9FBE),
     darkSecondary: Color(0xFFD98DD8),
     darkSurface: Color(0xFF321C2B),
@@ -341,6 +391,9 @@ const List<AppThemePreset> kAppThemePresets = [
     lightPrimary: Color(0xFFA35B37),
     lightSecondary: Color(0xFF6E463A),
     lightSurface: Color(0xFFF4E9E3),
+    lightBgTop: Color(0xFFF3E8E0),
+    lightBgMid: Color(0xFFEEDFD5),
+    lightBgBottom: Color(0xFFEAD9CE),
     darkPrimary: Color(0xFFE08A52),
     darkSecondary: Color(0xFF7F4A3E),
     darkSurface: Color(0xFF1C1316),

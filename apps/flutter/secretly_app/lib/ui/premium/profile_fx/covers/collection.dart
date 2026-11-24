@@ -39,19 +39,19 @@ final Paint _xF = Paint();
 final Paint _xS = Paint()..style = PaintingStyle.stroke;
 
 Paint _xFill(Color c, [BlendMode m = BlendMode.srcOver]) => _xF
-  ..color = c
+  ..color = _day(c)
   ..shader = null
-  ..blendMode = m;
+  ..blendMode = _fxDay && m == BlendMode.plus ? BlendMode.srcOver : m;
 
 Paint _xLine(Color c, double w,
         [StrokeCap cap = StrokeCap.round, StrokeJoin join = StrokeJoin.round, BlendMode m = BlendMode.srcOver]) =>
     _xS
-      ..color = c
+      ..color = _day(c)
       ..shader = null
       ..strokeWidth = w
       ..strokeCap = cap
       ..strokeJoin = join
-      ..blendMode = m;
+      ..blendMode = _fxDay && m == BlendMode.plus ? BlendMode.srcOver : m;
 
 /// `vfill` референса: вертикальный градиент с равными стопами.
 void _xBg(Canvas c, Size s, List<Color> stops) =>
@@ -75,6 +75,10 @@ class _XAtlas {
 
   void add(double x, double y, double r, Color col, double op) {
     if (op <= 0.003 || r <= 0.5) return;
+    if (_fxDay) {
+      col = _dayGlow(col);
+      op *= _dayGlowK;
+    }
     if ((n + 1) * 4 > _xf.length) _grow();
     final i = n * 4, s = r / 32;
     _xf[i] = s;
@@ -100,7 +104,7 @@ class _XAtlas {
 
   void flush(Canvas c, bool add) {
     if (n == 0) return;
-    _p.blendMode = add ? BlendMode.plus : BlendMode.srcOver;
+    _p.blendMode = add && !_fxDay ? BlendMode.plus : BlendMode.srcOver;
     c.drawRawAtlas(_glowSprite(_white), Float32List.sublistView(_xf, 0, n * 4), Float32List.sublistView(_rc, 0, n * 4),
         Int32List.sublistView(_cl, 0, n), BlendMode.modulate, null, _p);
     n = 0;
@@ -1228,7 +1232,7 @@ class _XInk extends CoverSim {
       q.x += (q.vx + u) * dt;
       q.y += (q.vy + v - 3) * dt;
       q.r += 3.2 * dt * sc;
-      if (draw) _at.add(q.x, q.y, q.r, q.c, math.sin(math.min(1.0, q.age / q.life) * math.pi) * 0.2);
+      if (draw) _at.add(q.x, q.y, q.r, q.c, math.sin(math.min(1.0, q.age / q.life) * math.pi) * _ka);
     }
     p.removeWhere((q) => q.age >= q.life);
   }
@@ -1251,7 +1255,10 @@ class _XInk extends CoverSim {
         _move(t - (72 - k) / 60, 1 / 60, null, 0, 0, false);
       }
     }
-    _xBg(c, s, const [Color(0xFF05070F), Color(0xFF0A1020)]);
+    // Светлая тема (24.11.2026): чернила в молоке — тёплая бумага вместо ночи, капли
+    // ложатся обычным наложением (дневной тон углубляет неон до акварели).
+    _xBg(c, s, dark ? const [Color(0xFF05070F), Color(0xFF0A1020)] : const [Color(0xFFFBF8F4), Color(0xFFEFEAF4)]);
+    _ka = dark ? 0.2 : 0.27;
     tm -= dt;
     if (tm <= 0) {
       drop(w * (0.1 + _rnd() * 0.8), h * (0.2 + _rnd() * 0.6));
@@ -1262,9 +1269,11 @@ class _XInk extends CoverSim {
     final pvx = pointer != null && last != null ? _clamp((pointer.dx - last.dx) / math.max(dt, 0.008), -700, 700) : 0.0;
     final pvy = pointer != null && last != null ? _clamp((pointer.dy - last.dy) / math.max(dt, 0.008), -700, 700) : 0.0;
     _move(t, dt, pointer, pvx, pvy, true);
-    _at.flush(c, true);
+    _at.flush(c, dark);
     lp = pointer;
   }
+
+  double _ka = 0.2;
 }
 
 // ───────────── Гиперпрыжок ─────────────

@@ -39,19 +39,19 @@ final Paint _qF = Paint();
 final Paint _qS = Paint()..style = PaintingStyle.stroke;
 
 Paint _qFill(Color c, [BlendMode m = BlendMode.srcOver]) => _qF
-  ..color = c
+  ..color = _day(c)
   ..shader = null
-  ..blendMode = m;
+  ..blendMode = _fxDay && m == BlendMode.plus ? BlendMode.srcOver : m;
 
 Paint _qLine(Color c, double w,
         [StrokeCap cap = StrokeCap.round, StrokeJoin join = StrokeJoin.round, BlendMode m = BlendMode.srcOver]) =>
     _qS
-      ..color = c
+      ..color = _day(c)
       ..shader = null
       ..strokeWidth = w
       ..strokeCap = cap
       ..strokeJoin = join
-      ..blendMode = m;
+      ..blendMode = _fxDay && m == BlendMode.plus ? BlendMode.srcOver : m;
 
 double _qHyp(double x, double y) => math.sqrt(x * x + y * y);
 
@@ -711,7 +711,7 @@ class _QFlock extends _QFrame {
   _QFlock() : super(const [Color(0xFFFFD36B), Color(0xFFFF7AB0)]) {
     ringWidth = 3;
     for (var i = 0; i < n; i++) {
-      final a = _rnd() * _tau, p = _pt(100, 100, 70 + _rnd() * 16, a);
+      final a = _rnd() * _tau, p = _pt(100, 100, 63 + _rnd() * 7, a);
       x[i] = p.dx;
       y[i] = p.dy;
       vx[i] = math.cos(a) * 34;
@@ -759,7 +759,8 @@ class _QFlock extends _QFrame {
         fy += (ay / cnt - vy[b]) * 1.6 + cy / cnt * 1.2;
       }
       final dx = x[b] - 100, dy = y[b] - 100, r0 = _qHyp(dx, dy), r = r0 == 0 ? 1.0 : r0, ux = dx / r, uy = dy / r;
-      final k = (r < 66 ? (66 - r) * 60 : (78 - r) * 2.4) + (sc > 0 ? 420 : 0) - (r > 94 ? (r - 94) * 40 : 0);
+      // 23.11.2026: стая ближе к портрету (было: держится у 78, край 94).
+      final k = (r < 62 ? (62 - r) * 60 : (67 - r) * 2.4) + (sc > 0 ? 420 : 0) - (r > 76 ? (r - 76) * 40 : 0);
       fx += ux * k - uy * 26 + ivx * 2;
       fy += uy * k + ux * 26 + ivy * 2;
       vx[b] += fx * dt;
@@ -815,10 +816,11 @@ class _QPWave extends _QFrame {
 
   @override
   void back(Canvas c, FramePalette p) {
-    _glowS(c, _qC, 94, const Color(0xFF7A5CFF), 0.16, p.dark);
+    _glowS(c, _qC, 78, const Color(0xFF7A5CFF), 0.16, p.dark);
     final am = _clamp(amp.x, 0, 1.3);
     for (var k = 0; k < n; k++) {
-      _r[k] = 78 + 13 * math.sin(_tau * (20 + k) / 24 * tt) * am;
+      // 23.11.2026: уже (было 78 ± 13), ближе к кольцу.
+      _r[k] = 67 + 6 * math.sin(_tau * (20 + k) / 24 * tt) * am;
     }
     _path.reset();
     for (var i = 0; i <= n; i++) {
@@ -827,7 +829,7 @@ class _QPWave extends _QFrame {
     }
     c.drawPath(_path, _qLine(const Color.fromRGBO(182, 156, 255, 0.28), 0.8, StrokeCap.butt, StrokeJoin.miter));
     for (var i = 0; i < n; i++) {
-      final a = i / n * _tau, q = _pt(100, 100, _r[i], a), o = _pt(100, 100, 62, a), ci = i % 3;
+      final a = i / n * _tau, q = _pt(100, 100, _r[i], a), o = _pt(100, 100, 60, a), ci = i % 3;
       c.drawLine(o, q, _qLine(_rod[ci], 0.7, StrokeCap.butt));
       _glowS(c, q, 7, _cs[ci], 0.6, p.dark);
       c.drawCircle(q, 2.5, _qFill(_cs[ci]));
@@ -861,7 +863,8 @@ class _QSpiro extends _QFrame {
       d -= st;
       th += st;
       final kk = k.x,
-          r = 79 + (12 * math.cos(kk * th) + 5 * math.cos((2 * kk + 1) * th + t * 0.2)) * _clamp(l.x, 0.3, 1.25);
+          // 23.11.2026: уже (было 79 + 12 + 5).
+          r = 68 + (6 * math.cos(kk * th) + 2.5 * math.cos((2 * kk + 1) * th + t * 0.2)) * _clamp(l.x, 0.3, 1.25);
       int i;
       if (_n < cap) {
         i = (_h + _n) % cap;

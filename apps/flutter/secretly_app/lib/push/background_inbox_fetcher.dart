@@ -92,12 +92,50 @@ class BackgroundInboxFetcher {
 
   /// Entry point for the push background handler. Never throws; never runs
   /// longer than [_overallBudget].
-  static Future<void> runFromPushWake() async {
+  /// Идущий проход в этом изоляте (23.11.2026, журнал Xiaomi: на каждый
+  /// пуш — свой проход, и они дрались за базу — `SqfliteDatabaseException`
+  /// и таймауты). Проход забирает весь ящик, поэтому пуш во время прохода
+  /// ничего не добавляет — пропускаем его.
+  static Future<void>? _inFlight;
+
+  static Future<void> runFromPushWake() {
+    final running = _inFlight;
+    if (running != null) {
+      DiagLog.event('push', 'bg_fetch_skip_busy', const {});
+      return running;
+    }
+    final pass = _runFromPushWakeOnce();
+    _inFlight = pass;
+    return pass.whenComplete(() {
+      if (identical(_inFlight, pass)) _inFlight = null;
+    });
+  }
+
+  static Future<void> _runFromPushWakeOnce() async {
+    // 🔴 23.11.2026: `timeout` не останавливает работу — проход продолжал
+    // держать базу после «bg_fetch_timeout», и открытое приложение ждало
+    // её десятки секунд (журнал Xiaomi: запуск 90 с). Флаг останавливает
+    // проход на следующем сообщении.
+    final stop = _PassStop();
+    final work = _run(stop);
     try {
-      final outcome = await _run().timeout(_overallBudget);
+      final outcome = await work.timeout(_overallBudget);
       DiagLog.event('push', 'bg_fetch_done', {'outcome': outcome});
     } on TimeoutException {
       DiagLog.event('push', 'bg_fetch_timeout', const {});
+      // 🔴 НЕ ВОЗВРАЩАТЬСЯ, ПОКА ПРОХОД НЕ ЗАКРЫЛ БАЗУ (23.11.2026, журнал
+      // Xiaomi). Раньше обработчик пуша отчитывался «готово» по таймауту,
+      // система гасила фоновый движок, а его подключение с незакрытой
+      // записью оставалось висеть: «database is locked» у открытого
+      // приложения минутами, вплоть до сообщений, которые нечем записать.
+      // Теперь проход дорабатывает текущее сообщение, закрывает базу в
+      // своём finally, и только потом мы возвращаемся.
+      stop.stopped = true;
+      try {
+        await work.timeout(const Duration(seconds: 8));
+      } catch (_) {
+        DiagLog.event('push', 'bg_fetch_stop_slow', const {});
+      }
     } catch (e) {
       DiagLog.event('push', 'bg_fetch_failed', {
         'err_type': '${e.runtimeType}',
@@ -108,7 +146,18 @@ class BackgroundInboxFetcher {
   /// Test-only window onto [_run]'s outcome codes (guards are pure prefs
   /// logic and must stay covered without plugin mocks).
   @visibleForTesting
-  static Future<String> debugRunForTest() => _run();
+  static Future<String> debugRunForTest() => _run(_PassStop());
+
+  /// Приложение открыто (главный изолят поставил свежую отметку) — фоновому
+  /// проходу пора отдать базу. Отметку ставит запуск приложения первым
+  /// шагом и насос каждые ~10 с.
+  static Future<bool> mainIsolateIsAlive(SharedPreferences prefs) async {
+    try {
+      await prefs.reload();
+    } catch (_) {}
+    final aliveAt = prefs.getInt(prefsMainIsolateAliveAtMsKey) ?? 0;
+    return DateTime.now().millisecondsSinceEpoch - aliveAt < mainIsolateFreshMs;
+  }
 
   /// Сколько оставляем прохода на саму работу после ожидания.
   ///
@@ -171,7 +220,7 @@ class BackgroundInboxFetcher {
     return true;
   }
 
-  static Future<String> _run() async {
+  static Future<String> _run(_PassStop stop) async {
     final prefs = await SharedPreferences.getInstance();
     // SharedPreferences caches per isolate; make sure we read the MAIN
     // isolate's latest heartbeat/config, not a stale snapshot.
@@ -362,6 +411,8 @@ class BackgroundInboxFetcher {
         }
       }
 
+      Future<bool> yieldNow() async =>
+          stop.stopped || await mainIsolateIsAlive(prefs);
       final decrypted = await BackgroundDecrypt.run(
         db: db,
         prefs: prefs,
@@ -371,6 +422,7 @@ class BackgroundInboxFetcher {
         items: items,
         nowMs: DateTime.now().millisecondsSinceEpoch,
         ack: ackOne,
+        shouldYield: yieldNow,
       );
       if (decrypted != null) {
         DiagLog.event('push', 'bg_fetch_decrypted', {
@@ -382,10 +434,17 @@ class BackgroundInboxFetcher {
         return 'decrypted_${decrypted.applied}_staged_${decrypted.staged}';
       }
 
+      // Приложение уже открыто — складывать нечего: оно заберёт ящик само,
+      // а запись в базу сейчас только задержит его запуск.
+      if (await yieldNow()) {
+        DiagLog.event('push', 'bg_fetch_yield_main_alive', const {});
+        return 'yield_main_alive';
+      }
       // Fallback: the download-only path. Stage ciphertext for the foreground to
       // decrypt on its next wake — unchanged from before background decrypt.
       var staged = 0;
       for (final it in items) {
+        if (await yieldNow()) break;
         final msgId = (it['msg_id'] as String?)?.trim() ?? '';
         final ciphertextB64 = it['ciphertext_b64'] as String? ?? '';
         if (msgId.isEmpty || ciphertextB64.isEmpty) continue;
@@ -410,4 +469,9 @@ class BackgroundInboxFetcher {
       await db.close();
     }
   }
+}
+
+/// Флаг остановки фонового прохода (вышло время прохода).
+class _PassStop {
+  bool stopped = false;
 }

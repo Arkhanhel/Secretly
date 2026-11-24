@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'glass/glass_category_strip.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -20,8 +21,11 @@ import 'call_history_l10n.dart';
 import 'diagnostics_screen.dart';
 import 'icons/app_icons.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'widgets/avatar_initials.dart';
 import 'widgets/frosted_top_bar.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 class CallHistoryScreen extends StatefulWidget {
   const CallHistoryScreen({
@@ -323,6 +327,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
     }
 
     return showModalBottomSheet<void>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       showDragHandle: true,
       builder: (context) {
@@ -441,42 +446,42 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                   const SizedBox(height: 18),
                   SizedBox(
                     width: double.infinity,
-                    child: FilledButton.tonalIcon(
+                    child: PressFeedback(child: FilledButton.tonalIcon(
                       onPressed: () {
                         Navigator.of(context).pop();
                         unawaited(_openDiagnostics());
                       },
-                      icon: const Icon(Icons.health_and_safety_outlined),
+                      icon: const Icon(AdaptiveIcons.health_and_safety_outlined),
                       label: Text(
                         _label(
                           ru: 'Открыть диагностику звонков',
                           en: 'Open call diagnostics',
                         ),
                       ),
-                    ),
+                    )),
                   ),
                 ],
                 const SizedBox(height: 18),
                 Row(
                   children: [
                     Expanded(
-                      child: FilledButton.tonal(
+                      child: PressFeedback(child: FilledButton.tonal(
                         onPressed: () {
                           Navigator.of(context).pop();
                           unawaited(_openChat(entry));
                         },
                         child: Text(_label(ru: 'Открыть чат', en: 'Open chat')),
-                      ),
+                      )),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: FilledButton(
+                      child: PressFeedback(child: FilledButton(
                         onPressed: () {
                           Navigator.of(context).pop();
                           unawaited(_redial(entry));
                         },
                         child: Text(_label(ru: 'Перезвонить', en: 'Call back')),
-                      ),
+                      )),
                     ),
                   ],
                 ),
@@ -722,6 +727,24 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
 
               final children = <Widget>[
                 if (_isScoped) _buildScopeHeader(entries),
+                if (kGlassCategoryStrip)
+                  // 23.11.2026 (план стекла): полоса во всю ширину с каплей.
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10, bottom: 8),
+                    child: GlassCategoryStrip(
+                      key: const ValueKey('call-history-filter'),
+                      items: [
+                        for (final f in _CallHistoryFilter.values)
+                          GlassStripItem(label: _filterLabel(f)),
+                      ],
+                      selected: _CallHistoryFilter.values.indexOf(_filter),
+                      onSelect: (i) => setState(
+                        () => _filter = _CallHistoryFilter.values[i],
+                      ),
+                      margin: const EdgeInsets.symmetric(horizontal: 16),
+                    ),
+                  )
+                else
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
                   child: Wrap(
@@ -831,24 +854,24 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                                   SizedBox(
                                     width: 34,
                                     height: 34,
-                                    child: IconButton.filledTonal(
+                                    child: PressFeedback(child: IconButton.filledTonal(
                                       tooltip: _label(
                                         ru: 'Детали',
                                         en: 'Details',
                                       ),
                                       padding: EdgeInsets.zero,
                                       icon: const Icon(
-                                        Icons.info_outline,
+                                        AdaptiveIcons.info_outline,
                                         size: 18,
                                       ),
                                       onPressed: () => _showDetails(entry),
-                                    ),
+                                    )),
                                   ),
                                   const SizedBox(height: 8),
                                   SizedBox(
                                     width: 34,
                                     height: 34,
-                                    child: IconButton.filledTonal(
+                                    child: PressFeedback(child: IconButton.filledTonal(
                                       tooltip: _label(
                                         ru: 'Перезвонить',
                                         en: 'Call back',
@@ -861,7 +884,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                                         size: 18,
                                       ),
                                       onPressed: () => _redial(entry),
-                                    ),
+                                    )),
                                   ),
                                 ],
                               ),

@@ -5,5 +5,8 @@
 
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">localhost</domain>
+        <!-- В-2: локальный источник видео в просмотре (только 127.0.0.1,
+             случайный порт и метка в пути; наружу ничего не уходит). -->
+        <domain includeSubdomains="false">127.0.0.1</domain>
     </domain-config>
 </network-security-config>

@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../../stickers/sticker_share_mode.dart';
 import '../l10n.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 class StickerPackAccessPicker extends StatelessWidget {
   const StickerPackAccessPicker({
@@ -54,7 +55,7 @@ class StickerPackAccessPicker extends StatelessWidget {
         const SizedBox(height: 6),
         _option(
           key: const ValueKey('sticker-pack-access-open'),
-          icon: Icons.group_rounded,
+          icon: AdaptiveIcons.group_rounded,
           title: l10n.stickerPackAccessOpen,
           hint: l10n.stickerPackAccessOpenHint,
           selected: !closed,
@@ -65,7 +66,7 @@ class StickerPackAccessPicker extends StatelessWidget {
         const SizedBox(height: 6),
         _option(
           key: const ValueKey('sticker-pack-access-closed'),
-          icon: Icons.lock_rounded,
+          icon: AdaptiveIcons.lock_rounded,
           title: l10n.stickerPackAccessClosed,
           hint: closed && showExistingNote
               ? '${l10n.stickerPackAccessClosedHint} '

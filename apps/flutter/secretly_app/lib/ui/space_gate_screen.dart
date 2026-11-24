@@ -10,6 +10,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import '../l10n/app_localizations.dart';
 import '../security/app_security_manager.dart';
 import '../security/space_gate.dart';
+import 'motion/press_feedback.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Экран PIN до старта приложения (Э2).
 ///
@@ -189,7 +191,7 @@ class _SpaceGateScreenState extends State<SpaceGateScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  const Icon(Icons.lock_outline_rounded, size: 48),
+                  const Icon(AdaptiveIcons.lock_outline_rounded, size: 48),
                   const SizedBox(height: 16),
                   Text(
                     l10n.spaceGateEnterCode,
@@ -227,16 +229,16 @@ class _SpaceGateScreenState extends State<SpaceGateScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  FilledButton(
+                  PressFeedback(child: FilledButton(
                     key: const ValueKey<String>('space_gate_submit'),
                     onPressed: _submitting || lockedOut ? null : _submit,
                     child: Text(l10n.spaceGateUnlock),
-                  ),
+                  )),
                   if (_biometricsAvailable) ...<Widget>[
                     const SizedBox(height: 8),
                     TextButton.icon(
                       onPressed: _submitting ? null : _biometric,
-                      icon: const Icon(Icons.fingerprint_rounded),
+                      icon: const Icon(AdaptiveIcons.fingerprint_rounded),
                       label: Text(l10n.spaceGateUseBiometrics),
                     ),
                   ],

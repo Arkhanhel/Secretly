@@ -2,6 +2,9 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:async';
+import 'motion/app_dialogs.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'scroll_feel.dart';
 import 'dart:io';
 import 'dart:math' as math;
@@ -29,6 +32,7 @@ import 'widgets/frosted_header_island.dart';
 import 'widgets/system_bottom_fade.dart';
 import 'widgets/broken_media_box.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 // ── Dark call-screen colour palette ──────────────────────────────────────────
 const _kCallBg = Color(0xFF0D0D0D);
@@ -372,7 +376,7 @@ class _RoomCallScreenState extends State<RoomCallScreen>
     if (activeCall == null || participant.isSelf) {
       return;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (context) {
         return SecretlyAlertDialog(
@@ -435,7 +439,7 @@ class _RoomCallScreenState extends State<RoomCallScreen>
     if (activeCall == null) {
       return;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (context) {
         return SecretlyAlertDialog(
@@ -672,7 +676,7 @@ class _RoomCallScreenState extends State<RoomCallScreen>
       child: Row(
         children: [
           _CallChromeButton(
-            icon: Icons.keyboard_arrow_down_rounded,
+            icon: AdaptiveIcons.keyboard_arrow_down_rounded,
             onTap: () => Navigator.of(context).maybePop(),
           ),
           const SizedBox(width: 8),
@@ -792,7 +796,7 @@ class _RoomCallScreenState extends State<RoomCallScreen>
               onSelected: (value) {
                 if (value == 'end') unawaited(_endCall(vm));
               },
-              child: const _CallChromeButton(icon: Icons.more_horiz_rounded),
+              child: const _CallChromeButton(icon: AdaptiveIcons.more_horiz_rounded),
               itemBuilder: (_) => [
                 PopupMenuItem(
                   value: 'end',
@@ -930,7 +934,7 @@ class _RoomCallScreenState extends State<RoomCallScreen>
     return SizedBox(
       width: double.infinity,
       height: 52,
-      child: FilledButton.icon(
+      child: PressFeedback(child: FilledButton.icon(
         onPressed: _pendingAction == null
             ? () => unawaited(
                 _startOrJoinCall(
@@ -952,7 +956,7 @@ class _RoomCallScreenState extends State<RoomCallScreen>
           _roomCallText(context, ru: 'Войти', en: 'Join'),
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
-      ),
+      )),
     );
   }
 
@@ -1411,7 +1415,7 @@ class _ParticipantStageState extends State<_ParticipantStage> {
         // it reads as a deliberate transition instead of a jarring jump.
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 260),
-          switchInCurve: Curves.easeOutCubic,
+          switchInCurve: Motion.standard,
           switchOutCurve: Curves.easeInCubic,
           transitionBuilder: (widget, animation) =>
               FadeTransition(opacity: animation, child: widget),
@@ -1540,7 +1544,7 @@ class _CallParticipantTile extends StatelessWidget {
                     status?.peersByDeviceId[participant.deviceId.trim()] ==
                     RoomCallE2eePeerState.failing;
                 return _ParticipantStatusChip(
-                  icon: Icons.key_rounded,
+                  icon: AdaptiveIcons.key_rounded,
                   semanticLabel: caption,
                   tint: failing ? _kCallLeaveRed : const Color(0xFFFFB84D),
                 );
@@ -1548,7 +1552,7 @@ class _CallParticipantTile extends StatelessWidget {
             ),
           if (participant.isReconnecting)
             _ParticipantStatusChip(
-              icon: Icons.sync_problem_rounded,
+              icon: AdaptiveIcons.sync_problem_rounded,
               semanticLabel: _roomCallText(context, ru: 'Сеть', en: 'Network'),
               tint: const Color(0xFFFFB84D),
             ),
@@ -1556,7 +1560,7 @@ class _CallParticipantTile extends StatelessWidget {
 
         return AnimatedContainer(
           duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
+          curve: Motion.fade,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(radius),
             border: Border.all(
@@ -1925,7 +1929,7 @@ class _CallControlButton extends StatelessWidget {
           children: [
             AnimatedContainer(
               duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
+              curve: Motion.standard,
               width: size,
               height: size,
               decoration: BoxDecoration(

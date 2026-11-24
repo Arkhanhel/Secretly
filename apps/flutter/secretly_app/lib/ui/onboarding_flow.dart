@@ -18,6 +18,7 @@ import '../security/safe_backup.dart';
 import 'app_asset_paths.dart';
 import 'backup_refusal_text.dart';
 import 'l10n.dart';
+import 'motion/motion.dart';
 import 'root_messenger.dart';
 import 'safe_backup_file_io.dart';
 import 'welcome/particle_logo_background.dart';
@@ -25,6 +26,7 @@ import 'welcome/welcome_hero.dart';
 import 'welcome/welcome_style.dart';
 import 'widgets/system_bottom_fade.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 // Первый запуск в стиле макета «Secretly Kit» (17.11.2026):
 // приветствие → имя → ключи → резервная копия → уведомления → готово,
@@ -268,7 +270,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                   Positioned.fill(
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 500),
-                      switchInCurve: Curves.easeOut,
+                      switchInCurve: Motion.fade,
                       switchOutCurve: Curves.easeIn,
                       transitionBuilder: _stepTransition,
                       child: KeyedSubtree(
@@ -777,7 +779,7 @@ class _BackupPageState extends State<_BackupPage> {
                   shape: BoxShape.circle,
                   color: s.success.withValues(alpha: 0.14),
                 ),
-                child: Icon(Icons.check_rounded, color: s.success, size: 38),
+                child: Icon(AdaptiveIcons.check_rounded, color: s.success, size: 38),
               ),
             ),
           ),
@@ -856,7 +858,7 @@ class _BackupPageState extends State<_BackupPage> {
               _meter(context),
               AnimatedSize(
                 duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutCubic,
+                curve: Motion.standard,
                 child: _validation.isValid || _p2.text.isNotEmpty
                     ? Padding(
                         padding: const EdgeInsets.only(top: 10),

@@ -55,6 +55,7 @@ import 'delivery_diagnostics.dart';
 import 'appearance_pane.dart';
 import 'settings_style.dart';
 import 'workspace_layout.dart';
+import '../../settings_icons/settings_glyphs.dart';
 
 /// Settings workspace — INLINE in the content pane, NOT a modal.
 /// Sections on the left, content on the right (Telegram desktop pattern).
@@ -283,6 +284,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'general',
           tint: DIconTint.amber,
+          glyph: SettingsGlyph.system,
           icon: FluentIcons.settings_24_regular,
           label: l10n.desktopSettingsGeneralLabel,
           subtitle: l10n.desktopSettingsGeneralSubtitle,
@@ -293,6 +295,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'appearance',
           tint: DIconTint.orange,
+          glyph: SettingsGlyph.appearance,
           icon: FluentIcons.color_24_regular,
           label: l10n.desktopSettingsAppearanceLabel,
           subtitle: l10n.desktopSettingsAppearanceSubtitle,
@@ -317,6 +320,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'shortcuts',
           tint: DIconTint.purple,
+          glyph: SettingsGlyph.hotkeys,
           icon: FluentIcons.keyboard_24_regular,
           label: l10n.desktopSettingsShortcutsLabel,
           subtitle: l10n.desktopSettingsShortcutsSubtitle,
@@ -327,6 +331,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'power',
           tint: DIconTint.green,
+          glyph: SettingsGlyph.power,
           icon: FluentIcons.flash_24_regular,
           label: l10n.desktopSettingsPowerLabel,
           subtitle: l10n.desktopSettingsPowerSubtitle,
@@ -337,6 +342,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'notifications',
           tint: DIconTint.red,
+          glyph: SettingsGlyph.notifications,
           icon: FluentIcons.alert_24_regular,
           label: l10n.desktopSettingsNotificationsLabel,
           subtitle: l10n.desktopSettingsNotificationsSubtitle,
@@ -354,6 +360,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'calls',
           tint: DIconTint.cyan,
+          glyph: SettingsGlyph.calls,
           icon: FluentIcons.call_24_regular,
           label: l10n.desktopSettingsCallsLabel,
           subtitle: l10n.desktopSettingsCallsSubtitle,
@@ -367,6 +374,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'media',
           tint: DIconTint.blue,
+          glyph: SettingsGlyph.media,
           icon: FluentIcons.mic_24_regular,
           label: l10n.desktopSettingsMediaLabel,
           subtitle: l10n.desktopSettingsMediaSubtitle,
@@ -380,6 +388,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'privacy',
           tint: DIconTint.green,
+          glyph: SettingsGlyph.privacy,
           icon: FluentIcons.eye_24_regular,
           label: l10n.desktopSettingsPrivacyLabel,
           subtitle: l10n.desktopSettingsPrivacySubtitle,
@@ -390,6 +399,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'security',
           tint: DIconTint.blue,
+          glyph: SettingsGlyph.security,
           icon: FluentIcons.shield_keyhole_24_regular,
           label: l10n.desktopSettingsSecurityLabel,
           subtitle: l10n.desktopSettingsSecuritySubtitle,
@@ -400,6 +410,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'backup',
           tint: DIconTint.cyan,
+          glyph: SettingsGlyph.backup,
           icon: FluentIcons.cloud_arrow_up_24_regular,
           label: l10n.desktopSettingsBackupLabel,
           subtitle: l10n.desktopSettingsBackupSubtitle,
@@ -415,6 +426,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'blocked',
           tint: DIconTint.red,
+          glyph: SettingsGlyph.blocked,
           icon: FluentIcons.person_prohibited_24_regular,
           label: l10n.desktopSettingsBlockedLabel,
           subtitle: l10n.desktopSettingsBlockedSubtitle,
@@ -430,6 +442,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'devices',
           tint: DIconTint.cyan,
+          glyph: SettingsGlyph.devices,
           icon: FluentIcons.phone_laptop_24_regular,
           label: l10n.desktopSettingsDevicesLabel,
           subtitle: l10n.desktopSettingsDevicesSubtitle,
@@ -442,6 +455,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'account',
           tint: DIconTint.blue,
+          glyph: SettingsGlyph.account,
           icon: FluentIcons.person_24_regular,
           label: l10n.desktopSettingsAccountLabel,
           subtitle: l10n.desktopSettingsAccountSubtitle,
@@ -452,6 +466,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'storage',
           tint: DIconTint.amber,
+          glyph: SettingsGlyph.storage,
           icon: FluentIcons.database_24_regular,
           label: l10n.desktopSettingsStorageLabel,
           subtitle: l10n.desktopSettingsStorageSubtitle,
@@ -462,6 +477,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'support',
           tint: DIconTint.orange,
+          glyph: SettingsGlyph.support,
           icon: FluentIcons.chat_help_24_regular,
           label: l10n.desktopSettingsSupportLabel,
           subtitle: l10n.desktopSettingsSupportSubtitle,
@@ -480,6 +496,7 @@ class SettingsWorkspace extends StatelessWidget {
         WorkspaceSection(
           id: 'about',
           tint: DIconTint.purple,
+          glyph: SettingsGlyph.about,
           icon: FluentIcons.info_24_regular,
           label: l10n.desktopSettingsAboutLabel,
           group: l10n.desktopSettingsGroupAccount,

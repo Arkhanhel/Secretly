@@ -52,14 +52,10 @@ void main() {
     final end = src.indexOf('class _StorageSettingsScreen', start);
     expect(end, isNot(-1));
 
-    // The screen body, plus the menu tile that opens it (which lives earlier in
-    // the file and carries the section title and subtitle).
-    final menuStart = src.indexOf('icon: Icons.bolt_rounded');
-    expect(menuStart, isNot(-1), reason: 'the Power menu tile moved');
-    final regions = <String>[
-      src.substring(menuStart, src.indexOf('onTap:', menuStart)),
-      src.substring(start, end),
-    ];
+    // Только сам экран. Строка, открывающая его из главного списка, с
+    // 20.11.2026 берёт название и пояснение из ARB (`settingsRowPower`,
+    // `settingsRowPowerSub`) — их проверяет отдельный тест ниже.
+    final regions = <String>[src.substring(start, end)];
 
     final out = <String>[];
     final re = RegExp('en:\\s*((?:(?:$literal)\\s*)+)');
@@ -134,8 +130,25 @@ void main() {
     expect(english.length, greaterThanOrEqualTo(8),
         reason: 'found only ${english.length} strings — the extractor is '
             'probably looking at the wrong region');
-    expect(english, contains('Power'));
     expect(english, contains('Glass bubbles'));
+  });
+
+  test('the Power row of the settings list is translated in every ARB', () {
+    final src = read('settings_screen.dart');
+    expect(src.contains('loc.settingsRowPower,'), isTrue,
+        reason: 'the Power row no longer uses the ARB title');
+    expect(src.contains('loc.settingsRowPowerSub,'), isTrue,
+        reason: 'the Power row no longer uses the ARB subtitle');
+    final english = File('lib/l10n/app_en.arb').readAsStringSync();
+    for (final lang in ['ru', 'uk', 'de', 'fr', 'es', 'pt', 'pt_BR']) {
+      final arb = File('lib/l10n/app_$lang.arb').readAsStringSync();
+      for (final key in ['settingsRowPower', 'settingsRowPowerSub']) {
+        final value = RegExp('"$key": "([^"]*)"').firstMatch(arb)?.group(1);
+        final en = RegExp('"$key": "([^"]*)"').firstMatch(english)?.group(1);
+        expect(value, isNotNull, reason: '$key missing in $lang');
+        expect(value, isNot(en), reason: '$key left in English in $lang');
+      }
+    }
   });
 
   // ru and en are returned directly by the helper and need no map entry.

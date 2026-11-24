@@ -130,6 +130,7 @@ class GlassPrefs {
   static Future<void> setEnabled(bool value) async {
     if (enabled.value == value) return;
     enabled.value = value;
+    _rebuildEverything();
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_prefsKey, value);
@@ -137,6 +138,28 @@ class GlassPrefs {
       // The live value already applied; persistence is best-effort.
     }
   }
+}
+
+/// 🔴 ПЕРЕКЛЮЧАТЕЛЬ «РАБОТАЛ» ТОЛЬКО ДЛЯ НИЖНЕЙ ПАНЕЛИ (найдено 20.11.2026).
+///
+/// Островки шапок, сегменты папок, кнопки профиля, музыкальный островок и
+/// слой стекла списка чатов решают «стекло или мат» через геттер
+/// [liquidGlassIslandsEnabled] прямо в `build` — и НЕ подписаны на
+/// [GlassPrefs.enabled]. `main.dart` перестраивал `const MyApp()`, а одинаковый
+/// const-виджет Flutter не перестраивает вовсе. Итог: переключили — сменилась
+/// только нижняя панель, всё остальное оставалось прежним до случайной
+/// перестройки экрана; выглядело как «настройка не работает».
+///
+/// Переключают стекло редко, поэтому вместо подписки в каждом из десятка мест
+/// (и в каждом будущем) дерево помечается к перестройке целиком, один раз.
+/// Состояние экранов при этом сохраняется: это перестройка, а не пересоздание.
+void _rebuildEverything() {
+  void mark(Element element) {
+    element.markNeedsBuild();
+    element.visitChildren(mark);
+  }
+
+  WidgetsBinding.instance.rootElement?.visitChildren(mark);
 }
 
 /// Footprint of the bottom navigation bar, measured from the screen bottom.
@@ -148,7 +171,7 @@ class GlassPrefs {
 double bottomBarFootprint(BuildContext context) =>
     (liquidGlassIslandsEnabled && ThermalGuard.effectsAllowed.value)
     ? 84.0
-    : MediaQuery.of(context).viewPadding.bottom + 84.0;
+    : MediaQuery.viewPaddingOf(context).bottom + 84.0;
 
 /// Gap between the top of the bottom bar and a floating action button.
 ///

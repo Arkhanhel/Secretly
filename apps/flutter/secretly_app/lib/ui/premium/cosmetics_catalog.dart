@@ -9,9 +9,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../app/elite_badges.dart';
+import '../../entitlements/cosmetic_catalog.dart'
+    show CosmeticKind, isCosmeticFree, isStaffCoverId;
 import '../wave1_l10n.dart';
 import 'live_covers.dart';
 import 'live_frames.dart';
+import '../motion/decoration_pacer.dart';
+import '../profile/pattern_cover.dart';
+import '../profile/profile_motion.dart';
 
 /// Built-in catalog of premium animated avatar FRAMES and profile COVERS
 /// (TZ-MONETIZE-01 — premium cosmetics). Each item is a short stable [id] stored
@@ -105,6 +111,257 @@ String _cosmeticNameForLocale(
 /// keyed by the catalog id. Frame and cover ids are disjoint except where the
 /// motif is identical (`bears`, `rainbow`), in which case one entry serves both.
 const Map<String, Map<String, String>> _kCosmeticNameTranslations = {
+  // ── обложка-узор из ключа шифрования (21.11.2026) ──
+  'pattern_fingerprint': {
+    'uk': 'Відбиток ключа',
+    'es': 'Huella de la clave',
+    'pt': 'Impressão da chave',
+    'pt_BR': 'Impressão da chave',
+    'fr': 'Empreinte de clé',
+    'de': 'Schlüssel-Fingerabdruck',
+  },
+  // ── закрытые обложки команды и новогодняя серия (23.11.2026) ──
+  'pattern_champagne': {
+    'uk': 'Шампанське',
+    'es': 'Champán',
+    'pt': 'Champanhe',
+    'pt_BR': 'Champanhe',
+    'fr': 'Champagne',
+    'de': 'Champagner',
+  },
+  'pattern_gems': {
+    'uk': 'Камені',
+    'es': 'Gemas',
+    'pt': 'Gemas',
+    'pt_BR': 'Gemas',
+    'fr': 'Pierres précieuses',
+    'de': 'Edelsteine',
+  },
+  'pattern_perfume': {
+    'uk': 'Парфуми',
+    'es': 'Perfume',
+    'pt': 'Perfume',
+    'pt_BR': 'Perfume',
+    'fr': 'Parfum',
+    'de': 'Parfüm',
+  },
+  'pattern_macarons': {
+    'uk': 'Макаруни',
+    'es': 'Macarons',
+    'pt': 'Macarons',
+    'pt_BR': 'Macarons',
+    'fr': 'Macarons',
+    'de': 'Macarons',
+  },
+  'pattern_watches': {
+    'uk': 'Годинники',
+    'es': 'Relojes',
+    'pt': 'Relógios',
+    'pt_BR': 'Relógios',
+    'fr': 'Montres',
+    'de': 'Uhren',
+  },
+  'pattern_movement': {
+    'uk': 'Механізм',
+    'es': 'Mecanismo',
+    'pt': 'Mecanismo',
+    'pt_BR': 'Mecanismo',
+    'fr': 'Mouvement',
+    'de': 'Uhrwerk',
+  },
+  'pattern_armillary': {
+    'uk': 'Армілярна сфера',
+    'es': 'Esfera armilar',
+    'pt': 'Esfera armilar',
+    'pt_BR': 'Esfera armilar',
+    'fr': 'Sphère armillaire',
+    'de': 'Armillarsphäre',
+  },
+  'pattern_cards': {
+    'uk': 'Металева картка',
+    'es': 'Tarjeta metálica',
+    'pt': 'Cartão metálico',
+    'pt_BR': 'Cartão metálico',
+    'fr': 'Carte en métal',
+    'de': 'Metallkarte',
+  },
+  'pattern_gifts': {
+    'uk': 'Подарунки',
+    'es': 'Regalos',
+    'pt': 'Presentes',
+    'pt_BR': 'Presentes',
+    'fr': 'Cadeaux',
+    'de': 'Geschenke',
+  },
+  'pattern_ornaments': {
+    'uk': 'Ялинкові кулі',
+    'es': 'Bolas de Navidad',
+    'pt': 'Bolas de Natal',
+    'pt_BR': 'Bolas de Natal',
+    'fr': 'Boules de Noël',
+    'de': 'Christbaumkugeln',
+  },
+  'pattern_snowflakes': {
+    'uk': 'Сніжинки',
+    'es': 'Copos de nieve',
+    'pt': 'Flocos de neve',
+    'pt_BR': 'Flocos de neve',
+    'fr': 'Flocons de neige',
+    'de': 'Schneeflocken',
+  },
+  'pattern_snowman': {
+    'uk': 'Сніговики',
+    'es': 'Muñecos de nieve',
+    'pt': 'Bonecos de neve',
+    'pt_BR': 'Bonecos de neve',
+    'fr': 'Bonshommes de neige',
+    'de': 'Schneemänner',
+  },
+  'pattern_tangerines': {
+    'uk': 'Мандарини',
+    'es': 'Mandarinas',
+    'pt': 'Tangerinas',
+    'pt_BR': 'Tangerinas',
+    'fr': 'Mandarines',
+    'de': 'Mandarinen',
+  },
+  'pattern_gingerbread': {
+    'uk': 'Пряникові чоловічки',
+    'es': 'Hombres de jengibre',
+    'pt': 'Bonecos de gengibre',
+    'pt_BR': 'Bonecos de gengibre',
+    'fr': 'Bonshommes en pain d’épice',
+    'de': 'Lebkuchenmännchen',
+  },
+  'pattern_sparkler': {
+    'uk': 'Бенгальські вогні',
+    'es': 'Bengalas',
+    'pt': 'Fogos de bengala',
+    'pt_BR': 'Estrelinhas',
+    'fr': 'Cierges magiques',
+    'de': 'Wunderkerzen',
+  },
+  'pattern_bells': {
+    'uk': 'Дзвіночки',
+    'es': 'Campanillas',
+    'pt': 'Sininhos',
+    'pt_BR': 'Sininhos',
+    'fr': 'Clochettes',
+    'de': 'Glöckchen',
+  },
+  'pattern_cocoa': {
+    'uk': 'Какао',
+    'es': 'Chocolate caliente',
+    'pt': 'Chocolate quente',
+    'pt_BR': 'Chocolate quente',
+    'fr': 'Chocolat chaud',
+    'de': 'Kakao',
+  },
+  'pattern_tree': {
+    'uk': 'Ялинки',
+    'es': 'Arbolitos',
+    'pt': 'Pinheirinhos',
+    'pt_BR': 'Pinheirinhos',
+    'fr': 'Sapins',
+    'de': 'Tannenbäumchen',
+  },
+  'pattern_snowglobe': {
+    'uk': 'Снігові кулі',
+    'es': 'Bolas de nieve',
+    'pt': 'Globos de neve',
+    'pt_BR': 'Globos de neve',
+    'fr': 'Boules à neige',
+    'de': 'Schneekugeln',
+  },
+  // ── обложки-узоры второй волны (22.11.2026) ──
+  'pattern_fireflies': {
+    'uk': 'Світлячки',
+    'es': 'Luciérnagas',
+    'pt': 'Vaga-lumes',
+    'pt_BR': 'Vaga-lumes',
+    'fr': 'Lucioles',
+    'de': 'Glühwürmchen',
+  },
+  'pattern_smark': {
+    'uk': 'Відбиток S',
+    'es': 'Huella S',
+    'pt': 'Impressão S',
+    'pt_BR': 'Impressão S',
+    'fr': 'Empreinte S',
+    'de': 'S-Abdruck',
+  },
+  'pattern_soda': {
+    'uk': 'Газованка',
+    'es': 'Refresco',
+    'pt': 'Refrigerante',
+    'pt_BR': 'Refrigerante',
+    'fr': 'Soda',
+    'de': 'Limo',
+  },
+  'pattern_burgers': {
+    'uk': 'Бургери',
+    'es': 'Hamburguesas',
+    'pt': 'Hambúrgueres',
+    'pt_BR': 'Hambúrgueres',
+    'fr': 'Burgers',
+    'de': 'Burger',
+  },
+  'pattern_planes': {
+    'uk': 'Літачки',
+    'es': 'Aviones de papel',
+    'pt': 'Aviões de papel',
+    'pt_BR': 'Aviõezinhos de papel',
+    'fr': 'Avions en papier',
+    'de': 'Papierflieger',
+  },
+  'pattern_balloons': {
+    'uk': 'Кульки',
+    'es': 'Globos',
+    'pt': 'Balões',
+    'pt_BR': 'Balões',
+    'fr': 'Ballons',
+    'de': 'Luftballons',
+  },
+  'pattern_coffee': {
+    'uk': 'Кава з собою',
+    'es': 'Café para llevar',
+    'pt': 'Café para levar',
+    'pt_BR': 'Café para viagem',
+    'fr': 'Café à emporter',
+    'de': 'Kaffee to go',
+  },
+  'pattern_donuts': {
+    'uk': 'Пончики',
+    'es': 'Donas',
+    'pt': 'Donuts',
+    'pt_BR': 'Donuts',
+    'fr': 'Donuts',
+    'de': 'Donuts',
+  },
+  'pattern_icecream': {
+    'uk': 'Морозиво',
+    'es': 'Helado',
+    'pt': 'Gelado',
+    'pt_BR': 'Sorvete',
+    'fr': 'Glaces',
+    'de': 'Eiscreme',
+  },
+  'pattern_popcorn': {
+    'uk': 'Попкорн',
+    'es': 'Palomitas',
+    'pt': 'Pipocas',
+    'pt_BR': 'Pipoca',
+    'fr': 'Pop-corn',
+    'de': 'Popcorn',
+  },
+  'pattern_suits': {
+    'uk': 'Масті',
+    'es': 'Palos de cartas',
+    'pt': 'Naipes',
+    'pt_BR': 'Naipes',
+    'fr': 'Couleurs de cartes',
+    'de': 'Kartenfarben',
+  },
   // ── эксклюзивная коллекция (13.11.2026); 'flow' — общий с обложкой «Поток» ──
   'dragon': {
     'uk': 'Дракон',
@@ -1194,13 +1451,8 @@ final List<AvatarFrame> kCollectionAvatarFrames = [
     exclusive: true,
     builder: (s) => LiveFrameView(size: s, id: 'gears'),
   ),
-  AvatarFrame(
-    id: 'flow',
-    nameRu: 'Поток',
-    nameEn: 'Airflow',
-    exclusive: true,
-    builder: (s) => LiveFrameView(size: s, id: 'flow'),
-  ),
+  // Рамка «Поток» убрана 23.11.2026 по решению владельца: слишком плохая.
+  // У кого была выбрана — `frameById('flow')` вернёт null, портрет без рамки.
   AvatarFrame(
     id: 'flock',
     nameRu: 'Стая',
@@ -1224,13 +1476,19 @@ final List<AvatarFrame> kCollectionAvatarFrames = [
   ),
 ];
 
-/// Всё, что можно ВЫБРАТЬ, в порядке экрана выбора: сначала коллекция, затем
-/// переделанные старые, затем персонажи.
-final List<AvatarFrame> kAllAvatarFrames = [
-  ...kCollectionAvatarFrames,
-  ...kAvatarFrames,
-  ...kLivingAvatarFrames,
+/// Сначала бесплатные, затем платные (решение владельца 23.11.2026); внутри
+/// каждой части порядок прежний.
+List<T> _freeFirst<T>(List<T> items, bool Function(T) isFree) => [
+  ...items.where(isFree),
+  ...items.where((e) => !isFree(e)),
 ];
+
+/// Всё, что можно ВЫБРАТЬ, в порядке экрана выбора: бесплатные наверху,
+/// затем коллекция, переделанные старые и персонажи.
+final List<AvatarFrame> kAllAvatarFrames = _freeFirst(
+  [...kCollectionAvatarFrames, ...kAvatarFrames, ...kLivingAvatarFrames],
+  (f) => isCosmeticFree(CosmeticKind.avatarFrame, f.id),
+);
 
 final List<ProfileCover> kProfileCovers = [
   ProfileCover(
@@ -1565,11 +1823,136 @@ final List<ProfileCover> kCollectionProfileCovers = [
   ),
 ];
 
-final List<ProfileCover> kAllProfileCovers = [
-  ...kCollectionProfileCovers,
-  ...kProfileCovers,
-  ...kLivingProfileCovers,
+/// Живые обложки-узоры (макет «Profile Motion», 21.11.2026): знаки
+/// приложения (буква S отпечатком, облачко, искра) вокруг портрета; узор
+/// расходится от натяжения и стягивается при прокрутке. Бесплатные.
+final List<ProfileCover> kPatternProfileCovers = [
+  for (final (style, ru, en) in const [
+    // Первым — узор из ключа шифрования (21.11.2026).
+    (PatternCoverStyle.fingerprint, 'Отпечаток ключа', 'Key fingerprint'),
+    (PatternCoverStyle.orbits, 'Орбиты', 'Orbits'),
+    (PatternCoverStyle.monogram, 'Монограмма', 'Monogram'),
+    (PatternCoverStyle.bubbles, 'Пузырьки', 'Bubbles'),
+    (PatternCoverStyle.constellation, 'Созвездие', 'Constellation'),
+    (PatternCoverStyle.ripples, 'Круги', 'Ripples'),
+    (PatternCoverStyle.rays, 'Лучи', 'Rays'),
+    (PatternCoverStyle.halftone, 'Растр', 'Halftone'),
+    (PatternCoverStyle.spiral, 'Спираль', 'Spiral'),
+    (PatternCoverStyle.rain, 'Дождь', 'Rain'),
+    (PatternCoverStyle.honeycomb, 'Соты', 'Honeycomb'),
+    // Вторая волна (22.11.2026): буква S логотипа и цветные наклейки.
+    (PatternCoverStyle.fireflies, 'Светлячки', 'Fireflies'),
+    (PatternCoverStyle.smark, 'Отпечаток S', 'S print'),
+    (PatternCoverStyle.soda, 'Газировка', 'Soda'),
+    (PatternCoverStyle.burgers, 'Бургеры', 'Burgers'),
+    (PatternCoverStyle.planes, 'Самолётики', 'Paper planes'),
+    (PatternCoverStyle.balloons, 'Шарики', 'Balloons'),
+    (PatternCoverStyle.coffee, 'Кофе с собой', 'Coffee to go'),
+    (PatternCoverStyle.donuts, 'Пончики', 'Donuts'),
+    (PatternCoverStyle.icecream, 'Мороженое', 'Ice cream'),
+    (PatternCoverStyle.popcorn, 'Попкорн', 'Popcorn'),
+    (PatternCoverStyle.suits, 'Масти', 'Card suits'),
+  ])
+    ProfileCover(
+      id: patternCoverId(style),
+      nameRu: ru,
+      nameEn: en,
+      builder: () => PatternCoverView(style: style),
+    ),
 ];
+
+/// 🔴 Обложка по умолчанию (владелец, 23.11.2026): у того, кто обложку не
+/// выбирал, профиль не пустой, а с «Отпечатком S» — знаком приложения.
+/// Явно выбранное «Без обложки» остаётся пустым. `false` — как было
+/// («Отпечаток ключа» у себя, у собеседника — только при известном ключе).
+const bool kSPrintDefaultCover = true;
+
+/// «Отпечаток S» — обложка по умолчанию.
+final String kDefaultProfileCoverId = patternCoverId(PatternCoverStyle.smark);
+
+/// Новогодняя серия (макет «Staff Covers», 23.11.2026): вещи-наклейки по
+/// орбитам вокруг аватара, у каждой своя жизнь, за обложкой идёт снег.
+/// Платные; стоят ПЕРВЫМИ среди платных (владелец: «в самый верх, где
+/// начинаются платные обложки»).
+final List<ProfileCover> kNewYearProfileCovers = [
+  for (final (style, ru, en) in const [
+    (PatternCoverStyle.ornaments, 'Ёлочные шары', 'Baubles'),
+    (PatternCoverStyle.snowflakes, 'Снежинки', 'Snowflakes'),
+    (PatternCoverStyle.snowman, 'Снеговики', 'Snowmen'),
+    (PatternCoverStyle.tangerines, 'Мандарины', 'Tangerines'),
+    (PatternCoverStyle.gingerbread, 'Пряничные человечки', 'Gingerbread men'),
+    (PatternCoverStyle.sparkler, 'Бенгальские огни', 'Sparklers'),
+    (PatternCoverStyle.bells, 'Колокольчики', 'Bells'),
+    (PatternCoverStyle.cocoa, 'Какао', 'Cocoa'),
+    (PatternCoverStyle.tree, 'Ёлочки', 'Christmas trees'),
+    (PatternCoverStyle.snowglobe, 'Снежные шары', 'Snow globes'),
+  ])
+    ProfileCover(
+      id: patternCoverId(style),
+      nameRu: ru,
+      nameEn: en,
+      builder: () => PatternCoverView(style: style),
+    ),
+];
+
+/// Закрытые обложки команды Secretly (макет «Staff Covers», 23.11.2026):
+/// шампанское, камни, часы, механизм…
+///
+/// 🔴 Их НЕТ в [kAllProfileCovers] и [coverById]: экран выбора, комнаты,
+/// превью и витрина их не видят, и никто без знака команды не может ими
+/// пользоваться. Видны ВСЕМ — но только в профиле со знаком команды
+/// (`EliteBadges.isTeam`, знак выдаёт оператор на сервере): так их
+/// показывают [coverWidgetFor] и [coverBackWidgetFor] с `ownerProfileId`.
+/// Выбрать их может только человек со знаком — раздел «Команда Secretly»
+/// в выборе обложки. Id — в `kStaffCoverIds` (entitlements).
+final List<ProfileCover> kStaffProfileCovers = [
+  for (final (style, ru, en) in const [
+    (PatternCoverStyle.champagne, 'Шампанское', 'Champagne'),
+    (PatternCoverStyle.gems, 'Камни', 'Gems'),
+    (PatternCoverStyle.perfume, 'Парфюм', 'Perfume'),
+    (PatternCoverStyle.macarons, 'Макаруны', 'Macarons'),
+    (PatternCoverStyle.watches, 'Часы', 'Watches'),
+    (PatternCoverStyle.movement, 'Механизм', 'Movement'),
+    (PatternCoverStyle.armillary, 'Армиллярная сфера', 'Armillary sphere'),
+    (PatternCoverStyle.cards, 'Металлическая карта', 'Metal card'),
+    (PatternCoverStyle.gifts, 'Подарки', 'Gifts'),
+  ])
+    ProfileCover(
+      id: patternCoverId(style),
+      nameRu: ru,
+      nameEn: en,
+      exclusive: true,
+      builder: () => PatternCoverView(style: style),
+    ),
+];
+
+/// Обложка команды по id (только для профиля со знаком команды).
+ProfileCover? staffCoverById(String? id) {
+  if (id == null || !isStaffCoverId(id)) return null;
+  for (final c in kStaffProfileCovers) {
+    if (c.id == id) return c;
+  }
+  return null;
+}
+
+/// Бесплатные обложки наверху, платные ниже (23.11.2026). Новогодние —
+/// первые среди платных.
+final List<ProfileCover> kAllProfileCovers = _freeFirst(
+  [
+    ...kPatternProfileCovers,
+    ...kNewYearProfileCovers,
+    ...kCollectionProfileCovers,
+    ...kProfileCovers,
+    ...kLivingProfileCovers,
+  ],
+  (c) => isCosmeticFree(CosmeticKind.profileCover, c.id),
+);
+
+/// Сколько бесплатных обложек стоит в начале [kAllProfileCovers]: после них
+/// экран выбора ставит платную «Свою обложку».
+final int kFreeProfileCoverCount = kAllProfileCovers
+    .where((c) => isCosmeticFree(CosmeticKind.profileCover, c.id))
+    .length;
 
 AvatarFrame? frameById(String? id) {
   if (id == null || id.isEmpty) return null;
@@ -1595,7 +1978,9 @@ Widget coverStill(String id) => TickerMode(
   enabled: false,
   child: isLiveCoverId(id)
       ? LiveCoverView(id: id, animate: false)
-      : (coverById(id)?.builder() ?? const SizedBox.shrink()),
+      // Обложки команды — только в выборе у человека со знаком команды.
+      : ((coverById(id) ?? staffCoverById(id))?.builder() ??
+            const SizedBox.shrink()),
 );
 
 ProfileCover? coverById(String? id) {
@@ -1613,13 +1998,23 @@ ProfileCover? coverById(String? id) {
 /// The video plays only where the owner has the local file; interlocutors get
 /// [customImagePath] (a still frame grabbed from that video), so passing both is
 /// expected — the still is the loading/fallback frame under the video too.
+///
+/// [ownerProfileId] — чей это профиль. Только с ним рисуются обложки команды
+/// ([kStaffProfileCovers]) — и только пока у профиля есть знак команды; без
+/// него (комнаты, превью) такая обложка — пусто.
 Widget? coverWidgetFor(
   String? coverId, {
   String? customImagePath,
   String? customVideoPath,
   Offset? avatarCenter,
   double? avatarRadius,
+  String? ownerProfileId,
 }) {
+  if (isStaffCoverId(coverId ?? '')) {
+    final staff = staffCoverById(coverId);
+    if (staff == null || (ownerProfileId ?? '').trim().isEmpty) return null;
+    return TeamCoverGate(profileId: ownerProfileId!, child: staff.builder());
+  }
   if (customVideoPath != null && customVideoPath.isNotEmpty) {
     return _VideoCover(
       key: ValueKey(customVideoPath),
@@ -1662,6 +2057,7 @@ Widget? coverBackWidgetFor(
   String? customVideoPath,
   Offset? avatarCenter,
   double? avatarRadius,
+  String? ownerProfileId,
 }) {
   final custom =
       (customVideoPath != null && customVideoPath.isNotEmpty) ||
@@ -1675,7 +2071,29 @@ Widget? coverBackWidgetFor(
     customVideoPath: customVideoPath,
     avatarCenter: avatarCenter,
     avatarRadius: avatarRadius,
+    ownerProfileId: ownerProfileId,
   );
+}
+
+/// Обложка команды видна, только пока у профиля [profileId] есть знак
+/// команды (знак приходит с сервера и может прийти позже — тогда обложка
+/// появляется сама; знак сняли — пропадает).
+class TeamCoverGate extends StatelessWidget {
+  const TeamCoverGate({super.key, required this.profileId, required this.child});
+
+  final String profileId;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    EliteBadges.instance.ensureLoaded();
+    return ValueListenableBuilder<Map<String, String>>(
+      valueListenable: EliteBadges.instance.badges,
+      builder: (context, _, _) => EliteBadges.instance.isTeam(profileId)
+          ? child
+          : const SizedBox.shrink(),
+    );
+  }
 }
 
 /// The transparent foreground pass to draw OVER the avatar photo (see
@@ -1817,7 +2235,7 @@ class _BlackHoleShaderCover extends StatefulWidget {
 }
 
 class _BlackHoleShaderCoverState extends State<_BlackHoleShaderCover>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with PacedTickerProviderStateMixin, WidgetsBindingObserver {
   // The profile page runs TWO instances (back + front layers) — load the
   // program once and share it; each instance still gets its own shader.
   static Future<ui.FragmentProgram>? _programFuture;

@@ -9,6 +9,8 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import '../calls/call_manager.dart';
 import '../calls/webrtc_call_session.dart';
+import 'motion/motion.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Floating call bubble shown when the active-call UI is minimized.
 /// Sits at the root of the widget tree so it overlays any screen.
@@ -73,7 +75,8 @@ class _CallBubbleOverlayState extends State<CallBubbleOverlay>
     final mid = _pos.dx + w / 2;
     _snapFrom = _pos.dx;
     _snapTo = mid < screen.width / 2 ? _margin : screen.width - w - _margin;
-    const spring = SpringDescription(mass: 1, stiffness: 300, damping: 24);
+    // Без отскока, как у Telegram (раньше 300/24 — перелетал край).
+    const spring = MotionSprings.bubble;
     _snapCtrl!.animateWith(SpringSimulation(spring, _snapFrom, _snapTo, 0));
   }
 
@@ -292,7 +295,7 @@ class _VideoPlaceholder extends StatelessWidget {
       children: [
         ColoredBox(color: Colors.black),
         Center(
-          child: Icon(Icons.videocam_rounded, color: Colors.white70, size: 30),
+          child: Icon(AdaptiveIcons.videocam_rounded, color: Colors.white70, size: 30),
         ),
       ],
     );
@@ -314,7 +317,7 @@ class _ControlsOverlay extends StatelessWidget {
       children: [
         Center(
           child: _OverlayIconButton(
-            icon: Icons.open_in_full_rounded,
+            icon: AdaptiveIcons.open_in_full_rounded,
             semanticLabel: 'Open call',
             size: 32,
             hitSize: 58,
@@ -325,7 +328,7 @@ class _ControlsOverlay extends StatelessWidget {
           top: 6,
           right: 6,
           child: _OverlayIconButton(
-            icon: Icons.close_rounded,
+            icon: AdaptiveIcons.close_rounded,
             semanticLabel: 'End call',
             size: 22,
             hitSize: 36,

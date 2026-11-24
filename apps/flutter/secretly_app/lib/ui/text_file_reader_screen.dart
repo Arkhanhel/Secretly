@@ -9,7 +9,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'icons/app_icons.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Full-screen in-app reader for PLAIN-TEXT attachments (.txt, .log, .json,
 /// .csv, .md …).
@@ -197,7 +200,7 @@ class _TextFileReaderScreenState extends State<TextFileReaderScreen> {
         ignoring: !_chromeVisible,
         child: AnimatedSlide(
           duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
+          curve: Motion.standard,
           offset: _chromeVisible ? Offset.zero : const Offset(0, -0.16),
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 160),
@@ -211,13 +214,13 @@ class _TextFileReaderScreenState extends State<TextFileReaderScreen> {
                     padding: const EdgeInsets.all(6),
                     child: Row(
                       children: [
-                        IconButton(
+                        PressFeedback(child: IconButton(
                           onPressed: () => Navigator.of(context).pop(),
                           icon: const Icon(
                             AppIcons.arrowBack,
                             color: Colors.white,
                           ),
-                        ),
+                        )),
                         Expanded(
                           child: Text(
                             widget.title,
@@ -252,7 +255,7 @@ class _TextFileReaderScreenState extends State<TextFileReaderScreen> {
         ignoring: !_chromeVisible,
         child: AnimatedSlide(
           duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
+          curve: Motion.standard,
           offset: _chromeVisible ? Offset.zero : const Offset(0, 0.2),
           child: AnimatedOpacity(
             duration: const Duration(milliseconds: 160),
@@ -270,7 +273,7 @@ class _TextFileReaderScreenState extends State<TextFileReaderScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        IconButton(
+                        PressFeedback(child: IconButton(
                           tooltip: _label(
                             context,
                             ru: 'Мельче',
@@ -280,21 +283,21 @@ class _TextFileReaderScreenState extends State<TextFileReaderScreen> {
                             () => _fontSize = (_fontSize - 1).clamp(10, 28),
                           ),
                           icon: const Icon(
-                            Icons.text_decrease_rounded,
+                            AdaptiveIcons.text_decrease_rounded,
                             color: Colors.white,
                           ),
-                        ),
-                        IconButton(
+                        )),
+                        PressFeedback(child: IconButton(
                           tooltip: _label(context, ru: 'Крупнее', en: 'Larger'),
                           onPressed: () => setState(
                             () => _fontSize = (_fontSize + 1).clamp(10, 28),
                           ),
                           icon: const Icon(
-                            Icons.text_increase_rounded,
+                            AdaptiveIcons.text_increase_rounded,
                             color: Colors.white,
                           ),
-                        ),
-                        IconButton(
+                        )),
+                        PressFeedback(child: IconButton(
                           tooltip: _label(
                             context,
                             ru: 'Копировать',
@@ -319,11 +322,11 @@ class _TextFileReaderScreenState extends State<TextFileReaderScreen> {
                             );
                           },
                           icon: const Icon(
-                            Icons.copy_rounded,
+                            AdaptiveIcons.copy_rounded,
                             color: Colors.white,
                           ),
-                        ),
-                        IconButton(
+                        )),
+                        PressFeedback(child: IconButton(
                           tooltip: _label(
                             context,
                             ru: 'Поделиться',
@@ -331,10 +334,10 @@ class _TextFileReaderScreenState extends State<TextFileReaderScreen> {
                           ),
                           onPressed: () => widget.onShare(),
                           icon: const Icon(
-                            Icons.ios_share_rounded,
+                            AdaptiveIcons.ios_share_rounded,
                             color: Colors.white,
                           ),
-                        ),
+                        )),
                       ],
                     ),
                   ),

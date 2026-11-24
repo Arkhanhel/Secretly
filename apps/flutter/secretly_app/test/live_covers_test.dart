@@ -17,7 +17,18 @@ void main() {
     expect(kLiveCoverIds.length, 50);
     final all = kAllProfileCovers.map((c) => c.id).toList();
     expect(all.toSet().length, all.length);
-    expect(all.toSet(), {...kLiveCoverIds, 'blackhole'});
+    // + 11 обложек-узоров (21.11.2026) — свой рисовальщик, не сцены набора.
+    expect(all.toSet(), {
+      ...kLiveCoverIds,
+      'blackhole',
+      ...kPatternProfileCovers.map((c) => c.id),
+      // Новогодняя серия (23.11.2026); обложек команды в каталоге нет.
+      ...kNewYearProfileCovers.map((c) => c.id),
+    });
+    // 11-я — «Отпечаток ключа», первой в списке; + 11 узоров второй волны
+    // (22.11.2026).
+    expect(kPatternProfileCovers, hasLength(22));
+    expect(kPatternProfileCovers.first.id, 'pattern_fingerprint');
     expect(kCollectionProfileCovers, hasLength(10));
     for (final id in kLiveCoverIds) {
       expect(coverById(id), isNotNull, reason: 'обложка $id не рисуется');
@@ -166,14 +177,17 @@ void main() {
     final src = File('lib/ui/profile_screen.dart').readAsStringSync();
     final i = src.indexOf('height: collapsedButtonsTop + 66,');
     expect(i, greaterThan(0));
-    final head = src.substring(i, i + 1400);
+    // Окно шире: над сценой теперь подсказка «Отпечатка ключа» (21.11.2026).
+    final head = src.substring(i, i + 2200);
     expect(
       head.contains('child: IgnorePointer('),
       isFalse,
       reason: 'живая сцена снова под запретом нажатий',
     );
     expect(head.contains('LiveCoverTouch('), isTrue);
-    expect(head.contains('isLiveCoverId(controller.myCoverId)'), isTrue);
+    // Не выбрана — живёт обложка по умолчанию «Отпечаток S» (23.11.2026).
+    expect(head.contains('isLiveCoverId('), isTrue);
+    expect(head.contains(': controller.myCoverId,'), isTrue);
   });
 
   test('🔴 обложки уходят в прозрачность, а не в плашку цвета страницы', () {

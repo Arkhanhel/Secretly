@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'glass/glass_category_strip.dart';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -12,15 +13,19 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../app/app_controller.dart';
+import '../app/elite_badges.dart';
+import '../l10n/app_localizations.dart';
 import '../build_variant.dart';
 import '../billing/show_paywall.dart';
 import '../entitlements/cosmetic_catalog.dart';
 import 'cover_crop_screen.dart';
+import 'motion/app_dialogs.dart';
 import 'paywall_screen.dart' show PaywallTrigger;
 import 'premium/cosmetic_animation_scope.dart';
 import 'premium/cosmetics_catalog.dart';
 import 'premium/live_frames.dart';
-import 'premium/live_covers.dart' show isLiveCoverId;
+import 'widgets/app_background.dart';
+import 'premium/live_covers.dart' show coverIsNightScene, isLiveCoverId;
 import 'premium/profile_fx.dart'
     show CoverPokeScope, CoverPokes, precacheProfileFxAssets;
 import 'wave1_l10n.dart';
@@ -29,6 +34,7 @@ import 'widgets/frosted_top_bar.dart';
 import 'widgets/premium_glass.dart';
 import '../media/h264_encoder.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// Premium picker for the animated avatar frame + animated profile cover.
 ///
@@ -99,8 +105,15 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
     if (mounted) setState(() {});
   }
 
+  /// Я из команды Secretly (знак выдаёт оператор) — мне открыт раздел
+  /// закрытых обложек команды (23.11.2026).
+  bool get _isTeam => EliteBadges.instance.isTeam(_c.profileId);
+
   Future<void> _selectCover(String? id) async {
-    if (id != null && !_coverAllowed(id)) {
+    if (id != null && isStaffCoverId(id)) {
+      // Обложки команды не продаются: без знака команды выбрать нельзя.
+      if (!_isTeam) return;
+    } else if (id != null && !_coverAllowed(id)) {
       await showPaywall(context, PaywallTrigger.cosmetic);
       if (!mounted) return;
       setState(() {});
@@ -121,9 +134,12 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
       if (!_premiumUnlocked) return;
     }
     // One entry point — пользователь выбирает фото или видео.
+    final ink = _cxInk(context);
     final choice = await showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
-      backgroundColor: const Color(0xFF15171E),
+      backgroundColor:
+          _cxLight(context) ? Colors.white : const Color(0xFF15171E),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -136,13 +152,13 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
               width: 38,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.white24,
+                color: ink.withValues(alpha: 0.24),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             const SizedBox(height: 6),
             ListTile(
-              leading: const Icon(Icons.photo_rounded, color: Colors.white),
+              leading: Icon(AdaptiveIcons.photo_rounded, color: ink),
               title: Text(
                 wave1Text(
                   context,
@@ -155,8 +171,7 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
                   fr: 'Photo',
                   de: 'Foto',
                 ),
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.w600),
+                style: TextStyle(color: ink, fontWeight: FontWeight.w600),
               ),
               onTap: () => Navigator.pop(ctx, 'photo'),
             ),
@@ -165,7 +180,7 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
             if (kVideoToolsAvailable)
             ListTile(
               leading:
-                  const Icon(Icons.movie_creation_rounded, color: Colors.white),
+                  Icon(AdaptiveIcons.movie_creation_rounded, color: ink),
               title: Text(
                 wave1Text(
                   context,
@@ -178,8 +193,7 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
                   fr: 'Vidéo',
                   de: 'Video',
                 ),
-                style: const TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.w600),
+                style: TextStyle(color: ink, fontWeight: FontWeight.w600),
               ),
               subtitle: Text(
                 wave1Text(
@@ -193,7 +207,10 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
                   fr: 'lue chez vous · vos contacts reçoivent une image fixe',
                   de: 'wird bei dir abgespielt · Kontakte erhalten ein Standbild',
                 ),
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
+                style: TextStyle(
+                  color: ink.withValues(alpha: 0.54),
+                  fontSize: 12,
+                ),
               ),
               onTap: () => Navigator.pop(ctx, 'video'),
             ),
@@ -289,8 +306,15 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Force a dark surface so the cosmic animations read well and the screen
-    // keeps the premium aesthetic regardless of the app theme.
+    // 24.11.2026: в светлой теме страница светлая — рамки и обложки рисуются
+    // в «дневном тоне» (profile_fx/util.dart) и выглядят так, как их увидят
+    // на светлом профиле. В тёмной теме — прежняя тёмная витрина.
+    if (_cxLight(context)) {
+      return StreamBuilder<void>(
+        stream: _c.changed,
+        builder: (context, _) => _buildScaffold(context),
+      );
+    }
     final dark = ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
@@ -333,8 +357,12 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
       ),
       body: Stack(
         children: [
-          const Positioned.fill(child: ColoredBox(color: Color(0xFF0C0D11))),
-          const Positioned.fill(child: CosmicDustField(count: 90)),
+          // Светлая тема: фон приложения (его рисует корень) и без
+          // космической пыли — белые искры на светлом не видны.
+          if (!_cxLight(context)) ...const [
+            Positioned.fill(child: ColoredBox(color: Color(0xFF0C0D11))),
+            Positioned.fill(child: CosmicDustField(count: 90)),
+          ],
           SafeArea(
             child: Column(
               children: [
@@ -381,7 +409,7 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
             children: [
-              const Icon(Icons.lock_rounded, color: kPremiumGold, size: 20),
+              const Icon(AdaptiveIcons.lock_rounded, color: kPremiumGold, size: 20),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -401,8 +429,8 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
               ),
               const SizedBox(width: 8),
               Icon(
-                Icons.chevron_right_rounded,
-                color: Colors.white.withValues(alpha: 0.6),
+                AdaptiveIcons.chevron_right_rounded,
+                color: _cxInk(context).withValues(alpha: 0.6),
               ),
             ],
           ),
@@ -465,12 +493,56 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
   }
 
   Widget _coversList(bool unlocked) {
+    EliteBadges.instance.ensureLoaded();
+    return ValueListenableBuilder<Map<String, String>>(
+      valueListenable: EliteBadges.instance.badges,
+      builder: (context, _, _) => _coversListFor(unlocked),
+    );
+  }
+
+  Widget _coversListFor(bool unlocked) {
     final current = _c.myCoverId;
+    // Ничего не выбрано — отмечен «Отпечаток S»: он и показывается.
+    final shown =
+        (current == null || current.isEmpty) && kSPrintDefaultCover
+        ? kDefaultProfileCoverId
+        : current;
+    // Закрытые обложки команды — отдельным разделом сразу под «Без
+    // обложки», и только у человека со знаком команды. Остальным раздела
+    // нет вовсе (23.11.2026).
+    final staff = _isTeam ? kStaffProfileCovers : const <ProfileCover>[];
+    final teamRows = staff.isEmpty ? 0 : staff.length + 1;
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      itemCount: kAllProfileCovers.length + 2,
+      itemCount: kAllProfileCovers.length + 2 + teamRows,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, i) {
+      itemBuilder: (context, row) {
+        // «Своя обложка» — в самом верху (владелец, 23.11.2026).
+        if (row == 0) {
+          // Single «Своя обложка» entry — photo OR video (chosen in a sheet).
+          return _CustomCoverTile(
+            imagePath: _c.myCoverImagePath,
+            hasVideo: _c.myCoverVideoPath != null,
+            busy: _busyVideo,
+            selected: current == 'custom',
+            locked: !unlocked,
+            onTap: _addCustomCover,
+          );
+        }
+        final index = row - 1;
+        if (teamRows > 0 && index >= 1 && index <= teamRows) {
+          if (index == 1) return const _TeamCoversHeader();
+          final cover = staff[index - 2];
+          return _CoverTile(
+            coverId: cover.id,
+            label: cover.nameLocalized(context),
+            selected: current == cover.id,
+            exclusive: true,
+            locked: false,
+            onTap: () => _selectCover(cover.id),
+          );
+        }
+        final i = index > teamRows ? index - teamRows : index;
         if (i == 0) {
           return _CoverTile(
             coverId: null,
@@ -485,32 +557,54 @@ class _ProfileCosmeticsScreenState extends State<ProfileCosmeticsScreen> {
               fr: 'Aucune couverture',
               de: 'Kein Titelbild',
             ),
-            selected: current == null,
+            selected: current == kNoProfileCoverId,
             locked: false,
-            onTap: () => _selectCover(null),
+            onTap: () => _selectCover(kNoProfileCoverId),
           );
         }
-        if (i == 1) {
-          // Single «Своя обложка» entry — photo OR video (chosen in a sheet).
-          return _CustomCoverTile(
-            imagePath: _c.myCoverImagePath,
-            hasVideo: _c.myCoverVideoPath != null,
-            busy: _busyVideo,
-            selected: current == 'custom',
-            locked: !unlocked,
-            onTap: _addCustomCover,
-          );
-        }
-        final cover = kAllProfileCovers[i - 2];
+        final cover = kAllProfileCovers[i - 1];
         return _CoverTile(
           coverId: cover.id,
           label: cover.nameLocalized(context),
-          selected: current == cover.id,
+          selected: shown == cover.id,
           exclusive: cover.exclusive,
           locked: !unlocked && !_coverAllowed(cover.id),
           onTap: () => _selectCover(cover.id),
         );
       },
+    );
+  }
+}
+
+/// Заголовок раздела закрытых обложек команды: видят только люди со знаком
+/// команды.
+class _TeamCoversHeader extends StatelessWidget {
+  const _TeamCoversHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n?.teamCoversTitle ?? 'Secretly',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            l10n?.teamCoversSubtitle ?? '',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -560,11 +654,15 @@ class _LivePreview extends StatelessWidget {
               final column = _avatar + 10 + _nameLine;
               final cy = (_height - column) / 2 + _avatar / 2;
               final cover = coverWidgetFor(
-                coverId,
+                // Не выбрана — «Отпечаток S», как в профиле (23.11.2026).
+                (coverId == null || coverId!.isEmpty) && kSPrintDefaultCover
+                    ? kDefaultProfileCoverId
+                    : coverId,
                 customImagePath: coverImagePath,
                 customVideoPath: coverVideoPath,
                 avatarCenter: Offset(0.5, cy / _height),
                 avatarRadius: _avatar / 2 / box.maxWidth,
+                ownerProfileId: controller.profileId,
               );
               return CoverPokeScope(
                 pokes: pokes,
@@ -578,18 +676,26 @@ class _LivePreview extends StatelessWidget {
   }
 
   Widget _previewStack(BuildContext context, Widget? cover, String name) {
+    // Светлая тема и дневная обложка: обложка сама светлая — подложка снизу
+    // светлая и имя тёмное (ночная сцена и своё фото/видео — как в тёмной).
+    final dayText =
+        _cxLight(context) &&
+        !coverIsNightScene(coverId) &&
+        (coverImagePath ?? '').isEmpty &&
+        (coverVideoPath ?? '').isEmpty;
+    final pageColor = AppBackground.scrimColorOf(context);
     return Stack(
             fit: StackFit.expand,
             children: [
               if (cover != null)
                 cover
               else
-                const DecoratedBox(
+                DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [Color(0xFF15171E), Color(0xFF0C0D11)],
+                      colors: _cxTileFill(context),
                     ),
                   ),
                 ),
@@ -600,10 +706,19 @@ class _LivePreview extends StatelessWidget {
                     gradient: LinearGradient(
                       begin: Alignment.center,
                       end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.45),
-                      ],
+                      // Днём низ превью уходит в цвет страницы. 🔴 Начало —
+                      // тот же цвет с нулевой прозрачностью: от
+                      // `Colors.transparent` (прозрачный ЧЁРНЫЙ) середина
+                      // перехода выходила серой полосой.
+                      colors: dayText
+                          ? [
+                              pageColor.withValues(alpha: 0),
+                              pageColor.withValues(alpha: 0.85),
+                            ]
+                          : [
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.45),
+                            ],
                     ),
                   ),
                 ),
@@ -629,17 +744,21 @@ class _LivePreview extends StatelessWidget {
                       name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: dayText ? _cxInk(context) : Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        shadows: [
-                          Shadow(
-                            color: Color.fromRGBO(0, 0, 0, 0.75),
-                            offset: Offset(0, 1),
-                            blurRadius: 6,
-                          ),
-                        ],
+                        shadows: dayText
+                            ? const [
+                                Shadow(color: Colors.white, blurRadius: 8),
+                              ]
+                            : const [
+                                Shadow(
+                                  color: Color.fromRGBO(0, 0, 0, 0.75),
+                                  offset: Offset(0, 1),
+                                  blurRadius: 6,
+                                ),
+                              ],
                       ),
                     ),
                   ],
@@ -721,7 +840,7 @@ class _TapHintState extends State<_TapHint>
                   Transform.scale(
                     scale: scale,
                     child: const Icon(
-                      Icons.touch_app_rounded,
+                      AdaptiveIcons.touch_app_rounded,
                       size: 44,
                       color: Colors.white,
                       shadows: [
@@ -897,18 +1016,50 @@ class _Segmented extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final frames = wave1Text(
+      context,
+      ru: 'Рамки',
+      en: 'Frames',
+      uk: 'Рамки',
+      es: 'Marcos',
+      pt: 'Molduras',
+      ptBr: 'Molduras',
+      fr: 'Cadres',
+      de: 'Rahmen',
+    );
+    final covers = wave1Text(
+      context,
+      ru: 'Обложки',
+      en: 'Covers',
+      uk: 'Обкладинки',
+      es: 'Portadas',
+      pt: 'Capas',
+      ptBr: 'Capas',
+      fr: 'Couvertures',
+      de: 'Titelbilder',
+    );
+    // 23.11.2026 (план стекла): полоса во всю ширину с каплей.
+    if (kGlassCategoryStrip) {
+      return GlassCategoryStrip(
+        items: [GlassStripItem(label: frames), GlassStripItem(label: covers)],
+        selected: index,
+        onSelect: onChanged,
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
+          color: _cxInk(context).withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+          border: Border.all(color: _cxInk(context).withValues(alpha: 0.10)),
         ),
         child: Row(
           children: [
             _seg(
+              context,
               wave1Text(
                 context,
                 ru: 'Рамки',
@@ -923,6 +1074,7 @@ class _Segmented extends StatelessWidget {
               0,
             ),
             _seg(
+              context,
               wave1Text(
                 context,
                 ru: 'Обложки',
@@ -942,8 +1094,9 @@ class _Segmented extends StatelessWidget {
     );
   }
 
-  Widget _seg(String label, int i) {
+  Widget _seg(BuildContext context, String label, int i) {
     final selected = index == i;
+    final ink = _cxInk(context);
     return Expanded(
       child: GestureDetector(
         onTap: () => onChanged(i),
@@ -952,7 +1105,7 @@ class _Segmented extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
             color: selected
-                ? Colors.white.withValues(alpha: 0.14)
+                ? ink.withValues(alpha: 0.14)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(11),
           ),
@@ -960,7 +1113,7 @@ class _Segmented extends StatelessWidget {
           child: Text(
             label,
             style: TextStyle(
-              color: selected ? Colors.white : Colors.white70,
+              color: selected ? ink : ink.withValues(alpha: 0.7),
               fontSize: 14,
               fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
             ),
@@ -994,6 +1147,8 @@ class _FrameTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ink = _cxInk(context);
+    final light = _cxLight(context);
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1001,12 +1156,15 @@ class _FrameTile extends StatelessWidget {
         // феникса выходят за портрет и не должны лезть на соседей.
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: selected ? 0.10 : 0.04),
+          // Светлая тема: плитка — белая карточка на фоне страницы.
+          color: light
+              ? Colors.white.withValues(alpha: selected ? 0.95 : 0.7)
+              : Colors.white.withValues(alpha: selected ? 0.10 : 0.04),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected
                 ? kPremiumGold.withValues(alpha: 0.8)
-                : Colors.white.withValues(alpha: 0.08),
+                : ink.withValues(alpha: 0.08),
             width: selected ? 1.6 : 1,
           ),
         ),
@@ -1037,13 +1195,13 @@ class _FrameTile extends StatelessWidget {
                 ),
                 ),
                 if (frameId == null)
-                  const Positioned(
+                  Positioned(
                     right: 6,
                     bottom: 6,
                     child: Icon(
-                      Icons.block_rounded,
+                      AdaptiveIcons.block_rounded,
                       size: 18,
-                      color: Colors.white38,
+                      color: ink.withValues(alpha: 0.38),
                     ),
                   ),
                 if (exclusive)
@@ -1058,16 +1216,18 @@ class _FrameTile extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: selected ? Colors.white : Colors.white70,
+                color: selected ? ink : ink.withValues(alpha: 0.7),
                 fontSize: 11.5,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                shadows: const [
-                  Shadow(
-                    color: Color.fromRGBO(0, 0, 0, 0.9),
-                    offset: Offset(0, 1),
-                    blurRadius: 4,
-                  ),
-                ],
+                shadows: light
+                    ? null
+                    : const [
+                        Shadow(
+                          color: Color.fromRGBO(0, 0, 0, 0.9),
+                          offset: Offset(0, 1),
+                          blurRadius: 4,
+                        ),
+                      ],
               ),
             ),
           ],
@@ -1108,7 +1268,7 @@ class _CustomCoverTile extends StatelessWidget {
             border: Border.all(
               color: selected
                   ? kPremiumGold.withValues(alpha: 0.85)
-                  : Colors.white.withValues(alpha: 0.16),
+                  : _cxInk(context).withValues(alpha: 0.16),
               width: selected ? 1.8 : 1,
             ),
             borderRadius: BorderRadius.circular(16),
@@ -1147,10 +1307,10 @@ class _CustomCoverTile extends StatelessWidget {
                   children: [
                     Icon(
                       hasVideo
-                          ? Icons.movie_creation_rounded
+                          ? AdaptiveIcons.movie_creation_rounded
                           : (hasImage
-                                ? Icons.edit_rounded
-                                : Icons.add_photo_alternate_rounded),
+                                ? AdaptiveIcons.edit_rounded
+                                : AdaptiveIcons.add_photo_alternate_rounded),
                       size: 18,
                       color: Colors.white,
                     ),
@@ -1204,7 +1364,7 @@ class _CustomCoverTile extends StatelessWidget {
                 const Positioned(
                   right: 12,
                   top: 10,
-                  child: Icon(Icons.play_circle_fill_rounded,
+                  child: Icon(AdaptiveIcons.play_circle_fill_rounded,
                       size: 22, color: Colors.white),
                 ),
               if (busy)
@@ -1230,16 +1390,19 @@ class _AddCoverPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final light = _cxLight(context);
     return DecoratedBox(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF1B1E27), Color(0xFF101218)],
+          colors: light
+              ? const [Color(0xFF8E9AB8), Color(0xFF6F7A96)]
+              : const [Color(0xFF1B1E27), Color(0xFF101218)],
         ),
       ),
       child: Center(
         child: Icon(
-          Icons.add_photo_alternate_outlined,
-          color: Colors.white.withValues(alpha: 0.5),
+          AdaptiveIcons.add_photo_alternate_outlined,
+          color: Colors.white.withValues(alpha: light ? 0.75 : 0.5),
           size: 30,
         ),
       ),
@@ -1268,7 +1431,10 @@ class _CoverTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cover = coverById(coverId);
+    final cover = coverById(coverId) ?? staffCoverById(coverId);
+    // Светлая тема: дневные обложки светлые — подложка под подписью белая,
+    // подпись тёмная (ночные сцены — как в тёмной теме).
+    final dayText = _cxLight(context) && !coverIsNightScene(coverId);
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
@@ -1279,7 +1445,7 @@ class _CoverTile extends StatelessWidget {
             border: Border.all(
               color: selected
                   ? kPremiumGold.withValues(alpha: 0.85)
-                  : Colors.white.withValues(alpha: 0.08),
+                  : _cxInk(context).withValues(alpha: 0.08),
               width: selected ? 1.8 : 1,
             ),
             borderRadius: BorderRadius.circular(16),
@@ -1294,11 +1460,9 @@ class _CoverTile extends StatelessWidget {
                 // same picture.
                 (selected ? cover.builder() : coverStill(cover.id))
               else
-                const DecoratedBox(
+                DecoratedBox(
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF15171E), Color(0xFF0C0D11)],
-                    ),
+                    gradient: LinearGradient(colors: _cxTileFill(context)),
                   ),
                 ),
               Positioned.fill(
@@ -1307,10 +1471,15 @@ class _CoverTile extends StatelessWidget {
                     gradient: LinearGradient(
                       begin: Alignment.centerLeft,
                       end: Alignment.centerRight,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.45),
-                        Colors.transparent,
-                      ],
+                      colors: dayText
+                          ? [
+                              Colors.white.withValues(alpha: 0.7),
+                              Colors.white.withValues(alpha: 0),
+                            ]
+                          : [
+                              Colors.black.withValues(alpha: 0.45),
+                              Colors.transparent,
+                            ],
                     ),
                   ),
                 ),
@@ -1320,21 +1489,22 @@ class _CoverTile extends StatelessWidget {
                 bottom: 12,
                 child: Text(
                   label,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: dayText ? _cxInk(context) : Colors.white,
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
               if (coverId == null)
-                const Positioned(
+                Positioned(
                   left: 14,
                   top: 12,
                   child: Icon(
-                    Icons.block_rounded,
+                    AdaptiveIcons.block_rounded,
                     size: 18,
-                    color: Colors.white38,
+                    color: (dayText ? _cxInk(context) : Colors.white)
+                        .withValues(alpha: 0.38),
                   ),
                 ),
               if (exclusive)
@@ -1363,7 +1533,7 @@ class _CollectionBadge extends StatelessWidget {
         color: Colors.black.withValues(alpha: 0.45),
         shape: BoxShape.circle,
       ),
-      child: const Icon(Icons.auto_awesome, size: 13, color: kPremiumGold),
+      child: const Icon(AdaptiveIcons.auto_awesome, size: 13, color: kPremiumGold),
     );
   }
 }
@@ -1382,7 +1552,7 @@ class _LockBadge extends StatelessWidget {
           color: Colors.black.withValues(alpha: 0.45),
           shape: BoxShape.circle,
         ),
-        child: const Icon(Icons.lock_rounded, size: 14, color: kPremiumGold),
+        child: const Icon(AdaptiveIcons.lock_rounded, size: 14, color: kPremiumGold),
       ),
     );
   }
@@ -1402,8 +1572,23 @@ class _CheckBadge extends StatelessWidget {
           color: kPremiumGold,
           shape: BoxShape.circle,
         ),
-        child: const Icon(Icons.check_rounded, size: 15, color: Colors.black),
+        child: const Icon(AdaptiveIcons.check_rounded, size: 15, color: Colors.black),
       ),
     );
   }
 }
+
+// ── Светлая тема страницы (24.11.2026) ──────────────────────────────────
+
+/// Страница в светлой теме (в тёмной она — прежняя тёмная витрина).
+bool _cxLight(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.light;
+
+/// Цвет надписей и линий страницы.
+Color _cxInk(BuildContext context) =>
+    _cxLight(context) ? const Color(0xFF1C1D22) : Colors.white;
+
+/// Заливка плитки «без обложки» и пустого предпросмотра.
+List<Color> _cxTileFill(BuildContext context) => _cxLight(context)
+    ? const [Color(0xFFFFFFFF), Color(0xFFE9ECF2)]
+    : const [Color(0xFF15171E), Color(0xFF0C0D11)];

@@ -198,7 +198,8 @@ void main() {
     test('🔴 the chats list is WIRED to the pull-safe physics', () {
       final src = File('lib/ui/chats_screen.dart').readAsStringSync();
       expect(
-        src.contains('secretlyPullListPhysics()'),
+        // 22.11.2026: с признаком пальца (пружина iPhone, «Личные» сверху).
+        src.contains('secretlyPullListPhysics('),
         isTrue,
         reason: 'the chats list stopped using the shared physics',
       );
@@ -234,8 +235,14 @@ void main() {
       final stockEnd = stock.createBallisticSimulation(metrics, 2000)!.x(1.0);
       final oursEnd = p.createBallisticSimulation(metrics, 2000)!.x(1.0);
       if (secretlyUsesBouncingScroll) {
-        // iOS is deliberately left byte-for-byte as it was.
-        expect(oursEnd, closeTo(stockEnd, 0.5));
+        // 23.11.2026: край по-прежнему прижат (жест сверху цел), но бросок
+        // тормозит как UIScrollView — раньше тут была кривая Android
+        // (docs/SCROLL_FEEL_TELEGRAM_2026-11-23.md).
+        final iosEnd = const BouncingScrollPhysics()
+            .createBallisticSimulation(metrics, 2000)!
+            .x(1.0);
+        expect(oursEnd, closeTo(iosEnd, 0.5));
+        expect(oursEnd, isNot(closeTo(stockEnd, 0.5)));
       } else {
         expect(
           oursEnd,

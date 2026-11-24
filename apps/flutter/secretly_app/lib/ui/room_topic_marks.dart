@@ -5,6 +5,8 @@ import 'package:fluentui_system_icons/fluentui_system_icons.dart';
 import 'package:flutter/widgets.dart' show Color, IconData;
 
 import '../app/message_command_utils.dart' show RoomTopicRef;
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 
 /// Знак темы — ЭТО САМА РЕШЁТКА, заменённая на другую (указание владельца
 /// 15.09.2026).
@@ -56,7 +58,7 @@ class RoomTopicMark {
 
 /// Решётка — знак по умолчанию. Не входит в [kRoomTopicMarks]: её не
 /// «выбирают», к ней возвращаются.
-const IconData kRoomTopicHashIcon = FluentIcons.number_symbol_24_regular;
+const IconData kRoomTopicHashIcon = AdaptiveIconData(FluentIcons.number_symbol_24_regular, CupertinoIcons.number);
 
 /// Зелёный, красный и янтарный — те же, что у десктопной палитры
 /// (`success` / `danger` / `warning`), чтобы знак не спорил с окном.
@@ -71,55 +73,55 @@ const List<RoomTopicMark> kRoomTopicMarks = <RoomTopicMark>[
   // ── Цветные: цвет обещает, что внутри ──────────────────────────────────
   RoomTopicMark(
     id: 'call',
-    icon: FluentIcons.call_24_regular,
+    icon: AdaptiveIconData(FluentIcons.call_24_regular, CupertinoIcons.phone),
     labelRu: 'Созвон',
     color: _kMarkGreen,
   ),
   RoomTopicMark(
     id: 'video',
-    icon: FluentIcons.video_24_regular,
+    icon: AdaptiveIconData(FluentIcons.video_24_regular, CupertinoIcons.video_camera),
     labelRu: 'Конференция',
     color: _kMarkGreen,
   ),
   RoomTopicMark(
     id: 'alert',
-    icon: FluentIcons.alert_urgent_24_regular,
+    icon: AdaptiveIconData(FluentIcons.alert_urgent_24_regular, CupertinoIcons.bell),
     labelRu: 'Срочное',
     color: _kMarkRed,
   ),
   RoomTopicMark(
     id: 'warning',
-    icon: FluentIcons.warning_24_regular,
+    icon: AdaptiveIconData(FluentIcons.warning_24_regular, CupertinoIcons.exclamationmark_triangle),
     labelRu: 'Внимание',
     color: _kMarkRed,
   ),
   RoomTopicMark(
     id: 'bug',
-    icon: FluentIcons.bug_24_regular,
+    icon: AdaptiveIconData(FluentIcons.bug_24_regular, CupertinoIcons.ant),
     labelRu: 'Ошибки',
     color: _kMarkRed,
   ),
   RoomTopicMark(
     id: 'announce',
-    icon: FluentIcons.megaphone_loud_24_regular,
+    icon: AdaptiveIconData(FluentIcons.megaphone_loud_24_regular, CupertinoIcons.speaker_3),
     labelRu: 'Объявления',
     color: _kMarkAmber,
   ),
   RoomTopicMark(
     id: 'star',
-    icon: FluentIcons.star_24_regular,
+    icon: AdaptiveIconData(FluentIcons.star_24_regular, CupertinoIcons.star),
     labelRu: 'Главное',
     color: _kMarkAmber,
   ),
   RoomTopicMark(
     id: 'fire',
-    icon: FluentIcons.fire_24_regular,
+    icon: AdaptiveIconData(FluentIcons.fire_24_regular, CupertinoIcons.flame),
     labelRu: 'Горячее',
     color: _kMarkAmber,
   ),
   RoomTopicMark(
     id: 'private',
-    icon: FluentIcons.lock_closed_24_regular,
+    icon: AdaptiveIconData(FluentIcons.lock_closed_24_regular, CupertinoIcons.lock),
     labelRu: 'Только свои',
     color: _kMarkViolet,
   ),
@@ -127,145 +129,145 @@ const List<RoomTopicMark> kRoomTopicMarks = <RoomTopicMark>[
   // ── Серые: узнавание боковым зрением, без обещаний ─────────────────────
   RoomTopicMark(
     id: 'chat',
-    icon: FluentIcons.chat_24_regular,
+    icon: AdaptiveIconData(FluentIcons.chat_24_regular, CupertinoIcons.chat_bubble),
     labelRu: 'Разговоры',
   ),
   RoomTopicMark(
     id: 'idea',
-    icon: FluentIcons.lightbulb_24_regular,
+    icon: AdaptiveIconData(FluentIcons.lightbulb_24_regular, CupertinoIcons.lightbulb),
     labelRu: 'Идеи',
   ),
   RoomTopicMark(
     id: 'task',
-    icon: FluentIcons.clipboard_task_24_regular,
+    icon: AdaptiveIconData(FluentIcons.clipboard_task_24_regular, CupertinoIcons.checkmark_rectangle),
     labelRu: 'Задачи',
   ),
   RoomTopicMark(
     id: 'done',
-    icon: FluentIcons.checkmark_circle_24_regular,
+    icon: AdaptiveIconData(FluentIcons.checkmark_circle_24_regular, CupertinoIcons.checkmark_circle),
     labelRu: 'Готово',
   ),
   RoomTopicMark(
     id: 'plan',
-    icon: FluentIcons.calendar_ltr_24_regular,
+    icon: AdaptiveIconData(FluentIcons.calendar_ltr_24_regular, CupertinoIcons.calendar),
     labelRu: 'Планы',
   ),
   RoomTopicMark(
     id: 'doc',
-    icon: FluentIcons.document_24_regular,
+    icon: AdaptiveIconData(FluentIcons.document_24_regular, CupertinoIcons.doc),
     labelRu: 'Документы',
   ),
   RoomTopicMark(
     id: 'book',
-    icon: FluentIcons.book_24_regular,
+    icon: AdaptiveIconData(FluentIcons.book_24_regular, CupertinoIcons.book),
     labelRu: 'Записи',
   ),
-  RoomTopicMark(id: 'code', icon: FluentIcons.code_24_regular, labelRu: 'Код'),
+  RoomTopicMark(id: 'code', icon: AdaptiveIconData(FluentIcons.code_24_regular, CupertinoIcons.chevron_left_slash_chevron_right), labelRu: 'Код'),
   RoomTopicMark(
     id: 'design',
-    icon: FluentIcons.color_24_regular,
+    icon: AdaptiveIconData(FluentIcons.color_24_regular, CupertinoIcons.paintbrush),
     labelRu: 'Дизайн',
   ),
   RoomTopicMark(
     id: 'media',
-    icon: FluentIcons.image_24_regular,
+    icon: AdaptiveIconData(FluentIcons.image_24_regular, CupertinoIcons.photo),
     labelRu: 'Картинки',
   ),
   RoomTopicMark(
     id: 'camera',
-    icon: FluentIcons.camera_24_regular,
+    icon: AdaptiveIconData(FluentIcons.camera_24_regular, CupertinoIcons.camera),
     labelRu: 'Съёмка',
   ),
   RoomTopicMark(
     id: 'music',
-    icon: FluentIcons.music_note_2_24_regular,
+    icon: AdaptiveIconData(FluentIcons.music_note_2_24_regular, CupertinoIcons.music_note_2),
     labelRu: 'Музыка',
   ),
   RoomTopicMark(
     id: 'voice',
-    icon: FluentIcons.mic_24_regular,
+    icon: AdaptiveIconData(FluentIcons.mic_24_regular, CupertinoIcons.mic),
     labelRu: 'Голосовые',
   ),
   RoomTopicMark(
     id: 'game',
-    icon: FluentIcons.games_24_regular,
+    icon: AdaptiveIconData(FluentIcons.games_24_regular, CupertinoIcons.gamecontroller),
     labelRu: 'Игры',
   ),
   RoomTopicMark(
     id: 'money',
-    icon: FluentIcons.money_24_regular,
+    icon: AdaptiveIconData(FluentIcons.money_24_regular, CupertinoIcons.money_dollar_circle),
     labelRu: 'Деньги',
   ),
   RoomTopicMark(
     id: 'chart',
-    icon: FluentIcons.data_trending_24_regular,
+    icon: AdaptiveIconData(FluentIcons.data_trending_24_regular, CupertinoIcons.chart_bar),
     labelRu: 'Цифры',
   ),
   RoomTopicMark(
     id: 'work',
-    icon: FluentIcons.briefcase_24_regular,
+    icon: AdaptiveIconData(FluentIcons.briefcase_24_regular, CupertinoIcons.briefcase),
     labelRu: 'Работа',
   ),
   RoomTopicMark(
     id: 'target',
-    icon: FluentIcons.target_24_regular,
+    icon: AdaptiveIconData(FluentIcons.target_24_regular, CupertinoIcons.scope),
     labelRu: 'Цели',
   ),
   RoomTopicMark(
     id: 'link',
-    icon: FluentIcons.link_24_regular,
+    icon: AdaptiveIconData(FluentIcons.link_24_regular, CupertinoIcons.link),
     labelRu: 'Ссылки',
   ),
-  RoomTopicMark(id: 'pin', icon: FluentIcons.pin_24_regular, labelRu: 'Важное'),
+  RoomTopicMark(id: 'pin', icon: AdaptiveIconData(FluentIcons.pin_24_regular, CupertinoIcons.pin), labelRu: 'Важное'),
   RoomTopicMark(
     id: 'question',
-    icon: FluentIcons.question_circle_24_regular,
+    icon: AdaptiveIconData(FluentIcons.question_circle_24_regular, CupertinoIcons.question_circle),
     labelRu: 'Вопросы',
   ),
   RoomTopicMark(
     id: 'people',
-    icon: FluentIcons.people_24_regular,
+    icon: AdaptiveIconData(FluentIcons.people_24_regular, CupertinoIcons.person_2),
     labelRu: 'Люди',
   ),
   RoomTopicMark(
     id: 'coffee',
-    icon: FluentIcons.drink_coffee_24_regular,
+    icon: AdaptiveIconData(FluentIcons.drink_coffee_24_regular, CupertinoIcons.cart),
     labelRu: 'Разное',
   ),
-  RoomTopicMark(id: 'food', icon: FluentIcons.food_24_regular, labelRu: 'Еда'),
+  RoomTopicMark(id: 'food', icon: AdaptiveIconData(FluentIcons.food_24_regular, CupertinoIcons.cart), labelRu: 'Еда'),
   RoomTopicMark(
     id: 'travel',
-    icon: FluentIcons.airplane_24_regular,
+    icon: AdaptiveIconData(FluentIcons.airplane_24_regular, CupertinoIcons.airplane),
     labelRu: 'Поездки',
   ),
   RoomTopicMark(
     id: 'sport',
-    icon: FluentIcons.dumbbell_24_regular,
+    icon: AdaptiveIconData(FluentIcons.dumbbell_24_regular, CupertinoIcons.sportscourt),
     labelRu: 'Спорт',
   ),
   RoomTopicMark(
     id: 'heart',
-    icon: FluentIcons.heart_24_regular,
+    icon: AdaptiveIconData(FluentIcons.heart_24_regular, CupertinoIcons.heart),
     labelRu: 'Личное',
   ),
   RoomTopicMark(
     id: 'rocket',
-    icon: FluentIcons.rocket_24_regular,
+    icon: AdaptiveIconData(FluentIcons.rocket_24_regular, CupertinoIcons.rocket),
     labelRu: 'Запуск',
   ),
   RoomTopicMark(
     id: 'shield',
-    icon: FluentIcons.shield_24_regular,
+    icon: AdaptiveIconData(FluentIcons.shield_24_regular, CupertinoIcons.shield),
     labelRu: 'Безопасность',
   ),
   RoomTopicMark(
     id: 'globe',
-    icon: FluentIcons.globe_24_regular,
+    icon: AdaptiveIconData(FluentIcons.globe_24_regular, CupertinoIcons.globe),
     labelRu: 'Снаружи',
   ),
   RoomTopicMark(
     id: 'archive',
-    icon: FluentIcons.archive_24_regular,
+    icon: AdaptiveIconData(FluentIcons.archive_24_regular, CupertinoIcons.archivebox),
     labelRu: 'Архив',
   ),
 ];

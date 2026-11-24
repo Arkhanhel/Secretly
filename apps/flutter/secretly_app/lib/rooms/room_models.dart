@@ -672,6 +672,11 @@ bool _policyCanAddMembers(RoomMemberRole role, RoomSettings settings) {
   }
 }
 
+/// Может ли участник с ролью [role] закреплять сообщения (22.11.2026: та же
+/// формула нужна при ПРИЁМЕ списка закреплённых — проверить автора).
+bool roomRoleCanPinMessages(RoomMemberRole role, RoomSettings settings) =>
+    _policyCanPinMessages(role, settings);
+
 bool _policyCanPinMessages(RoomMemberRole role, RoomSettings settings) {
   switch (role) {
     case RoomMemberRole.owner:

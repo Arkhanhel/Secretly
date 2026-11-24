@@ -15,6 +15,36 @@ import '../transport/blob_client.dart' show BlobUploadCancelToken;
 /// `topicId` / `targetId`) so the controller's single serialized worker can run
 /// the send without any screen context.
 
+/// 🔴 Выключатель М1–М4, М7–М9 (разбор медиа 22.11.2026): подмена заготовки
+/// настоящим пузырём за один кадр. Заготовка узнаёт номер сообщения ДО его
+/// записи в историю ([LocalAttachmentRowCallback]), размеры снимка — по
+/// заголовку файла при постановке в очередь, вид заготовки совпадает с
+/// готовым пузырём (скругление, ширина с подписью, альбом до 10 плиток),
+/// у строк заготовок есть ключи. `false` — прежнее поведение целиком.
+const bool kPendingSwapV2 = true;
+
+/// 🔴 Выключатель М5, М6, П-1…П-3 (разбор медиа 22.11.2026): превью в ленте
+/// одной формы с ключом по blobId, один запрос файла на blobId, знак
+/// скачивания — по ходу скачивания, без перерисовки всего чата; у видео —
+/// миниатюра отправителя вместо крутилки. `false` — как было.
+const bool kMediaPreviewV2 = true;
+
+/// Вызывается СИНХРОННО прямо перед записью исходящего вложения в историю
+/// (М1, 22.11.2026): номер сообщения, blobId и копия файла в кэше вложений
+/// (`null`, если её нет). Заготовка получает номер раньше, чем лента увидит
+/// строку, и потому не показывается вдвоём с ней.
+typedef LocalAttachmentRowCallback =
+    void Function(String payloadEventId, String blobId, String? cachePath);
+
+/// То же для альбома: [index] — позиция файла в переданном списке.
+typedef LocalAlbumRowCallback =
+    void Function(
+      int index,
+      String payloadEventId,
+      String blobId,
+      String? cachePath,
+    );
+
 /// A single photo / video / document / audio-file upload in flight.
 class PendingPhotoUpload {
   PendingPhotoUpload({
@@ -110,6 +140,18 @@ class PendingPhotoUpload {
 
   final BlobUploadCancelToken cancelToken = BlobUploadCancelToken();
   String? payloadEventId;
+
+  /// М3 (22.11.2026): размеры снимка по заголовку файла — заготовка сразу
+  /// занимает итоговую коробку, без 0,62 и полного декода. `null` — не
+  /// снимок или ещё не прочитаны.
+  int? width;
+  int? height;
+
+  /// М4 (22.11.2026): blobId и копия в кэше вложений, известные к моменту
+  /// записи сообщения в историю. Чат по ним заранее готовит картинку
+  /// настоящего пузыря, чтобы подмена шла без пустого кадра.
+  String? sentBlobId;
+  String? sentCachePath;
   int sentBytes = 0;
   int totalBytes;
   double speedBytesPerSec = 0;

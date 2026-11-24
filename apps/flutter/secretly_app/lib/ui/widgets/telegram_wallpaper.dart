@@ -15,6 +15,7 @@
 // Vendored from the supplied `telegram_wallpaper_flutter` package and extended
 // with [ChatWallpaperAnimMode] + a continuous smooth-drift mode.
 
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -269,6 +270,35 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
   ImageStream? _stream;
   bool _appActive = true;
 
+  // ── Дрейф непрерывного режима ─────────────────────────────────────────────
+  // Запись кадров Xiaomi (20.11.2026): фаза дрейфа и так шагает по 33 мс, но
+  // контроллер тикал на каждом кадре экрана (60–120 раз в секунду), и каждый
+  // такой кадр заново собирал ВЕСЬ экран со всеми размытиями (~5,8 мс GPU) —
+  // две трети из них впустую. Теперь дрейф двигает таймер ровно 30 раз в
+  // секунду: картинка та же, пустых кадров нет. Пока страницу не видно
+  // (TickerMode) или приложение в фоне — таймер стоит.
+  static const Duration _driftStep = Duration(milliseconds: 33);
+  Timer? _driftTimer;
+  ValueListenable<TickerModeData>? _tickerMode;
+
+  bool get _driftShouldRun =>
+      _continuous && _appActive && (_tickerMode?.value.enabled ?? true);
+
+  void _syncDrift() {
+    if (mounted && _driftShouldRun) {
+      _driftTimer ??= Timer.periodic(_driftStep, (_) {
+        if (!mounted) return;
+        final loopMs = widget.loopDuration.inMilliseconds;
+        if (loopMs <= 0) return;
+        final next = _c.value + _driftStep.inMilliseconds / loopMs;
+        _c.value = next - next.floorToDouble();
+      });
+    } else {
+      _driftTimer?.cancel();
+      _driftTimer = null;
+    }
+  }
+
   // ── «Обои проводят сообщение» ─────────────────────────────────────────────
   // Свой тикер, а не AnimationController: волн бывает несколько сразу, у каждой
   // своя фаза и своё направление. Один контроллер на всех означал бы, что
@@ -358,7 +388,7 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
     // Системное «меньше движения». Бегущая по экрану волна — ровно тот вид
     // движения, ради которого эту настройку и включают; сюда она относится
     // сильнее, чем к любой другой анимации в приложении.
-    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) return;
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) return;
 
     _ensurePulseAssets();
     if (_pulses.length >= kWallpaperMaxConcurrentPulses) {
@@ -405,6 +435,13 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
   @visibleForTesting
   bool get isConducting => _pulses.isNotEmpty;
 
+  /// Фаза дрейфа (0…1) и идёт ли она тикером экрана. Сторож: непрерывный
+  /// режим обязан двигаться таймером, без тикера.
+  @visibleForTesting
+  double get driftValue => _c.value;
+  @visibleForTesting
+  bool get driftOnScreenTicker => _c.isAnimating;
+
   /// Сколько волн летит прямо сейчас.
   @visibleForTesting
   int get conductingCount => _pulses.length;
@@ -432,13 +469,19 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final media = MediaQuery.maybeOf(context);
+    final tickerMode = TickerMode.getValuesNotifier(context);
+    if (!identical(tickerMode, _tickerMode)) {
+      _tickerMode?.removeListener(_syncDrift);
+      _tickerMode = tickerMode..addListener(_syncDrift);
+      _syncDrift();
+    }
     // ПК (О1): маска перечитывается, только когда раскладка ответила иначе.
     // Высота декодирования там от окна не зависит, поэтому растягивание окна
     // больше не декодирует маску заново на каждом шаге — это и было мигание
     // (ТЗ О1 §8.4). Ветка телефона ниже — прежняя.
     final layout = widget.patternLayout;
     if (layout != null) {
+      final media = MediaQuery.maybeOf(context);
       if (_maskResolvedForSize &&
           layout.maskProvider(widget.mask, media) == _layoutMaskProvider) {
         return;
@@ -447,7 +490,9 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
       _resolveMask();
       return;
     }
-    final size = media?.size;
+    // Телефон: только размер — не весь MediaQuery, иначе обои перестраивались
+    // в каждом кадре клавиатуры.
+    final size = MediaQuery.maybeSizeOf(context);
     if (_maskResolvedForSize && size == _lastMaskSize) return;
     _maskResolvedForSize = true;
     _lastMaskSize = size;
@@ -457,18 +502,16 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
   void _applyMode() {
     if (_continuous) {
       _c.duration = widget.loopDuration;
-      if (_appActive) {
-        _c.repeat(); // constant, smooth drift — no pulsing
-      } else {
-        _c.stop();
-      }
+      _c.stop(); // дрейф ведёт таймер, а не тикер экрана — см. _syncDrift
+      _syncDrift();
     } else {
+      _syncDrift();
       _c.stop();
       _c.duration = widget.shimmerDuration;
       _c.value = 0; // settled static frame
       if (widget.mode != ChatWallpaperAnimMode.off) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && !_continuous) shimmer();
+          if (mounted && !_continuous) _shimmerWhenRouteSettled();
         });
       }
     }
@@ -483,12 +526,14 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
     //
     // Resolved HERE rather than in the constructor because the target size
     // depends on the device, and the constructor is const.
-    final media = MediaQuery.maybeOf(context);
-    final targetWidth = media == null
-        ? null
-        : (media.size.width * media.devicePixelRatio).round().clamp(360, 2160);
-    final ImageProvider provider;
     final layout = widget.patternLayout;
+    final media = layout != null ? MediaQuery.maybeOf(context) : null;
+    final size = MediaQuery.maybeSizeOf(context);
+    final dpr = MediaQuery.maybeDevicePixelRatioOf(context);
+    final targetWidth = size == null || dpr == null
+        ? null
+        : (size.width * dpr).round().clamp(360, 2160);
+    final ImageProvider provider;
     if (layout != null) {
       // ПК (О1): во что декодировать, решает раскладка.
       provider = layout.maskProvider(widget.mask, media);
@@ -521,6 +566,26 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
 
   /// One eased discrete shimmer step. Called on appear, tap and by the chat on
   /// send / style change. No-op in continuous mode (which drifts on its own).
+  /// Перелив «при входе» — после того как экран чата въехал: во время
+  /// перехода полноэкранная перерисовка обоев добавляла рывков (Android).
+  void _shimmerWhenRouteSettled() {
+    final anim = ModalRoute.of(context)?.animation;
+    if (anim == null || anim.isCompleted) {
+      shimmer();
+      return;
+    }
+    void listener(AnimationStatus status) {
+      if (status.isCompleted) {
+        anim.removeStatusListener(listener);
+        if (mounted && !_continuous) shimmer();
+      } else if (status.isDismissed) {
+        anim.removeStatusListener(listener);
+      }
+    }
+
+    anim.addStatusListener(listener);
+  }
+
   void shimmer() {
     if (!mounted || _continuous) return;
     setState(() {
@@ -543,7 +608,7 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
     }
     if (_continuous) {
       // Pause the constant drift in the background, resume in foreground.
-      active ? _c.repeat() : _c.stop();
+      _syncDrift();
     }
   }
 
@@ -575,6 +640,8 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
     WidgetsBinding.instance.removeObserver(this);
     if (_listener != null) _stream?.removeListener(_listener!);
     if (_fieldListener != null) _fieldStream?.removeListener(_fieldListener!);
+    _driftTimer?.cancel();
+    _tickerMode?.removeListener(_syncDrift);
     _c.dispose();
     _pulseTicker?.dispose();
     // Шейдер держит GPU-ресурс: экземпляр наш, программа общая.

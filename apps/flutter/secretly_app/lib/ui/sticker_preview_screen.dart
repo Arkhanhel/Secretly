@@ -12,13 +12,17 @@ import '../entitlements/feature_gate.dart';
 import '../stickers/sticker_animation_service.dart';
 import '../stickers/sticker_catalog.dart';
 import '../stickers/sticker_share_mode.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'paywall_screen.dart' show PaywallTrigger;
+import 'motion/motion.dart';
 import 'secretly_snackbar.dart';
 import 'widgets/secretly_sticker_widgets.dart';
 import 'widgets/broken_media_box.dart';
 import 'widgets/sticker_pack_access_picker.dart';
 import 'l10n.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// What the user chose to do with the finished sticker on the preview screen.
 /// `send` is handled by the chat; `done` means the preview already saved it to a
@@ -290,7 +294,7 @@ class _StickerPreviewScreenState extends State<StickerPreviewScreen> {
                     alignment: WrapAlignment.center,
                     children: [
                       for (final e in StickerMotionEffect.values)
-                        OutlinedButton(
+                        PressFeedback(child: OutlinedButton(
                           onPressed: () =>
                               Navigator.of(sheetCtx).pop((e, speed)),
                           style: OutlinedButton.styleFrom(
@@ -303,7 +307,7 @@ class _StickerPreviewScreenState extends State<StickerPreviewScreen> {
                             ),
                           ),
                           child: Text(_motionLabel(context, e)),
-                        ),
+                        )),
                     ],
                   ),
                 ],
@@ -316,7 +320,7 @@ class _StickerPreviewScreenState extends State<StickerPreviewScreen> {
   }
 
   Future<void> _newPack() async {
-    final result = await showDialog<_NewPackResult>(
+    final result = await showAppDialog<_NewPackResult>(
       context: context,
       builder: (_) => _NewPackDialog(
         // Выбор режима — по доле из `/v1/config`; вне доли набор создаётся
@@ -424,7 +428,7 @@ class _StickerPreviewScreenState extends State<StickerPreviewScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
               child: AnimatedSize(
                 duration: const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
+                curve: Motion.standard,
                 child: Material(
                   color: const Color(0xFF1F2733).withValues(alpha: 0.96),
                   borderRadius: BorderRadius.circular(18),
@@ -458,7 +462,7 @@ class _StickerPreviewScreenState extends State<StickerPreviewScreen> {
       children: [
         if (target != null) ...[
           _row(
-            Icons.add_circle_rounded,
+            AdaptiveIcons.add_circle_rounded,
             context.l10n.stickerAddToThisPack(target.title),
             _busy ? null : () => _addTo(packId: target.id, title: target.title),
             primary: true,
@@ -466,7 +470,7 @@ class _StickerPreviewScreenState extends State<StickerPreviewScreen> {
           _divider(),
         ],
         _row(
-          Icons.send_rounded,
+          AdaptiveIcons.send_rounded,
           context.l10n.stickerSend,
           _busy ? null : _send,
           primary: target == null,
@@ -477,8 +481,8 @@ class _StickerPreviewScreenState extends State<StickerPreviewScreen> {
         if (kVideoToolsAvailable)
           _row(
             _isAnimated
-                ? Icons.auto_awesome_rounded
-                : Icons.auto_awesome_outlined,
+                ? AdaptiveIcons.auto_awesome_rounded
+                : AdaptiveIcons.auto_awesome_outlined,
             _animating
                 ? context.l10n.stickerAnimating
                 : (_isAnimated
@@ -488,13 +492,13 @@ class _StickerPreviewScreenState extends State<StickerPreviewScreen> {
           ),
         _divider(),
         _row(
-          Icons.star_outline_rounded,
+          AdaptiveIcons.star_outline_rounded,
           context.l10n.stickerMakeFavorite,
           _busy ? null : _favorite,
         ),
         _divider(),
         _row(
-          Icons.add_reaction_outlined,
+          AdaptiveIcons.add_reaction_outlined,
           context.l10n.stickerAddToPack,
           _busy ? null : () => setState(() => _view = _MenuView.chooser),
         ),
@@ -508,13 +512,13 @@ class _StickerPreviewScreenState extends State<StickerPreviewScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         _row(
-          appleBackIcon(Icons.arrow_back_rounded),
+          appleBackIcon(AdaptiveIcons.arrow_back_rounded),
           context.l10n.stickerBack,
           _busy ? null : () => setState(() => _view = _MenuView.actions),
         ),
         _divider(),
         _row(
-          Icons.add_circle_outline_rounded,
+          AdaptiveIcons.add_circle_outline_rounded,
           context.l10n.stickerNewPack,
           _busy ? null : _newPack,
         ),
@@ -537,7 +541,7 @@ class _StickerPreviewScreenState extends State<StickerPreviewScreen> {
               child: (icon != null && icon.isRenderable)
                   ? SecretlyStickerAssetView(sticker: icon, size: 34)
                   : const Icon(
-                      Icons.folder_rounded,
+                      AdaptiveIcons.folder_rounded,
                       color: Colors.white70,
                       size: 26,
                     ),
@@ -679,10 +683,10 @@ class _NewPackDialogState extends State<_NewPackDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(context.l10n.cancel),
         ),
-        FilledButton(
+        PressFeedback(child: FilledButton(
           onPressed: _submit,
           child: Text(context.l10n.stickerCreate),
-        ),
+        )),
       ],
     );
   }

@@ -8,10 +8,13 @@ import 'package:secretly_app/ui/secretly_snackbar.dart';
 
 import '../app/app_controller.dart';
 import '../entitlements/feature_gate.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'paywall_screen.dart';
 import '../billing/show_paywall.dart';
 import 'room_policy_error_text.dart';
 import 'icons/app_icons.dart';
+import 'settings_group.dart';
 import 'l10n.dart';
 import 'wave1_l10n.dart';
 import 'widgets/avatar_initials.dart';
@@ -19,6 +22,7 @@ import 'widgets/content_edge_fade.dart';
 import 'widgets/frosted_header_island.dart';
 import 'widgets/glass_icon_island.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 class NewGroupScreen extends StatefulWidget {
   const NewGroupScreen({super.key, required this.controller});
@@ -251,7 +255,13 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
-                      leading: const Icon(AppIcons.timer),
+                      // Android: цветной квадрат, как у строк настроек
+                      // (23.11.2026).
+                      leading: settingsRowLeading(
+                        icon: AppIcons.timer,
+                        tint: SettingsRowTint.orange,
+                        fallback: const Icon(AppIcons.timer),
+                      ),
                       title: Text(
                         _t(
                           ru: 'Автоудаление сообщений',
@@ -386,7 +396,11 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
                         return ListView.separated(
                           padding: EdgeInsets.zero,
                           itemCount: contacts.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          // Android: без линий между людьми — линии
+                          // примета iOS (владелец, 23.11.2026).
+                          separatorBuilder: (_, __) => settingsAndroidPanels
+                              ? const SizedBox.shrink()
+                              : const Divider(height: 1),
                           itemBuilder: (context, i) {
                             final c = contacts[i];
                             final title =
@@ -436,7 +450,7 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                   child: SizedBox(
                     width: double.infinity,
-                    child: FilledButton(
+                    child: PressFeedback(child: FilledButton(
                       onPressed: _saving ? null : _create,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 12),
@@ -460,7 +474,7 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
                                 ),
                               ),
                       ),
-                    ),
+                    )),
                   ),
                 ),
               ],
@@ -480,7 +494,7 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
               top: 4,
               left: 12,
               child: GlassIconIsland(
-                icon: Icons.arrow_back_ios_new,
+                icon: AdaptiveIcons.arrow_back_ios_new,
                 tooltip: MaterialLocalizations.of(context).backButtonTooltip,
                 onTap: () => Navigator.of(context).maybePop(),
               ),
@@ -518,7 +532,7 @@ class _NewGroupScreenState extends State<NewGroupScreen> {
       (secs: 30 * 24 * 60 * 60, label: _autoDeleteLabel(30 * 24 * 60 * 60)),
     ];
 
-    final selected = await showDialog<int?>(
+    final selected = await showAppDialog<int?>(
       context: context,
       builder: (context) => SimpleDialog(
         title: Text(

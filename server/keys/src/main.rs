@@ -1674,6 +1674,56 @@ async fn grant_entitlement(
 }
 
 #[derive(Deserialize)]
+struct SetProfileBadgeRequest {
+    profile_id: String,
+    /// "h2" — выдать; `null`/"" — снять.
+    badge: Option<String>,
+}
+
+#[derive(Serialize)]
+struct SetProfileBadgeResponse {
+    ok: bool,
+    profile_id: String,
+    badge: Option<String>,
+}
+
+/// POST /v1/badges/admin/set — INTERNAL-KEY ONLY (21.11.2026). Знак «важного
+/// пользователя»: выдаёт владелец вручную. Профиль должен существовать.
+async fn set_profile_badge(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<SetProfileBadgeRequest>,
+) -> Result<Json<SetProfileBadgeResponse>, (StatusCode, String)> {
+    if !internal_key_matches(&state, &headers) {
+        return Err((StatusCode::UNAUTHORIZED, "internal key required".into()));
+    }
+    let profile_id = req.profile_id;
+    if !is_valid_id(&profile_id, 128) {
+        return Err((StatusCode::BAD_REQUEST, "invalid profile id".into()));
+    }
+    let badge = req
+        .badge
+        .map(|b| b.trim().to_ascii_lowercase())
+        .filter(|b| !b.is_empty());
+    if let Some(b) = &badge {
+        let ok = b.len() <= 16 && b.chars().all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit());
+        if !ok {
+            return Err((StatusCode::BAD_REQUEST, "badge must be a short slug".into()));
+        }
+    }
+    tracing::info!(profile_id = %profile_id, badge = ?badge, "admin: setting profile badge");
+    let found = state
+        .store
+        .profile_badge_set(&profile_id, badge.clone(), now_ms())
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+    if !found {
+        return Err((StatusCode::NOT_FOUND, "unknown profile".into()));
+    }
+    Ok(Json(SetProfileBadgeResponse { ok: true, profile_id, badge }))
+}
+
+#[derive(Deserialize)]
 struct RevokeEntitlementRequest {
     profile_id: String,
 }
@@ -4580,6 +4630,10 @@ struct ProfileMetaResponse {
     cover_png_b64: Option<String>,
     emoji_status: Option<String>,
     premium_badge: Option<String>,
+    /// 21.11.2026: знак «важного пользователя» ("h2"), выдаёт только оператор.
+    /// Всегда в ответе (и `null`) — новые клиенты так видят снятие; старые
+    /// неизвестное поле пропускают.
+    elite_badge: Option<String>,
     updated_at_ms: i64,
     last_active_at_ms: i64,
 }
@@ -5528,6 +5582,7 @@ async fn profile_meta_get(
             cover_png_b64: None,
             emoji_status: None,
             premium_badge: None,
+            elite_badge: None,
             updated_at_ms: 0,
             last_active_at_ms,
         });
@@ -5574,6 +5629,7 @@ async fn profile_meta_get(
         } else {
             last_active_at_ms
         };
+        let elite_badge = state.store.profile_badge_get(&profile_id).await.unwrap_or(None);
         return Json(ProfileMetaResponse {
             exists: true,
             profile_id,
@@ -5587,6 +5643,7 @@ async fn profile_meta_get(
             cover_png_b64: if show_photo { cover_png_b64 } else { None },
             emoji_status,
             premium_badge,
+            elite_badge,
             updated_at_ms: updated,
             last_active_at_ms,
         });
@@ -5599,6 +5656,11 @@ async fn profile_meta_get(
     let exists = profile_exists_or_unknown(&state, &profile_id)
         .await
         .unwrap_or(false);
+    let elite_badge = if exists {
+        state.store.profile_badge_get(&profile_id).await.unwrap_or(None)
+    } else {
+        None
+    };
     Json(ProfileMetaResponse {
         exists,
         profile_id,
@@ -5612,6 +5674,7 @@ async fn profile_meta_get(
         cover_png_b64: None,
         emoji_status: None,
         premium_badge: None,
+        elite_badge,
         updated_at_ms: 0,
         last_active_at_ms,
     })
@@ -7805,6 +7868,7 @@ async fn main() {
         .route("/v1/entitlements/admin/grant", post(grant_entitlement))
         .route("/v1/entitlements/admin/rebind", post(rebind_entitlement))
         .route("/v1/entitlements/admin/revoke", post(revoke_entitlement))
+        .route("/v1/badges/admin/set", post(set_profile_badge))
         .route("/v1/webhooks/appstore", post(webhook_appstore))
         .route("/v1/webhooks/play", post(webhook_play))
         .route("/v1/profile/{profile_id}/meta", get(profile_meta_get))

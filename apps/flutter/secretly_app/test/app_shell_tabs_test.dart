@@ -28,13 +28,19 @@ void main() {
   final src = File('lib/ui/app_shell.dart').readAsStringSync();
 
   test('🔴 число вкладок совпадает с числом страниц', () {
-    final pagesBlock = RegExp(r'final pages = \[(.*?)\n    \];', dotAll: true)
-        .firstMatch(src);
+    // Острова v3: два ряда страниц — с островами (4) и прежний (5).
+    final pagesBlock = RegExp(
+      r'final pages = kHomeIslands\s*\? \[(.*?)\]\s*: \[(.*?)\];',
+      dotAll: true,
+    ).firstMatch(src);
     expect(pagesBlock, isNotNull, reason: 'список страниц не найден');
-    final pageCount =
-        'key: const ValueKey'.allMatches(pagesBlock!.group(1)!).length;
+    int count(String block) => 'key: const ValueKey'.allMatches(block).length;
+    final islands = count(pagesBlock!.group(1)!);
+    final classic = count(pagesBlock.group(2)!);
     expect(
-      src.contains('static const int _tabCount = $pageCount;'),
+      src.contains(
+        'static const int _tabCount = kHomeIslands ? $islands : $classic;',
+      ),
       isTrue,
       reason: '_tabCount и список страниц разошлись — TabBarView бросит на '
           'первом же переходе между разделами',

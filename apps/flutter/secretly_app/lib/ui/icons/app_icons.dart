@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show Icons;
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// SF-style icon mappings (Cupertino / Apple-like regular style).
 class AppIcons {
@@ -26,7 +26,12 @@ class AppIcons {
   static const IconData closeCircle = CupertinoIcons.xmark_circle_fill;
   static const IconData add = CupertinoIcons.plus;
   static const IconData more = CupertinoIcons.ellipsis;
-  static const IconData moreVert = CupertinoIcons.ellipsis_vertical;
+  // iPhone (20.11.2026): «ещё» в шапках — горизонтальное многоточие, как в
+  // iOS; на Android и компьютере — прежнее вертикальное.
+  static const IconData moreVert = AdaptiveIconData(
+    CupertinoIcons.ellipsis_vertical,
+    CupertinoIcons.ellipsis,
+  );
   static const IconData menu = CupertinoIcons.line_horizontal_3;
   static const IconData favorites = CupertinoIcons.star;
   static const IconData send = CupertinoIcons.paperplane;
@@ -93,19 +98,19 @@ class AppIcons {
   static const IconData skipNext = CupertinoIcons.forward_end_fill;
   static const IconData volumeUp = CupertinoIcons.speaker_3_fill;
   static const IconData volumeDown = CupertinoIcons.speaker_1_fill;
-  static const IconData bluetoothAudio = Icons.bluetooth_audio_rounded;
-  static const IconData headphones = Icons.headphones_rounded;
+  static const IconData bluetoothAudio = AdaptiveIcons.bluetooth_audio_rounded;
+  static const IconData headphones = AdaptiveIcons.headphones_rounded;
 
   // ── Phone / calls ──
   static const IconData call = CupertinoIcons.phone;
   static const IconData callSolid = CupertinoIcons.phone_fill;
   static const IconData callAlt = CupertinoIcons.phone;
   static const IconData callEnd = CupertinoIcons.phone_down_fill;
-  static const IconData roomCallAction = Icons.phone_in_talk_rounded;
-  static const IconData leaveRoomAction = Icons.logout_rounded;
+  static const IconData roomCallAction = AdaptiveIcons.phone_in_talk_rounded;
+  static const IconData leaveRoomAction = AdaptiveIcons.logout_rounded;
   static const IconData cameraSwitch = CupertinoIcons.camera_rotate_fill;
-  static const IconData screenShare = Icons.present_to_all;
-  static const IconData screenShareOff = Icons.cancel_presentation;
+  static const IconData screenShare = AdaptiveIcons.present_to_all;
+  static const IconData screenShareOff = AdaptiveIcons.cancel_presentation;
 
   // ── Mic ──
   static const IconData mic = CupertinoIcons.mic;

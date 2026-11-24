@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:math' as math;
+import '../motion/decoration_pacer.dart';
 import 'package:flutter/material.dart';
 
 /// Animated "typing…" indicator with three bouncing dots (iMessage/Telegram style).
@@ -29,7 +30,7 @@ class TypingIndicator extends StatefulWidget {
 }
 
 class _TypingIndicatorState extends State<TypingIndicator>
-    with SingleTickerProviderStateMixin {
+    with PacedTickerProviderStateMixin {
   late final AnimationController _controller;
 
   @override

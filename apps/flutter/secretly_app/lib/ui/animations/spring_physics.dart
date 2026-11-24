@@ -4,31 +4,26 @@
 import 'package:flutter/physics.dart';
 import 'package:flutter/material.dart';
 
+import '../motion/motion.dart';
+
 /// A spring simulation helper for snap-to-target animations.
 ///
 /// Used for PiP snap-to-corner and reply-swipe return.
 class SpringAnimationHelper {
   SpringAnimationHelper._();
 
-  /// Default spring description — snappy but not too stiff.
-  static const SpringDescription defaultSpring = SpringDescription(
-    mass: 1.0,
-    stiffness: 350.0,
-    damping: 25.0,
-  );
+  /// Default spring — Telegram's critically damped one (no bounce).
+  static const SpringDescription defaultSpring = MotionSprings.standard;
 
-  /// Softer spring for larger movements (PiP snap).
-  static const SpringDescription pipSpring = SpringDescription(
-    mass: 1.0,
-    stiffness: 220.0,
-    damping: 22.0,
-  );
+  /// Softer spring for larger movements (PiP snap), no bounce.
+  static const SpringDescription pipSpring = MotionSprings.large;
 
   /// Stiff spring for small, fast returns (reply swipe).
   static const SpringDescription swipeSpring = SpringDescription(
     mass: 1.0,
     stiffness: 500.0,
-    damping: 30.0,
+    // Critically damped (2·√500 ≈ 44.7) — Telegram's springs never bounce.
+    damping: kTelegramMotion ? 44.72 : 30.0,
   );
 
   /// Creates a spring simulation from [start] to [end] with optional [velocity].

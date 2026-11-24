@@ -15,8 +15,14 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app/app_controller.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'settings_screen_l10n.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/apple_style.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
 
 /// In-app Support chat (Variant C).
 /// The user types (and can attach a photo/file); the message is sealed to the
@@ -267,10 +273,12 @@ class _SupportScreenState extends State<SupportScreen> {
   Future<void> _pickAttachment() async {
     final cs = Theme.of(context).colorScheme;
     final choice = await showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
-      backgroundColor: cs.surface,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      backgroundColor: appleSheetFillOr(
+          context,
+          cs.surface,
+        ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -284,17 +292,17 @@ class _SupportScreenState extends State<SupportScreen> {
                     borderRadius: BorderRadius.circular(2))),
             const SizedBox(height: 8),
             ListTile(
-              leading: Icon(Icons.photo_library_rounded, color: cs.primary),
+              leading: Icon(AdaptiveIcons.photo_library_rounded, color: cs.primary),
               title: Text(settingsScreenLabel(ctx, ru: 'Фото из галереи', en: 'Photo library')),
               onTap: () => Navigator.pop(ctx, 'gallery'),
             ),
             ListTile(
-              leading: Icon(Icons.photo_camera_rounded, color: cs.primary),
+              leading: Icon(AdaptiveIcons.photo_camera_rounded, color: cs.primary),
               title: Text(settingsScreenLabel(ctx, ru: 'Камера', en: 'Camera')),
               onTap: () => Navigator.pop(ctx, 'camera'),
             ),
             ListTile(
-              leading: Icon(Icons.attach_file_rounded, color: cs.primary),
+              leading: Icon(AdaptiveIcons.attach_file_rounded, color: cs.primary),
               title: Text(settingsScreenLabel(ctx, ru: 'Файл', en: 'File')),
               onTap: () => Navigator.pop(ctx, 'file'),
             ),
@@ -454,7 +462,7 @@ class _SupportScreenState extends State<SupportScreen> {
         _scroll.animateTo(
           _scroll.position.maxScrollExtent,
           duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
+          curve: Motion.fade,
         );
       }
     });
@@ -473,7 +481,7 @@ class _SupportScreenState extends State<SupportScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.lock_rounded,
+                Icon(AdaptiveIcons.lock_rounded,
                     size: 12, color: cs.onSurfaceVariant.withValues(alpha: 0.8)),
                 const SizedBox(width: 5),
                 Text(
@@ -514,7 +522,7 @@ class _SupportScreenState extends State<SupportScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.support_agent_rounded,
+              Icon(AdaptiveIcons.support_agent_rounded,
                   size: 48, color: cs.primary.withValues(alpha: 0.85)),
               const SizedBox(height: 16),
               Text(
@@ -573,7 +581,7 @@ class _SupportScreenState extends State<SupportScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.insert_drive_file_rounded, size: 20, color: fg),
+                    Icon(AdaptiveIcons.insert_drive_file_rounded, size: 20, color: fg),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(m.attName ?? 'file',
@@ -614,7 +622,10 @@ class _SupportScreenState extends State<SupportScreen> {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest,
+          color: appleGlassFillOr(
+          context,
+          cs.surfaceContainerHighest,
+        ),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
@@ -628,7 +639,7 @@ class _SupportScreenState extends State<SupportScreen> {
                       width: 46,
                       height: 46,
                       color: cs.surface,
-                      child: Icon(Icons.insert_drive_file_rounded,
+                      child: Icon(AdaptiveIcons.insert_drive_file_rounded,
                           color: cs.primary),
                     ),
             ),
@@ -649,10 +660,10 @@ class _SupportScreenState extends State<SupportScreen> {
                 ],
               ),
             ),
-            IconButton(
-              icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant),
+            PressFeedback(child: IconButton(
+              icon: Icon(AdaptiveIcons.close_rounded, color: cs.onSurfaceVariant),
               onPressed: _clearPending,
-            ),
+            )),
           ],
         ),
       ),
@@ -681,7 +692,7 @@ class _SupportScreenState extends State<SupportScreen> {
                     cs: cs,
                     bg: cs.surfaceContainerHighest,
                     fg: cs.primary,
-                    icon: Icons.add_rounded,
+                    icon: AdaptiveIcons.add_rounded,
                     busy: _attaching,
                     onTap: (_attaching || _sending) ? null : _pickAttachment,
                   ),
@@ -696,7 +707,8 @@ class _SupportScreenState extends State<SupportScreen> {
                         hintText: settingsScreenLabel(context,
                             ru: 'Сообщение…', en: 'Message…'),
                         filled: true,
-                        fillColor: cs.surfaceContainerHighest,
+                        fillColor: appleFieldFillOr(
+                            context, cs.surfaceContainerHighest),
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 18, vertical: 12),
                         border: OutlineInputBorder(
@@ -711,7 +723,7 @@ class _SupportScreenState extends State<SupportScreen> {
                     cs: cs,
                     bg: cs.primary,
                     fg: cs.onPrimary,
-                    icon: Icons.arrow_upward_rounded,
+                    icon: AdaptiveIcons.arrow_upward_rounded,
                     busy: _sending,
                     onTap: _sending ? null : _send,
                   ),

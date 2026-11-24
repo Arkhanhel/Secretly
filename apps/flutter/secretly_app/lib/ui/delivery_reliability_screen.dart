@@ -5,10 +5,14 @@ import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../reliability/delivery_reliability_service.dart';
+import 'motion/press_feedback.dart';
 import 'settings_group.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
+import 'package:secretly_app/ui/apple_settings_row.dart';
 
 /// DELIVERY RELIABILITY SCREEN (2026-07-16, delivery-wake audit).
 ///
@@ -111,10 +115,10 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
     final scheme = Theme.of(context).colorScheme;
     return _InfoCard(
       icon: healthy
-          ? Icons.verified_rounded
+          ? AdaptiveIcons.verified_rounded
           : (unreported > 0
-                ? Icons.error_outline_rounded
-                : Icons.autorenew_rounded),
+                ? AdaptiveIcons.error_outline_rounded
+                : AdaptiveIcons.autorenew_rounded),
       color: healthy
           ? scheme.primary
           : (unreported > 0 ? scheme.error : scheme.tertiary),
@@ -187,7 +191,9 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
     final status = _status;
     final l10n = AppLocalizations.of(context);
 
-    return Scaffold(
+    // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
       extendBodyBehindAppBar: true,
       appBar: frostedAppBar(
         title: Text(
@@ -204,7 +210,7 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
           ),
         ),
         actions: [
-          IconButton(
+          PressFeedback(child: IconButton(
             tooltip: _rl(
               context,
               ru: 'Проверить снова',
@@ -217,11 +223,13 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
               de: 'Erneut prüfen',
             ),
             onPressed: _refresh,
-            icon: const Icon(Icons.refresh_rounded),
-          ),
+            icon: const Icon(AdaptiveIcons.refresh_rounded),
+          )),
         ],
       ),
-      body: ListView(
+      body: settingsAndroidPanels
+          ? _buildAndroidList(context, status, l10n, topPad, bottomPad)
+          : ListView(
         padding: EdgeInsets.fromLTRB(16, topPad, 16, bottomPad),
         children: [
           // Без локализаций (тесты, ранний старт) вступления просто нет.
@@ -230,7 +238,7 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
             padding: const EdgeInsets.only(bottom: 14),
             child: SettingsPageIntro(
               icon: const Icon(
-                Icons.network_check_rounded,
+                AdaptiveIcons.network_check_rounded,
                 color: Color(0xFF35B86B),
                 size: 28,
               ),
@@ -254,7 +262,7 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
             )
           else if (status == null)
             _InfoCard(
-              icon: Icons.desktop_windows_rounded,
+              icon: AdaptiveIcons.desktop_windows_rounded,
               color: Theme.of(context).colorScheme.primary,
               title: _rl(
                 context,
@@ -312,19 +320,117 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
           ],
         ],
       ),
+    ),
+    );
+  }
+
+  /// Android (23.11.2026, владелец: «доделай все категории, половина на
+  /// старом стиле»): состояние и проверки — строками двух групп (значок
+  /// цвета состояния, название, серое пояснение, состояние справа) вместо
+  /// отдельных карточек с плашками. Сведения и действия те же.
+  Widget _buildAndroidList(
+    BuildContext context,
+    DeliveryReliabilityStatus? status,
+    AppLocalizations? l10n,
+    double topPad,
+    double bottomPad,
+  ) {
+    final showHealth = !_loading && _health != null && _health!.isNotEmpty;
+    return ListView(
+      padding: EdgeInsets.only(top: topPad, bottom: bottomPad),
+      children: [
+        if (l10n != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: SettingsPageIntro(
+              icon: const Icon(
+                AdaptiveIcons.network_check_rounded,
+                color: Color(0xFF35B86B),
+                size: 28,
+              ),
+              color: const Color(0xFF35B86B),
+              text: l10n.settingsIntroReliability,
+            ),
+          ),
+        if (_loading)
+          const Padding(
+            padding: EdgeInsets.only(top: 48),
+            child: Center(child: SecretlySpinner()),
+          )
+        else if (status == null) ...[
+          if (showHealth) ...[
+            settingsRowsGroup([_buildHealthCard(context, _health!)]),
+            const SizedBox(height: 12),
+          ],
+          settingsRowsGroup([
+            _InfoCard(
+              icon: AdaptiveIcons.desktop_windows_rounded,
+              color: Theme.of(context).colorScheme.primary,
+              title: _rl(
+                context,
+                ru: 'Здесь всё просто',
+                uk: 'Тут усе просто',
+                en: 'Nothing to tune here',
+                es: 'Nada que ajustar aquí',
+                pt: 'Nada para ajustar aqui',
+                ptBr: 'Nada para ajustar aqui',
+                fr: 'Rien à régler ici',
+                de: 'Hier gibt es nichts einzustellen',
+              ),
+              body: _rl(
+                context,
+                ru: 'На этой платформе система не ограничивает доставку сообщений в фоне.',
+                uk: 'На цій платформі система не обмежує доставлення повідомлень у фоні.',
+                en: 'On this platform the OS does not restrict background message delivery.',
+                es: 'En esta plataforma el sistema no restringe la entrega de mensajes en segundo plano.',
+                pt: 'Nesta plataforma o sistema não restringe a entrega de mensagens em segundo plano.',
+                ptBr: 'Nesta plataforma o sistema não restringe a entrega de mensagens em segundo plano.',
+                fr: 'Sur cette plateforme le système ne limite pas la livraison des messages en arrière-plan.',
+                de: 'Auf dieser Plattform schränkt das System die Zustellung im Hintergrund nicht ein.',
+              ),
+            ),
+          ]),
+        ] else ...[
+          // Сводка и «Состояние доставки» — одна группа.
+          settingsRowsGroup([
+            _SummaryCard(status: status),
+            if (showHealth) _buildHealthCard(context, _health!),
+          ]),
+          const SizedBox(height: 12),
+          settingsRowsGroup(_rowsFor(context, status, spaced: false)),
+          SettingsGroupCaption(
+            _rl(
+              context,
+              ru: 'Эти переключатели живут в настройках системы — приложение не может менять их само, только показать дорогу.',
+              uk: 'Ці перемикачі живуть у налаштуваннях системи — застосунок не може змінювати їх сам, лише показати шлях.',
+              en: 'These switches live in system settings — the app cannot flip them itself, only take you there.',
+              es: 'Estos ajustes viven en la configuración del sistema: la app no puede cambiarlos, solo llevarte allí.',
+              pt: 'Estes ajustes vivem nas definições do sistema — a app não pode alterá-los, apenas levar-te até lá.',
+              ptBr: 'Esses ajustes ficam nas configurações do sistema — o app não pode alterá-los, apenas levar você até lá.',
+              fr: 'Ces réglages vivent dans les paramètres du système — l’app ne peut pas les changer, seulement vous y conduire.',
+              de: 'Diese Schalter liegen in den Systemeinstellungen — die App kann sie nicht selbst umlegen, nur dorthin führen.',
+            ),
+          ),
+        ],
+        if (widget.connectionSection != null) ...[
+          SettingsGroupHeader(l10n?.settingsGroupConnection ?? 'Connection'),
+          widget.connectionSection!,
+        ],
+      ],
     );
   }
 
   List<Widget> _rowsFor(
     BuildContext context,
-    DeliveryReliabilityStatus status,
-  ) {
+    DeliveryReliabilityStatus status, {
+    bool spaced = true,
+  }) {
     final rows = <Widget>[];
 
     // Notifications — both platforms.
     rows.add(
       _ReliabilityRow(
-        icon: Icons.notifications_active_rounded,
+        icon: AdaptiveIcons.notifications_active_rounded,
         title: _rl(
           context,
           ru: 'Уведомления',
@@ -397,7 +503,7 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
       // Battery optimization.
       rows.add(
         _ReliabilityRow(
-          icon: Icons.battery_charging_full_rounded,
+          icon: AdaptiveIcons.battery_charging_full_rounded,
           title: _rl(
             context,
             ru: 'Батарея',
@@ -466,7 +572,7 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
       final dataBlocked = status.dataSaver == 'enabled';
       rows.add(
         _ReliabilityRow(
-          icon: Icons.data_saver_on_rounded,
+          icon: AdaptiveIcons.data_saver_on_rounded,
           title: _rl(
             context,
             ru: 'Фоновые данные',
@@ -535,7 +641,7 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
       if (status.showAutostartAdvisory) {
         rows.add(
           _ReliabilityRow(
-            icon: Icons.rocket_launch_rounded,
+            icon: AdaptiveIcons.rocket_launch_rounded,
             title: _rl(
               context,
               ru: 'Автозапуск',
@@ -593,7 +699,7 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
           status.backgroundRefresh == 'restricted';
       rows.add(
         _ReliabilityRow(
-          icon: Icons.autorenew_rounded,
+          icon: AdaptiveIcons.autorenew_rounded,
           title: _rl(
             context,
             ru: 'Обновление в фоне',
@@ -660,7 +766,7 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
       if (status.lowPowerMode == true) {
         rows.add(
           _ReliabilityRow(
-            icon: Icons.battery_saver_rounded,
+            icon: AdaptiveIcons.battery_saver_rounded,
             title: _rl(
               context,
               ru: 'Энергосбережение',
@@ -703,6 +809,7 @@ class _DeliveryReliabilityScreenState extends State<DeliveryReliabilityScreen>
       }
     }
 
+    if (!spaced) return rows;
     return [
       for (var i = 0; i < rows.length; i++) ...[
         if (i > 0) const SizedBox(height: 10),
@@ -734,7 +841,7 @@ class _SummaryCard extends StatelessWidget {
     final ok = !status.hasIssues;
     final color = ok ? Colors.green : Colors.orange;
     return _InfoCard(
-      icon: ok ? Icons.verified_rounded : Icons.error_outline_rounded,
+      icon: ok ? AdaptiveIcons.verified_rounded : AdaptiveIcons.error_outline_rounded,
       color: color,
       title: ok
           ? _rl(
@@ -802,6 +909,14 @@ class _InfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    // Android: строка группы со значком цвета состояния.
+    if (settingsAndroidPanels) {
+      return AppleSettingsRow(
+        leading: AppleRowIcon(tint: color, icon: icon),
+        title: title,
+        subtitle: body,
+      );
+    }
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -873,11 +988,63 @@ class _ReliabilityRow extends StatelessWidget {
     };
     final String stateLabel = ok == true ? okLabel : warnLabel;
 
+    // Android (23.11.2026): строка группы — значок цвета состояния, серое
+    // пояснение, справа состояние и действие («Исправить» / «Открыть»);
+    // нажатие по строке делает то же, что кнопка.
+    if (settingsAndroidPanels) {
+      final Color tint = switch (ok) {
+        true => const Color(0xFF34C759),
+        false => const Color(0xFFFF9500),
+        null => const Color(0xFF8E8E93),
+      };
+      final fix = onFix;
+      return AppleSettingsRow(
+        leading: AppleRowIcon(tint: tint, icon: icon),
+        title: title,
+        subtitle: description,
+        onTap: fix,
+        trailing: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 120),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (stateLabel.isNotEmpty)
+                Text(
+                  stateLabel,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: ok == null ? cs.onSurfaceVariant : tint,
+                  ),
+                ),
+              if (fix != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  fixLabel,
+                  textAlign: TextAlign.end,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: cs.primary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: BoxDecoration(
+      decoration: appleGlassDecorationOr(
+        context,
+        BoxDecoration(
         color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(18),
+      ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -908,8 +1075,8 @@ class _ReliabilityRow extends StatelessWidget {
                   children: [
                     Icon(
                       ok == true
-                          ? Icons.check_circle_rounded
-                          : Icons.info_rounded,
+                          ? AdaptiveIcons.check_circle_rounded
+                          : AdaptiveIcons.info_rounded,
                       size: 14,
                       color: stateColor,
                     ),
@@ -937,10 +1104,10 @@ class _ReliabilityRow extends StatelessWidget {
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton.tonal(
+              child: PressFeedback(child: FilledButton.tonal(
                 onPressed: onFix,
                 child: Text(fixLabel),
-              ),
+              )),
             ),
           ],
         ],

@@ -14,10 +14,13 @@ import 'package:speech_to_text/speech_recognition_error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import '../motion/app_dialogs.dart';
+import '../motion/press_feedback.dart';
 import 'voice_transcription.dart';
 import '../wave1_l10n.dart';
 import '../widgets/secretly_glass_sheet.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 const Color _kGold = Color(0xFFE8A33D);
 
@@ -69,6 +72,7 @@ const List<({String code, String label})> _kOfflineLanguages = [
 /// persisted across sessions.
 Future<String?> showVoiceDictationSheet(BuildContext context) {
   return showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -580,6 +584,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
     }
     if (!mounted || _finished) return;
     final picked = await showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -666,6 +671,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
   Future<void> _openOfflineLanguagePicker() async {
     if (_finished) return;
     final picked = await showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -1029,9 +1035,9 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _Status(icon: Icons.mic_off_rounded, text: text, cs: cs),
+          _Status(icon: AdaptiveIcons.mic_off_rounded, text: text, cs: cs),
           const SizedBox(height: 14),
-          FilledButton(
+          PressFeedback(child: FilledButton(
             onPressed: _retryPermission,
             style: FilledButton.styleFrom(
               backgroundColor: _kGold,
@@ -1042,7 +1048,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
               buttonLabel,
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-          ),
+          )),
         ],
       );
     }
@@ -1122,7 +1128,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
                     : null,
               ),
               child: Icon(
-                _listening ? Icons.mic_rounded : Icons.mic_none_rounded,
+                _listening ? AdaptiveIcons.mic_rounded : AdaptiveIcons.mic_none_rounded,
                 size: 34,
                 color: _listening ? _kGold : cs.onSurfaceVariant,
               ),
@@ -1373,10 +1379,10 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
                     ),
                     child: Icon(
                       _offlinePermissionDenied
-                          ? Icons.mic_off_rounded
+                          ? AdaptiveIcons.mic_off_rounded
                           : _offlineRecording
-                          ? Icons.stop_rounded
-                          : Icons.mic_none_rounded,
+                          ? AdaptiveIcons.stop_rounded
+                          : AdaptiveIcons.mic_none_rounded,
                       size: 34,
                       color: _offlineRecording ? _kGold : cs.onSurfaceVariant,
                     ),
@@ -1536,7 +1542,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
       );
       onPressed = (busyPhase || _offlineBusy) ? null : _startOfflineRecording;
     }
-    return FilledButton(
+    return PressFeedback(child: FilledButton(
       onPressed: onPressed,
       style: FilledButton.styleFrom(
         backgroundColor: _kGold,
@@ -1545,7 +1551,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
         padding: const EdgeInsets.symmetric(vertical: 14),
       ),
       child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600)),
-    );
+    ));
   }
 
   /// Cancels out of the offline flow (no text returned).
@@ -1594,7 +1600,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: FilledButton(
+          child: PressFeedback(child: FilledButton(
             onPressed: canAccept ? () => _finish(accept: true) : null,
             style: FilledButton.styleFrom(
               backgroundColor: _kGold,
@@ -1616,7 +1622,7 @@ class _VoiceDictationSheetState extends State<_VoiceDictationSheet> {
               ),
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
-          ),
+          )),
         ),
       ],
     );
@@ -1694,7 +1700,7 @@ class _LanguageButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.language, size: 18, color: cs.onSurfaceVariant),
+                Icon(AdaptiveIcons.language, size: 18, color: cs.onSurfaceVariant),
                 if (label.isNotEmpty) ...[
                   const SizedBox(width: 5),
                   Text(
@@ -1707,7 +1713,7 @@ class _LanguageButton extends StatelessWidget {
                 ],
                 const SizedBox(width: 2),
                 Icon(
-                  Icons.expand_more_rounded,
+                  AdaptiveIcons.expand_more_rounded,
                   size: 16,
                   color: cs.onSurfaceVariant,
                 ),
@@ -1810,7 +1816,7 @@ class _LanguagePickerSheetState extends State<_LanguagePickerSheet> {
                     onChanged: (v) => setState(() => _query = v),
                     decoration: InputDecoration(
                       isDense: true,
-                      prefixIcon: const Icon(Icons.search, size: 20),
+                      prefixIcon: const Icon(AdaptiveIcons.search, size: 20),
                       hintText: wave1Text(
                         context,
                         ru: 'Поиск языка',
@@ -1865,7 +1871,7 @@ class _LanguagePickerSheetState extends State<_LanguagePickerSheet> {
                                 ),
                                 trailing: selected
                                     ? const Icon(
-                                        Icons.check_rounded,
+                                        AdaptiveIcons.check_rounded,
                                         color: _kGold,
                                       )
                                     : null,
@@ -1960,7 +1966,7 @@ class _OfflineLanguagePickerSheet extends StatelessWidget {
                                 ?.copyWith(color: cs.onSurfaceVariant),
                           ),
                           trailing: selected
-                              ? const Icon(Icons.check_rounded, color: _kGold)
+                              ? const Icon(AdaptiveIcons.check_rounded, color: _kGold)
                               : null,
                           onTap: () => Navigator.of(context).pop(o.code),
                         );

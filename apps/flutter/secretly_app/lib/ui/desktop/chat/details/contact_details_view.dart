@@ -17,8 +17,14 @@ import '../../../../l10n/app_localizations.dart';
 import '../../app/desktop_app_view_model.dart';
 import '../../app/desktop_selector.dart';
 import '../../../../calls/call_manager.dart';
+import '../../../../entitlements/cosmetic_catalog.dart'
+    show kNoProfileCoverId;
 import '../../../premium/cosmetics_catalog.dart'
-    show coverBackWidgetFor, coverFrontWidgetFor;
+    show
+        coverBackWidgetFor,
+        coverFrontWidgetFor,
+        kDefaultProfileCoverId,
+        kSPrintDefaultCover;
 import '../../design/tokens.dart';
 import '../../primitives/avatar.dart';
 import '../../primitives/context_menu.dart';
@@ -727,7 +733,15 @@ class _ContactDetailsViewState extends State<ContactDetailsView> {
     // has one. Rendered regardless of the local user's tier.
     // 🔴 Два слоя, как на телефоне: задний — сцена без ближнего края диска,
     // передний — сам край, он проходит ПЕРЕД лицом.
-    final cover = coverBackWidgetFor(convo.coverId);
+    // Обложки команды — только в профиле со знаком команды (23.11.2026).
+    final noCover = convo.coverId == kNoProfileCoverId;
+    // Обложки нет — «Отпечаток S», как на телефоне (23.11.2026).
+    final cover = noCover
+        ? null
+        : coverBackWidgetFor(convo.coverId, ownerProfileId: _peerProfileId) ??
+              (kSPrintDefaultCover
+                  ? coverBackWidgetFor(kDefaultProfileCoverId)
+                  : null);
     final coverFront = coverFrontWidgetFor(convo.coverId);
 
     return Column(

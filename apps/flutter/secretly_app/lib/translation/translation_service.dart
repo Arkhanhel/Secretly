@@ -8,6 +8,8 @@ import 'package:google_mlkit_language_id/google_mlkit_language_id.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 
 import '../build_variant.dart';
+import '../diagnostics/diag_log.dart';
+import 'translation_rules.dart';
 
 /// Чем закончилась попытка перевода. Экран чата показывает человеку причину,
 /// а не молчит: раньше любой сбой превращался в пустое место под сообщением.
@@ -141,6 +143,25 @@ class MessageTranslationService {
     return out;
   }
 
+  /// Все кандидаты, включая транслит (`ru-Latn`) — для [TranslationRules].
+  Future<List<(String, double)>> _rawCandidates(String cleaned) async {
+    final out = <(String, double)>[];
+    try {
+      final found = await _languageCandidates.identifyPossibleLanguages(
+        cleaned,
+      );
+      for (final l in found) {
+        final tag = l.languageTag.trim();
+        if (tag.isEmpty || tag == 'und') continue;
+        out.add((tag, l.confidence));
+      }
+    } catch (_) {
+      // Пустой список — правила решат «не распознан».
+    }
+    out.sort((a, b) => b.$2.compareTo(a.$2));
+    return out;
+  }
+
   /// Выбор языка оригинала по кандидатам. Если самый вероятный язык —
   /// язык перевода, но уверенность невысока (короткая фраза, опечатки),
   /// берём следующий правдоподобный: человек нажал «перевести», значит,
@@ -208,12 +229,14 @@ class MessageTranslationService {
     required String targetBcp,
     String? sourceBcp,
     String? cacheKey,
+    bool userInitiated = true,
   }) async {
     final r = await translateDetailed(
       text: text,
       targetBcp: targetBcp,
       sourceBcp: sourceBcp,
       cacheKey: cacheKey,
+      userInitiated: userInitiated,
     );
     return r.isOk ? r.text : null;
   }
@@ -221,11 +244,16 @@ class MessageTranslationService {
   /// Translates [text] into [targetBcp]. When [sourceBcp] is given (e.g. "en")
   /// it is used as the source language; otherwise the source is detected from
   /// the cleaned text with fallback candidates. Never throws.
+  ///
+  /// [userInitiated] — человек нажал «перевести». false — авторежим: он
+  /// переводит только сообщения, уверенно написанные на другом языке
+  /// (22.11.2026, Т-1, правила — [TranslationRules.decideSource]).
   Future<TranslationResult> translateDetailed({
     required String text,
     required String targetBcp,
     String? sourceBcp,
     String? cacheKey,
+    bool userInitiated = true,
   }) async {
     if (!kTranslationAvailable) {
       return const TranslationResult(TranslationOutcome.unavailable);
@@ -247,10 +275,40 @@ class MessageTranslationService {
       if (target == null) {
         return const TranslationResult(TranslationOutcome.unsupported);
       }
-      // Pinned source language wins; otherwise detect from the cleaned text.
       final pinned = sourceBcp?.trim() ?? '';
       final String? srcCode;
-      if (pinned.isNotEmpty) {
+      if (kTranslationStrictSameLanguage) {
+        // Определение идёт всегда, даже при выбранном языке оригинала.
+        final decision = TranslationRules.decideSource(
+          candidates: await _rawCandidates(cleaned),
+          target: target.bcpCode,
+          cleanedText: cleaned,
+          userInitiated: userInitiated,
+          pinnedSource: pinned.isEmpty ? null : pinned,
+          supported: (c) => BCP47Code.fromRawValue(c) != null,
+        );
+        DiagLog.event('translate', 'decision', {
+          'verdict': decision.verdict.name,
+          'rule': decision.reason,
+          'src': decision.source ?? '',
+          'tgt': target.bcpCode,
+          'pinned': pinned.isNotEmpty,
+          'user': userInitiated,
+          'len': cleaned.length,
+        });
+        switch (decision.verdict) {
+          case SourceVerdict.sameLanguage:
+            return TranslationResult(
+              TranslationOutcome.sameLanguage,
+              sourceBcp: target.bcpCode,
+            );
+          case SourceVerdict.undetected:
+            return const TranslationResult(TranslationOutcome.undetected);
+          case SourceVerdict.translate:
+            srcCode = decision.source;
+        }
+      } else if (pinned.isNotEmpty) {
+        // Прежнее поведение: выбранный язык без определения.
         srcCode = pinned;
       } else {
         srcCode = pickSource(await _candidates(cleaned), target.bcpCode);
@@ -298,6 +356,19 @@ class MessageTranslationService {
       if (out.trim().isEmpty) {
         return TranslationResult(
           TranslationOutcome.failed,
+          sourceBcp: source.bcpCode,
+        );
+      }
+      // «Перевод» почти совпал с оригиналом — сообщение уже было на языке
+      // перевода: не показываем и не запоминаем.
+      if (kTranslationStrictSameLanguage &&
+          TranslationRules.looksUnchanged(trimmed, out)) {
+        DiagLog.event('translate', 'unchanged', {
+          'src': source.bcpCode,
+          'tgt': target.bcpCode,
+        });
+        return TranslationResult(
+          TranslationOutcome.sameLanguage,
           sourceBcp: source.bcpCode,
         );
       }

@@ -2,8 +2,10 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme_presets.dart';
 import 'island_backdrop.dart';
+import '../apple_glass.dart';
 
 class FrostedTopBarBackground extends StatelessWidget {
   const FrostedTopBarBackground({super.key, this.sigma = 16});
@@ -57,7 +59,8 @@ AppBar frostedAppBar({
   double? toolbarHeight,
   double? titleSpacing,
   bool automaticallyImplyLeading = true,
-  bool centerTitle = false,
+  bool? centerTitle,
+  SystemUiOverlayStyle? systemOverlayStyle,
 }) {
   return AppBar(
     title: title,
@@ -69,7 +72,10 @@ AppBar frostedAppBar({
     toolbarHeight: toolbarHeight,
     titleSpacing: titleSpacing,
     automaticallyImplyLeading: automaticallyImplyLeading,
-    centerTitle: centerTitle,
+    systemOverlayStyle: systemOverlayStyle,
+    // На iPhone (20.11.2026) заголовок экрана по центру, как в iOS; на
+    // остальных — слева, как было. Экран может задать своё явно.
+    centerTitle: centerTitle ?? appleGlassPanelsEnabled,
     forceMaterialTransparency: true,
     backgroundColor: Colors.transparent,
     elevation: 0,

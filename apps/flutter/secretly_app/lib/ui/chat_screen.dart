@@ -1,18 +1,25 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'whats_new/pen_mark.dart';
+import 'glass/glass_category_strip.dart';
 import 'dart:async';
+import 'motion/app_dialogs.dart';
+import 'motion/entrance.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'scroll_feel.dart';
 import 'dart:collection';
 import 'dart:io';
-import 'dart:math' show cos, exp, pi, sin, Random;
+import 'dart:math' show cos, max, pi, sin, Random;
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui';
 import 'package:flutter/foundation.dart'
-    show SynchronousFuture, ValueListenable, setEquals;
+    show SynchronousFuture, ValueListenable, defaultTargetPlatform, setEquals;
 import 'package:flutter/physics.dart';
 import 'animations/animations.dart';
+import 'animations/avatar_bridge_route.dart';
 import 'icons/app_icons.dart';
 
 import 'package:flutter/material.dart';
@@ -51,6 +58,7 @@ export '../app/chat_read_target.dart' show resolveChatMarkReadPeerProfileId;
 import '../app/pending_attachment_upload.dart';
 import '../media/music_tags.dart';
 import '../media/video_thumbnail_cache.dart';
+import 'chat_media_slot.dart';
 import '../app/message_command_utils.dart';
 import '../app/platform_clipboard_media.dart';
 import 'app_asset_paths.dart';
@@ -61,6 +69,8 @@ import '../entitlements/feature_gate.dart';
 import '../cosmetics/cosmetics_catalog_service.dart';
 import '../entitlements/cosmetic_catalog.dart';
 import 'widgets/animated_wallpaper_preview.dart';
+import 'widgets/apple_menu.dart';
+import 'widgets/covered_route_media_freeze.dart' show mediaQueryNow;
 import 'widgets/island_backdrop.dart';
 import 'widgets/wallpaper_picker_sheet.dart';
 import 'paywall_screen.dart';
@@ -76,7 +86,6 @@ import '../rooms/room_call_state.dart';
 import '../rooms/room_policy_failure.dart';
 import '../rooms/room_system_event_text.dart';
 import 'haptics.dart';
-import 'widgets/composer_glyph_morph.dart';
 import 'emoji/emoji_search_index.dart';
 import '../gifs/gif_categories.dart';
 import '../gifs/gif_query.dart';
@@ -86,7 +95,24 @@ import 'attachment_error_text.dart';
 import 'attachment_too_large_dialog.dart';
 import 'call_error_text.dart';
 import 'chat/video_note_bubble.dart';
+import 'chat/chat_list_row_parts.dart' show ChatListDrafts;
+import 'chat/composer_drops.dart';
+import 'chat/composer_spell_check.dart';
+import 'chat/emoji_panel/emoji_panel.dart';
+import 'chat/video_note_playback.dart'
+    show VideoNoteDim, VideoNoteOutsideTap, VideoNotePlayback;
+import 'chat/chat_media_circle.dart';
+import 'chat/message_text_select_sheet.dart';
+import 'chat/sticker_reaction_bar.dart';
+import 'chat/reaction_burst.dart';
+import 'chat/reaction_fx.dart';
+import 'chat/solo_emoji_fx.dart';
+import 'chat/video_note_controller.dart';
 import 'chat/video_note_recorder.dart';
+import 'chat/video_note_ui.dart';
+import 'chat/voice_recorder_controller.dart';
+import 'chat/voice_recorder_ui.dart';
+import 'chat/voice_speed_chip.dart';
 import 'chat_attachment_picker_sheet.dart';
 import 'recent_attachments_store.dart';
 import 'chat_message_mentions.dart';
@@ -109,6 +135,12 @@ import 'search_date_carousel.dart';
 import 'search_results_list_screen.dart';
 import '../l10n/app_localizations.dart';
 import '../translation/translation_service.dart';
+import '../translation/chat_translation_policy.dart';
+import '../app/chat_open_position.dart';
+import '../app/chat_pins_logic.dart';
+import 'chat/chat_translation_sheet.dart';
+import 'chat/pin_jump.dart';
+import 'motion/decoration_pacer.dart';
 import 'chat_screen_l10n.dart';
 import 'room_call_screen.dart';
 import 'room_details_screen.dart';
@@ -119,6 +151,20 @@ import 'theme_presets.dart';
 import 'cover_crop_screen.dart';
 import 'verify_contact_screen.dart';
 import 'widgets/attachment_actions.dart';
+import 'media_viewer/edited_media_view.dart' show EditedMediaView;
+import 'media_viewer/media_edits.dart' show MediaEdits;
+import 'media_viewer/media_edits_store.dart' show MediaEditsStore;
+import 'media_viewer/media_flight.dart' show MediaFlightAnchor;
+import 'media_viewer/media_viewer_video.dart' show mediaVideoSpeedLabel;
+import 'media_viewer/media_viewer_screen.dart'
+    show
+        MediaDeleteScope,
+        MediaViewerActions,
+        MediaViewerDeleteInfo,
+        MediaViewerEntry,
+        MediaViewerKind,
+        openMediaViewer;
+import 'media_viewer/media_viewer_tokens.dart' show mediaViewerV2Enabled;
 import 'widgets/avatar_initials.dart';
 import 'widgets/call_return_banner.dart';
 import 'widgets/framed_avatar.dart';
@@ -136,6 +182,10 @@ import 'widgets/system_bottom_fade.dart';
 import 'widgets/typing_dots.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
 import 'package:secretly_app/ui/apple_style.dart';
+import 'package:secretly_app/ui/chat_look_prefs.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
+import 'package:secretly_app/ui/apple_glass.dart';
 
 // Geometry for the chat's stacked header islands — pinned message, now-playing
 // and the call-return strip. They must read as ONE family: identical width,
@@ -179,6 +229,12 @@ const double _kChatIslandSlot = _kChatIslandHeight + _kChatIslandGap;
 const String _kReadReceiptMarker = '⁠r⁠';
 
 const bool _kMergeHeaderIslands = true;
+
+/// 🔴 23.11.2026 (владелец: «если любой островок встречается с другим — они
+/// объединяются»). Плашки свёрнутого звонка и звонка в комнате — строками той
+/// же пластины, что закреплённое и «сейчас играет», а не отдельными
+/// капсулами в теле экрана. `false` — как было (плашки в теле).
+const bool _kCallIslandsInHeader = true;
 // Hairline that parts two glued strips. Deliberately fainter than any real
 // border: it should read as a fold in one plate, not as two plates touching.
 const double _kChatIslandSeam = 0.5;
@@ -291,7 +347,14 @@ String _nativeChatFontFamily(TargetPlatform platform) {
   }
 }
 
-TextStyle _nativeChatTextStyle(BuildContext context, Color color) {
+/// [followTextSize] — размер из ползунка «Оформления» (сообщения). Поле ввода
+/// передаёт `false`: оно остаётся прежних 16 и не перестраивает весь экран
+/// переписки на каждом шаге ползунка.
+TextStyle _nativeChatTextStyle(
+  BuildContext context,
+  Color color, {
+  bool followTextSize = true,
+}) {
   final platform = Theme.of(context).platform;
   final typography = Typography.material2021(platform: platform);
   final base = Theme.of(context).brightness == Brightness.dark
@@ -304,7 +367,10 @@ TextStyle _nativeChatTextStyle(BuildContext context, Color color) {
     // any glyph the UI font lacks to the platform colour-emoji font so it never
     // renders as a tofu box (.notdef cross).
     fontFamilyFallback: kEmojiFontFallback,
-    fontSize: 16,
+    // Ползунок «Размер текста» в «Оформлении»; по умолчанию прежние 16.
+    fontSize: followTextSize
+        ? chatMessageFontSize(context)
+        : ChatLookPrefs.defaultFontSize,
     fontWeight: FontWeight.w400,
     letterSpacing: 0,
     height: 1.2,
@@ -334,6 +400,60 @@ bool sharedAudioChangeNeedsLayout({
     trackId != previousTrackId ||
     playing != previousPlaying ||
     hasTrack != previousHasTrack;
+
+/// Пора ли гасить кружок загрузки на пузыре голосового/музыки.
+///
+/// Гаснет, когда плеер уже взял ИМЕННО этот трек, закончил его открывать и
+/// звук пошёл. Чужой трек (переключились посреди загрузки) кружок не гасит —
+/// это сделает сам переход по окончании.
+@visibleForTesting
+bool audioLoadingShouldClear({
+  required String? loadingBlobId,
+  required String? currentBlobId,
+  required bool controllerLoading,
+  required bool playing,
+}) =>
+    loadingBlobId != null &&
+    loadingBlobId == currentBlobId &&
+    !controllerLoading &&
+    playing;
+
+/// Настоящий пузырь вложения (голосовое, музыка, файл) — для снимков и
+/// проверок вида без поднятия всего экрана чата.
+@visibleForTesting
+Widget attachmentBubbleForTest({
+  required AttachmentEventV1 attachment,
+  required bool isMe,
+  bool playing = false,
+  Duration position = Duration.zero,
+  Duration duration = Duration.zero,
+  double? uploadProgress,
+  String? musicTitle,
+  String? musicArtist,
+  double? speed,
+  String localState = 'read',
+}) => _AttachmentBubble(
+  attachment: attachment,
+  timestampMs: DateTime(2026, 11, 21, 12, 40).millisecondsSinceEpoch,
+  isMe: isMe,
+  localState: localState,
+  reactionEventId: 'test',
+  reactions: const <MessageReaction>[],
+  reactionPlayTokens: const <String, int>{},
+  onToggleOwnReaction: (_) {},
+  selfProfileId: 'me',
+  onTap: () {},
+  isAudioPlaying: playing,
+  audioPosition: position,
+  audioDuration: duration,
+  onSeek: playing ? (_) {} : null,
+  musicTitle: musicTitle,
+  musicArtist: musicArtist,
+  uploadProgress: uploadProgress,
+  onCancelUpload: uploadProgress != null ? () {} : null,
+  audioSpeed: speed,
+  onCycleSpeed: playing ? () {} : null,
+);
 
 @visibleForTesting
 /// Whether an inbound 1:1 chat should be auto-marked read RIGHT NOW.
@@ -630,15 +750,24 @@ Future<String?> _showSkinTonePopover(
                 horizontal: padH,
                 vertical: 6,
               ),
+              // Под тему: тёмная плашка над светлым чатом выглядела чужой.
               decoration: BoxDecoration(
-                color: const Color(0xFF20232C),
+                color: Theme.of(ctx).brightness == Brightness.dark
+                    ? const Color(0xFF20232C)
+                    : Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-                boxShadow: const [
+                border: Border.all(
+                  color: Theme.of(ctx).brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.10)
+                      : Colors.black.withValues(alpha: 0.06),
+                ),
+                boxShadow: [
                   BoxShadow(
-                    color: Color(0x66000000),
+                    color: Theme.of(ctx).brightness == Brightness.dark
+                        ? const Color(0x66000000)
+                        : const Color(0x1F000000),
                     blurRadius: 18,
-                    offset: Offset(0, 6),
+                    offset: const Offset(0, 6),
                   ),
                 ],
               ),
@@ -990,6 +1119,7 @@ class ChatScreen extends StatefulWidget {
     this.peerProfileIdForSend,
     this.requestProfileId,
     this.initialForwardDraft,
+    this.openedFromNotification = false,
   });
 
   final AppController controller;
@@ -1000,6 +1130,14 @@ class ChatScreen extends StatefulWidget {
   /// If set, this screen shows a pending request chat (read-only) with Accept/Block actions.
   final String? requestProfileId;
   final ForwardDraft? initialForwardDraft;
+
+  /// Открыт нажатием на уведомление (23.11.2026, владелец: «из приложения
+  /// открывается на первом непрочитанном, а из уведомления — внизу»).
+  /// Приложение в этот момент только просыпается: сообщения, о которых
+  /// уведомление, ещё догружаются, и в базе непрочитанных нет. Тогда экран
+  /// ждёт их ([kNotificationUnreadWait]), не помечая прочитанным и не
+  /// уходя вниз.
+  final bool openedFromNotification;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -1078,6 +1216,10 @@ class _ChatScreenState extends State<ChatScreen>
   final AudioRecorder _voiceRecorder = AudioRecorder();
   late final AnimationController _smileIconController;
 
+  /// Панель эмодзи на месте клавиатуры (макет 2a, 22.11.2026); `null` —
+  /// выключатель [kInlineEmojiPanel] снят, работает прежний лист.
+  EmojiPanelController? _inlineEmojiPanel;
+
   /// Whether the smile has already played its one-off greeting for this
   /// appearance — see _syncComposerTickers for why it must not loop.
   bool _smileIconGreeted = false;
@@ -1146,6 +1288,12 @@ class _ChatScreenState extends State<ChatScreen>
   int _eventsFutureVersion = -1;
   String _eventsFutureConvoId = '';
   final Set<String> _imagePreviewLoadingBlobIds = <String>{};
+  // П-1 (22.11.2026): один запрос файла пузыря на blobId, пока он идёт.
+  final InflightRequests<File?> _imagePreviewRequests =
+      InflightRequests<File?>();
+  // М4 (22.11.2026): blobId отправленных снимков, для которых картинка
+  // настоящего пузыря уже подготовлена.
+  final Set<String> _primedSentBlobIds = <String>{};
   // П6 (разбор медиа 15.11.2026): сбой скачивания больше не «навсегда до
   // переоткрытия чата». Время и число сбоев — для повтора с нарастающей
   // паузой; «файла нет на сервере» (404, истёк срок) — отдельно и навсегда:
@@ -1357,6 +1505,14 @@ class _ChatScreenState extends State<ChatScreen>
   final Map<String, String?> _translations = <String, String?>{};
   final Set<String> _translateInFlight = <String>{};
   final Set<String> _translationShown = <String>{};
+  // Т-3/Т-4 (22.11.2026): настройка перевода этого чата, общие настройки и
+  // «поколение» настроек — смена любой из них сбрасывает показанные
+  // переводы, а запоздавший ответ старого поколения отбрасывается.
+  ChatTranslationSettings _chatTranslation = ChatTranslationSettings.inherit;
+  GlobalTranslationSettings _globalTranslation =
+      const GlobalTranslationSettings();
+  int _translationGeneration = 0;
+  String? _translationPolicySignature;
   final LinkedHashSet<String> _seenReactionAnimationKeys =
       LinkedHashSet<String>();
   Future<void>? _reactionSeenStateLoadFuture;
@@ -1380,23 +1536,24 @@ class _ChatScreenState extends State<ChatScreen>
   double get _chatSearchRevealRaw =>
       _chatSearchRevealController.value.clamp(0.0, 1.0);
   // Same curve chats_screen exposes via `_searchReveal`.
-  double get _chatSearchReveal =>
-      Curves.easeOutCubic.transform(_chatSearchRevealRaw);
+  double get _chatSearchReveal => kTelegramMotion
+      ? _chatSearchRevealRaw
+      : Curves.easeOutCubic.transform(_chatSearchRevealRaw);
   bool _voiceRecording = false;
-  bool _voiceRecordingLocked = false;
-  bool _voiceRecordingCancelHint = false;
-  bool _voiceRecordingBusy = false;
-  double _voiceDragDx = 0;
-  double _voiceDragDy = 0;
-  DateTime? _voiceStartedAt;
-  Duration _voiceElapsed = Duration.zero;
-  Timer? _voiceTimer;
-  String? _voiceRecordingPath;
-  // Real waveform capture: we sample the recorder's amplitude stream while
-  // recording, then downsample to a fixed bar list shipped with the voice
-  // message so playback shows the actual envelope of the whole track.
-  StreamSubscription<Amplitude>? _voiceAmpSub;
-  final List<double> _voiceAmpSamples = <double>[];
+  // Запись голосового (макет «Voice Recording», 21.11.2026): автомат и вид —
+  // chat/voice_recorder_controller.dart и chat/voice_recorder_ui.dart.
+  late final VoiceRecorderController _voice;
+  final GlobalKey _voiceButtonKey = GlobalKey();
+
+  /// Капля действия «Капли» (1a): одна и та же под микрофоном, кружком и
+  /// отправкой — ключ переносит её между жестами, и значки перетекают.
+  final GlobalKey _composerActionDropKey = GlobalKey();
+
+  /// Счётчик отправок — капля коротко сжимается до 0,8.
+  final ValueNotifier<int> _composerSendPulse = ValueNotifier<int>(0);
+  OverlayEntry? _voiceOverlay;
+  OverlayEntry? _voiceHintEntry;
+  Timer? _voiceHintTimer;
   static const int _voiceWaveformBars = 48;
   // Jump-to-latest affordance. A ValueNotifier for the same reason as
   // _floatingDay: it flips exactly when the drag crosses the near-bottom
@@ -1409,6 +1566,16 @@ class _ChatScreenState extends State<ChatScreen>
   final Map<String, GlobalKey> _eventRowKeys = {};
   List<_TimelineEntry> _lastTimeline = const [];
   Timer? _highlightTimer;
+  // Закреплённые (22.11.2026): номер попытки перехода — гасит подсветку только
+  // последняя (Д-8); сколько строк над лентой в показанном списке (Д-4);
+  // удалённые у всех (Д-3); отклонённые списки комнаты (Д-6).
+  final LatestAttempt _jumpAttempts = LatestAttempt();
+  int _lastRowIndexOffset = 0;
+  Set<String> _pinDeletedIds = const <String>{};
+  bool _pinDeletedCleanupScheduled = false;
+  final Set<int> _rejectedPinSyncAtMs = <int>{};
+  String? _lastRelayPinnedEventId;
+  bool _relayPinRead = false;
 
   // ── In-chat search (Telegram-style) ──────────────────────────────────────
   // Populated by `_search()` while `_chatSearchOpen`. Each hit is one match
@@ -1432,26 +1599,67 @@ class _ChatScreenState extends State<ChatScreen>
   final ValueNotifier<int> _jumpUnreadCount = ValueNotifier<int>(0);
   double? _pendingRestoreScrollOffset;
   bool _scrollRestoreAttempted = false;
+
+  // ── Место открытия (23.11.2026, как у Telegram) ─────────────────────────
+  // Есть непрочитанные — чат открывается на ПЕРВОМ из них с плашкой
+  // «Непрочитанные сообщения»; нет — там, где человек остановился (по
+  // сообщению, не по пикселям); иначе — внизу. Пока место выбирается,
+  // автопометка прочитанного ждёт: раньше через 450 мс после открытия весь
+  // чат помечался прочитанным, и первое непрочитанное терялось.
+  static const String _prefsChatScrollAnchorPrefix = 'chat_scroll_anchor_v1_';
+  bool _openPositionPending = kOpenAtFirstUnread;
+  bool _openInterruptedByUser = false;
+
+  /// Строка первого непрочитанного, с которого открыт чат (плашка над ней).
+  String? _unreadDividerRowId;
+
+  /// До какого времени отправителя уже помечено прочитанным при листании.
+  int _readThroughMs = 0;
   final GlobalKey _composerOverlayKey = GlobalKey();
+
+  /// Островок шапки (имя) и полоса под ним (закреплённое, музыка, темы):
+  /// по ним меряется настоящий низ верхних островов — под ним встаёт зелёная
+  /// плашка звонка (22.11.2026: по расчётной высоте шапки она оказывалась
+  /// под островами).
+  final GlobalKey _headerTitleKey = GlobalKey();
+  final GlobalKey _headerBottomKey = GlobalKey();
+  final ValueNotifier<double> _headerBottomEdge = ValueNotifier<double>(0);
+
+  /// Измерить низ верхних островов в координатах тела чата [body].
+  void _measureHeaderBottom(BuildContext body) {
+    final bodyBox = body.findRenderObject();
+    if (bodyBox is! RenderBox || !bodyBox.hasSize || !bodyBox.attached) return;
+    double edge = 0;
+    for (final (key, pad) in [(_headerBottomKey, 0.0), (_headerTitleKey, 8.0)]) {
+      final box = key.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize || !box.attached) continue;
+      final bottom = bodyBox
+              .globalToLocal(box.localToGlobal(Offset(0, box.size.height)))
+              .dy +
+          pad;
+      if (bottom > edge) edge = bottom;
+    }
+    if ((edge - _headerBottomEdge.value).abs() > 0.5) {
+      _headerBottomEdge.value = edge;
+    }
+  }
   double? _composerOverlayHeight;
   bool _composerOverlayMeasureScheduled = false;
-  // Raw pointer tracking (replaces LongPress gesture recognizer)
-  Timer? _voicePressTimer;
-  Offset? _voicePressOrigin;
-  int? _voicePointerId;
 
   static const double _voiceLockThresholdPx = 84;
   static const double _voiceCancelThresholdPx = 118;
-  static const Duration _voiceMinDuration = Duration(milliseconds: 450);
+  static const Duration _voiceMinDuration = Duration(milliseconds: 500);
 
   // ── Composer capture mode: voice (mic) ⇄ video note (квадратик) ─────────
   // A single tap on the composer mic button toggles the mode; the choice is
   // persisted across chats in SharedPreferences (`composer_capture_mode_v1`).
   static const String _kComposerCaptureModePrefKey = 'composer_capture_mode_v1';
   bool _composerVideoMode = false;
-  bool _videoNoteRecording = false;
-  bool _videoNoteBusy = false;
-  VideoNoteRecorderController? _videoNoteRecorderController;
+  // Видео-заметки (макет «Video Notes», 3b, 21.11.2026): автомат и вид —
+  // chat/video_note_controller.dart и chat/video_note_ui.dart.
+  late final VideoNoteController _videoNote;
+  OverlayEntry? _videoNoteOverlay;
+  AppLifecycleListener? _videoNoteLifecycle;
   // Anchors the room actions dropdown to the 3-dots button.
   final GlobalKey _roomMenuButtonKey = GlobalKey();
 
@@ -1489,13 +1697,9 @@ class _ChatScreenState extends State<ChatScreen>
       // Re-arm so it greets again next time it comes back into view.
       _smileIconGreeted = false;
     }
-    if (_voiceRecording) {
-      if (!_voicePulseController.isAnimating) {
-        _voicePulseController.repeat(reverse: true);
-      }
-    } else {
-      _voicePulseController.stop();
-    }
+    // Пульс старой кнопки записи больше не нужен: круг под пальцем рисует
+    // слой записи. Контроллер стоит — лишних кадров нет.
+    _voicePulseController.stop();
   }
   bool get _isGroupChat => widget.convoId.startsWith('group:');
   bool get _isFavoritesChat =>
@@ -1515,7 +1719,7 @@ class _ChatScreenState extends State<ChatScreen>
         return;
       }
       final mediaPaddingBottom =
-          MediaQuery.maybeOf(measureContext)?.padding.bottom ?? 0.0;
+          measureContext.getInheritedWidgetOfExactType<MediaQuery>()?.data.padding.bottom ?? 0.0;
       final safeAreaBottomGap = mediaPaddingBottom > 10.0
           ? mediaPaddingBottom
           : 10.0;
@@ -1711,6 +1915,9 @@ class _ChatScreenState extends State<ChatScreen>
   @override
   void initState() {
     super.initState();
+    _islandCallManager = CallManager.instance;
+    _islandCallMinimized = _callIslandVisibleNow();
+    _islandCallManager?.state.addListener(_onCallStateForIslands);
     widget.controller.setActiveConversation(widget.convoId);
     widget.controller.chatFocusRequest.addListener(_onChatFocusRequest);
     unawaited(_ensureReactionSeenStateReady());
@@ -1768,6 +1975,14 @@ class _ChatScreenState extends State<ChatScreen>
       vsync: this,
       duration: const Duration(milliseconds: 520),
     );
+    if (kInlineEmojiPanel) {
+      _inlineEmojiPanel = EmojiPanelController(
+        vsync: this,
+        field: _messageInputFocusNode,
+      );
+    }
+    _initVoiceRecorder();
+    _initVideoNote();
     // Same duration chats_screen uses for its search-bubble morph (260 ms).
     // No addListener(setState) here on purpose — that used to rebuild the
     // ENTIRE chat screen (message list included) on every animation tick.
@@ -1775,7 +1990,9 @@ class _ChatScreenState extends State<ChatScreen>
     // their own narrow AnimatedBuilder instead.
     _chatSearchRevealController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 260),
+      duration: kTelegramMotion
+          ? MotionDurations.list
+          : const Duration(milliseconds: 260),
     );
     _forwardDraft = widget.initialForwardDraft;
     _text.addListener(_onComposerTextChanged);
@@ -1798,6 +2015,8 @@ class _ChatScreenState extends State<ChatScreen>
     _changedSub = widget.controller.changed.listen((_) {
       _scheduleMarkRead();
       unawaited(_refreshJumpUnreadCount());
+      // Пришёл более свежий список закреплённых (21.11.2026).
+      unawaited(_reloadPinsIfNewer());
       if (_isGroupChat) {
         unawaited(_refreshRoomPolicyState());
         unawaited(_refreshRoomPinnedMessageState());
@@ -1846,7 +2065,11 @@ class _ChatScreenState extends State<ChatScreen>
       _handleSharedAudioPlaybackChanged,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(_restoreScrollOffset());
+      if (kOpenAtFirstUnread) {
+        unawaited(_resolveOpenPosition());
+      } else {
+        unawaited(_restoreScrollOffset());
+      }
       unawaited(_refreshJumpUnreadCount());
       _handleScrollChanged();
     });
@@ -1880,15 +2103,80 @@ class _ChatScreenState extends State<ChatScreen>
       final source =
           prefs.getString(_prefsLanguageTranslateSourceKey) ?? 'auto';
       final target = prefs.getString(_prefsLanguageTranslateTargetKey) ?? '';
-      if (!mounted) return;
+      final convoId = widget.convoId;
+      // Настройка этого чата (Т-4). В «Избранном» её нет.
+      final chat = _isFavoritesChat
+          ? ChatTranslationSettings.inherit
+          : await loadChatTranslationSettings(convoId);
+      if (!mounted || convoId != widget.convoId) return;
+      final global = GlobalTranslationSettings(
+        buttonEnabled: showBtn,
+        autoEnabled: auto,
+        source: source.trim().isEmpty ? 'auto' : source.trim(),
+        target: target.trim(),
+      );
+      // Т-2: автоперевод — только при включённой кнопке (или по настройке
+      // чата). Раньше выключенная кнопка оставляла сохранённый авторежим.
+      final policy = resolveTranslationPolicy(
+        global: global,
+        chat: chat,
+        appLanguage: '',
+      );
+      final signature =
+          '${policy.showButton}|${policy.auto}|${policy.source}|${policy.target}';
       setState(() {
-        _translateButtonEnabled = showBtn;
-        _autoTranslate = auto;
-        _translateSourceLang = source.trim().isEmpty ? 'auto' : source.trim();
-        _translateTargetLang = target.trim();
+        _globalTranslation = global;
+        _chatTranslation = chat;
+        _translateButtonEnabled = policy.showButton;
+        _autoTranslate = policy.auto;
+        _translateSourceLang = policy.source ?? 'auto';
+        _translateTargetLang = policy.target;
+        // Т-3: настройки поменялись — старые переводы сделаны по старым
+        // правилам. Сбросить и отбросить запоздавшие ответы.
+        final previous = _translationPolicySignature;
+        _translationPolicySignature = signature;
+        if (previous != null && previous != signature) {
+          _translationGeneration++;
+          _translations.clear();
+          _translationShown.clear();
+          _translateInFlight.clear();
+          _autoTranslateTried.clear();
+        }
       });
     } catch (_) {
       // Settings unavailable → leave translation off (safe default).
+    }
+  }
+
+  /// Окно «Перевод в этом чате» (Т-4) из меню «⋯».
+  Future<void> _openChatTranslationSettings() async {
+    if (!kTranslationAvailable || !kChatTranslationOverride) return;
+    if (_isFavoritesChat) return;
+    final before = resolveTranslationPolicy(
+      global: _globalTranslation,
+      chat: _chatTranslation,
+      appLanguage: Localizations.localeOf(context).languageCode,
+    );
+    final next = await showChatTranslationSheet(
+      context: context,
+      convoId: widget.convoId,
+      initial: _chatTranslation,
+      global: _globalTranslation,
+      appLanguage: Localizations.localeOf(context).languageCode,
+    );
+    if (!mounted) return;
+    await _loadTranslationSettings();
+    if (!mounted) return;
+    final after = resolveTranslationPolicy(
+      global: _globalTranslation,
+      chat: next,
+      appLanguage: Localizations.localeOf(context).languageCode,
+    );
+    // Новый язык перевода — модель заранее, чтобы первое нажатие не ждало.
+    if (after.showButton &&
+        after.target.isNotEmpty &&
+        (after.target != before.target || !before.showButton)) {
+      unawaited(MessageTranslationService.instance.prefetchModel(after.target));
     }
   }
 
@@ -1961,6 +2249,7 @@ class _ChatScreenState extends State<ChatScreen>
         _translationSnack(context.l10n.translateDownloading);
       }
     });
+    final generation = _translationGeneration;
     TranslationResult result;
     try {
       result = await MessageTranslationService.instance.translateDetailed(
@@ -1968,12 +2257,15 @@ class _ChatScreenState extends State<ChatScreen>
         targetBcp: _effectiveTranslateTarget(),
         sourceBcp: _effectiveTranslateSource(),
         cacheKey: eventId,
+        userInitiated: true,
       );
     } catch (_) {
       result = const TranslationResult(TranslationOutcome.failed);
     }
     slow.cancel();
     if (!mounted) return;
+    // Т-3: пока переводили, настройки сменились — ответ по старым правилам.
+    if (generation != _translationGeneration) return;
     setState(() {
       _translateInFlight.remove(eventId);
       if (result.isOk) {
@@ -2009,20 +2301,23 @@ class _ChatScreenState extends State<ChatScreen>
     }
     _autoTranslateTried.add(eventId);
     _translateInFlight.add(eventId);
+    final generation = _translationGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
+      if (!mounted || generation != _translationGeneration) return;
       TranslationResult result;
       try {
+        // Авторежим (Т-1): переводит только уверенно чужой язык.
         result = await MessageTranslationService.instance.translateDetailed(
           text: text,
           targetBcp: _effectiveTranslateTarget(),
           sourceBcp: _effectiveTranslateSource(),
           cacheKey: eventId,
+          userInitiated: false,
         );
       } catch (_) {
         result = const TranslationResult(TranslationOutcome.failed);
       }
-      if (!mounted) return;
+      if (!mounted || generation != _translationGeneration) return;
       setState(() {
         _translateInFlight.remove(eventId);
         if (result.isOk) {
@@ -2069,11 +2364,19 @@ class _ChatScreenState extends State<ChatScreen>
       _seenReactionAnimationKeys.clear();
       _pinnedMessages = const <_PinnedMessage>[];
       _visiblePinnedMessageIndex = 0;
+      // Состояние закреплённых и перевода — своё у каждого чата (22.11.2026).
+      _appliedPinSyncAtMs = 0;
+      _pinDeletedIds = const <String>{};
+      _rejectedPinSyncAtMs.clear();
+      _lastRelayPinnedEventId = null;
+      _relayPinRead = false;
+      _jumpAttempts.begin();
       _reactionSeenStateReady = false;
       _reactionSeenStateLoadFuture = null;
       unawaited(_ensureReactionSeenStateReady());
       unawaited(_acknowledgeMissedCallsForConversation());
       unawaited(_restorePinnedMessages());
+      unawaited(_loadTranslationSettings());
       if (_isGroupChat) {
         _groupPinnedMessageEventId = null;
         _roomMentionCandidates = const [];
@@ -2100,8 +2403,37 @@ class _ChatScreenState extends State<ChatScreen>
     final normalized = nextPinnedMessageEventId.isEmpty
         ? null
         : nextPinnedMessageEventId;
-    if (!mounted || _groupPinnedMessageEventId == normalized) {
-      return;
+    if (!mounted) return;
+    // Д-9: что реле говорило в прошлый раз (а не что показано: показанное
+    // могло прийти списком раньше, чем реле обновилось у нас).
+    final relayBefore = _lastRelayPinnedEventId;
+    final relayKnownBefore = _relayPinRead;
+    _relayPinRead = true;
+    _lastRelayPinnedEventId = normalized;
+    if (_groupPinnedMessageEventId == normalized) return;
+    if (kPinSyncChecksV2) {
+      // Открепили на другом устройстве (ПК меняет реле): реле было X, стало
+      // пустым — X убирается и с плашки. Локально, без новой ревизии —
+      // рассылать нечего, правка не наша.
+      if (normalized == null && relayKnownBefore && relayBefore != null) {
+        final next = _withoutPinnedMessage(_pinnedMessages, relayBefore);
+        final changed = next.length != _pinnedMessages.length;
+        setState(() {
+          _groupPinnedMessageEventId = null;
+          _pinnedMessages = next;
+          _visiblePinnedMessageIndex = _normalizedPinnedIndex(
+            _visiblePinnedMessageIndex,
+            _effectivePinnedMessages().length,
+          );
+        });
+        if (changed) await _savePinnedMessages();
+        return;
+      }
+      // При общем списке устаревшее реле не добавляет закреплённое заново.
+      if (_appliedPinSyncAtMs > 0) {
+        setState(() => _groupPinnedMessageEventId = normalized);
+        return;
+      }
     }
     var shouldPersistPins = false;
     setState(() {
@@ -2128,25 +2460,72 @@ class _ChatScreenState extends State<ChatScreen>
     if (_pinSyncApplyScheduled) return;
     PinSyncCommand? newest;
     var newestAtMs = 0;
+    var newestSenderDeviceId = '';
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     for (final item in resolved) {
       final payload = item.payload;
       if (payload is! MsgEventV1) continue;
       final command = parsePinSyncCommand(payload.text);
       if (command == null) continue;
-      final atMs = item.event.createdAtMs;
+      // G-3: ревизия «из будущего» не получает вечного первенства.
+      final atMs = trustedPinFreshnessMs(
+        command.freshnessMs(item.event.createdAtMs),
+        nowMs,
+        messageAtMs: item.event.createdAtMs,
+      );
+      // Д-6: список от того, кому закреплять нельзя, уже отклонён.
+      if (_rejectedPinSyncAtMs.contains(atMs)) continue;
       if (atMs >= newestAtMs) {
         newestAtMs = atMs;
         newest = command;
+        newestSenderDeviceId = item.event.senderDeviceId;
       }
     }
     if (newest == null || newestAtMs <= _appliedPinSyncAtMs) return;
 
     final adopted = newest;
     final adoptedAtMs = newestAtMs;
+    final senderDeviceId = newestSenderDeviceId;
     _pinSyncApplyScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) {
+        _pinSyncApplyScheduled = false;
+        return;
+      }
+      if (kPinSyncChecksV2) {
+        var allowed = false;
+        try {
+          final isOwn = widget.controller.isOwnDeviceId(senderDeviceId);
+          final authorPid = isOwn
+              ? ''
+              : (await widget.controller.cachedProfileIdByDeviceId(
+                      senderDeviceId,
+                    ) ??
+                    '');
+          allowed = await widget.controller.canRoomMemberPin(
+            groupId: widget.convoId,
+            senderProfileId: authorPid,
+            isOwn: isOwn,
+          );
+        } catch (_) {
+          allowed = false;
+        }
+        if (!mounted) {
+          _pinSyncApplyScheduled = false;
+          return;
+        }
+        if (!allowed) {
+          _rejectedPinSyncAtMs.add(adoptedAtMs);
+          _pinSyncApplyScheduled = false;
+          return;
+        }
+        // Пока проверяли, контроллер уже принял более новый список.
+        if (adoptedAtMs <= _appliedPinSyncAtMs) {
+          _pinSyncApplyScheduled = false;
+          return;
+        }
+      }
       _pinSyncApplyScheduled = false;
-      if (!mounted) return;
       final nextPins = adopted.pins
           .map(
             (ref) => _PinnedMessage(
@@ -2167,7 +2546,18 @@ class _ChatScreenState extends State<ChatScreen>
           _effectivePinnedMessages().length,
         );
       });
-      await _savePinnedMessages();
+      // В хранилище уже более новый список (принят контроллером) — не
+      // затирать его этим.
+      if (kPinSyncChecksV2 &&
+          await widget.controller.chatPinsRevision(widget.convoId) >=
+              adoptedAtMs) {
+        return;
+      }
+      await widget.controller.rememberChatPins(
+        convoId: widget.convoId,
+        pins: adopted.pins,
+        revision: adoptedAtMs,
+      );
     });
   }
 
@@ -2328,6 +2718,77 @@ class _ChatScreenState extends State<ChatScreen>
 
   Widget _buildTopicBar() {
     final canManage = _roomPolicyState?.canChangeGroupInfo ?? false;
+    // 23.11.2026 (план стекла): одна полоса во всю ширину, капля переливается
+    // между темами; закрытые ветки — пункты-действия (открывают свой экран).
+    if (kGlassCategoryStrip) {
+      final l10n = AppLocalizations.of(context)!;
+      final items = <GlassStripItem>[
+        GlassStripItem(
+          label: chatText(
+            context,
+            ru: kRoomBaseTopicTitleRu,
+            en: kRoomBaseTopicTitleEn,
+          ),
+          icon: roomTopicIconFor(_baseMark),
+          iconColor: roomTopicIconColorFor(_baseMark),
+          badge: _topicUnreadFor(null),
+        ),
+        for (final topic in _roomTopics)
+          GlassStripItem(
+            label: topic.emoji.trim().isEmpty
+                ? normalizeRoomTopicTitle(topic.title)
+                : '${topic.emoji.trim()} ${normalizeRoomTopicTitle(topic.title)}',
+            icon: roomTopicIcon(topic),
+            iconColor: roomTopicIconColor(topic),
+            badge: _topicUnreadFor(topic.id),
+          ),
+        for (final topic in _privateTopics)
+          GlassStripItem(
+            label: topic.title,
+            icon: AdaptiveIcons.lock_rounded,
+            badge: topic.unreadCount,
+            action: true,
+            semanticLabel: '${l10n.roomPrivateTopicLabel}: ${topic.title}',
+          ),
+      ];
+      final current = _currentTopicId;
+      final selected = current == null
+          ? 0
+          : 1 + _roomTopics.indexWhere((t) => t.id == current);
+      return SizedBox(
+        height: 44,
+        child: GlassCategoryStrip(
+          items: items,
+          selected: selected <= 0 && current != null ? 0 : selected,
+          height: 34,
+          margin: const EdgeInsets.fromLTRB(10, 4, 10, 6),
+          onSelect: (i) {
+            if (i == 0) {
+              if (_currentTopicId != null) {
+                setState(() => _currentTopicId = null);
+              }
+            } else if (i <= _roomTopics.length) {
+              final id = _roomTopics[i - 1].id;
+              if (_currentTopicId != id) setState(() => _currentTopicId = id);
+            } else {
+              final k = i - 1 - _roomTopics.length;
+              if (k >= 0 && k < _privateTopics.length) {
+                unawaited(_openPrivateTopic(_privateTopics[k]));
+              }
+            }
+          },
+          onLongPress: !canManage
+              ? null
+              : (i) {
+                  if (i == 0) {
+                    _manageBaseTopic();
+                  } else if (i <= _roomTopics.length) {
+                    _manageTopic(_roomTopics[i - 1]);
+                  }
+                },
+        ),
+      );
+    }
     return SizedBox(
       height: 44,
       child: ListView(
@@ -2382,7 +2843,7 @@ class _ChatScreenState extends State<ChatScreen>
               child: _buildTopicChip(
                 id: 'private:${topic.roomId}',
                 label: topic.title,
-                markIcon: Icons.lock_rounded,
+                markIcon: AdaptiveIcons.lock_rounded,
                 selected: false,
                 unread: topic.unreadCount,
                 onTap: () => unawaited(_openPrivateTopic(topic)),
@@ -2513,7 +2974,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<String?> _promptTopicTitle({String? initial}) async {
     final controller = TextEditingController(text: initial ?? '');
-    final result = await showDialog<String>(
+    final result = await showAppDialog<String>(
       context: context,
       builder: (dialogContext) {
         return SecretlyAlertDialog(
@@ -2545,11 +3006,11 @@ class _ChatScreenState extends State<ChatScreen>
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: Text(chatText(context, ru: 'Отмена', en: 'Cancel')),
             ),
-            FilledButton(
+            PressFeedback(child: FilledButton(
               onPressed: () =>
                   Navigator.of(dialogContext).pop(controller.text.trim()),
               child: Text(chatText(context, ru: 'Готово', en: 'Done')),
-            ),
+            )),
           ],
         );
       },
@@ -2566,6 +3027,7 @@ class _ChatScreenState extends State<ChatScreen>
   Future<String?> _pickTopicMark({required String current}) async {
     final cs = Theme.of(context).colorScheme;
     return showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
@@ -2762,6 +3224,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _manageTopic(RoomTopicRef topic) async {
     final action = await showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       builder: (sheetContext) {
         return SafeArea(
@@ -2769,7 +3232,7 @@ class _ChatScreenState extends State<ChatScreen>
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               ListTile(
-                leading: const Icon(Icons.edit_rounded),
+                leading: const Icon(AdaptiveIcons.edit_rounded),
                 title: Text(
                   chatText(context, ru: 'Переименовать', en: 'Rename'),
                 ),
@@ -2786,7 +3249,7 @@ class _ChatScreenState extends State<ChatScreen>
                 onTap: () => Navigator.of(sheetContext).pop('mark'),
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline_rounded),
+                leading: const Icon(AdaptiveIcons.delete_outline_rounded),
                 title: Text(
                   chatText(context, ru: 'Удалить тему', en: 'Delete topic'),
                 ),
@@ -2934,7 +3397,12 @@ class _ChatScreenState extends State<ChatScreen>
   Future<void> _acknowledgeMissedCallsForConversation() async {
     final convoId = widget.convoId.trim();
     if (convoId.isEmpty) return;
-    await widget.controller.acknowledgeMissedCalls(convoId: convoId);
+    try {
+      await widget.controller.acknowledgeMissedCalls(convoId: convoId);
+    } catch (_) {
+      // База занята — отметка пропущенных звонков догонит при следующем
+      // открытии; ошибкой зону не роняем (23.11.2026).
+    }
   }
 
   /// True only when THIS chat route is the current (top, visible) route — the
@@ -2951,6 +3419,9 @@ class _ChatScreenState extends State<ChatScreen>
   bool _wasEverVisiblyOpen = false;
 
   void _scheduleMarkRead() {
+    // Место открытия ещё выбирается (лента в самом низу только потому, что
+    // ещё не прокручена к первому непрочитанному) — не помечать всё.
+    if (_openPositionPending) return;
     final isRequest =
         widget.requestProfileId != null && widget.requestProfileId!.isNotEmpty;
     final peer = _markReadPeerProfileId;
@@ -2980,6 +3451,12 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   void _handleScrollChanged() {
+    if (_openPositionPending &&
+        _scroll.hasClients &&
+        _scroll.position.userScrollDirection != ScrollDirection.idle) {
+      // Человек сам листает, пока место открытия выбиралось, — не мешаем.
+      _openInterruptedByUser = true;
+    }
     final show = !_isNearLatestMessages();
     // Notifier write, not setState — this fires mid-drag (see the field docs).
     if (show != _showJumpToLatest.value && mounted) {
@@ -2995,6 +3472,7 @@ class _ChatScreenState extends State<ChatScreen>
     _scrollStateDebounce = Timer(const Duration(milliseconds: 180), () {
       unawaited(_persistScrollOffset());
       if (show) {
+        if (kOpenAtFirstUnread) _markVisibleRead();
         unawaited(_refreshJumpUnreadCount());
       }
     });
@@ -3005,8 +3483,473 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _persistScrollOffset() async {
     if (!_scroll.hasClients) return;
+    if (kOpenAtFirstUnread) {
+      await _persistScrollAnchor();
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_chatScrollOffsetKey, _scroll.offset);
+  }
+
+  String get _chatScrollAnchorKey =>
+      '$_prefsChatScrollAnchorPrefix${widget.convoId.trim()}';
+
+  /// Верх ленты: ниже всех верхних островов (с темами комнаты).
+  double get _timelineVisibleTop =>
+      max(_timelineTopEdgePx, _headerBottomEdge.value);
+
+  /// Низ видимой ленты — верх поля ввода.
+  double _timelineVisibleBottom() {
+    final box = _composerOverlayKey.currentContext?.findRenderObject();
+    if (box is RenderBox && box.hasSize && box.attached) {
+      return box.localToGlobal(Offset.zero).dy;
+    }
+    final view = View.maybeOf(context);
+    if (view == null) return double.infinity;
+    return view.physicalSize.height / view.devicePixelRatio - 80;
+  }
+
+  /// Самая верхняя видимая строка ленты и её верх относительно верха ленты.
+  ({String rowId, double dy})? _topVisibleRow() {
+    final topEdge = _timelineVisibleTop;
+    ({String rowId, double dy})? best;
+    for (final entry in _eventRowKeys.entries) {
+      final ctx = entry.value.currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject();
+      if (box is! RenderBox || !box.hasSize || !box.attached) continue;
+      final top = box.localToGlobal(Offset.zero).dy;
+      if (top + box.size.height <= topEdge) continue; // вся выше островов
+      if (best == null || top - topEdge < best.dy) {
+        best = (rowId: entry.key, dy: top - topEdge);
+      }
+    }
+    return best;
+  }
+
+  /// «Где остановился»: строка вверху экрана и её сдвиг. Внизу чата — ничего
+  /// не храним (откроется внизу). Только в «Основе»: чат всегда открывается
+  /// в ней.
+  Future<void> _persistScrollAnchor() async {
+    if (_openPositionPending || !mounted) return;
+    if (_isGroupChat && _currentTopicId != null) return;
+    final prefs = await SharedPreferences.getInstance();
+    // Прежний ключ в пикселях больше не нужен.
+    unawaited(prefs.remove(_chatScrollOffsetKey));
+    if (_isNearLatestMessages()) {
+      await prefs.remove(_chatScrollAnchorKey);
+      return;
+    }
+    final top = _topVisibleRow();
+    if (top == null) return;
+    await prefs.setString(
+      _chatScrollAnchorKey,
+      jsonEncode({'row': top.rowId, 'dy': top.dy}),
+    );
+  }
+
+  Future<({String rowId, double dy})?> _readScrollAnchor() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_chatScrollAnchorKey);
+      if (raw == null || raw.isEmpty) return null;
+      final m = jsonDecode(raw);
+      if (m is! Map) return null;
+      final row = (m['row'] as String?)?.trim() ?? '';
+      final dy = (m['dy'] as num?)?.toDouble() ?? 0;
+      if (row.isEmpty) return null;
+      return (rowId: row, dy: dy.clamp(-400.0, 2000.0).toDouble());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Выбрать место открытия: первое непрочитанное → где остановился → низ.
+  Future<void> _resolveOpenPosition() async {
+    final attempt = _jumpAttempts.begin();
+    bool latest() =>
+        mounted && !_openInterruptedByUser && _jumpAttempts.isLatest(attempt);
+    final startedAt = DateTime.now();
+    var outcome = 'bottom';
+    var unreadCount = 0;
+    try {
+      if (!await _waitForFirstTimeline(latest)) {
+        outcome = 'no_timeline';
+        return;
+      }
+      var unread = await widget.controller.unreadIncomingForConvo(
+        widget.convoId,
+      );
+      if (!latest()) return;
+      if (unread.isEmpty && widget.openedFromNotification) {
+        unread = await _waitForNotifiedUnread(latest);
+        if (!latest()) return;
+      }
+      unreadCount = unread.length;
+      if (unread.isNotEmpty) {
+        var rowId = await _firstUnreadRow(unread, latest);
+        // 23.11.2026 (журнал Xiaomi, 746: unread=25, match=none): лента
+        // собралась чуть раньше, чем легли последние сообщения пачки, —
+        // непрочитанных в ней ещё нет. Ждём её обновления (до 3 с) и
+        // пробуем снова, а не встаём в конец.
+        for (var i = 0; rowId == null && i < 12 && latest(); i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 250));
+          if (!latest()) break;
+          unread = await widget.controller.unreadIncomingForConvo(
+            widget.convoId,
+          );
+          if (unread.isEmpty || !latest()) break;
+          unreadCount = unread.length;
+          rowId = await _firstUnreadRow(unread, latest);
+        }
+        if (rowId != null && latest()) {
+          setState(() => _unreadDividerRowId = rowId);
+          // Плашка «Непрочитанные» — посередине видимой ленты (23.11.2026,
+          // владелец: «непрочитанные начинались с середины экрана, на
+          // середине — полоса»): выше видно, на чём остановился, ниже —
+          // новое. Не выше прежнего места под островами.
+          final unreadGap = max(
+            52.0,
+            (_timelineVisibleBottom() - _timelineVisibleTop) * 0.5,
+          );
+          final placed =
+              await _scrollRowTo(rowId, latest, topGap: unreadGap) ||
+              await _scrollRowTo(
+                rowId,
+                latest,
+                topGap: unreadGap,
+                maxFrames: 90,
+              );
+          if (placed) {
+            outcome = 'unread';
+            await _holdRowAt(rowId, latest, topGap: unreadGap);
+          } else {
+            outcome = 'unread_not_placed';
+            DiagLog.event('chat', 'open_unread_not_placed', {
+              'unread': unread.length,
+            });
+          }
+          return;
+        }
+      }
+      final anchor = await _readScrollAnchor();
+      if (anchor == null || !latest()) return;
+      var found = _findRenderedRow(anchor.rowId);
+      if (found == null) {
+        final exists = await widget.controller.chatEventExists(
+          convoId: widget.convoId,
+          eventId: anchor.rowId,
+        );
+        if (exists && latest()) {
+          found = await _growWindowUntil(
+            latest,
+            done: () => _findRenderedRow(anchor.rowId) != null,
+          )
+              ? _findRenderedRow(anchor.rowId)
+              : null;
+        }
+      }
+      if (found == null || !latest()) return;
+      if (await _scrollRowTo(found.rowId, latest, topGap: anchor.dy)) {
+        outcome = 'anchor';
+        await _holdRowAt(found.rowId, latest, topGap: anchor.dy);
+      }
+    } catch (e) {
+      outcome = 'failed';
+      DiagLog.event('chat', 'open_position_failed', {
+        'err': e.runtimeType.toString(),
+      });
+    } finally {
+      // Куда встал чат при открытии — для разборов «открылся внизу»
+      // (23.11.2026). Без содержимого и идентификаторов.
+      DiagLog.event('chat', 'open_position', {
+        'outcome': _openInterruptedByUser ? 'user_scrolled' : outcome,
+        'unread': unreadCount,
+        'from_notif': widget.openedFromNotification,
+        'ms': DateTime.now().difference(startedAt).inMilliseconds,
+      });
+      if (mounted) {
+        _openPositionPending = false;
+        _handleScrollChanged();
+        _scheduleMarkRead();
+        if (!_isNearLatestMessages()) _markVisibleRead();
+      }
+    }
+  }
+
+  /// Открыт из уведомления, а непрочитанных ещё нет: ждём, пока сообщения
+  /// догрузятся (до [kNotificationUnreadWait]). Всё это время место открытия
+  /// «выбирается» — ничего не помечается прочитанным. Человек начал листать
+  /// сам — ждать перестаём ([keepGoing]).
+  Future<List<({String eventId, String payloadEventId, int createdAtMs})>>
+  _waitForNotifiedUnread(bool Function() keepGoing) async {
+    final deadline = DateTime.now().add(kNotificationUnreadWait);
+    while (keepGoing() && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (!keepGoing()) break;
+      final unread = await widget.controller.unreadIncomingForConvo(
+        widget.convoId,
+      );
+      if (unread.isNotEmpty) {
+        DiagLog.event('chat', 'open_unread_arrived_late', {
+          'unread': unread.length,
+        });
+        // Догрузка обычно идёт пачкой — даём ей лечь целиком.
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        if (!keepGoing()) return unread;
+        return widget.controller.unreadIncomingForConvo(widget.convoId);
+      }
+    }
+    return const [];
+  }
+
+  /// Ждёт первую собранную ленту (до ~10 с).
+  ///
+  /// 🔴 23.11.2026 (владелец: «иногда открывается конец чата»): было ~3 с —
+  /// при возврате в приложение идёт синхронизация, лента собиралась позже, и
+  /// чат оставался внизу. Человек сам начал листать — ожидание прекращается
+  /// сразу ([keepGoing]).
+  Future<bool> _waitForFirstTimeline(bool Function() keepGoing) async {
+    for (var i = 0; i < 200; i++) {
+      if (!keepGoing()) return false;
+      if (_memoVisibleTimeline != null &&
+          _scroll.hasClients &&
+          _scroll.position.hasContentDimensions) {
+        return true;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    return false;
+  }
+
+  /// Окно ленты растёт шагами, пока [done] не скажет «хватит» (или потолок
+  /// [_pinJumpWindowCeiling]). Тему комнаты НЕ переключает.
+  Future<bool> _growWindowUntil(
+    bool Function() keepGoing, {
+    required bool Function() done,
+    int ceiling = _openWindowCeiling,
+  }) async {
+    while (keepGoing()) {
+      if (done()) return true;
+      final next = nextPinJumpWindowLimit(
+        current: _timelineLoadLimit,
+        step: _pinJumpWindowStep,
+        ceiling: ceiling,
+      );
+      if (next == null || !_timelineMaybeHasMore) return done();
+      final before = _memoVisibleTimeline;
+      setState(() {
+        _timelineLoadLimit = next;
+        _eventsFuture = null;
+      });
+      for (var i = 0; i < 60; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        if (!keepGoing()) return false;
+        if (_eventsFutureLimit == next &&
+            !identical(_memoVisibleTimeline, before)) {
+          break;
+        }
+      }
+    }
+    return false;
+  }
+
+  /// Потолок окна ленты при выборе места открытия (23.11.2026). Окно растёт
+  /// не больше чем до 800 событий: в большой комнате с сотнями непрочитанных
+  /// дорастание до 4000 пересобирало ленту секундами прямо при входе. Не
+  /// дотянулись — встаём на самое старое из загруженных непрочитанных.
+  static const int _openWindowCeiling = 800;
+
+  /// Самое старое непрочитанное, которое есть в показанной ленте (в комнате —
+  /// в открытой теме). Окно ленты при нужде растёт до него.
+  Future<String?> _firstUnreadRow(
+    List<({String eventId, String payloadEventId, int createdAtMs})> unread,
+    bool Function() keepGoing,
+  ) async {
+    final ids = <String>{};
+    var oldestMs = 1 << 62;
+    for (final u in unread) {
+      if (u.eventId.isNotEmpty) ids.add(u.eventId);
+      if (u.payloadEventId.isNotEmpty) ids.add(u.payloadEventId);
+      if (u.createdAtMs < oldestMs) oldestMs = u.createdAtMs;
+    }
+    if (ids.isEmpty) return null;
+    // Окно должно дотянуться до самого старого непрочитанного.
+    await _growWindowUntil(
+      keepGoing,
+      done: () {
+        final rows = _memoVisibleTimeline;
+        if (rows == null || rows.isEmpty) return true;
+        return rows.last.event.createdAtMs <= oldestMs;
+      },
+    );
+    if (!keepGoing()) return null;
+    final rows = _memoVisibleTimeline;
+    if (rows == null) return null;
+    final byId = firstUnreadRowId([
+      for (final e in rows)
+        (
+          rowId: timelineRowId(e.payloadEventId, e.event.eventId),
+          isMe: e.isMe,
+          ids: [
+            e.event.eventId,
+            (e.payloadEventId ?? '').trim(),
+            for (final f in e.imageItems ?? const <_TimelineImageItem>[]) ...[
+              f.event.eventId,
+              (f.event.payloadEventId ?? '').trim(),
+            ],
+          ],
+        ),
+    ], ids);
+    if (byId != null) {
+      DiagLog.event('chat', 'open_unread_match', {'by': 'id'});
+      return byId;
+    }
+    // 23.11.2026 (журнал Xiaomi: «unread=37», а чат встал вниз): часть
+    // непрочитанных — служебные или сгруппированные события, их номеров
+    // в строках ленты нет. Тогда — первое входящее сообщение не старше
+    // самого раннего непрочитанного.
+    for (var t = rows.length - 1; t >= 0; t--) {
+      final e = rows[t];
+      if (e.isMe) continue;
+      if (e.event.createdAtMs >= oldestMs) {
+        DiagLog.event('chat', 'open_unread_match', {'by': 'time'});
+        return timelineRowId(e.payloadEventId, e.event.eventId);
+      }
+    }
+    DiagLog.event('chat', 'open_unread_match', {'by': 'none'});
+    return null;
+  }
+
+  /// Прокрутить так, чтобы верх строки [rowId] встал на [topGap] ниже верха
+  /// ленты. Мгновенно (это открытие, а не переход).
+  Future<bool> _scrollRowTo(
+    String rowId,
+    bool Function() keepGoing, {
+    required double topGap,
+    int maxFrames = 30,
+  }) async {
+    final found = _findRenderedRow(rowId);
+    if (found == null) return false;
+    final ctx = await scrollUntilRowBuilt(
+      controller: _scroll,
+      targetIndex: found.index,
+      targetContext: () => _eventRowKeys[found.rowId]?.currentContext,
+      builtRange: _builtRowRange,
+      keepGoing: keepGoing,
+      maxFrames: maxFrames,
+    );
+    if (ctx == null || !keepGoing()) return false;
+    // Две поправки: после первого прыжка достраиваются соседние строки, и
+    // их настоящая высота сдвигает оценку.
+    for (var pass = 0; pass < 3; pass++) {
+      await WidgetsBinding.instance.endOfFrame;
+      if (!keepGoing() || !_scroll.hasClients) return false;
+      final box = _eventRowKeys[found.rowId]?.currentContext
+          ?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize || !box.attached) return false;
+      final top = box.localToGlobal(Offset.zero).dy;
+      final desired = _timelineVisibleTop + topGap;
+      if ((top - desired).abs() < 1) break;
+      final target = reversedListOffsetForRowTop(
+        offset: _scroll.offset,
+        rowTop: top,
+        desiredTop: desired,
+        maxExtent: _scroll.position.maxScrollExtent,
+      );
+      if ((target - _scroll.offset).abs() < 0.5) break;
+      _scroll.jumpTo(target);
+    }
+    return true;
+  }
+
+  /// Держать строку [rowId] на месте, пока под ней досчитываются высоты.
+  ///
+  /// 🔴 23.11.2026 (владелец: «иногда кое-как выставляет»): после прыжка
+  /// ниже первого непрочитанного догружаются фото, стикеры, превью ссылок —
+  /// их высота меняется, и перевёрнутая лента уводила строку с места.
+  /// [kOpenHoldDuration] строка стоит, где поставили, — каждый кадр
+  /// поправка, если уехала больше чем на точку. Палец на экране — сразу
+  /// отпускаем ([keepGoing]).
+  Future<void> _holdRowAt(
+    String rowId,
+    bool Function() keepGoing, {
+    required double topGap,
+  }) async {
+    final until = DateTime.now().add(kOpenHoldDuration);
+    while (DateTime.now().isBefore(until)) {
+      SchedulerBinding.instance.scheduleFrame();
+      await WidgetsBinding.instance.endOfFrame;
+      if (!keepGoing() || !_scroll.hasClients) return;
+      final box = _eventRowKeys[rowId]?.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize || !box.attached) return;
+      final top = box.localToGlobal(Offset.zero).dy;
+      final desired = _timelineVisibleTop + topGap;
+      if ((top - desired).abs() < 1) continue;
+      final target = reversedListOffsetForRowTop(
+        offset: _scroll.offset,
+        rowTop: top,
+        desiredTop: desired,
+        maxExtent: _scroll.position.maxScrollExtent,
+      );
+      if ((target - _scroll.offset).abs() >= 0.5) _scroll.jumpTo(target);
+    }
+  }
+
+  /// Листая вниз от первого непрочитанного, помечать прочитанным то, что
+  /// человек уже увидел (как Telegram): счётчик на кнопке «вниз» тает.
+  // Пометка рассылает «данные изменились» — лента и списки перечитываются.
+  // Не чаще раза в 1,5 с; последнее положение не теряется (23.11.2026).
+  int _lastPartialReadAtMs = 0;
+  Timer? _partialReadTimer;
+
+  void _markVisibleRead() {
+    if (_openPositionPending || !mounted) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final wait = 1500 - (now - _lastPartialReadAtMs);
+    if (wait > 0) {
+      _partialReadTimer ??= Timer(Duration(milliseconds: wait), () {
+        _partialReadTimer = null;
+        _markVisibleRead();
+      });
+      return;
+    }
+    final peer = _markReadPeerProfileId;
+    final isRequest =
+        widget.requestProfileId != null && widget.requestProfileId!.isNotEmpty;
+    if (!shouldAutoMarkChatRead(
+      appInForeground: widget.controller.appInForeground,
+      isChatVisible: _chatRouteIsVisible,
+      isNearLatestMessages: true,
+      isRequestConvo: isRequest,
+      peerProfileId: peer,
+    )) {
+      return;
+    }
+    final rows = _memoVisibleTimeline;
+    if (rows == null) return;
+    final topEdge = _timelineVisibleTop;
+    final bottomEdge = _timelineVisibleBottom();
+    // Новые первыми: первая видимая строка — самая новая на экране.
+    int? newestSeenMs;
+    for (final e in rows) {
+      final key = _eventRowKeys[timelineRowId(e.payloadEventId, e.event.eventId)];
+      final box = key?.currentContext?.findRenderObject();
+      if (box is! RenderBox || !box.hasSize || !box.attached) continue;
+      final top = box.localToGlobal(Offset.zero).dy;
+      final bottom = top + box.size.height;
+      if (bottom <= topEdge || top >= bottomEdge) continue;
+      newestSeenMs = e.event.createdAtMs;
+      break;
+    }
+    if (newestSeenMs == null || newestSeenMs <= _readThroughMs) return;
+    _readThroughMs = newestSeenMs;
+    _lastPartialReadAtMs = now;
+    unawaited(
+      widget.controller
+          .markChatRead(peerProfileId: peer!, upToCreatedAtMs: newestSeenMs)
+          .then((_) => _refreshJumpUnreadCount()),
+    );
   }
 
   Future<void> _restoreScrollOffset() async {
@@ -3230,24 +4173,24 @@ class _ChatScreenState extends State<ChatScreen>
   IconData _groupComposerPolicyBannerIcon() {
     final policy = _roomPolicyState;
     if (!_isGroupChat || policy == null) {
-      return Icons.info_outline_rounded;
+      return AdaptiveIcons.info_outline_rounded;
     }
     if (!policy.isMember) {
-      return Icons.group_off_rounded;
+      return AdaptiveIcons.group_off_rounded;
     }
     if (policy.isSlowModeActive) {
-      return Icons.timer_outlined;
+      return AdaptiveIcons.timer_outlined;
     }
     if (!policy.canSendText && !policy.canSendMedia) {
-      return Icons.lock_outline_rounded;
+      return AdaptiveIcons.lock_outline_rounded;
     }
     if (!policy.canSendText) {
-      return Icons.edit_off_outlined;
+      return AdaptiveIcons.edit_off_outlined;
     }
     if (!policy.canSendMedia) {
-      return Icons.photo_outlined;
+      return AdaptiveIcons.photo_outlined;
     }
-    return Icons.info_outline_rounded;
+    return AdaptiveIcons.info_outline_rounded;
   }
 
   Widget _buildGroupComposerPolicyBanner(String text) {
@@ -3258,7 +4201,11 @@ class _ChatScreenState extends State<ChatScreen>
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.72),
+        color: appleGlassFillOr(
+          context,
+          cs.surfaceContainerHighest.withValues(alpha: 0.72),
+          androidToo: false,
+        ),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.32)),
       ),
       child: Row(
@@ -3557,10 +4504,14 @@ class _ChatScreenState extends State<ChatScreen>
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(8, 2, 8, 6),
       constraints: const BoxConstraints(maxHeight: 220),
-      decoration: BoxDecoration(
+      decoration: appleGlassDecorationOr(
+        context,
+        BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         color: cs.surfaceContainerHighest.withValues(alpha: 0.78),
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.28)),
+      ),
+        androidToo: false,
       ),
       child: ListView.separated(
         shrinkWrap: true,
@@ -3612,7 +4563,7 @@ class _ChatScreenState extends State<ChatScreen>
         radius: 18,
         backgroundColor: AvatarInitials.backgroundColor(context, seed: seed),
         foregroundColor: AvatarInitials.foregroundColor(context, seed: seed),
-        child: const Icon(Icons.alternate_email_rounded, size: 18),
+        child: const Icon(AdaptiveIcons.alternate_email_rounded, size: 18),
       );
     }
     if (avatarPath.isNotEmpty) {
@@ -3633,10 +4584,29 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _scrollToLatest() async {
     if (!_scroll.hasClients) return;
+    if (kTelegramScrollToLatest) {
+      // 23.11.2026, как у Telegram: издалека — мгновенный прыжок на полтора
+      // экрана от низа, потом короткий доезд. Раньше 240 мс с ЛЮБОГО
+      // расстояния: с 50 экранов выше лента пролетала через все сообщения
+      // (каждое строилось — рывки) за четверть секунды.
+      final pos = _scroll.position;
+      final near = scrollToLatestJumpOffset(
+        pixels: pos.pixels,
+        viewport: pos.viewportDimension,
+      );
+      if (near != null) _scroll.jumpTo(near);
+      await _scroll.animateTo(
+        0,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutQuint,
+      );
+      _scheduleMarkRead();
+      return;
+    }
     await _scroll.animateTo(
       0,
       duration: const Duration(milliseconds: 240),
-      curve: Curves.easeOutCubic,
+      curve: Motion.standard,
     );
     _scheduleMarkRead();
   }
@@ -3792,7 +4762,7 @@ class _ChatScreenState extends State<ChatScreen>
     // Облегчённая сборка: диктовку на Android ведёт whisper, которого нет, —
     // кнопку не показываем вовсе, вместо немого нажатия.
     if (!kVoiceTranscriptionAvailable) return null;
-    return IconButton(
+    return PressFeedback(child: IconButton(
       padding: EdgeInsets.zero,
       visualDensity: VisualDensity.compact,
       iconSize: 22,
@@ -3808,9 +4778,9 @@ class _ChatScreenState extends State<ChatScreen>
         fr: 'Saisie vocale',
         de: 'Spracheingabe',
       ),
-      icon: Icon(Icons.mic_none_rounded, color: iconColor),
+      icon: Icon(AdaptiveIcons.mic_none_rounded, color: iconColor),
       onPressed: _onDictationPressed,
-    );
+    ));
   }
 
   Future<void> _onDictationPressed() async {
@@ -3906,23 +4876,35 @@ class _ChatScreenState extends State<ChatScreen>
     String? initialTitle,
     String? convoId,
     bool openChatByPush = false,
+    String? heroTag,
   }) {
-    Navigator.of(context).push(
-      SecretlyPageRoute(
-        builder: (_) => ContactDetailsScreen(
-          controller: widget.controller,
-          peerProfileId: profileId,
-          // For a group-member tap [convoId] is the member's OWN direct convo
-          // (their profile id), never the room — otherwise the details screen
-          // would resolve the room's title/avatar and "Chat" would reopen the
-          // room. Fall back to the current chat's convo only for a 1:1 peer.
-          convoId: convoId ?? widget.convoId,
-          initialTitle: initialTitle ?? (openChatByPush ? null : widget.title),
-          initialAvatarPath: avatarPath,
-          openChatByPush: openChatByPush,
-        ),
-      ),
+    ContactDetailsScreen details(BuildContext _) => ContactDetailsScreen(
+      controller: widget.controller,
+      peerProfileId: profileId,
+      // For a group-member tap [convoId] is the member's OWN direct convo
+      // (their profile id), never the room — otherwise the details screen
+      // would resolve the room's title/avatar and "Chat" would reopen the
+      // room. Fall back to the current chat's convo only for a 1:1 peer.
+      convoId: convoId ?? widget.convoId,
+      initialTitle: initialTitle ?? (openChatByPush ? null : widget.title),
+      initialAvatarPath: avatarPath,
+      openChatByPush: openChatByPush,
+      heroTag: heroTag,
     );
+    // «Мост аватара» — только из шапки этого чата (метка его аватара).
+    // Автор в комнате — другой человек: его профиль открывается без неё.
+    if (heroTag != null && kAvatarBridgeTransition) {
+      pushAvatarBridge<void>(
+        context,
+        heroTag: heroTag,
+        precachePath: avatarPath,
+        precacheDecodeSide: 112,
+        hapticsEnabled: () => widget.controller.appHapticsEnabled,
+        builder: details,
+      );
+      return;
+    }
+    Navigator.of(context).push(SecretlyPageRoute(builder: details));
   }
 
   /// Tap-to-profile for a group message's sender name/avatar. Resolves the
@@ -4019,16 +5001,28 @@ class _ChatScreenState extends State<ChatScreen>
     }());
   }
 
-  void _openRoomDetails() {
-    Navigator.of(context).push(
-      SecretlyPageRoute(
-        builder: (_) => RoomDetailsScreen(
-          controller: widget.controller,
-          groupId: widget.convoId,
-          initialTitle: widget.title,
-        ),
-      ),
+  void _openRoomDetails({bool fromHeader = false, String? avatarPath}) {
+    // «Мост аватара»: из шапки аватар комнаты летит в её страницу.
+    final bridge = fromHeader && kAvatarBridgeTransition;
+    final tag = avatarBridgeChatHeaderTag(widget.convoId);
+    RoomDetailsScreen details(BuildContext _) => RoomDetailsScreen(
+      controller: widget.controller,
+      groupId: widget.convoId,
+      initialTitle: widget.title,
+      initialAvatarPath: bridge ? avatarPath : null,
+      heroTag: bridge ? tag : null,
     );
+    if (bridge) {
+      pushAvatarBridge<void>(
+        context,
+        heroTag: tag,
+        precachePath: avatarPath,
+        hapticsEnabled: () => widget.controller.appHapticsEnabled,
+        builder: details,
+      );
+      return;
+    }
+    Navigator.of(context).push(SecretlyPageRoute(builder: details));
   }
 
   /// "Share room" from the in-chat menu: reuse a still-valid invite link if one
@@ -4106,6 +5100,21 @@ class _ChatScreenState extends State<ChatScreen>
       _audioAttachmentDurations[blobId] = playback.duration;
     }
 
+    // 🔴 Кружок загрузки гаснет, как только трек ЗАЗВУЧАЛ. `play()` у
+    // just_audio завершается лишь когда звук встал (пауза/конец), поэтому
+    // ждать окончания `_toggleAudioAttachment` нельзя — кружок крутился всё
+    // голосовое, хотя его уже было слышно.
+    final loadingCleared = audioLoadingShouldClear(
+      loadingBlobId: _audioLoadingBlobId,
+      currentBlobId: blobId,
+      controllerLoading: playback.loadingTrackId != null,
+      playing: playback.playing,
+    );
+    if (loadingCleared) _audioLoadingBlobId = null;
+    // Зазвучало голосовое или музыка — раскрытая видео-заметка сворачивается
+    // (в чате звучит что-то одно).
+    if (playback.playing) VideoNotePlayback.instance.collapseActive();
+
     // Развилка: вёрстка или только цифры.
     //
     // Смена трека, пауза и появление/исчезновение трека меняют РАЗМЕТКУ —
@@ -4134,6 +5143,10 @@ class _ChatScreenState extends State<ChatScreen>
       // дал бы кадр, в котором панель «сейчас играет» ещё смонтирована, но
       // `_activeNowPlayingItem` уже null: там стоит `!`, и это падение при
       // остановке трека.
+      setState(() {});
+      return;
+    }
+    if (loadingCleared) {
       setState(() {});
       return;
     }
@@ -4452,7 +5465,104 @@ class _ChatScreenState extends State<ChatScreen>
       } else {
         _selectedEventIds.add(eventId);
       }
+      if (!_selectedEventIds.contains(_textSelectEventId)) {
+        _textSelectEventId = null;
+      }
     });
+  }
+
+  // ── Выделение части текста в пузыре (21.11.2026) ──────────────────────
+  /// Сообщение, текст которого сейчас выделяется (одно за раз).
+  String? _textSelectEventId;
+  final GlobalKey<SelectionAreaState> _textSelectAreaKey =
+      GlobalKey<SelectionAreaState>();
+  String _textSelectContent = '';
+  bool _textSelectHadContent = false;
+
+  void _endTextSelection() {
+    if (_textSelectEventId == null) return;
+    setState(() {
+      _textSelectEventId = null;
+      _textSelectContent = '';
+      _textSelectHadContent = false;
+    });
+  }
+
+  Widget _inlineTextSelection(_TimelineEntry entry, Widget text) {
+    return SelectionArea(
+      key: _textSelectAreaKey,
+      onSelectionChanged: (content) {
+        final value = content?.plainText ?? '';
+        _textSelectContent = value;
+        if (value.isNotEmpty) {
+          _textSelectHadContent = true;
+        } else if (_textSelectHadContent) {
+          // Сняли выделение касанием мимо — выходим из режима текста.
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => _endTextSelection(),
+          );
+        }
+      },
+      contextMenuBuilder: (menuContext, region) {
+        String label(String ru, String en, String uk, String es, String pt,
+                String fr, String de) =>
+            chatText(
+              menuContext,
+              ru: ru,
+              en: en,
+              uk: uk,
+              es: es,
+              pt: pt,
+              fr: fr,
+              de: de,
+            );
+        return AdaptiveTextSelectionToolbar.buttonItems(
+          anchors: region.contextMenuAnchors,
+          buttonItems: [
+            ContextMenuButtonItem(
+              label: label('Копировать', 'Copy', 'Копіювати', 'Copiar',
+                  'Copiar', 'Copier', 'Kopieren'),
+              onPressed: () {
+                final value = _textSelectContent;
+                region.hideToolbar();
+                if (value.isEmpty) return;
+                unawaited(Clipboard.setData(ClipboardData(text: value)));
+                HapticFeedback.selectionClick();
+                _endTextSelection();
+                _clearSelection();
+                _showChatMessage(
+                  chatText(context, ru: 'Скопировано', en: 'Copied'),
+                );
+              },
+            ),
+            ContextMenuButtonItem(
+              label: label('Цитировать', 'Quote', 'Цитувати', 'Citar',
+                  'Citar', 'Citer', 'Zitieren'),
+              onPressed: () {
+                final value = _textSelectContent.trim();
+                region.hideToolbar();
+                if (value.isEmpty) return;
+                _endTextSelection();
+                _clearSelection();
+                _startReply(
+                  payloadEventId: entry.payloadEventId,
+                  previewText: value,
+                  authorName: entry.isMe
+                      ? _selfAuthorLabel()
+                      : (_isGroupChat
+                            ? (entry.authorName.trim().isEmpty
+                                  ? widget.title
+                                  : entry.authorName)
+                            : widget.title),
+                  authorIsMe: entry.isMe,
+                );
+              },
+            ),
+          ],
+        );
+      },
+      child: text,
+    );
   }
 
   void _startSelection(String eventId) {
@@ -4463,7 +5573,10 @@ class _ChatScreenState extends State<ChatScreen>
 
   void _clearSelection() {
     if (_selectedEventIds.isEmpty) return;
-    setState(_selectedEventIds.clear);
+    setState(() {
+      _selectedEventIds.clear();
+      _textSelectEventId = null;
+    });
   }
 
   Iterable<ChatEvent> _eventsForTimelineEntry(_TimelineEntry entry) sync* {
@@ -4539,6 +5652,70 @@ class _ChatScreenState extends State<ChatScreen>
     return targets;
   }
 
+  /// Все медиа альбома — для «Скачать все».
+  List<_AttachmentDownloadTarget> _albumDownloadTargets(_TimelineEntry entry) => [
+    for (final a in entry.imageAttachments ?? const <AttachmentEventV1>[])
+      if (_isDownloadableMediaAttachment(a))
+        _AttachmentDownloadTarget(
+          attachment: a,
+          createdAtMs: entry.event.createdAtMs,
+        ),
+  ];
+
+  /// «Скачать это» или «Скачать все (N)». `null` — передумал.
+  Future<String?> _pickDownloadScope(int count) {
+    final cs = Theme.of(context).colorScheme;
+    return showModalBottomSheet<String>(
+      sheetAnimationStyle: appSheetAnimationStyle,
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(AppIcons.cloudDownload, color: cs.onSurface),
+                title: Text(
+                  chatText(
+                    context,
+                    ru: 'Скачать выбранное',
+                    en: 'Download this one',
+                    uk: 'Завантажити вибране',
+                    es: 'Descargar esta',
+                    pt: 'Baixar esta',
+                    fr: 'Télécharger celle-ci',
+                    de: 'Dieses herunterladen',
+                  ),
+                ),
+                onTap: () => Navigator.of(sheetContext).pop('one'),
+              ),
+              ListTile(
+                leading: Icon(
+                  CupertinoIcons.photo_on_rectangle,
+                  color: cs.onSurface,
+                ),
+                title: Text(
+                  chatText(
+                    context,
+                    ru: 'Скачать все ($count)',
+                    en: 'Download all ($count)',
+                    uk: 'Завантажити всі ($count)',
+                    es: 'Descargar todo ($count)',
+                    pt: 'Baixar tudo ($count)',
+                    fr: 'Tout télécharger ($count)',
+                    de: 'Alle herunterladen ($count)',
+                  ),
+                ),
+                onTap: () => Navigator.of(sheetContext).pop('all'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   int get _selectedDownloadableAttachmentCount =>
       _selectedDownloadableAttachments().length;
 
@@ -4554,8 +5731,11 @@ class _ChatScreenState extends State<ChatScreen>
   Future<File> _uniqueDownloadTarget(Directory dir, String suggestedName) =>
       uniqueDownloadTarget(dir, suggestedName);
 
-  Future<void> _saveSelectedMediaAttachments() async {
-    final items = _selectedDownloadableAttachments();
+  /// [only] — сохранить именно эти (например, весь альбом), а не выделенные.
+  Future<void> _saveSelectedMediaAttachments([
+    List<_AttachmentDownloadTarget>? only,
+  ]) async {
+    final items = only ?? _selectedDownloadableAttachments();
     if (items.isEmpty || !mounted) return;
 
     final messenger = ScaffoldMessenger.of(context);
@@ -5541,7 +6721,16 @@ class _ChatScreenState extends State<ChatScreen>
   String _wallpaperPrefKey() => 'chat_wallpaper_v1_${widget.convoId}';
   String _notifPrefPrefix() => 'chat_notif_v1_${widget.convoId}_';
   String _pinnedMessagesPrefKey() =>
-      '$_prefsPinnedMessagesPrefix${widget.convoId.trim()}';
+      '$_prefsPinnedMessagesPrefix${_pinsStorageConvoId()}';
+
+  /// Под каким id хранится список закреплённых этого чата (G-2): запрос на
+  /// переписку `req:<профиль>` — под профилем собеседника, как и в
+  /// контроллере (`broadcastChatPins` нормализует id).
+  String _pinsStorageConvoId() {
+    final id = widget.convoId.trim();
+    if (!kPinSyncChecksV2 || _isGroupChat) return id;
+    return id.startsWith('req:') ? id.substring(4).trim() : id;
+  }
 
   String _draftPrefKey() => '$_prefsDraftPrefix${widget.convoId.trim()}';
 
@@ -5577,8 +6766,11 @@ class _ChatScreenState extends State<ChatScreen>
       if (text.trim().isEmpty ||
           _editingTarget != null ||
           _forwardDraft != null) {
+        ChatListDrafts.set(widget.convoId, null);
         await prefs.remove(key);
       } else {
+        // Строка в списке чатов сразу покажет «Черновик: …».
+        ChatListDrafts.set(widget.convoId, text);
         await prefs.setString(key, text);
       }
     } catch (_) {
@@ -5587,6 +6779,7 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _clearDraft() async {
+    ChatListDrafts.set(widget.convoId, null);
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_draftPrefKey());
@@ -5664,9 +6857,30 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _restorePinnedMessages() async {
     final key = _pinnedMessagesPrefKey();
+    final screenConvoId = widget.convoId;
+    final convoId = _pinsStorageConvoId();
     final prefs = await SharedPreferences.getInstance();
     final restored = _decodePinnedMessages(prefs.getString(key));
+    final revision = await widget.controller.chatPinsRevision(convoId);
     if (!mounted || key != _pinnedMessagesPrefKey()) return;
+    // G-5: пока читали, лента уже приняла более новый список — не
+    // затирать его прочитанным старым.
+    final adoptedMeanwhile =
+        kPinSyncChecksV2 && _appliedPinSyncAtMs > revision;
+    // Ревизия — с телефона, а не «0 при каждом открытии»: иначе старая
+    // команда в ленте перебивала бы более новый список.
+    if (revision > _appliedPinSyncAtMs) _appliedPinSyncAtMs = revision;
+    // Не дошло / у собеседника новое устройство — повторить (21.11.2026).
+    unawaited(
+      Future<void>.delayed(const Duration(seconds: 2), () {
+        if (mounted && widget.convoId == screenConvoId) {
+          return widget.controller.maybeResendChatPins(convoId);
+        }
+      }),
+    );
+    if (adoptedMeanwhile) return;
+    // Закреплённых нет и не было — без лишней перестройки при открытии.
+    if (restored.isEmpty && _pinnedMessages.isEmpty) return;
     setState(() {
       _pinnedMessages = restored;
       _visiblePinnedMessageIndex = _normalizedPinnedIndex(
@@ -5674,6 +6888,53 @@ class _ChatScreenState extends State<ChatScreen>
         _effectivePinnedMessages().length,
       );
     });
+  }
+
+  /// Список в хранилище новее показанного — показать его.
+  bool _pinsReloadInFlight = false;
+  Future<void> _reloadPinsIfNewer() async {
+    if (_pinsReloadInFlight) return;
+    _pinsReloadInFlight = true;
+    try {
+      final convoId = widget.convoId;
+      final revision = await widget.controller.chatPinsRevision(
+        _pinsStorageConvoId(),
+      );
+      if (!mounted || convoId != widget.convoId) return;
+      final prefs = await SharedPreferences.getInstance();
+      final next = _decodePinnedMessages(
+        prefs.getString(_pinnedMessagesPrefKey()),
+      );
+      if (!mounted || convoId != widget.convoId) return;
+      if (revision <= _appliedPinSyncAtMs) {
+        // 23.11.2026: закреплённые стёртых сообщений убраны у себя (очистка
+        // истории, автоудаление) — ревизия та же, список стал короче.
+        final have = {for (final p in _pinnedMessages) p.eventId};
+        final pruned =
+            next.length < _pinnedMessages.length &&
+            next.every((p) => have.contains(p.eventId));
+        if (!pruned) return;
+      }
+      setState(() {
+        _appliedPinSyncAtMs = max(revision, _appliedPinSyncAtMs);
+        _pinnedMessages = next;
+        if (_isGroupChat) {
+          // Д-9: пустой список — значит, закреплённых нет; закрепление
+          // реле больше не показывается.
+          _groupPinnedMessageEventId = next.isEmpty
+              ? (kPinSyncChecksV2 ? null : _groupPinnedMessageEventId)
+              : next.first.eventId;
+        }
+        _visiblePinnedMessageIndex = _normalizedPinnedIndex(
+          _visiblePinnedMessageIndex,
+          _effectivePinnedMessages().length,
+        );
+      });
+    } catch (_) {
+      // Покажется при следующем открытии.
+    } finally {
+      _pinsReloadInFlight = false;
+    }
   }
 
   Future<void> _savePinnedMessages() async {
@@ -5714,19 +6975,74 @@ class _ChatScreenState extends State<ChatScreen>
     return next.take(50).toList(growable: false);
   }
 
+  /// Д-3: запоминает удалённые у всех (из окна ленты) и, если среди них
+  /// есть закреплённые, убирает их из своего списка — локально, без новой
+  /// ревизии (рассылает тот, кто удалял, см. [_deleteEventsConfirmed]).
+  void _notePinDeletedIds(Set<String> deletedIds) {
+    final ids = Set<String>.unmodifiable(deletedIds);
+    _pinDeletedIds = ids;
+    if (ids.isEmpty || _pinDeletedCleanupScheduled) return;
+    if (!_pinnedMessages.any((p) => ids.contains(p.eventId.trim()))) return;
+    _pinDeletedCleanupScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _pinDeletedCleanupScheduled = false;
+      if (!mounted) return;
+      final next = pinsWithoutDeleted(_pinnedMessages, (p) => p.eventId, ids);
+      if (identical(next, _pinnedMessages)) return;
+      final storeId = _pinsStorageConvoId();
+      setState(() {
+        _pinnedMessages = next;
+        if (ids.contains((_groupPinnedMessageEventId ?? '').trim())) {
+          _groupPinnedMessageEventId = next.isEmpty ? null : next.first.eventId;
+        }
+        _visiblePinnedMessageIndex = _normalizedPinnedIndex(
+          _visiblePinnedMessageIndex,
+          _effectivePinnedMessages().length,
+        );
+      });
+      try {
+        final revision = await widget.controller.chatPinsRevision(storeId);
+        await widget.controller.rememberChatPins(
+          convoId: storeId,
+          pins: next
+              .map(
+                (p) => PinnedRef(
+                  eventId: p.eventId,
+                  previewText: p.previewText,
+                  pinnedAtMs: p.pinnedAtMs,
+                ),
+              )
+              .toList(growable: false),
+          revision: revision,
+        );
+      } catch (_) {
+        // Плашка уже чистая; хранилище поправится следующим списком.
+      }
+    });
+  }
+
   List<_PinnedMessage> _effectivePinnedMessages() {
+    // Д-3: удалённое у всех не остаётся на плашке с текстом.
+    List<_PinnedMessage> live(List<_PinnedMessage> pins) => kPinSyncChecksV2
+        ? pinsWithoutDeleted(pins, (p) => p.eventId, _pinDeletedIds)
+        : pins;
     final serverPinnedEventId = (_groupPinnedMessageEventId ?? '').trim();
     if (!_isGroupChat || serverPinnedEventId.isEmpty) {
-      return _pinnedMessages;
+      return live(_pinnedMessages);
     }
     final hasServerPin = _pinnedMessages.any(
       (message) => message.eventId == serverPinnedEventId,
     );
-    if (hasServerPin) return _pinnedMessages;
-    return <_PinnedMessage>[
+    if (hasServerPin) return live(_pinnedMessages);
+    // Д-9: в комнате уже есть общий список (ревизия известна) — он главный;
+    // одиночное закрепление реле — только для комнат без списка.
+    if (kPinSyncChecksV2 && _appliedPinSyncAtMs > 0) {
+      return live(_pinnedMessages);
+    }
+    return live(<_PinnedMessage>[
       _pinnedMessageForEventId(serverPinnedEventId),
       ..._pinnedMessages,
-    ];
+    ]);
   }
 
   bool _isPinnedEventId(String eventId) {
@@ -5763,11 +7079,12 @@ class _ChatScreenState extends State<ChatScreen>
         ? kGlobalChatWallpaperSelectionId
         : saved.trim();
     if (!mounted) return;
-    setState(() {
-      _chatWallpaperSelectionId = isValidChatWallpaperId(normalized)
-          ? normalized
-          : kGlobalChatWallpaperSelectionId;
-    });
+    final next = isValidChatWallpaperId(normalized)
+        ? normalized
+        : kGlobalChatWallpaperSelectionId;
+    // Тот же выбор — без перестройки всего экрана посреди открытия чата.
+    if (next == _chatWallpaperSelectionId) return;
+    setState(() => _chatWallpaperSelectionId = next);
   }
 
   Future<void> _saveChatWallpaperSelection(String id) async {
@@ -6114,28 +7431,12 @@ class _ChatScreenState extends State<ChatScreen>
     var showNotifications = false;
     if (!mounted) return;
 
-    await showGeneralDialog<void>(
+    // Меню «⋯» чата — общий показ всплывающих меню: на iPhone вырастает из
+    // угла кнопки, как `UIMenu`; на Android — прежнее появление.
+    await showFrostedPopup<void>(
       context: context,
-      barrierLabel: 'chat_actions_menu',
-      barrierColor: Colors.black.withValues(alpha: 0.12),
-      barrierDismissible: true,
-      transitionDuration: const Duration(milliseconds: 200),
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-          reverseCurve: Curves.easeInCubic,
-        );
-        return FadeTransition(
-          opacity: curved,
-          child: ScaleTransition(
-            scale: Tween<double>(begin: 0.92, end: 1.0).animate(curved),
-            alignment: Alignment.topRight,
-            child: child,
-          ),
-        );
-      },
-      pageBuilder: (context, animation, secondaryAnimation) {
+      alignment: Alignment.topRight,
+      builder: (context) {
         final cs = Theme.of(context).colorScheme;
         final media = MediaQuery.of(context);
         final panelWidth = (media.size.width - 64).clamp(214.0, 264.0);
@@ -6194,6 +7495,7 @@ class _ChatScreenState extends State<ChatScreen>
 
         Future<void> pickPrivacyLevel() async {
           final selected = await showModalBottomSheet<int>(
+  sheetAnimationStyle: appSheetAnimationStyle,
             context: context,
             showDragHandle: true,
             builder: (context) {
@@ -6226,48 +7528,21 @@ class _ChatScreenState extends State<ChatScreen>
 
         return StatefulBuilder(
           builder: (context, setLocalState) {
-            return Stack(
-              children: [
-                Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => Navigator.of(context).pop(),
-                  ),
-                ),
-                Positioned(
-                  top: media.padding.top + kToolbarHeight - 12,
-                  right: 10,
-                  child: Material(
-                    color: Colors.transparent,
-                    child: _FrostedGlass(
-                      borderRadius: BorderRadius.circular(20),
-                      sigmaX: 24,
-                      sigmaY: 24,
-                      backgroundColor: cs.surface.withValues(alpha: 0.24),
-                      child: ConstrainedBox(
+            final Widget chatMenuBody = ConstrainedBox(
                         constraints: BoxConstraints(
                           maxWidth: panelWidth,
                           maxHeight: media.size.height * 0.72,
                         ),
                         child: SingleChildScrollView(
-                          padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
+                          padding: appleMenusEnabled(context)
+                              ? EdgeInsets.zero
+                              : const EdgeInsets.fromLTRB(6, 8, 6, 8),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                ),
-                                minLeadingWidth: 22,
-                                horizontalTitleGap: 10,
-                                visualDensity: const VisualDensity(
-                                  horizontal: -1,
-                                  vertical: -1,
-                                ),
-                                dense: true,
-                                leading: const Icon(AppIcons.bell, size: 22),
-                                title: Text(
-                                  chatText(
+                              AppMenuRow(
+                                icon: AppIcons.bell,
+                                title: chatText(
                                     context,
                                     ru: 'Уведомления',
                                     en: 'Notifications',
@@ -6277,9 +7552,6 @@ class _ChatScreenState extends State<ChatScreen>
                                     fr: 'Notifications',
                                     de: 'Benachrichtigungen',
                                   ),
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
                                 trailing: AnimatedRotation(
                                   turns: showNotifications ? 0.5 : 0,
                                   duration: const Duration(milliseconds: 180),
@@ -6294,7 +7566,7 @@ class _ChatScreenState extends State<ChatScreen>
                               ),
                               AnimatedSize(
                                 duration: const Duration(milliseconds: 220),
-                                curve: Curves.easeOutCubic,
+                                curve: Motion.standard,
                                 child: showNotifications
                                     ? Padding(
                                         padding: const EdgeInsets.fromLTRB(
@@ -6443,6 +7715,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                               .quietStartHour
                                                         : settings.quietEndHour;
                                                     final selected = await showModalBottomSheet<int>(
+  sheetAnimationStyle: appSheetAnimationStyle,
                                                       context: context,
                                                       backgroundColor:
                                                           Colors.transparent,
@@ -6658,20 +7931,22 @@ class _ChatScreenState extends State<ChatScreen>
                                       )
                                     : const SizedBox.shrink(),
                               ),
-                              ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
+                              // Т-4: перевод в этом чате (не в «Избранном»,
+                              // не в облегчённой сборке).
+                              if (kTranslationAvailable &&
+                                  kChatTranslationOverride &&
+                                  !_isFavoritesChat)
+                                AppMenuRow(
+                                  icon: AdaptiveIcons.translate_rounded,
+                                  title: context.l10n.chatTranslateMenuItem,
+                                  onTap: () {
+                                    Navigator.of(context).pop();
+                                    unawaited(_openChatTranslationSettings());
+                                  },
                                 ),
-                                minLeadingWidth: 22,
-                                horizontalTitleGap: 10,
-                                visualDensity: const VisualDensity(
-                                  horizontal: -1,
-                                  vertical: -1,
-                                ),
-                                dense: true,
-                                leading: const Icon(AppIcons.video, size: 22),
-                                title: Text(
-                                  chatText(
+                              AppMenuRow(
+                                icon: AppIcons.video,
+                                title: chatText(
                                     context,
                                     ru: 'Видеозвонок',
                                     en: 'Video call',
@@ -6681,9 +7956,6 @@ class _ChatScreenState extends State<ChatScreen>
                                     fr: 'Appel vidéo',
                                     de: 'Videoanruf',
                                   ),
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
                                 onTap: () {
                                   Navigator.of(context).pop();
                                   unawaited(
@@ -6694,23 +7966,9 @@ class _ChatScreenState extends State<ChatScreen>
                                   );
                                 },
                               ),
-                              ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                ),
-                                minLeadingWidth: 22,
-                                horizontalTitleGap: 10,
-                                visualDensity: const VisualDensity(
-                                  horizontal: -1,
-                                  vertical: -1,
-                                ),
-                                dense: true,
-                                leading: const Icon(
-                                  AppIcons.wallpaper,
-                                  size: 22,
-                                ),
-                                title: Text(
-                                  chatText(
+                              AppMenuRow(
+                                icon: AppIcons.wallpaper,
+                                title: chatText(
                                     context,
                                     ru: 'Изменить обои',
                                     en: 'Change chat wallpaper',
@@ -6720,95 +7978,39 @@ class _ChatScreenState extends State<ChatScreen>
                                     fr: 'Changer le fond d’\u00e9cran',
                                     de: 'Chat-Hintergrund ändern',
                                   ),
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
                                 onTap: () {
                                   Navigator.of(context).pop();
                                   unawaited(_showWallpaperPickerSheet());
                                 },
                               ),
-                              ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                ),
-                                minLeadingWidth: 22,
-                                horizontalTitleGap: 10,
-                                visualDensity: const VisualDensity(
-                                  horizontal: -1,
-                                  vertical: -1,
-                                ),
-                                dense: true,
-                                leading: Icon(
-                                  AppIcons.fileOutline,
-                                  color: cs.onSurface.withValues(alpha: 0.8),
-                                  size: 22,
-                                ),
-                                title: Text(
-                                  chatText(
+                              AppMenuRow(
+                                icon: AppIcons.fileOutline,
+                                title: chatText(
                                     context,
                                     ru: 'Медиа и файлы',
                                     en: 'Media & files',
                                   ),
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
                                 onTap: () {
                                   Navigator.of(context).pop();
                                   unawaited(_openMediaGallery());
                                 },
                               ),
                               if (_isGroupChat)
-                                ListTile(
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                  ),
-                                  minLeadingWidth: 22,
-                                  horizontalTitleGap: 10,
-                                  visualDensity: const VisualDensity(
-                                    horizontal: -1,
-                                    vertical: -1,
-                                  ),
-                                  dense: true,
-                                  leading: Icon(
-                                    AppIcons.schedule,
-                                    color: cs.onSurface.withValues(alpha: 0.8),
-                                    size: 22,
-                                  ),
-                                  title: Text(
-                                    chatText(
+                                AppMenuRow(
+                                  icon: AppIcons.schedule,
+                                  title: chatText(
                                       context,
                                       ru: 'Журнал действий',
                                       en: 'Audit log',
                                     ),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(fontWeight: FontWeight.w600),
-                                  ),
                                   onTap: () {
                                     Navigator.of(context).pop();
                                     unawaited(_openAuditLog());
                                   },
                                 ),
-                              ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                ),
-                                minLeadingWidth: 22,
-                                horizontalTitleGap: 10,
-                                visualDensity: const VisualDensity(
-                                  horizontal: -1,
-                                  vertical: -1,
-                                ),
-                                dense: true,
-                                leading: Icon(
-                                  AppIcons.delete,
-                                  color: cs.error,
-                                  size: 22,
-                                ),
-                                title: Text(
-                                  chatText(
+                              AppMenuRow(
+                                icon: AppIcons.delete,
+                                title: chatText(
                                     context,
                                     ru: 'Очистить историю',
                                     en: 'Clear history',
@@ -6818,12 +8020,7 @@ class _ChatScreenState extends State<ChatScreen>
                                     fr: 'Effacer l’historique',
                                     de: 'Verlauf löschen',
                                   ),
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(
-                                        color: cs.error,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                ),
+                                destructive: true,
                                 onTap: () {
                                   Navigator.of(context).pop();
                                   unawaited(
@@ -6836,24 +8033,9 @@ class _ChatScreenState extends State<ChatScreen>
                                   );
                                 },
                               ),
-                              ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                ),
-                                minLeadingWidth: 22,
-                                horizontalTitleGap: 10,
-                                visualDensity: const VisualDensity(
-                                  horizontal: -1,
-                                  vertical: -1,
-                                ),
-                                dense: true,
-                                leading: Icon(
-                                  AppIcons.delete,
-                                  color: cs.error,
-                                  size: 22,
-                                ),
-                                title: Text(
-                                  chatText(
+                              AppMenuRow(
+                                icon: AppIcons.delete,
+                                title: chatText(
                                     context,
                                     ru: 'Удалить чат',
                                     en: 'Delete chat',
@@ -6863,12 +8045,7 @@ class _ChatScreenState extends State<ChatScreen>
                                     fr: 'Supprimer le chat',
                                     de: 'Chat löschen',
                                   ),
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(
-                                        color: cs.error,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                ),
+                                destructive: true,
                                 onTap: () {
                                   Navigator.of(context).pop();
                                   unawaited(
@@ -6881,20 +8058,9 @@ class _ChatScreenState extends State<ChatScreen>
                                   );
                                 },
                               ),
-                              ListTile(
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                ),
-                                minLeadingWidth: 22,
-                                horizontalTitleGap: 10,
-                                visualDensity: const VisualDensity(
-                                  horizontal: -1,
-                                  vertical: -1,
-                                ),
-                                dense: true,
-                                leading: const Icon(AppIcons.block, size: 22),
-                                title: Text(
-                                  blocked
+                              AppMenuRow(
+                                icon: AppIcons.block,
+                                title: blocked
                                       ? chatText(
                                           context,
                                           ru: 'Разблокировать пользователя',
@@ -6915,9 +8081,6 @@ class _ChatScreenState extends State<ChatScreen>
                                           fr: 'Bloquer l’utilisateur',
                                           de: 'Benutzer blockieren',
                                         ),
-                                  style: Theme.of(context).textTheme.titleMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
                                 onTap: () {
                                   Navigator.of(context).pop();
                                   unawaited(
@@ -6933,7 +8096,28 @@ class _ChatScreenState extends State<ChatScreen>
                             ],
                           ),
                         ),
-                      ),
+                      );
+            return Stack(
+              children: [
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => Navigator.of(context).pop(),
+                  ),
+                ),
+                Positioned(
+                  top: media.padding.top + kToolbarHeight - 12,
+                  right: 10,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: appleMenusEnabled(context)
+                        ? AppleMenuPanel(child: chatMenuBody)
+                        : _FrostedGlass(
+                      borderRadius: BorderRadius.circular(20),
+                      sigmaX: 24,
+                      sigmaY: 24,
+                      backgroundColor: cs.surface.withValues(alpha: 0.24),
+                      child: chatMenuBody,
                     ),
                   ),
                 ),
@@ -6945,8 +8129,14 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
+  /// Копирование сообщений (21.11.2026, владелец): одного автора — только
+  /// сам текст, без «Имя:»; несколько авторов (свои вместе с чужими, или
+  /// разные люди в комнате) — каждая строка с именем, чтобы различать.
   Future<void> _copyEventsToClipboard(List<ChatEvent> events) async {
-    final lines = <String>[];
+    final lines = <({String author, String name, String text})>[];
+    final authorByEvent = <String, String?>{
+      for (final e in _lastTimeline) e.event.eventId: e.authorName,
+    };
     final isRu = chatLocaleIsRussian(context);
     final stickerBaseLabel = chatText(
       context,
@@ -6979,13 +8169,24 @@ class _ChatScreenState extends State<ChatScreen>
       } else {
         text = await widget.controller.decryptPlainAsync(event);
       }
-      final who = widget.controller.isOwnDeviceId(event.senderDeviceId)
-          ? _selfAuthorLabel()
+      final own = widget.controller.isOwnDeviceId(event.senderDeviceId);
+      final peerName = _isGroupChat
+          ? (authorByEvent[event.eventId]?.trim().isNotEmpty == true
+                ? authorByEvent[event.eventId]!.trim()
+                : widget.title)
           : widget.title;
-      lines.add('$who: $text');
+      lines.add((
+        author: own ? '\u0000self' : (_isGroupChat ? peerName : 'peer'),
+        name: own ? _selfAuthorLabel() : peerName,
+        text: text,
+      ));
     }
     if (lines.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: lines.join('\n')));
+    final mixed = lines.map((l) => l.author).toSet().length > 1;
+    final out = mixed
+        ? lines.map((l) => '${l.name}: ${l.text}').join('\n')
+        : lines.map((l) => l.text).join('\n');
+    await Clipboard.setData(ClipboardData(text: out));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SecretlySnackBar(
@@ -7271,20 +8472,11 @@ class _ChatScreenState extends State<ChatScreen>
         .toList(growable: false);
     if (localEventIds.isEmpty) return;
 
-    final peer = widget.peerProfileIdForSend;
-    final deleteForAllPayloadIds = events
-        .where((event) => widget.controller.isOwnDeviceId(event.senderDeviceId))
-        .map((event) => (event.payloadEventId ?? '').trim())
-        .where((payloadEventId) => payloadEventId.isNotEmpty)
-        .toSet()
-        .toList(growable: false);
-    final canDeleteForAll =
-        deleteForAllPayloadIds.isNotEmpty &&
-        ((_isGroupChat && _roomCanSendTextNow()) ||
-            (peer != null && peer.isNotEmpty));
+    final deleteForAllPayloadIds = _deleteForAllPayloadIds(events);
+    final canDeleteForAll = deleteForAllPayloadIds.isNotEmpty;
     var deleteForAll = canDeleteForAll;
 
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -7322,7 +8514,7 @@ class _ChatScreenState extends State<ChatScreen>
                   ),
                   if (canDeleteForAll) ...[
                     const SizedBox(height: 12),
-                    CheckboxListTile(
+                    CheckboxListTile.adaptive(
                       value: deleteForAll,
                       onChanged: (value) =>
                           setState(() => deleteForAll = value == true),
@@ -7383,6 +8575,41 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
     if (ok != true) return;
+    await _deleteEventsConfirmed(events, forAll: deleteForAll);
+  }
+
+  /// Свои сообщения, которые можно удалить у всех (пусто — только у себя).
+  List<String> _deleteForAllPayloadIds(List<ChatEvent> events) {
+    final peer = widget.peerProfileIdForSend;
+    final canReach =
+        (_isGroupChat && _roomCanSendTextNow()) ||
+        (peer != null && peer.isNotEmpty);
+    if (!canReach) return const <String>[];
+    return events
+        .where((event) => widget.controller.isOwnDeviceId(event.senderDeviceId))
+        .map((event) => (event.payloadEventId ?? '').trim())
+        .where((payloadEventId) => payloadEventId.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+  }
+
+  /// Удаление после подтверждения (окно чата или шторка просмотра).
+  /// true — удалено на устройстве.
+  Future<bool> _deleteEventsConfirmed(
+    List<ChatEvent> events, {
+    required bool forAll,
+  }) async {
+    final localEventIds = events
+        .map((event) => event.eventId.trim())
+        .where((eventId) => eventId.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (localEventIds.isEmpty) return false;
+    final peer = widget.peerProfileIdForSend;
+    final deleteForAllPayloadIds = forAll
+        ? _deleteForAllPayloadIds(events)
+        : const <String>[];
+    final deleteForAll = deleteForAllPayloadIds.isNotEmpty;
 
     await widget.controller.deleteEventsLocal(
       convoId: widget.convoId,
@@ -7410,7 +8637,45 @@ class _ChatScreenState extends State<ChatScreen>
       } catch (_) {
         // Local delete stands; the peer re-syncs the removal on its next fetch.
       }
+      // Д-3 (22.11.2026): удалённое у всех было закреплено — тот, кто
+      // удалял и вправе закреплять, рассылает список без него (старые
+      // сборки получают обычный список и тоже убирают его с плашки).
+      if (kPinSyncChecksV2) {
+        final gone = deleteForAllPayloadIds.toSet();
+        final next = pinsWithoutDeleted(_pinnedMessages, (p) => p.eventId, gone);
+        final canPin =
+            !_isGroupChat || (_roomPolicyState?.canPinMessages ?? false);
+        if (!identical(next, _pinnedMessages) && canPin && mounted) {
+          try {
+            final revision = await _broadcastSharedPins(next);
+            if (_isGroupChat &&
+                gone.contains((_groupPinnedMessageEventId ?? '').trim())) {
+              unawaited(
+                _setServerPinBestEffort(next.isEmpty ? null : next.first.eventId),
+              );
+            }
+            if (mounted) {
+              _appliedPinSyncAtMs = revision;
+              setState(() {
+                _pinnedMessages = next;
+                if (_isGroupChat) {
+                  _groupPinnedMessageEventId = next.isEmpty
+                      ? null
+                      : next.first.eventId;
+                }
+                _visiblePinnedMessageIndex = _normalizedPinnedIndex(
+                  _visiblePinnedMessageIndex,
+                  _effectivePinnedMessages().length,
+                );
+              });
+            }
+          } catch (_) {
+            // Плашку почистит приём удаления (Д-3), список — следующая правка.
+          }
+        }
+      }
     }
+    return true;
   }
 
   Future<void> _showMessageActions({
@@ -7466,12 +8731,15 @@ class _ChatScreenState extends State<ChatScreen>
     // chip can either expand the picker in place (unlocked / fail-open) or fall
     // back to the centralized paywall path. Fail-open: when monetization is
     // disabled this is always true and the gate is inert.
-    final reactionsUnlocked = FeatureGate.isUnlocked(
-      widget.controller.entitlementStateNow,
-      GatedFeature.premiumStickers,
-    );
+    // 23.11.2026 (владелец): расширенные реакции — бесплатно для всех.
+    final reactionsUnlocked =
+        kExtendedReactionsFree ||
+        FeatureGate.isUnlocked(
+          widget.controller.entitlementStateNow,
+          GatedFeature.premiumStickers,
+        );
 
-    final media = MediaQuery.of(context);
+    final media = mediaQueryNow(context);
     final screenSize = media.size;
     // The reaction STRIP stays wide: it must fit 7 reaction chips + the expand
     // (⌄) chip (8 × 34px + gaps + padding ≈ 300); capped to the screen so the
@@ -7552,23 +8820,15 @@ class _ChatScreenState extends State<ChatScreen>
       whoReadMaxTop < minTop ? minTop : whoReadMaxTop,
     );
 
-    // Grow the popup out of the tapped bubble: convert the global tap point to
-    // screen-normalized Alignment (-1..1) for the scale origin.
-    final scaleAlignment = anchorGlobalPosition != null
-        ? Alignment(
-            ((anchorGlobalPosition.dx / screenSize.width) * 2 - 1).clamp(
-              -1.0,
-              1.0,
-            ),
-            ((anchorGlobalPosition.dy / screenSize.height) * 2 - 1).clamp(
-              -1.0,
-              1.0,
-            ),
-          )
-        : Alignment.center;
-    final selected = await showReactionDialog<String>(
+    // Сообщение остаётся резким в вырезе размытого фона (макет «Reactions
+    // Animation»), полёт реакции садится в его чип.
+    final bubbleRect = _bubbleRectForEntry(entry);
+    final reactionEventId = entry.payloadEventId ?? entry.event.eventId;
+    final reduceMotion = media.disableAnimations;
+    final selected = await showReactionMenu<String>(
       context: context,
-      scaleAlignment: scaleAlignment,
+      bubble: bubbleRect,
+      blur: !reduceMotion,
       builder: (context) {
         final cs = Theme.of(context).colorScheme;
         // In-place expand: tapping ⌄ flips this flag, swapping the functions
@@ -7584,16 +8844,59 @@ class _ChatScreenState extends State<ChatScreen>
         var whoReadFetched = false;
         var whoReadReaders = const <({String profileId, int readAtMs})>[];
         var whoReadMembers = const <String, RoomMember>{};
+        // Выбор реакции: эмодзи улетает к сообщению, панель схлопывается.
+        String? picked;
+        var fullPicker = false;
+        final cellKeys = <String, GlobalKey>{};
+        GlobalKey cellKey(String e) => cellKeys.putIfAbsent(e, GlobalKey.new);
         return StatefulBuilder(
           builder: (context, setPopupState) {
+            void pick(String e) {
+              if (picked != null) return;
+              if (e == selfReaction) {
+                // Та же реакция — снять (чип сожмётся сам).
+                Navigator.of(context).pop('react:$e');
+                return;
+              }
+              final box = cellKeys[e]?.currentContext?.findRenderObject();
+              final start = box is RenderBox && box.hasSize
+                  ? box.localToGlobal(Offset.zero) & box.size
+                  : Rect.fromCenter(center: anchor, width: 34, height: 34);
+              HapticFeedback.selectionClick();
+              launchReactionFlight(
+                // 🔴 23.11.2026: контекст ЧАТА, а не меню. Полёт привязан к
+                // своему экрану (RouteBoundFx) — с контекстом меню он
+                // снимался, как только меню закрывалось (480 мс), ещё до
+                // посадки (520 мс): ни приземления, ни эффекта, ни пружины
+                // чипа — у фото и файлов это и видно.
+                context: this.context,
+                emoji: e,
+                start: start,
+                bubble: bubbleRect,
+                fxId: ReactionFxRegistry.id(reactionEventId, e),
+                emojiBuilder: _reactionFlightEmoji,
+              );
+              setPopupState(() => picked = e);
+              Future<void>.delayed(const Duration(milliseconds: 480), () {
+                if (context.mounted) Navigator.of(context).pop('fly:$e');
+              });
+            }
+
             Widget glassCard({required Widget child, double alpha = 0.8}) {
+              // iPhone: та же стеклянная панель, что у всех меню.
+              if (appleMenusEnabled(context)) {
+                return AppleMenuPanel(child: child);
+              }
               return ClipRRect(
                 borderRadius: BorderRadius.circular(16),
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: cs.surface.withValues(alpha: alpha),
+                      color: appleBlurredFillOr(
+          context,
+          cs.surface.withValues(alpha: alpha),
+        ),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: cs.outlineVariant.withValues(alpha: 0.34),
@@ -7612,7 +8915,7 @@ class _ChatScreenState extends State<ChatScreen>
                   type: MaterialType.transparency,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
-                    children: [
+                    children: _staggerMenuItems([
                       _menuActionItem(
                         context,
                         icon: AppIcons.reply,
@@ -7624,7 +8927,7 @@ class _ChatScreenState extends State<ChatScreen>
                               MessageLocalState.scheduled)
                         _menuActionItem(
                           context,
-                          icon: Icons.send_rounded,
+                          icon: AdaptiveIcons.send_rounded,
                           label: chatText(
                             context,
                             ru: 'Отправить сейчас',
@@ -7656,6 +8959,23 @@ class _ChatScreenState extends State<ChatScreen>
                         label: context.l10n.chatMenuForward,
                         value: 'forward',
                       ),
+                      // Альбом (2+ медиа): скачать все сразу.
+                      if ((entry.imageAttachments?.length ?? 0) >= 2)
+                        _menuActionItem(
+                          context,
+                          icon: AppIcons.cloudDownload,
+                          label: chatText(
+                            context,
+                            ru: 'Скачать все (${entry.imageAttachments!.length})',
+                            en: 'Download all (${entry.imageAttachments!.length})',
+                            uk: 'Завантажити всі (${entry.imageAttachments!.length})',
+                            es: 'Descargar todo (${entry.imageAttachments!.length})',
+                            pt: 'Baixar tudo (${entry.imageAttachments!.length})',
+                            fr: 'Tout télécharger (${entry.imageAttachments!.length})',
+                            de: 'Alle herunterladen (${entry.imageAttachments!.length})',
+                          ),
+                          value: 'download_album',
+                        ),
                       if (canPinMessages)
                         _menuActionItem(
                           context,
@@ -7674,7 +8994,7 @@ class _ChatScreenState extends State<ChatScreen>
                       if (showWhoRead)
                         _menuActionItem(
                           context,
-                          icon: Icons.visibility_outlined,
+                          icon: AdaptiveIcons.visibility_outlined,
                           label: chatText(
                             context,
                             ru: 'Кто прочитал',
@@ -7684,7 +9004,7 @@ class _ChatScreenState extends State<ChatScreen>
                             turns: whoReadExpanded ? 0.5 : 0.0,
                             duration: const Duration(milliseconds: 200),
                             child: Icon(
-                              Icons.keyboard_arrow_down_rounded,
+                              AdaptiveIcons.keyboard_arrow_down_rounded,
                               size: 20,
                               color: cs.onSurface.withValues(alpha: 0.55),
                             ),
@@ -7725,7 +9045,7 @@ class _ChatScreenState extends State<ChatScreen>
                       if (showWhoRead)
                         AnimatedSize(
                           duration: const Duration(milliseconds: 200),
-                          curve: Curves.easeOutCubic,
+                          curve: Motion.standard,
                           alignment: Alignment.topCenter,
                           child: !whoReadExpanded
                               ? const SizedBox(width: double.infinity)
@@ -7748,13 +9068,90 @@ class _ChatScreenState extends State<ChatScreen>
                                   },
                                 ),
                         ),
-                    ],
+                    ]),
                   ),
                 ),
               ),
             );
 
-            final emojiPicker = SizedBox(
+            final moreEmoji = [
+              for (final e in kReactionMoreEmoji)
+                if (!_isGroupChat ||
+                    _roomPolicyState == null ||
+                    _roomPolicyState!.isReactionAllowed(e))
+                  e,
+            ];
+            final curatedGrid = ReactionDelayedPop(
+              delayMs: 0,
+              ms: 480,
+              scaleFrom: 0.92,
+              from: const Offset(0, -12),
+              child: SizedBox(
+                width: panelWidth,
+                child: glassCard(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: LayoutBuilder(
+                      builder: (context, box) {
+                        final cell = box.maxWidth / 8;
+                        final items = <String?>[...moreEmoji, null];
+                        return Wrap(
+                          runSpacing: 6,
+                          children: [
+                            for (var i = 0; i < items.length; i++)
+                              SizedBox(
+                                width: cell,
+                                height: 34,
+                                child: ReactionDelayedPop(
+                                  delayMs: 60 + ((i ~/ 8) + (i % 8)) * 24.0,
+                                  child: items[i] == null
+                                      ? _reactionAllEmojiCell(
+                                          context,
+                                          () => setPopupState(
+                                            () => fullPicker = true,
+                                          ),
+                                        )
+                                      : ReactionCollapse(
+                                          collapsing: picked != null,
+                                          hidden: picked == items[i],
+                                          distance: 0,
+                                          child: GestureDetector(
+                                            key: cellKey(items[i]!),
+                                            behavior: HitTestBehavior.opaque,
+                                            onTap: () => pick(items[i]!),
+                                            child: DecoratedBox(
+                                              decoration: BoxDecoration(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                color: selfReaction == items[i]
+                                                    ? cs.primaryContainer
+                                                          .withValues(
+                                                            alpha: 0.82,
+                                                          )
+                                                    : Colors.transparent,
+                                              ),
+                                              child: Center(
+                                                child: _NotoEmojiLottie(
+                                                  emoji: items[i]!,
+                                                  size: 27,
+                                                  mode: _NotoLottieMode.preview,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            );
+
+            final emojiPicker = !fullPicker ? curatedGrid : SizedBox(
               width: panelWidth,
               height: pickerHeight,
               child: glassCard(
@@ -7779,7 +9176,7 @@ class _ChatScreenState extends State<ChatScreen>
                   ),
                   AnimatedPositioned(
                     duration: const Duration(milliseconds: 240),
-                    curve: Curves.easeOutCubic,
+                    curve: Motion.standard,
                     left: panelLeft,
                     top: expanded
                         ? expandedTop
@@ -7790,80 +9187,145 @@ class _ChatScreenState extends State<ChatScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (showReactionStrip) ...[
-                          glassCard(
-                            alpha: 0.76,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  for (final e in reactionOptions)
-                                    GestureDetector(
-                                      onTap: () =>
-                                          Navigator.of(context).pop('react:$e'),
-                                      child: Container(
-                                        width: 34,
-                                        height: 34,
-                                        alignment: Alignment.center,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: selfReaction == e
-                                              ? cs.primaryContainer.withValues(
-                                                  alpha: 0.82,
-                                                )
-                                              : Colors.transparent,
+                          // Панель вырастает пружиной, эмодзи — каскадом;
+                          // после выбора — схлопываются от выбранного к
+                          // краям, панель гаснет.
+                          ReactionMenuEntrance(
+                            ms: 500,
+                            from: const Offset(0, 40),
+                            scaleFrom: const Offset(0.5, 0.3),
+                            alignment: Alignment.bottomCenter,
+                            child: _ReactionPickedFade(
+                              picked: picked != null,
+                              delayMs: 120,
+                              ms: 240,
+                              child: glassCard(
+                                alpha: 0.76,
+                                child: Padding(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    8,
+                                    6,
+                                    8,
+                                    6,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      for (
+                                        var i = 0;
+                                        i < reactionOptions.length;
+                                        i++
+                                      )
+                                        ReactionMenuEntrance(
+                                          delayMs: 70 + i * 34,
+                                          from: const Offset(0, 14),
+                                          scaleFrom: const Offset(0.2, 0.2),
+                                          child: ReactionCollapse(
+                                            collapsing: picked != null,
+                                            hidden:
+                                                picked == reactionOptions[i],
+                                            distance: picked == null ||
+                                                    !reactionOptions.contains(
+                                                      picked,
+                                                    )
+                                                ? 0
+                                                : (i -
+                                                          reactionOptions
+                                                              .indexOf(
+                                                                picked!,
+                                                              ))
+                                                      .abs(),
+                                            child: GestureDetector(
+                                              key: cellKey(reactionOptions[i]),
+                                              onTap: () =>
+                                                  pick(reactionOptions[i]),
+                                              child: Container(
+                                                width: 34,
+                                                height: 34,
+                                                alignment: Alignment.center,
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color:
+                                                      selfReaction ==
+                                                          reactionOptions[i]
+                                                      ? cs.primaryContainer
+                                                            .withValues(
+                                                              alpha: 0.82,
+                                                            )
+                                                      : Colors.transparent,
+                                                ),
+                                                child: _NotoEmojiLottie(
+                                                  emoji: reactionOptions[i],
+                                                  size: 29,
+                                                  // Bundled cookie Lottie while
+                                                  // the Noto CDN file loads —
+                                                  // never tofu (□).
+                                                  assetFallback:
+                                                      _reactionAssetByEmoji[
+                                                        reactionOptions[i]],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
                                         ),
-                                        child: _NotoEmojiLottie(
-                                          emoji: e,
-                                          size: 29,
-                                          // Bundled cookie Lottie while the Noto
-                                          // CDN file loads — never tofu (□).
-                                          assetFallback:
-                                              _reactionAssetByEmoji[e],
-                                        ),
-                                      ),
-                                    ),
-                                  GestureDetector(
-                                    onTap: () {
-                                      // Premium gate (TZ §C-3, fail-open): when
-                                      // monetization is off the state resolves
-                                      // open and we expand inline for everyone.
-                                      // Only free + monetization-on falls back
-                                      // to the centralized 'react_more' →
-                                      // paywall path below.
-                                      if (reactionsUnlocked) {
-                                        setPopupState(() => expanded = true);
-                                      } else {
-                                        Navigator.of(context).pop('react_more');
-                                      }
-                                    },
-                                    child: Container(
-                                      width: 34,
-                                      height: 34,
-                                      alignment: Alignment.center,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: cs.onSurface.withValues(
-                                          alpha: 0.06,
-                                        ),
-                                      ),
-                                      child: AnimatedRotation(
-                                        turns: expanded ? 0.5 : 0.0,
-                                        duration: const Duration(
-                                          milliseconds: 240,
-                                        ),
-                                        child: Icon(
-                                          Icons.keyboard_arrow_down_rounded,
-                                          size: 22,
-                                          color: cs.onSurface.withValues(
-                                            alpha: 0.82,
+                                      ReactionMenuEntrance(
+                                        delayMs:
+                                            70 + reactionOptions.length * 34.0,
+                                        from: const Offset(0, 14),
+                                        scaleFrom: const Offset(0.2, 0.2),
+                                        child: ReactionCollapse(
+                                          collapsing: picked != null,
+                                          distance: 1,
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              // Premium gate (TZ §C-3,
+                                              // fail-open): off → expand
+                                              // inline for everyone; only
+                                              // free + monetization-on goes
+                                              // to the paywall path.
+                                              if (reactionsUnlocked) {
+                                                HapticFeedback.selectionClick();
+                                                setPopupState(() {
+                                                  expanded = !expanded;
+                                                  fullPicker = false;
+                                                });
+                                              } else {
+                                                Navigator.of(
+                                                  context,
+                                                ).pop('react_more');
+                                              }
+                                            },
+                                            child: Container(
+                                              width: 34,
+                                              height: 34,
+                                              alignment: Alignment.center,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: cs.onSurface.withValues(
+                                                  alpha: 0.06,
+                                                ),
+                                              ),
+                                              child: AnimatedRotation(
+                                                turns: expanded ? 0.5 : 0.0,
+                                                duration: const Duration(
+                                                  milliseconds: 240,
+                                                ),
+                                                child: Icon(
+                                                  AdaptiveIcons
+                                                      .keyboard_arrow_down_rounded,
+                                                  size: 22,
+                                                  color: cs.onSurface
+                                                      .withValues(alpha: 0.82),
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ),
-                                    ),
+                                    ],
                                   ),
-                                ],
+                                ),
                               ),
                             ),
                           ),
@@ -7871,7 +9333,7 @@ class _ChatScreenState extends State<ChatScreen>
                         ],
                         AnimatedSize(
                           duration: const Duration(milliseconds: 240),
-                          curve: Curves.easeOutCubic,
+                          curve: Motion.standard,
                           alignment: Alignment.topCenter,
                           child: AnimatedSwitcher(
                             duration: const Duration(milliseconds: 200),
@@ -7879,12 +9341,32 @@ class _ChatScreenState extends State<ChatScreen>
                                 FadeTransition(opacity: anim, child: child),
                             child: expanded
                                 ? KeyedSubtree(
-                                    key: const ValueKey('reaction_picker'),
-                                    child: emojiPicker,
+                                    key: ValueKey(
+                                      fullPicker
+                                          ? 'reaction_picker_all'
+                                          : 'reaction_picker',
+                                    ),
+                                    child: _ReactionPickedFade(
+                                      picked: picked != null,
+                                      delayMs: 120,
+                                      ms: 240,
+                                      child: emojiPicker,
+                                    ),
                                   )
                                 : KeyedSubtree(
                                     key: const ValueKey('reaction_actions'),
-                                    child: functionsMenu,
+                                    child: ReactionMenuEntrance(
+                                      delayMs: 50,
+                                      ms: 420,
+                                      from: const Offset(0, 16),
+                                      scaleFrom: const Offset(0.9, 0.9),
+                                      alignment: Alignment.topLeft,
+                                      child: _ReactionPickedFade(
+                                        picked: picked != null,
+                                        ms: 200,
+                                        child: functionsMenu,
+                                      ),
+                                    ),
                                   ),
                           ),
                         ),
@@ -7903,6 +9385,18 @@ class _ChatScreenState extends State<ChatScreen>
 
     if (selected == 'react_more') {
       await _handleMoreReactions(entry);
+      return;
+    }
+
+    if (selected.startsWith('fly:')) {
+      final emoji = selected.substring('fly:'.length);
+      if (emoji.isNotEmpty) {
+        await _applyReaction(
+          eventId: entry.payloadEventId ?? entry.event.eventId,
+          emoji: emoji,
+          flight: true,
+        );
+      }
       return;
     }
 
@@ -7925,6 +9419,9 @@ class _ChatScreenState extends State<ChatScreen>
           authorName: entry.isMe ? _selfAuthorLabel() : widget.title,
           authorIsMe: entry.isMe,
         );
+        return;
+      case 'download_album':
+        await _saveSelectedMediaAttachments(_albumDownloadTargets(entry));
         return;
       case 'copy':
         await _copyEventsToClipboard([entry.event]);
@@ -7984,7 +9481,7 @@ class _ChatScreenState extends State<ChatScreen>
     final pinState = await _resolvePinStateForEntry(entry);
     if (!mounted) return;
 
-    final media = MediaQuery.of(context);
+    final media = mediaQueryNow(context);
     final screenSize = media.size;
     const panelWidth = 252.0;
     final actionCount = pinState.canPinMessages ? 6 : 5;
@@ -8007,7 +9504,6 @@ class _ChatScreenState extends State<ChatScreen>
     final selected = await showReactionDialog<String>(
       context: context,
       builder: (context) {
-        final cs = Theme.of(context).colorScheme;
         return Material(
           type: MaterialType.transparency,
           child: Stack(
@@ -8023,19 +9519,9 @@ class _ChatScreenState extends State<ChatScreen>
                 top: panelTop,
                 child: SizedBox(
                   width: panelWidth,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: cs.surface.withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: cs.outlineVariant.withValues(alpha: 0.34),
-                          ),
-                        ),
-                        child: Column(
+                  child: _messageMenuCard(
+                    context,
+                    child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             _menuActionItem(
@@ -8087,8 +9573,6 @@ class _ChatScreenState extends State<ChatScreen>
                             ),
                           ],
                         ),
-                      ),
-                    ),
                   ),
                 ),
               ),
@@ -8144,7 +9628,7 @@ class _ChatScreenState extends State<ChatScreen>
     final pinState = await _resolvePinStateForEntry(entry);
     if (!mounted) return;
 
-    final media = MediaQuery.of(context);
+    final media = mediaQueryNow(context);
     final screenSize = media.size;
     const panelWidth = 252.0;
     final actionCount = pinState.canPinMessages ? 7 : 6;
@@ -8167,7 +9651,6 @@ class _ChatScreenState extends State<ChatScreen>
     final selected = await showReactionDialog<String>(
       context: context,
       builder: (context) {
-        final cs = Theme.of(context).colorScheme;
         return Material(
           type: MaterialType.transparency,
           child: Stack(
@@ -8183,24 +9666,14 @@ class _ChatScreenState extends State<ChatScreen>
                 top: panelTop,
                 child: SizedBox(
                   width: panelWidth,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: cs.surface.withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: cs.outlineVariant.withValues(alpha: 0.34),
-                          ),
-                        ),
-                        child: Column(
+                  child: _messageMenuCard(
+                    context,
+                    child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             _menuActionItem(
                               context,
-                              icon: Icons.open_in_new_rounded,
+                              icon: AdaptiveIcons.open_in_new_rounded,
                               label: chatText(
                                 context,
                                 ru: 'Открыть',
@@ -8272,8 +9745,6 @@ class _ChatScreenState extends State<ChatScreen>
                             ),
                           ],
                         ),
-                      ),
-                    ),
                   ),
                 ),
               ),
@@ -8346,7 +9817,12 @@ class _ChatScreenState extends State<ChatScreen>
           widget.convoId,
         );
         final pinnedEventId = (settings.pinnedMessageEventId ?? '').trim();
-        final shouldUnpin = isAlreadyPinned || pinnedEventId == targetEventId;
+        // Д-9: при общем списке устаревшее закрепление реле не считается —
+        // меню показывало «Закрепить», а нажатие открепляло.
+        final shouldUnpin =
+            isAlreadyPinned ||
+            (pinnedEventId == targetEventId &&
+                !(kPinSyncChecksV2 && _appliedPinSyncAtMs > 0));
         nextPinnedMessages = shouldUnpin
             ? _withoutPinnedMessage(_pinnedMessages, targetEventId)
             : _withPinnedMessage(_pinnedMessages, pinnedMessage);
@@ -8359,15 +9835,19 @@ class _ChatScreenState extends State<ChatScreen>
               ? null
               : nextPinnedMessages.first.eventId;
         }
-        await widget.controller.setRoomPinnedMessage(
-          groupId: widget.convoId,
-          messageEventId: nextServerPinnedEventId,
-        );
       }
       if (!mounted) return;
-      // Mark our own change as the latest applied pin-sync so the self-echoed
-      // broadcast doesn't bounce back as a "newer" update.
-      _appliedPinSyncAtMs = DateTime.now().millisecondsSinceEpoch;
+      // Список — и собеседнику в личном чате, и комнате (21.11.2026);
+      // ревизия своей правки — чтобы своё эхо не считалось «новее».
+      final revision = await _broadcastSharedPins(nextPinnedMessages);
+      // Одиночное закрепление на сервере — для старых сборок, ПОСЛЕ списка и
+      // без права сорвать правку (аудит 23.11.2026: без сервера закрепить в
+      // комнате нельзя было вовсе).
+      if (_isGroupChat) {
+        unawaited(_setServerPinBestEffort(nextServerPinnedEventId));
+      }
+      if (!mounted) return;
+      _appliedPinSyncAtMs = revision;
       setState(() {
         _pinnedMessages = nextPinnedMessages;
         if (_isGroupChat) {
@@ -8375,10 +9855,6 @@ class _ChatScreenState extends State<ChatScreen>
         }
         _visiblePinnedMessageIndex = 0;
       });
-      await _savePinnedMessages();
-      if (_isGroupChat) {
-        await _broadcastSharedPins(nextPinnedMessages);
-      }
     } catch (e) {
       if (!mounted) return;
       final l10n = context.l10n;
@@ -8419,19 +9895,22 @@ class _ChatScreenState extends State<ChatScreen>
       if (nextServerPinnedEventId.isEmpty) {
         nextServerPinnedEventId = null;
       }
+      var serverPinChanged = false;
       if (_isGroupChat) {
         if (nextServerPinnedEventId == target.eventId) {
           nextServerPinnedEventId = nextPinnedMessages.isEmpty
               ? null
               : nextPinnedMessages.first.eventId;
-          await widget.controller.setRoomPinnedMessage(
-            groupId: widget.convoId,
-            messageEventId: nextServerPinnedEventId,
-          );
+          serverPinChanged = true;
         }
       }
       if (!mounted) return;
-      _appliedPinSyncAtMs = DateTime.now().millisecondsSinceEpoch;
+      final revision = await _broadcastSharedPins(nextPinnedMessages);
+      if (serverPinChanged) {
+        unawaited(_setServerPinBestEffort(nextServerPinnedEventId));
+      }
+      if (!mounted) return;
+      _appliedPinSyncAtMs = revision;
       setState(() {
         _pinnedMessages = nextPinnedMessages;
         if (_isGroupChat) {
@@ -8442,10 +9921,6 @@ class _ChatScreenState extends State<ChatScreen>
           _effectivePinnedMessages().length,
         );
       });
-      await _savePinnedMessages();
-      if (_isGroupChat) {
-        await _broadcastSharedPins(nextPinnedMessages);
-      }
     } catch (e) {
       if (!mounted) return;
       final l10n = context.l10n;
@@ -8458,31 +9933,50 @@ class _ChatScreenState extends State<ChatScreen>
     }
   }
 
-  /// Broadcasts the current full pin set to every room member. Best-effort:
-  /// the local change has already been applied + persisted, so a transient
-  /// relay hiccup just means peers pick it up on the next pin action.
-  Future<void> _broadcastSharedPins(List<_PinnedMessage> pins) async {
+  /// Одиночное закрепление комнаты на сервере (его понимают старые сборки).
+  /// Не дошло — не беда: общий список уже разослан.
+  Future<void> _setServerPinBestEffort(String? eventId) async {
     try {
-      await widget.controller.broadcastRoomPins(
+      await widget.controller.setRoomPinnedMessage(
         groupId: widget.convoId,
-        pins: pins
-            .map(
-              (pin) => (
-                eventId: pin.eventId,
-                previewText: pin.previewText,
-                pinnedAtMs: pin.pinnedAtMs,
-              ),
-            )
-            .toList(growable: false),
+        messageEventId: eventId,
       );
-    } catch (_) {
-      // Non-fatal — local state is already updated.
+    } catch (e) {
+      DiagLog.event('pins', 'server_pin_failed', {
+        'convo': DiagLog.pfx(widget.convoId),
+        'error': e.runtimeType.toString(),
+      });
     }
   }
 
+  /// Запоминает список (с ревизией) и рассылает его — собеседнику и своим
+  /// устройствам в личном чате, всем участникам в комнате. Не дошло —
+  /// контроллер повторит при следующем открытии (21.11.2026). Ошибку прав
+  /// пробрасывает: её покажет вызывающий.
+  Future<int> _broadcastSharedPins(List<_PinnedMessage> pins) {
+    return widget.controller.broadcastChatPins(
+      convoId: widget.convoId,
+      pins: pins
+          .map(
+            (pin) => (
+              eventId: pin.eventId,
+              previewText: pin.previewText,
+              pinnedAtMs: pin.pinnedAtMs,
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+
   Future<void> _handlePinnedMessageTap(_PinnedMessage pinnedMessage) async {
-    await _scrollToReply(pinnedMessage.eventId);
+    final shown = await _scrollToReply(
+      pinnedMessage.eventId,
+      pin: pinnedMessage,
+    );
     if (!mounted) return;
+    // Д-1: не нашли — плашка остаётся на этом закреплённом (раньше она
+    // переключалась на следующее и выглядело «ничего не происходит»).
+    if (!shown) return;
     final messages = _effectivePinnedMessages();
     if (messages.length <= 1) return;
     final currentIndex = messages.indexWhere(
@@ -8504,7 +9998,7 @@ class _ChatScreenState extends State<ChatScreen>
     if (targetIndex >= 0 && mounted) {
       setState(() => _visiblePinnedMessageIndex = targetIndex);
     }
-    await _scrollToReply(pinnedMessage.eventId);
+    await _scrollToReply(pinnedMessage.eventId, pin: pinnedMessage);
   }
 
   Future<void> _showPinnedMessagesSheet() async {
@@ -8513,6 +10007,7 @@ class _ChatScreenState extends State<ChatScreen>
     final canUnpin =
         !_isGroupChat || (_roomPolicyState?.canPinMessages ?? false);
     await showModalBottomSheet<void>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -8596,7 +10091,7 @@ class _ChatScreenState extends State<ChatScreen>
                                     ),
                                   ),
                                   if (canUnpin)
-                                    IconButton(
+                                    PressFeedback(child: IconButton(
                                       visualDensity: VisualDensity.compact,
                                       constraints:
                                           const BoxConstraints.tightFor(
@@ -8613,7 +10108,7 @@ class _ChatScreenState extends State<ChatScreen>
                                         AppIcons.close,
                                         size: 17,
                                       ),
-                                    ),
+                                    )),
                                 ],
                               ),
                             ),
@@ -8690,7 +10185,7 @@ class _ChatScreenState extends State<ChatScreen>
                   ),
                 ],
                 if (canShowAll)
-                  IconButton(
+                  PressFeedback(child: IconButton(
                     visualDensity: VisualDensity.compact,
                     constraints: const BoxConstraints.tightFor(
                       width: 30,
@@ -8704,9 +10199,9 @@ class _ChatScreenState extends State<ChatScreen>
                     ),
                     onPressed: () => unawaited(_showPinnedMessagesSheet()),
                     icon: const Icon(AppIcons.menu, size: 18),
-                  ),
+                  )),
                 if (canUnpin)
-                  IconButton(
+                  PressFeedback(child: IconButton(
                     visualDensity: VisualDensity.compact,
                     constraints: const BoxConstraints.tightFor(
                       width: 30,
@@ -8717,7 +10212,7 @@ class _ChatScreenState extends State<ChatScreen>
                     onPressed: () =>
                         unawaited(_clearPinnedMessage(pinnedMessage)),
                     icon: const Icon(AppIcons.close, size: 17),
-                  ),
+                  )),
               ],
             ),
           ),
@@ -8731,9 +10226,13 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
-  Widget _buildRoomCallReturnBanner(CachedRoomCall call) {
+  Widget _buildRoomCallReturnBanner(
+    CachedRoomCall call, {
+    bool merged = false,
+  }) {
     final sp = call.selfParticipant;
     return RuntimeAwareRoomCallReturnBanner(
+      merged: merged,
       // Same side margins + bottom gap as every other island in the stack.
       margin: _kChatIslandMargin,
       title: widget.title,
@@ -8766,6 +10265,8 @@ class _ChatScreenState extends State<ChatScreen>
     required List<MessageReaction> reactions,
     Offset? tapPosition,
   }) async {
+    // Касание, свернувшее раскрытую видео-заметку, ничего больше не делает.
+    if (VideoNotePlayback.instance.takeSwallowedTap()) return;
     if (_shouldShowOutgoingSendStateMenu(entry)) {
       await _showOutgoingSendStateActions(
         entry: entry,
@@ -8784,13 +10285,13 @@ class _ChatScreenState extends State<ChatScreen>
     required _TimelineEntry entry,
     Offset? anchorGlobalPosition,
   }) async {
-    final media = MediaQuery.of(context);
+    final media = mediaQueryNow(context);
     final anchor =
         anchorGlobalPosition ??
         Offset(media.size.width / 2, media.size.height / 2);
     final l10n = context.l10n;
 
-    final selected = await showMenu<String>(
+    final selected = await showAppMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
         anchor.dx,
@@ -8897,6 +10398,32 @@ class _ChatScreenState extends State<ChatScreen>
     }
   }
 
+  /// Карточка меню сообщения (музыка, файл): на iPhone — панель меню iOS,
+  /// иначе — прежнее матовое стекло.
+  Widget _messageMenuCard(BuildContext context, {required Widget child}) {
+    if (appleMenusEnabled(context)) return AppleMenuPanel(child: child);
+    final cs = Theme.of(context).colorScheme;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: appleBlurredFillOr(
+              context,
+              cs.surface.withValues(alpha: 0.8),
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: 0.34),
+            ),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
   Widget _menuActionItem(
     BuildContext context, {
     required IconData icon,
@@ -8905,6 +10432,17 @@ class _ChatScreenState extends State<ChatScreen>
     VoidCallback? onTap,
     Widget? trailing,
   }) {
+    // iPhone: строки контекстного меню iOS (подпись слева, значок справа,
+    // тонкие линии), «Удалить» — красным; как во всех меню приложения.
+    if (appleMenusEnabled(context)) {
+      return AppleMenuRow(
+        title: label,
+        icon: icon,
+        leading: trailing,
+        destructive: value == 'delete',
+        onTap: onTap ?? () => Navigator.of(context).pop(value),
+      );
+    }
     return ListTile(
       dense: true,
       minLeadingWidth: 26,
@@ -9008,12 +10546,125 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
+  /// Двойное касание — ❤️ (по умолчанию) с той же анимацией, что из меню:
+  /// сердце выскакивает из сообщения, приземляется с эффектом и садится в
+  /// чип. Уже стоит своё ❤️ — снимается (чип сжимается).
+  Future<void> _doubleTapReact(
+    _TimelineEntry entry,
+    String eventId, {
+    String emoji = '❤️',
+  }) async {
+    final self = widget.controller.profileId;
+    if (self.isEmpty) return;
+    final before = await widget.controller.loadMessageReactions(
+      eventIds: [eventId],
+    );
+    final mine = (before[eventId] ?? const <MessageReaction>[])
+        .where((r) => r.profileId == self)
+        .map((r) => r.emoji)
+        .cast<String?>()
+        .firstOrNull;
+    if (!mounted) return;
+    if (mine == emoji) {
+      await _applyReaction(eventId: eventId, emoji: emoji);
+      return;
+    }
+    HapticFeedback.lightImpact();
+    final bubble = _bubbleRectForEntry(entry);
+    final c = bubble?.center ?? MediaQuery.sizeOf(context).center(Offset.zero);
+    launchReactionFlight(
+      context: context,
+      emoji: emoji,
+      start: Rect.fromCenter(center: c, width: 30, height: 30),
+      bubble: bubble,
+      fxId: ReactionFxRegistry.id(eventId, emoji),
+      emojiBuilder: _reactionFlightEmoji,
+    );
+    await _applyReaction(eventId: eventId, emoji: emoji, flight: true);
+  }
+
+  /// Пункты меню появляются лесенкой (макет «Reactions Animation»).
+  List<Widget> _staggerMenuItems(List<Widget> items) => [
+    for (var i = 0; i < items.length; i++)
+      ReactionMenuEntrance(
+        delayMs: 110 + i * 30.0,
+        ms: 280,
+        from: const Offset(-10, 0),
+        spring: false,
+        alignment: Alignment.centerLeft,
+        child: items[i],
+      ),
+  ];
+
+  /// Большой эмодзи полёта: статичный в полёте, играет после приземления.
+  Widget _reactionFlightEmoji(String emoji, double size, bool play) =>
+      _NotoEmojiLottie(
+        key: ValueKey('fly-$emoji-$play'),
+        emoji: emoji,
+        size: size,
+        mode: play ? _NotoLottieMode.once : _NotoLottieMode.preview,
+        assetFallback: _reactionAssetByEmoji[emoji],
+      );
+
+  /// Ячейка «все эмодзи» в конце раскрытой панели.
+  Widget _reactionAllEmojiCell(BuildContext context, VoidCallback onTap) {
+    final cs = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      label: context.l10n.reactionAllEmoji,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Center(
+          child: Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: cs.onSurface.withValues(alpha: 0.08),
+            ),
+            child: Icon(
+              AdaptiveIcons.more_horiz_rounded,
+              size: 20,
+              color: cs.onSurface.withValues(alpha: 0.8),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Само сообщение (пузырь) в ленте — вырез в размытии меню реакций.
+  Rect? _bubbleRectForEntry(_TimelineEntry entry) {
+    final rowId = timelineRowId(entry.payloadEventId, entry.event.eventId);
+    final ctx = _eventRowKeys[rowId]?.currentContext;
+    if (ctx is! Element) return null;
+    Element? found;
+    void visit(Element el) {
+      if (found != null) return;
+      if (el.widget is _ChatBubbleSurface) {
+        found = el;
+        return;
+      }
+      el.visitChildElements(visit);
+    }
+
+    ctx.visitChildElements(visit);
+    final ro = found?.renderObject;
+    if (ro is! RenderBox || !ro.hasSize || !ro.attached) return null;
+    return ro.localToGlobal(Offset.zero) & ro.size;
+  }
+
+  /// [flight] — реакция прилетит из меню (макет «Reactions Animation»):
+  /// чип не раздувается сам, его оживит посадка.
   Future<void> _applyReaction({
     required String eventId,
     required String emoji,
+    bool flight = false,
   }) async {
     final selfProfileId = widget.controller.profileId;
     if (selfProfileId.isEmpty || emoji.trim().isEmpty) return;
+    final fxId = ReactionFxRegistry.id(eventId, emoji);
 
     try {
       final before = await widget.controller.loadMessageReactions(
@@ -9025,6 +10676,12 @@ class _ChatScreenState extends State<ChatScreen>
           .where((e) => e.isNotEmpty)
           .cast<String?>()
           .firstOrNull;
+      // Снятие своей реакции: чип сжимается и гаснет, потом уходит из ленты.
+      if (beforeMine == emoji && !flight && mounted) {
+        ReactionFxRegistry.instance.set(fxId, ReactionChipFx.removing);
+        HapticFeedback.selectionClick();
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+      }
 
       await widget.controller.toggleMessageReaction(
         convoId: widget.convoId,
@@ -9059,10 +10716,17 @@ class _ChatScreenState extends State<ChatScreen>
           _seenReactionAnimationKeys.add(seenKey);
           unawaited(_markReactionAnimationsSeen(<String>{seenKey}));
         }
-        setState(() {
-          _assignReactionPlayToken(key);
-        });
-        unawaited(widget.controller.triggerUiHaptic());
+        if (!flight) {
+          setState(() {
+            _assignReactionPlayToken(key);
+          });
+          unawaited(widget.controller.triggerUiHaptic());
+        } else {
+          setState(() {});
+        }
+      }
+      if (ReactionFxRegistry.instance.of(fxId) == ReactionChipFx.removing) {
+        ReactionFxRegistry.instance.clear(fxId);
       }
 
       await widget.controller.broadcastReactionUpdate(
@@ -9072,6 +10736,7 @@ class _ChatScreenState extends State<ChatScreen>
         removed: removed,
       );
     } catch (e) {
+      ReactionFxRegistry.instance.clear(fxId);
       if (!mounted) return;
       final l10n = context.l10n;
       final roomPolicyText = tryRoomPolicyErrorText(l10n, e);
@@ -9085,6 +10750,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   @override
   void dispose() {
+    _islandCallManager?.state.removeListener(_onCallStateForIslands);
     MessageTranslationService.settingsChanged.removeListener(
       _onTranslationSettingsChanged,
     );
@@ -9103,16 +10769,23 @@ class _ChatScreenState extends State<ChatScreen>
     );
     _audioTick.dispose();
     widget.controller.chatFocusRequest.removeListener(_onChatFocusRequest);
-    _voiceTimer?.cancel();
-    _voicePressTimer?.cancel();
-    unawaited(_voiceAmpSub?.cancel());
-    // Tear down any in-flight video-note recorder (releases the camera).
-    _videoNoteRecorderController?.signalCancel();
-    _videoNoteRecorderController = null;
+    _voiceHintTimer?.cancel();
+    _voiceHintEntry?.remove();
+    _voiceHintEntry = null;
+    _voice.phase.removeListener(_onVoicePhase);
+    _removeVoiceOverlay();
+    // Видео-заметка: камера закрывается, снятое удаляется.
+    _videoNote.phase.removeListener(_onVideoNotePhase);
+    _removeVideoNoteOverlay();
+    _headerBottomEdge.dispose();
+    _videoNoteLifecycle?.dispose();
+    unawaited(_videoNote.dispose());
     _voiceLockBounceController.dispose();
     _chatSearchRevealController.dispose();
-    unawaited(_voiceRecorder.dispose());
+    // Сначала запись (остановит микрофон и удалит черновик), потом рекордер.
+    unawaited(_voice.dispose().whenComplete(_voiceRecorder.dispose));
     _smileIconController.dispose();
+    _inlineEmojiPanel?.dispose();
     _voicePulseController.dispose();
     _roomPolicyRefreshTimer?.cancel();
     _retentionTimer?.cancel();
@@ -9129,7 +10802,8 @@ class _ChatScreenState extends State<ChatScreen>
     // (`_wasEverVisiblyOpen`), catching the case where the 450 ms debounce
     // hadn't fired yet. An off-stage transient that was never visibly open
     // stays unmarked.
-    if (shouldAutoMarkChatRead(
+    if (!_openPositionPending &&
+        shouldAutoMarkChatRead(
       appInForeground: widget.controller.appInForeground,
       isChatVisible: _wasEverVisiblyOpen,
       isNearLatestMessages: _isNearLatestMessages(),
@@ -9139,6 +10813,7 @@ class _ChatScreenState extends State<ChatScreen>
       unawaited(widget.controller.markChatRead(peerProfileId: flushPeer!));
     }
     _scrollStateDebounce?.cancel();
+    _partialReadTimer?.cancel();
     unawaited(_persistScrollOffset());
     _typingStopDebounce?.cancel();
     _stopTypingNow();
@@ -9149,6 +10824,7 @@ class _ChatScreenState extends State<ChatScreen>
     unawaited(_searchTickPlayer?.dispose());
     _messageInputFocusNode.dispose();
     _sendButtonFocusNode.dispose();
+    _composerSendPulse.dispose();
     _text.removeListener(_onComposerTextChanged);
     _text.dispose();
     _linkPreviewDraft.dispose();
@@ -9170,7 +10846,12 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => _ChatKindScope(
+    isGroup: _isGroupChat,
+    child: Builder(builder: _buildChat),
+  );
+
+  Widget _buildChat(BuildContext context) {
     final isRequest =
         widget.requestProfileId != null && widget.requestProfileId!.isNotEmpty;
     final peerProfileId = widget.peerProfileIdForSend;
@@ -9204,20 +10885,10 @@ class _ChatScreenState extends State<ChatScreen>
 
     // Peer cosmetics (header avatar frame / status emoji) inside the chat obey
     // the user's animation setting; profile pages stay animated.
-    return BackdropGroup(
-      // Lets the grouped chat-header islands (leading + title) share ONE
-      // backdrop read instead of one blur each (2026-07-23 perf audit). The
-      // shared backdrop is captured at the first grouped filter — the header —
-      // so it sees the chat body behind it exactly as separate filters would.
-      child: CosmeticAnimationScope(
-        enabled: widget.controller.peerCosmeticAnimEnabled,
-        child: BottomSystemFadeVisibility(
-      enabled: false,
-      child: Scaffold(
-        extendBody: true,
-        extendBodyBehindAppBar: true,
-        resizeToAvoidBottomInset: false,
-        appBar: frostedAppBar(
+    // Шапка — заранее: её высота нужна телу экрана (см. ниже), и брать её
+    // надо отсюда, а не из MediaQuery.paddingOf — та на Android меняется в
+    // каждом кадре движения клавиатуры и перестраивала всё тело чата.
+    final AppBar chatAppBar = frostedAppBar(
           toolbarHeight: chatToolbarHeight,
           // Experimental chat header: in the normal chat view the bar itself is
           // fully transparent and the back / identity / actions live in separate
@@ -9262,7 +10933,7 @@ class _ChatScreenState extends State<ChatScreen>
                   alignment: Alignment.centerLeft,
                   child: Padding(
                     padding: const EdgeInsets.only(left: 8),
-                    child: _frostedHeaderIsland(
+                    child: PressFeedback(child: _frostedHeaderIsland(
                       radius: _kHeaderIslandRadius,
                       grouped: true,
                       child: SizedBox(
@@ -9282,7 +10953,7 @@ class _ChatScreenState extends State<ChatScreen>
                                   end: _selectionMode ? 1.0 : 0.0,
                                 ),
                                 duration: const Duration(milliseconds: 280),
-                                curve: Curves.easeOutBack,
+                                curve: Motion.pop,
                                 builder: (context, selRaw, _) {
                                   final selO = selRaw.clamp(0.0, 1.0);
                                   return Stack(
@@ -9316,18 +10987,16 @@ class _ChatScreenState extends State<ChatScreen>
                           ),
                         ),
                       ),
-                    ),
+                    )),
                   ),
                 ),
           bottom:
-              (!_selectionMode &&
-                  !isRequest &&
-                  (_shouldShowTopicBar ||
-                      _resolvedPinnedMessage() != null ||
-                      _activeNowPlayingItem != null))
+              (!_selectionMode && !isRequest && _hasHeaderBottom)
               ? PreferredSize(
                   preferredSize: Size.fromHeight(_headerBottomHeight()),
-                  child: Column(
+                  child: KeyedSubtree(
+                    key: _headerBottomKey,
+                    child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       // Topic switcher first, then the secondary strips.
@@ -9336,6 +11005,7 @@ class _ChatScreenState extends State<ChatScreen>
                       // Search no longer unrolls below the header — it morphs
                       // out of the header island in place (see the title slot).
                     ],
+                  ),
                   ),
                 )
               : null,
@@ -9349,12 +11019,14 @@ class _ChatScreenState extends State<ChatScreen>
           // AnimatedBuilder scopes the _chatSearchRevealController tick to
           // just this header island instead of the whole chat screen (it
           // used to setState() the entire _ChatScreenState per frame).
-          title: AnimatedBuilder(
+          title: KeyedSubtree(
+            key: _headerTitleKey,
+            child: AnimatedBuilder(
             animation: _chatSearchRevealController,
             builder: (context, _) => TweenAnimationBuilder<double>(
             tween: Tween<double>(end: _selectionMode ? 1.0 : 0.0),
             duration: const Duration(milliseconds: 280),
-            curve: Curves.easeOutBack,
+            curve: Motion.pop,
             builder: (context, selRaw, _) {
               final selO = selRaw.clamp(0.0, 1.0);
               // 0 = idle, 1 = search field fully revealed (same curve as
@@ -9458,16 +11130,23 @@ class _ChatScreenState extends State<ChatScreen>
                                     // between them all open the profile/room
                                     // page (opaque behavior catches taps on
                                     // the transparent areas too).
-                                    return GestureDetector(
+                                    return PressFeedback(child: GestureDetector(
                                       behavior: HitTestBehavior.opaque,
                                       onTap: _isGroupChat
-                                          ? _openRoomDetails
+                                          ? () => _openRoomDetails(
+                                              fromHeader: true,
+                                              avatarPath: avatarPath,
+                                            )
                                           : (headerProfileId == null ||
                                                     headerProfileId.isEmpty
                                                 ? null
                                                 : () => _openPeerDetails(
                                                     profileId: headerProfileId,
                                                     avatarPath: avatarPath,
+                                                    heroTag:
+                                                        avatarBridgeChatHeaderTag(
+                                                          widget.convoId,
+                                                        ),
                                                   )),
                                       child: Row(
                                       children: [
@@ -9487,6 +11166,9 @@ class _ChatScreenState extends State<ChatScreen>
                                                 _favoritesNoteAssetPath,
                                             showOnlineDot: isPeerOnline,
                                             frameId: conversation?.frameId,
+                                            heroTag: avatarBridgeChatHeaderTag(
+                                              widget.convoId,
+                                            ),
                                         ),
                                         const SizedBox(width: 12),
                                         Expanded(
@@ -9574,7 +11256,7 @@ class _ChatScreenState extends State<ChatScreen>
                                           ),
                                         ],
                                       ),
-                                    );
+                                    ));
                                   },
                                 );
                               },
@@ -9648,11 +11330,11 @@ class _ChatScreenState extends State<ChatScreen>
                                 onSubmitted: (_) => _nextSearchHit(),
                               ),
                             ),
-                            IconButton(
+                            PressFeedback(child: IconButton(
                               tooltip: l10n.cancel,
                               icon: const Icon(AppIcons.close),
                               onPressed: () => _toggleChatSearch(open: false),
-                            ),
+                            )),
                           ],
                         ),
                       ),
@@ -9663,9 +11345,10 @@ class _ChatScreenState extends State<ChatScreen>
             },
           ),
           ),
+          ),
           actions: isRequest
               ? [
-                  IconButton(
+                  PressFeedback(child: IconButton(
                     tooltip: l10n.block,
                     icon: const Icon(AppIcons.block),
                     onPressed: () async {
@@ -9675,8 +11358,8 @@ class _ChatScreenState extends State<ChatScreen>
                       if (!context.mounted) return;
                       Navigator.of(context).pop();
                     },
-                  ),
-                  IconButton(
+                  )),
+                  PressFeedback(child: IconButton(
                     tooltip: l10n.accept,
                     icon: const Icon(AppIcons.checkCircle),
                     onPressed: () async {
@@ -9686,7 +11369,7 @@ class _ChatScreenState extends State<ChatScreen>
                       if (!context.mounted) return;
                       Navigator.of(context).pop();
                     },
-                  ),
+                  )),
                 ]
               // Persistent actions island: the normal (search / call / menu) and
               // selection (copy / forward / delete) rows live in one frosted
@@ -9702,7 +11385,7 @@ class _ChatScreenState extends State<ChatScreen>
                       builder: (context, _) => TweenAnimationBuilder<double>(
                       tween: Tween<double>(end: _selectionMode ? 1.0 : 0.0),
                       duration: const Duration(milliseconds: 280),
-                      curve: Curves.easeOutBack,
+                      curve: Motion.pop,
                       builder: (context, selRaw, _) {
                         final selO = selRaw.clamp(0.0, 1.0);
                         // As search opens, collapse this island to zero width and
@@ -9721,6 +11404,9 @@ class _ChatScreenState extends State<ChatScreen>
                                 child: _frostedHeaderIsland(
                                   radius: _kHeaderIslandRadius,
                                   height: _kHeaderIslandHeight,
+                                  // Одно общее размытие с соседними островками
+                                  // шапки (они не перекрываются).
+                                  grouped: true,
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 2,
                                   ),
@@ -9736,18 +11422,18 @@ class _ChatScreenState extends State<ChatScreen>
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              IconButton(
+                                              PressFeedback(child: IconButton(
                                                 tooltip: l10n.search,
                                                 icon: const Icon(
                                                   AppIcons.search,
                                                 ),
                                                 onPressed: () =>
                                                     _toggleChatSearch(),
-                                              ),
+                                              )),
                                               if (!_isFavoritesChat &&
                                                   peerProfileId != null &&
                                                   peerProfileId.isNotEmpty)
-                                                IconButton(
+                                                PressFeedback(child: IconButton(
                                                   tooltip: chatText(
                                                     context,
                                                     ru: 'Звонок',
@@ -9765,7 +11451,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                       ),
                                                     );
                                                   },
-                                                ),
+                                                )),
                                               if (_isGroupChat)
                                                 StreamBuilder<void>(
                                                   stream:
@@ -9785,7 +11471,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                           mainAxisSize:
                                                               MainAxisSize.min,
                                                           children: [
-                                                            IconButton(
+                                                            PressFeedback(child: IconButton(
                                                               tooltip: chatText(
                                                                 context,
                                                                 ru: 'Звонок комнаты',
@@ -9806,8 +11492,8 @@ class _ChatScreenState extends State<ChatScreen>
                                                               ),
                                                               onPressed:
                                                                   _openRoomCallScreen,
-                                                            ),
-                                                            IconButton(
+                                                            )),
+                                                            PressFeedback(child: IconButton(
                                                               key:
                                                                   _roomMenuButtonKey,
                                                               tooltip: chatText(
@@ -9822,7 +11508,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                               ),
                                                               onPressed:
                                                                   _openRoomActionsMenu,
-                                                            ),
+                                                            )),
                                                           ],
                                                         );
                                                       },
@@ -9858,7 +11544,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                         final blocked =
                                                             snap.data?.$2 ??
                                                             false;
-                                                        return IconButton(
+                                                        return PressFeedback(child: IconButton(
                                                           tooltip: l10n.menu,
                                                           icon: const Icon(
                                                             AppIcons.moreVert,
@@ -9872,7 +11558,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                                 peerProfileId:
                                                                     peerProfileId,
                                                               ),
-                                                        );
+                                                        ));
                                                       },
                                                     );
                                                   },
@@ -9889,19 +11575,19 @@ class _ChatScreenState extends State<ChatScreen>
                                           child: Row(
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
-                                              IconButton(
+                                              PressFeedback(child: IconButton(
                                                 tooltip: chatText(
                                                   context,
                                                   ru: 'Копировать',
                                                   en: 'Copy',
                                                 ),
                                                 icon: const Icon(
-                                                  FluentIcons.copy_24_regular,
+                                                  AdaptiveIconData(FluentIcons.copy_24_regular, CupertinoIcons.doc_on_doc),
                                                 ),
                                                 onPressed:
                                                     _copySelectedMessages,
-                                              ),
-                                              IconButton(
+                                              )),
+                                              PressFeedback(child: IconButton(
                                                 tooltip: chatText(
                                                   context,
                                                   ru: 'Переслать',
@@ -9913,22 +11599,22 @@ class _ChatScreenState extends State<ChatScreen>
                                                 ),
                                                 onPressed:
                                                     _forwardSelectedMessages,
-                                              ),
-                                              IconButton(
+                                              )),
+                                              PressFeedback(child: IconButton(
                                                 tooltip: chatText(
                                                   context,
                                                   ru: 'Удалить',
                                                   en: 'Delete',
                                                 ),
                                                 icon: const Icon(
-                                                  FluentIcons.delete_24_regular,
+                                                  AdaptiveIconData(FluentIcons.delete_24_regular, CupertinoIcons.trash),
                                                 ),
                                                 onPressed:
                                                     _deleteSelectedMessages,
-                                              ),
+                                              )),
                                               if (_selectedDownloadableAttachmentCount >
                                                   0)
-                                                PopupMenuButton<String>(
+                                                AppPopupMenuButton<String>(
                                                   tooltip: chatText(
                                                     context,
                                                     ru: 'Еще',
@@ -9985,7 +11671,21 @@ class _ChatScreenState extends State<ChatScreen>
                     ),
                   ),
                 ],
-        ),
+        );
+    return BackdropGroup(
+      // Lets the grouped chat-header islands (leading + title) share ONE
+      // backdrop read instead of one blur each (2026-07-23 perf audit). The
+      // shared backdrop is captured at the first grouped filter — the header —
+      // so it sees the chat body behind it exactly as separate filters would.
+      child: CosmeticAnimationScope(
+        enabled: widget.controller.peerCosmeticAnimEnabled,
+        child: BottomSystemFadeVisibility(
+      enabled: false,
+      child: Scaffold(
+        extendBody: true,
+        extendBodyBehindAppBar: true,
+        resizeToAvoidBottomInset: false,
+        appBar: chatAppBar,
         body: Builder(
           builder: (context) {
             // PERF(keyboard): this builder must NOT depend on viewInsets —
@@ -9995,18 +11695,26 @@ class _ChatScreenState extends State<ChatScreen>
             // tracking lives in leaf _KeyboardInsetAnchor widgets below, so a
             // keyboard frame only relayouts those subtrees. Only the stable
             // padding/viewPadding aspects are read here.
-            final mediaPadding = MediaQuery.paddingOf(context);
             final mediaViewPadding = MediaQuery.viewPaddingOf(context);
+            // Низ верхних островов — после кадра (островки уже разложены).
+            final bodyContext = context;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _measureHeaderBottom(bodyContext);
+            });
             final callManager = CallManager.instance;
             final callState = callManager?.state.value;
+            // 23.11.2026: со строками звонков в шапке их высота уже в
+            // высоте шапки — в теле ничего не прибавляется.
             final showCallReturnBanner =
+                !_kCallIslandsInHeader &&
                 callState != null &&
                 callState.isActive &&
                 callState.isUiMinimized;
             // Strip height + the island gap it now carries as a bottom margin,
             // so whatever stacks below it keeps the same rhythm.
             const callReturnBannerHeight = 46.0 + _kChatIslandGap;
-            final showRoomCallBanner = _isGroupChat && _activeRoomCall != null;
+            final showRoomCallBanner =
+                !_kCallIslandsInHeader && _isGroupChat && _activeRoomCall != null;
             const roomCallBannerHeight = 34.0 + _kChatIslandGap;
             // The pinned banner now lives in the AppBar bottom (above the music
             // island), so its height is already part of media.padding.top — no
@@ -10015,7 +11723,11 @@ class _ChatScreenState extends State<ChatScreen>
             // media.padding.top is already set by Scaffold's _BodyBuilder to
             // appBarHeight (statusBar + toolbarHeight + bottomWidget) when
             // extendBodyBehindAppBar:true — do NOT add chatToolbarHeight again.
-            final appBarViewportTopInset = mediaPadding.top;
+            // = то, что Scaffold кладёт в padding.top тела при
+            // extendBodyBehindAppBar: строка состояния + высота шапки. Верх
+            // экрана от клавиатуры не зависит — тело не перестраивается.
+            final appBarViewportTopInset =
+                mediaViewPadding.top + chatAppBar.preferredSize.height;
             final overlayBottomEdge =
                 appBarViewportTopInset +
                 (showCallReturnBanner ? callReturnBannerHeight : 0.0) +
@@ -10065,12 +11777,19 @@ class _ChatScreenState extends State<ChatScreen>
             }
 
             return DismissKeyboardOnTap(
-              onTap: _shimmerWallpaperOnEmptyTap,
+              onTap: () {
+                _inlineEmojiPanel?.close();
+                _shimmerWallpaperOnEmptyTap();
+              },
               child: Stack(
                 children: [
                   Positioned.fill(
                     child: IgnorePointer(
-                      child: _buildChatWallpaperBackground(),
+                      // Свой слой: перестройка тела (клавиатура, новое
+                      // сообщение) не перерисовывает полноэкранные обои.
+                      child: RepaintBoundary(
+                        child: _buildChatWallpaperBackground(),
+                      ),
                     ),
                   ),
                   Positioned.fill(
@@ -10085,6 +11804,9 @@ class _ChatScreenState extends State<ChatScreen>
                       // Feeds the bubble-gradient repaint signal; see
                       // [_keyboardInsetForGradient].
                       publishInset: _keyboardInsetForGradient,
+                      // Панель эмодзи на месте клавиатуры поднимает ленту так
+                      // же, как клавиатура.
+                      panelInset: _inlineEmojiPanel?.inset,
                       child: StreamBuilder<void>(
                         stream: widget.controller.changed,
                         builder: (context, _) {
@@ -10359,6 +12081,9 @@ class _ChatScreenState extends State<ChatScreen>
                                           _pendingPhotoAlbums.length +
                                           _pendingPhotos.length +
                                           _pendingAudio.length;
+                                      // Переход к сообщению считает индекс
+                                      // в показанном списке (Д-4).
+                                      _lastRowIndexOffset = rowIndexOffset;
                                       final rowIndexByKey = <Key, int>{};
                                       for (
                                         var t = 0;
@@ -10373,6 +12098,28 @@ class _ChatScreenState extends State<ChatScreen>
                                           rowIndexByKey[rowKey] =
                                               rowIndexOffset + t;
                                         }
+                                      }
+                                      // М9 (22.11.2026): строки заготовок —
+                                      // по их ключам, как строки сообщений.
+                                      if (kPendingSwapV2) {
+                                        final pendingBase =
+                                            (showRoomCallBanner ? 1 : 0) +
+                                            (showWaveBack ? 1 : 0);
+                                        final pendingCount =
+                                            _pendingPhotoAlbums.length +
+                                            _pendingPhotos.length +
+                                            _pendingAudio.length;
+                                        for (var k = 0; k < pendingCount; k++) {
+                                          final key = _pendingRowKeyAt(k);
+                                          if (key != null) {
+                                            rowIndexByKey[key] =
+                                                pendingBase + k;
+                                          }
+                                        }
+                                        // М4: снимки, чьё сообщение уже
+                                        // записано, — картинку настоящего
+                                        // пузыря готовим до подмены.
+                                        _primeSettledPendingMedia();
                                       }
                                       // Bound the per-event GlobalKey map —
                                       // it used to grow for the whole life of
@@ -10392,7 +12139,12 @@ class _ChatScreenState extends State<ChatScreen>
                                       // content at the top/bottom edges; the
                                       // wallpaper layer below this ShaderMask
                                       // stays fully visible.
-                                      return ShaderMask(
+                                      // Касание мимо раскрытой видео-заметки
+                                      // сворачивает её (макет 5a).
+                                      // Тряска, качка и перекос ленты вместе с эффектом эмодзи
+                                      // отдельным сообщением (в покое — как было).
+                                      return SoloEmojiScreenMotion(child: VideoNoteOutsideTap(
+                                        child: ShaderMask(
                                         shaderCallback: (rect) =>
                                             _chatContentFadeShader(
                                               rect,
@@ -10436,7 +12188,9 @@ class _ChatScreenState extends State<ChatScreen>
                                                 ScrollViewKeyboardDismissBehavior
                                                     .onDrag,
                                             findChildIndexCallback: (key) =>
-                                                rowIndexByKey[key],
+                                                rowIndexByKey[key is ValueKey<Key>
+                                                    ? key.value
+                                                    : key],
                                             padding: timelinePadding,
                                             itemCount:
                                                 _pendingPhotoAlbums.length +
@@ -10446,6 +12200,18 @@ class _ChatScreenState extends State<ChatScreen>
                                                 (showRoomCallBanner ? 1 : 0) +
                                                 (showWaveBack ? 1 : 0),
                                             itemBuilder: (context, i) {
+                                              // Пока видео-заметка раскрыта,
+                                              // остальные строки приглушены до
+                                              // 35 % (макет 5a). Ключ строки —
+                                              // снаружи, в ValueKey, чтобы
+                                              // findChildIndexCallback его
+                                              // по-прежнему находил.
+                                              Widget dim(Widget w) => VideoNoteDim(
+                                                key: w.key == null
+                                                    ? null
+                                                    : ValueKey<Key>(w.key!),
+                                                child: w,
+                                              );
                                               // Day separator: the row is built
                                               // verbatim by buildRow() below;
                                               // afterwards we only decide
@@ -10563,6 +12329,18 @@ class _ChatScreenState extends State<ChatScreen>
                                                     filePath: p.filePath,
                                                     mime: p.mime,
                                                     caption: p.caption,
+                                                    knownAspect:
+                                                        _chatMediaAspectFromDims(
+                                                          p.width,
+                                                          p.height,
+                                                          // М3: ролик — те же
+                                                          // пределы, что у
+                                                          // готового пузыря.
+                                                          isVideo:
+                                                              _isVideoMediaMime(
+                                                                p.mime,
+                                                              ),
+                                                        ),
                                                     createdAtMs: p.createdAtMs,
                                                     sentBytes: p.sentBytes,
                                                     totalBytes: p.totalBytes,
@@ -10803,6 +12581,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                     isOutgoing: entry.isMe,
                                                     child: _wrapSelectableEventItem(
                                                       event: entry.event,
+                                                      longPressOpensMenu: true,
                                                       onTapAction: (tapPosition) =>
                                                           _handleEventTapAction(
                                                             entry: entry,
@@ -10811,12 +12590,9 @@ class _ChatScreenState extends State<ChatScreen>
                                                             tapPosition:
                                                                 tapPosition,
                                                           ),
-                                                      onDoubleTapAction: () =>
-                                                          _applyReaction(
-                                                            eventId:
-                                                                reactionEventId,
-                                                            emoji: '❤️',
-                                                          ),
+                                                      onDoubleTapAction: () => unawaited(
+                                                        _doubleTapReact(entry, reactionEventId),
+                                                      ),
                                                       child: _ImageGroupBubble(
                                                         attachments: entry
                                                             .imageAttachments!,
@@ -10912,6 +12688,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                     isOutgoing: entry.isMe,
                                                     child: _wrapSelectableEventItem(
                                                       event: entry.event,
+                                                      longPressOpensMenu: true,
                                                       onTapAction: (tapPosition) =>
                                                           _handleEventTapAction(
                                                             entry: entry,
@@ -10920,12 +12697,9 @@ class _ChatScreenState extends State<ChatScreen>
                                                             tapPosition:
                                                                 tapPosition,
                                                           ),
-                                                      onDoubleTapAction: () =>
-                                                          _applyReaction(
-                                                            eventId:
-                                                                reactionEventId,
-                                                            emoji: '❤️',
-                                                          ),
+                                                      onDoubleTapAction: () => unawaited(
+                                                        _doubleTapReact(entry, reactionEventId),
+                                                      ),
                                                       child: _ImageAttachmentBubble(
                                                         attachment:
                                                             entry.attachment!,
@@ -10990,13 +12764,20 @@ class _ChatScreenState extends State<ChatScreen>
                                                         downloadProgressFor: widget
                                                             .controller
                                                             .attachmentDownloadProgress,
+                                                        // GIF — как стикер: касание открывает реакции и меню
+                                                        // (21.11.2026); фото — просмотр.
                                                         onTap: (_) =>
-                                                            _openTimelineImageGallery(
-                                                              entry: entry,
-                                                              selectedAttachment:
-                                                                  entry
-                                                                      .attachment,
-                                                            ),
+                                                            (entry.attachment!.mime ?? '').toLowerCase().contains('gif')
+                                                            ? unawaited(
+                                                                _handleEventTapAction(
+                                                                  entry: entry,
+                                                                  reactions: entryReactions,
+                                                                ),
+                                                              )
+                                                            : _openTimelineImageGallery(
+                                                                entry: entry,
+                                                                selectedAttachment: entry.attachment,
+                                                              ),
                                                         onReplySwipe:
                                                             replyAction,
                                                         onReplyQuoteTap:
@@ -11049,6 +12830,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                     isOutgoing: entry.isMe,
                                                     child: _wrapSelectableEventItem(
                                                       event: entry.event,
+                                                      longPressOpensMenu: true,
                                                       // The video note owns its
                                                       // own single tap (enlarge +
                                                       // unmute). Long-press → menu
@@ -11063,12 +12845,9 @@ class _ChatScreenState extends State<ChatScreen>
                                                             tapPosition:
                                                                 tapPosition,
                                                           ),
-                                                      onDoubleTapAction: () =>
-                                                          _applyReaction(
-                                                            eventId:
-                                                                reactionEventId,
-                                                            emoji: '❤️',
-                                                          ),
+                                                      onDoubleTapAction: () => unawaited(
+                                                        _doubleTapReact(entry, reactionEventId),
+                                                      ),
                                                       // Swipe-left → reply, same
                                                       // as every other bubble. The
                                                       // note's OWN horizontal-drag
@@ -11086,6 +12865,28 @@ class _ChatScreenState extends State<ChatScreen>
                                                           attachment:
                                                               attachment,
                                                           isMe: entry.isMe,
+                                                          createdAtMs: entry
+                                                              .event
+                                                              .createdAtMs,
+                                                          authorName: entry.isMe
+                                                              ? context.l10n.mvYou
+                                                              : entry.authorName,
+                                                          hapticsEnabled: () =>
+                                                              widget
+                                                                  .controller
+                                                                  .appHapticsEnabled,
+                                                          // Заметка зазвучала —
+                                                          // голосовое или музыка
+                                                          // встают на паузу.
+                                                          onSoundStart: () {
+                                                            if (_sharedAudioPlayback
+                                                                .playing) {
+                                                              unawaited(
+                                                                widget.controller
+                                                                    .toggleSharedAudioPlayback(),
+                                                              );
+                                                            }
+                                                          },
                                                           resolveFile: widget
                                                               .controller
                                                               .ensureCachedAttachmentFile,
@@ -11232,6 +13033,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                     isOutgoing: entry.isMe,
                                                     child: _wrapSelectableEventItem(
                                                       event: entry.event,
+                                                      longPressOpensMenu: true,
                                                       onTapAction: (tapPosition) =>
                                                           _handleEventTapAction(
                                                             entry: entry,
@@ -11240,12 +13042,9 @@ class _ChatScreenState extends State<ChatScreen>
                                                             tapPosition:
                                                                 tapPosition,
                                                           ),
-                                                      onDoubleTapAction: () =>
-                                                          _applyReaction(
-                                                            eventId:
-                                                                reactionEventId,
-                                                            emoji: '❤️',
-                                                          ),
+                                                      onDoubleTapAction: () => unawaited(
+                                                        _doubleTapReact(entry, reactionEventId),
+                                                      ),
                                                       child: _audioAwareBubble(
                                                         isAudioAttachment: isAudioAttachment,
                                                         build: () {
@@ -11365,6 +13164,34 @@ class _ChatScreenState extends State<ChatScreen>
                                                                       d,
                                                                     ),
                                                               )
+                                                            : null,
+                                                        // 2a: чип скорости на играющем голосовом.
+                                                        audioSpeed:
+                                                            isAudioActive
+                                                            ? _sharedAudioPlayback
+                                                                  .speed
+                                                            : null,
+                                                        onCycleSpeed:
+                                                            isAudioActive
+                                                            ? () {
+                                                                final cur =
+                                                                    _sharedAudioPlayback
+                                                                        .speed;
+                                                                final next =
+                                                                    cur < 1.25
+                                                                    ? 1.5
+                                                                    : (cur < 1.75
+                                                                          ? 2.0
+                                                                          : 1.0);
+                                                                Haptics.tap();
+                                                                unawaited(
+                                                                  widget
+                                                                      .controller
+                                                                      .setSharedAudioSpeed(
+                                                                        next,
+                                                                      ),
+                                                                );
+                                                              }
                                                             : null,
                                                         viewportListenable:
                                                             _bubbleGradientRepaint,
@@ -11495,24 +13322,34 @@ class _ChatScreenState extends State<ChatScreen>
                                                     isOutgoing: entry.isMe,
                                                     child: _wrapSelectableEventItem(
                                                       event: entry.event,
+                                                      longPressOpensMenu: true,
+                                                      // Касание стикера — пакет,
+                                                      // долгое по нему — меню.
+                                                      menuAction: (tapPosition) =>
+                                                          unawaited(
+                                                            _handleEventTapAction(
+                                                              entry: entry,
+                                                              reactions:
+                                                                  entryReactions,
+                                                              tapPosition:
+                                                                  tapPosition,
+                                                            ),
+                                                          ),
                                                       // TAP a sticker → open its
                                                       // pack sheet (install / send
                                                       // more from the set). Long-
                                                       // press (selection) + double-
                                                       // tap (❤️) still pass through.
-                                                      onTapAction: (_) =>
-                                                          unawaited(
-                                                            _showStickerPackSheet(
-                                                              entry
-                                                                  .stickerEvent!,
-                                                            ),
-                                                          ),
-                                                      onDoubleTapAction: () =>
-                                                          _applyReaction(
-                                                            eventId:
-                                                                reactionEventId,
-                                                            emoji: '❤️',
-                                                          ),
+                                                      onTapAction: (_) => unawaited(
+                                                        _showStickerPackSheet(
+                                                          entry.stickerEvent!,
+                                                          entry: entry,
+                                                          reactions: entryReactions,
+                                                        ),
+                                                      ),
+                                                      onDoubleTapAction: () => unawaited(
+                                                        _doubleTapReact(entry, reactionEventId),
+                                                      ),
                                                       child: _UserStickerResolver(
                                                         event:
                                                             entry.stickerEvent!,
@@ -11675,10 +13512,8 @@ class _ChatScreenState extends State<ChatScreen>
                                                             hasPoll ||
                                                             hasEvent
                                                         ? () {}
-                                                        : () => _applyReaction(
-                                                            eventId:
-                                                                reactionEventId,
-                                                            emoji: '❤️',
+                                                        : () => unawaited(
+                                                            _doubleTapReact(entry, reactionEventId),
                                                           ),
                                                     child: isSoloEmoji
                                                         ? _SoloEmojiMessage(
@@ -12157,6 +13992,17 @@ class _ChatScreenState extends State<ChatScreen>
                                                                 _isCurrentSearchHitEntry(
                                                                   entry,
                                                                 ),
+                                                            selectableText:
+                                                                _textSelectEventId ==
+                                                                    entry
+                                                                        .event
+                                                                        .eventId
+                                                                ? (child) =>
+                                                                      _inlineTextSelection(
+                                                                        entry,
+                                                                        child,
+                                                                      )
+                                                                : null,
                                                           ),
                                                   ),
                                                 ),
@@ -12177,26 +14023,40 @@ class _ChatScreenState extends State<ChatScreen>
                                                   _pendingPhotos.length +
                                                   _pendingAudio.length;
                                               if (i < pendingEnd) {
-                                                return ListenableBuilder(
+                                                return dim(ListenableBuilder(
+                                                  // М9 (22.11.2026): ключ
+                                                  // заготовки — при второй
+                                                  // отправке подряд пузыри не
+                                                  // меняются местами и не
+                                                  // играют появление заново.
+                                                  key: kPendingSwapV2
+                                                      ? _pendingRowKeyAt(
+                                                          i -
+                                                              (showRoomCallBanner
+                                                                  ? 1
+                                                                  : 0) -
+                                                              (showWaveBack
+                                                                  ? 1
+                                                                  : 0),
+                                                        )
+                                                      : null,
                                                   listenable:
                                                       _pendingUploadsTick,
                                                   builder: (context, _) =>
                                                       buildRow(),
-                                                );
+                                                ));
                                               }
 
                                               final row = buildRow();
-                                              final dayIdx =
-                                                  (showRoomCallBanner
-                                                      ? i - 1
-                                                      : i) -
-                                                  _pendingPhotoAlbums.length -
-                                                  _pendingPhotos.length -
-                                                  _pendingAudio.length;
+                                              // 23.11.2026: строка «помахать в
+                                              // ответ» тоже стоит перед лентой —
+                                              // без неё дата в маленьком чате
+                                              // вставала над соседней строкой.
+                                              final dayIdx = i - rowIndexOffset;
                                               if (dayIdx < 0 ||
                                                   dayIdx >=
                                                       visibleTimeline.length) {
-                                                return row;
+                                                return dim(row);
                                               }
                                               final dayEntry =
                                                   visibleTimeline[dayIdx];
@@ -12219,22 +14079,39 @@ class _ChatScreenState extends State<ChatScreen>
                                                         .createdAtMs,
                                                     dayEntry.event.createdAtMs,
                                                   );
-                                              if (!startsDay) return row;
-                                              return Column(
+                                              // «Непрочитанные сообщения» —
+                                              // над первым непрочитанным, с
+                                              // которого открыт чат (23.11.2026).
+                                              final dividerId =
+                                                  _unreadDividerRowId;
+                                              final startsUnread =
+                                                  dividerId != null &&
+                                                  timelineRowId(
+                                                        dayEntry.payloadEventId,
+                                                        dayEntry.event.eventId,
+                                                      ) ==
+                                                      dividerId;
+                                              if (!startsDay && !startsUnread) {
+                                                return dim(row);
+                                              }
+                                              return dim(Column(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  _ChatDateSeparator(
-                                                    timestampMs: dayEntry
-                                                        .event
-                                                        .createdAtMs,
-                                                  ),
+                                                  if (startsDay)
+                                                    _ChatDateSeparator(
+                                                      timestampMs: dayEntry
+                                                          .event
+                                                          .createdAtMs,
+                                                    ),
+                                                  if (startsUnread)
+                                                    const _UnreadMessagesDivider(),
                                                   row,
                                                 ],
-                                              );
+                                              ));
                                             },
                                           ),
                                         ),
-                                      );
+                                      )));
                                     },
                                   );
                                 },
@@ -12257,9 +14134,17 @@ class _ChatScreenState extends State<ChatScreen>
                   // ValueListenableBuilder: the chip updates on scroll ticks,
                   // and it must repaint ALONE — not drag the whole chat
                   // subtree through a rebuild mid-fling (see _floatingDay).
-                  ValueListenableBuilder<({int dayMs, bool visible})?>(
-                    valueListenable: _floatingDay,
-                    builder: (context, day, _) {
+                  // 🔴 23.11.2026: дата пряталась под строкой тем комнаты
+                  // (#Основа, #Идеи) — расчётная высота шапки её не знает.
+                  // Ставим под НАСТОЯЩИЙ низ верхних островов, как плашку
+                  // свёрнутого звонка.
+                  ListenableBuilder(
+                    listenable: Listenable.merge([
+                      _floatingDay,
+                      _headerBottomEdge,
+                    ]),
+                    builder: (context, _) {
+                      final day = _floatingDay.value;
                       // ALWAYS return a Positioned. Returning a bare SizedBox
                       // for the empty state made this a NON-positioned Stack
                       // child — and one of those makes a loose Stack size
@@ -12267,7 +14152,8 @@ class _ChatScreenState extends State<ChatScreen>
                       // (black screen, no composer). The empty state must live
                       // INSIDE the Positioned instead.
                       return Positioned(
-                        top: overlayBottomEdge + 6,
+                        top: max(overlayBottomEdge, _headerBottomEdge.value) +
+                            6,
                         left: 0,
                         right: 0,
                         child: day == null
@@ -12276,7 +14162,7 @@ class _ChatScreenState extends State<ChatScreen>
                                 child: AnimatedOpacity(
                                   opacity: day.visible ? 1 : 0,
                                   duration: const Duration(milliseconds: 180),
-                                  curve: Curves.easeOut,
+                                  curve: Motion.fade,
                                   child: Center(
                                     child: _ChatFloatingDayChip(
                                       timestampMs: day.dayMs,
@@ -12287,24 +14173,55 @@ class _ChatScreenState extends State<ChatScreen>
                       );
                     },
                   ),
-                  if (showCallReturnBanner)
-                    Positioned(
-                      top: appBarViewportTopInset,
-                      left: 0,
-                      right: 0,
-                      // Same side margins + bottom gap as the pinned / music
-                      // islands above it: the strip used to run edge-to-edge,
-                      // which is why it read as wider than the pinned island.
-                      child: const CallReturnBanner(margin: _kChatIslandMargin),
-                    ),
+                  // 🔴 22.11.2026: плашка свёрнутого звонка — под НАСТОЯЩИМ
+                  // низом верхних островов (меряется по ним, а не по расчётной
+                  // высоте шапки) и появляется сразу, как звонок свернули
+                  // (экран слушает звонок, а не ждёт случайной перестройки).
+                  ListenableBuilder(
+                    listenable: Listenable.merge([
+                      _headerBottomEdge,
+                      ?callManager?.state,
+                    ]),
+                    builder: (context, _) {
+                      final live = callManager?.state.value;
+                      final show = !_kCallIslandsInHeader &&
+                          live != null &&
+                          live.isActive &&
+                          live.isUiMinimized;
+                      return Positioned(
+                        top: max(
+                          appBarViewportTopInset,
+                          _headerBottomEdge.value,
+                        ),
+                        left: 0,
+                        right: 0,
+                        // Same side margins + bottom gap as the pinned / music
+                        // islands above it.
+                        child: !show
+                            ? const SizedBox.shrink()
+                            : const MountEntrance(
+                                offset: Offset(0, -12),
+                                child: CallReturnBanner(
+                                  margin: _kChatIslandMargin,
+                                ),
+                              ),
+                      );
+                    },
+                  ),
                   if (showRoomCallBanner)
                     Positioned(
                       top:
-                          appBarViewportTopInset +
+                          max(
+                            appBarViewportTopInset,
+                            _headerBottomEdge.value,
+                          ) +
                           (showCallReturnBanner ? callReturnBannerHeight : 0.0),
                       left: 0,
                       right: 0,
-                      child: _buildRoomCallReturnBanner(_activeRoomCall!),
+                      child: MountEntrance(
+                        offset: const Offset(0, -12),
+                        child: _buildRoomCallReturnBanner(_activeRoomCall!),
+                      ),
                     ),
                   // Bottom content fade is now handled by the ShaderMask around
                   // the message list (above). The old in-chat SystemBottomFade
@@ -12323,7 +14240,7 @@ class _ChatScreenState extends State<ChatScreen>
                         child: SafeArea(
                           top: false,
                           minimum: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-                          child: _ChatSearchBottomBar(
+                          child: MountEntrance(child: _ChatSearchBottomBar(
                             islandBuilder: (child) =>
                                 _frostedHeaderIsland(radius: 28, child: child),
                             total: _searchHits.length,
@@ -12333,7 +14250,7 @@ class _ChatScreenState extends State<ChatScreen>
                             onNext: _searchHits.isEmpty ? null : _nextSearchHit,
                             onCalendar: _onSearchCalendarTapPlaceholder,
                             onOpenList: _onSearchListTapPlaceholder,
-                          ),
+                          )),
                         ),
                       ),
                     ),
@@ -12346,482 +14263,53 @@ class _ChatScreenState extends State<ChatScreen>
                       // the keyboard, so per-frame inset changes relayout this
                       // subtree without rebuilding the composer widgets.
                       child: _KeyboardInsetAnchor(
+                        panelInset: _inlineEmojiPanel?.inset,
+                        dropSafeAreaUnderPanel: true,
                         child: SafeArea(
                         key: _composerOverlayKey,
                         top: false,
-                        minimum: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                        minimum: const EdgeInsets.fromLTRB(8, 6, 8, 8),
                         // Same Telegram-style matte glass as the chat-header
                         // islands, but with a transparent fill (pure blur) so
                         // the input background reads see-through like the search.
-                        child: _frostedHeaderIsland(
-                          radius: 28,
-                          transparentFill: true,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 6,
-                            ),
+                        child: MountEntrance(
+                          // Поле ввода возвращается после поиска — въезжает;
+                          // при открытии чата стоит на месте.
+                          animate: _chatSearchRevealController.value > 0.01,
+                          // «Капля» (макет 1a, 22.11.2026): три отдельные
+                          // капли в одном BackdropGroup — один снимок фона за
+                          // кадр; над ними — остров ответа, правки, пересылки
+                          // и упоминаний.
+                          child: BackdropGroup(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                if (_forwardDraft != null)
-                                  Container(
-                                    width: double.infinity,
-                                    margin: const EdgeInsets.fromLTRB(
-                                      8,
-                                      2,
-                                      8,
-                                      6,
-                                    ),
-                                    padding: const EdgeInsets.fromLTRB(
-                                      10,
-                                      8,
-                                      6,
-                                      8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(12),
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .surface
-                                          .withValues(alpha: 0.35),
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Icon(
-                                          AppIcons.forward,
-                                          size: 18,
-                                          color: Theme.of(
-                                            context,
-                                          ).colorScheme.primary,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                chatText(
-                                                  context,
-                                                  ru: 'Переслать ${_forwardDraft!.items.length} сообщение',
-                                                  en: 'Forward ${_forwardDraft!.items.length} message',
-                                                  uk: 'Переслати ${_forwardDraft!.items.length} повідомлення',
-                                                  es: 'Reenviar ${_forwardDraft!.items.length} mensaje',
-                                                  pt: 'Reencaminhar ${_forwardDraft!.items.length} mensagem',
-                                                  ptBr:
-                                                      'Encaminhar ${_forwardDraft!.items.length} mensagem',
-                                                  fr: 'Transférer ${_forwardDraft!.items.length} message',
-                                                  de: '${_forwardDraft!.items.length} Nachricht weiterleiten',
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .labelMedium
-                                                    ?.copyWith(
-                                                      color: Theme.of(
-                                                        context,
-                                                      ).colorScheme.primary,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                    ),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Builder(
-                                                builder: (context) {
-                                                  final visuals =
-                                                      Theme.of(context)
-                                                          .extension<
-                                                            ChatVisualsThemeExtension
-                                                          >();
-                                                  final firstAuthor =
-                                                      _forwardDraft!
-                                                          .items
-                                                          .first
-                                                          .authorName;
-                                                  final firstAuthorIsMe =
-                                                      firstAuthor ==
-                                                      _selfAuthorLabel();
-                                                  final authorColor =
-                                                      firstAuthorIsMe
-                                                      ? (visuals?.outgoingNickname ??
-                                                            Theme.of(context)
-                                                                .colorScheme
-                                                                .primary)
-                                                      : (visuals?.incomingNickname ??
-                                                            Theme.of(context)
-                                                                .colorScheme
-                                                                .primary);
-                                                  final preview =
-                                                      _forwardDraft!
-                                                          .items
-                                                          .first
-                                                          .isText
-                                                      ? (_forwardDraft!
-                                                                .items
-                                                                .first
-                                                                .text ??
-                                                            '')
-                                                      : _forwardDraft!
-                                                            .items
-                                                            .first
-                                                            .isSticker
-                                                      ? SecretlyStickerCatalog.previewLabel(
-                                                          isRu:
-                                                              chatLocaleIsRussian(
-                                                                context,
-                                                              ),
-                                                          emojiHint:
-                                                              _forwardDraft!
-                                                                  .items
-                                                                  .first
-                                                                  .sticker
-                                                                  ?.emojiHint,
-                                                          label: _forwardDraft!
-                                                              .items
-                                                              .first
-                                                              .sticker
-                                                              ?.label,
-                                                        )
-                                                      : _attachmentPreviewLabel(
-                                                          _forwardDraft!
-                                                              .items
-                                                              .first
-                                                              .mime,
-                                                        );
-                                                  final baseStyle = Theme.of(
-                                                    context,
-                                                  ).textTheme.bodySmall;
-                                                  return RichText(
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    text: TextSpan(
-                                                      style: baseStyle,
-                                                      children: [
-                                                        TextSpan(
-                                                          text:
-                                                              '$firstAuthor: ',
-                                                          style: baseStyle
-                                                              ?.copyWith(
-                                                                color:
-                                                                    authorColor,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w700,
-                                                              ),
-                                                        ),
-                                                        TextSpan(text: preview),
-                                                      ],
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        IconButton(
-                                          tooltip: l10n.cancel,
-                                          onPressed: () {
-                                            setState(
-                                              () => _forwardDraft = null,
-                                            );
-                                            widget.controller
-                                                .clearForwardDraft();
-                                          },
-                                          icon: const Icon(
-                                            AppIcons.close,
-                                            size: 18,
-                                          ),
-                                          visualDensity: VisualDensity.compact,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                ClipRect(child: AnimatedSize(
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Motion.standard,
+                                  alignment: Alignment.bottomCenter,
+                                  // Ответ, правка и пересылка — внутри капли
+                                  // поля (выезжают из неё, 22.11.2026); здесь —
+                                  // только ограничения комнаты и упоминания.
+                                  child: !(roomPolicyBannerText != null ||
+                                          mentionSuggestions.isNotEmpty)
+                                      ? const SizedBox(width: double.infinity)
+                                      : Padding(
+                                          padding: const EdgeInsets.only(bottom: 8),
+                                          child: ComposerContextDrop(
+                                            style: _composerDropStyle(context),
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
                                 if (roomPolicyBannerText != null)
                                   _buildGroupComposerPolicyBanner(
                                     roomPolicyBannerText,
                                   ),
                                 ClipRect(
                                   child: AnimatedSize(
-                                    duration: const Duration(milliseconds: 220),
-                                    curve: Curves.easeOutCubic,
-                                    alignment: Alignment.bottomCenter,
-                                    child: _editingTarget == null
-                                        ? const SizedBox.shrink()
-                                        : Padding(
-                                            padding: const EdgeInsets.fromLTRB(
-                                              12,
-                                              8,
-                                              6,
-                                              2,
-                                            ),
-                                            child: Row(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.center,
-                                              children: [
-                                                Container(
-                                                  width: 3,
-                                                  height: 34,
-                                                  decoration: BoxDecoration(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          3,
-                                                        ),
-                                                    color: Theme.of(
-                                                      context,
-                                                    ).colorScheme.primary,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 10),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      Text(
-                                                        chatText(
-                                                          context,
-                                                          ru: 'Изменение сообщения',
-                                                          en: 'Editing message',
-                                                        ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        style: Theme.of(context)
-                                                            .textTheme
-                                                            .labelSmall
-                                                            ?.copyWith(
-                                                              color:
-                                                                  Theme.of(
-                                                                        context,
-                                                                      )
-                                                                      .colorScheme
-                                                                      .primary,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .w700,
-                                                            ),
-                                                      ),
-                                                      Text(
-                                                        _editingTarget!
-                                                            .previewText,
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        style: Theme.of(context)
-                                                            .textTheme
-                                                            .bodySmall
-                                                            ?.copyWith(
-                                                              fontSize: 11,
-                                                              color:
-                                                                  Theme.of(
-                                                                        context,
-                                                                      )
-                                                                      .colorScheme
-                                                                      .onSurface
-                                                                      .withValues(
-                                                                        alpha:
-                                                                            0.6,
-                                                                      ),
-                                                            ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                                SizedBox(
-                                                  width: 36,
-                                                  height: 36,
-                                                  child: IconButton(
-                                                    tooltip: l10n.cancel,
-                                                    onPressed: _cancelEdit,
-                                                    padding: EdgeInsets.zero,
-                                                    visualDensity:
-                                                        VisualDensity.compact,
-                                                    splashRadius: 18,
-                                                    iconSize: 20,
-                                                    icon: Icon(
-                                                      AppIcons.close,
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .onSurface
-                                                          .withValues(
-                                                            alpha: 0.52,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                                ClipRect(
-                                  child: AnimatedSize(
-                                    duration: const Duration(milliseconds: 220),
-                                    curve: Curves.easeOutCubic,
-                                    alignment: Alignment.bottomCenter,
-                                    child: _replyTo == null
-                                        ? const SizedBox.shrink()
-                                        : Padding(
-                                            padding: const EdgeInsets.fromLTRB(
-                                              12,
-                                              8,
-                                              6,
-                                              2,
-                                            ),
-                                            child: Row(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.center,
-                                              children: [
-                                                Container(
-                                                  width: 3,
-                                                  height: 34,
-                                                  decoration: BoxDecoration(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          3,
-                                                        ),
-                                                    color: _replyTo!.authorIsMe
-                                                        ? (Theme.of(context)
-                                                                  .extension<
-                                                                    ChatVisualsThemeExtension
-                                                                  >()
-                                                                  ?.outgoingNickname ??
-                                                              Theme.of(context)
-                                                                  .colorScheme
-                                                                  .primary)
-                                                        : (Theme.of(context)
-                                                                  .extension<
-                                                                    ChatVisualsThemeExtension
-                                                                  >()
-                                                                  ?.incomingNickname ??
-                                                              Theme.of(context)
-                                                                  .colorScheme
-                                                                  .primary),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 10),
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      Text(
-                                                        chatText(
-                                                          context,
-                                                          ru: 'В ответ ${_replyTo!.authorName}',
-                                                          en: 'Replying to ${_replyTo!.authorName}',
-                                                          uk: 'У відповідь ${_replyTo!.authorName}',
-                                                          es: 'Respondiendo a ${_replyTo!.authorName}',
-                                                          pt: 'A responder a ${_replyTo!.authorName}',
-                                                          ptBr:
-                                                              'Respondendo a ${_replyTo!.authorName}',
-                                                          fr: 'Réponse à ${_replyTo!.authorName}',
-                                                          de: 'Antwort an ${_replyTo!.authorName}',
-                                                        ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                                          color:
-                                                              _replyTo!
-                                                                  .authorIsMe
-                                                              ? (Theme.of(
-                                                                          context,
-                                                                        )
-                                                                        .extension<
-                                                                          ChatVisualsThemeExtension
-                                                                        >()
-                                                                        ?.outgoingNickname ??
-                                                                    Theme.of(
-                                                                          context,
-                                                                        )
-                                                                        .colorScheme
-                                                                        .primary)
-                                                              : (Theme.of(
-                                                                          context,
-                                                                        )
-                                                                        .extension<
-                                                                          ChatVisualsThemeExtension
-                                                                        >()
-                                                                        ?.incomingNickname ??
-                                                                    Theme.of(
-                                                                          context,
-                                                                        )
-                                                                        .colorScheme
-                                                                        .primary),
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                        ),
-                                                      ),
-                                                      Text(
-                                                        _replyTo!.previewText,
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        style: Theme.of(context)
-                                                            .textTheme
-                                                            .bodySmall
-                                                            ?.copyWith(
-                                                              fontSize: 11,
-                                                              color:
-                                                                  Theme.of(
-                                                                        context,
-                                                                      )
-                                                                      .colorScheme
-                                                                      .onSurface
-                                                                      .withValues(
-                                                                        alpha:
-                                                                            0.6,
-                                                                      ),
-                                                            ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                                SizedBox(
-                                                  width: 36,
-                                                  height: 36,
-                                                  child: IconButton(
-                                                    tooltip: l10n.cancel,
-                                                    onPressed: () => setState(
-                                                      () => _replyTo = null,
-                                                    ),
-                                                    padding: EdgeInsets.zero,
-                                                    visualDensity:
-                                                        VisualDensity.compact,
-                                                    splashRadius: 18,
-                                                    iconSize: 20,
-                                                    icon: Icon(
-                                                      AppIcons.close,
-                                                      color: Theme.of(context)
-                                                          .colorScheme
-                                                          .onSurface
-                                                          .withValues(
-                                                            alpha: 0.52,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                  ),
-                                ),
-                                ClipRect(
-                                  child: AnimatedSize(
                                     duration: const Duration(milliseconds: 180),
-                                    curve: Curves.easeOutCubic,
+                                    curve: Motion.standard,
                                     alignment: Alignment.bottomCenter,
                                     child: mentionSuggestions.isEmpty
                                         ? const SizedBox.shrink()
@@ -12830,6 +14318,11 @@ class _ChatScreenState extends State<ChatScreen>
                                           ),
                                   ),
                                 ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                )),
                                 Row(
                                   children: [
                                     ValueListenableBuilder<TextEditingValue>(
@@ -12843,20 +14336,6 @@ class _ChatScreenState extends State<ChatScreen>
                                             >();
                                         final actionTop =
                                             visuals?.actionTop ?? cs.primary;
-                                        final actionBottom =
-                                            visuals?.actionBottom ??
-                                            cs.secondary;
-                                        final actionCenter =
-                                            Color.lerp(
-                                              actionTop,
-                                              actionBottom,
-                                              0.5,
-                                            ) ??
-                                            cs.primary;
-                                        final actionIconColor =
-                                            _resolveComposerActionIconColor(
-                                              actionCenter,
-                                            );
                                         // Bright white emoji/attach icons on the
                                         // frosted composer panel.
                                         // Contrast against the tonal composer
@@ -12879,8 +14358,10 @@ class _ChatScreenState extends State<ChatScreen>
                                         final canAttachNow =
                                             !_voiceRecording &&
                                             _roomCanSendMediaNow();
+                                        // Не гасим поле на время записи:
+                                        // `enabled: false` снимает фокус и
+                                        // прячет клавиатуру (23.11.2026).
                                         final composerTextEnabled =
-                                            !_voiceRecording &&
                                             _roomTextFieldEnabled();
                                         final messageHint =
                                             _editingTarget != null
@@ -12898,440 +14379,415 @@ class _ChatScreenState extends State<ChatScreen>
                                                 context,
                                                 l10n,
                                               );
-                                        final tonalBg = cs
-                                            .surfaceContainerHighest
-                                            .withValues(
-                                              alpha:
-                                                  theme.brightness ==
-                                                      Brightness.dark
-                                                  ? 0.44
-                                                  : 0.7,
-                                            );
 
+                                        // «Капля» (1a): «+», поле с ☺ и
+                                        // капля действия, прижатые к нижней
+                                        // строке; поле растёт до 6 строк.
+                                        final drop = _composerDropStyle(
+                                          context,
+                                        );
+                                        final ios = drop.glass;
+                                        final fieldFont = ios ? 17.0 : 16.0;
                                         return Expanded(
                                           child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
                                             children: [
                                               if (!_voiceRecording) ...[
-                                                SizedBox(
-                                                  width: 40,
-                                                  height: 40,
-                                                  child: _buildComposerSoftActionButton(
-                                                    size: 40,
-                                                    softBase: tonalBg,
-                                                    iconColor:
-                                                        softActionIconColor,
-                                                    onPressed: _openEmojiPanel,
-                                                    // PERF: the looping Lottie
-                                                    // must repaint alone — the
-                                                    // boundary keeps its ticks
-                                                    // from re-rasterizing the
-                                                    // frosted composer island
-                                                    // (BackdropFilter) above.
-                                                    child: RepaintBoundary(
-                                                      child: ColorFiltered(
-                                                      colorFilter:
-                                                          ColorFilter.mode(
-                                                            softActionIconColor,
-                                                            BlendMode.srcIn,
-                                                          ),
-                                                      child: Lottie.asset(
-                                                        _smileIconAssetPath,
-                                                        controller:
-                                                            _smileIconController,
-                                                        animate: false,
-                                                        repeat: false,
-                                                        width: 30,
-                                                        height: 30,
-                                                        fit: BoxFit.contain,
-                                                        onLoaded: (composition) {
-                                                          final ms =
-                                                              (composition
-                                                                          .duration
-                                                                          .inMilliseconds *
-                                                                      1.55)
-                                                                  .round();
-                                                          final target =
-                                                              Duration(
-                                                                milliseconds: ms
-                                                                    .clamp(
-                                                                      900,
-                                                                      4000,
-                                                                    ),
-                                                              );
-                                                          if (_smileIconController
-                                                                  .duration !=
-                                                              target) {
-                                                            // Stop first: an
-                                                            // in-flight repeat
-                                                            // keeps the old
-                                                            // timing until
-                                                            // restarted.
-                                                            _smileIconController
-                                                              ..stop()
-                                                              ..duration =
-                                                                  target;
-                                                          }
-                                                          // Play the greeting
-                                                          // once at the real
-                                                          // asset duration —
-                                                          // never resume a
-                                                          // loop here.
-                                                          _smileIconGreeted =
-                                                              false;
-                                                          _syncComposerTickers();
-                                                        },
-                                                      ),
-                                                      ),
-                                                    ),
-                                                  ),
+                                                ComposerAttachDrop(
+                                                  style: drop,
+                                                  tooltip: l10n.attach,
+                                                  onTap: canAttachNow
+                                                      ? _attach
+                                                      : null,
                                                 ),
-                                                const SizedBox(width: 6),
+                                                const SizedBox(width: 8),
                                               ],
                                               Expanded(
-                                                child: AnimatedSwitcher(
-                                                  duration: const Duration(
-                                                    milliseconds: 320,
-                                                  ),
-                                                  reverseDuration:
-                                                      const Duration(
-                                                        milliseconds: 240,
-                                                      ),
-                                                  switchInCurve:
-                                                      Curves.easeOutCubic,
-                                                  switchOutCurve:
-                                                      Curves.easeInCubic,
-                                                  transitionBuilder:
-                                                      (
-                                                        child,
-                                                        animation,
-                                                      ) => FadeTransition(
-                                                        opacity: animation,
-                                                        child: SlideTransition(
-                                                          position:
-                                                              Tween<Offset>(
-                                                                begin:
-                                                                    const Offset(
-                                                                      0.06,
-                                                                      0,
-                                                                    ),
-                                                                end:
-                                                                    Offset.zero,
-                                                              ).animate(
-                                                                CurvedAnimation(
-                                                                  parent:
-                                                                      animation,
-                                                                  curve: Curves
-                                                                      .easeOutCubic,
-                                                                ),
-                                                              ),
-                                                          child: child,
+                                                child: ComposerFieldDrop(
+                                                  style: drop,
+                                                  header: _voiceRecording
+                                                      ? null
+                                                      : _composerAttachedContext(
+                                                          context,
                                                         ),
-                                                      ),
-                                                  child: _voiceRecording
-                                                      ? KeyedSubtree(
-                                                          key: const ValueKey(
-                                                            'voice-inline',
-                                                          ),
+                                                  trailing: _voiceRecording
+                                                      ? null
+                                                      // «Что нового 1.9»: перо вокруг кнопки эмодзи.
+                                                      : PenMark(
+                                                          hint: PenHint.emoji,
+                                                          round: true,
+                                                          child: ComposerEmojiDrop(
+                                                          style: drop,
+                                                          tooltip:
+                                                              l10n.composerEmoji,
+                                                          onTap:
+                                                              _inlineEmojiPanel !=
+                                                                  null
+                                                              ? _inlineEmojiPanel!
+                                                                    .toggle
+                                                              : _openEmojiPanel,
                                                           child:
-                                                              _buildVoiceRecordingInlineContent(
-                                                                context,
+                                                              _inlineEmojiPanel ==
+                                                                  null
+                                                              ? _composerSmileGlyph(
+                                                                  drop.icon,
+                                                                )
+                                                              : EmojiPanelToggleGlyph(
+                                                                  open:
+                                                                      _inlineEmojiPanel!
+                                                                          .isOpen,
+                                                                  color:
+                                                                      drop.icon,
+                                                                  smile: _composerSmileGlyph(
+                                                                    drop.icon,
+                                                                  ),
+                                                                ),
+                                                        ),
+                                                        ),
+                                                  child: Stack(
+                                                    fit: StackFit.passthrough,
+                                                    alignment: Alignment.bottomLeft,
+                                                    children: [
+                                                      // 23.11.2026: поле НЕ уходит из дерева на время записи. Раньше
+                                                      // его подменяла панель записи — поле теряло фокус, клавиатура
+                                                      // пряталась посреди удержания, всё съезжало вниз, и запись сама
+                                                      // закреплялась. Теперь поле только гаснет и не ловит касаний,
+                                                      // клавиатура остаётся открытой, панель записи лежит поверх.
+                                                      IgnorePointer(
+                                                        ignoring: _voiceRecording,
+                                                        child: AnimatedOpacity(
+                                                          opacity: _voiceRecording ? 0 : 1,
+                                                          duration: const Duration(milliseconds: 160),
+                                                          child: TextField(
+                                                            key: const ValueKey(
+                                                              'composer-text-field',
+                                                            ),
+                                                            controller: _text,
+                                                            // Во время записи поле невидимо, но в фокусе — набор
+                                                            // на клавиатуре не должен молча менять текст.
+                                                            inputFormatters: [
+                                                              TextInputFormatter.withFunction(
+                                                                (old, next) => _voiceRecording ? old : next,
                                                               ),
-                                                        )
-                                                      : TextField(
-                                                          key: const ValueKey(
-                                                            'composer-text-field',
-                                                          ),
-                                                          controller: _text,
-                                                          focusNode:
-                                                              _messageInputFocusNode,
-                                                          enabled:
-                                                              composerTextEnabled,
-                                                          // Native-feeling
-                                                          // typing like other
-                                                          // messengers: capitalise
-                                                          // each sentence, keyboard
-                                                          // autocorrect + word
-                                                          // suggestions, smart
-                                                          // dashes/quotes.
-                                                          keyboardType:
-                                                              TextInputType
-                                                                  .multiline,
-                                                          textCapitalization:
-                                                              TextCapitalization
-                                                                  .sentences,
-                                                          autocorrect: true,
-                                                          enableSuggestions:
-                                                              true,
-                                                          smartDashesType:
-                                                              SmartDashesType
-                                                                  .enabled,
-                                                          smartQuotesType:
-                                                              SmartQuotesType
-                                                                  .enabled,
-                                                          contextMenuBuilder:
-                                                              _buildComposerContextMenu,
-                                                          contentInsertionConfiguration:
-                                                              ContentInsertionConfiguration(
-                                                                allowedMimeTypes:
-                                                                    _composerImageContentMimeTypes,
-                                                                onContentInserted:
-                                                                    (content) {
-                                                                      unawaited(
-                                                                        _handleComposerInsertedContent(
-                                                                          content,
+                                                            ],
+                                                            focusNode:
+                                                                _messageInputFocusNode,
+                                                            enabled:
+                                                                composerTextEnabled,
+                                                            // Native-feeling
+                                                            // typing like other
+                                                            // messengers.
+                                                            keyboardType:
+                                                                TextInputType
+                                                                    .multiline,
+                                                            textCapitalization:
+                                                                TextCapitalization
+                                                                    .sentences,
+                                                            autocorrect: true,
+                                                            enableSuggestions:
+                                                                true,
+                                                            smartDashesType:
+                                                                SmartDashesType
+                                                                    .enabled,
+                                                            smartQuotesType:
+                                                                SmartQuotesType
+                                                                    .enabled,
+                                                            contextMenuBuilder:
+                                                                _buildComposerContextMenu,
+                                                            // Красная волнистая линия под ошибками
+                                                            // на всех языках человека (23.11.2026).
+                                                            spellCheckConfiguration:
+                                                                composerSpellCheckConfiguration(),
+                                                            contentInsertionConfiguration:
+                                                                ContentInsertionConfiguration(
+                                                                  allowedMimeTypes:
+                                                                      _composerImageContentMimeTypes,
+                                                                  onContentInserted:
+                                                                      (
+                                                                        content,
+                                                                      ) {
+                                                                        unawaited(
+                                                                          _handleComposerInsertedContent(
+                                                                            content,
+                                                                          ),
+                                                                        );
+                                                                      },
+                                                                ),
+                                                            minLines: 1,
+                                                            maxLines: 6,
+                                                            // Макет: 17/22 на
+                                                            // iPhone, 16/22 на
+                                                            // Android.
+                                                            style:
+                                                                _nativeChatTextStyle(
+                                                                  context,
+                                                                  Theme.of(
+                                                                    context,
+                                                                  ).colorScheme.onSurface,
+                                                                  followTextSize:
+                                                                      false,
+                                                                ).copyWith(
+                                                                  fontSize:
+                                                                      fieldFont,
+                                                                  height:
+                                                                      22 /
+                                                                      fieldFont,
+                                                                ),
+                                                            textInputAction:
+                                                                TextInputAction
+                                                                    .newline,
+                                                            decoration: InputDecoration(
+                                                              hintText:
+                                                                  messageHint,
+                                                              hintStyle:
+                                                                  _nativeChatTextStyle(
+                                                                    context,
+                                                                    Theme.of(context)
+                                                                        .colorScheme
+                                                                        .onSurfaceVariant
+                                                                        .withValues(
+                                                                          alpha:
+                                                                              0.72,
                                                                         ),
-                                                                      );
-                                                                    },
-                                                              ),
-                                                          minLines: 1,
-                                                          maxLines: 6,
-                                                          style:
-                                                              _nativeChatTextStyle(
-                                                                context,
-                                                                Theme.of(
-                                                                      context,
-                                                                    )
-                                                                    .colorScheme
-                                                                    .onSurface,
-                                                              ),
-                                                          textInputAction:
-                                                              TextInputAction
-                                                                  .newline,
-                                                          decoration: InputDecoration(
-                                                            hintText:
-                                                                messageHint,
-                                                            hintStyle: _nativeChatTextStyle(
-                                                              context,
-                                                              Theme.of(context)
-                                                                  .colorScheme
-                                                                  .onSurfaceVariant
-                                                                  .withValues(
-                                                                    alpha: 0.72,
+                                                                    followTextSize:
+                                                                        false,
+                                                                  ).copyWith(
+                                                                    fontSize:
+                                                                        fieldFont,
+                                                                    height:
+                                                                        22 /
+                                                                        fieldFont,
+                                                                  ),
+                                                              // Без рамки поля
+                                                              // внутри капли: тема
+                                                              // приложения даёт
+                                                              // контур всем полям
+                                                              // (enabled/focused),
+                                                              // одного `border`
+                                                              // мало.
+                                                              border:
+                                                                  InputBorder
+                                                                      .none,
+                                                              enabledBorder:
+                                                                  InputBorder
+                                                                      .none,
+                                                              focusedBorder:
+                                                                  InputBorder
+                                                                      .none,
+                                                              disabledBorder:
+                                                                  InputBorder
+                                                                      .none,
+                                                              errorBorder:
+                                                                  InputBorder
+                                                                      .none,
+                                                              focusedErrorBorder:
+                                                                  InputBorder
+                                                                      .none,
+                                                              // Текст печатается
+                                                              // прямо по капле.
+                                                              filled: false,
+                                                              fillColor: Colors
+                                                                  .transparent,
+                                                              isDense: true,
+                                                              contentPadding:
+                                                                  EdgeInsets.symmetric(
+                                                                    vertical:
+                                                                        (drop.size -
+                                                                            22) /
+                                                                        2,
+                                                                  ),
+                                                              suffixIcon:
+                                                                  _buildDictationSuffix(
+                                                                    softActionIconColor,
+                                                                  ),
+                                                              suffixIconConstraints:
+                                                                  const BoxConstraints(
+                                                                    minWidth:
+                                                                        38,
+                                                                    minHeight:
+                                                                        38,
                                                                   ),
                                                             ),
-                                                            border: InputBorder
-                                                                .none,
-                                                            // Fully transparent composer: override the app-wide
-                                                            // InputDecorationTheme(filled:true, fillColor:inputBg)
-                                                            // so the field has no accent-tinted box — the text
-                                                            // types directly on the frosted bottom bar.
-                                                            filled: false,
-                                                            fillColor: Colors
-                                                                .transparent,
-                                                            isDense: true,
-                                                            contentPadding:
-                                                                const EdgeInsets.symmetric(
-                                                                  horizontal: 6,
-                                                                  vertical: 10,
-                                                                ),
-                                                            suffixIcon:
-                                                                _buildDictationSuffix(
-                                                                  softActionIconColor,
-                                                                ),
-                                                            suffixIconConstraints:
-                                                                const BoxConstraints(
-                                                                  minWidth: 38,
-                                                                  minHeight: 38,
-                                                                ),
                                                           ),
                                                         ),
-                                                ),
-                                              ),
-                                              if (!_voiceRecording) ...[
-                                                const SizedBox(width: 6),
-                                                SizedBox(
-                                                  width: 40,
-                                                  height: 40,
-                                                  child:
-                                                      _buildComposerSoftActionButton(
-                                                        size: 40,
-                                                        softBase: tonalBg,
-                                                        iconColor:
-                                                            softActionIconColor,
-                                                        onPressed: canAttachNow
-                                                            ? _attach
-                                                            : null,
-                                                        child: const Icon(
-                                                          AppIcons.attach,
-                                                          size: 24,
-                                                        ),
                                                       ),
-                                                ),
-                                                const SizedBox(width: 6),
-                                              ],
-                                              Stack(
-                                                clipBehavior: Clip.none,
-                                                alignment:
-                                                    Alignment.bottomCenter,
-                                                children: [
-                                                  Positioned(
-                                                    bottom: 62,
-                                                    child:
-                                                        _buildVoiceLockBubble(
-                                                          cs,
-                                                        ),
-                                                  ),
-                                                  AnimatedContainer(
+                                                  AnimatedSwitcher(
                                                     duration: const Duration(
-                                                      milliseconds: 350,
+                                                      milliseconds: 320,
                                                     ),
-                                                    curve: Curves.easeOutBack,
-                                                    width:
-                                                        (_voiceRecording &&
-                                                            !_voiceRecordingLocked)
-                                                        ? 56
-                                                        : 40,
-                                                    height:
-                                                        (_voiceRecording &&
-                                                            !_voiceRecordingLocked)
-                                                        ? 56
-                                                        : 40,
-                                                    child: AnimatedSwitcher(
-                                                      duration: const Duration(
-                                                        milliseconds: 280,
-                                                      ),
-                                                      reverseDuration:
-                                                          const Duration(
-                                                            milliseconds: 220,
-                                                          ),
-                                                      // 🔴 БЕЗ МАСШТАБА И БЕЗ
-                                                      // `easeOutBack`. Именно
-                                                      // они и раздували круг:
-                                                      // масштаб шёл от 0.82, а
-                                                      // кривая перелетала за
-                                                      // единицу, поэтому кнопка
-                                                      // вырастала БОЛЬШЕ своего
-                                                      // размера и оседала.
-                                                      switchInCurve:
-                                                          Curves.easeOutCubic,
-                                                      switchOutCurve:
-                                                          Curves.easeInCubic,
-                                                      transitionBuilder: (child, animation) {
-                                                        // Тот же поворот, что у
-                                                        // морфа значка, — чтобы
-                                                        // самолётик приходил и
-                                                        // уходил так же, как
-                                                        // микрофон с камерой.
-                                                        // Угол мал (7°): круг
-                                                        // залит градиентом, и
-                                                        // при большом повороте
-                                                        // была бы видна не смена
-                                                        // значка, а качнувшаяся
-                                                        // заливка.
-                                                        final curved = CurvedAnimation(
-                                                          parent: animation,
-                                                          curve: Curves.easeOutCubic,
-                                                        );
-                                                        return FadeTransition(
-                                                          // Кривая, а не прямая:
-                                                          // на середине перехода
-                                                          // два одинаковых круга
-                                                          // по 0.5 дали бы
-                                                          // просадку до 0.75 —
-                                                          // круг заметно светлел.
-                                                          opacity: curved,
-                                                          child: RotationTransition(
-                                                            turns: Tween<double>(
-                                                              begin: -0.02,
-                                                              end: 0,
-                                                            ).animate(animation),
-                                                            child: child,
-                                                          ),
-                                                        );
-                                                      },
-                                                      child:
-                                                          _voiceRecordingLocked
-                                                          ? _buildComposerActionButton(
-                                                              key: const ValueKey(
-                                                                'composer-voice-send',
-                                                              ),
-                                                              topColor:
-                                                                  actionTop,
-                                                              bottomColor:
-                                                                  actionBottom,
-                                                              iconColor:
-                                                                  actionIconColor,
-                                                              size: 40,
-                                                              onPressed: () =>
-                                                                  unawaited(
-                                                                    _finishVoiceRecording(
-                                                                      send:
-                                                                          true,
-                                                                    ),
-                                                                  ),
-                                                              child: const Icon(
-                                                                AppIcons.send,
-                                                                size: 18,
-                                                                color: Colors
-                                                                    .white,
-                                                              ),
-                                                            )
-                                                          : (_voiceRecording
-                                                                ? KeyedSubtree(
-                                                                    key: const ValueKey(
-                                                                      'composer-voice-mic-recording',
-                                                                    ),
-                                                                    child: _buildVoiceComposerButton(
-                                                                      enabled:
-                                                                          _roomCanSendMediaNow(),
-                                                                    ),
-                                                                  )
-                                                                : (showsSendButton
-                                                                      ? Builder(
-                                                                          // Long-press = schedule menu. Handed to the
-                                                                          // button itself rather than an outer
-                                                                          // detector, so tap and long-press share one
-                                                                          // gesture arena instead of competing.
-                                                                          builder: (_) => _buildComposerActionButton(
-                                                                            onLongPress:
-                                                                                !canSendNow
-                                                                                ? null
-                                                                                : _onSendLongPress,
-                                                                            key: const ValueKey(
-                                                                              'composer-send',
-                                                                            ),
-                                                                            topColor:
-                                                                                actionTop,
-                                                                            bottomColor:
-                                                                                actionBottom,
-                                                                            iconColor:
-                                                                                actionIconColor,
-                                                                            size:
-                                                                                40,
-                                                                            focusNode:
-                                                                                _sendButtonFocusNode,
-                                                                            onPressed:
-                                                                                canSendNow
-                                                                                ? () {
-                                                                                    final t = _text.text.trim();
-                                                                                    if (t.isEmpty &&
-                                                                                        _forwardDraft ==
-                                                                                            null) {
-                                                                                      return;
-                                                                                    }
-                                                                                    _messageInputFocusNode.requestFocus();
-                                                                                    // Средний — действие важное. Отклик стоит НА КНОПКЕ,
-                                                                                    // а не внутри `_send`: путь отправки трогать нельзя,
-                                                                                    // и `_send` зовут ещё из отложенной отправки.
-                                                                                    Haptics.confirm();
-                                                                                    _send();
-                                                                                  }
-                                                                                : null,
-                                                                            child: const Icon(
-                                                                              AppIcons.send,
-                                                                              size: 18,
-                                                                              color: Colors.white,
-                                                                            ),
-                                                                          ),
-                                                                        )
-                                                                      : _buildVoiceComposerButton(
-                                                                          enabled:
-                                                                              _roomCanSendMediaNow(),
-                                                                        ))),
+                                                    reverseDuration:
+                                                        const Duration(
+                                                          milliseconds: 240,
+                                                        ),
+                                                    switchInCurve:
+                                                        Motion.standard,
+                                                    switchOutCurve:
+                                                        Curves.easeInCubic,
+                                                    layoutBuilder: (current, previous) => Stack(
+                                                      alignment:
+                                                          Alignment.bottomLeft,
+                                                      children: [
+                                                        ...previous,
+                                                        ?current,
+                                                      ],
                                                     ),
+                                                    transitionBuilder:
+                                                        (child, animation) =>
+                                                            FadeTransition(
+                                                              opacity:
+                                                                  animation,
+                                                              child: SlideTransition(
+                                                                position:
+                                                                    Tween<Offset>(
+                                                                      begin: const Offset(
+                                                                        0.06,
+                                                                        0,
+                                                                      ),
+                                                                      end: Offset
+                                                                          .zero,
+                                                                    ).animate(
+                                                                      CurvedAnimation(
+                                                                        parent:
+                                                                            animation,
+                                                                        curve: Curves
+                                                                            .easeOutCubic,
+                                                                      ),
+                                                                    ),
+                                                                child: child,
+                                                              ),
+                                                            ),
+                                                    child: _voiceRecording &&
+                                                            _videoNote.isActive
+                                                        ? KeyedSubtree(
+                                                            key: const ValueKey(
+                                                              'video-note-inline',
+                                                            ),
+                                                            child: SizedBox(
+                                                              height: drop.size,
+                                                              child: Center(
+                                                                child: VideoNoteComposerPanel(
+                                                                  controller:
+                                                                      _videoNote,
+                                                                  strings:
+                                                                      _videoNoteStrings(
+                                                                        context,
+                                                                      ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          )
+                                                        : _voiceRecording
+                                                        ? KeyedSubtree(
+                                                            key: const ValueKey(
+                                                              'voice-inline',
+                                                            ),
+                                                            child: SizedBox(
+                                                              height: drop.size,
+                                                              child: Center(
+                                                                child: VoiceRecorderPanel(
+                                                                  controller:
+                                                                      _voice,
+                                                                  strings:
+                                                                      _voiceStrings(
+                                                                        context,
+                                                                      ),
+                                                                  accent:
+                                                                      actionTop,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          )
+                                                          : const SizedBox.shrink(
+                                                              key: ValueKey('composer-no-capture'),
+                                                            ),
                                                   ),
-                                                ],
+                                                    ],
+                                                  ),
+                                                ),
                                               ),
+                                              const SizedBox(width: 8),
+                                              // Одна капля на всё: без текста —
+                                              // микрофон/кружок (касание,
+                                              // удержание — запись), с текстом
+                                              // — отправка (удержание —
+                                              // отложить).
+                                              (_voiceRecording ||
+                                                      !showsSendButton)
+                                                  ? _buildVoiceComposerButton(
+                                                      enabled:
+                                                          _roomCanSendMediaNow(),
+                                                    )
+                                                  : Focus(
+                                                      focusNode:
+                                                          _sendButtonFocusNode,
+                                                      child: Semantics(
+                                                        button: true,
+                                                        enabled: canSendNow,
+                                                        label: l10n.send,
+                                                        child: GestureDetector(
+                                                          behavior:
+                                                              HitTestBehavior
+                                                                  .opaque,
+                                                          onLongPress:
+                                                              !canSendNow
+                                                              ? null
+                                                              : _onSendLongPress,
+                                                          onTap: canSendNow
+                                                              ? () {
+                                                                  final t = _text
+                                                                      .text
+                                                                      .trim();
+                                                                  if (t.isEmpty &&
+                                                                      _forwardDraft ==
+                                                                          null) {
+                                                                    return;
+                                                                  }
+                                                                  // Панель эмодзи открыта —
+                                                                  // фокус не просим: иначе
+                                                                  // вместо панели выезжала
+                                                                  // клавиатура (разбор
+                                                                  // 22.11.2026).
+                                                                  if (!(_inlineEmojiPanel
+                                                                          ?.isOpen
+                                                                          .value ??
+                                                                      false)) {
+                                                                    _messageInputFocusNode
+                                                                        .requestFocus();
+                                                                  }
+                                                                  // Средний отклик —
+                                                                  // на кнопке, путь
+                                                                  // отправки не трогаем.
+                                                                  Haptics.confirm();
+                                                                  _composerSendPulse
+                                                                      .value++;
+                                                                  _send();
+                                                                }
+                                                              : null,
+                                                          child: ValueListenableBuilder<int>(
+                                                            valueListenable:
+                                                                _composerSendPulse,
+                                                            builder:
+                                                                (
+                                                                  context,
+                                                                  pulse,
+                                                                  _,
+                                                                ) => ComposerActionDropView(
+                                                                  key:
+                                                                      _composerActionDropKey,
+                                                                  style: drop,
+                                                                  action:
+                                                                      ComposerDropAction
+                                                                          .send,
+                                                                  filled: true,
+                                                                  pulse: pulse,
+                                                                  enabled:
+                                                                      canSendNow,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
                                             ],
                                           ),
                                         );
@@ -13363,6 +14819,21 @@ class _ChatScreenState extends State<ChatScreen>
                         ),
                       ),
                     ),
+                  // Панель эмодзи, стикеров и GIF на месте клавиатуры (макет
+                  // 2a, 22.11.2026). Без поля ввода (выбор, поиск, запрос)
+                  // панель закрывается.
+                  if (_inlineEmojiPanel != null)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: isRequest || _selectionMode || _chatSearchOpen
+                          ? _closeInlineEmojiPanelLater()
+                          : EmojiPanelHost(
+                              controller: _inlineEmojiPanel!,
+                              builder: _buildInlineEmojiPanel,
+                            ),
+                    ),
                   // ValueListenableBuilder: the button toggles exactly when a
                   // drag crosses the near-bottom threshold — it must appear
                   // and vanish ALONE, not pull the whole chat subtree through
@@ -13385,7 +14856,12 @@ class _ChatScreenState extends State<ChatScreen>
                           bottom: 0,
                           child: _KeyboardInsetAnchor(
                             extraBottom: mediaViewPadding.bottom + 96,
-                            child: _FrostedGlass(
+                            panelInset: _inlineEmojiPanel?.inset,
+                            child: MountEntrance(
+                              offset: const Offset(0, 12),
+                              scaleFrom: 0.8,
+                              alignment: Alignment.bottomRight,
+                              child: _FrostedGlass(
                               borderRadius: BorderRadius.circular(22),
                               sigmaX: 24,
                               sigmaY: 24,
@@ -13457,6 +14933,7 @@ class _ChatScreenState extends State<ChatScreen>
                                   ),
                                 ),
                               ),
+                            )
                             ),
                           ),
                         );
@@ -13467,14 +14944,18 @@ class _ChatScreenState extends State<ChatScreen>
                       // The schedule overlay is transient and tiny — reading
                       // the per-frame keyboard inset via its own Builder keeps
                       // the dependency off the main chat body.
-                      child: Builder(
-                        builder: (overlayCtx) => _buildScheduleMenuOverlay(
-                          overlayCtx,
-                          l10n,
-                          MediaQuery.of(overlayCtx),
-                          keyboardInset:
-                              MediaQuery.viewInsetsOf(overlayCtx).bottom,
-                        ),
+                      child: ValueListenableBuilder<double>(
+                        valueListenable:
+                            _inlineEmojiPanel?.inset ?? _zeroPanelInset,
+                        builder: (overlayCtx, panelInset, _) =>
+                            _buildScheduleMenuOverlay(
+                              overlayCtx,
+                              l10n,
+                              MediaQuery.of(overlayCtx),
+                              keyboardInset:
+                                  MediaQuery.viewInsetsOf(overlayCtx).bottom,
+                              panelInset: panelInset,
+                            ),
                       ),
                     ),
                 ],
@@ -13499,7 +14980,25 @@ class _ChatScreenState extends State<ChatScreen>
   /// «недоступно» вместо вечного ожидания. Прочие сбои → `null`, и повтор
   /// разрешён после паузы [_imagePreviewRetryAfter] (повторяет первая же
   /// перерисовка ленты, как и прежде при первом показе).
-  Future<File?> _ensureImagePreviewFile(AttachmentEventV1 attachment) async {
+  ///
+  /// П-1 (22.11.2026): пока запрос идёт, повторный вызов для того же blobId
+  /// получает ТОТ ЖЕ Future (раньше — `null` сразу, и знак скачивания
+  /// пропадал), а итог сразу ложится в память ленты.
+  Future<File?> _ensureImagePreviewFile(AttachmentEventV1 attachment) {
+    if (!kMediaPreviewV2) return _ensureImagePreviewFileOnce(attachment);
+    final blobId = attachment.blobId;
+    return _imagePreviewRequests.run(
+      blobId,
+      () => _ensureImagePreviewFileOnce(attachment).then((file) {
+        _chatMediaFileRemember(blobId, file);
+        return file;
+      }),
+    );
+  }
+
+  Future<File?> _ensureImagePreviewFileOnce(
+    AttachmentEventV1 attachment,
+  ) async {
     final cached = await widget.controller.cachedAttachmentFile(attachment);
     if (cached != null) return cached;
     final blobId = attachment.blobId;
@@ -13534,7 +15033,9 @@ class _ChatScreenState extends State<ChatScreen>
       return null;
     } finally {
       _imagePreviewLoadingBlobIds.remove(attachment.blobId);
-      if (mounted) {
+      // П-1: пузырь ждёт свой Future сам — перерисовка ВСЕГО чата в конце
+      // каждого скачивания (весь делегат ленты) больше не нужна.
+      if (mounted && !kMediaPreviewV2) {
         setState(() {});
       }
     }
@@ -13556,17 +15057,95 @@ class _ChatScreenState extends State<ChatScreen>
         attachment,
       ).catchError((Object _) => null, test: (e) => e is _ChatMediaGone);
 
+  /// М9 (22.11.2026): ключ строки заготовки по её месту [k] среди заготовок
+  /// (альбомы, снимки, звук — в том же порядке, что и в ленте).
+  Key? _pendingRowKeyAt(int k) {
+    if (k < 0) return null;
+    final albums = _pendingPhotoAlbums;
+    if (k < albums.length) {
+      return ValueKey<String>('pending:a:${albums[k].id}');
+    }
+    final photos = _pendingPhotos;
+    final pi = k - albums.length;
+    if (pi < photos.length) return ValueKey<String>('pending:p:${photos[pi].id}');
+    final audio = _pendingAudio;
+    final ai = pi - photos.length;
+    if (ai < audio.length) return ValueKey<String>('pending:v:${audio[ai].id}');
+    return null;
+  }
+
+  /// М4 (22.11.2026): сообщение заготовки уже записано (номер и blobId
+  /// пришли до записи), но заготовка ещё на экране, пока идёт рассылка.
+  /// Готовим настоящий пузырь заранее: файл и пропорция — в память ленты,
+  /// картинка копии в кэше раскодирована с ТОЙ ЖЕ шириной, что у заготовки,
+  /// кадр ролика — тот же файл, что у заготовки. Подмена тогда рисуется
+  /// сразу, без пустого кадра и без нового ffmpeg.
+  void _primeSettledPendingMedia() {
+    for (final item in _pendingPhotos) {
+      _primeSettledPendingItem(item);
+    }
+    for (final album in _pendingPhotoAlbums) {
+      for (final item in album.items) {
+        _primeSettledPendingItem(item);
+      }
+    }
+  }
+
+  void _primeSettledPendingItem(PendingPhotoUpload item) {
+    final blobId = item.sentBlobId;
+    if (blobId == null || blobId.isEmpty) return;
+    if (!_primedSentBlobIds.add(blobId)) return;
+    final isVideo = _isVideoMediaMime(item.mime);
+    final aspect =
+        _chatMediaAspectFromDims(item.width, item.height, isVideo: isVideo) ??
+        _chatMediaAspectByPath[item.filePath];
+    if (aspect != null) _chatMediaAspectRemember(blobId, aspect);
+    final cachePath = item.sentCachePath;
+    if (cachePath == null) return;
+    final cache = File(cachePath);
+    _chatMediaFileRemember(blobId, cache);
+    if (isVideo) {
+      VideoThumbnailCache.alias(
+        key: blobId,
+        fromKey: p.basenameWithoutExtension(item.filePath),
+      );
+      return;
+    }
+    if (!item.mime.toLowerCase().startsWith('image/')) return;
+    final width = _chatImageDecodeWidthByPath[item.filePath];
+    final ImageProvider provider = width == null
+        ? FileImage(cache)
+        : ResizeImage(FileImage(cache), width: width);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(precacheImage(provider, context, onError: (_, _) {}));
+    });
+  }
+
   Widget _wrapSelectableEventItem({
     required ChatEvent event,
     required Widget child,
     required ValueChanged<Offset?> onTapAction,
     required VoidCallback onDoubleTapAction,
     bool ownsTap = false,
+    bool longPressOpensMenu = false,
+    ValueChanged<Offset?>? menuAction,
   }) {
     final selected = _selectedEventIds.contains(event.eventId);
     return _SelectableEventWrapper(
       selectionMode: _selectionMode,
       selected: selected,
+      passThrough: _textSelectEventId == event.eventId,
+      // 🔴 23.11.2026 (владелец): у медиа, файлов, голосовых, кружков и
+      // стикеров касание занято самим пузырём (просмотр, пакет, звук), и
+      // меню с реакциями было не открыть. Долгое нажатие ПО ПУЗЫРЮ — меню с
+      // реакциями, рядом с пузырём — выделение, как у остальных.
+      onBubbleLongPress: longPressOpensMenu && kMediaLongPressMenu
+          ? (position) {
+              HapticFeedback.mediumImpact();
+              (menuAction ?? onTapAction)(position);
+            }
+          : null,
       // When [ownsTap] is set the child handles single-tap itself (e.g. a
       // video note's tap-to-enlarge-with-sound). Outside selection mode we drop
       // the wrapper's own single-tap so it doesn't steal the gesture — but in
@@ -13587,12 +15166,74 @@ class _ChatScreenState extends State<ChatScreen>
       },
       onLongPress: () {
         if (_selectionMode) {
-          _toggleSelection(event.eventId);
+          // Второе долгое касание по уже выделенному — выделение текста
+          // (21.11.2026); по другому сообщению — как было, отметить.
+          if (selected) {
+            unawaited(_openMessageTextSelection(event));
+          } else {
+            _toggleSelection(event.eventId);
+          }
         } else {
           _startSelection(event.eventId);
         }
       },
       child: child,
+    );
+  }
+
+  /// Лист выделения части текста. Не текст (фото без подписи, стикер,
+  /// голосовое) — снимаем отметку, как раньше.
+  Future<void> _openMessageTextSelection(ChatEvent event) async {
+    final payload = await widget.controller.payloadEventForChatEvent(event);
+    if (!mounted) return;
+    String text = '';
+    if (payload is MsgEventV1 &&
+        !_isDeleteForAllCommandText(payload.text) &&
+        !_isHiddenSystemCommandText(payload.text)) {
+      text = payload.text;
+    } else if (payload is AttachmentEventV1) {
+      text = payload.caption?.trim() ?? '';
+    }
+    if (text.trim().isEmpty) {
+      _toggleSelection(event.eventId);
+      return;
+    }
+    HapticFeedback.mediumImpact();
+    // Текстовое сообщение — выделение прямо в пузыре, сообщение остаётся
+    // отмеченным (снимок владельца 21.11.2026): ручки и «Копировать /
+    // Цитировать». Подпись к медиа — листом, как раньше.
+    if (payload is MsgEventV1) {
+      setState(() => _textSelectEventId = event.eventId);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _textSelectEventId != event.eventId) return;
+        _textSelectAreaKey.currentState?.selectableRegion.selectAll(
+          SelectionChangedCause.toolbar,
+        );
+      });
+      return;
+    }
+    final own = widget.controller.isOwnDeviceId(event.senderDeviceId);
+    String? author;
+    if (_isGroupChat && !own) {
+      for (final e in _lastTimeline) {
+        if (e.event.eventId == event.eventId) {
+          author = e.authorName;
+          break;
+        }
+      }
+    }
+    // Выделение текста сменяет выделение сообщений.
+    _clearSelection();
+    final copied = await showMessageTextSelectSheet(
+      context,
+      text: text,
+      author: author,
+    );
+    if (copied == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SecretlySnackBar(
+        content: Text(chatText(context, ru: 'Скопировано', en: 'Copied')),
+      ),
     );
   }
 
@@ -13684,6 +15325,7 @@ class _ChatScreenState extends State<ChatScreen>
     required String previewText,
     required String authorName,
     required bool authorIsMe,
+    AttachmentEventV1? mediaAttachment,
   }) {
     if (payloadEventId == null || payloadEventId.isEmpty) return;
     setState(() {
@@ -13693,6 +15335,7 @@ class _ChatScreenState extends State<ChatScreen>
         authorName: authorName,
         previewText: _trimPreview(previewText),
         authorIsMe: authorIsMe,
+        mediaAttachment: mediaAttachment,
       );
     });
     _messageInputFocusNode.requestFocus();
@@ -13778,7 +15421,232 @@ class _ChatScreenState extends State<ChatScreen>
     unawaited(_scrollToReply(request.payloadEventId));
   }
 
-  Future<void> _scrollToReply(String targetPayloadId) async {
+  /// Переход к сообщению — по закреплённому, по цитате ответа, из поиска
+  /// (22.11.2026, Д-1/Д-2/Д-4/Д-8). true — строка найдена и показана.
+  ///
+  /// 🔴 Раньше сообщение вне загруженного окна ленты (200 событий) или в
+  /// другой теме комнаты молча не находилось, а прыжок «76 px на строку»
+  /// промахивался в чатах с медиа. Теперь: строка ищется в ПОКАЗАННОМ
+  /// списке; нет — переключается тема, проверяется база и окно ленты
+  /// растёт до цели; в базе нет — «Сообщение недоступно» (для
+  /// закреплённого — с «Открепить»).
+  Future<bool> _scrollToReply(
+    String targetPayloadId, {
+    _PinnedMessage? pin,
+  }) async {
+    if (!kPinJumpV2) {
+      await _scrollToReplyLegacy(targetPayloadId);
+      return true;
+    }
+    final target = targetPayloadId.trim();
+    if (target.isEmpty || !mounted) return false;
+    final attempt = _jumpAttempts.begin();
+    bool latest() => mounted && _jumpAttempts.isLatest(attempt);
+    _highlightTimer?.cancel();
+
+    var found = _findRenderedRow(target);
+    // Д-2: в комнате с темами сообщение может быть в другой теме.
+    if (found == null && _switchTopicForTarget(target)) {
+      found = await _waitForRenderedRow(target, latest);
+    }
+    // Д-1: не в окне ленты — есть ли в базе; есть — расширить окно.
+    if (found == null && latest()) {
+      final exists = await widget.controller.chatEventExists(
+        convoId: widget.convoId,
+        eventId: target,
+      );
+      if (exists && latest()) {
+        found = await _growTimelineUntilRendered(target, latest);
+      }
+    }
+    if (!latest()) return false;
+    if (found == null) {
+      DiagLog.event('pins', 'jump_unavailable', {'pin': pin != null});
+      _showMessageUnavailable(pin);
+      return false;
+    }
+    final rowId = found.rowId;
+    setState(() => _highlightedPayloadId = rowId);
+    final rowIndex = _findRenderedRow(target)?.index ?? found.index;
+    final ctx = await scrollUntilRowBuilt(
+      controller: _scroll,
+      targetIndex: rowIndex,
+      targetContext: () => _eventRowKeys[rowId]?.currentContext,
+      builtRange: _builtRowRange,
+      keepGoing: latest,
+    );
+    if (!latest()) return ctx != null;
+    if (ctx != null && ctx.mounted) {
+      await Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 350),
+        curve: Motion.standard,
+        alignment: 0.5,
+      );
+    }
+    if (!latest()) return true;
+    _highlightTimer?.cancel();
+    _highlightTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted && _jumpAttempts.isLatest(attempt)) {
+        setState(() => _highlightedPayloadId = null);
+      }
+    });
+    return true;
+  }
+
+  /// Строка цели в показанном списке: id строки и индекс в ListView
+  /// (с учётом строк отправки, плашки созвона и волны над лентой). Альбом —
+  /// по любому кадру, не только по первому (G-1).
+  ({String rowId, int index})? _findRenderedRow(String target) {
+    final rows = _memoVisibleTimeline;
+    if (rows == null) return null;
+    for (var t = 0; t < rows.length; t++) {
+      final e = rows[t];
+      final rowId = timelineRowId(e.payloadEventId, e.event.eventId);
+      var hit = rowId == target || e.event.eventId == target;
+      if (!hit) {
+        final frames = e.imageItems;
+        if (frames != null) {
+          for (final f in frames) {
+            if ((f.event.payloadEventId ?? '').trim() == target ||
+                f.event.eventId == target) {
+              hit = true;
+              break;
+            }
+          }
+        }
+      }
+      if (hit) return (rowId: rowId, index: _lastRowIndexOffset + t);
+    }
+    return null;
+  }
+
+  /// Индексы построенных сейчас строк ленты и их средняя высота
+  /// (`(-1, -1, 0)` — ни одной).
+  (int, int, double) _builtRowRange() {
+    final rows = _memoVisibleTimeline;
+    if (rows == null) return (-1, -1, 0);
+    var lo = -1;
+    var hi = -1;
+    var sum = 0.0;
+    var n = 0;
+    for (var t = 0; t < rows.length; t++) {
+      final e = rows[t];
+      final key = _eventRowKeys[timelineRowId(e.payloadEventId, e.event.eventId)];
+      final ctx = key?.currentContext;
+      if (ctx == null) continue;
+      final i = _lastRowIndexOffset + t;
+      if (lo < 0 || i < lo) lo = i;
+      if (i > hi) hi = i;
+      final h = builtRowExtent(ctx);
+      if (h > 0) {
+        sum += h;
+        n++;
+      }
+    }
+    return (lo, hi, n == 0 ? 0 : sum / n);
+  }
+
+  /// Д-2: цель — в другой теме комнаты (по уже разобранным событиям окна).
+  /// Переключает тему; true — переключил.
+  bool _switchTopicForTarget(String target) {
+    if (!_isGroupChat || _roomTopics.isEmpty) return false;
+    for (final entry in _resolvedTimelineCacheByEventId.values) {
+      final ev = entry.item.event;
+      if ((ev.payloadEventId ?? '').trim() != target && ev.eventId != target) {
+        continue;
+      }
+      final raw = _eventTopicId(entry.item.payload) ?? '';
+      final known = _roomTopics.any((t) => t.id == raw);
+      final topic = (raw.isEmpty || !known) ? '' : raw;
+      if (topic == (_currentTopicId ?? '')) return false;
+      setState(() => _currentTopicId = topic.isEmpty ? null : topic);
+      return true;
+    }
+    return false;
+  }
+
+  /// Ждёт, пока строка появится в показанном списке (лента собирается
+  /// асинхронно), до ~3 с.
+  Future<({String rowId, int index})?> _waitForRenderedRow(
+    String target,
+    bool Function() keepGoing, {
+    int? windowLimit,
+  }) async {
+    final before = _memoVisibleTimeline;
+    for (var i = 0; i < 60; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      if (!keepGoing()) return null;
+      final found = _findRenderedRow(target);
+      if (found != null) return found;
+      // Окно уже перечитано и показано, а строки нет — дальше ждать нечего.
+      if (windowLimit != null &&
+          _eventsFutureLimit == windowLimit &&
+          !identical(_memoVisibleTimeline, before)) {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /// Д-1: окно ленты растёт шагами до цели (не больше [_pinJumpWindowCeiling]
+  /// событий — дальше перебор длинной истории тяжелее пользы).
+  static const int _pinJumpWindowStep = 400;
+  static const int _pinJumpWindowCeiling = 4000;
+  Future<({String rowId, int index})?> _growTimelineUntilRendered(
+    String target,
+    bool Function() keepGoing,
+  ) async {
+    while (keepGoing()) {
+      final next = nextPinJumpWindowLimit(
+        current: _timelineLoadLimit,
+        step: _pinJumpWindowStep,
+        ceiling: _pinJumpWindowCeiling,
+      );
+      if (next == null || !_timelineMaybeHasMore) return null;
+      setState(() {
+        _timelineLoadLimit = next;
+        _eventsFuture = null;
+      });
+      final found = await _waitForRenderedRow(
+        target,
+        keepGoing,
+        windowLimit: next,
+      );
+      if (found != null) return found;
+      if (!keepGoing()) return null;
+      if (_switchTopicForTarget(target)) {
+        final inTopic = await _waitForRenderedRow(target, keepGoing);
+        if (inTopic != null) return inTopic;
+      }
+    }
+    return null;
+  }
+
+  /// «Сообщение недоступно на этом устройстве»; для закреплённого — с
+  /// «Открепить», если открепить можно.
+  void _showMessageUnavailable(_PinnedMessage? pin) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    final l10n = context.l10n;
+    final canUnpin =
+        pin != null &&
+        (!_isGroupChat || (_roomPolicyState?.canPinMessages ?? false));
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SecretlySnackBar(
+        content: Text(l10n.pinnedMessageUnavailable),
+        action: canUnpin
+            ? SnackBarAction(
+                label: l10n.unpin,
+                onPressed: () => unawaited(_clearPinnedMessage(pin)),
+              )
+            : null,
+      ),
+    );
+  }
+
+  Future<void> _scrollToReplyLegacy(String targetPayloadId) async {
     _highlightTimer?.cancel();
     if (mounted) setState(() => _highlightedPayloadId = targetPayloadId);
 
@@ -13788,7 +15656,7 @@ class _ChatScreenState extends State<ChatScreen>
       await Scrollable.ensureVisible(
         ctx,
         duration: const Duration(milliseconds: 350),
-        curve: Curves.easeOutCubic,
+        curve: Motion.standard,
         alignment: 0.5,
       );
     }
@@ -13892,6 +15760,20 @@ class _ChatScreenState extends State<ChatScreen>
         _timelineLoadLimit == _eventsFutureLimit) {
       return cached;
     }
+    // 🔴 23.11.2026 (журнал Xiaomi: из уведомления чат 10 с стоял пустым):
+    // каждое изменение данных (пришло сообщение, квитанция, профиль)
+    // заменяло незаконченную загрузку новой, а FutureBuilder слушает только
+    // последнюю — при пачке входящих, пока база занята их записью, ни одна
+    // не доезжала до экрана. Теперь начатая загрузка доводится и
+    // показывается, а следующая идёт сразу после неё.
+    final inFlight = _eventsInFlight;
+    if (inFlight != null &&
+        identical(inFlight, cached) &&
+        widget.convoId == _eventsFutureConvoId &&
+        _timelineLoadLimit == _eventsFutureLimit) {
+      _eventsReloadAfterInFlight = true;
+      return inFlight;
+    }
     final requestedLimit = _timelineLoadLimit;
     final fut = widget.controller
         .loadEvents(widget.convoId, applyRetention: false, limit: requestedLimit)
@@ -13910,8 +15792,21 @@ class _ChatScreenState extends State<ChatScreen>
     _eventsFutureVersion = version;
     _eventsFutureConvoId = widget.convoId;
     _eventsFutureLimit = requestedLimit;
+    _eventsInFlight = fut;
+    fut.whenComplete(() {
+      if (identical(_eventsInFlight, fut)) _eventsInFlight = null;
+      if (_eventsReloadAfterInFlight) {
+        _eventsReloadAfterInFlight = false;
+        // Данные успели измениться — перечитать (версия уже другая).
+        if (mounted) setState(() {});
+      }
+    }).ignore();
     return fut;
   }
+
+  /// Загрузка ленты, которая ещё идёт, и «после неё перечитать».
+  Future<List<ChatEvent>>? _eventsInFlight;
+  bool _eventsReloadAfterInFlight = false;
 
   /// TIMELINE PAGING (2026-07-18, "старые смс исчезают сверху"): the timeline
   /// loads the newest [_timelineLoadLimit] rows; scrolling near the TOP of the
@@ -14255,6 +16150,8 @@ class _ChatScreenState extends State<ChatScreen>
       if (!_isDeleteForAllCommandText(payload.text)) continue;
       deletedPayloadIds.addAll(_parseDeleteForAllCommand(payload.text));
     }
+    // Д-3 (22.11.2026): удалённое у всех уходит и с плашки закреплённых.
+    if (kPinSyncChecksV2) _notePinDeletedIds(deletedPayloadIds);
 
     // Tally poll votes (latest vote per voter per poll wins). Votes are hidden
     // control messages already present in `resolved`, so the card always shows
@@ -15242,6 +17139,33 @@ class _ChatScreenState extends State<ChatScreen>
     return 'jpg';
   }
 
+  /// Отредактированная копия фото из просмотра медиа — обычным фото в этот
+  /// чат (тот же путь отправки, что у фото из галереи; файл временный).
+  Future<bool> _sendEditedPhotoCopy(File edited) async {
+    final targetId = _isGroupChat
+        ? widget.convoId
+        : (widget.peerProfileIdForSend ?? '');
+    if (targetId.isEmpty || !mounted) return false;
+    if (_isGroupChat && !_roomCanSendMediaNow()) return false;
+    final bytes = await edited.length();
+    if (!mounted) return false;
+    widget.controller.enqueuePhotoUpload(
+      PendingPhotoUpload(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        filePath: edited.path,
+        mime: 'image/jpeg',
+        caption: '',
+        totalBytes: bytes,
+        convoId: widget.convoId,
+        targetId: targetId,
+        isGroup: _isGroupChat,
+        topicId: _isGroupChat ? _currentTopicId : null,
+        deleteFileAfterSend: true,
+      ),
+    );
+    return true;
+  }
+
   Future<void> _sendFileAttachmentPath({
     required String targetId,
     required String filePath,
@@ -15420,7 +17344,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _closePoll(_PollViewData poll) async {
     if (!_isGroupChat || poll.isClosed || !poll.isCreator) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (dialogContext) => SecretlyAlertDialog(
         title: Text(
@@ -15485,6 +17409,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _openEventComposer({required String targetId}) async {
     final draft = await showModalBottomSheet<_EventDraft>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -15508,6 +17433,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _openPollComposer({required String targetId}) async {
     final draft = await showModalBottomSheet<_PollDraft>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -15557,117 +17483,29 @@ class _ChatScreenState extends State<ChatScreen>
   List<({String label, List<String> emoji})> _emojiPickerCategories(
     BuildContext context,
   ) {
-    // Localized section titles for the 9 Noto animation categories.
+    // Localized section titles for the 9 Noto animation categories (ARB since
+    // 22.11.2026; same texts as the former inline `chatText`).
+    final l10n = context.l10n;
     String labelFor(String slug) {
       switch (slug) {
         case 'smileys_and_emotions':
-          return chatText(
-            context,
-            ru: 'Смайлики и эмоции',
-            en: 'Smileys & emotions',
-            uk: 'Смайли та емоції',
-            es: 'Emoticonos',
-            pt: 'Emoticons',
-            ptBr: 'Emoticons',
-            fr: 'Émoticônes',
-            de: 'Smileys & Emotionen',
-          );
+          return l10n.emojiCategorySmileys;
         case 'people':
-          return chatText(
-            context,
-            ru: 'Люди и жесты',
-            en: 'People & body',
-            uk: 'Люди та жести',
-            es: 'Personas',
-            pt: 'Pessoas',
-            ptBr: 'Pessoas',
-            fr: 'Personnes',
-            de: 'Personen',
-          );
+          return l10n.emojiCategoryPeople;
         case 'animals_and_nature':
-          return chatText(
-            context,
-            ru: 'Животные и природа',
-            en: 'Animals & nature',
-            uk: 'Тварини та природа',
-            es: 'Animales y naturaleza',
-            pt: 'Animais e natureza',
-            ptBr: 'Animais e natureza',
-            fr: 'Animaux et nature',
-            de: 'Tiere & Natur',
-          );
+          return l10n.emojiCategoryAnimals;
         case 'food_and_drink':
-          return chatText(
-            context,
-            ru: 'Еда и напитки',
-            en: 'Food & drink',
-            uk: 'Їжа та напої',
-            es: 'Comida y bebida',
-            pt: 'Comida e bebida',
-            ptBr: 'Comida e bebida',
-            fr: 'Nourriture et boissons',
-            de: 'Essen & Trinken',
-          );
+          return l10n.emojiCategoryFood;
         case 'travel_and_places':
-          return chatText(
-            context,
-            ru: 'Путешествия и места',
-            en: 'Travel & places',
-            uk: 'Подорожі та місця',
-            es: 'Viajes y lugares',
-            pt: 'Viagens e lugares',
-            ptBr: 'Viagens e lugares',
-            fr: 'Voyages et lieux',
-            de: 'Reisen & Orte',
-          );
+          return l10n.emojiCategoryTravel;
         case 'activities_and_events':
-          return chatText(
-            context,
-            ru: 'Активности',
-            en: 'Activities',
-            uk: 'Активності',
-            es: 'Actividades',
-            pt: 'Atividades',
-            ptBr: 'Atividades',
-            fr: 'Activités',
-            de: 'Aktivitäten',
-          );
+          return l10n.emojiCategoryActivities;
         case 'objects':
-          return chatText(
-            context,
-            ru: 'Предметы',
-            en: 'Objects',
-            uk: 'Об’єкти',
-            es: 'Objetos',
-            pt: 'Objetos',
-            ptBr: 'Objetos',
-            fr: 'Objets',
-            de: 'Objekte',
-          );
+          return l10n.emojiCategoryObjects;
         case 'symbols':
-          return chatText(
-            context,
-            ru: 'Символы',
-            en: 'Symbols',
-            uk: 'Символи',
-            es: 'Símbolos',
-            pt: 'Símbolos',
-            ptBr: 'Símbolos',
-            fr: 'Symboles',
-            de: 'Symbole',
-          );
+          return l10n.emojiCategorySymbols;
         case 'flags':
-          return chatText(
-            context,
-            ru: 'Флаги',
-            en: 'Flags',
-            uk: 'Прапори',
-            es: 'Banderas',
-            pt: 'Bandeiras',
-            ptBr: 'Bandeiras',
-            fr: 'Drapeaux',
-            de: 'Flaggen',
-          );
+          return l10n.emojiCategoryFlags;
         default:
           return slug;
       }
@@ -15699,10 +17537,12 @@ class _ChatScreenState extends State<ChatScreen>
   /// when monetization is enabled AND the profile is on the free tier do we show
   /// the paywall instead. Security features are untouched (Appendix B).
   Future<void> _handleMoreReactions(_TimelineEntry entry) async {
-    final unlocked = FeatureGate.isUnlocked(
-      widget.controller.entitlementStateNow,
-      GatedFeature.premiumStickers,
-    );
+    final unlocked =
+        kExtendedReactionsFree ||
+        FeatureGate.isUnlocked(
+          widget.controller.entitlementStateNow,
+          GatedFeature.premiumStickers,
+        );
     if (!unlocked) {
       if (!mounted) return;
       await showPaywall(context, PaywallTrigger.cosmetic);
@@ -15711,10 +17551,34 @@ class _ChatScreenState extends State<ChatScreen>
 
     final emoji = await _pickReactionEmoji();
     if (emoji == null || emoji.trim().isEmpty || !mounted) return;
-    await _applyReaction(
-      eventId: entry.payloadEventId ?? entry.event.eventId,
+    final eventId = entry.payloadEventId ?? entry.event.eventId;
+    // Реакция из полного списка — тот же полёт, что из панели (23.11.2026):
+    // эмодзи выскакивает из сообщения, приземляется и садится в чип. Своя
+    // такая же уже стоит — снимается без полёта.
+    final self = widget.controller.profileId;
+    final mine = (await widget.controller.loadMessageReactions(
+      eventIds: [eventId],
+    ))[eventId]
+        ?.where((r) => r.profileId == self)
+        .map((r) => r.emoji)
+        .cast<String?>()
+        .firstOrNull;
+    if (!mounted) return;
+    if (mine == emoji) {
+      await _applyReaction(eventId: eventId, emoji: emoji);
+      return;
+    }
+    final bubble = _bubbleRectForEntry(entry);
+    final c = bubble?.center ?? MediaQuery.sizeOf(context).center(Offset.zero);
+    launchReactionFlight(
+      context: context,
       emoji: emoji,
+      start: Rect.fromCenter(center: c, width: 30, height: 30),
+      bubble: bubble,
+      fxId: ReactionFxRegistry.id(eventId, emoji),
+      emojiBuilder: _reactionFlightEmoji,
     );
+    await _applyReaction(eventId: eventId, emoji: emoji, flight: true);
   }
 
   /// Full emoji picker used for premium reactions. Returns the chosen emoji, or
@@ -15725,6 +17589,7 @@ class _ChatScreenState extends State<ChatScreen>
     final emojiCategory = _emojiPickerCategories(context);
 
     return showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       enableDrag: true,
       isDismissible: true,
@@ -15755,6 +17620,60 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
+  /// Куда уходят стикеры и GIF из панели — как у прежнего листа.
+  String get _emojiPanelTargetId =>
+      _isGroupChat ? widget.convoId : (widget.peerProfileIdForSend ?? '');
+
+  /// Панель на месте клавиатуры (макет 2a): те же отправки, что у листа
+  /// [_openEmojiPanel], только панель остаётся открытой.
+  Widget _buildInlineEmojiPanel(BuildContext context) {
+    final controller = _inlineEmojiPanel!;
+    return EmojiPanel(
+      controller: controller,
+      textController: _text,
+      categories: _emojiPickerCategories(context),
+      stickerSource: AppControllerStickerSource(widget.controller),
+      gifSource: GiphyPanelGifSource(widget.controller),
+      profileKey: widget.controller.profileId,
+      frosted: widget.controller.frostedPanelsEnabled,
+      solidFill: opaquePanelFill(context),
+      composerRect: () {
+        final box = _composerOverlayKey.currentContext?.findRenderObject();
+        if (box is! RenderBox || !box.hasSize || !box.attached) return null;
+        return box.localToGlobal(Offset.zero) & box.size;
+      },
+      onSendSticker: (sticker) {
+        final targetId = _emojiPanelTargetId;
+        if (targetId.isEmpty) return;
+        unawaited(_sendSticker(targetId: targetId, sticker: sticker));
+      },
+      onSendGif: (url) {
+        final targetId = _emojiPanelTargetId;
+        if (targetId.isEmpty) return;
+        unawaited(_sendGifUrl(targetId: targetId, gifUrl: url));
+      },
+      onCreateSticker: ({String? targetPackId}) {
+        final targetId = _emojiPanelTargetId;
+        if (targetId.isEmpty) return;
+        controller.close();
+        unawaited(
+          _createStickerFromPhoto(targetId, targetPackId: targetPackId),
+        );
+      },
+    );
+  }
+
+  /// Поле ввода пропало (выбор, поиск) — панель закрывается после кадра.
+  Widget _closeInlineEmojiPanelLater() {
+    final c = _inlineEmojiPanel;
+    if (c != null && (c.isOpen.value || c.height.value > 0)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _inlineEmojiPanel?.close();
+      });
+    }
+    return const SizedBox.shrink();
+  }
+
   Future<void> _openEmojiPanel() async {
     final targetId = _isGroupChat
         ? widget.convoId
@@ -15775,6 +17694,7 @@ class _ChatScreenState extends State<ChatScreen>
     final qHolder = <String>[''];
 
     final result = await showModalBottomSheet<_PickerResult>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       enableDrag: true,
       isDismissible: true,
@@ -15816,7 +17736,7 @@ class _ChatScreenState extends State<ChatScreen>
                     fontSize: 14.5,
                   ),
                   prefixIcon: Icon(
-                    Icons.search_rounded,
+                    AdaptiveIcons.search_rounded,
                     size: 17,
                     color: cs.onSurfaceVariant.withValues(alpha: 0.7),
                   ),
@@ -15922,7 +17842,7 @@ class _ChatScreenState extends State<ChatScreen>
                             const SizedBox(width: 4),
                             buildPickerTabButton(
                               selected: controller.index == 1,
-                              icon: Icons.auto_awesome_rounded,
+                              icon: AdaptiveIcons.auto_awesome_rounded,
                               label: chatText(
                                 stCtx,
                                 ru: 'Стикеры',
@@ -16242,30 +18162,23 @@ class _ChatScreenState extends State<ChatScreen>
   }) async {
     // Choose: a sticker from a PHOTO, or a TEXT-only sticker (no photo).
     final mode = await showModalBottomSheet<String>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      // Лист и строки — из темы (стекло на iPhone, радиус листа): тёмный
+      // лист с белым текстом над светлым чатом выглядел чужим.
       builder: (sheetCtx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: 8),
             ListTile(
-              leading: const Icon(Icons.photo_rounded, color: Colors.white),
-              title: Text(
-                context.l10n.stickerCreateFromPhoto,
-                style: const TextStyle(color: Colors.white),
-              ),
+              leading: const Icon(AdaptiveIcons.photo_rounded),
+              title: Text(context.l10n.stickerCreateFromPhoto),
               onTap: () => Navigator.of(sheetCtx).pop('photo'),
             ),
             ListTile(
-              leading: const Icon(Icons.title_rounded, color: Colors.white),
-              title: Text(
-                context.l10n.stickerCreateTextOnly,
-                style: const TextStyle(color: Colors.white),
-              ),
+              leading: const Icon(AdaptiveIcons.title_rounded),
+              title: Text(context.l10n.stickerCreateTextOnly),
               onTap: () => Navigator.of(sheetCtx).pop('text'),
             ),
             const SizedBox(height: 8),
@@ -16365,8 +18278,17 @@ class _ChatScreenState extends State<ChatScreen>
   /// already installed) the whole set is shown immediately. For a sticker a peer
   /// sent us we hold only the one — the sheet offers «Установить», which pulls
   /// the rest of the author's pack over the e2ee WS and installs it.
-  Future<void> _showStickerPackSheet(StickerEventV1 event) async {
+  Future<void> _showStickerPackSheet(
+    StickerEventV1 event, {
+    _TimelineEntry? entry,
+    List<MessageReaction> reactions = const [],
+  }) async {
     FocusManager.instance.primaryFocus?.unfocus();
+    // Неотправленный стикер — сперва «повторить», как у остальных.
+    if (entry != null && _shouldShowOutgoingSendStateMenu(entry)) {
+      await _showOutgoingSendStateActions(entry: entry);
+      return;
+    }
     // Best-effort resolve of the TAPPED sticker so the sheet has something to
     // show before (or instead of) a full install.
     SecretlyStickerDescriptor? tapped;
@@ -16396,26 +18318,119 @@ class _ChatScreenState extends State<ChatScreen>
       );
     }
 
+    // Реакции над листом набора (21.11.2026, владелец: «при нажатии на
+    // стикер — плашка с реакциями вместе с нижней панелью набора»).
+    final reactionEventId = entry == null
+        ? null
+        : (entry.payloadEventId ?? entry.event.eventId);
+    final options = entry == null ? const <String>[] : _stickerReactionOptions();
+    final selfPid = widget.controller.profileId;
+    final selfReaction = reactions
+        .where((r) => r.profileId == selfPid && r.emoji.isNotEmpty)
+        .map((r) => r.emoji)
+        .cast<String?>()
+        .firstOrNull;
+    final bubbleRect = entry == null ? null : _bubbleRectForEntry(entry);
+    final sheetTheme = Theme.of(context).bottomSheetTheme;
+    final sheetColor =
+        sheetTheme.modalBackgroundColor ??
+        sheetTheme.backgroundColor ??
+        Theme.of(context).colorScheme.surfaceContainerLow;
+    final sheetShape =
+        sheetTheme.shape ??
+        const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        );
+
+    Widget packSheet(BuildContext sheetCtx) => _StickerPackSheet(
+      controller: widget.controller,
+      event: event,
+      packId: packId,
+      originPid: originPid,
+      isOwnPack: isOwnPack,
+      tappedSticker: tapped,
+      onSendSticker: (descriptor) async {
+        Navigator.of(sheetCtx).pop();
+        await _sendSticker(targetId: widget.convoId, sticker: descriptor);
+      },
+    );
+
+    if (reactionEventId == null || options.isEmpty) {
+      await showModalBottomSheet<void>(
+        sheetAnimationStyle: appSheetAnimationStyle,
+        context: context,
+        isScrollControlled: true,
+        builder: packSheet,
+      );
+      return;
+    }
+
     await showModalBottomSheet<void>(
+      sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF1B1E25),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) => _StickerPackSheet(
-        controller: widget.controller,
-        event: event,
-        packId: packId,
-        originPid: originPid,
-        isOwnPack: isOwnPack,
-        tappedSticker: tapped,
-        onSendSticker: (descriptor) async {
-          Navigator.of(sheetCtx).pop();
-          await _sendSticker(targetId: widget.convoId, sticker: descriptor);
-        },
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      builder: (sheetCtx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: StickerReactionBar(
+              emojis: options,
+              selected: selfReaction,
+              emojiBuilder: (e) => _reactionFlightEmoji(e, 30, false),
+              onPick: (e, cellRect) {
+                Navigator.of(sheetCtx).pop();
+                if (e == selfReaction) {
+                  // Та же — снять (чип сожмётся сам).
+                  unawaited(_applyReaction(eventId: reactionEventId, emoji: e));
+                  return;
+                }
+                launchReactionFlight(
+                  context: context,
+                  emoji: e,
+                  start: cellRect,
+                  bubble: bubbleRect,
+                  fxId: ReactionFxRegistry.id(reactionEventId, e),
+                  emojiBuilder: _reactionFlightEmoji,
+                );
+                unawaited(
+                  _applyReaction(
+                    eventId: reactionEventId,
+                    emoji: e,
+                    flight: true,
+                  ),
+                );
+              },
+            ),
+          ),
+          Material(
+            color: sheetColor,
+            shape: sheetShape,
+            clipBehavior: Clip.antiAlias,
+            child: packSheet(sheetCtx),
+          ),
+        ],
       ),
     );
+  }
+
+  /// Быстрые реакции для листа стикера — те же, что в меню (с правилами
+  /// комнаты), не больше семи.
+  List<String> _stickerReactionOptions() {
+    var options = _quickReactions;
+    if (_isGroupChat) {
+      final policy = _roomPolicyState;
+      options = (policy == null || policy.canReact)
+          ? _quickReactions
+                .where((e) => policy == null || policy.isReactionAllowed(e))
+                .toList(growable: false)
+          : const <String>[];
+    }
+    return options.length > 7
+        ? options.take(7).toList(growable: false)
+        : options;
   }
 
   Future<void> _sendSticker({
@@ -16629,14 +18644,6 @@ class _ChatScreenState extends State<ChatScreen>
     }
   }
 
-  String _voiceElapsedLabel(Duration value) {
-    final minutes = value.inMinutes;
-    final seconds = value.inSeconds % 60;
-    final tenths = (value.inMilliseconds % 1000) ~/ 100;
-    final secText = seconds.toString().padLeft(2, '0');
-    return '$minutes:$secText,$tenths';
-  }
-
   Future<void> _enqueuePendingAudioFile({
     required String targetId,
     required String filePath,
@@ -16693,478 +18700,6 @@ class _ChatScreenState extends State<ChatScreen>
     widget.controller.enqueueAudioUpload(pending);
   }
 
-  Future<void> _startVoiceRecording() async {
-    if (_voiceRecordingBusy || _voiceRecording) return;
-    final targetId = _isGroupChat
-        ? widget.convoId
-        : (widget.peerProfileIdForSend ?? '');
-    if (targetId.isEmpty) return;
-
-    if (_isGroupChat && !_roomCanSendMediaNow()) {
-      final text = _groupComposerPolicyBannerText(context.l10n);
-      if (text != null && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SecretlySnackBar(content: Text(text)));
-      }
-      return;
-    }
-
-    setState(() => _voiceRecordingBusy = true);
-    try {
-      final hasPermission = await _voiceRecorder.hasPermission();
-      if (!hasPermission) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SecretlySnackBar(
-            content: Text(
-              chatText(
-                context,
-                ru: 'Нет доступа к микрофону',
-                en: 'Microphone access is not available',
-                uk: 'Немає доступу до мікрофона',
-                es: 'No hay acceso al micrófono',
-                pt: 'Sem acesso ao microfone',
-                ptBr: 'Sem acesso ao microfone',
-                fr: 'Accès au microphone indisponible',
-                de: 'Kein Zugriff auf das Mikrofon',
-              ),
-            ),
-          ),
-        );
-        return;
-      }
-
-      final dir = await getTemporaryDirectory();
-      final path = p.join(
-        dir.path,
-        'voice_${DateTime.now().microsecondsSinceEpoch}.m4a',
-      );
-      const config = RecordConfig(
-        encoder: AudioEncoder.aacLc,
-        bitRate: 128000,
-        sampleRate: 44100,
-      );
-      await _voiceRecorder.start(config, path: path);
-
-      // Begin sampling the live amplitude envelope (dBFS) for the waveform.
-      _voiceAmpSamples.clear();
-      _voiceAmpSub?.cancel();
-      _voiceAmpSub = _voiceRecorder
-          .onAmplitudeChanged(const Duration(milliseconds: 90))
-          .listen((amp) {
-            // current is in dBFS: ~0 (loud) down to ~-60 (silence). Map a
-            // useful speech range [-45, 0] → [0, 1].
-            const floorDb = 45.0;
-            final norm = ((amp.current + floorDb) / floorDb).clamp(0.0, 1.0);
-            _voiceAmpSamples.add(norm);
-          }, onError: (_) {});
-
-      _voiceTimer?.cancel();
-      _voiceStartedAt = DateTime.now();
-      _voiceRecordingPath = path;
-      _voiceElapsed = Duration.zero;
-      _voiceTimer = Timer.periodic(const Duration(milliseconds: 90), (_) {
-        final started = _voiceStartedAt;
-        if (!mounted || started == null || !_voiceRecording) return;
-        setState(() {
-          _voiceElapsed = DateTime.now().difference(started);
-        });
-      });
-
-      if (!mounted) return;
-      HapticFeedback.selectionClick();
-      setState(() {
-        _voiceRecording = true;
-        _voiceRecordingLocked = false;
-        _voiceRecordingCancelHint = false;
-        _voiceDragDx = 0;
-        _voiceDragDy = 0;
-      });
-      _syncComposerTickers();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SecretlySnackBar(content: Text(context.l10n.sendFailed(e.toString()))),
-      );
-    } finally {
-      if (mounted) setState(() => _voiceRecordingBusy = false);
-    }
-  }
-
-  // ── Raw pointer handlers for voice button ──────────────────────────────
-  // Using Listener instead of GestureDetector so swipes register immediately
-  // without waiting for the ~500 ms long-press recognition delay.
-
-  void _onVoicePointerDown(PointerDownEvent event) {
-    if (_voiceRecording || _voiceRecordingBusy) return;
-    _voicePointerId = event.pointer;
-    _voicePressOrigin = event.position;
-    _capturePressPending = true;
-    _voicePressTimer?.cancel();
-    _voicePressTimer = Timer(const Duration(milliseconds: 200), () {
-      if (!mounted) return;
-      _capturePressPending = false;
-      unawaited(_startVoiceRecording());
-    });
-  }
-
-  void _onVoicePointerMove(PointerMoveEvent event) {
-    if (event.pointer != _voicePointerId) return;
-    final origin = _voicePressOrigin;
-    if (origin == null) return;
-
-    final dx = event.position.dx - origin.dx;
-    final dy = event.position.dy - origin.dy;
-
-    // Cancel press-timer early if user clearly swipes away before recording starts
-    if (!_voiceRecording) {
-      if (dx.abs() > 12 || dy.abs() > 12) {
-        _capturePressPending = false;
-      }
-      if (dx <= -_voiceCancelThresholdPx * 0.5) {
-        _voicePressTimer?.cancel();
-        _voicePressTimer = null;
-        _voicePointerId = null;
-        _voicePressOrigin = null;
-      }
-      return;
-    }
-
-    if (_voiceRecordingLocked) return;
-
-    final cancelHint = dx <= -_voiceCancelThresholdPx;
-    final shouldLock = dy <= -_voiceLockThresholdPx;
-
-    setState(() {
-      _voiceDragDx = dx;
-      _voiceDragDy = dy;
-      _voiceRecordingCancelHint = cancelHint;
-    });
-
-    if (cancelHint) {
-      HapticFeedback.lightImpact();
-      _voicePointerId = null;
-      _voicePressOrigin = null;
-      unawaited(_cancelVoiceRecording());
-      return;
-    }
-
-    if (shouldLock) {
-      HapticFeedback.mediumImpact();
-      _voiceLockBounceController.forward(from: 0);
-      setState(() {
-        _voiceRecordingLocked = true;
-        _voiceRecordingCancelHint = false;
-      });
-    }
-  }
-
-  void _onVoicePointerUp(PointerUpEvent event) {
-    if (event.pointer != _voicePointerId) return;
-    final wasTap = _capturePressPending && _voicePressTimer?.isActive == true;
-    _voicePressTimer?.cancel();
-    _voicePressTimer = null;
-    _voicePressOrigin = null;
-    _voicePointerId = null;
-    _capturePressPending = false;
-    if (wasTap && !_voiceRecording) {
-      _toggleComposerCaptureMode();
-      return;
-    }
-    if (!_voiceRecording) return;
-    if (_voiceRecordingLocked) return; // locked: user taps send/cancel manually
-    unawaited(_finishVoiceRecording(send: true));
-  }
-
-  void _onVoicePointerCancel(PointerCancelEvent event) {
-    if (event.pointer != _voicePointerId) return;
-    _voicePressTimer?.cancel();
-    _voicePressTimer = null;
-    _voicePressOrigin = null;
-    _voicePointerId = null;
-    if (!_voiceRecording) return;
-    if (_voiceRecordingLocked) return;
-    unawaited(_cancelVoiceRecording());
-  }
-
-  // ── Unified composer capture pointer handlers ──────────────────────────
-  // A quick TAP (no recording started, little movement) toggles voice⇄video.
-  // A press-and-hold records in the active mode (voice OR video note); the
-  // same swipe-up-to-lock / swipe-left-to-cancel gestures apply to both.
-
-  /// True when the current press was released as a quick tap (the press-timer
-  /// had not yet promoted it into a recording) — used to flip the mode.
-  bool _capturePressPending = false;
-
-  void _onCapturePointerDown(PointerDownEvent event) {
-    if (_composerVideoMode) {
-      _onVideoNotePointerDown(event);
-    } else {
-      _onVoicePointerDown(event);
-    }
-  }
-
-  void _onCapturePointerMove(PointerMoveEvent event) {
-    if (_composerVideoMode) {
-      _onVideoNotePointerMove(event);
-    } else {
-      _onVoicePointerMove(event);
-    }
-  }
-
-  void _onCapturePointerUp(PointerUpEvent event) {
-    if (_composerVideoMode) {
-      _onVideoNotePointerUp(event);
-    } else {
-      _onVoicePointerUp(event);
-    }
-  }
-
-  void _onCapturePointerCancel(PointerCancelEvent event) {
-    if (_composerVideoMode) {
-      _onVideoNotePointerCancel(event);
-    } else {
-      _onVoicePointerCancel(event);
-    }
-  }
-
-  void _onVideoNotePointerDown(PointerDownEvent event) {
-    if (_videoNoteRecording || _videoNoteBusy) return;
-    _voicePointerId = event.pointer;
-    _voicePressOrigin = event.position;
-    _capturePressPending = true;
-    _voicePressTimer?.cancel();
-    _voicePressTimer = Timer(const Duration(milliseconds: 220), () {
-      if (!mounted) return;
-      _capturePressPending = false;
-      unawaited(_startVideoNoteRecording());
-    });
-  }
-
-  void _onVideoNotePointerMove(PointerMoveEvent event) {
-    if (event.pointer != _voicePointerId) return;
-    final origin = _voicePressOrigin;
-    if (origin == null) return;
-    final dx = event.position.dx - origin.dx;
-    final dy = event.position.dy - origin.dy;
-
-    if (!_videoNoteRecording) {
-      // Treat any meaningful movement before the timer fires as a drag, not a
-      // tap — cancel the pending press so it does not toggle the mode.
-      if (dx.abs() > 12 || dy.abs() > 12) {
-        _capturePressPending = false;
-        if (dx <= -_voiceCancelThresholdPx * 0.5) {
-          _voicePressTimer?.cancel();
-          _voicePressTimer = null;
-          _voicePointerId = null;
-          _voicePressOrigin = null;
-        }
-      }
-      return;
-    }
-
-    final controller = _videoNoteRecorderController;
-    if (controller == null) return;
-    controller.updateDrag(dx: dx, dy: dy);
-    if (dy <= -_voiceLockThresholdPx) {
-      _voicePointerId = null;
-      _voicePressOrigin = null;
-      controller.signalLock();
-    }
-  }
-
-  void _onVideoNotePointerUp(PointerUpEvent event) {
-    if (event.pointer != _voicePointerId) return;
-    final wasTap = _capturePressPending && _voicePressTimer?.isActive == true;
-    _voicePressTimer?.cancel();
-    _voicePressTimer = null;
-    _voicePressOrigin = null;
-    _voicePointerId = null;
-    _capturePressPending = false;
-    if (wasTap) {
-      _toggleComposerCaptureMode();
-      return;
-    }
-    if (!_videoNoteRecording) return;
-    _videoNoteRecorderController?.signalRelease();
-  }
-
-  void _onVideoNotePointerCancel(PointerCancelEvent event) {
-    if (event.pointer != _voicePointerId) return;
-    _voicePressTimer?.cancel();
-    _voicePressTimer = null;
-    _voicePressOrigin = null;
-    _voicePointerId = null;
-    _capturePressPending = false;
-    if (!_videoNoteRecording) return;
-    _videoNoteRecorderController?.signalCancel();
-  }
-
-  Future<void> _cancelVoiceRecording() async {
-    if (!_voiceRecording && !_voiceRecordingBusy) return;
-    _voiceTimer?.cancel();
-    try {
-      await _voiceRecorder.cancel();
-    } catch (_) {
-      try {
-        await _voiceRecorder.stop();
-      } catch (_) {}
-    }
-
-    final tmp = _voiceRecordingPath;
-    if (tmp != null && tmp.isNotEmpty) {
-      try {
-        final f = File(tmp);
-        if (await f.exists()) await f.delete();
-      } catch (_) {}
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _voiceRecording = false;
-      _voiceRecordingLocked = false;
-      _voiceRecordingCancelHint = false;
-      _voiceRecordingBusy = false;
-      _voiceDragDx = 0;
-      _voiceDragDy = 0;
-      _voiceRecordingPath = null;
-      _voiceStartedAt = null;
-      _voiceElapsed = Duration.zero;
-    });
-    _syncComposerTickers();
-  }
-
-  Future<void> _finishVoiceRecording({required bool send}) async {
-    if (!_voiceRecording) return;
-
-    final elapsed = _voiceElapsed;
-    _voiceTimer?.cancel();
-    await _voiceAmpSub?.cancel();
-    _voiceAmpSub = null;
-    final waveform = _buildVoiceWaveform();
-    _voiceAmpSamples.clear();
-    String? path;
-    try {
-      path = await _voiceRecorder.stop();
-    } catch (_) {
-      path = null;
-    }
-    path ??= _voiceRecordingPath;
-
-    if (!mounted) return;
-    setState(() {
-      _voiceRecording = false;
-      _voiceRecordingLocked = false;
-      _voiceRecordingCancelHint = false;
-      _voiceRecordingBusy = false;
-      _voiceDragDx = 0;
-      _voiceDragDy = 0;
-      _voiceRecordingPath = null;
-      _voiceStartedAt = null;
-      _voiceElapsed = Duration.zero;
-    });
-    _syncComposerTickers();
-
-    if (!send || path == null || path.isEmpty) {
-      if (path != null && path.isNotEmpty) {
-        try {
-          final f = File(path);
-          if (await f.exists()) await f.delete();
-        } catch (_) {}
-      }
-      return;
-    }
-
-    if (elapsed < _voiceMinDuration) {
-      try {
-        final f = File(path);
-        if (await f.exists()) await f.delete();
-      } catch (_) {}
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SecretlySnackBar(
-          content: Text(
-            chatText(
-              context,
-              ru: 'Слишком короткое аудио',
-              en: 'Audio is too short',
-              uk: 'Аудіо занадто коротке',
-              es: 'El audio es demasiado corto',
-              pt: 'O áudio é curto demais',
-              ptBr: 'O áudio é curto demais',
-              fr: 'L’audio est trop court',
-              de: 'Audio ist zu kurz',
-            ),
-          ),
-        ),
-      );
-      return;
-    }
-
-    final targetId = _isGroupChat
-        ? widget.convoId
-        : (widget.peerProfileIdForSend ?? '');
-    if (targetId.isEmpty) return;
-    await _enqueuePendingAudioFile(
-      targetId: targetId,
-      filePath: path,
-      replyToPayloadEventId: _replyTo?.payloadEventId,
-      waveform: waveform,
-    );
-  }
-
-  /// Downsamples the captured amplitude stream to a fixed number of bars in
-  /// [0, 100]. Uses the peak per bucket (punchier, Telegram-like) and a gentle
-  /// normalisation against the loudest bar so quiet recordings still fill the
-  /// strip. Returns null when nothing was captured (renderer falls back).
-  List<int> _buildVoiceWaveform() {
-    final samples = _voiceAmpSamples;
-    final bars = _voiceWaveformBars;
-    if (samples.isEmpty) {
-      // Amplitude stream produced nothing on this device — still return a
-      // (synthetic) envelope so the message is reliably recognised as a voice
-      // note and renders with the waveform layout rather than the music card.
-      final rng = Random(DateTime.now().microsecondsSinceEpoch);
-      return List<int>.generate(bars, (_) {
-        final r = rng.nextDouble();
-        return (12 + r * r * 88).round().clamp(0, 100);
-      }, growable: false);
-    }
-    final out = List<double>.filled(bars, 0);
-    if (samples.length <= bars) {
-      for (var i = 0; i < bars; i++) {
-        final src = (i * samples.length / bars).floor().clamp(
-          0,
-          samples.length - 1,
-        );
-        out[i] = samples[src];
-      }
-    } else {
-      for (var i = 0; i < bars; i++) {
-        final start = (i * samples.length / bars).floor();
-        final end = ((i + 1) * samples.length / bars).floor().clamp(
-          start + 1,
-          samples.length,
-        );
-        var peak = 0.0;
-        for (var j = start; j < end; j++) {
-          if (samples[j] > peak) peak = samples[j];
-        }
-        out[i] = peak;
-      }
-    }
-    // Normalise against the loudest bar so the waveform always uses full range.
-    var maxV = 0.0;
-    for (final v in out) {
-      if (v > maxV) maxV = v;
-    }
-    final scale = maxV > 0.05 ? 1.0 / maxV : 1.0;
-    return out
-        .map((v) => (v * scale * 100).round().clamp(0, 100))
-        .toList(growable: false);
-  }
-
   // ── Composer capture mode (voice ⇄ video note) ─────────────────────────
   Future<void> _restoreComposerCaptureMode() async {
     // Режим мог быть сохранён полной сборкой — в облегчённой он не поднимается.
@@ -17189,7 +18724,7 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   void _toggleComposerCaptureMode() {
-    if (_voiceRecording || _videoNoteRecording) return;
+    if (_voiceRecording || _videoNote.isActive) return;
     // Облегчённая сборка: кружки собирает FFmpeg — в видеорежим не уходим,
     // кнопка остаётся микрофоном.
     if (!kVideoToolsAvailable) return;
@@ -17250,51 +18785,7 @@ class _ChatScreenState extends State<ChatScreen>
     }());
   }
 
-  // ── Video-note recording (driven by the composer press gesture) ────────
-  Future<void> _startVideoNoteRecording() async {
-    if (_videoNoteBusy || _videoNoteRecording) return;
-    if (!kVideoToolsAvailable) return;
-    // Dismiss the keyboard before the round-video recorder opens — otherwise it
-    // covers the recorder UI and there's no way to hide it mid-recording.
-    _messageInputFocusNode.unfocus();
-    FocusManager.instance.primaryFocus?.unfocus();
-    final targetId = _isGroupChat
-        ? widget.convoId
-        : (widget.peerProfileIdForSend ?? '');
-    if (targetId.isEmpty) return;
-
-    if (_isGroupChat && !_roomCanSendMediaNow()) {
-      final text = _groupComposerPolicyBannerText(context.l10n);
-      if (text != null && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SecretlySnackBar(content: Text(text)));
-      }
-      return;
-    }
-
-    _videoNoteBusy = true;
-    final controller = VideoNoteRecorderController();
-    _videoNoteRecorderController = controller;
-    setState(() => _videoNoteRecording = true);
-    HapticFeedback.selectionClick();
-
-    VideoNoteRecorderResult? result;
-    try {
-      result = await showVideoNoteRecorder(context, controller: controller);
-    } catch (_) {
-      result = null;
-    }
-
-    _videoNoteRecorderController = null;
-    _videoNoteBusy = false;
-    if (mounted) {
-      setState(() => _videoNoteRecording = false);
-    }
-    if (result == null) return;
-    await _sendVideoNote(result);
-  }
-
+  // ── Видео-заметка: отправка ─────────────────────────────────────────
   Future<void> _sendVideoNote(VideoNoteRecorderResult result) async {
     final replyToPayloadEventId = _replyTo?.payloadEventId;
     // Скорость (15.11.2026, владелец: «после зелёной стрелки несколько секунд
@@ -17366,32 +18857,6 @@ class _ChatScreenState extends State<ChatScreen>
     }
   }
 
-  /// All three composer actions (send / voice / video) route through here, so
-  /// the forgiving touch target and the water-drop press are automatically the
-  /// same on each — see [_ComposerActionButton].
-  Widget _buildComposerActionButton({
-    Key? key,
-    required Color topColor,
-    required Color bottomColor,
-    required Color iconColor,
-    required double size,
-    required Widget child,
-    VoidCallback? onPressed,
-    VoidCallback? onLongPress,
-    FocusNode? focusNode,
-  }) {
-    return _ComposerActionButton(
-      key: key,
-      topColor: topColor,
-      bottomColor: bottomColor,
-      iconColor: iconColor,
-      size: size,
-      onPressed: onPressed,
-      onLongPress: onLongPress,
-      focusNode: focusNode,
-      child: child,
-    );
-  }
 
   // Frosted-glass "island" for the experimental chat header: a back circle,
   // an identity pill (avatar + name), an actions pill, and the search bubble.
@@ -17450,31 +18915,83 @@ class _ChatScreenState extends State<ChatScreen>
     },
   );
 
-  /// The secondary strips below the toolbar, in order: pinned, then now-playing.
-  /// Two or more ⇒ they glue into a single pill (see [_buildHeaderIslandGroup]);
-  /// one ⇒ a plain island. Keep in sync with [_headerBottomHeight].
-  List<Widget> _buildSecondaryIslandStack() {
+  /// Звонок, на который подписана шапка (островки звонка — её строки).
+  CallManager? _islandCallManager;
+  bool _islandCallMinimized = false;
+
+  /// Свёрнутый звонок 1:1 — строкой пластины под шапкой.
+  bool _callIslandVisibleNow() {
+    if (!_kCallIslandsInHeader) return false;
+    final call = (_islandCallManager ?? CallManager.instance)?.state.value;
+    return call != null && call.isActive && call.isUiMinimized;
+  }
+
+  /// Звонок в комнате — строкой пластины под шапкой.
+  bool get _roomCallIslandVisible =>
+      _kCallIslandsInHeader && _isGroupChat && _activeRoomCall != null;
+
+  void _onCallStateForIslands() {
+    final next = _callIslandVisibleNow();
+    if (next == _islandCallMinimized || !mounted) return;
+    setState(() => _islandCallMinimized = next);
+  }
+
+  /// Строки пластины под шапкой, по порядку: закреплённое, «сейчас играет»,
+  /// свёрнутый звонок, звонок в комнате. Все — в одной пластине (23.11.2026):
+  /// любая пара сливается, новая строка вытекает из шва «жидко».
+  List<LiquidIslandRow> _secondaryIslandRows() {
     final pinned = _resolvedPinnedMessage();
-    final hasPlayer = _activeNowPlayingItem != null;
-    final merge = _kMergeHeaderIslands && pinned != null && hasPlayer;
-    if (merge) {
+    final room = _roomCallIslandVisible ? _activeRoomCall : null;
+    return [
+      if (pinned != null)
+        LiquidIslandRow(
+          id: 'pinned',
+          height: _kChatIslandHeight,
+          child: _buildPinnedMessageBanner(pinned, merged: true),
+        ),
+      if (_activeNowPlayingItem != null)
+        LiquidIslandRow(
+          id: 'player',
+          height: _kChatIslandHeight,
+          child: _buildNowPlayingStrip(merged: true),
+        ),
+      if (_callIslandVisibleNow())
+        const LiquidIslandRow(
+          id: 'call',
+          height: _kChatIslandHeight,
+          child: CallReturnBanner(merged: true),
+        ),
+      if (room != null)
+        LiquidIslandRow(
+          id: 'room_call',
+          height: _kChatIslandHeight,
+          child: _buildRoomCallReturnBanner(room, merged: true),
+        ),
+    ];
+  }
+
+  /// The secondary strips below the toolbar (see [_secondaryIslandRows]).
+  /// They always sit in ONE pill so rows can join and leave it liquidly.
+  /// Keep in sync with [_headerBottomHeight].
+  List<Widget> _buildSecondaryIslandStack() {
+    if (_kMergeHeaderIslands) {
+      final rows = _secondaryIslandRows();
+      if (rows.isEmpty) return const [];
       return [
         Padding(
           padding: _kChatIslandMargin,
-          child: _buildHeaderIslandGroup([
-            _buildPinnedMessageBanner(pinned, merged: true),
-            _buildNowPlayingStrip(merged: true),
-          ]),
+          child: _buildHeaderIslandGroup(rows),
         ),
       ];
     }
+    final pinned = _resolvedPinnedMessage();
     return [
       if (pinned != null)
         Padding(
           padding: _kChatIslandMargin,
           child: _buildPinnedMessageBanner(pinned),
         ),
-      if (hasPlayer)
+      if (_activeNowPlayingItem != null)
         Padding(
           padding: _kChatIslandMargin,
           child: _buildNowPlayingStrip(merged: false),
@@ -17482,36 +18999,41 @@ class _ChatScreenState extends State<ChatScreen>
     ];
   }
 
+  /// Есть ли что показать под шапкой (тема, закреплённое, плеер, звонки).
+  bool get _hasHeaderBottom =>
+      _shouldShowTopicBar ||
+      _resolvedPinnedMessage() != null ||
+      _activeNowPlayingItem != null ||
+      (_kMergeHeaderIslands &&
+          (_callIslandVisibleNow() || _roomCallIslandVisible));
+
   /// Exact height of the AppBar's bottom slot. It must match what
   /// [_buildSecondaryIslandStack] actually renders: any slack pools at the
-  /// AppBar's bottom edge and pushes the call strip — which the body positions
-  /// against that edge — further down than the strips are from each other.
+  /// AppBar's bottom edge.
   double _headerBottomHeight() {
     final topic = _shouldShowTopicBar ? 44.0 : 0.0;
-    final hasPinned = _resolvedPinnedMessage() != null;
-    final hasPlayer = _activeNowPlayingItem != null;
-    final strips = (hasPinned ? 1 : 0) + (hasPlayer ? 1 : 0);
-    if (strips == 0) return topic;
-    if (_kMergeHeaderIslands && strips > 1) {
+    if (_kMergeHeaderIslands) {
+      final strips = _secondaryIslandRows().length;
+      if (strips == 0) return topic;
       // One pill: N rows + the hairlines between them + ONE bottom gap.
       return topic +
           strips * _kChatIslandHeight +
           (strips - 1) * _kChatIslandSeam +
           _kChatIslandGap;
     }
+    final strips =
+        (_resolvedPinnedMessage() != null ? 1 : 0) +
+        (_activeNowPlayingItem != null ? 1 : 0);
     return topic + strips * _kChatIslandSlot;
   }
 
-  /// Glues the secondary header strips (pinned / now-playing) into ONE glass
-  /// pill — the Telegram behaviour. A single [_frostedHeaderIsland] provides the
-  /// blur, the specular edge, the outer shadow and the corner clip for the whole
-  /// group, so the strips inside have no rounding, no highlight and no edge of
-  /// their own: an inner seam is just a hairline, and the middle strip of three
-  /// has no rounded corner anywhere. Rows are handed in already built in their
-  /// `merged` form.
-  ///
-  /// One row ⇒ plain island (nothing to glue). Zero ⇒ nothing.
-  Widget _buildHeaderIslandGroup(List<Widget> rows) {
+  /// Glues the secondary header strips into ONE glass pill — the Telegram
+  /// behaviour. A single [_frostedHeaderIsland] provides the blur, the
+  /// specular edge, the outer shadow and the corner clip for the whole group,
+  /// so the strips inside have no rounding, no highlight and no edge of their
+  /// own: an inner seam is just a hairline. Rows come and go liquidly
+  /// ([LiquidIslandRows]).
+  Widget _buildHeaderIslandGroup(List<LiquidIslandRow> rows) {
     if (rows.isEmpty) return const SizedBox.shrink();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final seamColor = isDark
@@ -17519,15 +19041,10 @@ class _ChatScreenState extends State<ChatScreen>
         : Colors.black.withValues(alpha: 0.07);
     return _frostedHeaderIsland(
       radius: _kChatIslandRadius,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < rows.length; i++) ...[
-            if (i > 0)
-              Container(height: _kChatIslandSeam, color: seamColor),
-            SizedBox(height: _kChatIslandHeight, child: rows[i]),
-          ],
-        ],
+      child: LiquidIslandRows(
+        rows: rows,
+        seamColor: seamColor,
+        seam: _kChatIslandSeam,
       ),
     );
   }
@@ -17616,8 +19133,9 @@ class _ChatScreenState extends State<ChatScreen>
     // Painted as a foreground over the island WITHOUT a Stack so the island
     // keeps its exact layout/constraints.
     if (showHighlight) {
+      // Тёмная тема: кант 24 % → 8 % (разбор «Chat Diagnosis»).
       final highlight = isDark
-          ? Colors.white.withValues(alpha: 0.24)
+          ? Colors.white.withValues(alpha: 0.08)
           : Colors.white.withValues(alpha: 0.42);
       island = CustomPaint(
         foregroundPainter: GlassHighlightBorderPainter(
@@ -17646,391 +19164,890 @@ class _ChatScreenState extends State<ChatScreen>
   static const double _kHeaderIslandHeight = 48;
   static const double _kHeaderIslandRadius = 24;
 
-  Widget _buildComposerSoftActionButton({
-    required double size,
-    required Color softBase,
-    required Color iconColor,
-    required VoidCallback? onPressed,
-    required Widget child,
-  }) {
-    // Minimal: no circular background, gradient, border, or shadow — just the
-    // icon with a subtle circular tap ripple. (`softBase` kept for call-site
-    // compatibility but intentionally unused.)
-    return Material(
-      color: Colors.transparent,
-      shape: const CircleBorder(),
-      child: InkResponse(
-        onTap: onPressed,
-        radius: size * 0.55,
-        customBorder: const CircleBorder(),
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: IconTheme(
-            data: IconThemeData(color: iconColor),
-            child: Center(child: child),
-          ),
-        ),
+
+
+  /// Живая ☺ поля ввода (Lottie, проигрывается один раз приветствием) — в
+  /// капле поля справа, макет 1a.
+  Widget _composerSmileGlyph(Color color) => RepaintBoundary(
+    child: ColorFiltered(
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      child: Lottie.asset(
+        _smileIconAssetPath,
+        controller: _smileIconController,
+        animate: false,
+        repeat: false,
+        width: 27,
+        height: 27,
+        fit: BoxFit.contain,
+        onLoaded: (composition) {
+          final ms = (composition.duration.inMilliseconds * 1.55).round();
+          final target = Duration(milliseconds: ms.clamp(900, 4000));
+          if (_smileIconController.duration != target) {
+            // Stop first: an in-flight repeat keeps the old timing until
+            // restarted.
+            _smileIconController
+              ..stop()
+              ..duration = target;
+          }
+          // Play the greeting once at the real asset duration — never resume
+          // a loop here.
+          _smileIconGreeted = false;
+          _syncComposerTickers();
+        },
       ),
+    ),
+  );
+
+  /// Оформление капель поля ввода (стекло iPhone / тон Android, цвет темы).
+  ComposerDropStyle _composerDropStyle(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final visuals = theme.extension<ChatVisualsThemeExtension>();
+    return ComposerDropStyle.of(
+      context,
+      frosted: widget.controller.frostedPanelsEnabled,
+      accentTop: visuals?.actionTop ?? cs.primary,
+      accentBottom: visuals?.actionBottom ?? cs.secondary,
+      solidFill: opaquePanelFill(context),
     );
   }
 
-  Color _resolveComposerActionIconColor(Color actionCenter) {
-    if (widget.controller.appThemePresetId == 'flutter_dash') {
-      return Colors.white;
+  /// Ответ, правка и пересылка — шапка внутри капли поля ввода (22.11.2026,
+  /// владелец: «выезжает из нижних островков, а не отдельным островком»).
+  /// Пусто — `null`.
+  Widget? _composerAttachedContext(BuildContext context) {
+    if (_forwardDraft == null && _editingTarget == null && _replyTo == null) {
+      return null;
     }
-    return ThemeData.estimateBrightnessForColor(actionCenter) == Brightness.dark
-        ? Colors.white
-        : const Color(0xFF2A1A12);
+    final l10n = context.l10n;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+                                if (_forwardDraft != null)
+                                  Container(
+                                    width: double.infinity,
+                                    // Внутри капли поля (23.11): без своей
+                                    // карточки, отступы как у ответа.
+                                    padding: const EdgeInsets.fromLTRB(
+                                      12,
+                                      6,
+                                      0,
+                                      2,
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Icon(
+                                          AppIcons.forward,
+                                          size: 18,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                chatText(
+                                                  context,
+                                                  ru: 'Переслать ${_forwardDraft!.items.length} сообщение',
+                                                  en: 'Forward ${_forwardDraft!.items.length} message',
+                                                  uk: 'Переслати ${_forwardDraft!.items.length} повідомлення',
+                                                  es: 'Reenviar ${_forwardDraft!.items.length} mensaje',
+                                                  pt: 'Reencaminhar ${_forwardDraft!.items.length} mensagem',
+                                                  ptBr:
+                                                      'Encaminhar ${_forwardDraft!.items.length} mensagem',
+                                                  fr: 'Transférer ${_forwardDraft!.items.length} message',
+                                                  de: '${_forwardDraft!.items.length} Nachricht weiterleiten',
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .labelMedium
+                                                    ?.copyWith(
+                                                      color: Theme.of(
+                                                        context,
+                                                      ).colorScheme.primary,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Builder(
+                                                builder: (context) {
+                                                  final visuals =
+                                                      Theme.of(context)
+                                                          .extension<
+                                                            ChatVisualsThemeExtension
+                                                          >();
+                                                  final firstAuthor =
+                                                      _forwardDraft!
+                                                          .items
+                                                          .first
+                                                          .authorName;
+                                                  final firstAuthorIsMe =
+                                                      firstAuthor ==
+                                                      _selfAuthorLabel();
+                                                  final authorColor =
+                                                      firstAuthorIsMe
+                                                      ? (visuals?.outgoingNickname ??
+                                                            Theme.of(context)
+                                                                .colorScheme
+                                                                .primary)
+                                                      : (visuals?.incomingNickname ??
+                                                            Theme.of(context)
+                                                                .colorScheme
+                                                                .primary);
+                                                  final preview =
+                                                      _forwardDraft!
+                                                          .items
+                                                          .first
+                                                          .isText
+                                                      ? (_forwardDraft!
+                                                                .items
+                                                                .first
+                                                                .text ??
+                                                            '')
+                                                      : _forwardDraft!
+                                                            .items
+                                                            .first
+                                                            .isSticker
+                                                      ? SecretlyStickerCatalog.previewLabel(
+                                                          isRu:
+                                                              chatLocaleIsRussian(
+                                                                context,
+                                                              ),
+                                                          emojiHint:
+                                                              _forwardDraft!
+                                                                  .items
+                                                                  .first
+                                                                  .sticker
+                                                                  ?.emojiHint,
+                                                          label: _forwardDraft!
+                                                              .items
+                                                              .first
+                                                              .sticker
+                                                              ?.label,
+                                                        )
+                                                      : _attachmentPreviewLabel(
+                                                          _forwardDraft!
+                                                              .items
+                                                              .first
+                                                              .mime,
+                                                        );
+                                                  final baseStyle = Theme.of(
+                                                    context,
+                                                  ).textTheme.bodySmall;
+                                                  return RichText(
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    text: TextSpan(
+                                                      style: baseStyle,
+                                                      children: [
+                                                        TextSpan(
+                                                          text:
+                                                              '$firstAuthor: ',
+                                                          style: baseStyle
+                                                              ?.copyWith(
+                                                                color:
+                                                                    authorColor,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                              ),
+                                                        ),
+                                                        TextSpan(text: preview),
+                                                      ],
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        PressFeedback(child: IconButton(
+                                          tooltip: l10n.cancel,
+                                          onPressed: () {
+                                            setState(
+                                              () => _forwardDraft = null,
+                                            );
+                                            widget.controller
+                                                .clearForwardDraft();
+                                          },
+                                          icon: const Icon(
+                                            AppIcons.close,
+                                            size: 18,
+                                          ),
+                                          visualDensity: VisualDensity.compact,
+                                        )),
+                                      ],
+                                    ),
+                                  ),
+                                ClipRect(
+                                  child: AnimatedSize(
+                                    duration: const Duration(milliseconds: 220),
+                                    curve: Motion.standard,
+                                    alignment: Alignment.bottomCenter,
+                                    child: _editingTarget == null
+                                        ? const SizedBox.shrink()
+                                        : Padding(
+                                            padding: const EdgeInsets.fromLTRB(
+                                              12,
+                                              8,
+                                              6,
+                                              2,
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.center,
+                                              children: [
+                                                Container(
+                                                  width: 3,
+                                                  height: 34,
+                                                  decoration: BoxDecoration(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          3,
+                                                        ),
+                                                    color: Theme.of(
+                                                      context,
+                                                    ).colorScheme.primary,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        chatText(
+                                                          context,
+                                                          ru: 'Изменение сообщения',
+                                                          en: 'Editing message',
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .labelSmall
+                                                            ?.copyWith(
+                                                              color:
+                                                                  Theme.of(
+                                                                        context,
+                                                                      )
+                                                                      .colorScheme
+                                                                      .primary,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                            ),
+                                                      ),
+                                                      Text(
+                                                        _editingTarget!
+                                                            .previewText,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .bodySmall
+                                                            ?.copyWith(
+                                                              fontSize: 11,
+                                                              color:
+                                                                  Theme.of(
+                                                                        context,
+                                                                      )
+                                                                      .colorScheme
+                                                                      .onSurface
+                                                                      .withValues(
+                                                                        alpha:
+                                                                            0.6,
+                                                                      ),
+                                                            ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                SizedBox(
+                                                  width: 36,
+                                                  height: 36,
+                                                  child: PressFeedback(child: IconButton(
+                                                    tooltip: l10n.cancel,
+                                                    onPressed: _cancelEdit,
+                                                    padding: EdgeInsets.zero,
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                    splashRadius: 18,
+                                                    iconSize: 20,
+                                                    icon: Icon(
+                                                      AppIcons.close,
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .onSurface
+                                                          .withValues(
+                                                            alpha: 0.52,
+                                                          ),
+                                                    ),
+                                                  )),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                                ClipRect(
+                                  child: AnimatedSize(
+                                    duration: const Duration(milliseconds: 220),
+                                    curve: Motion.standard,
+                                    alignment: Alignment.bottomCenter,
+                                    child: _replyTo == null
+                                        ? const SizedBox.shrink()
+                                        : Padding(
+                                            padding: const EdgeInsets.fromLTRB(
+                                              12,
+                                              8,
+                                              6,
+                                              2,
+                                            ),
+                                            child: Row(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.center,
+                                              children: [
+                                                Container(
+                                                  width: 3,
+                                                  height: 34,
+                                                  decoration: BoxDecoration(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          3,
+                                                        ),
+                                                    color: _replyTo!.authorIsMe
+                                                        ? (Theme.of(context)
+                                                                  .extension<
+                                                                    ChatVisualsThemeExtension
+                                                                  >()
+                                                                  ?.outgoingNickname ??
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .primary)
+                                                        : (Theme.of(context)
+                                                                  .extension<
+                                                                    ChatVisualsThemeExtension
+                                                                  >()
+                                                                  ?.incomingNickname ??
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .primary),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                if (_replyTo!.mediaAttachment !=
+                                                    null) ...[
+                                                  _ReplyMediaThumb(
+                                                    attachment: _replyTo!
+                                                        .mediaAttachment!,
+                                                    loadCachedFile: widget
+                                                        .controller
+                                                        .cachedAttachmentFile,
+                                                  ),
+                                                  const SizedBox(width: 10),
+                                                ],
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        chatText(
+                                                          context,
+                                                          ru: 'В ответ ${_replyTo!.authorName}',
+                                                          en: 'Replying to ${_replyTo!.authorName}',
+                                                          uk: 'У відповідь ${_replyTo!.authorName}',
+                                                          es: 'Respondiendo a ${_replyTo!.authorName}',
+                                                          pt: 'A responder a ${_replyTo!.authorName}',
+                                                          ptBr:
+                                                              'Respondendo a ${_replyTo!.authorName}',
+                                                          fr: 'Réponse à ${_replyTo!.authorName}',
+                                                          de: 'Antwort an ${_replyTo!.authorName}',
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                                          color:
+                                                              _replyTo!
+                                                                  .authorIsMe
+                                                              ? (Theme.of(
+                                                                          context,
+                                                                        )
+                                                                        .extension<
+                                                                          ChatVisualsThemeExtension
+                                                                        >()
+                                                                        ?.outgoingNickname ??
+                                                                    Theme.of(
+                                                                          context,
+                                                                        )
+                                                                        .colorScheme
+                                                                        .primary)
+                                                              : (Theme.of(
+                                                                          context,
+                                                                        )
+                                                                        .extension<
+                                                                          ChatVisualsThemeExtension
+                                                                        >()
+                                                                        ?.incomingNickname ??
+                                                                    Theme.of(
+                                                                          context,
+                                                                        )
+                                                                        .colorScheme
+                                                                        .primary),
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                        ),
+                                                      ),
+                                                      Text(
+                                                        _replyTo!.previewText,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: Theme.of(context)
+                                                            .textTheme
+                                                            .bodySmall
+                                                            ?.copyWith(
+                                                              fontSize: 11,
+                                                              color:
+                                                                  Theme.of(
+                                                                        context,
+                                                                      )
+                                                                      .colorScheme
+                                                                      .onSurface
+                                                                      .withValues(
+                                                                        alpha:
+                                                                            0.6,
+                                                                      ),
+                                                            ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                SizedBox(
+                                                  width: 36,
+                                                  height: 36,
+                                                  child: PressFeedback(child: IconButton(
+                                                    tooltip: l10n.cancel,
+                                                    onPressed: () => setState(
+                                                      () => _replyTo = null,
+                                                    ),
+                                                    padding: EdgeInsets.zero,
+                                                    visualDensity:
+                                                        VisualDensity.compact,
+                                                    splashRadius: 18,
+                                                    iconSize: 20,
+                                                    icon: Icon(
+                                                      AppIcons.close,
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .onSurface
+                                                          .withValues(
+                                                            alpha: 0.52,
+                                                          ),
+                                                    ),
+                                                  )),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                  ),
+                                ),
+      ],
+    );
   }
 
   Widget _buildVoiceComposerButton({bool enabled = true}) {
+    // «Капля» (1a): та же капля, что под отправкой (ключ общий) — микрофон,
+    // кружок и стрелка перетекают друг в друга.
+    Widget button({required bool send}) => ValueListenableBuilder<int>(
+      valueListenable: _composerSendPulse,
+      builder: (context, pulse, _) => ComposerActionDropView(
+        key: _composerActionDropKey,
+        style: _composerDropStyle(context),
+        action: send
+            ? ComposerDropAction.send
+            : (_composerVideoMode
+                  ? ComposerDropAction.video
+                  : ComposerDropAction.mic),
+        filled: send,
+        pulse: pulse,
+        enabled: enabled || send,
+      ),
+    );
+
+    // Диктор (VoiceOver/TalkBack): у кнопки есть имя и подсказка; двойное
+    // касание — переключить микрофон ⇄ кружок, двойное касание с
+    // удержанием — запись (касания доходят до жеста как обычно).
+    Widget labelled(Widget child, {required bool video}) => Semantics(
+      button: true,
+      enabled: enabled,
+      label: video
+          ? context.l10n.composerRecordVideo
+          : context.l10n.composerRecordVoice,
+      hint: context.l10n.composerRecordHint,
+      onTap: enabled ? _onVoiceTap : null,
+      child: child,
+    );
+
+    // Видео-заметка: тот же жест, что у голосовых (один слушатель на весь
+    // жест); короткое касание — обратно на микрофон.
+    if (_composerVideoMode || _videoNote.isActive) {
+      return labelled(video: true, VoiceRecordGestureArea(
+        key: _voiceButtonKey,
+        controller: _videoNote,
+        enabled: enabled || _videoNote.isActive,
+        onTap: _onVoiceTap,
+        child: ValueListenableBuilder<VideoNotePhase>(
+          valueListenable: _videoNote.phase,
+          builder: (context, phase, _) => button(
+            send:
+                phase == VideoNotePhase.locked ||
+                phase == VideoNotePhase.paused ||
+                phase == VideoNotePhase.preview,
+          ),
+        ),
+      ));
+    }
+
+    // Голосовое: один слушатель на весь жест (VoiceRecordGestureArea), вид —
+    // по фазе записи.
+    return labelled(video: false, VoiceRecordGestureArea(
+      key: _voiceButtonKey,
+      controller: _voice,
+      enabled: enabled,
+      onTap: _onVoiceTap,
+      child: ValueListenableBuilder<VoicePhase>(
+        valueListenable: _voice.phase,
+        builder: (context, phase, _) => button(
+          send: phase == VoicePhase.locked || phase == VoicePhase.preview,
+        ),
+      ),
+    ));
+  }
+
+  // ── Запись голосового: связка с экраном ───────────────────────────────
+
+  void _initVoiceRecorder() {
+    final mobile =
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android;
+    _voice = VoiceRecorderController(
+      backend: RecordVoiceBackend(_voiceRecorder),
+      waveformBars: _voiceWaveformBars,
+      lockDistance: _voiceLockThresholdPx,
+      cancelDistance: _voiceCancelThresholdPx,
+      minDuration: _voiceMinDuration,
+      haptics: mobile,
+      newTempPath: () async {
+        final dir = await getTemporaryDirectory();
+        return p.join(
+          dir.path,
+          'voice_${DateTime.now().microsecondsSinceEpoch}.m4a',
+        );
+      },
+      canStart: () async {
+        if (!mounted) return false;
+        if (_voiceTargetId().isEmpty) return false;
+        if (_isGroupChat && !_roomCanSendMediaNow()) {
+          final text = _groupComposerPolicyBannerText(context.l10n);
+          if (text != null) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SecretlySnackBar(content: Text(text)));
+          }
+          return false;
+        }
+        return true;
+      },
+      onSend: (take) async {
+        final targetId = _voiceTargetId();
+        if (!mounted || targetId.isEmpty) return;
+        await _enqueuePendingAudioFile(
+          targetId: targetId,
+          filePath: take.path,
+          replyToPayloadEventId: _replyTo?.payloadEventId,
+          waveform: take.waveform,
+        );
+      },
+      onHint: (hint) {
+        // Короткое касание переключает микрофон ⇄ кружок — подсказку
+        // «Удерживайте, чтобы записать» на это не показываем (слово
+        // владельца 22.11.2026: мешает при каждом переключении).
+        if (hint == VoiceHint.holdToRecord) return;
+        if (mounted) _showVoiceHint(_voiceHintText(hint));
+      },
+    );
+    _voice.phase.addListener(_onVoicePhase);
+  }
+
+  String _voiceTargetId() => _isGroupChat
+      ? widget.convoId
+      : (widget.peerProfileIdForSend ?? '');
+
+  void _onVoicePhase() {
+    if (!mounted) return;
+    final active = _voice.phase.value != VoicePhase.idle;
+    _syncCaptureActive();
+    if (active) {
+      _ensureVoiceOverlay();
+    } else {
+      _removeVoiceOverlay();
+    }
+  }
+
+  /// Короткое касание микрофона: в полной сборке — переключить на кружки
+  /// (как было), подсказку уже показал автомат.
+  void _onVoiceTap() {
+    if (kVideoToolsAvailable) _toggleComposerCaptureMode();
+  }
+
+  Rect? _voiceAnchor() {
+    final box = _voiceButtonKey.currentContext?.findRenderObject();
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    final overlayBox = overlay?.context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize || overlayBox is! RenderBox) {
+      return null;
+    }
+    final topLeft = overlayBox.globalToLocal(box.localToGlobal(Offset.zero));
+    return topLeft & box.size;
+  }
+
+  void _ensureVoiceOverlay() {
+    if (_voiceOverlay != null) return;
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
     final visuals = Theme.of(context).extension<ChatVisualsThemeExtension>();
     final cs = Theme.of(context).colorScheme;
     final top = visuals?.actionTop ?? cs.primary;
     final bottom = visuals?.actionBottom ?? cs.secondary;
-    final center = Color.lerp(top, bottom, 0.5) ?? cs.primary;
-    final iconColor = _resolveComposerActionIconColor(center);
-
-    final recordingActive = _voiceRecording || _videoNoteRecording;
-
-    Widget buttonChild() {
-      // 🔴 ОДНА кнопка на оба режима, а не две подменяемые. Раньше здесь стояли
-      // две ветки `if`, и нажатие меняло значок рывком: круг пересобирался
-      // целиком, анимации не было вовсе.
-      //
-      // Размер значка одинаковый для микрофона и камеры. Раньше было 18 против
-      // 20, и это само по себе читалось как «кнопка меняет размер».
-      final glyph = recordingActive ? 21.0 : 19.0;
-      return _buildComposerActionButton(
-        topColor: top,
-        bottomColor: bottom,
-        iconColor: iconColor,
-        size: recordingActive ? 48 : 40,
-        onPressed: enabled ? () {} : null,
-        child: ComposerGlyphMorph(
-          box: recordingActive ? 26 : 23,
-          child: _composerVideoMode
-              ? Icon(
-                  AppIcons.videoSolid,
-                  key: const ValueKey<String>('composer-glyph-video'),
-                  size: glyph,
-                  color: iconColor,
-                )
-              : Image.asset(
-                  AppAssetPaths.settingsMicPng,
-                  key: const ValueKey<String>('composer-glyph-mic'),
-                  width: glyph,
-                  height: glyph,
-                  color: iconColor,
-                  colorBlendMode: BlendMode.srcIn,
-                  errorBuilder: (context, error, stackTrace) => Icon(
-                    AppIcons.mic,
-                    size: glyph,
-                    color: iconColor,
-                  ),
-                ),
-        ),
-      );
-    }
-
-    if (!enabled && !recordingActive) {
-      return buttonChild();
-    }
-
-    return Listener(
-      onPointerDown: _onCapturePointerDown,
-      onPointerMove: _onCapturePointerMove,
-      onPointerUp: _onCapturePointerUp,
-      onPointerCancel: _onCapturePointerCancel,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedBuilder(
-        animation: _voicePulseController,
-        builder: (context, child) {
-          final t = _voicePulseController.value;
-          final ripple1Opacity = _voiceRecording ? (0.45 * (1.0 - t)) : 0.0;
-          final ripple1Scale = _voiceRecording ? 1.0 + (0.65 * t) : 0.0;
-          final ripple2Opacity = _voiceRecording
-              ? (0.25 * (1.0 - Curves.easeIn.transform(t)))
-              : 0.0;
-          final ripple2Scale = _voiceRecording
-              ? 1.0 + (1.1 * Curves.easeIn.transform(t))
-              : 0.0;
-          final btnScale = _voiceRecording
-              ? 1 + (0.06 * Curves.easeOut.transform(t))
-              : 1.0;
-          return Stack(
-            alignment: Alignment.center,
-            clipBehavior: Clip.none,
-            children: [
-              if (_voiceRecording) ...[
-                Transform.scale(
-                  scale: ripple2Scale,
-                  child: Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: bottom.withValues(alpha: ripple2Opacity * 0.18),
-                    ),
-                  ),
-                ),
-                Transform.scale(
-                  scale: ripple1Scale,
-                  child: Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: top.withValues(alpha: ripple1Opacity),
-                        width: 2.5,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-              Transform.scale(scale: btnScale, child: child),
-            ],
-          );
-        },
-        child: buttonChild(),
+    final strings = _voiceStrings(context);
+    final entry = OverlayEntry(
+      builder: (_) => VoiceRecorderOverlay(
+        controller: _voice,
+        anchor: _voiceAnchor,
+        accentTop: top,
+        accentBottom: bottom,
+        strings: strings,
       ),
+    );
+    _voiceOverlay = entry;
+    overlay.insert(entry);
+  }
+
+  void _removeVoiceOverlay() {
+    _voiceOverlay?.remove();
+    _voiceOverlay = null;
+  }
+
+  // ── Видео-заметка: связка с экраном ───────────────────────────────────
+
+  void _initVideoNote() {
+    final mobile =
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android;
+    _videoNote = VideoNoteController(
+      camera: CameraVideoNoteCamera(),
+      previewPlayer: VideoPlayerNotePreview.new,
+      frames: kVideoToolsAvailable ? extractVideoNoteFrames : null,
+      lockDistance: _voiceLockThresholdPx,
+      cancelDistance: _voiceCancelThresholdPx,
+      haptics: mobile,
+      canStart: () async {
+        if (!mounted || !kVideoToolsAvailable) return false;
+        if (_voiceTargetId().isEmpty) return false;
+        // 23.11.2026: клавиатуру НЕ убираем — она пряталась посреди
+        // удержания, поле съезжало вниз и запись сама закреплялась.
+        // Квадрат раскладывается в месте над полем (VideoNoteLayout).
+        if (_isGroupChat && !_roomCanSendMediaNow()) {
+          final text = _groupComposerPolicyBannerText(context.l10n);
+          if (text != null) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SecretlySnackBar(content: Text(text)));
+          }
+          return false;
+        }
+        return true;
+      },
+      onSend: (result) async {
+        if (!mounted) return;
+        await _sendVideoNote(result);
+      },
+      onHint: (hint) {
+        if (mounted) _showVoiceHint(_videoNoteHintText(hint));
+      },
+    );
+    _videoNote.phase.addListener(_onVideoNotePhase);
+    // Свернули посреди записи — снятое не теряется (открывается просмотр).
+    _videoNoteLifecycle = AppLifecycleListener(
+      onHide: () => unawaited(_videoNote.appHidden()),
     );
   }
 
-  Widget _buildVoiceRecordingInlineContent(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final cancelColor = cs.error.withValues(alpha: 0.9);
-    final slideLeftProgress = (-_voiceDragDx / _voiceCancelThresholdPx)
-        .clamp(0.0, 1.0)
-        .toDouble();
-    final timerColor = Color.lerp(
-      Theme.of(context).textTheme.titleMedium?.color,
-      cancelColor,
-      Curves.easeIn.transform(slideLeftProgress),
-    );
+  /// Идёт ли запись (голосовое или видео-заметка): поле ввода уступает место
+  /// панели записи.
+  void _syncCaptureActive() {
+    final active = _voice.isActive || _videoNote.isActive;
+    if (active != _voiceRecording) {
+      setState(() => _voiceRecording = active);
+      _syncComposerTickers();
+    }
+  }
 
-    return Transform.translate(
-      offset: Offset(-slideLeftProgress * 22.0, 0),
-      child: SizedBox(
-        height: 40,
-        child: Row(
-          children: [
-            AnimatedBuilder(
-              animation: _voicePulseController,
-              builder: (context, child) {
-                final pulse =
-                    1.0 +
-                    (0.28 *
-                        Curves.easeOut.transform(_voicePulseController.value));
-                final cancelGrow = 1.0 + slideLeftProgress * 0.5;
-                return Transform.scale(scale: pulse * cancelGrow, child: child);
-              },
-              child: Icon(
-                Icons.fiber_manual_record_rounded,
-                size: 14,
-                color: _voiceRecordingCancelHint
-                    ? cancelColor
-                    : Colors.redAccent,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              _voiceElapsedLabel(_voiceElapsed),
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: timerColor,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _voiceRecordingLocked
-                  ? GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => unawaited(_cancelVoiceRecording()),
-                      child: Text(
-                        chatText(
-                          context,
-                          ru: 'ОТМЕНА',
-                          en: 'CANCEL',
-                          uk: 'СКАСУВАТИ',
-                          es: 'CANCELAR',
-                          pt: 'CANCELAR',
-                          ptBr: 'CANCELAR',
-                          fr: 'ANNULER',
-                          de: 'ABBRECHEN',
-                        ),
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: cancelColor,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    )
-                  : AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
-                      transitionBuilder: (child, anim) => FadeTransition(
-                        opacity: anim,
-                        child: SlideTransition(
-                          position:
-                              Tween<Offset>(
-                                begin: const Offset(-0.15, 0),
-                                end: Offset.zero,
-                              ).animate(
-                                CurvedAnimation(
-                                  parent: anim,
-                                  curve: Curves.easeOutCubic,
-                                ),
-                              ),
-                          child: child,
-                        ),
-                      ),
-                      child: Text(
-                        key: ValueKey(_voiceRecordingCancelHint),
-                        _voiceRecordingCancelHint
-                            ? chatText(
-                                context,
-                                ru: 'Отпустите — отмена',
-                                en: 'Release to cancel',
-                                uk: 'Відпустіть, щоб скасувати',
-                                es: 'Suelta para cancelar',
-                                pt: 'Solte para cancelar',
-                                ptBr: 'Solte para cancelar',
-                                fr: 'Relâchez pour annuler',
-                                de: 'Loslassen zum Abbrechen',
-                              )
-                            : chatText(
-                                context,
-                                ru: '< Влево — отмена',
-                                en: '< Slide left to cancel',
-                                uk: '< Вліво, щоб скасувати',
-                                es: '< Desliza a la izquierda para cancelar',
-                                pt: '< Deslize para a esquerda para cancelar',
-                                ptBr: '< Deslize para a esquerda para cancelar',
-                                fr: '< Glissez à gauche pour annuler',
-                                de: '< Nach links schieben zum Abbrechen',
-                              ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: _voiceRecordingCancelHint
-                              ? cancelColor
-                              : cs.onSurfaceVariant,
-                          fontWeight: _voiceRecordingCancelHint
-                              ? FontWeight.w600
-                              : null,
-                        ),
-                      ),
-                    ),
-            ),
-          ],
-        ),
-      ),
+  void _onVideoNotePhase() {
+    if (!mounted) return;
+    _syncCaptureActive();
+    if (_videoNote.isActive) _ensureVideoNoteOverlay();
+  }
+
+  /// Поле ввода — вырез в размытии (в координатах Overlay).
+  Rect? _videoNoteComposerRect() {
+    final box = _composerOverlayKey.currentContext?.findRenderObject();
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    final overlayBox = overlay?.context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize || overlayBox is! RenderBox) {
+      return null;
+    }
+    final topLeft = overlayBox.globalToLocal(box.localToGlobal(Offset.zero));
+    final outer = topLeft & box.size;
+    // «Капля» (22.11.2026): вырез — вся нижняя полоса поля ввода, во всю
+    // ширину и до низа экрана. Узкий вырез по форме старой плашки оставлял
+    // капли на сплошной тёмной подложке затемнения — «чёрная панель» вместо
+    // стекла на iPhone и матового стекла на Android.
+    return Rect.fromLTRB(
+      0,
+      outer.top,
+      overlayBox.size.width,
+      overlayBox.size.height,
     );
   }
 
-  Widget _buildVoiceLockBubble(ColorScheme cs) {
-    final rawProgress = (-_voiceDragDy / _voiceLockThresholdPx).clamp(0.0, 1.0);
-    final slideUpProgress = rawProgress.toDouble();
-    final isNearLock = slideUpProgress > 0.5;
-    final showBubble = _voiceRecording && !_voiceRecordingLocked;
-    final riseOffset = slideUpProgress * -24.0;
+  void _ensureVideoNoteOverlay() {
+    if (_videoNoteOverlay != null) return;
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
+    final strings = _videoNoteStrings(context);
+    final entry = OverlayEntry(
+      builder: (_) => VideoNoteOverlay(
+        controller: _videoNote,
+        anchor: _voiceAnchor,
+        composer: _videoNoteComposerRect,
+        strings: strings,
+        onClosed: _removeVideoNoteOverlay,
+      ),
+    );
+    _videoNoteOverlay = entry;
+    overlay.insert(entry);
+  }
 
-    final bubbleColor = Color.lerp(
-      cs.surfaceContainerHighest.withValues(alpha: 0.96),
-      cs.primary.withValues(alpha: 0.97),
-      Curves.easeIn.transform(slideUpProgress),
-    )!;
-    final iconColor = Color.lerp(
-      cs.onSurfaceVariant,
-      cs.onPrimary,
-      Curves.easeIn.transform(slideUpProgress),
-    )!;
+  void _removeVideoNoteOverlay() {
+    _videoNoteOverlay?.remove();
+    _videoNoteOverlay = null;
+  }
 
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 200),
-      opacity: showBubble ? 1.0 : 0.0,
-      child: AnimatedScale(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOutBack,
-        scale: showBubble ? 1.0 : 0.2,
-        child: Transform.translate(
-          offset: Offset(0, riseOffset),
-          child: AnimatedBuilder(
-            animation: Listenable.merge([
-              _voicePulseController,
-              _voiceLockBounceController,
-            ]),
-            builder: (context, child) {
-              final pv = _voicePulseController.value;
-              final bv = _voiceLockBounceController.value;
-              // Horizontal wiggle near lock threshold, driven by pulse
-              final shake = (isNearLock && bv < 0.85)
-                  ? sin(pv * pi * 5) * 2.8 * (1.0 - (bv > 0 ? bv : 0.0))
-                  : 0.0;
-              // Scale bounce on lock-in (one-shot)
-              final bounceScale = bv > 0 ? (1.0 + 0.32 * sin(bv * pi)) : 1.0;
-              return Transform.translate(
-                offset: Offset(shake, 0),
-                child: Transform.scale(
-                  scale: bounceScale,
-                  alignment: Alignment.center,
-                  child: child,
-                ),
-              );
-            },
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 44,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: bubbleColor,
-                    borderRadius: BorderRadius.circular(22),
-                    boxShadow: [
-                      BoxShadow(
-                        color: (isNearLock ? cs.primary : Colors.black)
-                            .withValues(alpha: 0.26 + slideUpProgress * 0.12),
-                        blurRadius: 14,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      SizedBox(
-                        width: 32,
-                        height: 32,
-                        child: SecretlySpinner(
-                          value: slideUpProgress,
-                          strokeWidth: 2.8,
-                          color: iconColor.withValues(alpha: 0.7),
-                          backgroundColor: iconColor.withValues(alpha: 0.14),
-                          strokeCap: StrokeCap.round,
-                        ),
-                      ),
-                      Icon(
-                        isNearLock
-                            ? Icons.lock_rounded
-                            : Icons.lock_open_rounded,
-                        size: 16,
-                        color: iconColor,
-                      ),
-                    ],
-                  ),
-                ),
-                ClipPath(
-                  clipper: _VoiceLockArrowClipper(),
-                  child: Container(width: 14, height: 8, color: bubbleColor),
-                ),
-              ],
-            ),
+  // Подписи записи кружков — из ARB (22.11.2026; прежде `chatText`, тексты
+  // те же).
+  String _videoNoteHintText(VideoNoteHint hint) => switch (hint) {
+    VideoNoteHint.tooShort => context.l10n.videoNoteHintTooShort,
+    VideoNoteHint.limitReached => context.l10n.videoNoteHintLimitReached,
+    VideoNoteHint.retake => context.l10n.videoNoteHintRetake,
+    VideoNoteHint.noPermission => context.l10n.videoNoteHintNoPermission,
+    VideoNoteHint.cameraFailed => context.l10n.videoNoteHintCameraFailed,
+  };
+
+  VideoNoteStrings _videoNoteStrings(BuildContext context) {
+    final l10n = context.l10n;
+    return VideoNoteStrings(
+      slideToCancel: l10n.videoNoteRecSlideToCancel,
+      releaseToDelete: l10n.videoNoteRecReleaseToDelete,
+      pause: l10n.videoNoteRecPause,
+      resume: l10n.videoNoteRecResume,
+      stop: l10n.videoNoteRecStop,
+      delete: l10n.videoNoteRecDelete,
+      retake: l10n.videoNoteRecRetake,
+      looped: l10n.videoNoteRecLooped,
+      flip: l10n.videoNoteRecFlip,
+      light: l10n.videoNoteRecLight,
+      play: l10n.videoNoteRecPlay,
+      trimStart: l10n.videoNoteRecTrimStart,
+      trimEnd: l10n.videoNoteRecTrimEnd,
+      cameraUnavailable: l10n.videoNoteRecCameraUnavailable,
+    );
+  }
+
+  void _showVoiceHint(String text) {
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
+    _voiceHintTimer?.cancel();
+    _voiceHintEntry?.remove();
+    final anchor = _voiceAnchor();
+    final entry = OverlayEntry(
+      builder: (ctx) {
+        final screen = MediaQuery.sizeOf(ctx);
+        final bottom = anchor == null
+            ? 120.0
+            : screen.height - anchor.top + 16;
+        return Positioned(
+          left: 24,
+          right: 24,
+          bottom: bottom,
+          child: IgnorePointer(
+            child: Center(child: VoiceHintToast(text: text)),
           ),
-        ),
-      ),
+        );
+      },
+    );
+    _voiceHintEntry = entry;
+    overlay.insert(entry);
+    _voiceHintTimer = Timer(const Duration(milliseconds: 1800), () {
+      if (_voiceHintEntry == entry) {
+        entry.remove();
+        _voiceHintEntry = null;
+      }
+    });
+  }
+
+  // Подписи записи голосовых — из ARB (22.11.2026; прежде `chatText`,
+  // тексты те же).
+  String _voiceHintText(VoiceHint hint) => switch (hint) {
+    VoiceHint.holdToRecord => context.l10n.voiceHintHoldToRecord,
+    VoiceHint.tooShort => context.l10n.voiceHintTooShort,
+    VoiceHint.noPermission => context.l10n.voiceHintNoPermission,
+    VoiceHint.failed => context.l10n.voiceHintFailed,
+  };
+
+  VoiceRecorderStrings _voiceStrings(BuildContext context) {
+    final l10n = context.l10n;
+    return VoiceRecorderStrings(
+      slideToCancel: l10n.voiceRecSlideToCancel,
+      releaseToDelete: l10n.voiceRecReleaseToDelete,
+      deleted: l10n.voiceRecDeleted,
+      stop: l10n.voiceRecStop,
+      delete: l10n.delete,
+      play: l10n.voiceRecPlay,
+      pause: l10n.voiceRecPause,
     );
   }
 
@@ -18128,7 +20145,7 @@ class _ChatScreenState extends State<ChatScreen>
           });
           await _openVideoPlayerDialog(file, title: p.basename(file.path));
         } else {
-          await showDialog<void>(
+          await showAppDialog<void>(
             context: context,
             builder: (context) {
               final maxHeight = MediaQuery.of(context).size.height * 0.78;
@@ -18214,7 +20231,12 @@ class _ChatScreenState extends State<ChatScreen>
     required File file,
     String? payloadEventId,
   }) async {
-    final queue = await _loadAudioQueue();
+    // Как в Telegram (21.11.2026): голосовые — только голосовые, музыка —
+    // только музыка; порядок от старых к новым. Последнее голосовое —
+    // конец очереди: проигрыватель останавливается, а не идёт по кругу.
+    final queue = await _loadAudioQueue(
+      voice: _isVoiceMessageAttachment(attachment),
+    );
     if (!mounted) return;
     final musicLabel = context.l10n.music;
     final unknownArtistLabel = _unknownMusicArtistLabel(context);
@@ -18241,8 +20263,9 @@ class _ChatScreenState extends State<ChatScreen>
         attachment: attachment,
         cachedFile: file,
       );
-      mutableQueue = [track, ...queue];
-      index = 0;
+      // Нет в очереди (только что отправлено) — это самое новое: в конец.
+      mutableQueue = [...queue, track];
+      index = mutableQueue.length - 1;
     }
     await _playAudioTrackAt(index, queue: mutableQueue, fileOverride: file);
   }
@@ -18276,11 +20299,16 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
-  Future<List<_ChatAudioTrack>> _loadAudioQueue() async {
+  /// Очередь воспроизведения чата. [voice] — только голосовые (`true`),
+  /// только музыка (`false`) или всё (`null`). Всегда по времени сообщения от
+  /// старых к новым — независимо от того, в каком порядке их отдаёт база
+  /// (она отдаёт от новых, и голосовые шли «в обратную сторону»).
+  Future<List<_ChatAudioTrack>> _loadAudioQueue({bool? voice}) async {
     final musicLabel = context.l10n.music;
     final unknownArtistLabel = _unknownMusicArtistLabel(context);
     final voiceMessageLabel = _voiceMessageLabel(context);
-    final events = await widget.controller.loadEvents(widget.convoId);
+    final events = [...await widget.controller.loadEvents(widget.convoId)]
+      ..sort((a, b) => a.createdAtMs.compareTo(b.createdAtMs));
     final tracks = <_ChatAudioTrack>[];
     for (final e in events) {
       final payload = await widget.controller.payloadEventForChatEvent(e);
@@ -18288,6 +20316,7 @@ class _ChatScreenState extends State<ChatScreen>
       final mime = (payload.mime ?? '').toLowerCase();
       if (!mime.startsWith('audio/')) continue;
       final isVoice = _isVoiceMessageAttachment(payload);
+      if (voice != null && isVoice != voice) continue;
       final cached = await widget.controller.cachedAttachmentFile(payload);
       final resolvedMusic = !isVoice
           ? await _resolveMusicMetadataForPlayback(
@@ -18408,7 +20437,7 @@ class _ChatScreenState extends State<ChatScreen>
     File file, {
     required String title,
   }) async {
-    await showDialog<void>(
+    await showAppDialog<void>(
       context: context,
       builder: (context) {
         return Dialog.fullscreen(
@@ -18507,6 +20536,17 @@ class _ChatScreenState extends State<ChatScreen>
     AttachmentEventV1? selectedAttachment,
     int initialIndex = 0,
   }) async {
+    if (VideoNotePlayback.instance.takeSwallowedTap()) return;
+    // Своё фото/альбом не отправилось (21.11.2026, владелец): касание — меню
+    // «Повторить отправку», а не просмотр.
+    final state = MessageLocalState.normalize(entry.event.localState);
+    if (entry.isMe &&
+        (state == MessageLocalState.failed ||
+            state == MessageLocalState.retry)) {
+      HapticFeedback.selectionClick();
+      await _showOutgoingSendStateActions(entry: entry);
+      return;
+    }
     final imageItems = entry.imageItems;
     if (imageItems == null || imageItems.isEmpty) {
       final fallbackAttachment = selectedAttachment ?? entry.attachment;
@@ -18556,7 +20596,16 @@ class _ChatScreenState extends State<ChatScreen>
     required int startIndex,
   }) async {
     if (galleryItems.isEmpty) return;
-    await showDialog<void>(
+    // Новый просмотр (макет «Просмотр медиа», 22.11.2026) — телефоны;
+    // выключатель kMediaViewerV2 возвращает прежний.
+    if (mediaViewerV2Enabled) {
+      await _openChatMediaViewerV2(
+        galleryItems: galleryItems,
+        startIndex: startIndex,
+      );
+      return;
+    }
+    await showAppDialog<void>(
       context: context,
       // EDGE-TO-EDGE (2026-07-17): без useSafeArea:false диалог inset-ится
       // системными панелями и медиа не может занять весь экран.
@@ -18598,10 +20647,28 @@ class _ChatScreenState extends State<ChatScreen>
                 authorIsMe: entry.isMe,
               );
             },
-            onSaveToGallery: (item) => _saveSingleAttachmentToGallery(
-              attachment: item.attachment,
-              createdAtMs: item.event.createdAtMs,
-            ),
+            // В альбоме (2+ медиа) — выбор: это или все (21.11.2026).
+            onSaveToGallery: (item) async {
+              final entry = _findTimelineEntryForAttachment(
+                item.attachment,
+                payloadEventId: item.payloadEventId,
+              );
+              final album = entry?.imageAttachments ?? const [];
+              if (entry != null && album.length >= 2) {
+                final scope = await _pickDownloadScope(album.length);
+                if (scope == null || !mounted) return;
+                if (scope == 'all') {
+                  await _saveSelectedMediaAttachments(
+                    _albumDownloadTargets(entry),
+                  );
+                  return;
+                }
+              }
+              await _saveSingleAttachmentToGallery(
+                attachment: item.attachment,
+                createdAtMs: item.event.createdAtMs,
+              );
+            },
             onShare: (item) => _shareSingleAttachment(
               attachment: item.attachment,
               createdAtMs: item.event.createdAtMs,
@@ -18624,6 +20691,167 @@ class _ChatScreenState extends State<ChatScreen>
           ),
         );
       },
+    );
+  }
+
+  /// Новый просмотр медиа: перелёт из миниатюры, правки фото, удаление без
+  /// закрытия просмотра, сохранение файлом, копирование.
+  Future<void> _openChatMediaViewerV2({
+    required List<MediaViewerItem> galleryItems,
+    required int startIndex,
+  }) async {
+    final l10n = context.l10n;
+    // Автор каждого снимка — из ленты (один проход, не по разу на снимок).
+    final byBlob = <String, _TimelineEntry>{};
+    for (final entry in _lastTimeline) {
+      final a = entry.attachment;
+      if (a != null) byBlob[a.blobId] = entry;
+      final items = entry.imageItems;
+      if (items != null) {
+        for (final it in items) {
+          byBlob[it.attachment.blobId] = entry;
+        }
+      }
+    }
+    final entries = <MediaViewerEntry>[];
+    for (final item in galleryItems) {
+      final att = item.attachment;
+      final mime = (att.mime ?? '').toLowerCase();
+      final isVideo = _isVideoMediaMime(mime);
+      final owner = byBlob[att.blobId];
+      final isMe =
+          owner?.isMe ??
+          widget.controller.isOwnDeviceId(item.event.senderDeviceId);
+      final w = att.width, h = att.height;
+      entries.add(
+        MediaViewerEntry(
+          id: att.blobId,
+          kind: isVideo ? MediaViewerKind.video : MediaViewerKind.photo,
+          loadFile: () => _ensureImageFile(att),
+          cachedFile: () => widget.controller.cachedAttachmentFile(att),
+          title: isMe ? l10n.mvYou : (owner?.authorName ?? widget.title),
+          time: DateTime.fromMillisecondsSinceEpoch(item.event.createdAtMs),
+          caption: att.caption,
+          own: isMe,
+          // Фото — пропорция по самому снимку (ориентация из EXIF);
+          // видео — по размерам от отправителя, кадр уточнит.
+          knownAspect: isVideo && w != null && h != null && w > 0 && h > 0
+              ? w / h
+              : null,
+          duration: att.durationMs == null
+              ? null
+              : Duration(milliseconds: att.durationMs!),
+          thumbBytes: _chatThumbBytesFor(att.blobId, att.thumbB64),
+          exportName: att.filename,
+          payload: item,
+        ),
+      );
+    }
+    MediaViewerItem itemOf(MediaViewerEntry e) => e.payload! as MediaViewerItem;
+    await openMediaViewer(
+      context,
+      entries: entries,
+      initialIndex: startIndex.clamp(0, entries.length - 1),
+      title: widget.title,
+      hapticsEnabled: () => widget.controller.appHapticsEnabled,
+      actions: MediaViewerActions(
+        canEdit: true,
+        // Правленое фото — новой копией в этот чат; оригинал не меняется.
+        onSendEdited: (e, edited) => _sendEditedPhotoCopy(edited),
+        onReply: (e) async {
+          final item = itemOf(e);
+          final payloadEventId = (item.payloadEventId ?? '').trim();
+          if (payloadEventId.isEmpty || !mounted) return;
+          final entry = _findTimelineEntryForAttachment(
+            item.attachment,
+            payloadEventId: payloadEventId,
+          );
+          if (entry == null) return;
+          _startReply(
+            payloadEventId: payloadEventId,
+            previewText: entry.previewText,
+            authorName: entry.isMe ? _selfAuthorLabel() : entry.authorName,
+            authorIsMe: entry.isMe,
+            mediaAttachment: item.attachment,
+          );
+        },
+        onForward: (e) => _forwardEvents([itemOf(e).event]),
+        onShowInChat: (e) async {
+          final item = itemOf(e);
+          final targetId = (item.payloadEventId ?? item.event.eventId).trim();
+          if (targetId.isEmpty || !mounted) return;
+          _messageInputFocusNode.unfocus();
+          FocusManager.instance.primaryFocus?.unfocus();
+          await _scrollToReply(targetId);
+        },
+        onShare: (e) async {
+          final item = itemOf(e);
+          await _shareSingleAttachment(
+            attachment: item.attachment,
+            createdAtMs: item.event.createdAtMs,
+          );
+          return null;
+        },
+        onSaveToGallery: (e) async {
+          final item = itemOf(e);
+          // В альбоме (2+ медиа) — выбор: это или все (21.11.2026).
+          final entry = _findTimelineEntryForAttachment(
+            item.attachment,
+            payloadEventId: item.payloadEventId,
+          );
+          final album = entry?.imageAttachments ?? const [];
+          if (entry != null && album.length >= 2) {
+            final scope = await _pickDownloadScope(album.length);
+            if (scope == null || !mounted) return null;
+            if (scope == 'all') {
+              await _saveSelectedMediaAttachments(_albumDownloadTargets(entry));
+              return null;
+            }
+          }
+          final source = await _ensureImageFile(item.attachment);
+          final inGallery = await saveMediaToSystemGallery(
+            attachment: item.attachment,
+            createdAtMs: item.event.createdAtMs,
+            source: source,
+          );
+          if (inGallery) return l10n.mvSavedToGallery;
+          final saved = await saveAttachmentToDownloads(
+            attachment: item.attachment,
+            createdAtMs: item.event.createdAtMs,
+            source: source,
+          );
+          return l10n.savedTo(saved.path);
+        },
+        onSaveAsFile: (e) async {
+          final item = itemOf(e);
+          final source = await _ensureImageFile(item.attachment);
+          final path = await saveAttachmentToUserVisibleLocation(
+            fileName: attachmentDownloadSuggestedName(
+              item.attachment,
+              item.event.createdAtMs,
+              source,
+            ),
+            source: source,
+            mime: item.attachment.mime,
+          );
+          return l10n.savedTo(path);
+        },
+        deleteInfo: (e) {
+          final event = itemOf(e).event;
+          return MediaViewerDeleteInfo(
+            own: widget.controller.isOwnDeviceId(event.senderDeviceId),
+            canDeleteForEveryone: _deleteForAllPayloadIds([event]).isNotEmpty,
+            isGroup: _isGroupChat,
+            peerName: widget.title,
+          );
+        },
+        // Удаляется ТОЛЬКО этот снимок: каждое фото альбома — своё событие,
+        // лента пересоберёт оставшиеся в альбом поменьше.
+        onDelete: (e, scope) => _deleteEventsConfirmed(
+          <ChatEvent>[itemOf(e).event],
+          forAll: scope == MediaDeleteScope.everyone,
+        ),
+      ),
     );
   }
 
@@ -19216,7 +21444,7 @@ class _ChatScreenState extends State<ChatScreen>
         // разговор: что произошло, что переписка по-прежнему зашифрована, и
         // два внятных выхода.
         final strict = widget.controller.blockUnverified;
-        final choice = await showDialog<String>(
+        final choice = await showAppDialog<String>(
           context: context,
           builder: (dialogContext) => SecretlyAlertDialog(
             title: Text(
@@ -19296,6 +21524,7 @@ class _ChatScreenState extends State<ChatScreen>
     AppLocalizations l10n,
     MediaQueryData media, {
     required double keyboardInset,
+    double panelInset = 0.0,
   }) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -19308,11 +21537,15 @@ class _ChatScreenState extends State<ChatScreen>
             children: [
               Positioned(
                 right: 16,
-                bottom:
-                    keyboardInset +
-                    media.padding.bottom +
-                    96 +
-                    (_replyTo != null ? 58.0 : 0.0),
+                // С-6 (22.11.2026): при открытой панели эмодзи клавиатуры нет
+                // (0), и меню вставало внутрь панели на ~340 px ниже кнопки.
+                bottom: scheduleMenuBottom(
+                  keyboardInset: keyboardInset,
+                  panelInset: panelInset,
+                  padding: media.padding,
+                  viewPadding: media.viewPadding,
+                  replying: _replyTo != null,
+                ),
                 child: _buildScheduleMenuCard(context, l10n),
               ),
             ],
@@ -19330,7 +21563,10 @@ class _ChatScreenState extends State<ChatScreen>
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           decoration: BoxDecoration(
-            color: cs.surface.withValues(alpha: 0.85),
+            color: appleBlurredFillOr(
+          context,
+          cs.surface.withValues(alpha: 0.85),
+        ),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: cs.onSurface.withValues(alpha: 0.12),
@@ -19363,9 +21599,13 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<DateTime?> _showScheduledTimePicker() {
     return showModalBottomSheet<DateTime>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: appleSheetFillOr(
+          context,
+          Colors.transparent,
+        ),
       builder: (_) => const _ScheduleDateTimePicker(),
     );
   }
@@ -19373,6 +21613,7 @@ class _ChatScreenState extends State<ChatScreen>
   Future<void> _openMediaGallery() async {
     final cs = Theme.of(context).colorScheme;
     await showModalBottomSheet<void>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -19418,10 +21659,14 @@ class _ChatScreenState extends State<ChatScreen>
     if (!mounted) return;
     final cs = Theme.of(context).colorScheme;
     await showModalBottomSheet<void>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      backgroundColor: cs.surface,
+      backgroundColor: appleSheetFillOr(
+          context,
+          cs.surface,
+        ),
       builder: (sheetContext) {
         final media = MediaQuery.of(sheetContext);
         return SafeArea(
@@ -19531,9 +21776,13 @@ class _ChatScreenState extends State<ChatScreen>
     }
 
     await showModalBottomSheet<void>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: appleSheetFillOr(
+          context,
+          Theme.of(context).colorScheme.surface,
+        ),
       builder: (sheetContext) {
         return SafeArea(
           top: false,
@@ -19711,7 +21960,7 @@ class _ChatScreenState extends State<ChatScreen>
         Offset.zero & overlay.size,
       );
     } else {
-      final media = MediaQuery.of(context);
+      final media = mediaQueryNow(context);
       position = RelativeRect.fromLTRB(
         media.size.width,
         media.padding.top + kToolbarHeight,
@@ -19747,7 +21996,7 @@ class _ChatScreenState extends State<ChatScreen>
       );
     }
 
-    final selected = await showMenu<String>(
+    final selected = await showAppMenu<String>(
       context: context,
       position: position,
       items: [
@@ -19779,6 +22028,13 @@ class _ChatScreenState extends State<ChatScreen>
             de: 'Benachrichtigungen',
           ),
         ),
+        // Т-4: перевод в этой комнате.
+        if (kTranslationAvailable && kChatTranslationOverride)
+          menuItem(
+            value: 'translation',
+            icon: AdaptiveIcons.translate_rounded,
+            label: context.l10n.chatTranslateMenuItem,
+          ),
         menuItem(
           value: 'share_room',
           icon: AppIcons.reply,
@@ -19848,6 +22104,9 @@ class _ChatScreenState extends State<ChatScreen>
       case 'notifs':
         unawaited(_openMuteOptions(muted: muted));
         break;
+      case 'translation':
+        unawaited(_openChatTranslationSettings());
+        break;
       case 'share_room':
         unawaited(_shareRoomExternally());
         break;
@@ -19870,7 +22129,7 @@ class _ChatScreenState extends State<ChatScreen>
   /// local copy. Reuses the controller's existing clear methods.
   Future<void> _clearRoomHistoryFromMenu({required bool isAdmin}) async {
     bool clearForAll = false;
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
@@ -19916,7 +22175,7 @@ class _ChatScreenState extends State<ChatScreen>
                   ),
                   if (isAdmin) ...[
                     const SizedBox(height: 12),
-                    CheckboxListTile(
+                    CheckboxListTile.adaptive(
                       value: clearForAll,
                       onChanged: (v) =>
                           setLocalState(() => clearForAll = v == true),
@@ -20010,7 +22269,7 @@ class _ChatScreenState extends State<ChatScreen>
     final canBlockOwner =
         ownerProfileId.isNotEmpty && ownerProfileId != myProfileId;
     bool block = false;
-    final ok = await showDialog<bool>(
+    final ok = await showAppDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
@@ -20045,7 +22304,7 @@ class _ChatScreenState extends State<ChatScreen>
                   ),
                   if (canBlockOwner) ...[
                     const SizedBox(height: 12),
-                    CheckboxListTile(
+                    CheckboxListTile.adaptive(
                       value: block,
                       onChanged: (v) => setLocalState(() => block = v == true),
                       title: Text(
@@ -20176,7 +22435,7 @@ class _ChatScreenState extends State<ChatScreen>
           return;
         case 'block':
           if (blocked) {
-            final ok = await showDialog<bool>(
+            final ok = await showAppDialog<bool>(
               context: context,
               builder: (context) {
                 return SecretlyAlertDialog(
@@ -20187,10 +22446,10 @@ class _ChatScreenState extends State<ChatScreen>
                       onPressed: () => Navigator.of(context).pop(false),
                       child: Text(context.l10n.cancel),
                     ),
-                    FilledButton(
+                    PressFeedback(child: FilledButton(
                       onPressed: () => Navigator.of(context).pop(true),
                       child: Text(context.l10n.unblock),
-                    ),
+                    )),
                   ],
                 );
               },
@@ -20205,7 +22464,7 @@ class _ChatScreenState extends State<ChatScreen>
           }
 
           bool deleteChat = false;
-          final ok = await showDialog<bool>(
+          final ok = await showAppDialog<bool>(
             context: context,
             builder: (context) {
               return StatefulBuilder(
@@ -20217,7 +22476,7 @@ class _ChatScreenState extends State<ChatScreen>
                       children: [
                         Text(peerProfileId),
                         const SizedBox(height: 12),
-                        CheckboxListTile(
+                        CheckboxListTile.adaptive(
                           value: deleteChat,
                           onChanged: (v) =>
                               setState(() => deleteChat = v == true),
@@ -20257,7 +22516,7 @@ class _ChatScreenState extends State<ChatScreen>
           }
           return;
         case 'delete':
-          final ok = await showDialog<bool>(
+          final ok = await showAppDialog<bool>(
             context: context,
             builder: (context) {
               return SecretlyAlertDialog(
@@ -20283,7 +22542,7 @@ class _ChatScreenState extends State<ChatScreen>
           Navigator.of(context).pop();
           return;
         case 'clear_history':
-          final ok = await showDialog<bool>(
+          final ok = await showAppDialog<bool>(
             context: context,
             builder: (context) {
               return SecretlyAlertDialog(
@@ -20354,7 +22613,10 @@ class _ChatScreenState extends State<ChatScreen>
     // like chats_screen — same controller, same open/close curves.
     _chatSearchRevealController.animateTo(
       nextOpen ? 1.0 : 0.0,
-      curve: nextOpen ? Curves.easeOutCubic : Curves.easeInCubic,
+      duration: kTelegramMotion && !nextOpen
+          ? MotionDurations.standard
+          : null,
+      curve: nextOpen || kTelegramMotion ? Motion.standard : Curves.easeInCubic,
     );
     if (_chatSearchOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -20380,8 +22642,9 @@ class _ChatScreenState extends State<ChatScreen>
     final timeline = _memoVisibleTimeline;
     if (timeline == null || timeline.isEmpty) return;
 
-    // Topmost row that is not yet fully scrolled behind the islands.
-    final topEdge = _timelineTopEdgePx;
+    // Topmost row that is not yet fully scrolled behind the islands
+    // (включая строку тем комнаты — её низ меряется, 23.11.2026).
+    final topEdge = max(_timelineTopEdgePx, _headerBottomEdge.value);
     double? bestDy;
     String? bestId;
     for (final entry in _eventRowKeys.entries) {
@@ -20662,6 +22925,7 @@ class _ChatScreenState extends State<ChatScreen>
     }
 
     final res = await showModalBottomSheet<_PhotoDraft>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
       showDragHandle: false,
@@ -20764,7 +23028,10 @@ class _ChatScreenState extends State<ChatScreen>
                               color: cs.onSurface.withValues(alpha: 0.45),
                             ),
                             filled: true,
-                            fillColor: cs.onSurface.withValues(alpha: 0.06),
+                            fillColor: appleFieldFillOr(
+                              context,
+                              cs.onSurface.withValues(alpha: 0.06),
+                            ),
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 14,
                               vertical: 11,
@@ -20800,7 +23067,7 @@ class _ChatScreenState extends State<ChatScreen>
                               child: Text(l10n.cancel),
                             ),
                             const Spacer(),
-                            FilledButton.icon(
+                            PressFeedback(child: FilledButton.icon(
                               onPressed: () {
                                 Navigator.of(context).pop(
                                   _PhotoDraft(
@@ -20811,7 +23078,7 @@ class _ChatScreenState extends State<ChatScreen>
                               },
                               icon: const Icon(AppIcons.send),
                               label: Text(l10n.send),
-                            ),
+                            )),
                           ],
                         ),
                       ),
@@ -20831,258 +23098,6 @@ class _ChatScreenState extends State<ChatScreen>
 }
 
 enum _RoomMentionCandidateKind { member, all, here, admins }
-
-
-/// Composer action button — send / voice / video, all three share this.
-///
-/// TWO jobs beyond drawing a circle:
-///
-/// **1. A forgiving touch target.** The visual stays [size] (40), but the
-/// widget claims [size] + 2×[hitSlop] and centres the circle inside it, so the
-/// tappable area reaches the 48dp Android/iOS minimum without the button
-/// looking any bigger. Users kept just missing it — a 40dp target is below the
-/// guideline for a control this important, and it sits at the very edge of the
-/// screen where thumbs are least precise. Flutter will NOT deliver taps that
-/// land outside a widget's own box, so growing the box is the only honest fix;
-/// the caller trims the neighbouring gap so nothing moves visually.
-///
-/// **2. A water-drop press.** Down: the circle compresses like a droplet
-/// meeting a surface. Release: it springs back past 1.0 and settles, while a
-/// ring expands from its rim and fades — the "бульк". Deliberately quiet:
-/// 0.9 scale, one thin ring, ~0.4 s. A send button is pressed hundreds of times
-/// a day, and anything louder becomes tiring long before it becomes charming.
-///
-/// Honours the platform's reduce-motion setting: with animations disabled the
-/// button still responds, just without the flourish.
-class _ComposerActionButton extends StatefulWidget {
-  const _ComposerActionButton({
-    super.key,
-    required this.topColor,
-    required this.bottomColor,
-    required this.iconColor,
-    required this.size,
-    required this.child,
-    this.onPressed,
-    this.onLongPress,
-    this.focusNode,
-  });
-
-  final Color topColor;
-  final Color bottomColor;
-  final Color iconColor;
-  final double size;
-  final Widget child;
-  final VoidCallback? onPressed;
-  final VoidCallback? onLongPress;
-  final FocusNode? focusNode;
-
-  @override
-  State<_ComposerActionButton> createState() => _ComposerActionButtonState();
-}
-
-class _ComposerActionButtonState extends State<_ComposerActionButton>
-    with TickerProviderStateMixin {
-  late final AnimationController _press = AnimationController(
-    vsync: this,
-    // Slower on the way in so the compression is actually seen, and a long,
-    // soft rebound so the spring reads as liquid rather than a twitch.
-    // The press follows the finger quickly enough to feel responsive; the
-    // RELEASE is where the length lives, because that is the part you watch.
-    duration: const Duration(milliseconds: 200),
-    reverseDuration: const Duration(milliseconds: 840),
-  );
-  late final AnimationController _ripple = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 900),
-  );
-
-  bool get _enabled => widget.onPressed != null;
-
-  @override
-  void dispose() {
-    _press.dispose();
-    _ripple.dispose();
-    super.dispose();
-  }
-
-  void _down() {
-    if (!_enabled) return;
-    HapticFeedback.lightImpact();
-    _press.forward();
-  }
-
-  /// Springs back and drops the ring. Used by both release and cancel so a
-  /// finger that slides off never leaves the button stuck compressed.
-  void _up() {
-    if (_press.value == 0) return;
-    _press.reverse();
-  }
-
-  void _tap() {
-    if (!_enabled) return;
-    _ripple.forward(from: 0);
-    widget.onPressed!.call();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final reduceMotion = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    // +4 on every side: a 40 visual becomes a 48 target, the platform minimum.
-    const hitSlop = 4.0;
-    final box = widget.size + hitSlop * 2;
-    final resolvedTop = _enabled
-        ? widget.topColor
-        : widget.topColor.withValues(alpha: 0.45);
-    final resolvedBottom = _enabled
-        ? widget.bottomColor
-        : widget.bottomColor.withValues(alpha: 0.45);
-    final resolvedIcon = _enabled
-        ? widget.iconColor
-        : widget.iconColor.withValues(alpha: 0.55);
-
-    final visual = DecoratedBox(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [resolvedTop, resolvedBottom],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: resolvedBottom.withValues(alpha: _enabled ? 0.32 : 0.14),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: SizedBox(
-        width: widget.size,
-        height: widget.size,
-        child: IconTheme(
-          data: IconThemeData(color: resolvedIcon),
-          child: Center(child: widget.child),
-        ),
-      ),
-    );
-
-    return Focus(
-      focusNode: widget.focusNode,
-      child: GestureDetector(
-        // Opaque so the whole slop area counts, not just the painted circle.
-        behavior: HitTestBehavior.opaque,
-        onTapDown: reduceMotion ? null : (_) => _down(),
-        onTapUp: reduceMotion ? null : (_) => _up(),
-        onTapCancel: reduceMotion ? null : _up,
-        onTap: _tap,
-        onLongPress: widget.onLongPress,
-        child: SizedBox(
-          width: box,
-          height: box,
-          child: Center(
-            child: reduceMotion
-                ? visual
-                : AnimatedBuilder(
-                    animation: Listenable.merge([_press, _ripple]),
-                    builder: (context, child) {
-                      // 1.0 → 0.90 down; elasticOut on the way back gives the
-                      // little overshoot that reads as a droplet rebound.
-                      // easeInOutCubic going down (no snap), and a gentler
-                      // spring coming back: elasticOut overshoots hard and
-                      // reads as a bounce; this settles like a drop.
-                      // easeOutCubic on the way down: moves immediately with
-                      // the finger, then eases into the bottom instead of
-                      // hitting it — that landing is what reads as "soft".
-                      final t = _press.status == AnimationStatus.reverse
-                          ? _softSpring(1 - _press.value)
-                          : 1 - Curves.easeOutCubic.transform(_press.value);
-                      // 0.76: clearly visible travel. Deeper than this and the
-                      // icon starts to shrink noticeably, which looks cheap.
-                      final scale = 0.76 + 0.24 * t.clamp(0.0, 1.14);
-                      return CustomPaint(
-                        painter: _DropletRipplePainter(
-                          progress: _ripple.value,
-                          color: resolvedBottom,
-                          radius: widget.size / 2,
-                        ),
-                        child: Transform.scale(scale: scale, child: child),
-                      );
-                    },
-                    child: visual,
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// A spring that overshoots ONCE, gently, then settles.
-///
-/// `Curves.elasticOut` wobbles several times and reads as a bounce — fine for a
-/// toy, wrong for a control pressed hundreds of times a day. This is a single
-/// damped overshoot of a few percent: the eye registers "it sprang back"
-/// without the button ever looking unstable.
-double _softSpring(double t) {
-  if (t <= 0) return 0;
-  if (t >= 1) return 1;
-  // Lower damping ⇒ the overshoot is actually visible; the frequency is kept
-  // below 2 so there is still only ONE swing back, not a wobble.
-  const damping = 3.4;
-  const frequency = 1.35;
-  return 1 - exp(-damping * t) * cos(frequency * pi * t) * (1 - t * 0.35);
-}
-
-/// The ring that expands from the button's rim and fades — the visible half of
-/// the "бульк". One thin stroke, never a filled splash: a filled one reads as a
-/// loading state at this size.
-class _DropletRipplePainter extends CustomPainter {
-  const _DropletRipplePainter({
-    required this.progress,
-    required this.color,
-    required this.radius,
-  });
-
-  final double progress;
-  final Color color;
-  final double radius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (progress <= 0 || progress >= 1) return;
-    final centre = Offset(size.width / 2, size.height / 2);
-    // TWO rings, the second trailing by a fifth of the cycle: one ring reads as
-    // a blip, two read as a ripple spreading on water. The trailing one is
-    // fainter so it supports the first instead of competing with it.
-    // THREE rings now, each trailing the last: a single ring blinks, two read
-    // as a ripple, three read as a ripple that keeps spreading — which is what
-    // water actually does. Each is fainter than the one before it, so the eye
-    // follows the leading edge outwards instead of seeing three equal circles.
-    for (final ring in const <({double delay, double strength})>[
-      (delay: 0.0, strength: 1.0),
-      (delay: 0.16, strength: 0.62),
-      (delay: 0.32, strength: 0.34),
-    ]) {
-      final local = (progress - ring.delay) / (1 - ring.delay);
-      if (local <= 0 || local >= 1) continue;
-      final eased = Curves.easeOutCubic.transform(local);
-      final alpha = (1 - eased) * 0.78 * ring.strength;
-      if (alpha <= 0.01) continue;
-      canvas.drawCircle(
-        centre,
-        radius + eased * (radius * 1.35),
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3.0 * (1 - eased) + 0.5
-          ..color = color.withValues(alpha: alpha),
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_DropletRipplePainter old) =>
-      old.progress != progress || old.color != color || old.radius != radius;
-}
 
 
 /// Room header subtitle: who is TYPING, else who is HERE, else the plain label.
@@ -21295,7 +23310,7 @@ class _TypingDots extends StatefulWidget {
 }
 
 class _TypingDotsState extends State<_TypingDots>
-    with SingleTickerProviderStateMixin {
+    with PacedTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
@@ -21309,7 +23324,7 @@ class _TypingDotsState extends State<_TypingDots>
 
   @override
   Widget build(BuildContext context) {
-    if (MediaQuery.maybeOf(context)?.disableAnimations ?? false) {
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
       return Text('…', style: Theme.of(context).textTheme.labelSmall);
     }
     final color =
@@ -21527,12 +23542,16 @@ class _ReplyTarget {
     required this.authorName,
     required this.previewText,
     required this.authorIsMe,
+    this.mediaAttachment,
   });
 
   final String payloadEventId;
   final String authorName;
   final String previewText;
   final bool authorIsMe;
+
+  /// Ответ на фото или видео: в плашке ответа — миниатюра 36×36.
+  final AttachmentEventV1? mediaAttachment;
 }
 
 class _EditingTarget {
@@ -21943,8 +23962,8 @@ class _CallEventBubble extends StatelessWidget {
                       const SizedBox(width: 10),
                       Icon(
                         callEvent.hadVideo
-                            ? Icons.videocam_rounded
-                            : Icons.call_rounded,
+                            ? AdaptiveIcons.videocam_rounded
+                            : AdaptiveIcons.call_rounded,
                         size: 20,
                         color: iconColor,
                       ),
@@ -21985,10 +24004,10 @@ class _CallEventBubble extends StatelessWidget {
         callEvent.result == CallRecordResult.ongoing;
     if (callEvent.direction == CallRecordDirection.incoming) {
       return isSuccessLike
-          ? Icons.call_received_rounded
-          : Icons.call_received_rounded;
+          ? AdaptiveIcons.call_received_rounded
+          : AdaptiveIcons.call_received_rounded;
     }
-    return Icons.call_made_rounded;
+    return AdaptiveIcons.call_made_rounded;
   }
 
   Color _callEventAccentColor() {
@@ -22093,6 +24112,7 @@ class _HeaderAvatar extends StatelessWidget {
     required this.favoritesAssetPath,
     required this.showOnlineDot,
     this.frameId,
+    this.heroTag,
   });
 
   final String? avatarPath;
@@ -22104,6 +24124,29 @@ class _HeaderAvatar extends StatelessWidget {
 
   /// Peer's premium animated frame id (cosmetic). Null → plain avatar.
   final String? frameId;
+
+  /// «Мост аватара»: метка этого чата — аватар шапки летит в профиль.
+  final String? heroTag;
+
+  Widget _bridge(BuildContext context, Widget avatar, String seed) {
+    final tag = heroTag;
+    if (tag == null || !kAvatarBridgeTransition) return avatar;
+    return AvatarBridgeHero(
+      tag: tag,
+      side: AvatarBridgeSide.source,
+      spec: AvatarBridgeSpec.framed(
+        context,
+        size: 42,
+        path: avatarPath,
+        frameId: frameId,
+        seed: seed,
+        name: title,
+        fallbackId: fallbackId,
+        favoritesAsset: isFavoritesChat ? favoritesAssetPath : null,
+      ),
+      child: avatar,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22120,7 +24163,7 @@ class _HeaderAvatar extends StatelessWidget {
           ),
         ),
       );
-      return _wrapTypingIndicator(context, avatar);
+      return _wrapTypingIndicator(context, _bridge(context, avatar, title));
     }
     final hasAvatar = avatarPath != null && avatarPath!.isNotEmpty;
     final seed = (fallbackId ?? '').trim().isNotEmpty
@@ -22135,7 +24178,7 @@ class _HeaderAvatar extends StatelessWidget {
       fallbackId: fallbackId,
       labelStyle: Theme.of(context).textTheme.titleMedium,
     );
-    return _wrapTypingIndicator(context, avatar);
+    return _wrapTypingIndicator(context, _bridge(context, avatar, seed));
   }
 
   Widget _wrapTypingIndicator(BuildContext context, Widget avatar) {
@@ -22636,7 +24679,9 @@ class _PendingPhotoAlbumBubble extends StatelessWidget {
     final collageWidth = (mediaSize.width * 0.80)
         .clamp(300.0, 340.0)
         .toDouble();
-    const maxVisibleTiles = 4;
+    // М7 (22.11.2026): столько же плиток, сколько у готового альбома (10), —
+    // иначе при подмене сетка перестраивалась из 4 + «+N» в 10.
+    const maxVisibleTiles = kPendingSwapV2 ? 10 : 4;
     final visibleCount = attachments.length > maxVisibleTiles
         ? maxVisibleTiles
         : attachments.length;
@@ -22667,6 +24712,13 @@ class _PendingPhotoAlbumBubble extends StatelessWidget {
                   cellOverlayBuilder: (i) =>
                       i < active.length ? _cellOverlay(context, active[i]) : null,
                 ),
+                // М7/М8: подпись альбома — как у готового (под сеткой).
+                if (kPendingSwapV2)
+                  _AttachmentCaptionText(
+                    caption: items.isEmpty ? null : items.first.caption,
+                    color: fg,
+                    padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+                  ),
                 const SizedBox(height: 3),
                 _BubbleMetaFooter(
                   timestampMs: createdAtMs,
@@ -22722,11 +24774,15 @@ class _PendingPhotoBubble extends StatelessWidget {
     this.filename,
     this.asFile = false,
     this.onRetry,
+    this.knownAspect,
   });
 
   /// О2 (разбор медиа 15.11.2026): задан — отправка сорвалась по сети, и
   /// пузырь «не отправлено»: нажатие повторяет, ✕ убирает.
   final VoidCallback? onRetry;
+
+  /// М3 (22.11.2026): пропорция снимка по заголовку файла.
+  final double? knownAspect;
 
   final String id;
   final String filePath;
@@ -22786,12 +24842,16 @@ class _PendingPhotoBubble extends StatelessWidget {
             isMe: true,
             showIncomingBorder: false,
             viewportListenable: viewportListenable,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(20),
-              topRight: Radius.circular(20),
-              bottomLeft: Radius.circular(20),
-              bottomRight: Radius.circular(8),
-            ),
+            // М8 (22.11.2026): скругление — из настроек, как у готового
+            // пузыря (было жёсткое 20/20/20/8, и при подмене углы прыгали).
+            borderRadius: kPendingSwapV2
+                ? chatBubbleRadius(context, true)
+                : const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(8),
+                  ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -22801,15 +24861,29 @@ class _PendingPhotoBubble extends StatelessWidget {
                   // is centered ON THE IMAGE and the MB chip sits in its corner
                   // — not floating at the screen edge (the old Positioned.fill
                   // over the full row put them mid-screen for isMe bubbles).
-                  child: ClipRRect(
+                  // М8: с подписью превью во всю ширину пузыря — как у
+                  // готового (_ImageAttachmentBubble).
+                  child: SizedBox(
+                    width: kPendingSwapV2 && caption.trim().isNotEmpty
+                        ? double.infinity
+                        : null,
+                    child: ClipRRect(
                     borderRadius: BorderRadius.circular(19),
                     child: Stack(
+                      // М8: те же ограничения, что у превью готового пузыря
+                      // (там Stack — passthrough), иначе коробка с подписью
+                      // выходила другой ширины.
+                      fit: kPendingSwapV2
+                          ? StackFit.passthrough
+                          : StackFit.loose,
                       children: [
                         _ChatFilledVisualPreview(
                           file: File(filePath),
                           mime: mime,
                           maxHeight: previewMaxHeight,
                           placeholderHeight: previewMaxHeight * 0.52,
+                          // М3: итоговая коробка сразу — по заголовку файла.
+                          knownAspect: kPendingSwapV2 ? knownAspect : null,
                           // Uploading: the cancel ring IS the only center glyph
                           // — suppress the video play button so there is no
                           // duplicate play-under-spinner.
@@ -22849,6 +24923,7 @@ class _PendingPhotoBubble extends StatelessWidget {
                           ),
                       ],
                     ),
+                  ),
                   ),
                 ),
                 _AttachmentCaptionText(
@@ -23266,7 +25341,7 @@ class _EventRsvpButton extends StatelessWidget {
     return Expanded(
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
+        curve: Motion.standard,
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(10),
@@ -23413,7 +25488,10 @@ class _EventComposerSheetState extends State<_EventComposerSheet> {
     InputDecoration deco(String hint) => InputDecoration(
       hintText: hint,
       filled: true,
-      fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+      fillColor: appleFieldFillOr(
+        context,
+        cs.surfaceContainerHighest.withValues(alpha: 0.5),
+      ),
       counterText: '',
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -23429,7 +25507,10 @@ class _EventComposerSheetState extends State<_EventComposerSheet> {
           filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
             decoration: BoxDecoration(
-              color: cs.surface.withValues(alpha: 0.96),
+              color: appleSheetFillOr(
+          context,
+          cs.surface.withValues(alpha: 0.96),
+        ),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(24),
               ),
@@ -23521,7 +25602,7 @@ class _EventComposerSheetState extends State<_EventComposerSheet> {
                     const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
-                      child: FilledButton(
+                      child: PressFeedback(child: FilledButton(
                         onPressed: _canCreate ? _create : null,
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -23536,7 +25617,7 @@ class _EventComposerSheetState extends State<_EventComposerSheet> {
                             en: 'Create event',
                           ),
                         ),
-                      ),
+                      )),
                     ),
                   ],
                 ),
@@ -23662,20 +25743,20 @@ class _PollCard extends StatelessWidget {
                             ? SizedBox(
                                 key: const ValueKey('close-button'),
                                 height: 22,
-                                child: IconButton(
+                                child: PressFeedback(child: IconButton(
                                   padding: EdgeInsets.zero,
                                   constraints: const BoxConstraints(),
                                   iconSize: 15,
                                   visualDensity: VisualDensity.compact,
                                   color: cs.onSurface.withValues(alpha: 0.45),
-                                  icon: const Icon(Icons.stop_circle_outlined),
+                                  icon: const Icon(AdaptiveIcons.stop_circle_outlined),
                                   tooltip: chatText(
                                     context,
                                     ru: 'Завершить опрос',
                                     en: 'Close poll',
                                   ),
                                   onPressed: () => onClose(),
-                                ),
+                                )),
                               )
                             : const SizedBox.shrink(key: ValueKey('empty'))),
                 ),
@@ -23778,7 +25859,7 @@ class _PollCard extends StatelessWidget {
                 Positioned.fill(
                   child: TweenAnimationBuilder<double>(
                     duration: const Duration(milliseconds: 320),
-                    curve: Curves.easeOutCubic,
+                    curve: Motion.standard,
                     tween: Tween<double>(
                       begin: 0,
                       end: fraction == 0 ? 0.001 : fraction,
@@ -23884,7 +25965,7 @@ class _PollOptionIndicator extends StatelessWidget {
       ),
       child: selected
           ? Icon(
-              multiple ? AppIcons.check : Icons.circle,
+              multiple ? AppIcons.check : AdaptiveIcons.circle,
               size: multiple ? 12 : 8,
               color: cs.onPrimary,
             )
@@ -23981,7 +26062,10 @@ class _PollComposerSheetState extends State<_PollComposerSheet> {
           filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
           child: Container(
             decoration: BoxDecoration(
-              color: cs.surface.withValues(alpha: 0.96),
+              color: appleSheetFillOr(
+          context,
+          cs.surface.withValues(alpha: 0.96),
+        ),
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(24),
               ),
@@ -24025,8 +26109,9 @@ class _PollComposerSheetState extends State<_PollComposerSheet> {
                           en: 'Ask a question',
                         ),
                         filled: true,
-                        fillColor: cs.surfaceContainerHighest.withValues(
-                          alpha: 0.5,
+                        fillColor: appleFieldFillOr(
+                          context,
+                          cs.surfaceContainerHighest.withValues(alpha: 0.5),
                         ),
                         counterText: '',
                         border: OutlineInputBorder(
@@ -24060,8 +26145,11 @@ class _PollComposerSheetState extends State<_PollComposerSheet> {
                                   hintText:
                                       '${chatText(context, ru: 'Вариант', en: 'Option')} ${i + 1}',
                                   filled: true,
-                                  fillColor: cs.surfaceContainerHighest
-                                      .withValues(alpha: 0.5),
+                                  fillColor: appleFieldFillOr(
+                                    context,
+                                    cs.surfaceContainerHighest
+                                        .withValues(alpha: 0.5),
+                                  ),
                                   counterText: '',
                                   contentPadding: const EdgeInsets.symmetric(
                                     horizontal: 14,
@@ -24075,20 +26163,20 @@ class _PollComposerSheetState extends State<_PollComposerSheet> {
                               ),
                             ),
                             if (_options.length > 2)
-                              IconButton(
+                              PressFeedback(child: IconButton(
                                 onPressed: () => _removeOption(i),
                                 icon: Icon(
-                                  Icons.remove_circle_outline_rounded,
+                                  AdaptiveIcons.remove_circle_outline_rounded,
                                   color: cs.onSurface.withValues(alpha: 0.5),
                                 ),
-                              ),
+                              )),
                           ],
                         ),
                       ),
                     if (_options.length < _maxOptions)
                       TextButton.icon(
                         onPressed: _addOption,
-                        icon: const Icon(Icons.add_rounded, size: 18),
+                        icon: const Icon(AdaptiveIcons.add_rounded, size: 18),
                         label: Text(
                           chatText(
                             context,
@@ -24125,7 +26213,7 @@ class _PollComposerSheetState extends State<_PollComposerSheet> {
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
-                      child: FilledButton(
+                      child: PressFeedback(child: FilledButton(
                         onPressed: _canCreate ? _create : null,
                         style: FilledButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
@@ -24140,7 +26228,7 @@ class _PollComposerSheetState extends State<_PollComposerSheet> {
                             en: 'Create poll',
                           ),
                         ),
-                      ),
+                      )),
                     ),
                   ],
                 ),
@@ -24430,12 +26518,77 @@ class _SoloEmojiMessage extends StatefulWidget {
   State<_SoloEmojiMessage> createState() => _SoloEmojiMessageState();
 }
 
-class _SoloEmojiMessageState extends State<_SoloEmojiMessage> {
-  /// Incremented on each tap — causes [_NotoEmojiLottie] to rebuild with a
-  /// new [Key], which resets the [AnimationController] and replays once.
-  int _replayKey = 0;
+class _SoloEmojiMessageState extends State<_SoloEmojiMessage>
+    with SingleTickerProviderStateMixin {
+  /// Новый на каждое проигрывание — [_NotoEmojiLottie] пересоздаётся и
+  /// играет один раз. Глобальный ключ: когда вокруг эмодзи появляется или
+  /// пропадает обёртка движения/окраски, Lottie переезжает со своим
+  /// состоянием, а не начинает заново (23.11.2026: в конце движения эмодзи
+  /// проигрывался второй раз).
+  GlobalKey _lottieKey = GlobalKey();
 
-  void _replay() => setState(() => _replayKey++);
+  /// Играть ли Lottie (иначе — неподвижный первый кадр: уже виденное не
+  /// грузит систему, макет «Solo Emoji», правило владельца).
+  bool _play = false;
+  final GlobalKey _emojiKey = GlobalKey();
+  late final AnimationController _card = AnimationController(vsync: this);
+  SoloEmojiEffect? _effect;
+
+  String get _seenId => 'solo:${widget.reactionEventId}';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(
+      SoloEmojiSeen.ensureLoaded().then((_) {
+        if (!mounted || SoloEmojiSeen.isSeen(_seenId)) return;
+        // Только свежие: при первом открытии старой переписки не устраивать
+        // салют из всех эмодзи истории.
+        final age =
+            DateTime.now().millisecondsSinceEpoch - widget.timestampMs;
+        if (age > const Duration(hours: 48).inMilliseconds) {
+          SoloEmojiSeen.markSeen(_seenId);
+          return;
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _start();
+        });
+      }),
+    );
+  }
+
+  @override
+  void dispose() {
+    _card.dispose();
+    super.dispose();
+  }
+
+  /// Крупная анимация: Lottie, эффект на весь экран и движение эмодзи.
+  void _start() {
+    SoloEmojiSeen.markSeen(_seenId);
+    setState(() {
+      _play = true;
+      _lottieKey = GlobalKey();
+    });
+    final media = mediaQueryNow(context);
+    if (media.disableAnimations) return;
+    final box = _emojiKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize || !box.attached) return;
+    final origin = box.localToGlobal(box.size.center(Offset.zero));
+    final effect = soloEmojiEffect(
+      widget.emoji,
+      // Поднята клавиатура — эффект целиком в видимой части над ней
+      // (21.11.2026: салюты, фонтаны и «лужи» снизу прятались за ней).
+      screen: soloEmojiVisibleArea(context, media.size),
+      origin: origin,
+    );
+    if (playSoloEmojiFx(context: context, effect: effect, origin: origin)) {
+      _effect = effect;
+      _card
+        ..duration = Duration(milliseconds: effect.cardMs.round().clamp(1, 6000))
+        ..forward(from: 0);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24479,13 +26632,34 @@ class _SoloEmojiMessageState extends State<_SoloEmojiMessage> {
               const SizedBox(height: 4),
             ],
             GestureDetector(
+              key: _emojiKey,
               behavior: HitTestBehavior.opaque,
-              onTap: _replay,
-              child: _NotoEmojiLottie(
-                key: ValueKey('${widget.emoji}#$_replayKey'),
-                emoji: widget.emoji,
-                size: 160,
-                mode: _NotoLottieMode.once,
+              onTap: _start,
+              child: AnimatedBuilder(
+                animation: _card,
+                builder: (context, child) {
+                  final e = _effect;
+                  if (e == null || !_card.isAnimating) return child!;
+                  final ms = _card.value * e.cardMs;
+                  // Окраска (😡 краснеет, ⚡ вспыхивает) — только пока идёт.
+                  final tint = soloEmojiCardFilter(e, ms);
+                  return Opacity(
+                    opacity: soloEmojiCardOpacity(e, ms).clamp(0.0, 1.0),
+                    child: Transform(
+                      alignment: Alignment.center,
+                      transform: soloEmojiCardTransform(e, ms),
+                      child: tint == null
+                          ? child
+                          : ColorFiltered(colorFilter: tint, child: child),
+                    ),
+                  );
+                },
+                child: _NotoEmojiLottie(
+                  key: _lottieKey,
+                  emoji: widget.emoji,
+                  size: kSoloEmojiSize,
+                  mode: _play ? _NotoLottieMode.once : _NotoLottieMode.preview,
+                ),
               ),
             ),
             const SizedBox(height: 2),
@@ -24550,7 +26724,13 @@ class _MessageBubble extends StatelessWidget {
     this.onToggleTranslate,
     this.searchQuery,
     this.isCurrentSearchHit = false,
+    this.selectableText,
   });
+
+  /// Выделение части текста прямо в пузыре (21.11.2026, по снимку
+  /// владельца): обёртка выделения. Тогда эмодзи — обычными знаками, чтобы
+  /// они копировались вместе с текстом.
+  final Widget Function(Widget text)? selectableText;
 
   final String text;
   final List<MsgMentionV1> mentions;
@@ -24706,24 +26886,31 @@ class _MessageBubble extends StatelessWidget {
                         alpha: isCurrentSearchHit ? 0.40 : 0.22,
                       ),
                   );
+            final spans = buildChatMessageTextSpans(
+              context: context,
+              text: text,
+              mentions: mentions,
+              baseStyle: messageStyle,
+              isOutgoing: isMe,
+              selfProfileId: selfProfileId,
+              currentUserCanReceiveAdminMentions:
+                  currentUserCanReceiveAdminMentions,
+              onProfileMentionTap: onProfileMentionTap,
+              onLinkTap: onLinkTap,
+              highlightQuery: hlQuery,
+              highlightStyle: hlStyle,
+            );
+            final wrap = selectableText;
+            if (wrap != null) {
+              return wrap(
+                Text.rich(TextSpan(style: messageStyle, children: spans)),
+              );
+            }
             return Text.rich(
               TextSpan(
                 style: messageStyle,
                 children: _animateEmojiInSpans(
-                  buildChatMessageTextSpans(
-                    context: context,
-                    text: text,
-                    mentions: mentions,
-                    baseStyle: messageStyle,
-                    isOutgoing: isMe,
-                    selfProfileId: selfProfileId,
-                    currentUserCanReceiveAdminMentions:
-                        currentUserCanReceiveAdminMentions,
-                    onProfileMentionTap: onProfileMentionTap,
-                    onLinkTap: onLinkTap,
-                    highlightQuery: hlQuery,
-                    highlightStyle: hlStyle,
-                  ),
+                  spans,
                   messageStyle.fontSize ?? 16.0,
                 ),
               ),
@@ -24864,12 +27051,7 @@ class _MessageBubble extends StatelessWidget {
           child: _ChatBubbleSurface(
             isMe: isMe,
             viewportListenable: viewportListenable,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(20),
-              topRight: const Radius.circular(20),
-              bottomLeft: Radius.circular(isMe ? 20 : 8),
-              bottomRight: Radius.circular(isMe ? 8 : 20),
-            ),
+            borderRadius: chatBubbleRadius(context, isMe),
             child: bubbleBody(),
           ),
         ),
@@ -25016,7 +27198,7 @@ class _LinkPreviewCard extends StatelessWidget {
                                   ),
                                   alignment: Alignment.center,
                                   child: Icon(
-                                    Icons.link_rounded,
+                                    AdaptiveIcons.link_rounded,
                                     color: foregroundColor.withValues(
                                       alpha: 0.72,
                                     ),
@@ -25130,7 +27312,7 @@ class _LockedStickerSlot extends StatelessWidget {
             ),
           Center(
             child: Icon(
-              Icons.lock_rounded,
+              AdaptiveIcons.lock_rounded,
               size: 18,
               color: Colors.white.withValues(alpha: 0.7),
             ),
@@ -25140,6 +27322,11 @@ class _LockedStickerSlot extends StatelessWidget {
     );
   }
 }
+
+/// Цвет текста и линий листа набора стикеров — от темы (лист светлый в
+/// светлой теме, тёмный в тёмной).
+Color _onSheet(BuildContext context) =>
+    Theme.of(context).colorScheme.onSurface;
 
 class _StickerPackSheet extends StatelessWidget {
   const _StickerPackSheet({
@@ -25210,7 +27397,7 @@ class _StickerPackSheet extends StatelessWidget {
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.22),
+                    color: _onSheet(context).withValues(alpha: 0.22),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -25225,8 +27412,8 @@ class _StickerPackSheet extends StatelessWidget {
                             title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: _onSheet(context),
                               fontSize: 17,
                               fontWeight: FontWeight.w700,
                             ),
@@ -25236,9 +27423,9 @@ class _StickerPackSheet extends StatelessWidget {
                             children: [
                               if (closed) ...[
                                 Icon(
-                                  Icons.lock_rounded,
+                                  AdaptiveIcons.lock_rounded,
                                   size: 13,
-                                  color: Colors.white.withValues(alpha: 0.55),
+                                  color: _onSheet(context).withValues(alpha: 0.55),
                                 ),
                                 const SizedBox(width: 4),
                               ],
@@ -25251,7 +27438,7 @@ class _StickerPackSheet extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.55),
+                                    color: _onSheet(context).withValues(alpha: 0.55),
                                     fontSize: 13,
                                   ),
                                 ),
@@ -25298,13 +27485,13 @@ class _StickerPackSheet extends StatelessWidget {
                       // Greyed slot for a not-yet-fetched sticker.
                       return DecoratedBox(
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.05),
+                          color: _onSheet(context).withValues(alpha: 0.05),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
                           AppIcons.photo,
                           size: 22,
-                          color: Colors.white.withValues(alpha: 0.18),
+                          color: _onSheet(context).withValues(alpha: 0.18),
                         ),
                       );
                     },
@@ -25326,16 +27513,16 @@ class _StickerPackSheet extends StatelessWidget {
                   Row(
                     children: [
                       Icon(
-                        Icons.info_outline_rounded,
+                        AdaptiveIcons.info_outline_rounded,
                         size: 15,
-                        color: Colors.white.withValues(alpha: 0.5),
+                        color: _onSheet(context).withValues(alpha: 0.5),
                       ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           l10n.stickerPackMissingNote(missing),
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
+                            color: _onSheet(context).withValues(alpha: 0.5),
                             fontSize: 12,
                             height: 1.25,
                           ),
@@ -25352,9 +27539,9 @@ class _StickerPackSheet extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.lock_rounded,
+                          AdaptiveIcons.lock_rounded,
                           size: 16,
-                          color: Colors.white.withValues(alpha: 0.55),
+                          color: _onSheet(context).withValues(alpha: 0.55),
                         ),
                         const SizedBox(width: 6),
                         Flexible(
@@ -25362,7 +27549,7 @@ class _StickerPackSheet extends StatelessWidget {
                             l10n.stickerPackClosedNote,
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.6),
+                              color: _onSheet(context).withValues(alpha: 0.6),
                               fontSize: 13,
                             ),
                           ),
@@ -25404,17 +27591,17 @@ class _StickerPackSheet extends StatelessWidget {
       borderRadius: BorderRadius.circular(14),
     );
     if (installed) {
-      return FilledButton(
+      return PressFeedback(child: FilledButton(
         onPressed: null,
         style: FilledButton.styleFrom(shape: shape),
         child: Text(l10n.desktopStickerPackInstalled),
-      );
+      ));
     }
     if (inFlight) {
       final label = expected > 0
           ? l10n.desktopStickerPackInstallingProgress(received, expected)
           : l10n.desktopStickerPackInstalling;
-      return FilledButton(
+      return PressFeedback(child: FilledButton(
         onPressed: null,
         style: FilledButton.styleFrom(shape: shape),
         child: Row(
@@ -25429,10 +27616,10 @@ class _StickerPackSheet extends StatelessWidget {
             Text(label),
           ],
         ),
-      );
+      ));
     }
     if (canFetch) {
-      return FilledButton(
+      return PressFeedback(child: FilledButton(
         onPressed: () => unawaited(
           controller.requestPeerStickerPack(
             packId: packId,
@@ -25448,7 +27635,7 @@ class _StickerPackSheet extends StatelessWidget {
               ? l10n.desktopStickerPackAdd(total)
               : l10n.desktopStickerPackAddPlain,
         ),
-      );
+      ));
     }
     return const SizedBox.shrink();
   }
@@ -25491,21 +27678,12 @@ class _ChatDownloadProgressMark extends StatelessWidget {
         valueListenable: progress,
         builder: (context, value, _) {
           if (value == null) return const SizedBox.shrink();
+          // Скачивание — тот же круг 2a: стрелка вниз и кольцо хода.
           return Center(
-            child: Container(
-              width: 44,
-              height: 44,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.black.withValues(alpha: 0.35),
-              ),
-              child: SecretlySpinner(
-                value: value,
-                strokeWidth: 2.4,
-                color: Colors.white,
-                backgroundColor: Colors.white.withValues(alpha: 0.25),
-              ),
+            child: ChatMediaCircle(
+              glyph: ChatMediaGlyph.download,
+              ring: true,
+              progress: value > 0 ? value : null,
             ),
           );
         },
@@ -25524,7 +27702,7 @@ class _ChatMediaGoneMark extends StatelessWidget {
         decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.28)),
         child: Center(
           child: Icon(
-            Icons.image_not_supported_outlined,
+            AdaptiveIcons.image_not_supported_outlined,
             size: 30,
             color: Colors.white.withValues(alpha: 0.85),
           ),
@@ -25549,7 +27727,7 @@ class _BrokenMediaBox extends StatelessWidget {
       ),
       child: Center(
         child: Icon(
-          Icons.broken_image_outlined,
+          AdaptiveIcons.broken_image_outlined,
           size: iconSize,
           color: Colors.white.withValues(alpha: 0.35),
         ),
@@ -25948,12 +28126,7 @@ class _SharedProfileBubble extends StatelessWidget {
           child: _ChatBubbleSurface(
             isMe: isMe,
             viewportListenable: viewportListenable,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(20),
-              topRight: const Radius.circular(20),
-              bottomLeft: Radius.circular(isMe ? 20 : 8),
-              bottomRight: Radius.circular(isMe ? 8 : 20),
-            ),
+            borderRadius: chatBubbleRadius(context, isMe),
             child: bubbleBody(),
           ),
         ),
@@ -26322,12 +28495,7 @@ class _RoomInviteBubble extends StatelessWidget {
           child: _ChatBubbleSurface(
             isMe: isMe,
             viewportListenable: viewportListenable,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(20),
-              topRight: const Radius.circular(20),
-              bottomLeft: Radius.circular(isMe ? 20 : 8),
-              bottomRight: Radius.circular(isMe ? 8 : 20),
-            ),
+            borderRadius: chatBubbleRadius(context, isMe),
             child: bubbleBody(),
           ),
         ),
@@ -26410,7 +28578,13 @@ class _AttachmentBubble extends StatelessWidget {
     this.loadThumbnailFile,
     this.uploadProgress,
     this.onCancelUpload,
+    this.audioSpeed,
+    this.onCycleSpeed,
   });
+
+  /// Скорость текущего трека (только у играющего) и её переключатель.
+  final double? audioSpeed;
+  final VoidCallback? onCycleSpeed;
 
   final AttachmentEventV1? attachment;
   final int timestampMs;
@@ -26467,6 +28641,12 @@ class _AttachmentBubble extends StatelessWidget {
 
   bool get _isUploading => onCancelUpload != null;
 
+  /// Значок документа: на iPhone — системный Apple.
+  IconData _fileDocIcon() => const AdaptiveIconData(
+    Icons.description_rounded,
+    CupertinoIcons.doc_text_fill,
+  );
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -26486,7 +28666,6 @@ class _AttachmentBubble extends StatelessWidget {
       final hasVoiceWaveform = attachment?.waveform?.isNotEmpty ?? false;
       final isVoice = _isVoiceMessageMime(mime) || hasVoiceWaveform;
       final audioAttachment = attachment!;
-      final sizeLabel = _formatBytesHuman(audioAttachment.sizeBytes);
       final durationLabel = audioDuration > Duration.zero
           ? _fmtAudioDur(audioDuration)
           : '--:--';
@@ -26517,22 +28696,17 @@ class _AttachmentBubble extends StatelessWidget {
                 // which read as a foreign element on the blue bubble.
                 const playButtonColor = Color(0xFF5C9CEF);
                 const playIconColor = Colors.white;
-                final footerStyle =
-                    Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Colors.white,
-                      fontSize: 10.2,
-                      fontWeight: FontWeight.w700,
-                      height: 1,
-                    ) ??
-                    const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10.2,
-                      fontWeight: FontWeight.w700,
-                      height: 1,
-                    );
+                // 2a: мета 11,5, белая на 80 %, цифры одной ширины.
+                final footerStyle = TextStyle(
+                  color: Colors.white.withValues(alpha: 0.8),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  height: 1,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                );
 
                 return Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 7, 5, 5),
+                  padding: const EdgeInsets.fromLTRB(8, 8, 10, 6),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -26579,8 +28753,8 @@ class _AttachmentBubble extends StatelessWidget {
                                   opacity: isAudioLoading ? 0.72 : 1,
                                   child: Icon(
                                     isAudioPlaying
-                                        ? Icons.pause_rounded
-                                        : Icons.play_arrow_rounded,
+                                        ? AdaptiveIcons.pause_rounded
+                                        : AdaptiveIcons.play_arrow_rounded,
                                     size: isAudioPlaying ? 22 : 26,
                                     color: playIconColor,
                                   ),
@@ -26588,7 +28762,7 @@ class _AttachmentBubble extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 10),
                           Expanded(
                             child: GestureDetector(
                               onTap: onTap,
@@ -26610,15 +28784,15 @@ class _AttachmentBubble extends StatelessWidget {
                                               .titleMedium
                                               ?.copyWith(
                                                 color: Colors.white,
-                                                fontSize: 13.2,
-                                                fontWeight: FontWeight.w800,
-                                                height: 1.06,
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w700,
+                                                height: 1.1,
                                               ),
                                         ),
                                       ),
                                       if (onMusicMenuRequested != null)
                                         Builder(
-                                          builder: (menuContext) => IconButton(
+                                          builder: (menuContext) => PressFeedback(child: IconButton(
                                             visualDensity:
                                                 VisualDensity.compact,
                                             padding: EdgeInsets.zero,
@@ -26642,7 +28816,7 @@ class _AttachmentBubble extends StatelessWidget {
                                               );
                                             },
                                             icon: Icon(
-                                              appleMoreIcon(Icons.more_vert_rounded),
+                                              appleMoreIcon(AdaptiveIcons.more_vert_rounded),
                                               color: Colors.white,
                                               size: 18,
                                             ),
@@ -26651,7 +28825,7 @@ class _AttachmentBubble extends StatelessWidget {
                                               ru: 'Действия',
                                               en: 'Actions',
                                             ),
-                                          ),
+                                          )),
                                         )
                                       else
                                         const SizedBox(width: 20, height: 20),
@@ -26670,10 +28844,12 @@ class _AttachmentBubble extends StatelessWidget {
                                         .textTheme
                                         .bodyMedium
                                         ?.copyWith(
-                                          color: Colors.white,
-                                          fontSize: 11.4,
-                                          fontWeight: FontWeight.w600,
-                                          height: 1.05,
+                                          color: Colors.white.withValues(
+                                            alpha: 0.75,
+                                          ),
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w500,
+                                          height: 1.1,
                                         ),
                                   ),
                                   if (showProgressBar) ...[
@@ -26751,142 +28927,219 @@ class _AttachmentBubble extends StatelessWidget {
                 );
               },
             )
-          : Padding(
-              padding: const EdgeInsets.fromLTRB(7, 7, 7, 5),
-              child: Column(
-                crossAxisAlignment: isMe
-                    ? CrossAxisAlignment.end
-                    : CrossAxisAlignment.start,
-                children: [
-                  if (isFirstInSeries && groupAuthorName != null)
-                    _GroupAuthorInlineHeader(
-                      onTap: onGroupAuthorTap,
-                      name: groupAuthorName!,
-                      seed: groupAuthorSeed ?? groupAuthorName!,
-                      statusText: groupHeaderStatusText,
-                      padding: const EdgeInsets.only(bottom: 4),
-                    ),
-                  if (replySnippet != null) ...[
-                    _ReplyQuoteStrip(
-                      snippet: replySnippet!,
-                      color: fg,
-                      isMe: isMe,
-                      onTap: onReplyQuoteTap,
-                    ),
-                    const SizedBox(height: 5),
-                  ],
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+          : Builder(
+              builder: (context) {
+                // 2a «Капсула»: круг 42 слева, волна 30 столбиков, внизу
+                // одной строкой длительность (на играющем — чип скорости) и
+                // справа время с галочками.
+                const accent = Color(0xFF5C9CEF);
+                final metaColor = isMe
+                    ? Colors.white.withValues(alpha: 0.85)
+                    : fg.withValues(alpha: 0.62);
+                final metaStyle = TextStyle(
+                  color: metaColor,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  height: 1,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                );
+                final active = isAudioPlaying || audioPosition > Duration.zero;
+                final speed = audioSpeed ?? 1.0;
+                // Десятичный знак языка: «1.5×» по-английски, «1,5×» у
+                // остальных (как в просмотре видео).
+                final speedLabel = mediaVideoSpeedLabel(
+                  speed,
+                  Localizations.localeOf(context).languageCode == 'en'
+                      ? '.'
+                      : ',',
+                );
+                // Н-8: зона касания чипа скорости шире самого чипа — её держит
+                // обёртка пузыря, раскладка не меняется.
+                return SpeedChipHitScope(child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 10, 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      GestureDetector(
-                        onTap: onTap,
-                        child: Container(
-                          // Same footprint and glyph sizing as the music card's
-                          // play button — the two audio bubbles must read as
-                          // one family.
-                          width: 42,
-                          height: 42,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Color(0xFF5C9CEF),
-                          ),
-                          child: Center(
-                            child: Opacity(
-                              opacity: isAudioLoading ? 0.72 : 1,
-                              child: Icon(
-                                isAudioPlaying
-                                    ? Icons.pause_rounded
-                                    : Icons.play_arrow_rounded,
-                                size: isAudioPlaying ? 22 : 26,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
+                      if (isFirstInSeries && groupAuthorName != null)
+                        _GroupAuthorInlineHeader(
+                          onTap: onGroupAuthorTap,
+                          name: groupAuthorName!,
+                          seed: groupAuthorSeed ?? groupAuthorName!,
+                          statusText: groupHeaderStatusText,
+                          padding: const EdgeInsets.only(bottom: 4),
                         ),
-                      ),
-                      const SizedBox(width: 7),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SeekableAudioWaveform(
-                              progress: progressFraction,
-                              seed: audioAttachment.blobId.hashCode,
-                              amplitudes: audioAttachment.waveform,
-                              height: 30,
-                              barCount: 32,
-                              barWidth: 2.1,
-                              barSpacing: 1.3,
-                              playedColor: Colors.white.withValues(alpha: 0.92),
-                              unplayedColor: Colors.white.withValues(
-                                alpha: 0.32,
+                      if (replySnippet != null) ...[
+                        _ReplyQuoteStrip(
+                          snippet: replySnippet!,
+                          color: fg,
+                          isMe: isMe,
+                          onTap: onReplyQuoteTap,
+                        ),
+                        const SizedBox(height: 5),
+                      ],
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          GestureDetector(
+                            onTap: onTap,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: 42,
+                              height: 42,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: accent,
+                                boxShadow: isMe
+                                    ? const [
+                                        BoxShadow(
+                                          color: Color(0x29000000),
+                                          blurRadius: 10,
+                                          offset: Offset(0, 3),
+                                        ),
+                                      ]
+                                    : null,
                               ),
-                              onSeek: onSeek != null
-                                  ? (f) => onSeek!(
-                                      Duration(
-                                        milliseconds:
-                                            (audioDuration.inMilliseconds * f)
-                                                .round(),
+                              child: Center(
+                                // Н-9: на iPhone — системная «ромашка», как
+                                // везде в приложении, а не кольцо Material.
+                                child: isAudioLoading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: SecretlySpinner(
+                                          strokeWidth: 2.2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : AnimatedSwitcher(
+                                        duration: const Duration(
+                                          milliseconds: 180,
+                                        ),
+                                        transitionBuilder: (c, a) =>
+                                            ScaleTransition(scale: a, child: c),
+                                        child: Icon(
+                                          isAudioPlaying
+                                              ? AdaptiveIcons.pause_rounded
+                                              : AdaptiveIcons.play_arrow_rounded,
+                                          key: ValueKey(isAudioPlaying),
+                                          size: isAudioPlaying ? 22 : 26,
+                                          color: Colors.white,
+                                        ),
                                       ),
-                                    )
-                                  : null,
+                              ),
                             ),
-                            const SizedBox(height: 1),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                  child: Text(
-                                    // No "Voice message" label — the waveform
-                                    // already says it; the words only bloated
-                                    // the bubble.
-                                    isAudioPlaying ||
-                                            audioPosition > Duration.zero
-                                        ? '${_fmtAudioDur(audioPosition)} • $sizeLabel'
-                                        : sizeLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: fg.withValues(alpha: 0.62),
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
+                                SeekableAudioWaveform(
+                                  progress: progressFraction,
+                                  seed: audioAttachment.blobId.hashCode,
+                                  amplitudes: audioAttachment.waveform,
+                                  height: 24,
+                                  barCount: 30,
+                                  barWidth: 3,
+                                  barSpacing: 2,
+                                  // Входящее в светлой теме — светлый пузырь:
+                                  // белая сыгранная часть на нём не видна,
+                                  // поэтому — акцентом (разбор 22.11.2026).
+                                  playedColor:
+                                      !isMe &&
+                                          Theme.of(context).brightness ==
+                                              Brightness.light
+                                      ? const Color(0xFF2F7FDB)
+                                      : Colors.white,
+                                  unplayedColor: isMe
+                                      ? Colors.white.withValues(alpha: 0.42)
+                                      : (Theme.of(context).brightness ==
+                                                Brightness.light
+                                            ? const Color(0x592F7FDB)
+                                            : const Color(0x8C7FD0FF)),
+                                  onSeek: onSeek != null
+                                      ? (f) => onSeek!(
+                                          Duration(
+                                            milliseconds:
+                                                (audioDuration.inMilliseconds *
+                                                        f)
+                                                    .round(),
+                                          ),
+                                        )
+                                      : null,
                                 ),
-                                const SizedBox(width: 5),
-                                Text(
-                                  durationLabel,
-                                  style: TextStyle(
-                                    color: fg.withValues(alpha: 0.62),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Text(
+                                      active
+                                          ? _fmtAudioDur(audioPosition)
+                                          : durationLabel,
+                                      style: metaStyle,
+                                    ),
+                                    // Н-8: место чипа держится и на паузе —
+                                    // строка под волной не прыгает.
+                                    if (onCycleSpeed != null) ...[
+                                      const SizedBox(width: 6),
+                                      VoiceSpeedChip(
+                                        label: speedLabel,
+                                        semanticLabel:
+                                            context.l10n.voicePlaybackSpeed,
+                                        visible: isAudioPlaying,
+                                        onTap: onCycleSpeed,
+                                        textStyle: metaStyle.copyWith(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                    const Spacer(),
+                                    if (statusText != null &&
+                                        statusText!.isNotEmpty) ...[
+                                      _buildBubbleStatusSlot(
+                                        statusText!,
+                                        metaStyle.copyWith(fontSize: 11),
+                                      ),
+                                      const SizedBox(width: 5),
+                                    ],
+                                    Text(
+                                      _formatTime(timestampMs),
+                                      style: metaStyle.copyWith(fontSize: 11),
+                                    ),
+                                    if (status != null) ...[
+                                      const SizedBox(width: 3),
+                                      status,
+                                    ],
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
+                      ),
+                      if (voiceTranscriptionFooter != null) ...[
+                        const SizedBox(height: 4),
+                        voiceTranscriptionFooter!,
+                      ],
+                      _ReactionSlot(
+                        alignment: Alignment.topRight,
+                        child: reactions.isEmpty
+                            ? const SizedBox.shrink()
+                            : Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: _ReactionPills(
+                                  reactionEventId: reactionEventId,
+                                  reactions: reactions,
+                                  selfProfileId: selfProfileId,
+                                  reactionPlayTokens: reactionPlayTokens,
+                                  onToggleOwnReaction: onToggleOwnReaction,
+                                ),
+                              ),
                       ),
                     ],
                   ),
-                  if (voiceTranscriptionFooter != null) ...[
-                    const SizedBox(height: 2),
-                    voiceTranscriptionFooter!,
-                  ],
-                  const SizedBox(height: 1),
-                  _BubbleMetaFooter(
-                    timestampMs: timestampMs,
-                    status: status,
-                    statusText: statusText,
-                    color: fg,
-                    reactionEventId: reactionEventId,
-                    reactions: reactions,
-                    selfProfileId: selfProfileId,
-                    reactionPlayTokens: reactionPlayTokens,
-                    onToggleOwnReaction: onToggleOwnReaction,
-                  ),
-                ],
-              ),
+                ));
+              },
             );
 
       return _ReplySwipeWrapper(
@@ -26903,19 +29156,12 @@ class _AttachmentBubble extends StatelessWidget {
           showGroupAvatar: showGroupAvatar,
           sideAffordance: sideAffordance,
           child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minWidth: isVoice ? 168 : 176,
-              maxWidth: isVoice ? 248 : 258,
-            ),
+            // 2a: обе капсулы одной ширины.
+            constraints: const BoxConstraints(minWidth: 220, maxWidth: 262),
             child: _ChatBubbleSurface(
               isMe: isMe,
               viewportListenable: viewportListenable,
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(20),
-                topRight: const Radius.circular(20),
-                bottomLeft: Radius.circular(isMe ? 20 : 8),
-                bottomRight: Radius.circular(isMe ? 8 : 20),
-              ),
+              borderRadius: chatBubbleRadius(context, isMe),
               child: audioChild,
             ),
           ),
@@ -26979,10 +29225,10 @@ class _AttachmentBubble extends StatelessWidget {
     // null), which is what shrinks their height.
     Widget metaInline() {
       final metaStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
+        fontSize: 12,
+        fontWeight: FontWeight.w400,
         height: 1,
-        color: fg.withValues(alpha: 0.72),
+        color: fg.withValues(alpha: 0.6),
       );
       return Row(
         mainAxisSize: MainAxisSize.min,
@@ -27008,9 +29254,9 @@ class _AttachmentBubble extends StatelessWidget {
           label,
           maxLines: nameMaxLines,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(color: fg, fontWeight: FontWeight.w600),
+          style: TextStyle(color: fg, fontSize: 14, fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 3),
         Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
@@ -27019,8 +29265,10 @@ class _AttachmentBubble extends StatelessWidget {
                 resolvedSubline,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                style: TextStyle(
+                  fontSize: 12,
                   color: fg.withValues(alpha: 0.8),
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ),
@@ -27032,7 +29280,7 @@ class _AttachmentBubble extends StatelessWidget {
     );
 
     Widget menuButton() => Builder(
-      builder: (menuContext) => IconButton(
+      builder: (menuContext) => PressFeedback(child: IconButton(
         visualDensity: VisualDensity.compact,
         padding: EdgeInsets.zero,
         constraints: const BoxConstraints.tightFor(width: 28, height: 28),
@@ -27043,12 +29291,12 @@ class _AttachmentBubble extends StatelessWidget {
           unawaited(onFileMenuRequested!(origin & box.size));
         },
         icon: Icon(
-          appleMoreIcon(Icons.more_vert_rounded),
+          appleMoreIcon(AdaptiveIcons.more_vert_rounded),
           color: fg.withValues(alpha: 0.95),
           size: 20,
         ),
         tooltip: chatText(context, ru: 'Действия', en: 'Actions'),
-      ),
+      )),
     );
 
     Widget reactionsFooter() => _ReactionSlot(
@@ -27084,7 +29332,7 @@ class _AttachmentBubble extends StatelessWidget {
     final child = Padding(
       padding: isPhotoFileRow
           ? const EdgeInsets.fromLTRB(8, 8, 12, 8)
-          : const EdgeInsets.fromLTRB(12, 10, 12, 8),
+          : const EdgeInsets.fromLTRB(8, 8, 10, 6),
       child: Column(
         crossAxisAlignment: isMe
             ? CrossAxisAlignment.end
@@ -27108,7 +29356,7 @@ class _AttachmentBubble extends StatelessWidget {
                 _UploadProgressRing(
                   progress: uploadProgress,
                   onCancel: onCancelUpload!,
-                  size: 46,
+                  size: 42,
                 )
               else if (isPhotoFileRow)
                 _FileThumbnailLeading(
@@ -27119,30 +29367,40 @@ class _AttachmentBubble extends StatelessWidget {
                   size: thumbSize,
                 )
               else
+                // 2a: тот же акцентный круг 42, что у голосовых и музыки.
                 Container(
-                  width: 46,
-                  height: 46,
+                  width: 42,
+                  height: 42,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.black.withValues(alpha: 0.25),
+                    color: const Color(0xFF5C9CEF),
+                    boxShadow: isMe
+                        ? const [
+                            BoxShadow(
+                              color: Color(0x29000000),
+                              blurRadius: 10,
+                              offset: Offset(0, 3),
+                            ),
+                          ]
+                        : null,
                   ),
                   child: isDownloading
-                      ? Center(
-                          child: SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: SecretlySpinner(
-                              strokeWidth: 2.4,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                fg.withValues(alpha: 0.95),
-                              ),
-                            ),
-                          ),
+                      ? const ChatMediaCircle(
+                          glyph: ChatMediaGlyph.download,
+                          style: ChatMediaCircleStyle.accent,
+                          size: 42,
+                          ring: true,
                         )
-                      : Icon(icon, size: 24, color: fg.withValues(alpha: 0.95)),
+                      : Icon(
+                          mime.startsWith('video/') && !hasFileName
+                              ? icon
+                              : _fileDocIcon(),
+                          size: 22,
+                          color: Colors.white,
+                        ),
                 ),
               const SizedBox(width: 10),
-              Expanded(child: fileTextBlock(nameMaxLines: 2)),
+              Expanded(child: fileTextBlock(nameMaxLines: 1)),
               if (onFileMenuRequested != null) ...[
                 const SizedBox(width: 6),
                 menuButton(),
@@ -27172,26 +29430,17 @@ class _AttachmentBubble extends StatelessWidget {
         onGroupAuthorTap: onGroupAuthorTap,
         showGroupAvatar: showGroupAvatar,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 320),
+          // 2a: файлы — той же ширины, что голосовые и музыка.
+          constraints: const BoxConstraints(maxWidth: 262),
           child: _ChatBubbleSurface(
             isMe: isMe,
             viewportListenable: viewportListenable,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(20),
-              topRight: const Radius.circular(20),
-              bottomLeft: Radius.circular(isMe ? 20 : 8),
-              bottomRight: Radius.circular(isMe ? 8 : 20),
-            ),
+            borderRadius: chatBubbleRadius(context, isMe),
             child: Material(
               type: MaterialType.transparency,
               child: InkWell(
                 onTap: onTap,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(20),
-                  topRight: const Radius.circular(20),
-                  bottomLeft: Radius.circular(isMe ? 20 : 8),
-                  bottomRight: Radius.circular(isMe ? 8 : 20),
-                ),
+                borderRadius: chatBubbleRadius(context, isMe),
                 child: child,
               ),
             ),
@@ -27349,12 +29598,7 @@ class _ImageAttachmentBubble extends StatelessWidget {
         ? _statusIcon(context, localState, fg, timestampMs)
         : null;
 
-    final radius = BorderRadius.only(
-      topLeft: const Radius.circular(20),
-      topRight: const Radius.circular(20),
-      bottomLeft: Radius.circular(isMe ? 20 : 8),
-      bottomRight: Radius.circular(isMe ? 8 : 20),
-    );
+    final radius = chatBubbleRadius(context, isMe);
 
     final content = Material(
       type: MaterialType.transparency,
@@ -27434,18 +29678,45 @@ class _ImageAttachmentBubble extends StatelessWidget {
                         attachment.blobId,
                         attachment.thumbB64,
                       );
-                      if (known != null) {
-                        return _ChatFilledVisualPreview(
-                          file: known,
+                      // М5/П-1/П-2 (22.11.2026): ОДНА форма дерева во всех
+                      // состояниях (файл есть / качается / нет на сервере) и
+                      // превью с ключом по blobId — оно больше не
+                      // пересоздаётся (пустой кадр, повторный декод), когда
+                      // запрос файла завершается или лента перерисовывается.
+                      // Запрос файла — один на blobId (см.
+                      // _ensureImagePreviewFile), знак скачивания — по ходу
+                      // скачивания, а не по ожиданию запроса.
+                      if (kMediaPreviewV2) {
+                        return _ChatBubbleMediaSlot(
+                          attachment: attachment,
+                          known: known,
                           mime: mime,
                           maxHeight: previewMaxHeight,
-                          placeholderHeight: previewMaxHeight * 0.52,
                           knownAspect: knownAspect,
-                          blobId: attachment.blobId,
                           thumbBytes: thumbBytes,
+                          loadCachedFile: loadCachedFile,
+                          downloadProgressFor: downloadProgressFor,
                         );
                       }
-                      return FutureBuilder<File?>(
+                      if (known != null) {
+                        return MediaFlightAnchor(
+                          tag: attachment.blobId,
+                          borderRadius: BorderRadius.circular(19),
+                          child: _ChatFilledVisualPreview(
+                            file: known,
+                            mime: mime,
+                            maxHeight: previewMaxHeight,
+                            placeholderHeight: previewMaxHeight * 0.52,
+                            knownAspect: knownAspect,
+                            blobId: attachment.blobId,
+                            thumbBytes: thumbBytes,
+                          ),
+                        );
+                      }
+                      return MediaFlightAnchor(
+                        tag: attachment.blobId,
+                        borderRadius: BorderRadius.circular(19),
+                        child: FutureBuilder<File?>(
                         future: loadCachedFile(attachment).then((f) {
                           _chatMediaFileRemember(attachment.blobId, f);
                           return f;
@@ -27487,6 +29758,7 @@ class _ImageAttachmentBubble extends StatelessWidget {
                             ],
                           );
                         },
+                        ),
                       );
                     },
                   ),
@@ -27652,7 +29924,17 @@ class _ImageGroupBubble extends StatelessWidget {
           FutureBuilder<List<File?>>(
             future: loadCachedFiles(attachments),
             builder: (context, snapshot) {
-              final files = snapshot.data;
+              // М7 (22.11.2026): файлы, уже известные ленте (в том числе
+              // подготовленные при подмене заготовки), — с первого кадра, а
+              // не после ответа запроса.
+              final data = snapshot.data;
+              final files = kPendingSwapV2
+                  ? <File?>[
+                      for (var i = 0; i < attachments.length; i++)
+                        (data != null && i < data.length ? data[i] : null) ??
+                            _chatMediaFilePeek(attachments[i].blobId),
+                    ]
+                  : data;
               const maxVisibleTiles = 10;
               final visibleCount = attachments.length > maxVisibleTiles
                   ? maxVisibleTiles
@@ -27806,6 +30088,72 @@ Future<double?> _chatVideoAspectFromPoster(File file) async {
   }
 }
 
+/// М5/П-1/П-2 (разбор медиа 22.11.2026): снимок или ролик в пузыре ленты —
+/// одной формы во всех состояниях, см. [ChatMediaFileSlot].
+class _ChatBubbleMediaSlot extends StatelessWidget {
+  const _ChatBubbleMediaSlot({
+    required this.attachment,
+    required this.known,
+    required this.mime,
+    required this.maxHeight,
+    required this.knownAspect,
+    required this.thumbBytes,
+    required this.loadCachedFile,
+    required this.downloadProgressFor,
+  });
+
+  final AttachmentEventV1 attachment;
+  final File? known;
+  final String mime;
+  final double maxHeight;
+  final double? knownAspect;
+  final Uint8List? thumbBytes;
+  final Future<File?> Function(AttachmentEventV1 attachment) loadCachedFile;
+  final ValueListenable<double?> Function(String blobId)? downloadProgressFor;
+
+  @override
+  Widget build(BuildContext context) {
+    final blobId = attachment.blobId;
+    final progress = downloadProgressFor?.call(blobId);
+    final isVideo = _isVideoMediaMime(mime);
+    Widget preview(File? file, {bool showPlayGlyph = true}) =>
+        _ChatFilledVisualPreview(
+          file: file,
+          mime: mime,
+          maxHeight: maxHeight,
+          placeholderHeight: maxHeight * 0.52,
+          knownAspect: knownAspect,
+          blobId: blobId,
+          thumbBytes: thumbBytes,
+          showPlayGlyph: showPlayGlyph,
+        );
+    return MediaFlightAnchor(
+      tag: blobId,
+      borderRadius: BorderRadius.circular(19),
+      child: ChatMediaFileSlot(
+        slotKey: blobId,
+        known: known,
+        // Запрос файла сам запоминает итог в памяти ленты и отдаёт один и
+        // тот же Future, пока качается.
+        load: () => loadCachedFile(attachment),
+        progress: progress,
+        // П-2: у ролика, пока он качается, ▶ под знаком ↓ не рисуется —
+        // раньше они чередовались.
+        preview: (file) => isVideo && progress != null
+            ? ValueListenableBuilder<double?>(
+                valueListenable: progress,
+                builder: (context, value, _) =>
+                    preview(file, showPlayGlyph: value == null),
+              )
+            : preview(file),
+        progressMark: (p) => _ChatDownloadProgressMark(progress: p),
+        goneMark: const _ChatMediaGoneMark(),
+        isGone: (e) => e is _ChatMediaGone,
+      ),
+    );
+  }
+}
+
 class _ChatFilledVisualPreview extends StatelessWidget {
   const _ChatFilledVisualPreview({
     required this.file,
@@ -27898,6 +30246,7 @@ class _ChatFilledVisualPreview extends StatelessWidget {
           child: _ChatVideoPreviewSurface(
             file: file!,
             showPlayGlyph: showPlayGlyph,
+            thumbBytes: thumbBytes,
           ),
         ),
       );
@@ -27910,6 +30259,11 @@ class _ChatFilledVisualPreview extends StatelessWidget {
         if (snapshot.hasData && blobId != null) {
           _chatMediaAspectRemember(blobId!, aspectRatio);
         }
+        // М4: заготовка (без blobId) — по пути, чтобы готовый пузырь занял ту
+        // же коробку.
+        if (snapshot.hasData) {
+          _chatMediaAspectByPathRemember(file!.path, aspectRatio);
+        }
         return ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),
           child: AspectRatio(
@@ -27917,6 +30271,7 @@ class _ChatFilledVisualPreview extends StatelessWidget {
             child: _ChatVideoPreviewSurface(
               file: file!,
               showPlayGlyph: showPlayGlyph,
+              thumbBytes: thumbBytes,
             ),
           ),
         );
@@ -28038,6 +30393,7 @@ class _ChatFilledImagePreviewState extends State<_ChatFilledImagePreview> {
       // back to this row) reserves the exact height with no async round-trip.
       _aspectFuture = _resolveChatImageAspectRatio(widget.file!).then((a) {
         if (blobId != null) _chatMediaAspectRemember(blobId, a);
+        _chatMediaAspectByPathRemember(path, a);
         return a;
       });
     }
@@ -28105,6 +30461,50 @@ class _ChatFilledImagePreviewState extends State<_ChatFilledImagePreview> {
   }
 
   Widget _buildImageBox(BuildContext context, double aspectRatio, File file) {
+    final id = widget.blobId;
+    if (id == null || !mediaViewerV2Enabled) {
+      return _buildPlainImageBox(context, aspectRatio, file);
+    }
+    // Правки из просмотра (на этом устройстве): лента рисует снимок с ними,
+    // пропорция коробки — итоговая (кадр, поворот).
+    return ValueListenableBuilder<MediaEdits?>(
+      valueListenable: MediaEditsStore.instance.listen(id),
+      builder: (context, edits, _) {
+        if (edits == null || edits.isIdentity) {
+          return _buildPlainImageBox(context, aspectRatio, file);
+        }
+        final dpr = MediaQuery.devicePixelRatioOf(context);
+        final a = edits.outputAspect(aspectRatio).clamp(0.5, 1.9);
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: widget.maxHeight),
+          child: AspectRatio(
+            aspectRatio: a,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final side = constraints.biggest.longestSide;
+                final cacheW = side.isFinite && side > 0
+                    ? (side * dpr * 1.5).round()
+                    : null;
+                return EditedMediaView(
+                  image: cacheW == null
+                      ? FileImage(file) as ImageProvider
+                      : ResizeImage(FileImage(file), width: cacheW),
+                  edits: edits,
+                  cover: true,
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPlainImageBox(
+    BuildContext context,
+    double aspectRatio,
+    File file,
+  ) {
     final dpr = MediaQuery.devicePixelRatioOf(context);
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: widget.maxHeight),
@@ -28125,6 +30525,7 @@ class _ChatFilledImagePreviewState extends State<_ChatFilledImagePreview> {
             final cacheW = boxW.isFinite && boxW > 0
                 ? (boxW * dpr).round()
                 : null;
+            _chatImageDecodeWidthRemember(file.path, cacheW);
             return Image.file(
               file,
               fit: BoxFit.cover,
@@ -28134,6 +30535,9 @@ class _ChatFilledImagePreviewState extends State<_ChatFilledImagePreview> {
               // Keep the already-decoded frame on rebuilds instead of
               // dropping to a blank box while the image re-resolves.
               gaplessPlayback: true,
+              // М4 (22.11.2026): пока первый кадр файла не раскодирован —
+              // размытая миниатюра отправителя под ним, а не пустая коробка.
+              frameBuilder: _chatThumbUnderlayFrameBuilder(widget.thumbBytes),
             );
           },
         ),
@@ -28142,13 +30546,38 @@ class _ChatFilledImagePreviewState extends State<_ChatFilledImagePreview> {
   }
 }
 
+/// М4/М6 (22.11.2026): пока первый кадр картинки не раскодирован — размытая
+/// миниатюра отправителя под ней, а не пустая коробка. Форма дерева одна до
+/// и после кадра. `null` — без подложки (как было).
+ImageFrameBuilder? _chatThumbUnderlayFrameBuilder(Uint8List? thumb) {
+  if (!kPendingSwapV2 || thumb == null) return null;
+  return (context, child, frame, sync) => Stack(
+    fit: StackFit.expand,
+    children: [
+      Positioned.fill(
+        child: frame == null && !sync
+            ? _ChatMediaPlaceholderSurface(
+                thumbBytes: thumb,
+                overlay: const SizedBox.shrink(),
+              )
+            : const SizedBox.shrink(),
+      ),
+      child,
+    ],
+  );
+}
+
 class _ChatVideoPreviewSurface extends StatefulWidget {
   const _ChatVideoPreviewSurface({
     required this.file,
     this.showPlayGlyph = true,
+    this.thumbBytes,
   });
 
   final File file;
+
+  /// М6: размытая миниатюра отправителя — пока кадр ролика не вынут.
+  final Uint8List? thumbBytes;
 
   /// Hidden while the video is uploading (the cancel ring is shown instead) so
   /// there is no duplicate play-button-under-spinner.
@@ -28239,24 +30668,8 @@ class _ChatVideoPreviewSurfaceState extends State<_ChatVideoPreviewSurface> {
     final controller = _controller;
     final initialized = controller?.value.isInitialized == true;
     final videoSize = initialized ? controller!.value.size : const Size(1, 1);
-    // Single play button — ONE thin white ring (2px, thinner than the old
-    // play_circle glyph's fat stroke) + a plain triangle, with a faint dark
-    // disc for contrast. No double-circle, no fat outline.
-    final icon = Container(
-      width: 50,
-      height: 50,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.black.withValues(alpha: 0.18),
-        border: Border.all(color: Colors.white, width: 2),
-      ),
-      child: const Icon(
-        AppIcons.playFill,
-        color: Colors.white,
-        size: 20,
-        shadows: [Shadow(color: Colors.black54, blurRadius: 6)],
-      ),
-    );
+    // Кнопка воспроизведения — общий круг 2a (знак Apple на iPhone).
+    const icon = ChatMediaCircle(glyph: ChatMediaGlyph.play);
 
     return Stack(
       fit: StackFit.expand,
@@ -28303,6 +30716,56 @@ class _ChatVideoPreviewSurfaceState extends State<_ChatVideoPreviewSurface> {
               if (!kVideoToolsAvailable) return const SizedBox.shrink();
               final posterKey = p.basenameWithoutExtension(widget.file.path);
               final known = VideoThumbnailCache.peek(posterKey);
+              // М6 (22.11.2026): одна форма дерева; пока кадра нет — размытая
+              // миниатюра отправителя (у заготовки — пустая плашка: кольцо
+              // загрузки и так в центре), а не крутилка. Кадр — с
+              // gaplessPlayback и той же подложкой до первого декода. Кадр не
+              // больше 536 точек, cacheWidth ему не нужен.
+              if (kMediaPreviewV2) {
+                final thumb = widget.thumbBytes;
+                return FutureBuilder<VideoThumbnail?>(
+                  future: known != null
+                      ? null
+                      : VideoThumbnailCache.forVideo(
+                          key: posterKey,
+                          videoPath: widget.file.path,
+                        ),
+                  initialData: known,
+                  builder: (context, snap) {
+                    final poster = known ?? snap.data;
+                    if (poster == null &&
+                        snap.connectionState == ConnectionState.done) {
+                      _fallBackToPlayer();
+                    }
+                    return Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Positioned.fill(
+                          child: poster == null && thumb != null
+                              ? _ChatMediaPlaceholderSurface(
+                                  thumbBytes: thumb,
+                                  overlay: const SizedBox.shrink(),
+                                )
+                              : const SizedBox.shrink(),
+                        ),
+                        Positioned.fill(
+                          child: poster == null
+                              ? const SizedBox.shrink()
+                              : Image.file(
+                                  poster.file,
+                                  fit: BoxFit.cover,
+                                  gaplessPlayback: true,
+                                  frameBuilder:
+                                      _chatThumbUnderlayFrameBuilder(thumb),
+                                  errorBuilder: (_, _, _) =>
+                                      const _BrokenMediaBox(),
+                                ),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              }
               if (known != null) {
                 return Image.file(
                   known.file,
@@ -28350,7 +30813,7 @@ class _ChatVideoPreviewSurfaceState extends State<_ChatVideoPreviewSurface> {
             ),
           ),
         ),
-        if (widget.showPlayGlyph) Center(child: IgnorePointer(child: icon)),
+        if (widget.showPlayGlyph) const Center(child: icon),
       ],
     );
   }
@@ -28361,17 +30824,41 @@ class _ChatGalleryMediaThumbnail extends StatelessWidget {
     required this.file,
     required this.mime,
     this.showPlayGlyph = true,
+    this.editsId,
+    this.thumbBytes,
   });
 
   final File? file;
   final String mime;
 
+  /// Ключ правок фото (blobId): плитка рисует снимок с правками просмотра.
+  final String? editsId;
+
   /// Suppressed on uploading album cells so a video's play button doesn't sit
   /// behind the per-photo upload ring (no play-under-spinner duplicate).
   final bool showPlayGlyph;
 
+  /// М7 (22.11.2026): размытая миниатюра отправителя — пока файла нет и до
+  /// первого кадра (раньше плитка готового альбома была пустой с иконкой).
+  final Uint8List? thumbBytes;
+
   @override
   Widget build(BuildContext context) {
+    final thumb = kPendingSwapV2 ? thumbBytes : null;
+    if (file == null && thumb != null) {
+      return _ChatMediaPlaceholderSurface(
+        thumbBytes: thumb,
+        overlay: _isVideoMediaMime(mime) && showPlayGlyph
+            ? const Center(
+                child: Icon(
+                  AppIcons.playCircle,
+                  color: Colors.white70,
+                  size: 24,
+                ),
+              )
+            : const SizedBox.shrink(),
+      );
+    }
     if (file == null) {
       return DecoratedBox(
         decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.22)),
@@ -28388,7 +30875,11 @@ class _ChatGalleryMediaThumbnail extends StatelessWidget {
     }
 
     if (_isVideoMediaMime(mime)) {
-      return _ChatVideoPreviewSurface(file: file!, showPlayGlyph: showPlayGlyph);
+      return _ChatVideoPreviewSurface(
+        file: file!,
+        showPlayGlyph: showPlayGlyph,
+        thumbBytes: thumb,
+      );
     }
 
     // Decode each collage tile to its on-screen footprint (px = the larger box
@@ -28402,11 +30893,12 @@ class _ChatGalleryMediaThumbnail extends StatelessWidget {
         final cacheDim = longestEdge.isFinite && longestEdge > 0
             ? (longestEdge * dpr).round()
             : null;
+        _chatImageDecodeWidthRemember(file!.path, cacheDim);
         // Decode with ONLY the width bound so the aspect ratio is preserved
         // (BoxFit.cover then crops the overflow). Setting BOTH cacheWidth and
         // cacheHeight to the same value decodes the image to a SQUARE, which
         // distorts non-square photos — that was the "squished" collage.
-        return Image.file(
+        final plain = Image.file(
           file!,
           fit: BoxFit.cover,
           alignment: Alignment.center,
@@ -28415,8 +30907,101 @@ class _ChatGalleryMediaThumbnail extends StatelessWidget {
           // Как у одиночного превью: без этого плитка альбома моргает пустотой
           // на каждом пересоздании кадра, пока картинка декодируется заново.
           gaplessPlayback: true,
+          frameBuilder: _chatThumbUnderlayFrameBuilder(thumb),
+        );
+        final id = editsId;
+        if (id == null || !mediaViewerV2Enabled) return plain;
+        return ValueListenableBuilder<MediaEdits?>(
+          valueListenable: MediaEditsStore.instance.listen(id),
+          child: plain,
+          builder: (context, edits, plain) {
+            if (edits == null || edits.isIdentity) return plain!;
+            return EditedMediaView(
+              image: cacheDim == null
+                  ? FileImage(file!) as ImageProvider
+                  : ResizeImage(FileImage(file!), width: cacheDim),
+              edits: edits,
+              cover: true,
+            );
+          },
         );
       },
+    );
+  }
+}
+
+/// Миниатюра 36×36 в плашке ответа на фото или видео (макет «Просмотр
+/// медиа»: «Ответить» ставит ответ над полем ввода с миниатюрой).
+class _ReplyMediaThumb extends StatefulWidget {
+  const _ReplyMediaThumb({
+    required this.attachment,
+    required this.loadCachedFile,
+  });
+
+  final AttachmentEventV1 attachment;
+  final Future<File?> Function(AttachmentEventV1 a) loadCachedFile;
+
+  @override
+  State<_ReplyMediaThumb> createState() => _ReplyMediaThumbState();
+}
+
+class _ReplyMediaThumbState extends State<_ReplyMediaThumb> {
+  // Один запрос на снимок: поле ввода перерисовывается на каждую букву, и
+  // без этого миниатюра мигала бы, заново ища файл.
+  late Future<File?> _file = _resolve();
+  String? _blobId;
+
+  bool get _isVideo =>
+      _isVideoMediaMime((widget.attachment.mime ?? '').toLowerCase());
+
+  Future<File?> _resolve() async {
+    _blobId = widget.attachment.blobId;
+    final f = await widget.loadCachedFile(widget.attachment);
+    if (f == null || !_isVideo) return f;
+    final poster = await VideoThumbnailCache.forVideo(
+      key: widget.attachment.blobId,
+      videoPath: f.path,
+    );
+    return poster?.file;
+  }
+
+  @override
+  void didUpdateWidget(covariant _ReplyMediaThumb old) {
+    super.didUpdateWidget(old);
+    if (widget.attachment.blobId != _blobId) _file = _resolve();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final attachment = widget.attachment;
+    final mime = (attachment.mime ?? '').toLowerCase();
+    final micro = _chatThumbBytesFor(attachment.blobId, attachment.thumbB64);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        width: 36,
+        height: 36,
+        child: FutureBuilder<File?>(
+          future: _file,
+          builder: (context, snap) {
+            final f = snap.data;
+            if (f == null) {
+              return micro != null
+                  ? Image.memory(micro, fit: BoxFit.cover, gaplessPlayback: true)
+                  : ColoredBox(color: Colors.black.withValues(alpha: 0.22));
+            }
+            if (_isVideo) {
+              return Image.file(f, fit: BoxFit.cover, cacheWidth: 108);
+            }
+            return _ChatGalleryMediaThumbnail(
+              file: f,
+              mime: mime,
+              showPlayGlyph: false,
+              editsId: attachment.blobId,
+            );
+          },
+        ),
+      ),
     );
   }
 }
@@ -28460,7 +31045,10 @@ class _ImageGroupCollage extends StatelessWidget {
     final overlay = cellOverlayBuilder?.call(index);
     return GestureDetector(
       onTap: () => onImageTap(index),
-      child: ClipRRect(
+      child: MediaFlightAnchor(
+        tag: attachment.blobId,
+        borderRadius: borderRadius,
+        child: ClipRRect(
         borderRadius: borderRadius,
         child: Stack(
           fit: StackFit.expand,
@@ -28472,9 +31060,15 @@ class _ImageGroupCollage extends StatelessWidget {
               child: _ChatGalleryMediaThumbnail(
                 file: file,
                 mime: mime,
+                editsId: attachment.blobId,
                 // Uploading cells carry their own ring — hide the play button so
                 // it doesn't peek out behind it (no duplicate play-under-ring).
                 showPlayGlyph: overlay == null,
+                // М7: миниатюра отправителя сразу, до файла.
+                thumbBytes: _chatThumbBytesFor(
+                  attachment.blobId,
+                  attachment.thumbB64,
+                ),
               ),
             ),
             if (overlayCount != null && overlayCount > 0)
@@ -28495,6 +31089,7 @@ class _ImageGroupCollage extends StatelessWidget {
             if (overlay != null) Positioned.fill(child: overlay),
           ],
         ),
+      ),
       ),
     );
   }
@@ -29011,10 +31606,10 @@ class _VideoPlayerDialogState extends State<_VideoPlayerDialog> {
               padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
               child: Row(
                 children: [
-                  IconButton(
+                  PressFeedback(child: IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(AppIcons.arrowBack, color: Colors.white),
-                  ),
+                  )),
                   Expanded(
                     child: Text(
                       widget.title,
@@ -29084,7 +31679,7 @@ class _VideoPlayerDialogState extends State<_VideoPlayerDialog> {
         ),
       ),
       floatingActionButton: _ready
-          ? FloatingActionButton(
+          ? PressFeedback(child: FloatingActionButton(
               onPressed: () async {
                 if (_controller.value.isPlaying) {
                   await _controller.pause();
@@ -29096,7 +31691,7 @@ class _VideoPlayerDialogState extends State<_VideoPlayerDialog> {
               child: Icon(
                 _controller.value.isPlaying ? AppIcons.pause : AppIcons.play,
               ),
-            )
+            ))
           : null,
     );
   }
@@ -29327,12 +31922,22 @@ class _ChatBubbleSurface extends StatelessWidget {
         kIncomingBubbleWallpaperGlass &&
         (st?.widget.controller.bubbleGlassEnabled ?? true);
     final blur = glassOn ? st?._wallpaperBlur : null;
+    // Разбор «Chat Diagnosis» (21.11.2026): в тёмной теме входящий пузырь —
+    // того же оттенка, что фон темы, на ступень светлее (поверхность темы),
+    // а не серо-лиловое стекло. Новых цветов нет — всё из темы.
+    final calmFill = isDarkTheme
+        ? (Color.lerp(cs.surface, cs.surfaceContainerHigh, 0.35) ??
+              cs.surfaceContainerHigh)
+        : cs.surfaceContainerHigh;
     return _IncomingFrostedBubble(
       borderRadius: borderRadius,
       isDark: isDarkTheme,
       showBorder: showIncomingBorder,
-      fill: cs.surfaceContainerHigh,
-      borderColor: cs.outlineVariant.withValues(alpha: 0.2),
+      fill: calmFill,
+      darkGlassTint: cs.surface.withValues(alpha: 0.61),
+      borderColor: cs.outlineVariant.withValues(
+        alpha: isDarkTheme ? 0.1 : 0.2,
+      ),
       blur: blur,
       viewportListenable: viewportListenable,
       fallbackViewportSize: MediaQuery.sizeOf(context),
@@ -29395,6 +32000,7 @@ class _IncomingFrostedBubble extends StatelessWidget {
     required this.isDark,
     required this.showBorder,
     required this.fill,
+    this.darkGlassTint,
     required this.borderColor,
     required this.child,
     this.blur,
@@ -29406,6 +32012,10 @@ class _IncomingFrostedBubble extends StatelessWidget {
   final bool isDark;
   final bool showBorder;
   final Color fill;
+
+  /// Подкраска стекла в тёмной теме — поверхность темы (оттенок фона), а не
+  /// общая серо-лиловая. `null` — прежняя из настроек размытия.
+  final Color? darkGlassTint;
   final Color borderColor;
   final Widget child;
 
@@ -29435,7 +32045,9 @@ class _IncomingFrostedBubble extends StatelessWidget {
         return renderObject is RenderBox ? renderObject : null;
       }
 
-      final specular = Colors.white.withValues(alpha: isDark ? 0.14 : 0.30);
+      // Кант сверху тише (разбор: десятки светлых линий делали экран
+      // «пластиковым»).
+      final specular = Colors.white.withValues(alpha: isDark ? 0.06 : 0.30);
       return CustomPaint(
         isComplex: false,
         willChange: viewportListenable != null,
@@ -29448,7 +32060,7 @@ class _IncomingFrostedBubble extends StatelessWidget {
             viewportRenderObjectProvider: viewportRenderObjectProvider,
           ),
           tint: isDark
-              ? blurController.config.darkTint
+              ? (darkGlassTint ?? blurController.config.darkTint)
               : blurController.config.lightTint,
           fallbackTop: fill.withValues(alpha: isDark ? 0.95 : 0.98),
           fallbackBottom: fill.withValues(alpha: isDark ? 0.92 : 0.96),
@@ -29519,7 +32131,7 @@ class _IncomingFrostedBubble extends StatelessWidget {
     final sheen = Colors.white.withValues(alpha: 0.0);
     // 1px specular top/left highlight — same convex "lit-from-above" edge the
     // app's glass islands use.
-    final specular = Colors.white.withValues(alpha: isDark ? 0.14 : 0.30);
+    final specular = Colors.white.withValues(alpha: isDark ? 0.06 : 0.30);
 
     // Static frosted plate — same rounded shape, gradient fill, sheen and
     // border as before, just WITHOUT the live BackdropFilter (and its extra
@@ -29807,8 +32419,10 @@ class _GlobalGradientShader {
     Color? mid,
     Brightness brightness,
   ) {
-    final highlightBlend = brightness == Brightness.dark ? 0.10 : 0.18;
-    final shadowBlend = brightness == Brightness.dark ? 0.14 : 0.04;
+    // Тёмная тема: края переливов тише (разбор «Chat Diagnosis» — соседние
+    // пузыри не должны спорить оттенками). Цвета наборов — те же.
+    final highlightBlend = brightness == Brightness.dark ? 0.04 : 0.18;
+    final shadowBlend = brightness == Brightness.dark ? 0.06 : 0.04;
     final highlight = Color.lerp(top, Colors.white, highlightBlend) ?? top;
     final bridge = mid ?? (Color.lerp(top, bottom, 0.48) ?? top);
     final lowerBridge = mid != null
@@ -30027,7 +32641,7 @@ class _ReactionSlot extends StatelessWidget {
       // Long enough to read as a glide rather than a snap, short enough that a
       // burst of reactions never feels laggy.
       duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
+      curve: Motion.standard,
       alignment: alignment,
       // 🔴 NO CLIPPING (2026-08-01, field: "the reaction is cut in half
       // horizontally until the growth finishes — it is a fraction of a second
@@ -30104,6 +32718,62 @@ class _ReactionPills extends StatelessWidget {
               final isOwn = reactionGroup.isOwn;
               final members = reactionGroup.members;
               final showAvatars = members.length <= 5;
+              // Личный чат (21.11.2026, владелец): в чате двое — кто
+              // поставил, и так ясно. Только эмодзи: без плашки и фото
+              // (число — если оба поставили одно и то же).
+              if (!_ChatKindScope.isGroupOf(context)) {
+                final bare = Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _ownReactionGlyph(
+                        isOwn,
+                        ReactionFxRegistry.id(
+                          reactionEventId,
+                          reactionGroup.emoji,
+                        ),
+                        _ReactionEmojiLottie(
+                          emoji: reactionGroup.emoji,
+                          size: 20,
+                          playToken: members.fold<int?>(
+                            null,
+                            (current, reaction) =>
+                                reactionPlayTokens['$reactionEventId|${reaction.profileId}|${reaction.emoji}'] ??
+                                current,
+                          ),
+                        ),
+                      ),
+                      if (members.length > 1) ...[
+                        const SizedBox(width: 3),
+                        Text(
+                          '${members.length}',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: DefaultTextStyle.of(context).style.color,
+                                height: 1,
+                              ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+                if (!isOwn) return bare;
+                return GestureDetector(
+                  onTap: () => onToggleOwnReaction(reactionGroup.emoji),
+                  behavior: HitTestBehavior.opaque,
+                  child: ReactionChipFxScope(
+                    fxId: ReactionFxRegistry.id(
+                      reactionEventId,
+                      reactionGroup.emoji,
+                    ),
+                    ringColor: cs.primary,
+                    child: bare,
+                  ),
+                );
+              }
               final chip = Container(
                 padding: const EdgeInsets.fromLTRB(7, 3, 7, 3),
                 decoration: BoxDecoration(
@@ -30118,30 +32788,30 @@ class _ReactionPills extends StatelessWidget {
                   // pick automatically, including the default "follow theme".
                   // Hard-coding any preset hue would freeze it on one choice.
                   //
-                  // A reaction I took part in reads at full strength; one from
-                  // other people is the same hue, softened, so my own reaction
-                  // is still findable at a glance without inventing a colour.
-                  color: isOwn
-                      ? cs.primary
-                      : cs.primary.withValues(alpha: 0.68),
+                  // Моя реакция — цвет индикатора. Чужая (21.11.2026,
+                  // владелец) — не синяя, а нейтральная плашка приложения,
+                  // как у плашки даты: свою видно сразу.
+                  color: isOwn ? cs.primary : _othersReactionPlate(context),
                   border: Border.all(
-                    color: isOwn
-                        ? cs.primary
-                        : cs.primary.withValues(alpha: 0.68),
+                    color: isOwn ? cs.primary : Colors.transparent,
                   ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _ReactionEmojiLottie(
-                      emoji: reactionGroup.emoji,
-                      size: 18,
-                      playToken: members.fold<int?>(
-                        null,
-                        (current, reaction) =>
-                            reactionPlayTokens['$reactionEventId|${reaction.profileId}|${reaction.emoji}'] ??
-                            current,
+                    _ownReactionGlyph(
+                      isOwn,
+                      ReactionFxRegistry.id(reactionEventId, reactionGroup.emoji),
+                      _ReactionEmojiLottie(
+                        emoji: reactionGroup.emoji,
+                        size: 18,
+                        playToken: members.fold<int?>(
+                          null,
+                          (current, reaction) =>
+                              reactionPlayTokens['$reactionEventId|${reaction.profileId}|${reaction.emoji}'] ??
+                              current,
+                        ),
                       ),
                     ),
                     if (showAvatars && members.isNotEmpty) ...[
@@ -30161,7 +32831,7 @@ class _ReactionPills extends StatelessWidget {
                           // background's own colour — an invisible counter.
                           color: isOwn
                               ? cs.onPrimary
-                              : cs.onPrimary.withValues(alpha: 0.92),
+                              : _othersReactionInk(context),
                           height: 1,
                         ),
                       ),
@@ -30171,10 +32841,19 @@ class _ReactionPills extends StatelessWidget {
               );
 
               if (!isOwn) return chip;
+              // Своя реакция: посадка полёта (пружина и кольцо) и снятие
+              // (сжатие) — макет «Reactions Animation».
               return GestureDetector(
                 onTap: () => onToggleOwnReaction(reactionGroup.emoji),
                 behavior: HitTestBehavior.opaque,
-                child: chip,
+                child: ReactionChipFxScope(
+                  fxId: ReactionFxRegistry.id(
+                    reactionEventId,
+                    reactionGroup.emoji,
+                  ),
+                  ringColor: cs.primary,
+                  child: chip,
+                ),
               );
             },
           ),
@@ -30182,6 +32861,36 @@ class _ReactionPills extends StatelessWidget {
     );
   }
 }
+
+/// Плашка чужой реакции — нейтральный тон плашек приложения (как у даты).
+Color _othersReactionPlate(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+    ? Colors.white.withValues(alpha: 0.14)
+    : const Color(0xFF5A6270).withValues(alpha: 0.13);
+
+/// Текст (число) на плашке чужой реакции.
+Color _othersReactionInk(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+    ? const Color(0xFFDCE1E8).withValues(alpha: 0.92)
+    : const Color(0xFF5A6270);
+
+/// Какой это чат — личный или комната (реакции в личном — без плашек).
+class _ChatKindScope extends InheritedWidget {
+  const _ChatKindScope({required this.isGroup, required super.child});
+
+  final bool isGroup;
+
+  /// Вне экрана чата (тесты, превью) — как в комнате (прежний вид).
+  static bool isGroupOf(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_ChatKindScope>()?.isGroup ?? true;
+
+  @override
+  bool updateShouldNotify(_ChatKindScope old) => old.isGroup != isGroup;
+}
+
+Widget _ownReactionGlyph(bool isOwn, String fxId, Widget glyph) => isOwn
+    ? ReactionGlyphFxScope(fxId: fxId, child: glyph)
+    : glyph;
 
 class _GroupedReaction {
   const _GroupedReaction({
@@ -30260,6 +32969,9 @@ class _ReactionEmojiLottieState extends State<_ReactionEmojiLottie>
   int? _lastHandledToken;
   ({double min, double max}) _segment = (min: 0.0, max: 1.0);
 
+  /// Анимация загружена и стоит на кадре — значок шрифта под ней не нужен.
+  bool _composed = false;
+
   void _loadEmojiFile(String emoji) {
     final currentGeneration = ++_loadGeneration;
     final codepoint = _notoCodepoints[emoji];
@@ -30306,6 +33018,7 @@ class _ReactionEmojiLottieState extends State<_ReactionEmojiLottie>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.emoji != widget.emoji) {
       _lastHandledToken = null;
+      _composed = false;
       _controller
         ..stop()
         ..value = 0.0;
@@ -30323,6 +33036,13 @@ class _ReactionEmojiLottieState extends State<_ReactionEmojiLottie>
 
   void _onCompositionLoaded(LottieComposition composition) {
     _segment = (min: 0.0, max: 1.0);
+    // Анимация готова — значок шрифта под ней больше не нужен.
+    if (!_composed) {
+      _composed = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }
 
     if (widget.playToken != null && widget.playToken != _lastHandledToken) {
       _lastHandledToken = widget.playToken;
@@ -30347,11 +33067,18 @@ class _ReactionEmojiLottieState extends State<_ReactionEmojiLottie>
       ),
     );
     unawaited(
-      _controller.animateTo(
-        _segment.max,
-        duration: duration,
-        curve: Curves.easeOutCubic,
-      ),
+      _controller
+          .animateTo(
+            _segment.max,
+            duration: duration,
+            curve: Motion.standard,
+          )
+          .then((_) {
+            // Последний кадр Noto пустой — в покое стоим на первом.
+            if (mounted && !_controller.isAnimating) {
+              _controller.value = _segment.min;
+            }
+          }),
     );
   }
 
@@ -30465,9 +33192,17 @@ class _ReactionEmojiLottieState extends State<_ReactionEmojiLottie>
           // pop itself the Lottie is the sole visible layer, avoiding the
           // double-emoji look; once settled, the static glyph is the
           // safety net against a transparent resting frame.
+          // 🔴 23.11.2026 (владелец: «реакция как будто дублируется, на 💯
+          // видно — их две»): у анимации Noto под ней лежал ещё и значок
+          // шрифта — 💯 Apple и 💯 Noto нарисованы по-разному, и в покое
+          // были видны оба. Теперь анимация Noto в покое стоит на первом
+          // кадре (полный эмодзи; последний кадр у Noto пустой — после
+          // проигрывания возвращаемся на первый), значок шрифта — только
+          // пока анимация не загрузилась. Собственные анимации-«печеньки»
+          // (bundledAsset) — как были.
           final Widget emojiWidget = animated == null
               ? _fallback()
-              : (_controller.isAnimating
+              : (_controller.isAnimating || (file != null && _composed)
                     ? animated
                     : Stack(
                         alignment: Alignment.center,
@@ -30752,7 +33487,7 @@ class _GifPickerViewState extends State<_GifPickerView> {
                 fontSize: 14.5,
               ),
               prefixIcon: Icon(
-                Icons.search_rounded,
+                AdaptiveIcons.search_rounded,
                 size: 17,
                 color: cs.onSurfaceVariant.withValues(alpha: 0.7),
               ),
@@ -30959,7 +33694,7 @@ class _GifPickerViewState extends State<_GifPickerView> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
-          failed ? Icons.wifi_off_rounded : Icons.gif_box_outlined,
+          failed ? AdaptiveIcons.wifi_off_rounded : Icons.gif_box_outlined,
           size: 40,
           color: cs.outline,
         ),
@@ -31059,7 +33794,8 @@ class _NotoEmojiLottie extends StatefulWidget {
 int _notoLottieVisibilitySeq = 0;
 
 class _NotoEmojiLottieState extends State<_NotoEmojiLottie>
-    with SingleTickerProviderStateMixin {
+    // Эмодзи в ленте — украшение: не чаще 60 кадров в секунду (23.11.2026).
+    with PacedTickerProviderStateMixin {
   File? _file;
   AnimationController? _ctrl;
   int _loadGeneration = 0;
@@ -31479,7 +34215,7 @@ Widget _buildBubbleStatusSlot(String statusText, TextStyle? style) {
   return Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Icon(FluentIcons.eye_16_regular, size: 12, color: style?.color),
+      Icon(const AdaptiveIconData(FluentIcons.eye_16_regular, CupertinoIcons.eye), size: 12, color: style?.color),
       const SizedBox(width: 3),
       Text(count, style: style),
     ],
@@ -31493,6 +34229,45 @@ Widget _buildBubbleStatusSlot(String statusText, TextStyle? style) {
 /// wallpaper instead of competing with the bubbles. Rendered as part of the
 /// first row of each day (see the timeline itemBuilder) rather than as its own
 /// list item, so row indices stay stable.
+/// «Непрочитанные сообщения» — полоса во всю ширину над первым
+/// непрочитанным (как у Telegram, 23.11.2026). Стоит, пока чат открыт.
+class _UnreadMessagesDivider extends StatelessWidget {
+  const _UnreadMessagesDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: isDark
+              ? const Color(0x47000000)
+              : const Color(0x8CFFFFFF),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Center(
+            child: Text(
+              context.l10n.chatUnreadMessagesDivider,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.15,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0.2,
+                color: isDark
+                    ? const Color(0xFFE4E8EE).withValues(alpha: 0.86)
+                    : const Color(0xFF4B5563),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ChatDateSeparator extends StatelessWidget {
   const _ChatDateSeparator({required this.timestampMs});
 
@@ -31580,11 +34355,17 @@ class _SelectableEventWrapper extends StatefulWidget {
     required this.onTap,
     required this.onDoubleTap,
     required this.onLongPress,
+    this.onBubbleLongPress,
+    this.passThrough = false,
     required this.child,
   });
 
   final bool selectionMode;
   final bool selected;
+
+  /// Долгое нажатие ПО САМОМУ пузырю (не по пустому месту рядом) вне режима
+  /// выделения. `null` — как раньше, любое долгое нажатие выделяет.
+  final ValueChanged<Offset>? onBubbleLongPress;
 
   /// Single-tap handler. `null` means the *child* owns single-tap (e.g. a video
   /// note that enlarges + unmutes on tap) — the wrapper then forwards taps only
@@ -31593,6 +34374,10 @@ class _SelectableEventWrapper extends StatefulWidget {
   final ValueChanged<Offset?>? onTap;
   final VoidCallback onDoubleTap;
   final VoidCallback onLongPress;
+
+  /// Идёт выделение текста в этом пузыре: касания, двойные касания и
+  /// долгие нажатия — выделению (ручки, слово), а не обёртке.
+  final bool passThrough;
   final Widget child;
 
   @override
@@ -31623,15 +34408,20 @@ class _SelectableEventWrapperState extends State<_SelectableEventWrapper> {
     // (context menu) and double-tap (❤️) still go through this wrapper.
     final bool childOwnsTap = widget.onTap == null;
     final bool wrapperHandlesTap = !childOwnsTap || widget.selectionMode;
+    final pass = widget.passThrough;
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onTapDown: (details) {
-        _lastTapPosition = details.globalPosition;
-      },
-      onDoubleTapDown: (details) {
-        _lastTapPosition = details.globalPosition;
-      },
-      onTap: wrapperHandlesTap
+      onTapDown: pass
+          ? null
+          : (details) {
+              _lastTapPosition = details.globalPosition;
+            },
+      onDoubleTapDown: pass
+          ? null
+          : (details) {
+              _lastTapPosition = details.globalPosition;
+            },
+      onTap: wrapperHandlesTap && !pass
           ? () {
               if (!_isInteractiveChildHit(_lastTapPosition)) {
                 FocusManager.instance.primaryFocus?.unfocus();
@@ -31643,17 +34433,30 @@ class _SelectableEventWrapperState extends State<_SelectableEventWrapper> {
               }
             }
           : null,
-      onDoubleTap: () {
-        if (!_isInteractiveChildHit(_lastTapPosition)) return;
-        widget.onDoubleTap();
-      },
-      onLongPress: widget.onLongPress,
+      onDoubleTap: pass
+          ? null
+          : () {
+              if (!_isInteractiveChildHit(_lastTapPosition)) return;
+              widget.onDoubleTap();
+            },
+      onLongPressStart: pass
+          ? null
+          : (details) {
+              final bubble = widget.onBubbleLongPress;
+              if (bubble != null &&
+                  !widget.selectionMode &&
+                  _isInteractiveChildHit(details.globalPosition)) {
+                bubble(details.globalPosition);
+                return;
+              }
+              widget.onLongPress();
+            },
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           AnimatedContainer(
             duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
+            curve: Motion.fade,
             width: widget.selectionMode ? 34 : 0,
             padding: EdgeInsets.only(
               left: widget.selectionMode ? 8 : 0,
@@ -31887,11 +34690,12 @@ class _BubbleMetaFooter extends StatelessWidget {
             children: [
               Text(
                 _formatTime(timestampMs),
+                // Время тише текста (разбор): обычное начертание, 12 px.
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
                   height: 1,
-                  color: color.withValues(alpha: 0.72),
+                  color: color.withValues(alpha: 0.6),
                 ),
               ),
               if (statusText != null && statusText!.isNotEmpty) ...[
@@ -31899,10 +34703,10 @@ class _BubbleMetaFooter extends StatelessWidget {
                 _buildBubbleStatusSlot(
                   statusText!,
                   Theme.of(context).textTheme.labelSmall?.copyWith(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
                     height: 1,
-                    color: color.withValues(alpha: 0.72),
+                    color: color.withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -32084,7 +34888,7 @@ class _TranslateAffordance extends StatelessWidget {
               ),
             ),
           )
-        : Icon(Icons.translate_rounded, size: 16, color: iconColor);
+        : Icon(AdaptiveIcons.translate_rounded, size: 16, color: iconColor);
 
     // 🔴 11.2026: зона нажатия была 20×20 — промах уходил в пузырь, и
     // казалось, что кнопка не работает. Теперь 40×40, сам значок прежний.
@@ -32130,13 +34934,29 @@ class _FrostedGlass extends StatelessWidget {
       borderRadius: br,
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: sigmaX, sigmaY: sigmaY),
+        // iPhone (20.11.2026): стекло iOS со светлой кромкой; цвет, заданный
+        // явно (например, тёмная подложка над фото), сохраняется.
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: bg,
+            color: backgroundColor == null ? appleBlurredFillOr(context, bg) : bg,
             borderRadius: br,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+            border: appleGlassPanelsEnabled
+                ? null
+                : Border.all(color: Colors.white.withValues(alpha: 0.18)),
           ),
-          child: child,
+          child: appleGlassPanelsEnabled
+              ? DecoratedBox(
+                  position: DecorationPosition.foreground,
+                  decoration: ShapeDecoration(
+                    shape: AppleGlassBorder(
+                      radius: br.topLeft.x,
+                      dark: Theme.of(context).brightness == Brightness.dark,
+                      topOnly: br.bottomLeft.x == 0,
+                    ),
+                  ),
+                  child: child,
+                )
+              : child,
         ),
       ),
     );
@@ -32215,8 +35035,8 @@ class _PendingVideoNoteBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width * 0.58;
-    final side = width < 216.0 ? width : 216.0;
+    // Тот же квадрат, что у отправленной (макет 3b): 200, скругление 40.
+    final side = videoNoteSmallSide(MediaQuery.sizeOf(context).width);
     final progress = totalBytes > 0 && sentBytes > 0
         ? (sentBytes / totalBytes).clamp(0.0, 1.0)
         : null;
@@ -32229,11 +35049,11 @@ class _PendingVideoNoteBubble extends StatelessWidget {
           width: side,
           height: side,
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(44),
+            borderRadius: BorderRadius.circular(kVideoNoteRadius),
             child: Stack(
               fit: StackFit.expand,
               children: [
-                const ColoredBox(color: Colors.black),
+                const VideoNoteStripes(isMe: true),
                 if (kVideoToolsAvailable)
                   FutureBuilder<VideoThumbnail?>(
                     future: VideoThumbnailCache.forVideo(
@@ -32286,30 +35106,11 @@ class _UploadRetryButton extends StatelessWidget {
   final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: context.l10n.uploadRetry,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onRetry,
-        child: Container(
-          width: 54,
-          height: 54,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.black.withValues(alpha: 0.42),
-            border: Border.all(color: Colors.white, width: 2),
-          ),
-          child: const Icon(
-            Icons.refresh_rounded,
-            color: Colors.white,
-            size: 26,
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => ChatMediaCircle(
+    glyph: ChatMediaGlyph.retry,
+    onTap: onRetry,
+    semanticsLabel: context.l10n.uploadRetry,
+  );
 }
 
 class _UploadDismissButton extends StatelessWidget {
@@ -32339,11 +35140,13 @@ class _UploadDismissButton extends StatelessWidget {
   }
 }
 
-class _UploadProgressRing extends StatefulWidget {
+/// Отправка идёт: кольцо хода с крестиком «отменить» — общий круг 2a
+/// ([ChatMediaCircle]) для фото, альбомов, видео, кружков и файлов.
+class _UploadProgressRing extends StatelessWidget {
   const _UploadProgressRing({
     required this.progress,
     required this.onCancel,
-    this.size = 54,
+    this.size = 48,
   });
 
   final double? progress;
@@ -32351,112 +35154,14 @@ class _UploadProgressRing extends StatefulWidget {
   final double size;
 
   @override
-  State<_UploadProgressRing> createState() => _UploadProgressRingState();
-}
-
-class _UploadProgressRingState extends State<_UploadProgressRing>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _spin = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1100),
+  Widget build(BuildContext context) => ChatMediaCircle(
+    glyph: ChatMediaGlyph.cancel,
+    size: size,
+    ring: true,
+    progress: progress,
+    onTap: onCancel,
+    semanticsLabel: context.l10n.cancel,
   );
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.progress == null) _spin.repeat();
-  }
-
-  @override
-  void didUpdateWidget(covariant _UploadProgressRing oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final indeterminate = widget.progress == null;
-    if (indeterminate && !_spin.isAnimating) {
-      _spin.repeat();
-    } else if (!indeterminate && _spin.isAnimating) {
-      _spin.stop();
-    }
-  }
-
-  @override
-  void dispose() {
-    _spin.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: widget.onCancel,
-      child: SizedBox(
-        width: widget.size,
-        height: widget.size,
-        child: AnimatedBuilder(
-          animation: _spin,
-          builder: (context, child) => CustomPaint(
-            painter: _UploadRingPainter(
-              progress: widget.progress,
-              rotation: _spin.value,
-            ),
-            child: child,
-          ),
-          child: Center(
-            child: Icon(
-              AppIcons.close,
-              size: widget.size * 0.34,
-              color: Colors.white,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _UploadRingPainter extends CustomPainter {
-  _UploadRingPainter({required this.progress, required this.rotation});
-
-  final double? progress;
-  final double rotation;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final radius = size.width / 2;
-    canvas.drawCircle(
-      center,
-      radius,
-      Paint()..color = Colors.black.withValues(alpha: 0.45),
-    );
-    final ringRadius = radius - 4;
-    final rect = Rect.fromCircle(center: center, radius: ringRadius);
-    canvas.drawCircle(
-      center,
-      ringRadius,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..color = Colors.white.withValues(alpha: 0.26),
-    );
-    final arcPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round
-      ..color = Colors.white;
-    final p = progress;
-    if (p == null) {
-      final start = rotation * 2 * pi - pi / 2;
-      canvas.drawArc(rect, start, pi * 0.6, false, arcPaint);
-    } else {
-      final sweep = p.clamp(0.0, 1.0) * 2 * pi;
-      canvas.drawArc(rect, -pi / 2, sweep, false, arcPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _UploadRingPainter oldDelegate) =>
-      oldDelegate.progress != progress || oldDelegate.rotation != rotation;
 }
 
 /// Small dark pill holding the MB readout (top corner of an uploading bubble).
@@ -32671,6 +35376,33 @@ void _chatMediaFileRemember(String blobId, File? file) {
   }
 }
 
+/// М4 (разбор медиа 22.11.2026): ширина декода (`cacheWidth`), с которой
+/// превью в ленте рисовало файл, — по пути файла. Заготовка рисует исходник,
+/// готовый пузырь — копию в кэше; зная ширину заготовки, чат заранее
+/// раскодирует копию ровно с тем же ключом, и подмена идёт без пустого кадра.
+final LinkedHashMap<String, int> _chatImageDecodeWidthByPath =
+    LinkedHashMap<String, int>();
+
+void _chatImageDecodeWidthRemember(String path, int? width) {
+  if (!kPendingSwapV2 || width == null || width <= 0) return;
+  if (_chatImageDecodeWidthByPath[path] == width) return;
+  _chatImageDecodeWidthByPath.remove(path);
+  _chatImageDecodeWidthByPath[path] = width;
+  while (_chatImageDecodeWidthByPath.length > 128) {
+    _chatImageDecodeWidthByPath.remove(_chatImageDecodeWidthByPath.keys.first);
+  }
+}
+
+/// М4/М3: пропорция, раскодированная по пути файла (для заготовки, у
+/// которой ещё нет blobId). Заполняется теми же разборами, что и раньше.
+final Map<String, double> _chatMediaAspectByPath = <String, double>{};
+
+void _chatMediaAspectByPathRemember(String path, double aspect) {
+  if (!kPendingSwapV2 || !aspect.isFinite || aspect <= 0) return;
+  if (_chatMediaAspectByPath.length > 256) _chatMediaAspectByPath.clear();
+  _chatMediaAspectByPath[path] = aspect;
+}
+
 /// Compact duration label:  "0:07"  "1:24"  "1:02:15"
 String _fmtAudioDur(Duration d) {
   if (d.inHours > 0) {
@@ -32789,7 +35521,7 @@ class _SendingClockStatusIcon extends StatefulWidget {
 }
 
 class _SendingClockStatusIconState extends State<_SendingClockStatusIcon>
-    with SingleTickerProviderStateMixin {
+    with PacedTickerProviderStateMixin {
   late final AnimationController _controller;
 
   @override
@@ -33027,7 +35759,10 @@ class _QuietHoursHourPickerSheetState
 
     return Container(
       decoration: BoxDecoration(
-        color: cs.surface,
+        color: appleSheetFillOr(
+          context,
+          cs.surface,
+        ),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
       ),
       padding: EdgeInsets.only(bottom: media.padding.bottom + 10),
@@ -33108,7 +35843,7 @@ class _QuietHoursHourPickerSheetState
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
             child: SizedBox(
               width: double.infinity,
-              child: FilledButton(
+              child: PressFeedback(child: FilledButton(
                 onPressed: () => Navigator.of(context).pop(_selectedHour),
                 child: Text(
                   chatText(
@@ -33123,7 +35858,7 @@ class _QuietHoursHourPickerSheetState
                     de: '${_hourText(_selectedHour)} auswählen',
                   ),
                 ),
-              ),
+              )),
             ),
           ),
         ],
@@ -33341,7 +36076,10 @@ class _ScheduleDateTimePickerState extends State<_ScheduleDateTimePicker> {
 
     return Container(
       decoration: BoxDecoration(
-        color: cs.surface,
+        color: appleSheetFillOr(
+          context,
+          cs.surface,
+        ),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
       ),
       padding: EdgeInsets.only(bottom: media.padding.bottom + 8),
@@ -33503,13 +36241,13 @@ class _ScheduleDateTimePickerState extends State<_ScheduleDateTimePicker> {
                 Icon(
                   AppIcons.lock,
                   size: 14,
-                  color: cs.onSurface.withValues(alpha: 0.40),
+                  color: cs.onSurface.withValues(alpha: 0.6),
                 ),
                 const SizedBox(width: 6),
                 Text(
                   '${l10n.repeat}: ${l10n.repeatNever}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: cs.onSurface.withValues(alpha: 0.40),
+                    color: cs.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
               ],
@@ -33521,10 +36259,10 @@ class _ScheduleDateTimePickerState extends State<_ScheduleDateTimePicker> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SizedBox(
               width: double.infinity,
-              child: FilledButton(
+              child: PressFeedback(child: FilledButton(
                 onPressed: () => Navigator.of(context).pop(_selectedDateTime),
                 child: Text(_confirmLabel(context, l10n)),
-              ),
+              )),
             ),
           ),
           const SizedBox(height: 8),
@@ -33633,7 +36371,7 @@ class _ChatSearchBottomBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
         child: Row(
           children: [
-            IconButton(
+            PressFeedback(child: IconButton(
               icon: Icon(AppIcons.calendar, size: 22, color: fg),
               onPressed: onCalendar,
               tooltip: wave1Text(
@@ -33647,7 +36385,7 @@ class _ChatSearchBottomBar extends StatelessWidget {
                 fr: 'Par date',
                 de: 'Nach Datum',
               ),
-            ),
+            )),
             Expanded(
               child: Center(
                 child: Text(
@@ -33662,7 +36400,7 @@ class _ChatSearchBottomBar extends StatelessWidget {
                 ),
               ),
             ),
-            IconButton(
+            PressFeedback(child: IconButton(
               icon: Icon(
                 AppIcons.searchUp,
                 size: 22,
@@ -33680,8 +36418,8 @@ class _ChatSearchBottomBar extends StatelessWidget {
                 fr: 'Précédent',
                 de: 'Vorheriges',
               ),
-            ),
-            IconButton(
+            )),
+            PressFeedback(child: IconButton(
               icon: Icon(
                 AppIcons.searchDown,
                 size: 22,
@@ -33699,7 +36437,7 @@ class _ChatSearchBottomBar extends StatelessWidget {
                 fr: 'Suivant',
                 de: 'Nächstes',
               ),
-            ),
+            )),
             TextButton(
               onPressed: onOpenList,
               child: Text(
@@ -33735,7 +36473,7 @@ class _HighlightWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 550),
-      curve: Curves.easeOutCubic,
+      curve: Motion.standard,
       color: highlighted
           ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.20)
           : Colors.transparent,
@@ -33747,6 +36485,30 @@ class _HighlightWrapper extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Slide-up entrance animation for new messages
 // ---------------------------------------------------------------------------
+/// Вылет своего сообщения из поля ввода (макет «Капля» 1a). `false` —
+/// прежнее появление М3.
+const bool kComposerSendFlight = true;
+
+/// Долгое нажатие по пузырю с медиа/файлом/стикером — меню с реакциями,
+/// рядом с пузырём — выделение (23.11.2026). `false` — как раньше.
+const bool kMediaLongPressMenu = true;
+
+/// Расширенные реакции (весь каталог эмодзи под ⌄) — для всех, не только
+/// Premium (решение владельца 23.11.2026). `false` — прежний замок.
+const bool kExtendedReactionsFree = true;
+
+/// Чат открывается на первом непрочитанном (плашка «Непрочитанные
+/// сообщения») или там, где человек остановился; прочитанное помечается по
+/// мере листания (23.11.2026). `false` — прежнее открытие внизу.
+const bool kOpenAtFirstUnread = true;
+
+/// Сколько чат, открытый из уведомления, ждёт догрузки непрочитанных
+/// (23.11.2026). `Duration.zero` — не ждать (прежнее поведение).
+const Duration kNotificationUnreadWait = Duration(seconds: 8);
+
+/// Сколько держать строку открытия на месте, пока догружаются высоты ниже.
+const Duration kOpenHoldDuration = Duration(milliseconds: 2500);
+
 class _SlideUpEntrance extends StatefulWidget {
   const _SlideUpEntrance({
     required this.child,
@@ -33766,18 +36528,39 @@ class _SlideUpEntranceState extends State<_SlideUpEntrance>
   late final AnimationController _ctrl;
   late final Animation<Offset> _slide;
 
+  /// М3 (Telegram): новое сообщение не «впрыгивает» — его строка вырастает
+  /// по высоте, и лента плавно поднимается; сам пузырь проявляется. iPhone —
+  /// 0,4 с фирменной кривой, проявление 0,2 с (`ListView.swift`); Android —
+  /// 250 мс кривой `ChatListItemAnimator` и масштаб 0,9 → 1.
+  static bool get _tg =>
+      kTelegramMotion &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.android);
+
+  bool get _ios => defaultTargetPlatform == TargetPlatform.iOS;
+
   @override
   void initState() {
     super.initState();
-    final duration = widget.isOutgoing
-        ? const Duration(milliseconds: 360)
-        : const Duration(milliseconds: 280);
+    final Duration duration;
+    if (_tg && widget.isOutgoing && kComposerSendFlight) {
+      // «Капля» (1a): своё сообщение вылетает из поля — 0,5 с пружиной.
+      duration = const Duration(milliseconds: 500);
+    } else if (_tg) {
+      duration = _ios
+          ? MotionDurations.list
+          : const Duration(milliseconds: 250);
+    } else {
+      duration = widget.isOutgoing
+          ? const Duration(milliseconds: 360)
+          : const Duration(milliseconds: 280);
+    }
     _ctrl = AnimationController(vsync: this, duration: duration);
     final curve = CurvedAnimation(
       parent: _ctrl,
       curve: widget.isOutgoing
           ? const Cubic(0.16, 1.0, 0.3, 1.0)
-          : Curves.easeOutQuart,
+          : Motion.standardQuart,
     );
     _slide = Tween<Offset>(
       begin: widget.isOutgoing ? const Offset(0, 0.24) : const Offset(0, 0.32),
@@ -33798,26 +36581,66 @@ class _SlideUpEntranceState extends State<_SlideUpEntrance>
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: SlideTransition(position: _slide, child: widget.child),
+    if (!_tg) {
+      return ClipRect(
+        child: SlideTransition(position: _slide, child: widget.child),
+      );
+    }
+    final ios = _ios;
+    final align = widget.isOutgoing
+        ? Alignment.bottomRight
+        : Alignment.bottomLeft;
+    // Дерево одной формы и до, и после анимации.
+    return AnimatedBuilder(
+      animation: _ctrl,
+      child: widget.child,
+      builder: (context, child) {
+        final t = _ctrl.value;
+        final grow = ios
+            ? TgCurves.ios.transform(t)
+            : TgCurves.androidMessage.transform(t);
+        if (widget.isOutgoing && kComposerSendFlight) {
+          // Макет 1a: пузырь вырастает из поля в ленту — снизу на 56 px,
+          // из 0,84, проявляется к середине пути; строка ленты растёт вместе
+          // с ним. Без обрезки: пузырь выходит из-под поля ввода.
+          final c = const Cubic(.2, .9, .3, 1.12).transform(t);
+          return Align(
+            alignment: Alignment.topCenter,
+            heightFactor: grow,
+            child: Opacity(
+              opacity: (t / .55).clamp(0.0, 1.0),
+              child: Transform(
+                alignment: align,
+                transform: Matrix4.identity()
+                  ..translateByDouble(0, 56 * (1 - c), 0, 1)
+                  ..scaleByDouble(.84 + .16 * c, .84 + .16 * c, 1, 1),
+                child: child,
+              ),
+            ),
+          );
+        }
+        final fade = ios ? (t / 0.5).clamp(0.0, 1.0) : grow;
+        final scale = ios ? 1.0 : 0.9 + 0.1 * grow;
+        return ClipRect(
+          clipBehavior: t < 1 ? Clip.hardEdge : Clip.none,
+          child: Align(
+            alignment: Alignment.topCenter,
+            heightFactor: grow,
+            child: Opacity(
+              opacity: fade,
+              child: Transform.scale(
+                scale: scale,
+                alignment: align,
+                child: child,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
 
-class _VoiceLockArrowClipper extends CustomClipper<Path> {
-  @override
-  Path getClip(Size size) {
-    final path = Path();
-    path.moveTo(0, 0);
-    path.lineTo(size.width / 2, size.height);
-    path.lineTo(size.width, 0);
-    path.close();
-    return path;
-  }
-
-  @override
-  bool shouldReclip(_VoiceLockArrowClipper oldClipper) => false;
-}
 
 // ---------------------------------------------------------------------------
 // Room call announcement card (shown as a "sticky" chat item while active)
@@ -33849,6 +36672,9 @@ class _RoomCallAnnouncementCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
       child: Center(
         child: DecoratedBox(
+          // Плашка лежит прямо на обоях переписки, без размытия под ней —
+          // стекло здесь сделало бы «N в созвоне» нечитаемым на пёстрых
+          // обоях. Плотная заливка оставлена намеренно.
           decoration: BoxDecoration(
             color: cs.surfaceContainerHighest.withValues(alpha: 0.92),
             borderRadius: BorderRadius.circular(18),
@@ -33897,7 +36723,7 @@ class _RoomCallAnnouncementCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(width: 10),
-                FilledButton(
+                PressFeedback(child: FilledButton(
                   onPressed: onJoin,
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFF34C759),
@@ -33916,7 +36742,7 @@ class _RoomCallAnnouncementCard extends StatelessWidget {
                       fontSize: 13,
                     ),
                   ),
-                ),
+                )),
               ],
             ),
           ),
@@ -33924,6 +36750,34 @@ class _RoomCallAnnouncementCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Нет панели эмодзи — её место внизу всегда ноль.
+const ValueListenable<double> _zeroPanelInset = AlwaysStoppedAnimation<double>(
+  0.0,
+);
+
+/// Нижний край меню отложенной отправки (долгое нажатие «Отправить»).
+///
+/// С-6 (22.11.2026): меню стоит над кнопкой отправки, которую поднимает
+/// `max(клавиатура, панель эмодзи)` — так же, как поле ввода в
+/// [_KeyboardInsetAnchor]. Под панелью нижний системный отступ уже внутри
+/// неё и уходит постепенно (`viewPadding − панель`). Без панели — прежняя
+/// формула: клавиатура + отступ + 96 (+58 над цитатой ответа).
+@visibleForTesting
+double scheduleMenuBottom({
+  required double keyboardInset,
+  required double panelInset,
+  required EdgeInsets padding,
+  required EdgeInsets viewPadding,
+  required bool replying,
+}) {
+  final under = panelInset > keyboardInset && panelInset > 0;
+  final lift = under ? panelInset : keyboardInset;
+  final safe = under
+      ? (viewPadding.bottom - panelInset).clamp(0.0, padding.bottom)
+      : padding.bottom;
+  return lift + safe + 96 + (replying ? 58.0 : 0.0);
 }
 
 /// PERF(keyboard): applies the keyboard inset as bottom padding in a LEAF
@@ -33938,10 +36792,22 @@ class _KeyboardInsetAnchor extends StatelessWidget {
     this.extraBottom = 0.0,
     this.liftThreshold = 0.0,
     this.publishInset,
+    this.panelInset,
+    this.dropSafeAreaUnderPanel = false,
     required this.child,
   });
 
-  /// Optional sink for the RAW keyboard inset this anchor already reads.
+  /// Панель эмодзи на месте клавиатуры (22.11.2026): место, которое она
+  /// занимает внизу. Якорь поднимает [child] на `max(клавиатура, панель)` —
+  /// пока одна уезжает, а другая встаёт, отступ не меняется (без прыжка).
+  final ValueListenable<double>? panelInset;
+
+  /// Под панелью нижний системный отступ уже внутри неё — как и под
+  /// клавиатурой, [child] его не добавляет (поле ввода).
+  final bool dropSafeAreaUnderPanel;
+
+  /// Optional sink for the bottom inset this anchor applies: the raw keyboard
+  /// inset, or `max(keyboard, panel)` when [panelInset] is set.
   ///
   /// This widget is the one leaf that is allowed to depend on `viewInsets` —
   /// that is the whole point of it (2026-07-05: keep the chat body off the
@@ -33964,21 +36830,92 @@ class _KeyboardInsetAnchor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final inset = MediaQuery.viewInsetsOf(context).bottom;
-    final sink = publishInset;
-    if (sink != null && sink.value != inset) {
-      // AFTER the frame, never during it: notifying listeners inside build
-      // would rebuild/repaint widgets that this frame has already handled.
-      // One frame of lag is invisible next to the keyboard's own travel.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (sink.value != inset) sink.value = inset;
-      });
+    final panel = panelInset;
+    if (panel == null) {
+      _publish(inset);
+      return _lift(inset, child);
     }
+    return ValueListenableBuilder<double>(
+      valueListenable: panel,
+      child: child,
+      builder: (context, p, child) {
+        // С-7 (22.11.2026): градиент пузырей знает о сдвиге ленты панелью
+        // эмодзи так же, как о клавиатуре, — публикуем то, на что лента
+        // реально поднята: `max(клавиатура, панель)`.
+        _publish(p > inset ? p : inset);
+        if (!dropSafeAreaUnderPanel) return _lift((p > inset ? p : inset), child!);
+        final mq = MediaQuery.of(context);
+        final under = p > inset && p > 0;
+        // 🔴 22.11.2026 (разбор): нижний системный отступ уходит ПОСТЕПЕННО,
+        // как под клавиатурой (`viewPadding − высота`), а не обнуляется в
+        // первом же кадре панели — иначе поле подпрыгивало на ~26–34 px при
+        // открытии и закрытии панели без клавиатуры.
+        final rest = under
+            ? (mq.viewPadding.bottom - p).clamp(0.0, mq.padding.bottom)
+            : mq.padding.bottom;
+        return _lift(
+          (p > inset ? p : inset),
+          MediaQuery(
+            data: mq.copyWith(padding: mq.padding.copyWith(bottom: rest)),
+            child: child!,
+          ),
+        );
+      },
+    );
+  }
+
+  void _publish(double value) {
+    final sink = publishInset;
+    if (sink == null || sink.value == value) return;
+    // AFTER the frame, never during it: notifying listeners inside build
+    // would rebuild/repaint widgets that this frame has already handled.
+    // One frame of lag is invisible next to the keyboard's own travel.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (sink.value != value) sink.value = value;
+    });
+  }
+
+  Widget _lift(double inset, Widget child) {
     final lifted = inset <= 0.0
         ? 0.0
         : (inset - liftThreshold).clamp(0.0, double.infinity);
     return Padding(
       padding: EdgeInsets.only(bottom: lifted + extraBottom),
       child: child,
+    );
+  }
+}
+
+
+/// Часть меню реакций гаснет после выбора (с задержкой [delayMs]).
+class _ReactionPickedFade extends StatelessWidget {
+  const _ReactionPickedFade({
+    required this.picked,
+    required this.child,
+    this.delayMs = 0,
+    this.ms = 220,
+  });
+
+  final bool picked;
+  final double delayMs;
+  final double ms;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = delayMs + ms;
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: picked ? 1 : 0),
+      duration: Duration(milliseconds: total.round()),
+      curve: Interval(delayMs / total, 1, curve: Curves.easeIn),
+      child: child,
+      builder: (context, t, child) => Opacity(
+        opacity: 1 - t,
+        child: Transform.translate(
+          offset: Offset(0, 10 * t),
+          child: Transform.scale(scale: 1 - 0.05 * t, child: child),
+        ),
+      ),
     );
   }
 }

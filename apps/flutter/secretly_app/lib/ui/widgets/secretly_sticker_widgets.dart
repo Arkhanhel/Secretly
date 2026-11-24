@@ -3,6 +3,9 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:async';
 import 'dart:io';
+import '../motion/app_dialogs.dart';
+import '../motion/motion.dart';
+import '../motion/press_feedback.dart';
 import '../scroll_feel.dart';
 
 import 'package:flutter/material.dart';
@@ -14,9 +17,12 @@ import '../../stickers/sticker_catalog.dart';
 import '../../stickers/sticker_share_mode.dart';
 import '../icons/app_icons.dart';
 import '../l10n.dart';
+import 'apple_menu.dart';
 import 'broken_media_box.dart';
 import 'sticker_pack_access_picker.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
 
 
 class SecretlyStickerAssetView extends StatelessWidget {
@@ -119,7 +125,7 @@ class _MissingStickerAsset extends StatelessWidget {
         child: emoji.isNotEmpty
             ? Text(emoji, style: TextStyle(fontSize: fontSize))
             : Icon(
-                Icons.sticky_note_2_rounded,
+                AdaptiveIcons.sticky_note_2_rounded,
                 size: size * 0.44,
                 color: cs.onSurfaceVariant,
               ),
@@ -235,7 +241,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
     Scrollable.ensureVisible(
       ctx,
       duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOutCubic,
+      curve: Motion.standard,
     ).whenComplete(() => _scrollingToSection = false);
   }
 
@@ -344,7 +350,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
         fontSize: 14.5,
       ),
       prefixIcon: Icon(
-        Icons.search_rounded,
+        AdaptiveIcons.search_rounded,
         size: 17,
         color: cs.onSurfaceVariant.withValues(alpha: 0.7),
       ),
@@ -360,7 +366,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
   }
 
   Future<void> _confirmUninstall(SecretlyStickerPack pack) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return SecretlyAlertDialog(
@@ -437,7 +443,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
     final ownPack = pack != null &&
         pack.id.startsWith('user:$myPid:') &&
         pack.id != favoritesId;
-    final action = await showDialog<String>(
+    final action = await showAppDialog<String>(
       context: context,
       builder: (dialogContext) {
         Widget item(String id, IconData icon, String label,
@@ -482,24 +488,27 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
               SecretlyStickerAssetView(sticker: sticker, size: 220),
               const SizedBox(height: 18),
               Material(
-                color: cs.surfaceContainerHigh,
+                color: appleGlassFillOr(
+          context,
+          cs.surfaceContainerHigh,
+        ),
                 borderRadius: BorderRadius.circular(16),
                 clipBehavior: Clip.antiAlias,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    item('send', Icons.send_rounded,
+                    item('send', AdaptiveIcons.send_rounded,
                         dialogContext.l10n.stickerSend),
                     if (isFavorite)
-                      item('unfavorite', Icons.star_rounded,
+                      item('unfavorite', AdaptiveIcons.star_rounded,
                           dialogContext.l10n.stickerRemoveFromFavorites)
                     else
-                      item('favorite', Icons.star_outline_rounded,
+                      item('favorite', AdaptiveIcons.star_outline_rounded,
                           dialogContext.l10n.stickerMakeFavorite),
                     if (ownPack) ...[
-                      item('cover', Icons.image_outlined,
+                      item('cover', AdaptiveIcons.image_outlined,
                           dialogContext.l10n.stickerMakeCover),
-                      item('delete', Icons.delete_outline_rounded,
+                      item('delete', AdaptiveIcons.delete_outline_rounded,
                           dialogContext.l10n.stickerDeleteAction,
                           danger: true),
                     ],
@@ -613,7 +622,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                Icons.add_rounded,
+                AdaptiveIcons.add_rounded,
                 size: 26,
                 color: cs.onSurface.withValues(alpha: 0.75),
               ),
@@ -685,7 +694,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
                   children: [
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOutCubic,
+                      curve: Motion.standard,
                       width: 46,
                       height: 46,
                       padding: const EdgeInsets.all(5),
@@ -740,7 +749,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
                                                       ),
                                                 )
                                               : Icon(
-                                                  Icons.download_rounded,
+                                                  AdaptiveIcons.download_rounded,
                                                   size: 11,
                                                   color: cs.onPrimary,
                                                 ),
@@ -754,7 +763,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
                     const SizedBox(height: 4),
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOutCubic,
+                      curve: Motion.standard,
                       width: selected ? 14 : 0,
                       height: 3,
                       decoration: BoxDecoration(
@@ -904,10 +913,10 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
               ),
             ),
             if (onSettings != null)
-              smallButton(Icons.settings_outlined,
+              smallButton(AdaptiveIcons.settings_outlined,
                   context.l10n.stickerPackSettings, onSettings, 'settings'),
             if (onMore != null)
-              smallButton(Icons.more_horiz_rounded, context.l10n.stickerMore,
+              smallButton(AdaptiveIcons.more_horiz_rounded, context.l10n.stickerMore,
                   onMore, 'more'),
           ],
         ),
@@ -960,12 +969,13 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
     final addTo = widget.onAddStickerToPack;
     String? addRequested;
     await showModalBottomSheet<void>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: appleSheetFillOr(
+          context,
+          Theme.of(context).colorScheme.surface,
+        ),
       builder: (sheetCtx) => _StickerPackEditSheet(
         controller: widget.controller,
         packId: pack.id,
@@ -983,11 +993,12 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
   /// остаётся.
   Future<void> _showForeignPackActions(SecretlyStickerPack pack) async {
     final remove = await showModalBottomSheet<bool>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: appleSheetFillOr(
+          context,
+          Theme.of(context).colorScheme.surface,
+        ),
       builder: (sheetCtx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -995,7 +1006,7 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
             const SizedBox(height: 8),
             ListTile(
               key: const ValueKey('stickers:remove-foreign'),
-              leading: const Icon(Icons.remove_circle_outline_rounded),
+              leading: const Icon(AdaptiveIcons.remove_circle_outline_rounded),
               title: Text(sheetCtx.l10n.stickerPackRemoveFromMine),
               onTap: () => Navigator.of(sheetCtx).pop(true),
             ),
@@ -1026,7 +1037,7 @@ Future<bool> _confirmDestructive(
   required String body,
   required String action,
 }) async {
-  final ok = await showDialog<bool>(
+  final ok = await showAppDialog<bool>(
     context: context,
     builder: (dialogContext) => SecretlyAlertDialog(
       title: Text(title),
@@ -1104,7 +1115,7 @@ class _StickerTileState extends State<_StickerTile> {
       child: AnimatedScale(
         scale: _pressed ? 0.86 : 1.0,
         duration: const Duration(milliseconds: 140),
-        curve: Curves.easeOutCubic,
+        curve: Motion.standard,
         child: Padding(
           padding: const EdgeInsets.all(6),
           child: SecretlyStickerAssetView(sticker: widget.sticker, size: 64),
@@ -1228,7 +1239,7 @@ class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
         Overlay.of(context).context.findRenderObject() as RenderBox?;
     if (box == null || overlay == null) return;
     final topLeft = box.localToGlobal(Offset.zero, ancestor: overlay);
-    final choice = await showMenu<String>(
+    final choice = await showAppMenu<String>(
       context: context,
       position: RelativeRect.fromRect(
         topLeft & box.size,
@@ -1287,9 +1298,9 @@ class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
                     ),
                   ),
                 ),
-                PopupMenuButton<String>(
+                AppPopupMenuButton<String>(
                   key: const ValueKey('stickers:pack-menu'),
-                  icon: Icon(appleMoreIcon(Icons.more_vert_rounded)),
+                  icon: Icon(appleMoreIcon(AdaptiveIcons.more_vert_rounded)),
                   onSelected: (v) {
                     if (v == 'delete-pack') unawaited(_deletePack());
                   },
@@ -1343,7 +1354,7 @@ class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
                             child: Padding(
                               padding: const EdgeInsets.all(14),
                               child: Icon(
-                                Icons.add_rounded,
+                                AdaptiveIcons.add_rounded,
                                 size: 28,
                                 color: cs.onSurfaceVariant,
                               ),
@@ -1382,7 +1393,7 @@ class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
-                                  Icons.more_horiz_rounded,
+                                  AdaptiveIcons.more_horiz_rounded,
                                   size: 16,
                                   color: cs.onSurface,
                                 ),
@@ -1399,7 +1410,7 @@ class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
-              child: FilledButton(
+              child: PressFeedback(child: FilledButton(
                 key: const ValueKey('stickers:pack-done'),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1415,7 +1426,7 @@ class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-              ),
+              )),
             ),
           ],
         ),
@@ -1423,3 +1434,81 @@ class _StickerPackEditSheetState extends State<_StickerPackEditSheet> {
     );
   }
 }
+
+// ─── Общие окна для встроенной панели эмодзи (22.11.2026) ───────────────────
+//
+// Панель на месте клавиатуры (`lib/ui/chat/emoji_panel/`) показывает те же
+// стикеры и наборы, что и [SecretlyStickerPickerTab], и обязана вести себя так
+// же: те же окна набора, те же вопросы перед удалением. Здесь — тонкие
+// публичные обёртки над закрытыми окнами этого файла; поведение не меняется,
+// ПК и лист выбора их не трогают.
+
+/// Окно своего набора по ⚙ — то же, что открывает лента стикеров.
+/// [onAddSticker] — «+» в окне: закрыть окно и создать стикер в этот набор.
+Future<void> showSecretlyStickerPackEditor(
+  BuildContext context, {
+  required AppController controller,
+  required SecretlyStickerPack pack,
+  VoidCallback? onAddSticker,
+}) {
+  return showModalBottomSheet<void>(
+    sheetAnimationStyle: appSheetAnimationStyle,
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: appleSheetFillOr(
+      context,
+      Theme.of(context).colorScheme.surface,
+    ),
+    builder: (sheetCtx) => _StickerPackEditSheet(
+      controller: controller,
+      packId: pack.id,
+      title: pack.title,
+      onAddSticker: onAddSticker,
+    ),
+  );
+}
+
+/// ⋯ у чужого набора: лист с «Убрать из моих наборов». `true` — выбрано.
+Future<bool> showSecretlyForeignStickerPackSheet(BuildContext context) async {
+  final remove = await showModalBottomSheet<bool>(
+    sheetAnimationStyle: appSheetAnimationStyle,
+    context: context,
+    backgroundColor: appleSheetFillOr(
+      context,
+      Theme.of(context).colorScheme.surface,
+    ),
+    builder: (sheetCtx) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: 8),
+          ListTile(
+            key: const ValueKey('stickers:remove-foreign'),
+            leading: const Icon(AdaptiveIcons.remove_circle_outline_rounded),
+            title: Text(sheetCtx.l10n.stickerPackRemoveFromMine),
+            onTap: () => Navigator.of(sheetCtx).pop(true),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    ),
+  );
+  return remove == true;
+}
+
+/// Вопрос перед удалением — тот же, что у ленты стикеров.
+Future<bool> confirmSecretlyStickerDestructive(
+  BuildContext context, {
+  required String title,
+  required String body,
+  required String action,
+}) =>
+    _confirmDestructive(context, title: title, body: body, action: action);
+
+/// Вопрос перед удалением стикера из своего набора (последний уносит набор).
+Future<bool> confirmSecretlyStickerDelete(
+  BuildContext context, {
+  required String packTitle,
+  required bool isLast,
+}) =>
+    _confirmStickerDelete(context, packTitle: packTitle, isLast: isLast);

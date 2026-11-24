@@ -3,6 +3,7 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:math' as math;
 
+import 'motion/decoration_pacer.dart';
 import 'package:flutter/material.dart';
 
 import '../models/e2e_payload_v1.dart';
@@ -667,7 +668,7 @@ class _SpoilerText extends StatefulWidget {
 }
 
 class _SpoilerTextState extends State<_SpoilerText>
-    with SingleTickerProviderStateMixin {
+    with PacedTickerProviderStateMixin {
   late final AnimationController _controller;
   bool _revealed = false;
 

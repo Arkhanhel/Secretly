@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
@@ -177,11 +178,18 @@ class StickerCatalogClient {
         message: 'missing sticker catalog signature header',
       );
     }
-    await _verifyStickerCatalogManifestSignature(
-      bodyBytes: response.bodyBytes,
-      signatureB64: signatureB64,
-    );
-    final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+    // 🔴 23.11.2026 (замер холодного старта на Xiaomi): проверка подписи
+    // Ed25519 на чистом Dart и SHA-512 по всему манифесту шли в главном
+    // потоке — ~15 % работы первых секунд, интерфейс подтормаживал. Проверка
+    // и разбор JSON — в отдельном потоке; результат тот же.
+    final bodyBytes = response.bodyBytes;
+    final decoded = await Isolate.run(() async {
+      await _verifyStickerCatalogManifestSignature(
+        bodyBytes: bodyBytes,
+        signatureB64: signatureB64,
+      );
+      return jsonDecode(utf8.decode(bodyBytes));
+    });
     if (decoded is! Map<String, dynamic>) {
       throw const RelayHttpException(
         operation: 'fetchStickerCatalogManifest',

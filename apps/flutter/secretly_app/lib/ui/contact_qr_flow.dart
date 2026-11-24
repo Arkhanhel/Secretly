@@ -13,6 +13,7 @@ import 'animations/animations.dart';
 import 'chat_screen.dart';
 import 'contact_action_error_text.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
 
 class ContactQrScanOutcome {
@@ -70,7 +71,7 @@ Future<ContactQrScanOutcome?> handleContactQrScan({
   final qrKeysBaseUrl = (payload.keysBaseUrl ?? '').trim();
   if (!qrMatchesKeysServer(qrKeysBaseUrl, controller.keysBaseUrl)) {
     if (!context.mounted) return null;
-    await showDialog<void>(
+    await showAppDialog<void>(
       context: context,
       builder: (context) {
         return SecretlyAlertDialog(

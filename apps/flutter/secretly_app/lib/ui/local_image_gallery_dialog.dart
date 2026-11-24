@@ -8,9 +8,13 @@ import 'package:flutter/material.dart';
 
 import 'icons/app_icons.dart';
 import 'l10n.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/motion.dart';
+import 'motion/press_feedback.dart';
 import 'wave1_l10n.dart';
 import 'widgets/full_bleed_zoom.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 class LocalImageGalleryItem {
   const LocalImageGalleryItem({
@@ -122,6 +126,7 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
   Future<void> _showAllMediaGrid() async {
     if (widget.items.length < 2) return;
     final selectedIndex = await showModalBottomSheet<int>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
@@ -187,7 +192,7 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
     await _controller.animateToPage(
       selectedIndex,
       duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
+      curve: Motion.standard,
     );
   }
 
@@ -211,7 +216,7 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
         <({IconData icon, String label, _LocalImageGalleryMenuAction value})>[
           if (widget.items.length > 1)
             (
-              icon: Icons.grid_view_rounded,
+              icon: AdaptiveIcons.grid_view_rounded,
               label: _label(
                 context,
                 ru: 'Показать все медиа',
@@ -220,7 +225,7 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
               value: _LocalImageGalleryMenuAction.showAllMedia,
             ),
           (
-            icon: appleShareIcon(Icons.share_outlined),
+            icon: appleShareIcon(AdaptiveIcons.share_outlined),
             label: _label(context, ru: 'Поделиться', en: 'Share'),
             value: _LocalImageGalleryMenuAction.share,
           ),
@@ -231,7 +236,7 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
           ),
         ];
 
-    final selected = await showDialog<_LocalImageGalleryMenuAction>(
+    final selected = await showAppDialog<_LocalImageGalleryMenuAction>(
       context: context,
       barrierColor: Colors.transparent,
       builder: (context) {
@@ -324,7 +329,7 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
               ignoring: !_chromeVisible,
               child: AnimatedSlide(
                 duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
+                curve: Motion.standard,
                 offset: _chromeVisible ? Offset.zero : const Offset(0, -0.16),
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 160),
@@ -340,7 +345,7 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
                               padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
                               child: Row(
                                 children: [
-                                  IconButton(
+                                  PressFeedback(child: IconButton(
                                     tooltip: context.l10n.close,
                                     onPressed: () =>
                                         Navigator.of(context).pop(),
@@ -348,7 +353,7 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
                                       AppIcons.arrowBack,
                                       color: Colors.white,
                                     ),
-                                  ),
+                                  )),
                                   Expanded(
                                     child: Column(
                                       mainAxisSize: MainAxisSize.min,
@@ -380,7 +385,7 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
                                       ],
                                     ),
                                   ),
-                                  IconButton(
+                                  PressFeedback(child: IconButton(
                                     tooltip: context.l10n.chatMenuForward,
                                     onPressed: () =>
                                         _performAndClose(widget.onForward),
@@ -388,8 +393,8 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
                                       AppIcons.forward,
                                       color: Colors.white,
                                     ),
-                                  ),
-                                  IconButton(
+                                  )),
+                                  PressFeedback(child: IconButton(
                                     tooltip: _label(
                                       context,
                                       ru: 'Меню',
@@ -400,7 +405,7 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
                                       AppIcons.moreVert,
                                       color: Colors.white,
                                     ),
-                                  ),
+                                  )),
                                 ],
                               ),
                             ),
@@ -439,7 +444,7 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
                 ignoring: !_chromeVisible,
                 child: AnimatedSlide(
                   duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
+                  curve: Motion.standard,
                   offset: _chromeVisible ? Offset.zero : const Offset(0, 0.2),
                   child: AnimatedOpacity(
                     duration: const Duration(milliseconds: 160),
@@ -458,7 +463,7 @@ class _LocalImageGalleryDialogState extends State<LocalImageGalleryDialog> {
                               _controller.animateToPage(
                                 index,
                                 duration: const Duration(milliseconds: 180),
-                                curve: Curves.easeOut,
+                                curve: Motion.fade,
                               );
                             },
                             child: AnimatedContainer(

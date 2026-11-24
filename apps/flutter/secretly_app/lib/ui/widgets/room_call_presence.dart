@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../rooms/room_call_state.dart';
 import '../icons/app_icons.dart';
+import '../motion/press_feedback.dart';
 import '../wave1_l10n.dart';
 
 String _presenceText(
@@ -256,11 +257,11 @@ class RoomCallPresenceCard extends StatelessWidget {
           ),
           if (onTap != null) ...[
             const SizedBox(height: 12),
-            FilledButton.icon(
+            PressFeedback(child: FilledButton.icon(
               onPressed: onTap,
               icon: Icon(callIcon, size: 16),
               label: Text(roomCallPresenceActionLabel(context, call)),
-            ),
+            )),
           ],
         ],
       ),

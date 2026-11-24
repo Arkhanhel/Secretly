@@ -85,6 +85,11 @@
 	<string>Use microphone for secure voice and video calls.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Speech is recognized on your device to turn your voice into text. Audio is not sent to any server.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Secretly may use the local network to improve voice and video call connectivity when available.</string>
 	<key>UIApplicationSceneManifest</key>

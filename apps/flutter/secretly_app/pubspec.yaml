@@ -81,6 +81,8 @@ dependencies:
   file_picker: ^10.2.1
   image: ^4.5.4
   just_audio: ^0.10.5
+  # Часы записи голосового: в тестах подменяются поддельным временем.
+  clock: ^1.1.2
   # Direct (not transitive) because the notification cue declares its own
   # Android audio attributes — see AppController._ensureNotificationCueAudio
   # Attributes. Without the usage tag the cue plays on the MEDIA stream, which
@@ -114,6 +116,9 @@ dependencies:
   glass_kit: ^4.0.2
   lottie: ^3.1.2
   flutter_svg: ^2.1.0
+  # Разбор контуров SVG для значков настроек (`lib/ui/settings_icons`).
+  # Уже был в сборке через flutter_svg — теперь объявлен явно.
+  path_parsing: ^1.1.0
   animations: ^2.0.11
   flutter_local_notifications: ^17.2.2
   firebase_core: ^3.15.2
@@ -192,6 +197,10 @@ dev_dependencies:
   # профиля (Э2): признак активного пространства хранится сырым ключом, и его
   # нельзя подменить через `SharedPreferences.setMockInitialValues`.
   shared_preferences_platform_interface: ^2.4.2
+  # Подменный плеер в тестах видео-заметок (22.11.2026): раскрытие, перемотка
+  # и цепочка проверяются без настоящего видео. Обе — уже в дереве.
+  plugin_platform_interface: ^2.1.8
+  video_player_platform_interface: ^6.6.0
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -221,8 +230,12 @@ flutter:
     # запечённое поле расстояний assets/wallpaper_fx/pattern_field.png
     # (tools/bake_wallpaper_field.py).
     - assets/shaders/wallpaper_pulse.frag
+    # SecretlyGlass — своё жидкое стекло одним проходом (23.11.2026,
+    # docs/LIQUID_GLASS_PLAN_2026-11-23.md).
+    - assets/shaders/secretly_glass.frag
 
   assets:
+    - assets/whats_new/
     - pubspec.yaml
     # Перечень украшений по требованию (Э7): путь → отпечаток и размер.
     # Десятки килобайт, нужен и полной сборке — по нему же сверяется

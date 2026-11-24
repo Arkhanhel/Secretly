@@ -63,7 +63,7 @@ void main() {
         expect(makeLiveFrame(f.id), isNotNull, reason: '${f.id}: нет симуляции');
       }
       expect(kClassicFrameIds, hasLength(20));
-      expect(kCollectionFrameIds, hasLength(10));
+      expect(kCollectionFrameIds, hasLength(9)); // «Поток» убрана 23.11.2026
       expect(
         kCollectionAvatarFrames.map((f) => f.id).toList(),
         kCollectionFrameIds,
@@ -72,7 +72,8 @@ void main() {
     });
 
     test('набор перенесён целиком, идентификаторы не столкнулись', () {
-      expect(kLiveFrameIds.length, 56);
+      expect(kLiveFrameIds.length, 55);
+      expect(frameById('flow'), isNull); // рамка «Поток» убрана 23.11.2026
       final ids = kAllAvatarFrames.map((f) => f.id).toList();
       expect(ids.toSet().length, ids.length);
       expect(ids.toSet(), kLiveFrameIds.toSet());

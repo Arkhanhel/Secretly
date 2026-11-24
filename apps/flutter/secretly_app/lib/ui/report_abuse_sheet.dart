@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'icons/app_icons.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'support_request_utils.dart';
 import 'wave1_l10n.dart';
 import 'widgets/secretly_glass_sheet.dart';
@@ -330,6 +332,7 @@ Future<ReportAbuseResult?> showReportAbuseSheet({
 
   try {
     return await showModalBottomSheet<ReportAbuseResult>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       isScrollControlled: true,
       useSafeArea: false,
@@ -489,7 +492,7 @@ Future<ReportAbuseResult?> showReportAbuseSheet({
                             ),
                           ],
                           const SizedBox(height: 14),
-                          FilledButton.icon(
+                          PressFeedback(child: FilledButton.icon(
                             onPressed: canSubmit ? submit : null,
                             icon: submitting
                                 ? const SizedBox.square(
@@ -523,7 +526,7 @@ Future<ReportAbuseResult?> showReportAbuseSheet({
                                       de: 'Meldung senden',
                                     ),
                             ),
-                          ),
+                          )),
                           TextButton(
                             onPressed: submitting
                                 ? null

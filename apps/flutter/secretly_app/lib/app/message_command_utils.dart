@@ -194,13 +194,34 @@ class PinnedRef {
 }
 
 class PinSyncCommand {
-  const PinSyncCommand({required this.pins});
+  const PinSyncCommand({
+    required this.pins,
+    this.revision = 0,
+    this.convoId = '',
+  });
   final List<PinnedRef> pins;
+
+  /// 21.11.2026: ревизия списка (время правки у того, кто правил). Свежесть
+  /// по ней, а не по часам получателя. 0 — старая команда без ревизии.
+  final int revision;
+
+  /// 21.11.2026: в личном чате — профиль собеседника отправителя (для него
+  /// это «мой профиль», для своих устройств — тот же чат). В комнате пусто.
+  final String convoId;
+
+  /// Насколько свежий список: по ревизии, без неё — по времени сообщения.
+  int freshnessMs(int messageAtMs) => revision > 0 ? revision : messageAtMs;
 }
 
-String buildPinSyncCommand(List<PinnedRef> pins) {
+String buildPinSyncCommand(
+  List<PinnedRef> pins, {
+  int revision = 0,
+  String convoId = '',
+}) {
   final payload = <String, Object?>{
     'v': 1,
+    if (revision > 0) 'rev': revision,
+    if (convoId.trim().isNotEmpty) 'convo': convoId.trim(),
     'pins': pins
         .where((pin) => pin.eventId.trim().isNotEmpty)
         .map(
@@ -250,7 +271,12 @@ PinSyncCommand? parsePinSyncCommand(String text) {
         })
         .whereType<PinnedRef>()
         .toList(growable: false);
-    return PinSyncCommand(pins: pins);
+    final rev = json['rev'];
+    return PinSyncCommand(
+      pins: pins,
+      revision: rev is num ? rev.toInt() : 0,
+      convoId: (json['convo'] as String?)?.trim() ?? '',
+    );
   } catch (_) {
     return null;
   }
@@ -516,6 +542,69 @@ bool shouldResendRoomTopics({
       ? kRoomTopicsResendAfterPartial
       : kRoomTopicsResendInterval;
   return nowMs - sentAtMs >= wait.inMilliseconds;
+}
+
+// ── Закреплённые: хранимый вид и повтор (21.11.2026) ─────────────────────
+
+/// Список закреплённых в настройках телефона — тот же JSON, что всегда
+/// писал экран чата (`chat_pinned_messages_v1_<чат>`): новые сверху, без
+/// повторов, до 50.
+List<PinnedRef> decodeStoredChatPins(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return const <PinnedRef>[];
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return const <PinnedRef>[];
+    final seen = <String>{};
+    final out = <PinnedRef>[];
+    for (final item in decoded) {
+      if (item is! Map) continue;
+      final eventId = (item['eventId'] as String?)?.trim() ?? '';
+      if (eventId.isEmpty || !seen.add(eventId)) continue;
+      final at = item['pinnedAtMs'];
+      out.add(
+        PinnedRef(
+          eventId: eventId,
+          previewText: (item['previewText'] as String?)?.trim() ?? '',
+          pinnedAtMs: at is num ? at.toInt() : int.tryParse('$at') ?? 0,
+        ),
+      );
+    }
+    out.sort((a, b) => b.pinnedAtMs.compareTo(a.pinnedAtMs));
+    return out.take(50).toList(growable: false);
+  } catch (_) {
+    return const <PinnedRef>[];
+  }
+}
+
+String encodeStoredChatPins(List<PinnedRef> pins) => jsonEncode([
+  for (final pin in pins.take(50))
+    <String, Object>{
+      'eventId': pin.eventId,
+      'previewText': pin.previewText,
+      'pinnedAtMs': pin.pinnedAtMs,
+    },
+]);
+
+/// Повторить ли список закреплённых. Как у тем, только без «автора»: список
+/// общий, а повтор несёт исходную ревизию и более позднюю правку не
+/// перебьёт.
+const Duration kChatPinsResendAfterPartial = Duration(minutes: 10);
+
+bool shouldResendChatPins({
+  required int nowMs,
+  required int revision,
+  required int sentRevision,
+  required int sentAtMs,
+  required bool sentPartially,
+  required String recipientsKey,
+  required String sentRecipientsKey,
+}) {
+  if (revision <= 0) return false;
+  if (sentAtMs <= 0) return true;
+  if (revision > sentRevision) return true;
+  if (recipientsKey != sentRecipientsKey) return true;
+  return sentPartially &&
+      nowMs - sentAtMs >= kChatPinsResendAfterPartial.inMilliseconds;
 }
 
 // ── Events / RSVP (room feature) ──────────────────────────────────────────

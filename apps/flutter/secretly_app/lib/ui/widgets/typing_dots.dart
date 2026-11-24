@@ -3,6 +3,7 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'dart:math' as math;
 
+import '../motion/decoration_pacer.dart';
 import 'package:flutter/material.dart';
 
 /// Telegram-style three-dot typing indicator.
@@ -24,7 +25,7 @@ class TypingDots extends StatefulWidget {
 }
 
 class _TypingDotsState extends State<TypingDots>
-    with SingleTickerProviderStateMixin {
+    with PacedTickerProviderStateMixin {
   late final AnimationController _controller;
 
   // One full bounce cycle. Each dot is phase-shifted across the period so the

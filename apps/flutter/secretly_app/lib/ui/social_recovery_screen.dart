@@ -11,7 +11,11 @@ import '../app/app_controller.dart';
 import '../l10n/app_localizations.dart';
 import '../security/social_recovery.dart';
 import 'animations/page_transitions.dart';
+import 'motion/press_feedback.dart';
 import 'qr_scan_screen.dart';
+import 'settings_group.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_settings_row.dart';
 
 /// Э3 «социальное восстановление»: вход из настроек безопасности.
 ///
@@ -28,25 +32,58 @@ class SocialRecoveryEntryCard extends StatelessWidget {
     Future<void> open(Widget page) => Navigator.of(context).push(
       SecretlyPageRoute<void>(builder: (_) => page),
     );
+    // Android (23.11.2026): группа строк с цветными значками, как остальные
+    // страницы настроек; переходы те же.
+    if (settingsAndroidPanels) {
+      return settingsRowsGroup([
+        AppleSettingsRow(
+          leading: const AppleRowIcon(
+            tint: Color(0xFF34C759),
+            icon: AdaptiveIcons.diversity_3_rounded,
+          ),
+          title: l10n.socialRecoveryGuardiansTitle,
+          subtitle: l10n.socialRecoveryEntryGuardiansSubtitle,
+          onTap: () => open(GuardiansSetupScreen(controller: controller)),
+        ),
+        AppleSettingsRow(
+          leading: const AppleRowIcon(
+            tint: Color(0xFFFF2D55),
+            icon: AdaptiveIcons.volunteer_activism_rounded,
+          ),
+          title: l10n.socialRecoveryHelpSomeoneTitle,
+          subtitle: l10n.socialRecoveryHelpSomeoneSubtitle,
+          onTap: () => open(GuardianHelpScreen(controller: controller)),
+        ),
+        AppleSettingsRow(
+          leading: const AppleRowIcon(
+            tint: Color(0xFFFF9500),
+            icon: AdaptiveIcons.restore_rounded,
+          ),
+          title: l10n.socialRecoveryRecoverMineTitle,
+          subtitle: l10n.socialRecoveryRecoverMineSubtitle,
+          onTap: () => open(RecoveryRequestScreen(controller: controller)),
+        ),
+      ]);
+    }
     return Card(
       child: Column(
         children: <Widget>[
           ListTile(
-            leading: const Icon(Icons.diversity_3_rounded),
+            leading: const Icon(AdaptiveIcons.diversity_3_rounded),
             title: Text(l10n.socialRecoveryGuardiansTitle),
             subtitle: Text(l10n.socialRecoveryEntryGuardiansSubtitle),
             onTap: () => open(GuardiansSetupScreen(controller: controller)),
           ),
           const Divider(height: 1),
           ListTile(
-            leading: const Icon(Icons.volunteer_activism_rounded),
+            leading: const Icon(AdaptiveIcons.volunteer_activism_rounded),
             title: Text(l10n.socialRecoveryHelpSomeoneTitle),
             subtitle: Text(l10n.socialRecoveryHelpSomeoneSubtitle),
             onTap: () => open(GuardianHelpScreen(controller: controller)),
           ),
           const Divider(height: 1),
           ListTile(
-            leading: const Icon(Icons.restore_rounded),
+            leading: const Icon(AdaptiveIcons.restore_rounded),
             title: Text(l10n.socialRecoveryRecoverMineTitle),
             subtitle: Text(l10n.socialRecoveryRecoverMineSubtitle),
             onTap: () => open(RecoveryRequestScreen(controller: controller)),
@@ -161,7 +198,9 @@ class _GuardiansSetupScreenState extends State<GuardiansSetupScreen> {
     final theme = Theme.of(context);
     final state = _state;
     final maxPick = SocialRecovery.maxGuardians;
-    return Scaffold(
+    // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
       appBar: AppBar(title: Text(l10n.socialRecoveryGuardiansTitle)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -175,7 +214,7 @@ class _GuardiansSetupScreenState extends State<GuardiansSetupScreen> {
             Card(
               child: ListTile(
                 leading: Icon(
-                  state.ready ? Icons.verified_rounded : Icons.hourglass_top_rounded,
+                  state.ready ? AdaptiveIcons.verified_rounded : AdaptiveIcons.hourglass_top_rounded,
                 ),
                 title: Text(
                   state.ready
@@ -196,9 +235,9 @@ class _GuardiansSetupScreenState extends State<GuardiansSetupScreen> {
                 dense: true,
                 leading: Icon(
                   switch (g.status) {
-                    'accepted' => Icons.check_circle_rounded,
-                    'failed' => Icons.error_outline_rounded,
-                    _ => Icons.schedule_rounded,
+                    'accepted' => AdaptiveIcons.check_circle_rounded,
+                    'failed' => AdaptiveIcons.error_outline_rounded,
+                    _ => AdaptiveIcons.schedule_rounded,
                   },
                 ),
                 title: Text(_name(g.profileId)),
@@ -226,7 +265,7 @@ class _GuardiansSetupScreenState extends State<GuardiansSetupScreen> {
               ),
             ),
           for (final contact in _contacts)
-            CheckboxListTile(
+            CheckboxListTile.adaptive(
               value: _picked.contains(contact.profileId),
               onChanged: _busy
                   ? null
@@ -246,7 +285,7 @@ class _GuardiansSetupScreenState extends State<GuardiansSetupScreen> {
               l10n.socialRecoveryThresholdLabel(_threshold, _picked.length),
               style: theme.textTheme.titleSmall,
             ),
-            Slider(
+            Slider.adaptive(
               value: _threshold.toDouble(),
               min: 2,
               max: _picked.length.toDouble(),
@@ -269,14 +308,14 @@ class _GuardiansSetupScreenState extends State<GuardiansSetupScreen> {
             ),
           ],
           const SizedBox(height: 16),
-          FilledButton(
+          PressFeedback(child: FilledButton(
             onPressed: _busy ? null : _save,
             child: Text(
               state == null
                   ? l10n.socialRecoverySendParts
                   : l10n.socialRecoveryUpdateGuardians,
             ),
-          ),
+          )),
           if (state != null) ...<Widget>[
             const SizedBox(height: 8),
             TextButton(
@@ -286,6 +325,7 @@ class _GuardiansSetupScreenState extends State<GuardiansSetupScreen> {
           ],
         ],
       ),
+    ),
     );
   }
 }
@@ -405,7 +445,9 @@ class _GuardianHelpScreenState extends State<GuardianHelpScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
-    return Scaffold(
+    // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
       appBar: AppBar(title: Text(l10n.socialRecoveryHelpRecoverTitle)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -429,7 +471,7 @@ class _GuardianHelpScreenState extends State<GuardianHelpScreen> {
               child: Column(
                 children: <Widget>[
                   for (final s in _held)
-                    RadioListTile<String>(
+                    RadioListTile<String>.adaptive(
                       value: s.ownerProfileId,
                       enabled: !_done,
                       title: Text(s.ownerName.isEmpty ? s.ownerProfileId : s.ownerName),
@@ -447,19 +489,19 @@ class _GuardianHelpScreenState extends State<GuardianHelpScreen> {
             Row(
               children: <Widget>[
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: PressFeedback(child: OutlinedButton.icon(
                     onPressed: _done ? null : _scan,
-                    icon: const Icon(Icons.qr_code_scanner_rounded),
+                    icon: const Icon(AdaptiveIcons.qr_code_scanner_rounded),
                     label: Text(l10n.socialRecoveryScanCode),
-                  ),
+                  )),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: PressFeedback(child: OutlinedButton.icon(
                     onPressed: _done ? null : _paste,
-                    icon: const Icon(Icons.content_paste_rounded),
+                    icon: const Icon(AdaptiveIcons.content_paste_rounded),
                     label: Text(l10n.socialRecoveryPasteCode),
-                  ),
+                  )),
                 ),
               ],
             ),
@@ -486,7 +528,7 @@ class _GuardianHelpScreenState extends State<GuardianHelpScreen> {
                         l10n.socialRecoveryCheckWordsExplanation,
                         style: theme.textTheme.bodySmall,
                       ),
-                      CheckboxListTile(
+                      CheckboxListTile.adaptive(
                         contentPadding: EdgeInsets.zero,
                         value: _confirmed,
                         onChanged: _done ? null : (v) => setState(() => _confirmed = v == true),
@@ -497,14 +539,14 @@ class _GuardianHelpScreenState extends State<GuardianHelpScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              FilledButton(
+              PressFeedback(child: FilledButton(
                 onPressed: !_confirmed || _ownerPid == null || _busy || _done ? null : _release,
                 child: Text(
                   _done
                       ? l10n.socialRecoverySent
                       : l10n.socialRecoverySendMyPart,
                 ),
-              ),
+              )),
             ],
           ],
           if (_error.isNotEmpty) ...<Widget>[
@@ -513,6 +555,7 @@ class _GuardianHelpScreenState extends State<GuardianHelpScreen> {
           ],
         ],
       ),
+    ),
     );
   }
 }
@@ -578,7 +621,9 @@ class _RecoveryRequestScreenState extends State<RecoveryRequestScreen> {
     final theme = Theme.of(context);
     final code = _code;
     final error = c.socialRecoveryLastError;
-    return Scaffold(
+    // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
       appBar: AppBar(title: Text(l10n.socialRecoveryRecoverProfileTitle)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -589,10 +634,10 @@ class _RecoveryRequestScreenState extends State<RecoveryRequestScreen> {
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
-            FilledButton(
+            PressFeedback(child: FilledButton(
               onPressed: _start,
               child: Text(l10n.socialRecoveryShowCodeToGuardians),
-            ),
+            )),
           ] else if (code != null) ...<Widget>[
             Center(
               child: Container(
@@ -614,15 +659,15 @@ class _RecoveryRequestScreenState extends State<RecoveryRequestScreen> {
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
-            OutlinedButton.icon(
+            PressFeedback(child: OutlinedButton.icon(
               onPressed: () => Clipboard.setData(ClipboardData(text: code.encode())),
-              icon: const Icon(Icons.copy_rounded),
+              icon: const Icon(AdaptiveIcons.copy_rounded),
               label: Text(l10n.socialRecoveryCopyCode),
-            ),
+            )),
             const SizedBox(height: 16),
             Card(
               child: ListTile(
-                leading: const Icon(Icons.group_rounded),
+                leading: const Icon(AdaptiveIcons.group_rounded),
                 title: Text(
                   _progress.threshold == 0
                       ? l10n.socialRecoveryWaitingGuardians
@@ -647,6 +692,7 @@ class _RecoveryRequestScreenState extends State<RecoveryRequestScreen> {
           ],
         ],
       ),
+    ),
     );
   }
 }

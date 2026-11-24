@@ -8,9 +8,15 @@ import 'package:flutter/material.dart';
 
 import '../app/app_controller.dart';
 import '../app/platform_share_target.dart';
+import '../l10n/app_localizations.dart';
+import 'apple_style.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'widgets/avatar_initials.dart';
 import 'widgets/secretly_glass_sheet.dart';
 import 'widgets/broken_media_box.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 
 Future<Conversation?> showShareTargetConversationSheet({
   required BuildContext context,
@@ -18,6 +24,7 @@ Future<Conversation?> showShareTargetConversationSheet({
   required PlatformSharePayload payload,
 }) {
   return showModalBottomSheet<Conversation>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     isScrollControlled: true,
     // Лист уходит ЗА системную панель; отступ под неё даёт список внутри.
@@ -95,11 +102,11 @@ class _ShareTargetConversationSheetState
                       ],
                     ),
                   ),
-                  IconButton(
+                  PressFeedback(child: IconButton(
                     tooltip: 'Закрыть',
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(FluentIcons.dismiss_24_regular),
-                  ),
+                    icon: const Icon(AdaptiveIconData(FluentIcons.dismiss_24_regular, CupertinoIcons.xmark)),
+                  )),
                 ],
               ),
             ),
@@ -109,16 +116,19 @@ class _ShareTargetConversationSheetState
                 controller: _search,
                 onChanged: (value) => setState(() => _query = value.trim()),
                 decoration: InputDecoration(
-                  hintText: 'Поиск',
-                  prefixIcon: const Icon(FluentIcons.search_24_regular),
+                  hintText: AppLocalizations.of(context)!.search,
+                  prefixIcon: const Icon(AdaptiveIconData(FluentIcons.search_24_regular, CupertinoIcons.search)),
                   isDense: true,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
                   filled: true,
-                  fillColor: theme.colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.62),
+                  fillColor: appleFieldFillOr(
+                    context,
+                    theme.colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.62),
+                  ),
                 ),
               ),
             ),
@@ -187,7 +197,7 @@ class _ShareTargetConversationSheetState
                             ),
                             subtitle: Text(isRoom ? 'Комната' : 'Чат'),
                             trailing: Icon(
-                              FluentIcons.send_24_regular,
+                              const AdaptiveIconData(FluentIcons.send_24_regular, CupertinoIcons.paperplane),
                               color: theme.colorScheme.primary,
                             ),
                             onTap: () =>

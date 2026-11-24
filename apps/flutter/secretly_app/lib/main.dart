@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'ui/whats_new/whats_new_flow.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
@@ -10,7 +11,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:secretly_app/legal/third_party_licenses.dart';
 import 'package:secretly_app/ui/secretly_snackbar.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
 import 'package:secretly_app/ui/apple_style.dart';
+import 'package:secretly_app/ui/settings_icons/settings_icon_style.dart';
+import 'package:secretly_app/ui/chat_look_prefs.dart';
+import 'package:secretly_app/ui/app_backdrop.dart';
 import 'package:flutter/services.dart';
 import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -21,6 +26,10 @@ import 'push/push_wake_service.dart';
 import 'ui/network_settings_screen.dart'
     show importOfflineEnvelopeFileWithFeedback, isOfflineEnvelopeFileName;
 import 'ui/app_shell.dart';
+import 'ui/motion/decoration_pacer.dart';
+import 'ui/scroll_feel.dart';
+import 'ui/motion/frame_stats.dart';
+import 'ui/motion/motion.dart';
 import 'ui/widgets/island_backdrop.dart';
 import 'ui/active_call_screen.dart';
 import 'ui/chat_screen.dart';
@@ -32,6 +41,8 @@ import 'ui/onboarding_flow.dart';
 import 'ui/root_messenger.dart';
 import 'ui/room_invite_join_screen.dart';
 import 'ui/security_lock_flow.dart';
+import 'ui/contact_qr_flow.dart';
+import 'security/qr_payload.dart';
 import 'app/app_controller.dart';
 import 'security/secure_secrets.dart';
 import 'billing/billing_service.dart';
@@ -54,6 +65,7 @@ import 'ui/theme_presets.dart';
 import 'ui/theme_transition.dart';
 import 'ui/widgets/system_bottom_fade.dart';
 import 'ui/widgets/app_background.dart';
+import 'ui/widgets/covered_route_media_freeze.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart';
 import 'ui/liquid_glass_flags.dart';
 import 'ui/thermal_guard.dart';
@@ -61,9 +73,12 @@ import 'legal/ffmpeg_mobile_license.dart';
 import 'assets/on_demand_assets.dart';
 import 'transport/resilient_http_client.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // М7: замер кадров — только в сборке с SECRETLY_FRAME_STATS=true.
+  FrameStats.start();
   // 🔴 Пространство профиля выбирается ПЕРВЫМ (Э2, код принуждения): до
   // первого обращения к настройкам, до пушей и до фоновых задач — префикс
   // настроек нельзя сменить после первого чтения. Если код принуждения не
@@ -109,6 +124,11 @@ Future<void> main() async {
       FlutterDisplayMode.setHighRefreshRate().catchError((Object _) {}),
     );
   }
+  // Украшения (живые рамки, обложки) — не чаще 60 кадров в секунду: в покое
+  // список чатов и профиль рисовали 120 к/с без остановки (замер 23.11.2026).
+  DecorationPacer.enableForMobile();
+  // Касания на Android — пересчитаны на время кадра, как у системных View.
+  enableTouchResamplingForAndroid();
   unawaited(PushWakeService.initialize());
   // ANDROID DELIVERY RELIABILITY (2026-07-17): register the periodic
   // background sync (outbox flush + inbound top-up) so a Doze-frozen /
@@ -150,6 +170,10 @@ Future<void> main() async {
       // Default (on) already applies.
     }
   }
+  // Стиль значков настроек — до первого кадра, чтобы список настроек не
+  // мигнул стилем по умолчанию. Чтение одной строки из уже открытых настроек.
+  await SettingsIconStylePrefs.load();
+  await ChatLookPrefs.load();
   final liquidGlass = kLiquidGlassNavBar && Platform.isIOS;
   if (liquidGlass) {
     ThermalGuard.start();
@@ -157,6 +181,8 @@ Future<void> main() async {
     // must not cost a first-frame stall, and it is a no-op otherwise.
     await LiquidGlassWidgets.initialize();
   }
+  // «Что нового 1.9» — только в настоящем запуске, не в тестах.
+  WhatsNew19.enabledForThisRun = true;
   runApp(
     // Every island reads PanelPrefs.frostedEnabled at build time, so the whole
     // tree has to rebuild when it flips — otherwise screens already on the
@@ -191,6 +217,67 @@ Future<void> main() async {
         : const MyApp(),
     ),
   );
+}
+
+/// Самый тёмный цвет фона страниц темы — тот же, что отдаёт
+/// `AppBackground.scrimColorOf` (графит — чёрный, у остальных — самый тёмный
+/// из трёх цветов градиента; с фоном из «Оформления» — его основа).
+Color _darkPageColorFor(AppThemePreset preset, [AppBackdropPreset? backdrop]) {
+  if (backdrop != null) return backdrop.base(true);
+  if (preset.id == 'graphite') return const Color(0xFF000000);
+  return [preset.darkBgBottom, preset.darkBgMid, preset.darkBgTop].reduce(
+    (a, b) => a.computeLuminance() <= b.computeLuminance() ? a : b,
+  );
+}
+
+/// Тема приложения — для тестов, которые рисуют экраны в настоящих цветах
+/// (снимки экранов, сверка с макетом). Приложение зовёт её само.
+@visibleForTesting
+ThemeData buildSecretlyThemeForTest(
+  Brightness brightness, {
+  required AppThemePreset appPreset,
+  required ChatBubbleStylePreset bubblePreset,
+  required NicknameStylePreset nicknamePreset,
+  required IndicatorColorPreset indicatorPreset,
+}) => _MyAppState._buildTheme(
+  brightness,
+  appPreset: appPreset,
+  bubblePreset: bubblePreset,
+  nicknamePreset: nicknamePreset,
+  indicatorPreset: indicatorPreset,
+);
+
+/// Светлый фон страниц для темы [preset] (сверху, середина, снизу).
+///
+/// «Графит» — ровный светлый фон iOS (`systemGroupedBackground`, #F2F2F7),
+/// зеркало его чёрного тёмного фона. Раньше формула подмешивала к фону
+/// серо-синий основной цвет темы — светлая тема выглядела «грязной»
+/// (решение владельца 20.11.2026). Остальные темы — прежняя формула:
+/// у них основной цвет цветной, и подмес даёт пастельный оттенок.
+List<Color> appLightBackgroundColors(AppThemePreset preset) {
+  if (preset.id == 'graphite') {
+    return const [Color(0xFFF2F2F7), Color(0xFFF2F2F7), Color(0xFFF2F2F7)];
+  }
+  Color mix(Color a, Color b, double t) => Color.lerp(a, b, t)!;
+  return [
+    mix(
+      preset.lightBgTop ??
+          mix(preset.lightSurface, preset.lightSecondary, 0.08),
+      Colors.white,
+      0.48,
+    ),
+    mix(
+      preset.lightBgMid ?? mix(preset.lightSurface, preset.lightPrimary, 0.1),
+      Colors.white,
+      0.40,
+    ),
+    mix(
+      preset.lightBgBottom ??
+          mix(preset.lightSurface, preset.lightSecondary, 0.14),
+      Colors.white,
+      0.32,
+    ),
+  ];
 }
 
 /// Адрес реле для украшений: берётся из того же места, что и у остального
@@ -273,7 +360,7 @@ class _StartupLoadingSurfaceState extends State<_StartupLoadingSurface>
                       ..repeat();
                   },
                   errorBuilder: (_, __, ___) => const Icon(
-                    Icons.fingerprint_rounded,
+                    AdaptiveIcons.fingerprint_rounded,
                     color: Colors.white,
                     size: 38,
                   ),
@@ -319,6 +406,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   // again on top.
   Uri? _lastHandledDeepLinkUri;
   int _lastHandledDeepLinkAtMs = 0;
+  // QR-ссылка с ключами (системная камера → приложение) добавляет контакт и
+  // шлёт знакомство — повтор той же ссылки не должен делать это дважды.
+  // Пока ссылка в работе (висит вопрос «Добавить в контакты?»), её повторы
+  // отбрасываются целиком, а после — ещё 5 с: вторая доставка при холодном
+  // запуске (getInitialLink и поток) может прийти позже общего окна 1,5 с.
+  String? _contactQrLinkInFlight;
+  String? _lastContactQrLink;
+  int _lastContactQrLinkAtMs = 0;
   OneToOneCallWakeHint? _pendingCallWakeHint;
   int _startupGeneration = 0;
   // Tracks the brightness last pushed to the system status/nav bar so we can
@@ -375,12 +470,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     return EdgeInsets.fromLTRB(14, 0, 14, bottom);
   }
 
-  ThemeData _buildTheme(
+  static ThemeData _buildTheme(
     Brightness brightness, {
     required AppThemePreset appPreset,
     required ChatBubbleStylePreset bubblePreset,
     required NicknameStylePreset nicknamePreset,
     required IndicatorColorPreset indicatorPreset,
+    Color? darkPageColor,
   }) {
     final isDark = brightness == Brightness.dark;
     final useGraphitePageSurfaces = appPreset.id == 'flutter_dash';
@@ -500,10 +596,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             cardTint.withValues(alpha: useGraphitePageSurfaces ? 0.14 : 0.16),
             surfacePreset.darkSurface.withValues(alpha: 0.86),
           )
-        : Color.alphaBlend(
-            cardTint.withValues(alpha: useGraphitePageSurfaces ? 0.05 : 0.055),
-            surface.withValues(alpha: 0.985),
-          );
+        : (appPreset.id == 'graphite'
+              // «Графит» светлый — белые карточки на ровном #F2F2F7, как
+              // группы iOS. Серый подмес делал их мутными, почти в цвет фона.
+              ? Colors.white
+              : Color.alphaBlend(
+                  cardTint.withValues(
+                    alpha: useGraphitePageSurfaces ? 0.05 : 0.055,
+                  ),
+                  surface.withValues(alpha: 0.985),
+                ));
     final inputBg = isDark
         ? Color.alphaBlend(
             inputTint.withValues(alpha: useGraphitePageSurfaces ? 0.11 : 0.13),
@@ -563,18 +665,54 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       canvasColor: Colors.transparent,
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
-        foregroundColor: scheme.onSurface,
+        // 24.11.2026: шапки прозрачные, и без явного стиля Flutter выбирал
+        // значки строки состояния по «чёрному» прозрачному фону — в светлой
+        // теме они были белыми на белом («Стиль», карточки профиля и др.).
+        // Только значки строки состояния; цвета панелей не трогаем.
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+          statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
+        ),
+        // iPhone: «назад» и значки шапки — белые/чёрные, как в iOS.
+        foregroundColor: appleGlassPanelsEnabled
+            ? (isDark ? Colors.white : Colors.black)
+            : scheme.onSurface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         shadowColor: Colors.transparent,
       ),
-      cardTheme: CardThemeData(
-        color: cardBg,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      ),
+      // На iPhone (20.11.2026) каждая карточка — стекло из макета Liquid
+      // Glass (`apple_glass.dart`): так все экраны с `Card` меняются разом.
+      // 23.11.2026 (владелец: «сделай такие плашки везде — на страницах
+      // профилей и т. д.»): на Android карточки — те же панели, что в
+      // настройках и на iPhone (прозрачная заливка, тонкая кромка, без
+      // размытия — дёшево). Выключатель `kAndroidCardsAsPanels` (apple_glass.dart).
+      cardTheme: panelCardsEnabled && PanelPrefs.translucentCards.value
+          ? CardThemeData(
+              color: AppleGlass.fill(isDark),
+              surfaceTintColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              elevation: 0,
+              shape: AppleGlassBorder(dark: isDark),
+            )
+          : CardThemeData(
+              // «Прозрачные плашки» выключены (23.11.2026): тот же плотный
+              // цвет, что у всех плашек ([opaquePanelColorFor]) — карточки
+              // профиля, настроек и окон одного тона.
+              color: panelCardsEnabled
+                  ? opaquePanelColorFor(
+                      dark: isDark,
+                      page: darkPageColor ?? _darkPageColorFor(appPreset),
+                      surface: surface,
+                    )
+                  : cardBg,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
@@ -607,14 +745,49 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           padding: const EdgeInsets.all(8),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           visualDensity: VisualDensity.compact,
+          // iPhone (20.11.2026): кнопки-значки — цвета текста iOS (белые в
+          // тёмной теме, чёрные в светлой). Без этого Material 3 красит их в
+          // серый `onSurfaceVariant`, и значки в шапках читались серыми.
+          // Кнопка со своим цветом его сохраняет.
+          foregroundColor: appleGlassPanelsEnabled
+              ? (isDark ? Colors.white : Colors.black)
+              : null,
         ),
       ),
+      iconTheme: appleGlassPanelsEnabled
+          ? IconThemeData(color: isDark ? Colors.white : Colors.black)
+          : null,
       listTileTheme: ListTileThemeData(
         iconColor: scheme.onSurface.withValues(alpha: 0.9),
         textColor: scheme.onSurface,
         tileColor: Colors.transparent,
+        // iPhone (20.11.2026): строки списков в размерах iOS — название 17,
+        // пояснение 13 серым. Экран, задавший свой стиль, его сохраняет.
+        titleTextStyle: appleGlassPanelsEnabled
+            ? TextStyle(
+                fontSize: 17,
+                letterSpacing: -0.4,
+                height: 1.25,
+                color: scheme.onSurface,
+              )
+            : null,
+        subtitleTextStyle: appleGlassPanelsEnabled
+            ? TextStyle(
+                fontSize: 13,
+                letterSpacing: -0.08,
+                height: 1.3,
+                color: AppleGlass.secondaryLabel(isDark),
+              )
+            : null,
       ),
-      inputDecorationTheme: InputDecorationTheme(
+      // На iPhone (20.11.2026) поля полупрозрачные, как в iOS 26
+      // (`apple_style.dart`, kAppleGlassFields); на остальных — прежние.
+      inputDecorationTheme: appleGlassFieldsEnabled
+          ? appleGlassInputDecorationTheme(
+              brightness: isDark ? Brightness.dark : Brightness.light,
+              scheme: scheme,
+            )
+          : InputDecorationTheme(
         filled: true,
         fillColor: inputBg,
         hintStyle: TextStyle(
@@ -649,7 +822,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             color: scheme.outlineVariant.withValues(alpha: 0.62),
           ),
         ),
-      ),
+            ),
       dividerColor: scheme.outlineVariant.withValues(alpha: 0.35),
       // На iPhone (17.11.2026) нажатие — без «волны» Android: нажатое место
       // подсвечивается, как в iOS. Кнопки сохраняют свою подсветку нажатия.
@@ -659,9 +832,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         barrierColor: appleDialogsEnabled
             ? (isDark ? const Color(0x66000000) : const Color(0x33000000))
             : null,
-        backgroundColor: scheme.surface,
+        backgroundColor: appleGlassPanelsEnabled
+            ? AppleGlass.sheetFill(isDark).withValues(alpha: 0.97)
+            : scheme.surface,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: appleGlassPanelsEnabled
+            ? AppleGlassBorder(radius: AppleGlass.sheetRadius, dark: isDark)
+            : RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       // На iPhone (17.11.2026) меню «⋯» — как выпадающее меню iOS: светлая
       // или тёмная матовая плашка со скруглением 13, крупные строки. На
@@ -672,9 +849,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               surfaceTintColor: Colors.transparent,
               elevation: 14,
               shadowColor: Colors.black.withValues(alpha: isDark ? 0.5 : 0.22),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(13),
-              ),
+              // Liquid Glass (20.11.2026): крупнее скругление и светлая
+              // кромка стекла, как у остальных панелей iPhone.
+              shape: appleGlassPanelsEnabled
+                  ? AppleGlassBorder(radius: 18, dark: isDark)
+                  : RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(13),
+                    ),
               menuPadding: EdgeInsets.zero,
               textStyle: TextStyle(
                 fontSize: 17,
@@ -690,15 +871,47 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ),
             )
           : null,
+      // iPhone: вкладки — как сегменты iOS (выбранная — светлая «пилюля»,
+      // без подчёркивания и линии Material под полосой).
+      tabBarTheme: appleGlassPanelsEnabled
+          ? TabBarThemeData(
+              indicatorSize: TabBarIndicatorSize.tab,
+              dividerColor: Colors.transparent,
+              dividerHeight: 0,
+              splashFactory: NoSplash.splashFactory,
+              overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+              labelColor: isDark ? Colors.white : Colors.black,
+              unselectedLabelColor: AppleGlass.secondaryLabel(isDark),
+              labelStyle: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+              unselectedLabelStyle: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+              indicator: ApplePillTabIndicator(dark: isDark),
+            )
+          : null,
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: Color.alphaBlend(
-          scheme.secondary.withValues(alpha: isDark ? 0.16 : 0.08),
-          scheme.surface.withValues(alpha: 0.96),
-        ),
+        // На iPhone лист — плотное стекло со светлой кромкой (без размытия:
+        // лист может быть высоким, а размытие на весь экран дорого).
+        backgroundColor: appleGlassPanelsEnabled
+            ? AppleGlass.sheetFill(isDark).withValues(alpha: 0.97)
+            : Color.alphaBlend(
+                scheme.secondary.withValues(alpha: isDark ? 0.16 : 0.08),
+                scheme.surface.withValues(alpha: 0.96),
+              ),
         surfaceTintColor: Colors.transparent,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
+        shape: appleGlassPanelsEnabled
+            ? AppleGlassBorder(
+                radius: AppleGlass.sheetRadius,
+                dark: isDark,
+                topOnly: true,
+              )
+            : const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
         // На iPhone (17.11.2026) ручка листа — короткая серая, как в iOS.
         // Сама ручка включается каждым листом, как и раньше.
         dragHandleColor: appleDialogsEnabled
@@ -774,6 +987,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _init();
+  }
+
+  @override
+  void didChangePlatformBrightness() {
+    super.didChangePlatformBrightness();
+    // «Авто» в «Оформлении»: тема идёт за системой. Без «Авто» — ничего.
+    unawaited(
+      _controller.syncSystemBrightness(
+        WidgetsBinding.instance.platformDispatcher.platformBrightness,
+      ),
+    );
   }
 
   @override
@@ -1008,7 +1232,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void _registerNotificationTapHandler() {
     _controller.setOnNotificationTap((convoId) {
       WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _openConvoById(convoId),
+        (_) => _openConvoById(convoId, fromNotification: true),
       );
     });
   }
@@ -1259,6 +1483,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     _lastHandledDeepLinkAtMs = nowMs;
     final profileId = tryParseProfileShareUri(uri);
     if (profileId != null) {
+      // Ссылка из QR профиля с ключом устройства после `#` — тот же путь, что
+      // и при сканировании внутри приложения (сверка сервера и ключа,
+      // знакомство). Без ключа — как раньше: просто открыть профиль.
+      final raw = uri.toString();
+      final payload = QrPayload.tryParse(raw);
+      if (payload.hasDeviceKey &&
+          (payload.secretlyId ?? '').trim() == profileId) {
+        unawaited(_addContactFromQrLink(raw, payload));
+        return;
+      }
       unawaited(_openProfileChat(profileId));
       return;
     }
@@ -1356,6 +1590,77 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     );
     if (ok == true) {
       await _controller.setTransportProxy(host: host, port: port);
+    }
+  }
+
+  /// QR профиля, открытый системной камерой (или ссылка с тем же хвостом).
+  ///
+  /// В отличие от сканера внутри приложения ссылку можно не только навести
+  /// камерой, но и просто нажать где угодно, а знакомство сообщает её автору
+  /// наш ID и ник. Поэтому сначала короткий вопрос «Добавить в контакты?»
+  /// (подписи уже есть во всех языках), потом — [handleContactQrScan] без
+  /// подмены экрана, и чат открывается обычным [_openConvoById].
+  Future<void> _addContactFromQrLink(String raw, QrPayload payload) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (_contactQrLinkInFlight == raw) return;
+    if (_lastContactQrLink == raw && nowMs - _lastContactQrLinkAtMs < 5000) {
+      return;
+    }
+    final profileId = (payload.secretlyId ?? '').trim();
+    final nav = CallManager.navigatorKey.currentState;
+    if (nav == null || profileId.isEmpty) {
+      if (profileId.isNotEmpty) unawaited(_openProfileChat(profileId));
+      return;
+    }
+    _contactQrLinkInFlight = raw;
+    try {
+      final context = nav.context;
+      final unlocked = await ensureSecurityScopeUnlocked(
+        context: context,
+        controller: _controller,
+        scope: SecurityLockScope.app,
+      );
+      if (!unlocked || !mounted || !context.mounted) return;
+
+      final myId = _controller.profileId.trim();
+      if (myId.isNotEmpty && myId == profileId) {
+        // Свой же QR — добавлять себя некуда; открыть как раньше.
+        unawaited(_openProfileChat(profileId));
+        return;
+      }
+
+      final l10n = AppLocalizations.of(context);
+      final nick = (payload.nickname ?? '').trim();
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (dialogCtx) => SecretlyAlertDialog(
+          title: Text(nick.isEmpty ? profileId : nick),
+          content: nick.isEmpty ? null : Text(profileId),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(false),
+              child: Text(l10n?.cancel ?? 'Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(true),
+              child: Text(l10n?.contactDetailsAddToContacts ?? 'Add to contacts'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true || !mounted || !context.mounted) return;
+
+      final outcome = await handleContactQrScan(
+        context: context,
+        controller: _controller,
+        raw: raw,
+      );
+      if (outcome == null || !mounted) return;
+      await _openConvoById(outcome.profileId);
+    } finally {
+      _lastContactQrLink = raw;
+      _lastContactQrLinkAtMs = DateTime.now().millisecondsSinceEpoch;
+      if (_contactQrLinkInFlight == raw) _contactQrLinkInFlight = null;
     }
   }
 
@@ -1585,7 +1890,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _openConvoById(String convoId, {int attempt = 0}) async {
+  Future<void> _openConvoById(
+    String convoId, {
+    int attempt = 0,
+    bool fromNotification = false,
+  }) async {
     final nav = CallManager.navigatorKey.currentState;
     if (nav == null) {
       // 13.11.2026 (Т10): при холодном запуске с нажатия на уведомление
@@ -1594,7 +1903,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       unawaited(NotifTapTrail.add('open_nav_null_$attempt', convoId));
       if (attempt < 40 && mounted) {
         Future<void>.delayed(const Duration(milliseconds: 250), () {
-          if (mounted) unawaited(_openConvoById(convoId, attempt: attempt + 1));
+          if (mounted) {
+            unawaited(
+              _openConvoById(
+                convoId,
+                attempt: attempt + 1,
+                fromNotification: fromNotification,
+              ),
+            );
+          }
         });
       }
       return;
@@ -1648,6 +1965,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           title: title,
           requestProfileId: requestProfileId,
           peerProfileIdForSend: isGroup || isRequest ? null : normalizedConvoId,
+          // Из уведомления — ждать догрузки непрочитанных (23.11.2026).
+          openedFromNotification: fromNotification,
         ),
       ),
     );
@@ -1692,6 +2011,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  /// Собранные темы и то, из чего собраны (см. build).
+  String? _themeKey;
+  ThemeData? _lightTheme;
+  ThemeData? _darkTheme;
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<void>(
@@ -1707,23 +2031,49 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         final indicatorPreset = resolveIndicatorColorPreset(
           _controller.indicatorColorPresetId,
         );
-        final light = _buildTheme(
-          Brightness.light,
-          appPreset: appPreset,
-          bubblePreset: bubblePreset,
-          nicknamePreset: nicknamePreset,
-          indicatorPreset: indicatorPreset,
+        // Плотные плашки — от настоящего фона страницы (23.11.2026).
+        final darkPage = _darkPageColorFor(
+          appPreset,
+          resolveAppBackdrop(_controller.appBackdropId),
         );
-        final dark = _buildTheme(
-          Brightness.dark,
-          appPreset: appPreset,
-          bubblePreset: bubblePreset,
-          nicknamePreset: nicknamePreset,
-          indicatorPreset: indicatorPreset,
-        );
+        // 🔴 23.11.2026 (замер Xiaomi: «подтормаживает»): корень
+        // перестраивается на КАЖДОЕ изменение данных (новое сообщение,
+        // «был в сети» собеседника…), и обе темы собирались заново — десятки
+        // раз за минуту после запуска. Темы зависят только от выбранного
+        // оформления — собираем их, только когда оно поменялось.
+        final themeKey = [
+          appPreset.id,
+          bubblePreset.id,
+          nicknamePreset.id,
+          indicatorPreset.id,
+          darkPage.toARGB32(),
+          PanelPrefs.translucentCards.value,
+        ].join('|');
+        if (themeKey != _themeKey) {
+          _themeKey = themeKey;
+          _lightTheme = _buildTheme(
+            Brightness.light,
+            appPreset: appPreset,
+            bubblePreset: bubblePreset,
+            nicknamePreset: nicknamePreset,
+            indicatorPreset: indicatorPreset,
+          );
+          _darkTheme = _buildTheme(
+            Brightness.dark,
+            appPreset: appPreset,
+            bubblePreset: bubblePreset,
+            nicknamePreset: nicknamePreset,
+            indicatorPreset: indicatorPreset,
+            darkPageColor: darkPage,
+          );
+        }
+        final light = _lightTheme!;
+        final dark = _darkTheme!;
         final mode = _controller.darkMode ? ThemeMode.dark : ThemeMode.light;
         return MaterialApp(
           debugShowCheckedModeBanner: false,
+          // Одна прокрутка на всех экранах, как у Telegram (23.11.2026).
+          scrollBehavior: const SecretlyScrollBehavior(),
           navigatorKey: CallManager.navigatorKey,
           // 🔴 Ключ единственного `ScaffoldMessenger` (15.09.2026).
           //
@@ -1757,9 +2107,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             // Default: show the main shell (or loading/error).
             return MaterialPageRoute(
               settings: settings,
-              builder: (_) => AnimatedSwitcher(
+              // Оболочка под открытым чатом не перестраивается от клавиатуры.
+              builder: (_) => CoveredRouteMediaFreeze(
+                child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 400),
-                switchInCurve: Curves.easeOutCubic,
+                switchInCurve: Motion.standard,
                 switchOutCurve: Curves.easeInCubic,
                 child: _ready
                     ? (_isDesktopRuntime || _onboardingComplete
@@ -1830,6 +2182,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         ),
                       ),
               ),
+              ),
             );
           },
           builder: (context, child) {
@@ -1837,36 +2190,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             // flutter_dash draws its page gradient from its OWN preset (Telegram
             // dark navy), not graphite's near-black.
             final backgroundPreset = appPreset;
-            final lightBgTop = _mix(
-              backgroundPreset.lightBgTop ??
-                  _mix(
-                    backgroundPreset.lightSurface,
-                    backgroundPreset.lightSecondary,
-                    0.08,
-                  ),
-              Colors.white,
-              0.48,
-            );
-            final lightBgMid = _mix(
-              backgroundPreset.lightBgMid ??
-                  _mix(
-                    backgroundPreset.lightSurface,
-                    backgroundPreset.lightPrimary,
-                    0.1,
-                  ),
-              Colors.white,
-              0.40,
-            );
-            final lightBgBottom = _mix(
-              backgroundPreset.lightBgBottom ??
-                  _mix(
-                    backgroundPreset.lightSurface,
-                    backgroundPreset.lightSecondary,
-                    0.14,
-                  ),
-              Colors.white,
-              0.32,
-            );
+            final lightBackground = appLightBackgroundColors(backgroundPreset);
+            final lightBgTop = lightBackground[0];
+            final lightBgMid = lightBackground[1];
+            final lightBgBottom = lightBackground[2];
             final darkBackgroundColors = appPreset.id == 'graphite'
                 ? const [
                     Color(0xFF000000),
@@ -1916,7 +2243,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             final app = AnnotatedRegion<SystemUiOverlayStyle>(
               value: overlayStyle,
               child: ThemeTransitionLayer(
-                onToggle: (v) => _controller.setDarkMode(v),
+                // Явный выбор темы человеком выключает «Авто».
+                onToggle: (v) => _controller.setDarkModeByUser(v),
                 child: Builder(
                   builder: (context) {
                     final appGradient = LinearGradient(
@@ -1926,19 +2254,38 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                           ? darkBackgroundColors
                           : [lightBgTop, lightBgMid, lightBgBottom],
                     );
+                    // «Фон» из «Оформления»: мягкие пятна вместо градиента
+                    // темы. `null` — прежний градиент.
+                    final backdrop = resolveAppBackdrop(
+                      _controller.appBackdropId,
+                    );
+                    final pageGradient = backdrop == null
+                        ? appGradient
+                        : LinearGradient(
+                            colors: [
+                              backdrop.base(isDark),
+                              backdrop.base(isDark),
+                            ],
+                          );
+                    // Форма дерева одна и та же с фоном и без: иначе смена
+                    // «Фона» пересоздавала бы всё над навигатором (пузырь
+                    // свёрнутого звонка, капсулу уведомления, заслонку).
+                    Widget withBackdrop(Widget child) => AppBackdropLayer(
+                      preset: backdrop,
+                      dark: isDark,
+                      child: child,
+                    );
                     return AnimatedContainer(
                       duration: const Duration(milliseconds: 400),
                       curve: Curves.easeInOutCubic,
-                      decoration: BoxDecoration(gradient: appGradient),
-                      child: Theme(
-                        data: Theme.of(context).copyWith(
-                          snackBarTheme: Theme.of(context).snackBarTheme
-                              .copyWith(
-                                insetPadding: _topSnackBarInsetPadding(
-                                  MediaQuery.of(context),
-                                ),
-                              ),
-                        ),
+                      decoration: BoxDecoration(gradient: pageGradient),
+                      // Размер текста и скругление пузырей из «Оформления»:
+                      // пузыри перестраиваются только при их смене.
+                      // Отступ всплывашек от клавиатуры — в своём виджете:
+                      // тема меняется, когда клавиатура встала, а не в
+                      // каждом её кадре (см. _KeyboardSettledSnackTheme).
+                      child: ChatLookScope(child: withBackdrop(
+                        _KeyboardSettledSnackTheme(
                         // Expose the gradient so pushed routes can paint it
                         // themselves and slide it in opaquely (no
                         // bleed-through / background pop on transitions).
@@ -1953,7 +2300,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                         // every theme. In scope it now dissolves into the
                         // actual page background colour.
                         child: AppBackground(
-                          gradient: appGradient,
+                          gradient: pageGradient,
+                          backdrop: backdrop,
+                          dark: isDark,
                           child: Stack(
                             children: [
                               child ?? const SizedBox.shrink(),
@@ -1980,7 +2329,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                             ],
                           ),
                         ),
-                      ),
+                      ))),
                     );
                   },
                 ),
@@ -2024,6 +2373,77 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 /// Bottom system-nav fade that lives behind every route. Toggled off via
 /// [bottomSystemFadeEnabled] (call screens, onboarding) so it doesn't
 /// overlay full-bleed UI like the active call or welcome flow.
+/// Тема приложения с отступом всплывашек (они стоят под шапкой, над
+/// клавиатурой).
+///
+/// 🔴 Главная причина лагов клавиатуры (запись кадров Xiaomi, 20.11.2026):
+/// отступ считался из MediaQuery прямо в теме приложения, а высота
+/// клавиатуры меняется в каждом кадре её движения. Каждый кадр давал НОВУЮ
+/// тему — и Flutter перестраивал всё, что берёт из неё цвета: экран чата,
+/// пузыри, шапку, поле ввода (13–20 мс на кадр).
+///
+/// Теперь тема получает новый отступ один раз — когда клавиатура встала
+/// (120 мс без изменений). Всплывашка, показанная прямо посреди движения
+/// клавиатуры, встанет по отступу на миг раньше — разница незаметна.
+class _KeyboardSettledSnackTheme extends StatefulWidget {
+  const _KeyboardSettledSnackTheme({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_KeyboardSettledSnackTheme> createState() =>
+      _KeyboardSettledSnackThemeState();
+}
+
+class _KeyboardSettledSnackThemeState
+    extends State<_KeyboardSettledSnackTheme> {
+  static const Duration _settle = Duration(milliseconds: 120);
+
+  EdgeInsets? _applied;
+  Timer? _settleTimer;
+  ThemeData? _base;
+  EdgeInsets? _themedInset;
+  ThemeData? _themed;
+
+  @override
+  void dispose() {
+    _settleTimer?.cancel();
+    super.dispose();
+  }
+
+  void _applyLatest() {
+    _settleTimer = null;
+    if (!mounted) return;
+    final next = _MyAppState._topSnackBarInsetPadding(mediaQueryNow(context));
+    if (next != _applied) setState(() => _applied = next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Сам этот виджет перестраивается в кадрах клавиатуры — он дешёвый; всё,
+    // что ниже, — нет, пока тема та же самая.
+    final target = _MyAppState._topSnackBarInsetPadding(MediaQuery.of(context));
+    if (_applied == null) {
+      _applied = target;
+    } else if (target != _applied) {
+      _settleTimer?.cancel();
+      _settleTimer = Timer(_settle, _applyLatest);
+    } else {
+      _settleTimer?.cancel();
+      _settleTimer = null;
+    }
+    final base = Theme.of(context);
+    if (!identical(base, _base) || _applied != _themedInset) {
+      _base = base;
+      _themedInset = _applied;
+      _themed = base.copyWith(
+        snackBarTheme: base.snackBarTheme.copyWith(insetPadding: _applied),
+      );
+    }
+    return Theme(data: _themed!, child: widget.child);
+  }
+}
+
 class _GlobalBottomFade extends StatelessWidget {
   const _GlobalBottomFade();
 

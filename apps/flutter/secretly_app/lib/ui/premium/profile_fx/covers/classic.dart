@@ -86,12 +86,25 @@ void _clStarsDraw(_ClAtlas q, Float32List st, double t, double amp,
 }
 
 ui.Image? _clSqImg;
+bool _clImgGuarded = false;
+void _clGuard() {
+  if (_clImgGuarded) return;
+  _clImgGuarded = true;
+  GpuImageGuard.register(() {
+    _clSqImg = null;
+    _clRayImg = null;
+  });
+}
+
 ui.Image _clSquare() {
   final cached = _clSqImg;
   if (cached != null) return cached;
+  _clGuard();
   final rec = ui.PictureRecorder();
   Canvas(rec).drawRect(const Rect.fromLTWH(0, 0, 4, 4), Paint()..color = const Color(0xFFFFFFFF));
-  return _clSqImg = rec.endRecording().toImageSync(4, 4);
+  final img = rec.endRecording().toImageSync(4, 4);
+  _clSqImg = img;
+  return img;
 }
 
 final Paint _clAtlasPaint = Paint()..filterQuality = FilterQuality.low;
@@ -128,19 +141,24 @@ class _ClAtlas {
   /// Свечение радиуса [r] (как `glow` референса).
   void glow(double x, double y, double r, int rgb, double op) {
     if (op <= 0.003 || r <= 0.5) return;
+    if (_fxDay) {
+      rgb = _dayGlow(Color(rgb | 0xFF000000)).toARGB32();
+      op *= _dayGlowK;
+    }
     _add(r / 32, x - r, y - r, 64, _clArgb(rgb, op));
   }
 
   /// Квадрат со стороной [size], левый верхний угол (x, y) (как `fillRect`).
   void sq(double x, double y, double size, int rgb, double a) {
     if (a <= 0.003) return;
+    if (_fxDay) rgb = _day(Color(rgb | 0xFF000000)).toARGB32();
     _add(size / 4, x, y, 4, _clArgb(rgb, a));
   }
 
   void flush(Canvas c, [bool add = false]) {
     if (n == 0) return;
     final img = isGlow ? _glowSprite(const Color(0xFFFFFFFF)) : _clSquare();
-    _clAtlasPaint.blendMode = add ? BlendMode.plus : BlendMode.srcOver;
+    _clAtlasPaint.blendMode = add && !_fxDay ? BlendMode.plus : BlendMode.srcOver;
     c.drawRawAtlas(img, Float32List.sublistView(_t, 0, n * 4), Float32List.sublistView(_r, 0, n * 4),
         Int32List.sublistView(_c, 0, n), BlendMode.modulate, null, _clAtlasPaint);
     n = 0;
@@ -156,7 +174,7 @@ final Paint _clGlF = Paint();
 /// `glint` референса, с цветом и сложением света.
 void _clGlint(Canvas c, double x, double y, double s, double a, [int rgb = 0xFFFFFF, bool add = false]) {
   if (a <= 0.02) return;
-  final col = _cla(rgb, a), m = add ? BlendMode.plus : BlendMode.srcOver;
+  final col = _cla(rgb, a), m = add && !_fxDay ? BlendMode.plus : BlendMode.srcOver;
   _clGlS
     ..color = col
     ..blendMode = m;
@@ -1935,7 +1953,10 @@ ui.Image _clRay() {
           0.86,
           1.0
         ]));
-  return _clRayImg = rec.endRecording().toImageSync(4, 96);
+  _clGuard();
+  final img = rec.endRecording().toImageSync(4, 96);
+  _clRayImg = img;
+  return img;
 }
 
 class _CAuroraSky extends _CBase {

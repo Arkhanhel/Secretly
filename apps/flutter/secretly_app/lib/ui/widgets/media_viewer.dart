@@ -16,9 +16,13 @@ import '../../models/e2e_payload_v1.dart';
 import '../chat_screen_l10n.dart';
 import '../icons/app_icons.dart';
 import '../l10n.dart';
+import '../motion/app_dialogs.dart';
+import '../motion/motion.dart';
+import '../motion/press_feedback.dart';
 import 'full_bleed_zoom.dart';
 import 'broken_media_box.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 bool _isVideoMediaMime(String mime) =>
     mime.trim().toLowerCase().startsWith('video/');
@@ -267,7 +271,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
       _stripController.animateTo(
         clamped,
         duration: const Duration(milliseconds: 240),
-        curve: Curves.easeOutCubic,
+        curve: Motion.standard,
       );
     } else {
       _stripController.jumpTo(clamped);
@@ -395,6 +399,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
   Future<void> _showAllMediaGrid() async {
     if (widget.items.length < 2) return;
     final selectedIndex = await showModalBottomSheet<int>(
+  sheetAnimationStyle: appSheetAnimationStyle,
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
@@ -470,7 +475,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
     await _controller.animateToPage(
       selectedIndex,
       duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
+      curve: Motion.standard,
     );
   }
 
@@ -503,7 +508,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
         <({IconData icon, String label, MediaViewerMenuAction value})>[
           if (widget.onSaveToGallery != null)
             (
-              icon: Icons.save_alt_rounded,
+              icon: AdaptiveIcons.save_alt_rounded,
               label: chatText(
                 context,
                 ru: 'Сохранить в галерею',
@@ -513,7 +518,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
             ),
           if (widget.items.length > 1)
             (
-              icon: Icons.grid_view_rounded,
+              icon: AdaptiveIcons.grid_view_rounded,
               label: chatText(
                 context,
                 ru: 'Показать все медиа',
@@ -523,7 +528,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
             ),
           if (widget.onShowInChat != null)
             (
-              icon: Icons.visibility_outlined,
+              icon: AdaptiveIcons.visibility_outlined,
               label: chatText(
                 context,
                 ru: 'Показать в чате',
@@ -539,7 +544,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
             ),
           if (widget.onShare != null)
             (
-              icon: appleShareIcon(Icons.share_outlined),
+              icon: appleShareIcon(AdaptiveIcons.share_outlined),
               label: chatText(context, ru: 'Поделиться', en: 'Share'),
               value: MediaViewerMenuAction.share,
             ),
@@ -551,7 +556,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
             ),
         ];
 
-    final selected = await showDialog<MediaViewerMenuAction>(
+    final selected = await showAppDialog<MediaViewerMenuAction>(
       context: context,
       barrierColor: Colors.transparent,
       builder: (context) {
@@ -706,7 +711,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
               ignoring: !_chromeVisible,
               child: AnimatedSlide(
                 duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
+                curve: Motion.standard,
                 offset: _chromeVisible ? Offset.zero : const Offset(0, -0.16),
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 160),
@@ -730,7 +735,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
                                 child: SizedBox(
                                   width: 46,
                                   height: 46,
-                                  child: IconButton(
+                                  child: PressFeedback(child: IconButton(
                                     tooltip: context.l10n.close,
                                     padding: EdgeInsets.zero,
                                     onPressed: () =>
@@ -739,7 +744,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
                                       AppIcons.arrowBack,
                                       color: Colors.white,
                                     ),
-                                  ),
+                                  )),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -791,7 +796,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      IconButton(
+                                      PressFeedback(child: IconButton(
                                         tooltip: chatText(
                                           context,
                                           ru: 'Переслать',
@@ -809,8 +814,8 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
                                           AppIcons.forward,
                                           color: Colors.white,
                                         ),
-                                      ),
-                                      IconButton(
+                                      )),
+                                      PressFeedback(child: IconButton(
                                         tooltip: chatText(
                                           context,
                                           ru: 'Меню',
@@ -827,7 +832,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
                                           AppIcons.moreVert,
                                           color: Colors.white,
                                         ),
-                                      ),
+                                      )),
                                     ],
                                   ),
                                 ),
@@ -870,7 +875,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
               ignoring: !_chromeVisible,
               child: AnimatedSlide(
                 duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOutCubic,
+                curve: Motion.standard,
                 offset: _chromeVisible ? Offset.zero : const Offset(0, 0.2),
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 160),
@@ -984,7 +989,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
               _controller.animateToPage(
                 index,
                 duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOut,
+                curve: Motion.fade,
               );
             },
             child: Align(
@@ -992,13 +997,13 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
               child: AnimatedScale(
                 scale: selected ? 1.16 : 1.0,
                 duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOutCubic,
+                curve: Motion.standard,
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 160),
                   opacity: selected ? 1.0 : 0.62,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 160),
-                    curve: Curves.easeOutCubic,
+                    curve: Motion.standard,
                     width: _stripThumbWidth(index),
                     height: _stripThumbHeight,
                     decoration: BoxDecoration(
@@ -1046,7 +1051,7 @@ class MediaViewerDialogState extends State<MediaViewerDialog> {
                               thumb,
                               const Center(
                                 child: Icon(
-                                  Icons.play_arrow_rounded,
+                                  AdaptiveIcons.play_arrow_rounded,
                                   color: Colors.white,
                                   size: 15,
                                   shadows: [

@@ -10,6 +10,7 @@ import '../app/app_controller.dart';
 import '../entitlements/feature_gate.dart';
 import '../rooms/room_invite_failure.dart';
 import 'chat_screen.dart';
+import 'motion/press_feedback.dart';
 import 'paywall_screen.dart';
 import 'room_policy_error_text.dart' show roomLimitErrorText;
 import 'l10n.dart';
@@ -18,6 +19,7 @@ import 'wave1_l10n.dart';
 import 'widgets/avatar_initials.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 class RoomInviteJoinScreen extends StatefulWidget {
   const RoomInviteJoinScreen({
@@ -586,7 +588,7 @@ class _RoomInviteJoinScreenState extends State<RoomInviteJoinScreen> {
           } else if (snapshot.hasError) {
             child = _InviteStateCard(
               icon: Icon(
-                Icons.link_off_rounded,
+                AdaptiveIcons.link_off_rounded,
                 size: 30,
                 color: colorScheme.error,
               ),
@@ -600,9 +602,9 @@ class _RoomInviteJoinScreenState extends State<RoomInviteJoinScreen> {
                 de: 'Einladung nicht verfügbar',
               ),
               body: _errorText(snapshot.error!),
-              footer: FilledButton.tonalIcon(
+              footer: PressFeedback(child: FilledButton.tonalIcon(
                 onPressed: _retryResolve,
-                icon: const Icon(Icons.refresh_rounded),
+                icon: const Icon(AdaptiveIcons.refresh_rounded),
                 label: Text(
                   _t(
                     ru: 'Повторить',
@@ -614,12 +616,12 @@ class _RoomInviteJoinScreenState extends State<RoomInviteJoinScreen> {
                     de: 'Erneut versuchen',
                   ),
                 ),
-              ),
+              )),
             );
           } else if (!snapshot.hasData) {
             child = _InviteStateCard(
               icon: Icon(
-                Icons.groups_rounded,
+                AdaptiveIcons.groups_rounded,
                 size: 30,
                 color: colorScheme.primary,
               ),
@@ -689,12 +691,12 @@ class _RoomInviteJoinScreenState extends State<RoomInviteJoinScreen> {
             final actionIcon = _joining
                 ? null
                 : preview.isAlreadyMember
-                ? Icons.forum_rounded
+                ? AdaptiveIcons.forum_rounded
                 : preview.isJoinRequestPending
-                ? Icons.hourglass_top_rounded
+                ? AdaptiveIcons.hourglass_top_rounded
                 : preview.isBanned
-                ? Icons.block_rounded
-                : Icons.login_rounded;
+                ? AdaptiveIcons.block_rounded
+                : AdaptiveIcons.login_rounded;
             final actionDisabled =
                 _joining || preview.isJoinRequestPending || preview.isBanned;
             child = Card(
@@ -731,7 +733,7 @@ class _RoomInviteJoinScreenState extends State<RoomInviteJoinScreen> {
                     ),
                     const SizedBox(height: 20),
                     _InviteInfoRow(
-                      icon: Icons.person_outline_rounded,
+                      icon: AdaptiveIcons.person_outline_rounded,
                       text: _t(
                         ru: 'Ссылку создал: ${preview.inviterDisplayName}',
                         en: 'Link created by ${preview.inviterDisplayName}',
@@ -744,7 +746,7 @@ class _RoomInviteJoinScreenState extends State<RoomInviteJoinScreen> {
                       ),
                     ),
                     _InviteInfoRow(
-                      icon: Icons.group_outlined,
+                      icon: AdaptiveIcons.group_outlined,
                       text: _t(
                         ru: 'Участников: ${preview.memberCount}',
                         en: 'Members: ${preview.memberCount}',
@@ -756,25 +758,25 @@ class _RoomInviteJoinScreenState extends State<RoomInviteJoinScreen> {
                       ),
                     ),
                     _InviteInfoRow(
-                      icon: Icons.history_toggle_off_rounded,
+                      icon: AdaptiveIcons.history_toggle_off_rounded,
                       text: _historyText(preview),
                     ),
                     _InviteInfoRow(
                       icon: preview.joinApprovalRequired
-                          ? Icons.admin_panel_settings_outlined
-                          : Icons.flash_on_rounded,
+                          ? AdaptiveIcons.admin_panel_settings_outlined
+                          : AdaptiveIcons.flash_on_rounded,
                       text: _joinModeText(preview),
                     ),
                     _InviteInfoRow(
-                      icon: Icons.shield_outlined,
+                      icon: AdaptiveIcons.shield_outlined,
                       text: _joinRoleText(preview),
                     ),
                     _InviteInfoRow(
-                      icon: Icons.link_rounded,
+                      icon: AdaptiveIcons.link_rounded,
                       text: _linkUsageText(preview),
                     ),
                     _InviteInfoRow(
-                      icon: Icons.schedule_rounded,
+                      icon: AdaptiveIcons.schedule_rounded,
                       text: _expiryText(preview),
                     ),
                     if (preview.isAlreadyMember) ...[
@@ -840,7 +842,7 @@ class _RoomInviteJoinScreenState extends State<RoomInviteJoinScreen> {
                       ),
                     ],
                     const SizedBox(height: 22),
-                    FilledButton.icon(
+                    PressFeedback(child: FilledButton.icon(
                       onPressed: actionDisabled ? null : () => _join(preview),
                       icon: _joining
                           ? SizedBox(
@@ -853,7 +855,7 @@ class _RoomInviteJoinScreenState extends State<RoomInviteJoinScreen> {
                             )
                           : Icon(actionIcon),
                       label: Text(actionLabel),
-                    ),
+                    )),
                     if (!preview.isAlreadyMember)
                       TextButton(
                         onPressed: _joining

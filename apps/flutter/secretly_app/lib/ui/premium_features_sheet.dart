@@ -4,14 +4,18 @@
 import 'package:flutter/material.dart';
 
 import 'icons/app_icons.dart';
+import 'motion/app_dialogs.dart';
 import 'wave1_l10n.dart';
 import 'widgets/premium_glass.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/build_variant.dart';
 
 /// A localized, read-only sheet that lists what an active Premium subscriber
 /// gets — one row per feature: name, then a lighter, smaller one-line blurb.
 /// Opened by tapping the gold "Premium" badge in the chats header.
 Future<void> showPremiumFeaturesSheet(BuildContext context) {
   return showModalBottomSheet<void>(
+  sheetAnimationStyle: appSheetAnimationStyle,
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
@@ -24,7 +28,9 @@ class _PremiumFeaturesSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    // Лист Premium всегда тёмный (0xFF0F1116) — текст светлый в любой
+    // теме; от темы приложения в светлой был чёрный текст на чёрном.
+    final cs = _premiumSheetScheme(context);
     final features = _features(context);
     return DraggableScrollableSheet(
       initialChildSize: 0.72,
@@ -53,7 +59,7 @@ class _PremiumFeaturesSheet extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.workspace_premium_rounded,
+                  const Icon(AdaptiveIcons.workspace_premium_rounded,
                       color: kPremiumGold, size: 24),
                   const SizedBox(width: 8),
                   Text(
@@ -109,7 +115,9 @@ class _FeatureRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    // Лист Premium всегда тёмный (0xFF0F1116) — текст светлый в любой
+    // теме; от темы приложения в светлой был чёрный текст на чёрном.
+    final cs = _premiumSheetScheme(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -163,7 +171,7 @@ class _PremiumFeature {
 
 List<_PremiumFeature> _features(BuildContext context) => [
   _PremiumFeature(
-    Icons.auto_awesome_rounded,
+    AdaptiveIcons.auto_awesome_rounded,
     wave1Text(context,
         ru: 'Рамки и обложки профиля',
         en: 'Profile frames & covers',
@@ -184,7 +192,7 @@ List<_PremiumFeature> _features(BuildContext context) => [
         de: 'Animierte Rahmen um deinen Avatar und Cover mit eigenem Foto oder Video.'),
   ),
   _PremiumFeature(
-    Icons.wallpaper_rounded,
+    AdaptiveIcons.wallpaper_rounded,
     wave1Text(context,
         ru: 'Премиум-обои чатов',
         en: 'Premium chat wallpapers',
@@ -205,7 +213,7 @@ List<_PremiumFeature> _features(BuildContext context) => [
         de: 'Lebendige animierte Hintergründe und Premium-Designs.'),
   ),
   _PremiumFeature(
-    Icons.emoji_emotions_rounded,
+    AdaptiveIcons.emoji_emotions_rounded,
     wave1Text(context,
         ru: 'Эмодзи-статусы и стикеры',
         en: 'Emoji statuses & stickers',
@@ -225,8 +233,10 @@ List<_PremiumFeature> _features(BuildContext context) => [
         fr: 'Un statut emoji près de votre nom et des packs de stickers premium.',
         de: 'Ein Emoji-Status neben deinem Namen und Premium-Sticker-Pakete.'),
   ),
+  // «Голос в текст» убран из приложения (build_variant.dart) — не обещаем.
+  if (kVoiceTranscriptionAvailable)
   _PremiumFeature(
-    Icons.record_voice_over_rounded,
+    AdaptiveIcons.record_voice_over_rounded,
     wave1Text(context,
         ru: 'ИИ: голос в текст',
         en: 'AI: voice-to-text',
@@ -268,3 +278,9 @@ List<_PremiumFeature> _features(BuildContext context) => [
         de: 'Eigene Anrufklänge und ein Premium-App-Icon.'),
   ),
 ];
+
+ColorScheme _premiumSheetScheme(BuildContext context) =>
+    Theme.of(context).colorScheme.copyWith(
+      onSurface: Colors.white,
+      onSurfaceVariant: const Color(0xFFA9AFB8),
+    );

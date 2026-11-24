@@ -177,7 +177,10 @@ void main() {
     });
 
     test('знак находится по идентификатору', () {
-      expect(resolveRoomTopicMark('call')?.icon, FluentIcons.call_24_regular);
+      expect(
+        resolveRoomTopicMark('call')?.icon.codePoint,
+        FluentIcons.call_24_regular.codePoint,
+      );
       expect(resolveRoomTopicMark('')?.icon, isNull);
       expect(resolveRoomTopicMark(null), isNull);
     });
@@ -189,7 +192,10 @@ void main() {
       const plain = RoomTopicRef(id: 't', title: 'релиз');
       const called = RoomTopicRef(id: 't', title: 'созвон', mark: 'call');
       expect(roomTopicIcon(plain), kRoomTopicHashIcon);
-      expect(roomTopicIcon(called), FluentIcons.call_24_regular);
+      expect(
+        roomTopicIcon(called).codePoint,
+        FluentIcons.call_24_regular.codePoint,
+      );
       expect(roomTopicIconColor(plain), isNull);
       expect(roomTopicIconColor(called), const Color(0xFF34D399));
     });
@@ -316,7 +322,10 @@ void main() {
 
     test('у основы есть свой значок и по умолчанию это решётка', () {
       expect(roomTopicIconFor(''), kRoomTopicHashIcon);
-      expect(roomTopicIconFor('star'), FluentIcons.star_24_regular);
+      expect(
+        roomTopicIconFor('star').codePoint,
+        FluentIcons.star_24_regular.codePoint,
+      );
       expect(roomTopicIconColorFor('star'), isNotNull);
       expect(roomTopicIconColorFor(''), isNull);
     });

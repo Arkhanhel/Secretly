@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import 'package:flutter/material.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
 /// A tiny premium indicator — the same ✦ sparkle as [GoldPremiumBadge] — shown
 /// next to a PAID (Premium/Teams) feature so free users can see it requires
@@ -37,7 +38,7 @@ class PremiumStarBadge extends StatelessWidget {
         color: c.withValues(alpha: 0.14),
         border: Border.all(color: c.withValues(alpha: 0.32), width: 0.7),
       ),
-      child: Icon(Icons.auto_awesome, size: size, color: c),
+      child: Icon(AdaptiveIcons.auto_awesome, size: size, color: c),
     );
   }
 }

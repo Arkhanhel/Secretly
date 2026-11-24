@@ -15867,6 +15867,2202 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unmute'**
   String get chatSwipeUnmute;
+
+  /// Settings icon style: flat colour plate.
+  ///
+  /// In en, this message translates to:
+  /// **'Classic'**
+  String get iconStyleClassic;
+
+  /// Settings icon style: gradient with highlight.
+  ///
+  /// In en, this message translates to:
+  /// **'Glossy'**
+  String get iconStyleGlossy;
+
+  /// Settings icon style: puffy 3D tiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Clay'**
+  String get iconStyleClay;
+
+  /// Settings icon style: translucent glowing tiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Frosted'**
+  String get iconStyleFrost;
+
+  /// Settings icon style: light tinted plate.
+  ///
+  /// In en, this message translates to:
+  /// **'Pastel'**
+  String get iconStylePastel;
+
+  /// Settings icon style: dark tile with glowing outline.
+  ///
+  /// In en, this message translates to:
+  /// **'Neon'**
+  String get iconStyleNeon;
+
+  /// Settings icon style: two-colour gradient.
+  ///
+  /// In en, this message translates to:
+  /// **'Aurora'**
+  String get iconStyleAurora;
+
+  /// Settings icon style: round gradient badges.
+  ///
+  /// In en, this message translates to:
+  /// **'Circles'**
+  String get iconStyleCircles;
+
+  /// Settings icon style: white outline like a sticker.
+  ///
+  /// In en, this message translates to:
+  /// **'Stickers'**
+  String get iconStyleStickers;
+
+  /// Settings icon style: graphite tile with a coloured glyph.
+  ///
+  /// In en, this message translates to:
+  /// **'Monolith'**
+  String get iconStyleMono;
+
+  /// Settings icon style: Apple Liquid Glass. Product name, not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'Liquid Glass'**
+  String get iconStyleGlass;
+
+  /// Settings root row: delivery reliability checks.
+  ///
+  /// In en, this message translates to:
+  /// **'Reliability'**
+  String get settingsRowReliability;
+
+  /// Accessibility label of the warning mark on a settings row.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs attention'**
+  String get settingsRowNeedsAttention;
+
+  /// Settings root row: power usage.
+  ///
+  /// In en, this message translates to:
+  /// **'Power'**
+  String get settingsRowPower;
+
+  /// Settings root row subtitle: power usage.
+  ///
+  /// In en, this message translates to:
+  /// **'Less heat and battery drain'**
+  String get settingsRowPowerSub;
+
+  /// Settings root row subtitle when the System section has a warning.
+  ///
+  /// In en, this message translates to:
+  /// **'System message available'**
+  String get settingsRowSystemNotice;
+
+  /// Settings root row.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite friends'**
+  String get settingsRowInvite;
+
+  /// Settings root row: donate (not shown on iOS).
+  ///
+  /// In en, this message translates to:
+  /// **'Support Secretly'**
+  String get settingsRowDonate;
+
+  /// Settings root row: contact support.
+  ///
+  /// In en, this message translates to:
+  /// **'Support'**
+  String get settingsRowSupport;
+
+  /// Settings root row.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy policy'**
+  String get settingsRowPolicy;
+
+  /// Settings root row.
+  ///
+  /// In en, this message translates to:
+  /// **'About Secretly'**
+  String get settingsRowAbout;
+
+  /// iPhone settings: subtitle of the profile card.
+  ///
+  /// In en, this message translates to:
+  /// **'Secretly ID, QR profile'**
+  String get settingsProfileCardSub;
+
+  /// Button/tooltip: open my profile QR code.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile QR code'**
+  String get settingsProfileQr;
+
+  /// iPhone settings search: empty result.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing found for “{query}”'**
+  String settingsSearchNoResults(String query);
+
+  /// Settings: Secretly Premium entry subtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'More limits, themes, frames and more'**
+  String get settingsPremiumTeaser;
+
+  /// Settings → Chats: one-screen appearance editor title.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get appearanceTitle;
+
+  /// Confirm dialog title.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset appearance?'**
+  String get appearanceResetTitle;
+
+  /// Confirm dialog body for resetting appearance.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode, theme, background, wallpaper, bubbles, text size, colours and icon style return to the defaults. Protection settings and the app icon stay as they are.'**
+  String get appearanceResetBody;
+
+  /// Appearance tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Theme'**
+  String get appearanceTabTheme;
+
+  /// Appearance tab description.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode and interface colours'**
+  String get appearanceTabThemeDesc;
+
+  /// Appearance tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallpaper'**
+  String get appearanceTabWallpaper;
+
+  /// Appearance tab description.
+  ///
+  /// In en, this message translates to:
+  /// **'Background inside conversations'**
+  String get appearanceTabWallpaperDesc;
+
+  /// Appearance tab: message bubbles.
+  ///
+  /// In en, this message translates to:
+  /// **'Bubbles'**
+  String get appearanceTabBubbles;
+
+  /// Appearance tab: settings icon style.
+  ///
+  /// In en, this message translates to:
+  /// **'Icons'**
+  String get appearanceTabIcons;
+
+  /// Appearance tab description.
+  ///
+  /// In en, this message translates to:
+  /// **'Style of the settings icons'**
+  String get appearanceTabIconsDesc;
+
+  /// Appearance tab: launcher icon.
+  ///
+  /// In en, this message translates to:
+  /// **'App icon'**
+  String get appearanceTabAppIcon;
+
+  /// Appearance tab description.
+  ///
+  /// In en, this message translates to:
+  /// **'Icon on the home screen'**
+  String get appearanceTabAppIconDesc;
+
+  /// Appearance tab: protection switches.
+  ///
+  /// In en, this message translates to:
+  /// **'Behaviour'**
+  String get appearanceTabBehavior;
+
+  /// Appearance tab description.
+  ///
+  /// In en, this message translates to:
+  /// **'Protection and visibility'**
+  String get appearanceTabBehaviorDesc;
+
+  /// Theme mode segment.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get appearanceModeLight;
+
+  /// Theme mode segment.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get appearanceModeDark;
+
+  /// Theme mode segment: follow the system.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto'**
+  String get appearanceModeAuto;
+
+  /// Wallpaper grid tile opening the full picker (own photos, animated, server).
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get appearanceAllWallpapers;
+
+  /// Appearance colours section.
+  ///
+  /// In en, this message translates to:
+  /// **'Colour of names in replies'**
+  String get appearanceNickColors;
+
+  /// Appearance colours section.
+  ///
+  /// In en, this message translates to:
+  /// **'Colour of ticks and indicators'**
+  String get appearanceIndicatorColors;
+
+  /// Screen reader label for the tab counter.
+  ///
+  /// In en, this message translates to:
+  /// **'Category {current} of {total}'**
+  String appearanceTabPosition(int current, int total);
+
+  /// Button.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous category'**
+  String get appearancePrevTab;
+
+  /// Button.
+  ///
+  /// In en, this message translates to:
+  /// **'Next category'**
+  String get appearanceNextTab;
+
+  /// Screen reader: category differs from the defaults.
+  ///
+  /// In en, this message translates to:
+  /// **'changed'**
+  String get appearanceModified;
+
+  /// Switch title (SEC-11).
+  ///
+  /// In en, this message translates to:
+  /// **'Hide screen contents'**
+  String get appearanceHideScreen;
+
+  /// Switch subtitle on Android (FLAG_SECURE).
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshots and screen recording are blocked, and the app preview is blank. Screen sharing and some accessibility tools will stop working.'**
+  String get appearanceHideScreenAndroid;
+
+  /// Switch subtitle on iOS: only the app switcher card is hidden.
+  ///
+  /// In en, this message translates to:
+  /// **'Contents are hidden in the app switcher. iOS does not let apps block screenshots.'**
+  String get appearanceHideScreenIos;
+
+  /// Snackbar when the OS refuses screen privacy.
+  ///
+  /// In en, this message translates to:
+  /// **'The system refused the setting — screen contents are not hidden.'**
+  String get appearanceHideScreenRefused;
+
+  /// Note under the Android app icon grid.
+  ///
+  /// In en, this message translates to:
+  /// **'The icon changes once the home screen refreshes — it may take a few seconds.'**
+  String get appearanceAppIconAndroidNote;
+
+  /// Desktop appearance: settings icon style section title.
+  ///
+  /// In en, this message translates to:
+  /// **'Icon style'**
+  String get desktopAppearanceIconStyle;
+
+  /// Desktop appearance: icon style hint.
+  ///
+  /// In en, this message translates to:
+  /// **'Icons of the settings sections. Each device keeps its own choice.'**
+  String get desktopAppearanceIconStyleHint;
+
+  /// Appearance tab: text size, name and tick colours.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get appearanceTabText;
+
+  /// Appearance tab description.
+  ///
+  /// In en, this message translates to:
+  /// **'Size, names, ticks'**
+  String get appearanceTabTextDesc;
+
+  /// Appearance tab: soft app background.
+  ///
+  /// In en, this message translates to:
+  /// **'Background'**
+  String get appearanceTabBackground;
+
+  /// Appearance tab description.
+  ///
+  /// In en, this message translates to:
+  /// **'Soft blurred backgrounds for dark and light themes'**
+  String get appearanceTabBackgroundDesc;
+
+  /// Appearance tab description (bubbles, v2).
+  ///
+  /// In en, this message translates to:
+  /// **'Colour and shape of messages'**
+  String get appearanceTabBubblesShapeDesc;
+
+  /// Slider: message text size.
+  ///
+  /// In en, this message translates to:
+  /// **'Text size'**
+  String get appearanceTextSize;
+
+  /// Slider: bubble corner radius.
+  ///
+  /// In en, this message translates to:
+  /// **'Corner rounding'**
+  String get appearanceBubbleRadius;
+
+  /// Background option: follow the theme gradient (default).
+  ///
+  /// In en, this message translates to:
+  /// **'Theme'**
+  String get appBackdropTheme;
+
+  /// Background name.
+  ///
+  /// In en, this message translates to:
+  /// **'Dusk'**
+  String get appBackdropDusk;
+
+  /// Background name.
+  ///
+  /// In en, this message translates to:
+  /// **'Ocean'**
+  String get appBackdropOcean;
+
+  /// Background name.
+  ///
+  /// In en, this message translates to:
+  /// **'Sunset'**
+  String get appBackdropSunset;
+
+  /// Background name.
+  ///
+  /// In en, this message translates to:
+  /// **'Mint'**
+  String get appBackdropMint;
+
+  /// Background name.
+  ///
+  /// In en, this message translates to:
+  /// **'Lavender'**
+  String get appBackdropLavender;
+
+  /// Background name.
+  ///
+  /// In en, this message translates to:
+  /// **'Peach'**
+  String get appBackdropPeach;
+
+  /// Background name.
+  ///
+  /// In en, this message translates to:
+  /// **'Aurora'**
+  String get appBackdropAurora;
+
+  /// Background name.
+  ///
+  /// In en, this message translates to:
+  /// **'Berries'**
+  String get appBackdropBerry;
+
+  /// Background name.
+  ///
+  /// In en, this message translates to:
+  /// **'Amber'**
+  String get appBackdropAmber;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'{current} of {total}'**
+  String mvCounter(int current, int total);
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Reply'**
+  String get mvReply;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Forward'**
+  String get mvForward;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get mvEdit;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get mvShare;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get mvDelete;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get mvMenu;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Save to gallery'**
+  String get mvSaveToGallery;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Save as file'**
+  String get mvSaveAsFile;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Show in chat'**
+  String get mvShowInChat;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'All media'**
+  String get mvAllMedia;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'All media · {count}'**
+  String mvAllMediaCount(int count);
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get mvCopy;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get mvCopied;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Show full text'**
+  String get mvShowFullCaption;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete photo?'**
+  String get mvDeletePhotoTitle;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete video?'**
+  String get mvDeleteVideoTitle;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'You can delete it only for yourself or for both of you.'**
+  String get mvDeleteOwnHint;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'You can delete it only for yourself or for everyone.'**
+  String get mvDeleteOwnGroupHint;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Other people\'s photos and videos are deleted only for you.'**
+  String get mvDeleteTheirsHint;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'It will be deleted only on this device.'**
+  String get mvDeleteLocalHint;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete for me and {name}'**
+  String mvDeleteForBoth(String name);
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete for everyone'**
+  String get mvDeleteForEveryone;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete only for me'**
+  String get mvDeleteForMeOnly;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Delete for me'**
+  String get mvDeleteForMe;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Photo deleted'**
+  String get mvPhotoDeleted;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Video deleted'**
+  String get mvVideoDeleted;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to gallery'**
+  String get mvSavedToGallery;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Changes saved'**
+  String get mvChangesSaved;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get mvYou;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get mvPlay;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get mvPause;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Play again'**
+  String get mvReplay;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Turn sound off'**
+  String get mvMute;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Turn sound on'**
+  String get mvUnmute;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Playback speed'**
+  String get mvSpeed;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'−5 s'**
+  String get mvSeekBack;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'+5 s'**
+  String get mvSeekForward;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get meDone;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Crop'**
+  String get meTabCrop;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Draw'**
+  String get meTabDraw;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Adjust'**
+  String get meTabAdjust;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Free'**
+  String get meAspectFree;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Original'**
+  String get meAspectOriginal;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Reset'**
+  String get meReset;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Rotate'**
+  String get meRotate;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Flip'**
+  String get meFlip;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Straighten'**
+  String get meStraighten;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Pen'**
+  String get meToolPen;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Marker'**
+  String get meToolMarker;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Neon'**
+  String get meToolNeon;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Eraser'**
+  String get meToolEraser;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get meToolText;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Thickness'**
+  String get meBrushSize;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Draw right on the photo with your finger'**
+  String get meHintDraw;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the photo to add text'**
+  String get meHintText;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Swipe over a line to erase it'**
+  String get meHintEraser;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Enter text'**
+  String get meTextPlaceholder;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Background'**
+  String get meTextBackground;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Text can be dragged around the photo. Tap it to edit.'**
+  String get meTextHelp;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Brightness'**
+  String get meBrightness;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Contrast'**
+  String get meContrast;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Saturation'**
+  String get meSaturation;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Warmth'**
+  String get meWarmth;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Vignette'**
+  String get meVignette;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Compare'**
+  String get meCompare;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get meUndo;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Redo'**
+  String get meRedo;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Discard changes?'**
+  String get meDiscardTitle;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Edits to this photo won\'t be saved.'**
+  String get meDiscardBody;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Discard changes'**
+  String get meDiscardAction;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'today, {time}'**
+  String mvDateToday(String time);
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'yesterday, {time}'**
+  String mvDateYesterday(String time);
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Zoom'**
+  String get vnZoom;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'{name} · video note'**
+  String vnNoteTitle(String name);
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Swipe sideways to rewind'**
+  String get vnScrubHint;
+
+  /// Media viewer / photo editor (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Emoji, stickers and GIFs'**
+  String get composerEmoji;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Keyboard'**
+  String get emojiPanelKeyboard;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Expand panel'**
+  String get emojiPanelExpand;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Search emoji: laugh, cat, coffee'**
+  String get emojiPanelSearchHint;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Results'**
+  String get emojiPanelResults;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing found. Try “laugh”, “cat” or “coffee”.'**
+  String get emojiPanelNothingFound;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Hold a sticker and add it to favorites'**
+  String get emojiPanelFavoritesEmpty;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Slide across stickers, release to see the menu'**
+  String get emojiPanelPreviewHint;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Trending'**
+  String get emojiPanelGifTrending;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'No GIFs found'**
+  String get emojiPanelGifNotFound;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Laugh'**
+  String get emojiPanelGifLaugh;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Love'**
+  String get emojiPanelGifLove;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Approval'**
+  String get emojiPanelGifApproval;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Hello'**
+  String get emojiPanelGifHello;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Hug'**
+  String get emojiPanelGifHug;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Crying'**
+  String get emojiPanelGifCrying;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Excited'**
+  String get emojiPanelGifExcited;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking'**
+  String get emojiPanelGifThinking;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Sleepy'**
+  String get emojiPanelGifSleepy;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Angry'**
+  String get emojiPanelGifAngry;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Shocked'**
+  String get emojiPanelGifShocked;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Dance'**
+  String get emojiPanelGifDance;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Party'**
+  String get emojiPanelGifParty;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Cats'**
+  String get emojiPanelGifCats;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Dogs'**
+  String get emojiPanelGifDogs;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Fire'**
+  String get emojiPanelGifFire;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Food'**
+  String get emojiPanelGifFood;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Sport'**
+  String get emojiPanelGifSport;
+
+  /// Emoji / sticker / GIF panel in place of the keyboard (22.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, one{{count} sticker} other{{count} stickers}}'**
+  String emojiPanelStickerCount(int count);
+
+  /// Chat list row time: less than a minute ago.
+  ///
+  /// In en, this message translates to:
+  /// **'now'**
+  String get chatListTimeNow;
+
+  /// Chat list row time: minutes ago (under an hour).
+  ///
+  /// In en, this message translates to:
+  /// **'{count} min'**
+  String chatListTimeMinutes(int count);
+
+  /// Chat list row subtitle while a call with this person is going on.
+  ///
+  /// In en, this message translates to:
+  /// **'Call in progress'**
+  String get chatListCallInProgress;
+
+  /// Chat list row subtitle while a call with this person is still ringing.
+  ///
+  /// In en, this message translates to:
+  /// **'Calling…'**
+  String get chatListCallRinging;
+
+  /// Title of the sheet shown when tapping the Secretly team checkmark.
+  ///
+  /// In en, this message translates to:
+  /// **'Secretly team'**
+  String get eliteBadgeTeamTitle;
+
+  /// Explains what the team checkmark means.
+  ///
+  /// In en, this message translates to:
+  /// **'This checkmark confirms that this user is part of the Secretly development team.'**
+  String get eliteBadgeTeamBody;
+
+  /// Label before the team role.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get eliteBadgeStatusLabel;
+
+  /// Team role: founder.
+  ///
+  /// In en, this message translates to:
+  /// **'Founder'**
+  String get eliteBadgeRoleFounder;
+
+  /// Team role: tester.
+  ///
+  /// In en, this message translates to:
+  /// **'Tester'**
+  String get eliteBadgeRoleTester;
+
+  /// Sheet title after editing a photo in the media viewer.
+  ///
+  /// In en, this message translates to:
+  /// **'Edited photo'**
+  String get mvEditedTitle;
+
+  /// Explains that the original stays untouched and an edited copy is sent.
+  ///
+  /// In en, this message translates to:
+  /// **'The original won’t change — an edited copy will be sent.'**
+  String get mvEditedHint;
+
+  /// Button: send the edited copy to this chat.
+  ///
+  /// In en, this message translates to:
+  /// **'Send edited copy'**
+  String get mvEditedSend;
+
+  /// Button: discard the edits.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard edits'**
+  String get mvEditedDiscard;
+
+  /// Toast after the edited copy was sent.
+  ///
+  /// In en, this message translates to:
+  /// **'Edited photo sent'**
+  String get mvEditedSent;
+
+  /// Chat menu row: per-chat translator settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation'**
+  String get chatTranslateMenuItem;
+
+  /// Title of the per-chat translator sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation in this chat'**
+  String get chatTranslateSheetTitle;
+
+  /// Section header: translator mode in this chat.
+  ///
+  /// In en, this message translates to:
+  /// **'Mode'**
+  String get chatTranslateModeLabel;
+
+  /// Mode: follow the global Settings.
+  ///
+  /// In en, this message translates to:
+  /// **'As in Settings'**
+  String get chatTranslateModeInherit;
+
+  /// Mode: translator off in this chat.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get chatTranslateModeOff;
+
+  /// Mode: show the translate button only.
+  ///
+  /// In en, this message translates to:
+  /// **'Translate button'**
+  String get chatTranslateModeButton;
+
+  /// Mode: translate incoming messages automatically.
+  ///
+  /// In en, this message translates to:
+  /// **'Translate automatically'**
+  String get chatTranslateModeAuto;
+
+  /// Row: source language.
+  ///
+  /// In en, this message translates to:
+  /// **'Translate from'**
+  String get chatTranslateFrom;
+
+  /// Row: target language.
+  ///
+  /// In en, this message translates to:
+  /// **'Translate to'**
+  String get chatTranslateTo;
+
+  /// Source option: detect the language of each message.
+  ///
+  /// In en, this message translates to:
+  /// **'Detect automatically'**
+  String get chatTranslateAutoDetect;
+
+  /// Target option: the app language.
+  ///
+  /// In en, this message translates to:
+  /// **'App language'**
+  String get chatTranslateAppLanguage;
+
+  /// Button: drop this chat's translator settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset to Settings'**
+  String get chatTranslateReset;
+
+  /// Warning: source and target languages are the same.
+  ///
+  /// In en, this message translates to:
+  /// **'Source and target languages are the same'**
+  String get chatTranslateSameLanguagePair;
+
+  /// Header above the full language list.
+  ///
+  /// In en, this message translates to:
+  /// **'All languages'**
+  String get chatTranslateAllLanguages;
+
+  /// Note under the per-chat translator settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Translation runs on your phone — the text is never sent anywhere. The language pack downloads once.'**
+  String get chatTranslatePrivacyNote;
+
+  /// Snack: the pinned or quoted message is not stored on this device.
+  ///
+  /// In en, this message translates to:
+  /// **'Message unavailable on this device'**
+  String get pinnedMessageUnavailable;
+
+  /// Reaction panel cell opening the full emoji picker.
+  ///
+  /// In en, this message translates to:
+  /// **'All emoji'**
+  String get reactionAllEmoji;
+
+  /// Screen reader label of the mic button in the composer.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice message'**
+  String get composerRecordVoice;
+
+  /// Screen reader label of the video-message button in the composer.
+  ///
+  /// In en, this message translates to:
+  /// **'Video message'**
+  String get composerRecordVideo;
+
+  /// Screen reader hint for the mic/video button.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold to record, tap to switch'**
+  String get composerRecordHint;
+
+  /// Toast while recording a video message: tooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Too short — hold longer'**
+  String get videoNoteHintTooShort;
+
+  /// Toast while recording a video message: limitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'Limit reached — 1 minute'**
+  String get videoNoteHintLimitReached;
+
+  /// Toast while recording a video message: retake.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold the button to record again'**
+  String get videoNoteHintRetake;
+
+  /// Toast while recording a video message: noPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Video needs camera and microphone access'**
+  String get videoNoteHintNoPermission;
+
+  /// Toast while recording a video message: cameraFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera unavailable — try again'**
+  String get videoNoteHintCameraFailed;
+
+  /// Video-message recorder control or label: slideToCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Slide left to cancel'**
+  String get videoNoteRecSlideToCancel;
+
+  /// Video-message recorder control or label: releaseToDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Release to delete'**
+  String get videoNoteRecReleaseToDelete;
+
+  /// Video-message recorder control or label: pause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get videoNoteRecPause;
+
+  /// Video-message recorder control or label: resume.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get videoNoteRecResume;
+
+  /// Video-message recorder control or label: stop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop and preview'**
+  String get videoNoteRecStop;
+
+  /// Video-message recorder control or label: delete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get videoNoteRecDelete;
+
+  /// Video-message recorder control or label: retake.
+  ///
+  /// In en, this message translates to:
+  /// **'Retake'**
+  String get videoNoteRecRetake;
+
+  /// Video-message recorder control or label: looped.
+  ///
+  /// In en, this message translates to:
+  /// **'looping'**
+  String get videoNoteRecLooped;
+
+  /// Video-message recorder control or label: flip.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch camera'**
+  String get videoNoteRecFlip;
+
+  /// Video-message recorder control or label: light.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get videoNoteRecLight;
+
+  /// Video-message recorder control or label: play.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get videoNoteRecPlay;
+
+  /// Video-message recorder control or label: trimStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Clip start'**
+  String get videoNoteRecTrimStart;
+
+  /// Video-message recorder control or label: trimEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'Clip end'**
+  String get videoNoteRecTrimEnd;
+
+  /// Video-message recorder control or label: cameraUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera unavailable'**
+  String get videoNoteRecCameraUnavailable;
+
+  /// Toast while recording a voice message: holdToRecord.
+  ///
+  /// In en, this message translates to:
+  /// **'Hold to record a voice message'**
+  String get voiceHintHoldToRecord;
+
+  /// Toast while recording a voice message: tooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Too short — hold a bit longer'**
+  String get voiceHintTooShort;
+
+  /// Toast while recording a voice message: noPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Microphone access is not available'**
+  String get voiceHintNoPermission;
+
+  /// Toast while recording a voice message: failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t record the voice message'**
+  String get voiceHintFailed;
+
+  /// Voice-message recorder control or label: slideToCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Slide to cancel'**
+  String get voiceRecSlideToCancel;
+
+  /// Voice-message recorder control or label: releaseToDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Release to delete'**
+  String get voiceRecReleaseToDelete;
+
+  /// Voice-message recorder control or label: deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording deleted'**
+  String get voiceRecDeleted;
+
+  /// Voice-message recorder control or label: stop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop and listen'**
+  String get voiceRecStop;
+
+  /// Voice-message recorder control or label: play.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get voiceRecPlay;
+
+  /// Voice-message recorder control or label: pause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get voiceRecPause;
+
+  /// Emoji panel section title: smileys_and_emotions.
+  ///
+  /// In en, this message translates to:
+  /// **'Smileys & emotions'**
+  String get emojiCategorySmileys;
+
+  /// Emoji panel section title: people.
+  ///
+  /// In en, this message translates to:
+  /// **'People & body'**
+  String get emojiCategoryPeople;
+
+  /// Emoji panel section title: animals_and_nature.
+  ///
+  /// In en, this message translates to:
+  /// **'Animals & nature'**
+  String get emojiCategoryAnimals;
+
+  /// Emoji panel section title: food_and_drink.
+  ///
+  /// In en, this message translates to:
+  /// **'Food & drink'**
+  String get emojiCategoryFood;
+
+  /// Emoji panel section title: travel_and_places.
+  ///
+  /// In en, this message translates to:
+  /// **'Travel & places'**
+  String get emojiCategoryTravel;
+
+  /// Emoji panel section title: activities_and_events.
+  ///
+  /// In en, this message translates to:
+  /// **'Activities'**
+  String get emojiCategoryActivities;
+
+  /// Emoji panel section title: objects.
+  ///
+  /// In en, this message translates to:
+  /// **'Objects'**
+  String get emojiCategoryObjects;
+
+  /// Emoji panel section title: symbols.
+  ///
+  /// In en, this message translates to:
+  /// **'Symbols'**
+  String get emojiCategorySymbols;
+
+  /// Emoji panel section title: flags.
+  ///
+  /// In en, this message translates to:
+  /// **'Flags'**
+  String get emojiCategoryFlags;
+
+  /// Screen reader label of the speed chip on a voice message bubble; the value (e.g. 1.5×) is read separately.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback speed'**
+  String get voicePlaybackSpeed;
+
+  /// Media viewer: the video could not be downloaded or played.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open the video'**
+  String get mvVideoOpenFailed;
+
+  /// Media viewer: button under the video error that tries again.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get mvRetry;
+
+  /// Screen reader label of the spinner while a video that is still downloading waits for data.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading video…'**
+  String get mvVideoBuffering;
+
+  /// Snackbar when the OS refused to change the app icon.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn’t change the app icon. Try again.'**
+  String get appIconChangeFailed;
+
+  /// Full-width divider above the first unread message when a chat opens
+  ///
+  /// In en, this message translates to:
+  /// **'Unread messages'**
+  String get chatUnreadMessagesDivider;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Premium'**
+  String get premiumHubTitle;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get premiumHubRestore;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Free plan'**
+  String get premiumHubChipFree;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Premium active'**
+  String get premiumHubChipActive;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Secretly Premium'**
+  String get premiumHubHeroFree;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Congratulations!'**
+  String get premiumHubHeroPremium;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Frames, live wallpapers, voice transcription and bigger limits. Here is what a subscription unlocks.'**
+  String get premiumHubSubFree;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Everything below is already unlocked. Thank you for supporting Secretly.'**
+  String get premiumHubSubPremium;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'How you look in chats'**
+  String get premiumHubSeenAs;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Plan'**
+  String get premiumHubPlan;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Premium'**
+  String get premiumHubPlanPremium;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Premium · Lifetime'**
+  String get premiumHubPlanLifetime;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Premium · Team'**
+  String get premiumHubPlanTeam;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Premium · Early supporter'**
+  String get premiumHubPlanLegacy;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Next renewal'**
+  String get premiumHubRenews;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Payment'**
+  String get premiumHubPayment;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'one-time payment'**
+  String get premiumHubOneTime;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Manage subscription'**
+  String get premiumHubManage;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'FRAMES AND COVERS'**
+  String get premiumHubFramesCovers;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get premiumHubAll;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Some frames and covers are free. Premium unlocks the rest.'**
+  String get premiumHubFramesNote;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'PROFILE'**
+  String get premiumHubGroupProfile;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'CHATS AND STYLE'**
+  String get premiumHubGroupChats;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'FEATURES'**
+  String get premiumHubGroupFeatures;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Emoji status'**
+  String get premiumHubStatusName;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'An emoji next to your name in chats and profile'**
+  String get premiumHubStatusDesc;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Premium badge'**
+  String get premiumHubBadgeName;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'A Premium mark next to your name'**
+  String get premiumHubBadgeDesc;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Video avatar'**
+  String get premiumHubVideoName;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'A short video instead of a photo'**
+  String get premiumHubVideoDesc;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Custom cover'**
+  String get premiumHubCoverName;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'A photo or video on your profile cover'**
+  String get premiumHubCoverDesc;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Live wallpapers'**
+  String get premiumHubWallpaperName;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Animated wallpapers and premium themes'**
+  String get premiumHubWallpaperDesc;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Premium stickers'**
+  String get premiumHubStickersName;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Premium sticker packs'**
+  String get premiumHubStickersDesc;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'App icon'**
+  String get premiumHubAppIconName;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Premium icons on your home screen'**
+  String get premiumHubAppIconDesc;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Ringtones'**
+  String get premiumHubRingtonesName;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Your own call and message sounds'**
+  String get premiumHubRingtonesDesc;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'AI: voice to text'**
+  String get premiumHubVoiceName;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Voice messages transcribed right on your device'**
+  String get premiumHubVoiceDesc;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Be there at 7'**
+  String get premiumHubVoiceSample;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Multiple devices'**
+  String get premiumHubDevicesName;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Secretly on your computer and other devices'**
+  String get premiumHubDevicesDesc;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Files up to {size}'**
+  String premiumHubFilesName(String size);
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Instead of {size} on the free plan'**
+  String premiumHubFilesDesc(String size);
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Calls with up to {count} people'**
+  String premiumHubCallsName(int count);
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Instead of {count} on the free plan'**
+  String premiumHubCallsDesc(int count);
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'More of your own groups and rooms'**
+  String get premiumHubGroupsName;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Up to {premium} instead of {free}, no limit on joining'**
+  String premiumHubGroupsDesc(int premium, int free);
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'LIMITS: FREE AND PREMIUM'**
+  String get premiumHubLimits;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Free'**
+  String get premiumHubColFree;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Premium'**
+  String get premiumHubColPremium;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get premiumHubLimitFiles;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Call participants'**
+  String get premiumHubLimitCalls;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Your own groups and rooms'**
+  String get premiumHubLimitOwnGroups;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Groups you are in'**
+  String get premiumHubLimitJoinedGroups;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Devices'**
+  String get premiumHubLimitDevices;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Frames and covers'**
+  String get premiumHubLimitCosmetics;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'unlimited'**
+  String get premiumHubUnlimited;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'several'**
+  String get premiumHubSeveral;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'some'**
+  String get premiumHubSome;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'all'**
+  String get premiumHubAllValue;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'COMING TO PREMIUM'**
+  String get premiumHubSoon;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Soon'**
+  String get premiumHubSoonChip;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Spaces: channels and communities'**
+  String get premiumHubSoonSpaces;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Your own sticker packs'**
+  String get premiumHubSoonStickers;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Stories that disappear'**
+  String get premiumHubSoonStories;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Watch videos together in calls'**
+  String get premiumHubSoonWatch;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'HD video calls and noise suppression'**
+  String get premiumHubSoonHd;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Get Premium'**
+  String get premiumHubGet;
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'{n} MB'**
+  String premiumHubSizeMb(int n);
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'{n} GB'**
+  String premiumHubSizeGb(int n);
+
+  /// Premium hub screen (opened from the profile header).
+  ///
+  /// In en, this message translates to:
+  /// **'Secretly logo made of fireflies. Drag to tilt it.'**
+  String get premiumHubLogoHint;
+
+  /// Settings → Power: switch translucent (see-through) cards/panels vs solid cards.
+  ///
+  /// In en, this message translates to:
+  /// **'Translucent cards'**
+  String get translucentCardsTitle;
+
+  /// No description provided for @translucentCardsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings, profile and window cards let the background show through. Turn off for solid cards.'**
+  String get translucentCardsSubtitle;
+
+  /// Cover picker: header of the private covers section shown only to Secretly team members (profiles with the team badge).
+  ///
+  /// In en, this message translates to:
+  /// **'Secretly team'**
+  String get teamCoversTitle;
+
+  /// Cover picker: explanation under the team covers header.
+  ///
+  /// In en, this message translates to:
+  /// **'Private covers. They are not in the catalogue: only team members can pick them, and everyone sees them on your profile.'**
+  String get teamCoversSubtitle;
+
+  /// Settings → section with theme, wallpapers, bubbles, app icon (was titled Chats). Also the title of that page.
+  ///
+  /// In en, this message translates to:
+  /// **'Style'**
+  String get settingsStyleSection;
+
+  /// Welcome sheet after updating to 1.9: title.
+  ///
+  /// In en, this message translates to:
+  /// **'Meet Secretly 1.9'**
+  String get whatsNewTitle;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Faster, quieter and even more professional.'**
+  String get whatsNewSubtitle;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'What’s new'**
+  String get whatsNewOpen;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get whatsNewLater;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'What’s new in 1.9'**
+  String get whatsNewHeader;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get whatsNewNext;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Get started'**
+  String get whatsNewStart;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get whatsNewClose;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Straight from the notification'**
+  String get whatsNewCard1Title;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a notification — the chat opens at the first unread message.'**
+  String get whatsNewCard1Body;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'A fresh look'**
+  String get whatsNewCard2Title;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Islands, panels and the folder strip — calmer and cleaner.'**
+  String get whatsNewCard2Body;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Your style'**
+  String get whatsNewCard3Title;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Theme, wallpaper, bubbles and icon — all in Style.'**
+  String get whatsNewCard3Body;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'A profile that feels alive'**
+  String get whatsNewCard4Title;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Live covers and frames, one smooth move into your profile.'**
+  String get whatsNewCard4Body;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Messages'**
+  String get whatsNewCard5Title;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'New composer, emoji, voice and video notes, and a photo editor.'**
+  String get whatsNewCard5Body;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Emotions'**
+  String get whatsNewCard6Title;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Flying reactions and 63 emoji with full-screen effects.'**
+  String get whatsNewCard6Body;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Alice'**
+  String get whatsNewDemoSender;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Can you take a look tonight?'**
+  String get whatsNewDemoMessage;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'now'**
+  String get whatsNewDemoNow;
+
+  /// Settings → About: row that reopens the What’s new 1.9 tour.
+  ///
+  /// In en, this message translates to:
+  /// **'What’s new in 1.9'**
+  String get whatsNewSettingsRow;
+
+  /// Hand-drawn pen hint near the search button on the home screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Search by username and contacts'**
+  String get penHintSearch;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Theme, wallpaper, bubbles, icon'**
+  String get penHintStyle;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'See-through or solid'**
+  String get penHintPanels;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Live covers'**
+  String get penHintCovers;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Emoji, stickers, GIFs'**
+  String get penHintEmoji;
+
+  /// What’s new in 1.9 (welcome sheet, tour cards, pen hints).
+  ///
+  /// In en, this message translates to:
+  /// **'Long-press to react'**
+  String get penHintReactions;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

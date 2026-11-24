@@ -13,6 +13,8 @@ import '../diagnostics/identity_journal.dart';
 import '../security/keychain_migration.dart';
 import '../transport/server_clock.dart';
 import 'diagnostics_unlock.dart';
+import 'motion/press_feedback.dart';
+import 'settings_group.dart';
 import 'settings_screen_l10n.dart';
 import '../calls/call_manager.dart';
 import '../app/app_controller.dart';
@@ -28,6 +30,9 @@ import 'l10n.dart';
 import 'wave1_l10n.dart';
 import 'widgets/frosted_top_bar.dart';
 import 'package:secretly_app/ui/apple_controls.dart';
+import 'package:secretly_app/ui/icons/adaptive_icons.dart';
+import 'package:secretly_app/ui/apple_settings_row.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
 
 class _MessageDiagnosticsData {
   const _MessageDiagnosticsData({
@@ -568,11 +573,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     final subtitleStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
       color: Theme.of(context).colorScheme.onSurfaceVariant,
     );
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
+    return _diagEntryCard(
+      Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -609,12 +611,25 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               ],
             ),
           ],
-        ),
       ),
     );
   }
 
+  /// Карточка записи (сообщение, звонок). На Android она уже внутри панели
+  /// раздела — без второй карточки, только отступ снизу.
+  Widget _diagEntryCard(Widget child) {
+    if (settingsAndroidPanels) {
+      return Padding(padding: const EdgeInsets.only(bottom: 12), child: child);
+    }
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(padding: const EdgeInsets.all(12), child: child),
+    );
+  }
+
   Widget _sectionTitle(BuildContext context, String title) {
+    // Android: заголовок группы настроек (без капса — это имена полей).
+    if (settingsAndroidPanels) return _DiagSectionTitle(title);
     return Text(title, style: Theme.of(context).textTheme.titleMedium);
   }
 
@@ -624,11 +639,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     final outboxSummary = _stringField(row, 'outbox_state_summary');
     final lastErrorCode = _stringField(row, 'last_error_code');
     final updatedAtMs = (row['updated_at_ms'] as num?)?.toInt() ?? 0;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
+    return _diagEntryCard(
+      Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SelectableText(
@@ -644,7 +656,6 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
             Text('last_error: ${lastErrorCode.isEmpty ? '—' : lastErrorCode}'),
             Text('updated: ${_fmtMs(context, updatedAtMs)}'),
           ],
-        ),
       ),
     );
   }
@@ -655,6 +666,38 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     required List<Map<String, Object?>> rows,
     required String Function(Map<String, Object?> row) label,
   }) {
+    if (settingsAndroidPanels) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _DiagSectionTitle(title),
+          SettingsPanel(
+            margin: EdgeInsets.zero,
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (rows.isEmpty)
+                  Text('—', style: Theme.of(context).textTheme.bodySmall)
+                else
+                  ...rows.map(
+                    (row) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: SelectableText(
+                        label(row),
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -681,7 +724,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       spacing: 12,
       runSpacing: 12,
       children: [
-        FilledButton.tonal(
+        PressFeedback(child: FilledButton.tonal(
           onPressed: () async {
             await controller.forceOutboxPump();
             if (!context.mounted) return;
@@ -705,8 +748,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               en: 'Force outbox pump',
             ),
           ),
-        ),
-        FilledButton.tonal(
+        )),
+        PressFeedback(child: FilledButton.tonal(
           onPressed: () async {
             final recovered = await controller
                 .recoverStuckOutgoingForDiagnostics();
@@ -731,7 +774,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               en: 'Recover stuck sends',
             ),
           ),
-        ),
+        )),
       ],
     );
   }
@@ -894,14 +937,28 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     return buffer.toString().trimRight();
   }
 
+  /// Панель групп настроек вместо серой карточки Material — на Android и на
+  /// iPhone (23.11.2026: на iPhone серая карточка не слушалась «Прозрачных
+  /// плашек»). На компьютере — прежняя карточка.
+  Widget _introPanel(ColorScheme colors, Widget child) => settingsIosLayout
+      ? SettingsPanel(
+          margin: EdgeInsets.zero,
+          padding: EdgeInsets.zero,
+          child: child,
+        )
+      : Card(
+          color: colors.surfaceContainerHighest.withValues(alpha: 0.65),
+          child: child,
+        );
+
   Widget _diagnosticsIntroCard(BuildContext context, _DiagnosticsData? data) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     return GestureDetector(
       onLongPress: () => _unlockDeveloperActions(context),
-      child: Card(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.65),
-        child: Padding(
+      child: _introPanel(
+        colors,
+        Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -909,7 +966,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.info_outline_rounded, color: colors.primary),
+                  Icon(AdaptiveIcons.info_outline_rounded, color: colors.primary),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -945,13 +1002,13 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
               const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerLeft,
-                child: FilledButton.tonalIcon(
+                child: PressFeedback(child: FilledButton.tonalIcon(
                   onPressed: () => _copyDiagnosticsReport(context, data),
-                  icon: const Icon(Icons.copy_all_rounded),
+                  icon: const Icon(AdaptiveIcons.copy_all_rounded),
                   label: Text(
                     _label(context, ru: 'Скопировать отчёт', en: 'Copy report'),
                   ),
-                ),
+                )),
               ),
             ],
           ),
@@ -963,7 +1020,9 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Scaffold(
+    // iPhone: строки, разделители и группы — как в «Настройках» iOS.
+    return AppleSettingsPageTheme(
+      child: Scaffold(
       extendBodyBehindAppBar: true,
       appBar: frostedAppBar(title: Text(l10n.diagnostics)),
       body: StreamBuilder<void>(
@@ -1011,7 +1070,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                   16,
                   16,
                 ),
-                children: [
+                children: _panelize(<Widget>[
                   _diagnosticsIntroCard(context, data),
                   const SizedBox(height: 16),
 
@@ -1023,14 +1082,14 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                       runSpacing: 8,
                       children: [
                         for (final t in PaywallTrigger.values)
-                          OutlinedButton(
+                          PressFeedback(child: OutlinedButton(
                             onPressed: () => Navigator.of(context).push(
                               MaterialPageRoute<void>(
                                 builder: (_) => PaywallScreen(trigger: t),
                               ),
                             ),
                             child: Text('Paywall: ${t.name}'),
-                          ),
+                          )),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -1474,13 +1533,13 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                   // включать. Односторонняя настройка — это ловушка.
                   SizedBox(
                     width: double.infinity,
-                    child: OutlinedButton.icon(
+                    child: PressFeedback(child: OutlinedButton.icon(
                       onPressed: () async {
                         final navigator = Navigator.of(context);
                         await DiagnosticsUnlock.setUnlocked(false);
                         navigator.pop();
                       },
-                      icon: const Icon(Icons.visibility_off_outlined),
+                      icon: const Icon(AdaptiveIcons.visibility_off_outlined),
                       label: Text(
                         settingsScreenLabel(
                           context,
@@ -1488,7 +1547,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                           en: 'Hide diagnostics',
                         ),
                       ),
-                    ),
+                    )),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -1503,13 +1562,65 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                ],
+                ]),
               );
             },
           );
         },
       ),
+    ),
     );
+  }
+
+  /// Android (23.11.2026, владелец: «доделай все категории, половина на
+  /// старом стиле»): каждый раздел — заголовок и панель групп настроек под
+  /// ним, а не сплошной текст по фону. Раздел — от заголовка до отступа 16
+  /// и больше. На iPhone список прежний.
+  List<Widget> _panelize(List<Widget> items) {
+    if (!settingsAndroidPanels) return items;
+    bool isSpacer(Widget w, {required bool end}) {
+      if (w is! SizedBox || w.child != null || w.width != null) return false;
+      final h = w.height ?? 0;
+      return end ? h >= 16 : h < 16;
+    }
+
+    final out = <Widget>[];
+    List<Widget>? body;
+    void flush() {
+      final b = body;
+      body = null;
+      if (b == null) return;
+      // Отступ 8 под заголовком внутри панели не нужен.
+      if (b.isNotEmpty && isSpacer(b.first, end: false)) b.removeAt(0);
+      if (b.isEmpty) return;
+      out.add(
+        SettingsPanel(
+          margin: EdgeInsets.zero,
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: b,
+          ),
+        ),
+      );
+    }
+
+    for (final w in items) {
+      if (w is _DiagSectionTitle) {
+        flush();
+        out.add(w);
+        body = <Widget>[];
+      } else if (body != null && isSpacer(w, end: true)) {
+        flush();
+        out.add(const SizedBox(height: 4));
+      } else if (body != null) {
+        body!.add(w);
+      } else {
+        out.add(w);
+      }
+    }
+    flush();
+    return out;
   }
 
   Widget _kv(String k, String v) {
@@ -1529,6 +1640,35 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Заголовок раздела диагностики на Android: мелко и серо, как заголовок
+/// группы настроек, но без капса — это имена полей отчёта.
+class _DiagSectionTitle extends StatelessWidget {
+  const _DiagSectionTitle(this.title);
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      child: Semantics(
+        header: true,
+        child: Text(
+          title,
+          style: TextStyle(
+            fontSize: 13,
+            letterSpacing: -0.08,
+            color: AppleGlass.secondaryLabel(
+              theme.brightness == Brightness.dark,
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -81,12 +81,62 @@ const Set<String> kFreeAvatarFrameIds = {
 
 /// Бесплатные обложки профиля (то же решение 13.11.2026). Своя обложка из
 /// фото или видео остаётся в Premium.
+/// Обложка «Без обложки», выбранная ЯВНО (22.11.2026). Без неё «не
+/// выбирал» и «выбрал без обложки» были одним `null`, и выбор «Без
+/// обложки» тихо заменялся узором «Отпечаток ключа» по умолчанию.
+const String kNoProfileCoverId = 'none';
+
 const Set<String> kFreeProfileCoverIds = {
+  kNoProfileCoverId,
   'space',
   'waves',
   'marks',
   'goldhaze',
+  // Обложки-узоры (21.11.2026): спокойные, 5–20 % прозрачности — для всех.
+  'pattern_orbits',
+  'pattern_monogram',
+  'pattern_bubbles',
+  'pattern_constellation',
+  'pattern_ripples',
+  'pattern_rays',
+  'pattern_halftone',
+  'pattern_spiral',
+  'pattern_rain',
+  'pattern_honeycomb',
+  // «Отпечаток ключа» (21.11.2026) — узор из ключа шифрования.
+  'pattern_fingerprint',
+  // Вторая волна узоров (22.11.2026) — тоже для всех.
+  'pattern_fireflies',
+  'pattern_smark',
+  'pattern_soda',
+  'pattern_burgers',
+  'pattern_planes',
+  'pattern_balloons',
+  'pattern_coffee',
+  'pattern_donuts',
+  'pattern_icecream',
+  'pattern_popcorn',
+  'pattern_suits',
 };
+
+/// Закрытые обложки команды Secretly (макет «Staff Covers», 23.11.2026).
+/// 🔴 Не продаются и не выбираются: их нет в каталоге, выбрать может только
+/// профиль со знаком команды, а у собеседников они рисуются только в
+/// профиле со знаком (`EliteBadges.isTeam`). Платная подписка на них не
+/// влияет ни в какую сторону.
+const Set<String> kStaffCoverIds = {
+  'pattern_champagne',
+  'pattern_gems',
+  'pattern_perfume',
+  'pattern_macarons',
+  'pattern_watches',
+  'pattern_movement',
+  'pattern_armillary',
+  'pattern_cards',
+  'pattern_gifts',
+};
+
+bool isStaffCoverId(String id) => kStaffCoverIds.contains(id);
 
 /// The kind of cosmetic being checked (drives which free set is consulted).
 enum CosmeticKind {

@@ -4,6 +4,7 @@
 // Переводчик (11.2026): подготовка текста и выбор языка оригинала.
 // Чистые функции — без ML Kit.
 import 'package:flutter_test/flutter_test.dart';
+import 'package:secretly_app/translation/translation_rules.dart';
 import 'package:secretly_app/translation/translation_service.dart';
 
 void main() {
@@ -85,11 +86,24 @@ void main() {
       );
     });
 
-    test('unsure target falls back to the next plausible language', () {
-      // Короткая фраза с опечатками: «ru» впереди, но неуверенно.
+    test('legacy rule (switch off) still picks a neighbour — new rules do not',
+        () {
+      // Прежний выбор остался только за выключателем
+      // kTranslationStrictSameLanguage: он и давал «русский → русский»
+      // (Т-1, 22.11.2026). Новые правила для того же случая говорят «уже на
+      // этом языке» — см. translation_same_language_test.dart.
       expect(
         MessageTranslationService.pickSource([('ru', 0.4), ('uk', 0.35)], 'ru'),
         'uk',
+      );
+      expect(
+        TranslationRules.decideSource(
+          candidates: const [('ru', 0.4), ('uk', 0.35)],
+          target: 'ru',
+          cleanedText: 'Привет как дела',
+          userInitiated: true,
+        ).verdict,
+        SourceVerdict.sameLanguage,
       );
     });
 

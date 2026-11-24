@@ -5,9 +5,12 @@ import 'package:flutter/material.dart';
 
 import '../billing/show_paywall.dart';
 import 'icons/app_icons.dart';
+import 'motion/app_dialogs.dart';
+import 'motion/press_feedback.dart';
 import 'paywall_screen.dart';
 import 'wave1_l10n.dart';
 import 'widgets/premium_glass.dart';
+import 'package:secretly_app/ui/apple_glass.dart';
 
 /// Telegram-style upsell dialog shown when a picked file exceeds the free
 /// attachment ceiling but WOULD fit under Premium. Explains why the file was
@@ -26,12 +29,15 @@ Future<void> showAttachmentTooLargeDialog({
   final fileMb = (fileBytes / 1000000).round();
   final limitMb = (limitBytes / (1024 * 1024)).round();
 
-  final wantsPremium = await showDialog<bool>(
+  final wantsPremium = await showAppDialog<bool>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.55),
     builder: (dialogContext) {
       return Dialog(
-        backgroundColor: cs.surface,
+        backgroundColor: appleSheetFillOr(
+          context,
+          cs.surface,
+        ),
         insetPadding: const EdgeInsets.symmetric(horizontal: 40),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(22),
@@ -109,7 +115,7 @@ Future<void> showAttachmentTooLargeDialog({
               const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
-                child: FilledButton(
+                child: PressFeedback(child: FilledButton(
                   style: FilledButton.styleFrom(
                     backgroundColor: kPremiumGold,
                     foregroundColor: Colors.black,
@@ -136,7 +142,7 @@ Future<void> showAttachmentTooLargeDialog({
                       de: 'Premium holen',
                     ),
                   ),
-                ),
+                )),
               ),
               const SizedBox(height: 4),
               TextButton(
