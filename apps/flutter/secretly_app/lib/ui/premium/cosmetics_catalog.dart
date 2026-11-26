@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import '../gpu_image_guard.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:video_player/video_player.dart';
 
@@ -2236,6 +2237,9 @@ class _BlackHoleShaderCover extends StatefulWidget {
 
 class _BlackHoleShaderCoverState extends State<_BlackHoleShaderCover>
     with PacedTickerProviderStateMixin, WidgetsBindingObserver {
+  @override
+  bool get restsWhenIdle => true;
+
   // The profile page runs TWO instances (back + front layers) — load the
   // program once and share it; each instance still gets its own shader.
   static Future<ui.FragmentProgram>? _programFuture;
@@ -2306,7 +2310,7 @@ class _BlackHoleShaderCoverState extends State<_BlackHoleShaderCover>
     final pic = rec.endRecording();
     final img = pic.toImageSync(w.round(), h.round());
     pic.dispose();
-    _frame?.dispose();
+    GpuImageGuard.disposeAfterFrames(_frame);
     _frame = img;
     setState(() {});
   }
@@ -2324,7 +2328,7 @@ class _BlackHoleShaderCoverState extends State<_BlackHoleShaderCover>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _ticker?.dispose();
-    _frame?.dispose();
+    GpuImageGuard.disposeAfterFrames(_frame);
     _shader?.dispose();
     super.dispose();
   }

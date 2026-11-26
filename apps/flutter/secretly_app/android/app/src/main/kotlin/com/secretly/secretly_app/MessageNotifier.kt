@@ -37,6 +37,7 @@ import java.security.MessageDigest
 object MessageNotifier {
     private const val TAG = "MessageNotifier"
     private const val CHANNEL_ID = "secretly_messages_v2"
+    const val SILENT_CHANNEL_ID = "secretly_messages_silent_v1"
     private const val GROUP_KEY = "secretly_messages_group"
     private const val NOTIF_TAG_PREFIX = "secretly_msg:"
     private const val NOTIF_ID = 1
@@ -261,6 +262,27 @@ object MessageNotifier {
         ).apply {
             description = context.getString(R.string.notification_channel_messages_description)
             enableVibration(true)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
+            setShowBadge(true)
+        }
+        manager.createNotificationChannel(channel)
+    }
+
+    /// SendFlow (24.11.2026): беззвучный канал для «Отправить без звука» —
+    /// реле шлёт такие уведомления с channel_id = SILENT_CHANNEL_ID. Канал
+    /// должен существовать заранее (уведомление может прийти, когда
+    /// приложение не запущено), поэтому создаётся при старте.
+    fun ensureSilentChannel(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager ?: return
+        if (manager.getNotificationChannel(SILENT_CHANNEL_ID) != null) return
+        val channel = NotificationChannel(
+            SILENT_CHANNEL_ID,
+            context.getString(R.string.notification_channel_silent_name),
+            NotificationManager.IMPORTANCE_DEFAULT,
+        ).apply {
+            setSound(null, null)
+            enableVibration(false)
             lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
             setShowBadge(true)
         }

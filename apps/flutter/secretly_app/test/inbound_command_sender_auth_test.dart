@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:secretly_app/rooms/call_e2ee/call_e2ee_protocol.dart' show kRoomCallKeyCapability;
 import 'package:secretly_app/app/app_controller.dart';
 import 'package:secretly_app/crypto/dart_crypto_provider.dart';
 import 'package:secretly_app/models/e2e_payload_v1.dart';
@@ -505,11 +506,10 @@ void main() {
       // 06.10.2026: к rk2 добавилась rc1 — «понимаю ключи созвона» (ТЗ E2EE
       // созвонов, ЗР-14). rk2 по-прежнему объявляется в каждой служебной
       // посылке.
-      final capsAt = control.indexOf('caps: const <String>[');
-      expect(capsAt, greaterThan(0));
-      final caps = control.substring(capsAt, control.indexOf(']', capsAt));
-      expect(caps.contains('E2ePayloadV1.capRoomKeyV2'), isTrue);
-      expect(caps.contains('kRoomCallKeyCapability'), isTrue);
+      // 24.11.2026: список — общий E2ePayloadV1.ownCaps (добавилась msx1).
+      expect(control.contains('caps: E2ePayloadV1.ownCaps,'), isTrue);
+      expect(E2ePayloadV1.ownCaps, contains(E2ePayloadV1.capRoomKeyV2));
+      expect(E2ePayloadV1.ownCaps, contains(kRoomCallKeyCapability));
     });
   });
 

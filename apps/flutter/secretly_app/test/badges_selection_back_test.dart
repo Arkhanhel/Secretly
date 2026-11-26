@@ -238,9 +238,9 @@ void main() {
     test('🔴 второе долгое касание по выделенному — выделение текста', () {
       final s = _src('lib/ui/chat_screen.dart');
       final at = s.indexOf('Widget _wrapSelectableEventItem(');
-      final body = s.substring(at, at + 2600);
+      final body = s.substring(at, at + 3200);
       expect(body.contains('if (selected) {'), isTrue);
-      expect(body.contains('_openMessageTextSelection(event)'), isTrue);
+      expect(body.contains('_openMessageTextSelection(event, position)'), isTrue);
       expect(body.contains('_toggleSelection(event.eventId);'), isTrue);
       expect(body.contains('_startSelection(event.eventId);'), isTrue);
     });

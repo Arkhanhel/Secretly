@@ -62,6 +62,9 @@ class ShimmerGoldText extends StatefulWidget {
 
 class _ShimmerGoldTextState extends State<ShimmerGoldText>
     with PacedTickerProviderStateMixin {
+  @override
+  bool get restsWhenIdle => true;
+
   late final AnimationController _c =
       AnimationController(vsync: this, duration: widget.period)..repeat();
 
@@ -390,6 +393,9 @@ class CosmicDustField extends StatefulWidget {
 
 class _CosmicDustFieldState extends State<CosmicDustField>
     with PacedTickerProviderStateMixin {
+  @override
+  bool get restsWhenIdle => true;
+
   late final AnimationController _c =
       AnimationController(vsync: this, duration: const Duration(seconds: 18))
         ..repeat();

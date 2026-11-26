@@ -131,6 +131,9 @@ class _NotoStatusEmojiState extends State<NotoStatusEmoji>
     // контроллер Lottie просил кадр на каждое обновление экрана (120 Гц), и
     // `FrameRate(30)` этого не меняет — он лишь округляет картинку.
     with PacedTickerProviderStateMixin {
+  @override
+  bool get restsWhenIdle => true;
+
   File? _lottie;
   int _loadGeneration = 0;
   late final AnimationController _ctrl = AnimationController(vsync: this);

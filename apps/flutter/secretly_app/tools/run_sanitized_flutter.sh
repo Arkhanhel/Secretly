@@ -206,13 +206,17 @@ if [ "${SECRETLY_SANITIZED_FULL_SYNC:-0}" != "1" ] \
   copy_dir "$app_dir/tools" "$mirror_dir/tools"
   copy_dir "$app_dir/android" "$mirror_dir/android"
 
+  # 🔴 25.11.2026: ресурсы догоняются ВСЕГДА. Раньше копия держала прежние
+  # «чтобы быстрее»: 761 собралась без 44 стикеров — pubspec на них уже
+  # ссылался, а Flutter промолчал. rsync переносит только изменившееся.
   if [ "${SECRETLY_SANITIZED_LINK_ASSETS:-0}" = "1" ]; then
     link_dir "$app_dir/assets" "$mirror_dir/assets"
     printf 'Linked assets into mirror.\n'
-  elif [ "${SECRETLY_SANITIZED_SYNC_ASSETS:-0}" = "1" ] || [ ! -d "$mirror_dir/assets" ]; then
-    copy_dir "$app_dir/assets" "$mirror_dir/assets"
   else
-    printf 'Keeping cached assets in mirror; set SECRETLY_SANITIZED_SYNC_ASSETS=1 to refresh them.\n'
+    [ -L "$mirror_dir/assets" ] && rm -f "$mirror_dir/assets"
+    mkdir -p "$mirror_dir/assets"
+    rsync -a --delete "$app_dir/assets/" "$mirror_dir/assets/"
+    printf 'Assets synced into mirror.\n'
   fi
 
   if [ -d "$app_dir/third_party" ]; then
@@ -232,17 +236,23 @@ if [ "${SECRETLY_SANITIZED_FULL_SYNC:-0}" != "1" ] \
     if [ "$third_party_relink" -eq 1 ]; then
       link_dir "$app_dir/third_party" "$mirror_dir/third_party"
       printf 'Linked third_party path dependencies into mirror.\n'
+    elif [ -L "$mirror_dir/third_party" ]; then
+      printf 'third_party linked in mirror.\n'
     else
-      printf 'Keeping cached third_party path dependencies in mirror.\n'
+      # Та же беда, что с ресурсами (25.11.2026): правка в third_party в копию
+      # не попадала. Догоняем изменившееся; сборочный мусор не трогаем.
+      rsync -a --delete \
+        --exclude '.gradle/' --exclude '.cxx/' --exclude 'build/' \
+        --exclude 'target/' --exclude 'example/' --exclude '*.hprof*' \
+        "$app_dir/third_party/" "$mirror_dir/third_party/"
+      printf 'third_party synced into mirror.\n'
     fi
   else
     rm -rf "$mirror_dir/third_party"
   fi
 else
   if [ "${SECRETLY_SANITIZED_LINK_ASSETS:-0}" = "1" ]; then
-    rsync_args+=(--exclude 'assets/')
-  elif [ "${SECRETLY_SANITIZED_SYNC_ASSETS:-0}" != "1" ] && [ -d "$mirror_dir/assets" ]; then
-    rsync_args+=(--exclude 'assets/')
+    rsync_args+=(--exclude '/assets/')
   fi
   if [ "${SECRETLY_SANITIZED_SYNC_ASSETS:-0}" != "1" ] && [ -d "$mirror_dir/third_party" ]; then
     rsync_args+=(--exclude 'third_party/')

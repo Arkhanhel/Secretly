@@ -14,6 +14,17 @@ import java.util.UUID
 
 class SecretlyFirebaseMessagingService : FirebaseMessagingService() {
 
+    override fun onCreate() {
+        super.onCreate()
+        // Беззвучный канал («Отправить без звука», SendFlow 24.11.2026): нужен
+        // до первого такого уведомления, даже если приложение после
+        // обновления ещё не открывали.
+        try {
+            MessageNotifier.ensureSilentChannel(applicationContext)
+        } catch (_: Exception) {
+        }
+    }
+
     companion object {
         private const val TAG = "SecretlyFCM"
 

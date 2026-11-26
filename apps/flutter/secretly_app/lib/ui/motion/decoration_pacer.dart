@@ -26,11 +26,108 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 /// Выключатель. `false` — украшения снова просят кадр на каждое обновление.
 const bool kDecorationPacer = true;
+
+/// Выключатель покоя украшений (25.11.2026). `false` — без остановки, как
+/// раньше.
+const bool kDecorationRest = true;
+
+/// Покой украшений на телефоне: рамки, обложки, значки, эмодзи-статусы и
+/// дрейф обоев не двигаются вечно, если экран никто не трогает.
+///
+/// 🔴 ЗАМЕР (iPhone 14 Pro Max, 763, 25.11.2026): спокойный чат держал
+/// видеочип на 70–90 % — украшение заказывает кадр, а кадр пересчитывает ВСЁ
+/// стекло экрана (17 проходов). Касание — 60 кадров в секунду; через
+/// [calmAfter] без касаний — 30; через [restAfter] — замирают и продолжают с
+/// того же места при первом касании. Содержимое (стикеры, эмодзи сообщений,
+/// «печатает», отправка) не затронуто. На ПК так же с 15.11 (там 10 с).
+abstract final class DecorationActivity {
+  static const Duration calmAfter = Duration(seconds: 3);
+  static const Duration restAfter = Duration(seconds: 20);
+
+  static bool _on = false;
+  static bool _calm = false;
+  static bool _touchedSinceArm = false;
+  static Timer? _timer;
+  static _ResumeObserver? _observer;
+
+  /// Замерли.
+  static final ValueNotifier<bool> resting = ValueNotifier<bool>(false);
+
+  /// Реже: 30 кадров в секунду.
+  static bool get calm => _on && _calm;
+
+  static void _enable() {
+    if (_on || !kDecorationRest) return;
+    _on = true;
+    GestureBinding.instance.pointerRouter.addGlobalRoute(_onPointer);
+    WidgetsBinding.instance.addObserver(_observer = _ResumeObserver());
+    _arm(calmAfter);
+  }
+
+  static void _onPointer(PointerEvent e) {
+    if (e is PointerDownEvent || e is PointerMoveEvent) touch();
+  }
+
+  /// Человек здесь.
+  static void touch() {
+    if (!_on) return;
+    if (!_calm && !resting.value) {
+      // Без перезаводки таймера на каждое движение пальца.
+      _touchedSinceArm = true;
+      return;
+    }
+    _calm = false;
+    resting.value = false;
+    _arm(calmAfter);
+  }
+
+  static void _arm(Duration d) {
+    _touchedSinceArm = false;
+    _timer?.cancel();
+    _timer = Timer(d, _onTimer);
+  }
+
+  static void _onTimer() {
+    if (_touchedSinceArm) {
+      _arm(calmAfter);
+    } else if (!_calm) {
+      _calm = true;
+      _arm(restAfter - calmAfter);
+    } else {
+      _timer = null;
+      resting.value = true;
+    }
+  }
+
+  static void _reset() {
+    _timer?.cancel();
+    _timer = null;
+    if (_on) {
+      GestureBinding.instance.pointerRouter.removeGlobalRoute(_onPointer);
+      final o = _observer;
+      if (o != null) WidgetsBinding.instance.removeObserver(o);
+    }
+    _observer = null;
+    _on = false;
+    _calm = false;
+    _touchedSinceArm = false;
+    resting.value = false;
+  }
+}
+
+/// Вернулись в приложение — украшения снова живые.
+class _ResumeObserver with WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) DecorationActivity.touch();
+  }
+}
 
 abstract final class DecorationPacer {
   static bool _enabled = false;
@@ -57,6 +154,7 @@ abstract final class DecorationPacer {
     if (!kDecorationPacer || kIsWeb) return;
     if (!(Platform.isAndroid || Platform.isIOS)) return;
     _enable();
+    DecorationActivity._enable();
   }
 
   static void _enable() {
@@ -98,8 +196,12 @@ abstract final class DecorationPacer {
   /// Заказ — за 0,6 периода до нужного обновления: позже предыдущего, раньше
   /// нужного.
   @visibleForTesting
-  static Duration delayFor({required int frameUs, required int periodUs}) {
-    final k = stepFor(periodUs);
+  static Duration delayFor({
+    required int frameUs,
+    required int periodUs,
+    bool calm = false,
+  }) {
+    final k = stepFor(periodUs) * (calm ? 2 : 1);
     final i = (frameUs / periodUs).round();
     final j = (i ~/ k + 1) * k;
     final us = ((j - i) * periodUs - periodUs * 0.6).round();
@@ -107,25 +209,28 @@ abstract final class DecorationPacer {
   }
 
   /// Пауза до заказа кадра — по сетке, от кадра, который идёт сейчас.
-  static Duration get gap => delayFor(
+  static Duration gap({bool calm = false}) => delayFor(
     frameUs: SchedulerBinding.instance.currentSystemFrameTimeStamp
         .inMicroseconds,
     periodUs: _periodUs,
+    calm: calm,
   );
 
   @visibleForTesting
   static int get debugPeriodUs => _periodUs;
 
   @visibleForTesting
-  static void debugEnable({int periodUs = 8333}) {
+  static void debugEnable({int periodUs = 8333, bool rest = false}) {
     _enabled = true;
     _periodUs = periodUs;
+    if (rest) DecorationActivity._enable();
   }
 
   @visibleForTesting
   static void debugReset() {
     _enabled = false;
     _periodUs = 8333;
+    DecorationActivity._reset();
   }
 }
 
@@ -137,9 +242,31 @@ abstract final class DecorationPacer {
 /// событий системным вызовом, и десяток рамок, каждая со своим таймером на
 /// каждый шаг, съедали треть процессора в покое.
 class PacedTicker extends Ticker {
-  PacedTicker(super.onTick, {super.debugLabel});
+  PacedTicker(
+    TickerCallback onTick, {
+    String? debugLabel,
+    bool restsWhenIdle = false,
+  }) : this._(onTick, _SleepShift(), restsWhenIdle, debugLabel);
 
+  PacedTicker._(
+    TickerCallback onTick,
+    _SleepShift shift,
+    this.restsWhenIdle,
+    String? debugLabel,
+  ) : _shift = shift,
+      super((raw) => onTick(shift.apply(raw)), debugLabel: debugLabel);
+
+  /// Украшение: без касаний реже, потом замирает ([DecorationActivity]).
+  final bool restsWhenIdle;
+
+  final _SleepShift _shift;
   bool _waiting = false;
+
+  @override
+  TickerFuture start() {
+    _shift.reset();
+    return super.start();
+  }
 
   @override
   bool get scheduled => _waiting || super.scheduled;
@@ -152,6 +279,11 @@ class PacedTicker extends Ticker {
       return;
     }
     _waiting = true;
+    if (restsWhenIdle && DecorationActivity.resting.value) {
+      _shift.asleep = true;
+      _RestingDecorations.add(this);
+      return;
+    }
     _PacerClock.wait(this);
   }
 
@@ -166,6 +298,7 @@ class PacedTicker extends Ticker {
     if (_waiting) {
       _waiting = false;
       _PacerClock.cancel(this);
+      _RestingDecorations.remove(this);
     }
     super.unscheduleTick();
   }
@@ -175,8 +308,57 @@ class PacedTicker extends Ticker {
     if (_waiting) {
       _waiting = false;
       _PacerClock.cancel(this);
+      _RestingDecorations.remove(this);
     }
     super.dispose();
+  }
+}
+
+/// Время украшения без сна: проснулось — продолжает с той же позы, а не
+/// прыгает туда, где «было бы» сейчас.
+class _SleepShift {
+  Duration _slept = Duration.zero;
+  Duration _last = Duration.zero;
+  bool asleep = false;
+
+  Duration apply(Duration raw) {
+    if (asleep) {
+      asleep = false;
+      final gap = raw - _last - const Duration(microseconds: 16667);
+      if (gap > Duration.zero) _slept += gap;
+    }
+    _last = raw;
+    return raw - _slept;
+  }
+
+  void reset() {
+    _slept = Duration.zero;
+    _last = Duration.zero;
+    asleep = false;
+  }
+}
+
+/// Замершие украшения: ни таймера, ни кадров — ждут касания.
+abstract final class _RestingDecorations {
+  static final Set<PacedTicker> _all = <PacedTicker>{};
+  static bool _listening = false;
+
+  static void add(PacedTicker t) {
+    _all.add(t);
+    if (_listening) return;
+    _listening = true;
+    DecorationActivity.resting.addListener(_onChange);
+  }
+
+  static void remove(PacedTicker t) => _all.remove(t);
+
+  static void _onChange() {
+    if (DecorationActivity.resting.value) return;
+    final due = List<PacedTicker>.of(_all);
+    _all.clear();
+    for (final t in due) {
+      t._wake();
+    }
   }
 }
 
@@ -184,10 +366,20 @@ class PacedTicker extends Ticker {
 abstract final class _PacerClock {
   static final Set<PacedTicker> _waiting = <PacedTicker>{};
   static Timer? _timer;
+  static bool _calmTimer = false;
 
   static void wait(PacedTicker t) {
     _waiting.add(t);
-    _timer ??= Timer(DecorationPacer.gap, _fire);
+    final calm = t.restsWhenIdle && DecorationActivity.calm;
+    if (_timer == null) {
+      _calmTimer = calm;
+      _timer = Timer(DecorationPacer.gap(calm: calm), _fire);
+    } else if (_calmTimer && !calm) {
+      // Есть и содержимое на 60 — украшения идут с ним, отдельных кадров нет.
+      _timer!.cancel();
+      _calmTimer = false;
+      _timer = Timer(DecorationPacer.gap(), _fire);
+    }
   }
 
   static void cancel(PacedTicker t) {
@@ -218,12 +410,16 @@ mixin PacedTickerProviderStateMixin<T extends StatefulWidget> on State<T>
   PacedTicker? _pacedTicker;
   ValueListenable<TickerModeData>? _pacedTickerMode;
 
+  /// Украшение, а не содержимое: без касаний замирает ([DecorationActivity]).
+  bool get restsWhenIdle => false;
+
   @override
   Ticker createTicker(TickerCallback onTick) {
     assert(_pacedTicker == null, 'PacedTickerProviderStateMixin: один тикер');
     _pacedTicker = PacedTicker(
       onTick,
       debugLabel: kDebugMode ? 'paced by ${describeIdentity(this)}' : null,
+      restsWhenIdle: restsWhenIdle,
     );
     _updatePacedTickerMode();
     _applyPacedTickerMode();

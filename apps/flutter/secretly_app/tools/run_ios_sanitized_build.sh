@@ -93,13 +93,17 @@ refresh_ios_sources() {
   copy_file_if_exists "$app_dir/ios/Podfile" "$mirror_dir/ios/Podfile"
   copy_file_if_exists "$app_dir/ios/Podfile.lock" "$mirror_dir/ios/Podfile.lock"
 
+  # 🔴 25.11.2026: ресурсы догоняются ВСЕГДА. Раньше копия держала прежние
+  # «чтобы быстрее»: 761 собралась без 44 стикеров — pubspec на них уже
+  # ссылался, а Flutter промолчал. rsync переносит только изменившееся.
   if [ "${SECRETLY_SANITIZED_LINK_ASSETS:-0}" = "1" ]; then
     link_dir "$app_dir/assets" "$mirror_dir/assets"
     printf 'Linked assets into mirror.\n'
-  elif [ "${SECRETLY_SANITIZED_SYNC_ASSETS:-0}" = "1" ] || [ ! -d "$mirror_dir/assets" ]; then
-    copy_dir "$app_dir/assets" "$mirror_dir/assets"
   else
-    printf 'Keeping cached assets in mirror; set SECRETLY_SANITIZED_SYNC_ASSETS=1 to refresh them.\n'
+    [ -L "$mirror_dir/assets" ] && rm -f "$mirror_dir/assets"
+    mkdir -p "$mirror_dir/assets"
+    rsync -a --delete "$app_dir/assets/" "$mirror_dir/assets/"
+    printf 'Assets synced into mirror.\n'
   fi
 
   if [ -d "$app_dir/third_party" ]; then

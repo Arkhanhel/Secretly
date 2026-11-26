@@ -420,8 +420,12 @@ class MediaEditorCropPanel extends StatelessWidget {
           (CropAspect.free, l10n.meAspectFree),
           (CropAspect.original, l10n.meAspectOriginal),
           (CropAspect.square, '1:1'),
+          (CropAspect.landscape32, '3:2'),
+          (CropAspect.classic43, '4:3'),
           (CropAspect.portrait45, '4:5'),
           (CropAspect.wide169, '16:9'),
+          (CropAspect.tall916, '9:16'),
+          (CropAspect.portrait34, '3:4'),
         ];
         return Stack(
           children: [
@@ -491,9 +495,12 @@ class MediaEditorCropPanel extends StatelessWidget {
               left: 14,
               right: 14,
               height: 44,
+              // Девять пропорций (SendFlow) — лентой с прокруткой, а не
+              // сжатием в одну строку.
               child: Center(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
+                child: SingleChildScrollView(
+                  key: const ValueKey('me:aspects'),
+                  scrollDirection: Axis.horizontal,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

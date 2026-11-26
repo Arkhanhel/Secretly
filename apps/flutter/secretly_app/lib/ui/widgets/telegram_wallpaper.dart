@@ -23,6 +23,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../motion/decoration_pacer.dart' show DecorationActivity;
 import 'wallpaper_blur.dart';
 
 /// How the animated wallpaper behaves in an open chat. One global setting.
@@ -282,7 +283,11 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
   ValueListenable<TickerModeData>? _tickerMode;
 
   bool get _driftShouldRun =>
-      _continuous && _appActive && (_tickerMode?.value.enabled ?? true);
+      _continuous &&
+      _appActive &&
+      // Экран никто не трогает — дрейф замирает вместе с украшениями.
+      !DecorationActivity.resting.value &&
+      (_tickerMode?.value.enabled ?? true);
 
   void _syncDrift() {
     if (mounted && _driftShouldRun) {
@@ -322,6 +327,7 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    DecorationActivity.resting.addListener(_syncDrift);
     _applyMode();
     if (widget.conduct) _ensurePulseAssets();
   }
@@ -642,6 +648,7 @@ class TelegramWallpaperState extends State<TelegramWallpaper>
     if (_fieldListener != null) _fieldStream?.removeListener(_fieldListener!);
     _driftTimer?.cancel();
     _tickerMode?.removeListener(_syncDrift);
+    DecorationActivity.resting.removeListener(_syncDrift);
     _c.dispose();
     _pulseTicker?.dispose();
     // Шейдер держит GPU-ресурс: экземпляр наш, программа общая.

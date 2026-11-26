@@ -435,6 +435,9 @@ class LiveFrameView extends StatefulWidget {
 
 class _LiveFrameViewState extends State<LiveFrameView>
     with PacedTickerProviderStateMixin {
+  @override
+  bool get restsWhenIdle => true;
+
   // Не `late final`: тикер, созданный лениво, был бы построен уже внутри
   // dispose(), а createTicker смотрит TickerMode на умершем элементе.
   Ticker? _ticker;

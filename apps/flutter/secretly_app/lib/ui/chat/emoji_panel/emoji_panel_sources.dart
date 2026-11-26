@@ -17,8 +17,10 @@ import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http_pkg;
 
 import '../../../app/app_controller.dart';
+import '../../../billing/show_paywall.dart';
 import '../../../gifs/gif_query.dart';
 import '../../../stickers/sticker_catalog.dart';
+import '../../paywall_screen.dart' show PaywallTrigger;
 import '../../widgets/secretly_sticker_widgets.dart'
     show showSecretlyStickerPackEditor;
 
@@ -37,6 +39,13 @@ abstract class EmojiPanelStickerSource {
   /// Наборы панели — те же, что у прежнего листа (флаги закрытых наборов и
   /// установленных учитывает сам контроллер).
   Future<List<SecretlyStickerPack>> loadPacks({bool refresh = true});
+
+  /// Наборы прямо сейчас, без ожидания (каталог уже в памяти); `null` —
+  /// ещё не прочитан, ждём [loadPacks].
+  List<SecretlyStickerPack>? packsNow() => null;
+
+  /// Ключ снимка недавних между открытиями панели; `null` — не хранить.
+  String? get cacheKey => null;
 
   /// Поиск по словам стикеров (общий каталог).
   List<SecretlyStickerDescriptor> search(String query) =>
@@ -63,6 +72,16 @@ abstract class EmojiPanelStickerSource {
     SecretlyStickerPack pack, {
     VoidCallback? onAddSticker,
   });
+
+  /// Премиум-наборы (premium_sticker_packs.dart) — значки закреплены слева
+  /// от лупы. По умолчанию нет (подделки в тестах, старые источники).
+  List<SecretlyStickerPack> premiumPacks() => const <SecretlyStickerPack>[];
+
+  /// Есть ли Premium: можно ли отправлять стикеры премиум-наборов.
+  bool get premiumUnlocked => false;
+
+  /// Страница покупки Premium.
+  Future<void> openPremium(BuildContext context) async {}
 }
 
 /// Боевой источник: те же вызовы контроллера, что у ленты стикеров.
@@ -75,12 +94,30 @@ class AppControllerStickerSource extends EmojiPanelStickerSource {
   String get profileId => controller.profileId;
 
   @override
+  List<SecretlyStickerPack> premiumPacks() =>
+      SecretlyStickerCatalog.premiumPickerPacks;
+
+  @override
+  bool get premiumUnlocked => controller.premiumStickersUnlocked;
+
+  @override
+  Future<void> openPremium(BuildContext context) =>
+      showPaywall(context, PaywallTrigger.cosmetic);
+
+  @override
   Future<List<SecretlyStickerDescriptor>> loadRecent() =>
       controller.loadRecentStickers(limit: 20);
 
   @override
   Future<List<SecretlyStickerPack>> loadPacks({bool refresh = true}) =>
-      controller.loadStickerPickerPacks(refresh: refresh);
+      controller.loadStickerPickerPacksFromMemory(refresh: refresh);
+
+  @override
+  List<SecretlyStickerPack>? packsNow() =>
+      controller.stickerPickerPacksInMemory;
+
+  @override
+  String? get cacheKey => controller.profileId;
 
   @override
   bool isFavorite(String stickerId) => controller.isStickerFavorite(stickerId);
@@ -193,6 +230,11 @@ abstract class EmojiPanelGifSource {
 
   Future<List<PanelGif>> loadRecents();
 
+  /// «В тренде» и недавние с прошлого открытия — первым кадром, без сетки-
+  /// заглушки; `null` — грузим как обычно.
+  PanelGifPage? trendingNow() => null;
+  List<PanelGif>? recentsNow() => null;
+
   /// Запомнить выбранную — в момент выбора, как прежний лист.
   Future<void> remember(PanelGif gif);
 
@@ -227,8 +269,9 @@ class GiphyPanelGifSource extends EmojiPanelGifSource {
 
   @override
   Future<List<PanelGif>> loadRecents() async {
+    final profile = controller.profileId;
     final recents = await controller.loadRecentGifs();
-    return [
+    return _recentsByProfile[profile] = [
       for (final r in recents)
         PanelGif(
           previewUrl: r.previewUrl,
@@ -237,6 +280,22 @@ class GiphyPanelGifSource extends EmojiPanelGifSource {
         ),
     ];
   }
+
+  static final Map<String, List<PanelGif>> _recentsByProfile =
+      <String, List<PanelGif>>{};
+
+  /// «В тренде» одна на всех; дольше десяти минут не держим.
+  static PanelGifPage? _trending;
+  static final Stopwatch _trendingAge = Stopwatch();
+
+  @override
+  List<PanelGif>? recentsNow() => _recentsByProfile[controller.profileId];
+
+  @override
+  PanelGifPage? trendingNow() =>
+      _trendingAge.isRunning && _trendingAge.elapsed.inMinutes < 10
+      ? _trending
+      : null;
 
   @override
   Future<void> remember(PanelGif gif) => controller.rememberPickedGif(
@@ -260,6 +319,12 @@ class GiphyPanelGifSource extends EmojiPanelGifSource {
     for (final g in page.items) {
       final a = g.aspect;
       if (a != null) _aspectByUrl[g.fullUrl] = a;
+    }
+    if ((query ?? '').trim().isEmpty && offset == 0 && page.items.isNotEmpty) {
+      _trending = page;
+      _trendingAge
+        ..reset()
+        ..start();
     }
     return page;
   }

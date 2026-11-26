@@ -153,6 +153,7 @@ class _MediaEditorCanvasAreaState extends State<MediaEditorCanvasArea> {
         m.begin();
         _eraseAt(p);
       case MediaDrawTool.pen:
+      case MediaDrawTool.arrow:
       case MediaDrawTool.marker:
       case MediaDrawTool.neon:
         _mode = _DragMode.stroke;
@@ -162,6 +163,7 @@ class _MediaEditorCanvasAreaState extends State<MediaEditorCanvasArea> {
           tool: switch (m.tool) {
             MediaDrawTool.marker => StrokeTool.marker,
             MediaDrawTool.neon => StrokeTool.neon,
+            MediaDrawTool.arrow => StrokeTool.arrow,
             _ => StrokeTool.pen,
           },
           color: m.color,
@@ -321,6 +323,7 @@ class MediaEditorDrawPanel extends StatelessWidget {
       builder: (context, _) {
         final tools = <(MediaDrawTool, IconData, String)>[
           (MediaDrawTool.pen, MediaEditorIcons.pen, l10n.meToolPen),
+          (MediaDrawTool.arrow, Icons.north_east_rounded, l10n.meToolArrow),
           (MediaDrawTool.marker, MediaEditorIcons.marker, l10n.meToolMarker),
           (MediaDrawTool.neon, MediaEditorIcons.neon, l10n.meToolNeon),
           (MediaDrawTool.eraser, MediaEditorIcons.eraser, l10n.meToolEraser),

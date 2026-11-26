@@ -3867,6 +3867,20 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
     }
   }
 
+  /// Спокойная «опасная» кнопка: красный текст, красноватая подложка.
+  static ButtonStyle _destructiveTonalStyle(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final red = dark ? const Color(0xFFFF6B66) : const Color(0xFFD93A33);
+    return FilledButton.styleFrom(
+      backgroundColor: red.withValues(alpha: dark ? 0.14 : 0.10),
+      foregroundColor: red,
+      overlayColor: red,
+      minimumSize: const Size.fromHeight(50),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      elevation: 0,
+    );
+  }
+
   String _ownerActionLabel(_RoomAdministrationVm vm) {
     final hasOtherActive = vm.members.any(
       (member) => member.profileId != vm.myProfileId && member.isActive,
@@ -4701,13 +4715,16 @@ class _RoomAdministrationScreenState extends State<RoomAdministrationScreen> {
                   const SizedBox(height: 16),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
+                    // 24.11.2026 (владелец: «синяя с красным — вырви глаз»):
+                    // красный текст на мягкой красноватой подложке, как у
+                    // кнопок удаления в iOS; без синей заливки темы.
                     child: PressFeedback(child: FilledButton.tonal(
+                      key: const ValueKey('room-admin:owner-action'),
+                      style: _destructiveTonalStyle(context),
                       onPressed: () => _ownerActionLeaveOrDelete(vm),
                       child: Text(
                         _ownerActionLabel(vm),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
                     )),
                   ),

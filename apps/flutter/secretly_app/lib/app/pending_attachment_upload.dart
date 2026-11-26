@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
-import '../models/e2e_payload_v1.dart' show AttachmentEventV1;
+import '../models/e2e_payload_v1.dart' show AttachmentEventFlags, AttachmentEventV1;
 import '../transport/blob_client.dart' show BlobUploadCancelToken;
 
 /// In-progress attachment uploads, owned by [AppController] so a bubble stays
@@ -70,12 +70,28 @@ class PendingPhotoUpload {
     this.prepare,
     this.deleteFileAfterSend = false,
     this.mirrorPreview = false,
+    this.photoMaxSide,
+    this.videoMaxSide,
+    this.muteVideo = false,
+    this.flags = AttachmentEventFlags.none,
   }) : createdAtMs = DateTime.now().millisecondsSinceEpoch;
 
   /// Сделать итоговый файл перед загрузкой (кружок: склейка/зеркалирование,
   /// 15.11.2026). Выполняется один раз; результат — в [preparedPath], повтор
   /// после сбоя берёт его. `null` от функции — отправляется [filePath].
   final Future<String?> Function()? prepare;
+
+  /// SendFlow (24.11.2026): качество, выбранное в просмотре перед отправкой.
+  /// Фото: длинная сторона (SD 1280); `null` — HD, то есть как раньше
+  /// (оригинал без пересжатия). Видео: длинная сторона (854/1280/1920);
+  /// `null` — 1920. [muteVideo] — без звуковой дорожки.
+  final int? photoMaxSide;
+  final int? videoMaxSide;
+  final bool muteVideo;
+
+  /// SendFlow: подпись над медиа, спойлер, одноразовый просмотр (у альбома
+  /// берутся флаги первого снимка).
+  final AttachmentEventFlags flags;
 
   /// Временный файл приложения (кружок) — удалить после удачной отправки:
   /// копия уже лежит в кэше вложений.

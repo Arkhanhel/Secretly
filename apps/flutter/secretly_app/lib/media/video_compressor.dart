@@ -55,9 +55,15 @@ class VideoCompressor {
   /// [onProgress] reports the re-encode's completion fraction (0..1) as it runs
   /// — the caller drives the upload ring with it so a long compress of a big
   /// video no longer looks frozen at 0%. Fires only when the duration is known.
+  /// [maxSide] — длинная сторона (SendFlow 24.11.2026: 480 → 854,
+  /// 720 → 1280, 1080 → 1920); [mute] — без звуковой дорожки (`-an`).
+  /// С выбранным качеством ниже 1080p или без звука файл пережимается и
+  /// когда он меньше [skipBelowBytes] — иначе выбор человека не сработал бы.
   static Future<String> compressForSend(
     String sourcePath, {
     void Function(double fraction)? onProgress,
+    int maxSide = 1920,
+    bool mute = false,
   }) async {
     // Облегчённая сборка: FFmpeg нет — файл уходит как снят, без сжатия.
     if (!kVideoToolsAvailable) return sourcePath;
@@ -65,7 +71,8 @@ class VideoCompressor {
       final src = File(sourcePath);
       if (!await src.exists()) return sourcePath;
       final srcLen = await src.length();
-      if (srcLen <= skipBelowBytes) return sourcePath;
+      final forced = mute || maxSide < 1920;
+      if (srcLen <= skipBelowBytes && !forced) return sourcePath;
 
       final tmpDir = await getTemporaryDirectory();
       final outDir = Directory(p.join(tmpDir.path, 'vsend'));
@@ -85,19 +92,21 @@ class VideoCompressor {
 
       // scale: fit inside 1920x1920 keeping aspect, downscale only (never
       // upscale), and force even dimensions (H.264 encoders require them).
-      const cmd =
+      final side = maxSide.clamp(320, 1920);
+      final audio = mute ? '-an' : '-c:a aac -b:a 128k';
+      final cmd =
           '-y -i {SRC} '
-          "-vf \"scale='min(1920,iw)':'min(1920,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2\" "
+          "-vf \"scale='min($side,iw)':'min($side,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2\" "
           '{VIDEO} '
-          '-c:a aac -b:a 128k -movflags +faststart {OUT}';
+          '$audio -movflags +faststart {OUT}';
 
       // Кодер — по лицензии сборки FFmpeg (04.10.2026): на телефоне
       // системный H.264, на компьютере libx264. Запасной MPEG-4 на Android
       // здесь не нужен: картинку до 1920 iPhone в нём не покажет, а при
       // сбое и так уходит оригинал.
       final variants = H264Encoder.variants(
-        crf: 25,
-        kbps: 4000,
+        crf: side <= 854 ? 28 : (side <= 1280 ? 26 : 25),
+        kbps: side <= 854 ? 1000 : (side <= 1280 ? 2200 : 4000),
         fallback: H264Encoder.platform != H264Platform.android,
       );
       ReturnCode? rc;
@@ -141,8 +150,9 @@ class VideoCompressor {
           await outFile.length() <= 0) {
         return sourcePath;
       }
-      // Only use the re-encode if it actually shrank the file.
-      if (await outFile.length() >= srcLen) {
+      // Only use the re-encode if it actually shrank the file (без звука —
+      // всегда: дорожку надо убрать, даже если файл не стал меньше).
+      if (!mute && await outFile.length() >= srcLen) {
         try {
           await outFile.delete();
         } catch (_) {}
@@ -154,6 +164,13 @@ class VideoCompressor {
       return sourcePath;
     }
   }
+
+  /// Длинная сторона для качества «480/720/1080p» (SendFlow).
+  static int maxSideForQuality(int quality) => switch (quality) {
+    <= 480 => 854,
+    <= 720 => 1280,
+    _ => 1920,
+  };
 
   static bool isVideoMime(String mime) => mime.toLowerCase().startsWith('video/');
 }

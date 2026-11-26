@@ -21,7 +21,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart' show FontLoader, rootBundle;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:visibility_detector/visibility_detector.dart';
 import 'package:secretly_app/l10n/app_localizations.dart';
+import 'package:secretly_app/stickers/premium_sticker_packs.dart';
 import 'package:secretly_app/stickers/sticker_catalog.dart';
 import 'package:secretly_app/ui/chat/emoji_panel/emoji_panel.dart';
 import 'package:secretly_app/ui/chat/emoji_panel/emoji_panel_gifs.dart'
@@ -30,6 +32,7 @@ import 'package:secretly_app/ui/chat/emoji_panel/emoji_panel_sources.dart';
 import 'package:secretly_app/ui/chat/emoji_panel/emoji_panel_stickers.dart';
 import 'package:secretly_app/ui/chat/emoji_panel/emoji_panel_widgets.dart';
 import 'package:secretly_app/ui/chat/emoji_panel/gif_packing.dart';
+import 'package:secretly_app/ui/chat/emoji_panel/premium_sticker_sheet.dart';
 import 'package:secretly_app/ui/emoji/noto_emoji_catalog.dart';
 import 'package:secretly_app/ui/widgets/secretly_sticker_widgets.dart'
     show SecretlyStickerAssetView;
@@ -72,11 +75,28 @@ SecretlyStickerPack _pack(String id, String title, List<SecretlyStickerDescripto
     );
 
 class _FakeStickers extends EmojiPanelStickerSource {
-  _FakeStickers({this.recent = const [], this.packs = const []});
+  _FakeStickers({
+    this.recent = const [],
+    this.packs = const [],
+    this.premium = const [],
+    this.unlocked = false,
+  });
 
   final List<SecretlyStickerDescriptor> recent;
   final List<SecretlyStickerPack> packs;
+  final List<SecretlyStickerPack> premium;
+  final bool unlocked;
+  int premiumOpened = 0;
   final Set<String> favs = <String>{};
+
+  @override
+  List<SecretlyStickerPack> premiumPacks() => premium;
+
+  @override
+  bool get premiumUnlocked => unlocked;
+
+  @override
+  Future<void> openPremium(BuildContext context) async => premiumOpened++;
 
   @override
   String get profileId => 'ME';
@@ -411,6 +431,9 @@ int _firstRowCount(List<double> tops) {
 }
 
 void main() {
+  // Стикеры дизайнера встают на паузу вне экрана (VisibilityDetector):
+  // в тестах — без задержки, чтобы не оставалось таймеров.
+  VisibilityDetectorController.instance.updateInterval = Duration.zero;
   setUpAll(_loadFonts);
   setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
 
@@ -661,6 +684,80 @@ void main() {
     await t.tap(find.byWidgetPredicate((w) => w is PanelStickerThumb && w.size > 40).at(1));
     await _frames(t, 10);
     expect(b.sent.single.stickerId, 'c1');
+  });
+
+  testWidgets('🔴 премиум-наборы без Premium: значки со звёздочкой у лупы, '
+      'касание — окно набора с покупкой, в сетке их нет', (t) async {
+    _view(t);
+    final stickers = _FakeStickers(
+      packs: [
+        _pack('user:OTHER:cats', 'Котики', [for (var i = 0; i < 3; i++) _st('user:OTHER:cats', 'c$i')]),
+      ],
+      premium: premiumStickerPacks,
+    );
+    final b = _bench(t, stickers: stickers);
+    await t.pumpWidget(_app(b));
+    await t.tap(find.byKey(const ValueKey('emoji-panel:tab:1')));
+    await _frames(t, 40);
+    final safe = find.byKey(const ValueKey('emoji-panel:premium-pin:$kPremiumSafePackId'));
+    final pixel = find.byKey(const ValueKey('emoji-panel:premium-pin:$kPremiumPixelPackId'));
+    expect(safe, findsOneWidget);
+    expect(pixel, findsOneWidget);
+    expect(find.byType(PremiumStickerStar), findsNWidgets(2));
+    // Значки — слева от лупы, правее рейки.
+    final search = t.getRect(find.byKey(const ValueKey('emoji-panel:search')));
+    expect(t.getRect(pixel).right, lessThanOrEqualTo(search.left + 1));
+    expect(t.getRect(safe).right, lessThanOrEqualTo(t.getRect(pixel).left + 1));
+    // В сетке премиум-стикеров нет.
+    expect(find.text('Секретный сейф'), findsNothing);
+    await t.tap(safe);
+    await _frames(t, 30);
+    expect(find.byKey(const ValueKey('premium-sticker-sheet:$kPremiumSafePackId')), findsOneWidget);
+    expect(find.text('Секретный сейф'), findsOneWidget);
+    expect(find.text('Открыть с Premium'), findsOneWidget);
+    // Касание стикера в окне ничего не отправляет.
+    await t.tap(find.byKey(const ValueKey('premium-sticker-sheet:cell:crown')));
+    await _frames(t, 5);
+    expect(b.sent, isEmpty);
+    await t.tap(find.byKey(const ValueKey('premium-sticker-sheet:unlock')));
+    await _frames(t, 30);
+    expect(stickers.premiumOpened, 1);
+    expect(find.byKey(const ValueKey('premium-sticker-sheet:$kPremiumSafePackId')), findsNothing);
+  });
+
+  testWidgets('премиум-наборы с Premium: разделы в конце сетки, значок ведёт '
+      'к разделу и подсвечивается, стикер отправляется', (t) async {
+    _view(t);
+    final stickers = _FakeStickers(
+      packs: [
+        _pack('user:OTHER:cats', 'Котики', [for (var i = 0; i < 3; i++) _st('user:OTHER:cats', 'c$i')]),
+      ],
+      premium: premiumStickerPacks,
+      unlocked: true,
+    );
+    final b = _bench(t, stickers: stickers);
+    await t.pumpWidget(_app(b));
+    await t.tap(find.byKey(const ValueKey('emoji-panel:tab:1')));
+    await _frames(t, 40);
+    await t.tap(find.byKey(const ValueKey('emoji-panel:premium-pin:$kPremiumPixelPackId')));
+    await _frames(t, 60);
+    expect(find.byType(PremiumStickerPackSheet), findsNothing);
+    expect(find.text('Pixel'), findsWidgets);
+    // Прокручиваемая рейка не подсвечивает свой последний значок.
+    final pin = t.widget<AnimatedContainer>(
+      find.descendant(
+        of: find.byKey(const ValueKey('emoji-panel:premium-pin:$kPremiumPixelPackId')),
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    expect((pin.decoration as BoxDecoration?)?.color, isNot(Colors.transparent));
+    final cells = find.byWidgetPredicate(
+      (w) => w is PanelStickerThumb && w.size > 40 && w.sticker.packId == kPremiumPixelPackId,
+    );
+    expect(cells, findsWidgets);
+    await t.tap(cells.first);
+    await _frames(t, 10);
+    expect(b.sent.single.packId, kPremiumPixelPackId);
   });
 
   testWidgets('«стереть» стирает из поля и гаснет на пустом', (t) async {

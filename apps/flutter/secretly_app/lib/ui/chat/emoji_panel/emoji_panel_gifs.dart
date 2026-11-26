@@ -15,8 +15,11 @@ library;
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport;
+import 'package:flutter/scheduler.dart'
+    show SchedulerBinding, SchedulerPhase;
 import 'package:flutter/services.dart';
 
 import '../../../gifs/gif_categories.dart';
@@ -86,7 +89,15 @@ class GifTabModel extends ChangeNotifier {
   void ensureStarted() {
     if (_started) return;
     _started = true;
-    unawaited(_loadFirst(null));
+    recents = source.recentsNow() ?? recents;
+    final ready = source.trendingNow();
+    if (ready != null) {
+      gifs = ready.items;
+      hasMore = ready.hasMore && ready.items.length < kPanelGifMaxItems;
+      _offset = ready.returned;
+    } else {
+      unawaited(_loadFirst(null));
+    }
     unawaited(_loadRecents());
   }
 
@@ -593,6 +604,30 @@ class _LazyTilesState extends State<_LazyTiles> {
   static const double _margin = 400;
   Set<int> _visible = <int>{};
 
+  /// Плитки, видимые прямо сейчас (без запаса): играют только они
+  /// (24.11.2026, замер Xiaomi 14 Pro: все гифки в запасе за экраном тоже
+  /// крутились, и растр не укладывался в 8,3 мс при 120 Гц).
+  Set<int> _onScreen = <int>{};
+
+  /// Пока лента едет — гифки стоят на текущем кадре.
+  bool _scrolling = false;
+  ValueListenable<bool>? _scrollingNote;
+
+  void _onScrollingChanged() {
+    final v = _scrollingNote?.value ?? false;
+    if (!mounted || v == _scrolling) return;
+    // Остановка прокрутки бывает и посреди раскладки (сменилась высота
+    // панели) — тогда перестраиваемся следующим кадром.
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _onScrollingChanged(),
+      );
+      return;
+    }
+    setState(() => _scrolling = v);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -613,11 +648,21 @@ class _LazyTilesState extends State<_LazyTiles> {
   @override
   void dispose() {
     widget.scroll.removeListener(_recompute);
+    _scrollingNote?.removeListener(_onScrollingChanged);
     super.dispose();
+  }
+
+  void _watchScrolling() {
+    if (!widget.scroll.hasClients) return;
+    final note = widget.scroll.position.isScrollingNotifier;
+    if (identical(note, _scrollingNote)) return;
+    _scrollingNote?.removeListener(_onScrollingChanged);
+    _scrollingNote = note..addListener(_onScrollingChanged);
   }
 
   void _recompute() {
     if (!mounted) return;
+    _watchScrolling();
     final box = context.findRenderObject();
     if (box is! RenderBox || !box.hasSize || !box.attached) return;
     final viewport = RenderAbstractViewport.maybeOf(box);
@@ -636,8 +681,20 @@ class _LazyTilesState extends State<_LazyTiles> {
             widget.pack.tiles[k].rect.top <= bottom)
           k,
     };
-    if (next.length == _visible.length && next.containsAll(_visible)) return;
-    setState(() => _visible = next);
+    final seenTop = top + _margin;
+    final seenBottom = bottom - _margin;
+    final seen = <int>{
+      for (final k in next)
+        if (widget.pack.tiles[k].rect.bottom >= seenTop &&
+            widget.pack.tiles[k].rect.top <= seenBottom)
+          k,
+    };
+    bool same(Set<int> a, Set<int> b) => a.length == b.length && a.containsAll(b);
+    if (same(next, _visible) && same(seen, _onScreen)) return;
+    setState(() {
+      _visible = next;
+      _onScreen = seen;
+    });
   }
 
   @override
@@ -654,12 +711,20 @@ class _LazyTilesState extends State<_LazyTiles> {
             Positioned.fromRect(
               key: ValueKey(widget.gifs[tiles[k].index].fullUrl),
               rect: tiles[k].rect,
-              child: _GifTile(
-                gif: widget.gifs[tiles[k].index],
-                shimmer: widget.shimmer,
-                style: widget.style,
-                image: widget.image,
-                onTap: widget.onPick,
+              // До первого замера играют первые плитки — как и раньше.
+              child: TickerMode(
+                enabled: !_scrolling &&
+                    (_onScreen.isEmpty ? _visible.isEmpty : _onScreen.contains(k)),
+                // Кадр одной гифки не перерисовывает соседние.
+                child: RepaintBoundary(
+                  child: _GifTile(
+                    gif: widget.gifs[tiles[k].index],
+                    shimmer: widget.shimmer,
+                    style: widget.style,
+                    image: widget.image,
+                    onTap: widget.onPick,
+                  ),
+                ),
               ),
             ),
       ],

@@ -46,10 +46,15 @@ class ConversationMediaGalleryVm {
     required this.files,
     required this.music,
     this.links = const <ConversationLinkItem>[],
+    this.gifs = const <ConversationAttachmentItem>[],
   });
 
   final List<ConversationAttachmentItem> photos;
   final List<ConversationAttachmentItem> videos;
+
+  /// GIF — отдельно от фото и видео (24.11.2026, владелец: «гифки
+  /// отображаются в категории Фото, Видео — сделай отдельную»).
+  final List<ConversationAttachmentItem> gifs;
   final List<ConversationAttachmentItem> files;
   final List<ConversationAttachmentItem> music;
 
@@ -108,6 +113,7 @@ Future<ConversationMediaGalleryVm> loadConversationMediaFiles(
   final events = await controller.loadEventsAll(convoId, limit: eventLimit);
   final photos = <ConversationAttachmentItem>[];
   final videos = <ConversationAttachmentItem>[];
+  final gifs = <ConversationAttachmentItem>[];
   final files = <ConversationAttachmentItem>[];
   final music = <ConversationAttachmentItem>[];
 
@@ -136,6 +142,8 @@ Future<ConversationMediaGalleryVm> loadConversationMediaFiles(
       continue;
     }
     if (payload is! AttachmentEventV1) continue;
+    // Одноразовое (SendFlow Э5) в галерею профиля не попадает.
+    if (payload.viewOnce) continue;
     final mime = (payload.mime ?? '').toLowerCase();
     final item = ConversationAttachmentItem(
       event: event,
@@ -143,7 +151,9 @@ Future<ConversationMediaGalleryVm> loadConversationMediaFiles(
       createdAtMs: event.createdAtMs,
       senderDeviceId: event.senderDeviceId,
     );
-    if (mime.startsWith('image/')) {
+    if (isConversationGifAttachment(payload)) {
+      gifs.add(item);
+    } else if (mime.startsWith('image/')) {
       photos.add(item);
     } else if (mime.startsWith('video/')) {
       videos.add(item);
@@ -156,6 +166,7 @@ Future<ConversationMediaGalleryVm> loadConversationMediaFiles(
 
   photos.sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
   videos.sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
+  gifs.sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
   files.sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
   music.sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
 
@@ -167,7 +178,18 @@ Future<ConversationMediaGalleryVm> loadConversationMediaFiles(
     files: files,
     music: music,
     links: links,
+    gifs: gifs,
   );
+}
+
+/// GIF в переписке: `image/gif` (так их шлёт панель GIF) или файл `.gif`,
+/// пришедший как видео/картинка из других мест.
+bool isConversationGifAttachment(AttachmentEventV1 a) {
+  final mime = (a.mime ?? '').toLowerCase();
+  if (mime == 'image/gif') return true;
+  final name = (a.filename ?? '').toLowerCase();
+  return (mime.startsWith('image/') || mime.startsWith('video/')) &&
+      (name.endsWith('.gif') || name.endsWith('.gif.mp4'));
 }
 
 /// Итог попытки достать вложение: файл или КОД причины отказа.
@@ -1339,7 +1361,7 @@ class ConversationMusicList extends StatelessWidget {
   }
 }
 
-/// Composite widget rendering a 4-tab gallery (Photos / Videos / Files / Music)
+/// Composite widget rendering a 5-tab gallery (Photos / Videos / GIF / Files / Music)
 /// for any conversation (DM or group).
 ///
 /// INLINE: the section lays out at its natural height and scrolls together
@@ -1379,7 +1401,7 @@ class _ConversationMediaGallerySectionState
   int _gridShown = _gridCap;
   int _listShown = _listCap;
 
-  late final TabController _tabs = TabController(length: 4, vsync: this);
+  late final TabController _tabs = TabController(length: 5, vsync: this);
   Future<ConversationMediaGalleryVm>? _vmFuture;
   String _vmConvoId = '';
 
@@ -1425,6 +1447,7 @@ class _ConversationMediaGallerySectionState
         fr: 'Vidéos',
         de: 'Videos',
       ),
+      'GIF',
       l10n.contactDetailsFilesTab,
       wave1Text(
         context,
@@ -1448,6 +1471,10 @@ class _ConversationMediaGallerySectionState
             child: ListenableBuilder(
               listenable: _tabs,
               builder: (context, _) => GlassCategoryStrip(
+                // Пять вкладок (с GIF, 24.11.2026): поля и шрифт чуть
+                // меньше, чтобы на 375 pt все языки вставали поровну.
+                itemPadding: 9,
+                fontSize: 13,
                 items: [for (final l in tabLabels) GlassStripItem(label: l)],
                 selected: _tabs.index,
                 position: _tabs.animation,
@@ -1495,11 +1522,13 @@ class _ConversationMediaGallerySectionState
               animation: _tabs,
               builder: (context, _) {
                 final index = _tabs.index;
-                final isList = index == 2 || index == 3;
+                // 0 фото, 1 видео, 2 GIF, 3 файлы, 4 музыка.
+                final isList = index == 3 || index == 4;
                 final total = switch (index) {
                   1 => vm.videos.length,
-                  2 => vm.files.length,
-                  3 => vm.music.length,
+                  2 => vm.gifs.length,
+                  3 => vm.files.length,
+                  4 => vm.music.length,
                   _ => vm.photos.length,
                 };
                 final shown = isList ? _listShown : _gridShown;
@@ -1522,13 +1551,31 @@ class _ConversationMediaGallerySectionState
                     de: 'Keine Videos',
                   ),
                 ),
-                2 => ConversationFilesList(
+                2 => ConversationMediaGrid(
+                  items: vm.gifs,
+                  loadFile: loadFile,
+                  fetchFile: fetchFile,
+                  cachedFile: cachedFile,
+                  onItemTap: (i) => openAt(vm.gifs, i),
+                  maxItems: _gridShown,
+                  emptyLabel: wave1Text(
+                    context,
+                    ru: 'Нет GIF',
+                    en: 'No GIFs',
+                    uk: 'Немає GIF',
+                    es: 'No hay GIF',
+                    pt: 'Sem GIFs',
+                    fr: 'Aucun GIF',
+                    de: 'Keine GIFs',
+                  ),
+                ),
+                3 => ConversationFilesList(
                   items: vm.files,
                   loadFile: loadFile,
                   maxItems: _listShown,
                   emptyLabel: l10n.contactDetailsNoFiles,
                 ),
-                3 => ConversationMusicList(
+                4 => ConversationMusicList(
                   controller: controller,
                   convoId: convoId,
                   items: vm.music,

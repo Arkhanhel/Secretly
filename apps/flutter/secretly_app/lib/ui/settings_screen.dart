@@ -133,6 +133,18 @@ String _settingsLabel(
   return settingsScreenLabel(context, ru: ru, en: en);
 }
 
+/// Вход в «Поддержать»: на iPhone его нет — App Review 3.1.1 (отказ
+/// 01.06.2026), пока пожертвования не идут через покупку Apple. Один ответ на
+/// «Настройки» и меню «Secretly».
+bool get donateEntryAvailable => !Platform.isIOS;
+
+/// Страница «Поддержать Secretly».
+Future<void> openDonateSection(BuildContext context) async {
+  await Navigator.of(context).push(
+    SecretlyPageRoute(builder: (_) => const _DonateSupportLandingScreen()),
+  );
+}
+
 Future<bool> _openDonorboxCampaignInBrowser(BuildContext context) async {
   final uri = Uri.tryParse(_kDonorboxCampaignUrl);
   if (uri == null) {
@@ -1424,11 +1436,8 @@ class _SettingsScreenState extends State<SettingsScreen>
     await shareTextExternally(text: text);
   }
 
-  Future<void> _openDonateSection(BuildContext context) async {
-    await Navigator.of(context).push(
-      SecretlyPageRoute(builder: (_) => const _DonateSupportLandingScreen()),
-    );
-  }
+  Future<void> _openDonateSection(BuildContext context) =>
+      openDonateSection(context);
 
   Future<void> _openPrivacyPolicySection(BuildContext context) async {
     await Navigator.of(context).push(
@@ -2324,7 +2333,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           // to «digital content or services» must use In-App Purchase
           // on iOS. Until we ship the IAP rewrite we hide the donor
           // entry point on iOS entirely; Android keeps Donorbox.
-          if (!Platform.isIOS)
+          if (donateEntryAvailable)
             SettingsRootRow(
               id: 'donate',
               glyph: SettingsGlyph.donate,

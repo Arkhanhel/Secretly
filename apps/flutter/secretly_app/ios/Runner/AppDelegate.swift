@@ -8,11 +8,13 @@ import FirebaseMessaging
 import Flutter
 import MediaPlayer
 import PDFKit
+import Photos
 import Network
 import os
 import PushKit
 import QuickLook
 import Security
+import StoreKit
 import UIKit
 import UserNotifications
 import Vision
@@ -132,6 +134,9 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
     attachNseConfigChannel(messenger)
     attachThermalStateChannel(messenger)
     attachHeatProbeChannel(messenger)
+    attachSpellLanguagesChannel(messenger)
+    attachAppReviewChannel(messenger)
+    attachGalleryThumbsChannel(messenger)
     attachBackgroundTaskChannel(messenger)
     attachShareInboxChannel(messenger)
     attachPdfChannel(messenger)
@@ -471,6 +476,182 @@ private func secretlyMessageNotificationCategories() -> Set<UNNotificationCatego
         result(FlutterMethodNotImplemented)
       }
     }
+  }
+
+  /// Нативное окно оценки Apple (24.11.2026). Когда просить — решает
+  /// Dart (app_review_prompt.dart); покажет ли система окно — решает Apple
+  /// (не чаще трёх раз в год), поэтому ответ — только «попросили».
+  private func attachAppReviewChannel(_ messenger: FlutterBinaryMessenger) {
+    FlutterMethodChannel(name: "secretly/app_review", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "request" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        DispatchQueue.main.async {
+          let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+          guard let scene else {
+            result(false)
+            return
+          }
+          if #available(iOS 16.0, *) {
+            AppStore.requestReview(in: scene)
+          } else {
+            SKStoreReviewController.requestReview(in: scene)
+          }
+          result(true)
+        }
+      }
+  }
+
+  /// Миниатюры галереи (скрепка, 25.11.2026). Плагин фототеки сжимал каждую
+  /// в JPEG в главном потоке, а интерфейс Flutter живёт в нём же — первые
+  /// секунды галерея дёргалась. Здесь главный поток только принимает готовую
+  /// картинку, сжатие — в фоне.
+  ///
+  /// `thumb` {id, px, full}: full=false — быстрая, без сети; full=true —
+  /// чёткая, при нужде из iCloud. Ответ {data, degraded} или nil.
+  /// `prepare` {ids} — поднять снимки страницы одним запросом.
+  private func attachGalleryThumbsChannel(_ messenger: FlutterBinaryMessenger) {
+    let work = DispatchQueue(
+      label: "secretly.gallery.thumbs", qos: .userInitiated, attributes: .concurrent)
+    let assets = NSCache<NSString, PHAsset>()
+    assets.countLimit = 2000
+    let fetchOptions: () -> PHFetchOptions = {
+      let o = PHFetchOptions()
+      o.includeHiddenAssets = true
+      o.includeAssetSourceTypes = [.typeUserLibrary, .typeCloudShared, .typeiTunesSynced]
+      return o
+    }
+    FlutterMethodChannel(name: "secretly/gallery_thumbs", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        let args = call.arguments as? [String: Any]
+        switch call.method {
+        case "prepare":
+          let ids = args?["ids"] as? [String] ?? []
+          result(nil)
+          work.async {
+            let missing = ids.filter { assets.object(forKey: $0 as NSString) == nil }
+            guard !missing.isEmpty else { return }
+            PHAsset.fetchAssets(withLocalIdentifiers: missing, options: fetchOptions())
+              .enumerateObjects { asset, _, _ in
+                assets.setObject(asset, forKey: asset.localIdentifier as NSString)
+              }
+          }
+        case "thumb":
+          guard let id = args?["id"] as? String else {
+            result(nil)
+            return
+          }
+          let px = CGFloat((args?["px"] as? NSNumber)?.doubleValue ?? 320)
+          let full = (args?["full"] as? NSNumber)?.boolValue ?? false
+          work.async {
+            let cached = assets.object(forKey: id as NSString)
+            let found =
+              cached
+              ?? PHAsset.fetchAssets(withLocalIdentifiers: [id], options: fetchOptions())
+              .firstObject
+            guard let asset = found else {
+              DispatchQueue.main.async { result(nil) }
+              return
+            }
+            if cached == nil { assets.setObject(asset, forKey: id as NSString) }
+            let options = PHImageRequestOptions()
+            options.isSynchronous = false
+            options.deliveryMode = full ? .highQualityFormat : .fastFormat
+            options.resizeMode = .fast
+            options.isNetworkAccessAllowed = full
+            var replied = false
+            PHImageManager.default().requestImage(
+              for: asset, targetSize: CGSize(width: px, height: px),
+              contentMode: .aspectFill, options: options
+            ) { image, info in
+              // Главный поток: один ответ, тяжёлое — в фон.
+              if replied { return }
+              replied = true
+              guard let image else {
+                result(nil)
+                return
+              }
+              let side = min(image.size.width, image.size.height) * image.scale
+              let small =
+                side < px * 0.8
+                && CGFloat(min(asset.pixelWidth, asset.pixelHeight)) > side
+              let degraded =
+                small || (info?[PHImageResultIsDegradedKey] as? NSNumber)?.boolValue ?? false
+              work.async {
+                let data = image.jpegData(compressionQuality: 0.8)
+                DispatchQueue.main.async {
+                  guard let data else {
+                    result(nil)
+                    return
+                  }
+                  result([
+                    "data": FlutterStandardTypedData(bytes: data),
+                    "degraded": degraded,
+                  ])
+                }
+              }
+            }
+          }
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+  }
+
+  /// Словари проверки орфографии iPhone (вида «ru_RU», «en»). Движок
+  /// Flutter молча пропускает язык, которого нет в этом списке, — поле
+  /// ввода подбирает по нему точную запись (24.11.2026).
+  private func attachSpellLanguagesChannel(_ messenger: FlutterBinaryMessenger) {
+    FlutterMethodChannel(name: "secretly/spell_languages", binaryMessenger: messenger)
+      .setMethodCallHandler { call, result in
+        switch call.method {
+        case "available":
+          result(UITextChecker.availableLanguages)
+        // Где ошибки, БЕЗ подбора вариантов: варианты и есть вся цена
+        // (замер 25.11.2026: 2 000 знаков на русском у украинского словаря —
+        // 1,07 с с вариантами, 5 мс без них, и так на каждую букву).
+        case "check":
+          guard let args = call.arguments as? [String: Any],
+            let text = args["text"] as? String,
+            let language = args["language"] as? String
+          else {
+            result(nil)
+            return
+          }
+          let length = (text as NSString).length
+          let whole = NSRange(location: 0, length: length)
+          let checker = UITextChecker()
+          var flat: [Int] = []
+          var from = 0
+          while from < length {
+            let r = checker.rangeOfMisspelledWord(
+              in: text, range: whole, startingAt: from, wrap: false, language: language)
+            if r.location == NSNotFound || r.length == 0 { break }
+            flat.append(r.location)
+            flat.append(r.location + r.length)
+            from = r.location + r.length
+          }
+          result(flat)
+        case "guesses":
+          guard let args = call.arguments as? [String: Any],
+            let word = args["word"] as? String,
+            let language = args["language"] as? String
+          else {
+            result(nil)
+            return
+          }
+          let range = NSRange(location: 0, length: (word as NSString).length)
+          let found =
+            UITextChecker().guesses(forWordRange: range, in: word, language: language) ?? []
+          result(Array(found.prefix(5)))
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
   }
 
   // Проба нагрева (24.11.2026): одна точка для журнала нагрева проверочных

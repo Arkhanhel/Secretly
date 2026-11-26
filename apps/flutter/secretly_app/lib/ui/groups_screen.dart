@@ -1500,6 +1500,9 @@ class _RoomsFabIcon extends StatefulWidget {
 /// ~73 кадра в секунду). Свой контроллер на размеренном тикере — не чаще 60.
 class _RoomsFabIconState extends State<_RoomsFabIcon>
     with PacedTickerProviderStateMixin {
+  @override
+  bool get restsWhenIdle => true;
+
   late final AnimationController _ctrl = AnimationController(vsync: this);
 
   String get assetPath => widget.assetPath;

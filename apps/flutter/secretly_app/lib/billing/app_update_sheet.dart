@@ -35,29 +35,34 @@ String _t(BuildContext context, {required String ru, required String en}) =>
 /// Auto entry point — safe to call on every app open. Shows the nudge only when
 /// the server advertises a newer build than the one running, and not more often
 /// than the cooldown. Never throws into the caller.
-Future<void> maybeShowUpdateNudge(
+/// Возвращает `true`, если есть более новая сборка (окно могло и не
+/// показаться из-за паузы): окно оценки в такой запуск не просится —
+/// сначала обновление (24.11.2026).
+Future<bool> maybeShowUpdateNudge(
   BuildContext context,
   AppController controller,
 ) async {
   try {
     final info = controller.appUpdateInfo;
-    if (info.latestBuild <= 0) return; // server didn't advertise anything
+    if (info.latestBuild <= 0) return false; // server didn't advertise anything
 
     final pkg = await AppPackageInfo.load();
     final running = int.tryParse(pkg.buildNumber.trim()) ?? 0;
-    if (running <= 0 || running >= info.latestBuild) return; // up to date
+    if (running <= 0 || running >= info.latestBuild) return false; // up to date
 
     final prefs = await SharedPreferences.getInstance();
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final lastShown = prefs.getInt(_kUpdateNudgeLastShownMs) ?? 0;
-    if (nowMs - lastShown < _kCooldown.inMilliseconds) return;
+    if (nowMs - lastShown < _kCooldown.inMilliseconds) return true;
     await prefs.setInt(_kUpdateNudgeLastShownMs, nowMs);
 
-    if (!context.mounted) return;
+    if (!context.mounted) return true;
     await _showUpdateSheet(context, running: running, latest: info.latestBuild,
         url: info.updateUrl);
+    return true;
   } catch (_) {
     // best-effort — an update reminder must never crash the app start.
+    return false;
   }
 }
 

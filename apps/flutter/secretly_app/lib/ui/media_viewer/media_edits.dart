@@ -141,7 +141,7 @@ class Adjustments {
       Object.hash(brightness, contrast, saturation, warmth, vignette);
 }
 
-enum StrokeTool { pen, marker, neon }
+enum StrokeTool { pen, marker, neon, arrow }
 
 @immutable
 class DrawStroke {
@@ -612,6 +612,27 @@ void paintStroke(Canvas canvas, DrawStroke s) {
       canvas.drawPath(path, base(s.width * 2.6, s.color.withValues(alpha: .22)));
       canvas.drawPath(path, base(s.width * 1.4, s.color.withValues(alpha: .55)));
       canvas.drawPath(path, base(s.width * .5, const Color(0xFFFFFFFF)));
+    case StrokeTool.arrow:
+      // Стрелка (макет SendFlow): линия ручки и наконечник по направлению
+      // последнего отрезка длиннее «пяты» наконечника.
+      final paint = base(s.width, s.color);
+      canvas.drawPath(path, paint);
+      final p = s.points;
+      if (p.length < 2) return;
+      final tip = p.last;
+      var k = p.length - 2;
+      while (k > 0 && (tip - p[k]).distance < s.width * 2 + 6) {
+        k--;
+      }
+      final dir = tip - p[k];
+      if (dir.distance < 1) return;
+      final a = math.atan2(dir.dy, dir.dx);
+      final len = s.width * 2.5 + 10;
+      final head = Path()
+        ..moveTo(tip.dx - len * math.cos(a - .55), tip.dy - len * math.sin(a - .55))
+        ..lineTo(tip.dx, tip.dy)
+        ..lineTo(tip.dx - len * math.cos(a + .55), tip.dy - len * math.sin(a + .55));
+      canvas.drawPath(head, paint);
   }
 }
 
@@ -635,7 +656,17 @@ TextStyle mediaTextStyle(TextItem t, double fontSize) => TextStyle(
 /// Пропорция рамки для выбранного варианта; null — «Свободно».
 /// `orig` — пропорция исходника; при повороте на 90° пропорции 1:1, 4:5,
 /// 16:9 переворачиваются (прототип: `aspectR`).
-enum CropAspect { free, original, square, portrait45, wide169 }
+enum CropAspect {
+  free,
+  original,
+  square,
+  landscape32,
+  classic43,
+  portrait45,
+  wide169,
+  tall916,
+  portrait34,
+}
 
 double? cropAspectRatio(CropAspect key, int k, double sourceAspect) {
   final double r;
@@ -650,6 +681,14 @@ double? cropAspectRatio(CropAspect key, int k, double sourceAspect) {
       r = .8;
     case CropAspect.wide169:
       r = 16 / 9;
+    case CropAspect.landscape32:
+      r = 1.5;
+    case CropAspect.classic43:
+      r = 4 / 3;
+    case CropAspect.tall916:
+      r = 9 / 16;
+    case CropAspect.portrait34:
+      r = .75;
   }
   return k.isOdd ? 1 / r : r;
 }

@@ -11,6 +11,11 @@ import '../scroll_feel.dart';
 import 'package:flutter/material.dart';
 import 'package:secretly_app/ui/secretly_snackbar.dart';
 import 'package:lottie/lottie.dart';
+import 'package:visibility_detector/visibility_detector.dart';
+import 'lottie_still.dart';
+import '../motion/decoration_pacer.dart' show PacedTickerProviderStateMixin;
+import 'package:secretly_app/stickers/premium_sticker_packs.dart'
+    show isDesignerStickerPackId, stickerPackFrameRate;
 
 import '../../app/app_controller.dart';
 import '../../stickers/sticker_catalog.dart';
@@ -24,6 +29,207 @@ import 'package:secretly_app/ui/apple_controls.dart';
 import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 import 'package:secretly_app/ui/apple_glass.dart';
 
+
+/// Встроенный Lottie-стикер (24.11.2026): `.tgs` (gzip, как в Telegram)
+/// распаковывается и разбирается в фоновом потоке (`backgroundLoading`);
+/// композиция кэшируется пакетом `lottie` по пути. Нет файла — подсказка-
+/// эмодзи. Как играет — см. [BundledStickerLottie].
+Widget bundledStickerLottie(
+  SecretlyStickerDescriptor sticker, {
+  required double size,
+  BoxFit fit = BoxFit.contain,
+  bool animate = true,
+  int? maxLoops = BundledStickerLottie.defaultLoops,
+}) {
+  return BundledStickerLottie(
+    key: ValueKey('bundled-sticker:${sticker.lookupKey}'),
+    sticker: sticker,
+    size: size,
+    fit: fit,
+    animate: animate,
+    maxLoops: maxLoops,
+  );
+}
+
+/// Проигрыватель встроенного стикера, бережный к батарее (24.11.2026 —
+/// разбор перед выпуском):
+/// - не чаще 60 кадров в секунду (на экранах 120 Гц обычный тикер гонял
+///   бы перерисовку всего окна 120 раз в секунду);
+/// - [maxLoops] повторов, затем стоп на первом кадре; снова играет, когда
+///   стикер возвращается на экран (`null` — без ограничения: панель, где
+///   играют не больше шести видимых);
+/// - за экраном стоит; «уменьшить движение» в системе — неподвижный кадр;
+/// - «Pixel» — 12 кадров в секунду, как нарисован, с кэшем кадров;
+/// - когда не играет (повторы кончились, [animate] выключен, «уменьшить
+///   движение») — неподвижный кадр КАРТИНКОЙ ([LottieStillImage]): на
+///   Impeller стоящий вектор всё равно растеризуется каждый кадр, и лента
+///   со стикерами листалась рывками (замер Xiaomi 14 Pro, 24.11.2026);
+/// - файл со стикером (свой набор) — тот же путь, что и ассет.
+class BundledStickerLottie extends StatefulWidget {
+  const BundledStickerLottie({
+    super.key,
+    required this.sticker,
+    required this.size,
+    this.fit = BoxFit.contain,
+    this.animate = true,
+    this.maxLoops = defaultLoops,
+  });
+
+  static const int defaultLoops = 3;
+
+  final SecretlyStickerDescriptor sticker;
+  final double size;
+  final BoxFit fit;
+  final bool animate;
+  final int? maxLoops;
+
+  @override
+  State<BundledStickerLottie> createState() => _BundledStickerLottieState();
+}
+
+int _bundledStickerVisibilitySeq = 0;
+
+class _BundledStickerLottieState extends State<BundledStickerLottie>
+    with PacedTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    // Не лениво: в режиме картинки контроллер иначе впервые создавался бы
+    // в dispose(), когда искать TickerMode у предков уже нельзя.
+    _ctrl = AnimationController(vsync: this)..addStatusListener(_onStatus);
+  }
+
+  late final Key _visKey = ValueKey(
+    'bundled-sticker-vis-${_bundledStickerVisibilitySeq++}',
+  );
+  bool _loaded = false;
+  bool _onScreen = true;
+  int _loops = 0;
+
+  /// Отыграл свои повторы и стоит на первом кадре — показываем картинку.
+  bool _settled = false;
+
+  late LottieProvider _provider = _providerFor(widget.sticker);
+
+  static LottieProvider _providerFor(SecretlyStickerDescriptor s) {
+    final decoder = s.assetPath.endsWith('.tgs')
+        ? LottieComposition.decodeGZip
+        : null;
+    return s.assetSource == SecretlyStickerAssetSource.file
+        ? FileLottie(File(s.assetPath), decoder: decoder, backgroundLoading: true)
+        : AssetLottie(s.assetPath, decoder: decoder, backgroundLoading: true);
+  }
+
+  bool get _motion =>
+      widget.animate && !(MediaQuery.maybeDisableAnimationsOf(context) ?? false);
+
+  void _onStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed || !mounted) return;
+    _loops++;
+    final max = widget.maxLoops;
+    if (max != null && _loops >= max) {
+      _ctrl.value = 0; // первый кадр — «поза покоя» бесшовного цикла
+      setState(() => _settled = true);
+      return;
+    }
+    if (_onScreen && _motion) _ctrl.forward(from: 0);
+  }
+
+  void _play({bool restart = false}) {
+    if (!_loaded || !_motion || !_onScreen) return;
+    if (restart) _loops = 0;
+    final max = widget.maxLoops;
+    if (max != null && _loops >= max) return;
+    if (_settled) setState(() => _settled = false);
+    // Заново — с первого кадра: он же стоял картинкой, стыка не видно.
+    if (!_ctrl.isAnimating) {
+      _ctrl.forward(from: restart || _ctrl.value >= 1 ? 0 : _ctrl.value);
+    }
+  }
+
+  void _onVisibility(VisibilityInfo info) {
+    if (!mounted) return;
+    final visible = info.visibleFraction > 0;
+    if (visible == _onScreen) return;
+    _onScreen = visible;
+    if (visible) {
+      _play(restart: true); // вернулся на экран — сыграть заново
+    } else {
+      _ctrl.stop();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant BundledStickerLottie old) {
+    super.didUpdateWidget(old);
+    if (old.sticker.assetPath != widget.sticker.assetPath ||
+        old.sticker.assetSource != widget.sticker.assetSource) {
+      _provider = _providerFor(widget.sticker);
+    }
+    if (old.animate != widget.animate) {
+      if (widget.animate) {
+        _play(restart: true);
+      } else {
+        _ctrl.stop();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sticker = widget.sticker;
+    final fps = stickerPackFrameRate(sticker.packId);
+    final still = LottieStillImage(
+      provider: _provider,
+      id: '${sticker.assetSource.name}:${sticker.assetPath}',
+      size: widget.size,
+      fit: widget.fit,
+      errorBuilder: (context) =>
+          _MissingStickerAsset(sticker: sticker, size: widget.size),
+    );
+    if (_settled || !widget.animate || !_motion) {
+      return VisibilityDetector(
+        key: _visKey,
+        onVisibilityChanged: _onVisibility,
+        child: still,
+      );
+    }
+    final lottie = LottieBuilder(
+      lottie: _provider,
+      controller: _ctrl,
+      width: widget.size,
+      height: widget.size,
+      fit: widget.fit,
+      // Пока композиция грузится — тот же кадр картинкой, без мигания.
+      frameBuilder: (context, child, composition) =>
+          composition == null ? still : child,
+      frameRate: fps == null ? null : FrameRate(fps.toDouble()),
+      // «Pixel»: 36 разных кадров — кэш картинок кадров дешевле, чем
+      // каждый раз рисовать ~4 000 квадратов.
+      renderCache: fps == null ? null : RenderCache.drawingCommands,
+      onLoaded: (composition) {
+        _ctrl.duration = composition.duration;
+        _loaded = true;
+        _play(restart: true);
+      },
+      errorBuilder: (context, error, stack) =>
+          _MissingStickerAsset(sticker: sticker, size: widget.size),
+    );
+    return VisibilityDetector(
+      key: _visKey,
+      onVisibilityChanged: _onVisibility,
+      child: lottie,
+    );
+  }
+}
 
 class SecretlyStickerAssetView extends StatelessWidget {
   const SecretlyStickerAssetView({
@@ -42,12 +248,10 @@ class SecretlyStickerAssetView extends StatelessWidget {
     final dimension = size.clamp(24.0, 280.0);
     final child = switch (sticker.assetSource) {
       SecretlyStickerAssetSource.bundledAsset => switch (sticker.format) {
-        SecretlyStickerFormat.lottie => Lottie.asset(
-          sticker.assetPath,
-          width: dimension,
-          height: dimension,
+        SecretlyStickerFormat.lottie => bundledStickerLottie(
+          sticker,
+          size: dimension,
           fit: fit,
-          repeat: true,
         ),
         // png AND animated webp both render via Image — Flutter's codec plays
         // animated WebP inline with no controller (ideal for grids + bubbles).
@@ -499,7 +703,11 @@ class _SecretlyStickerPickerTabState extends State<SecretlyStickerPickerTab> {
                   children: [
                     item('send', AdaptiveIcons.send_rounded,
                         dialogContext.l10n.stickerSend),
-                    if (isFavorite)
+                    // Встроенные наборы дизайнера — без «Избранного» (см.
+                    // панель стикеров).
+                    if (isDesignerStickerPackId(sticker.packId))
+                      const SizedBox.shrink()
+                    else if (isFavorite)
                       item('unfavorite', AdaptiveIcons.star_rounded,
                           dialogContext.l10n.stickerRemoveFromFavorites)
                     else

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../app/app_review_prompt.dart';
+import '../calls/call_manager.dart';
 import 'whats_new/whats_new_flow.dart';
 import 'dart:async';
 import 'dart:ui';
@@ -184,6 +186,13 @@ class _AppShellState extends State<AppShell>
     // shows) AND is gated to never-subscribed users only. Delayed so the
     // monetization bootstrap (signed /v1/config + entitlement) has settled and
     // the home screen is calm before anything pops. Best-effort — never throws.
+    // Окно оценки (24.11.2026): считаем запуск сразу, просим — в конце
+    // цепочки окон ниже.
+    unawaited(
+      AppReviewPrompt.noteLaunch(
+        hasMessagesBefore: widget.controller.hasLocalMessagesBefore,
+      ),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future<void>.delayed(const Duration(milliseconds: 1200), () async {
         if (!mounted) return;
@@ -194,13 +203,33 @@ class _AppShellState extends State<AppShell>
         if (!mounted) return;
         // Higher priority than the upsell: if a newer build is available, nudge
         // first (dismissible). Sequential so the two sheets never stack.
-        await maybeShowUpdateNudge(context, widget.controller);
+        final updateAvailable = await maybeShowUpdateNudge(
+          context,
+          widget.controller,
+        );
         if (!mounted) return;
         // Нативная плашка Google Play — ПОСЛЕ нашего напоминания и как
         // дополнение к нему: на iOS её не существует, а установленным из
         // ручной APK Play обновления не предлагает. Молча ничего не делает
         // везде, где неприменима.
         unawaited(NativeUpdatePrompt.maybePrompt());
+
+        // Нативное окно оценки Apple / Google — только новым, не раньше
+        // 3 суток и 5 запусков (app_review_prompt.dart). Попросили — другие
+        // окна ждут следующего запуска, чтобы не налезать друг на друга.
+        if (!updateAvailable &&
+            mounted &&
+            await AppReviewPrompt.maybeRequest(
+              // Главный экран сверху (не открыт чат из пуша, не лист) и
+              // нет звонка — иначе окно всплыло бы поверх переписки.
+              screenCalm: () =>
+                  mounted &&
+                  (ModalRoute.of(context)?.isCurrent ?? true) &&
+                  !(CallManager.instance?.state.value.isActive ?? false),
+            )) {
+          return;
+        }
+        if (!mounted) return;
 
         unawaited(
           maybeShowPremiumTrialAnnouncement(context, widget.controller),

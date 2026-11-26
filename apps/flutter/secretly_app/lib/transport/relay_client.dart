@@ -4267,12 +4267,15 @@ class RelayClient {
   /// row so the sender can re-upload the same message under a fresh session.
   /// Returns true iff the relay removed the row (false once released — an
   /// already-delivered message can never be silently unsent).
-  Future<bool> cancelScheduled({
+  /// `true` — снято; `false` — реле ответило, что такой копии у него нет
+  /// (выдана или не доходила); `null` — ответа нет (сеть, ошибка сервера):
+  /// неизвестно (26.11.2026 — раньше это тоже было `false`).
+  Future<bool?> cancelScheduled({
     required String toDeviceId,
     required String msgId,
   }) async {
     final base = httpBaseUrl;
-    if (base == null) return false;
+    if (base == null) return null;
     try {
       final uri = base.resolve('/v1/cancel_scheduled');
       final tsMs = ServerClock.instance.nowMs();
@@ -4305,11 +4308,11 @@ class RelayClient {
             }),
           )
           .timeout(_httpTimeout);
-      if (resp.statusCode < 200 || resp.statusCode >= 300) return false;
+      if (resp.statusCode < 200 || resp.statusCode >= 300) return null;
       final decoded = jsonDecode(resp.body);
       return decoded is Map && decoded['cancelled'] == true;
     } catch (_) {
-      return false; // best-effort — caller treats false as "old copy may fire"
+      return null; // best-effort — caller treats null as "old copy may fire"
     }
   }
 

@@ -9694,4 +9694,22 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get penHintReactions => 'Реакції — довгим натисканням';
+
+  @override
+  String get stickerPremiumPackSafe => 'Секретний сейф';
+
+  @override
+  String get stickerPremiumPackPixel => 'Pixel';
+
+  @override
+  String get stickerPremiumSubtitle => 'Анімовані стікери для передплатників Premium';
+
+  @override
+  String get stickerPremiumUnlock => 'Відкрити з Premium';
+
+  @override
+  String get stickerPackKids => 'Дітки';
+
+  @override
+  String get meToolArrow => 'Стрілка';
 }

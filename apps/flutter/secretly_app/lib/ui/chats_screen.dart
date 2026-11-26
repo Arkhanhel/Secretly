@@ -51,9 +51,11 @@ import 'room_call_screen.dart';
 import 'room_details_screen.dart';
 import 'security_lock_flow.dart';
 import 'security_settings_screen.dart';
+import 'settings_screen.dart' show donateEntryAvailable, openDonateSection;
 import 'shared_audio_controls.dart';
 import 'theme_transition.dart';
 import 'wave1_l10n.dart';
+import 'widgets/heart_beat_icon.dart';
 import 'widgets/apple_menu.dart';
 import 'home/home_islands.dart';
 import 'home/home_shell_scope.dart';
@@ -4438,6 +4440,25 @@ class _CallHistoryMenuAnimatedIcon extends StatelessWidget {
   }
 }
 
+/// Красное бьющееся сердце в той же круглой подложке, что у соседей.
+class _SupportMenuAnimatedIcon extends StatelessWidget {
+  const _SupportMenuAnimatedIcon();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 34,
+    height: 34,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      color: Theme.of(
+        context,
+      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.55),
+    ),
+    child: const HeartBeatIcon(size: 20),
+  );
+}
+
 class _MenuLottieIcon extends StatelessWidget {
   const _MenuLottieIcon({
     required this.assetPath,
@@ -4674,6 +4695,22 @@ Future<void> showHomeMainMenu(
                         onTap: () =>
                             Navigator.of(context).pop('call_history'),
                       ),
+                      if (donateEntryAvailable)
+                        _GlassMenuAction(
+                          leading: const _SupportMenuAnimatedIcon(),
+                          title: wave1Text(
+                            context,
+                            ru: 'Поддержать',
+                            en: 'Support us',
+                            uk: 'Підтримати',
+                            es: 'Apoyar',
+                            pt: 'Apoiar',
+                            ptBr: 'Apoiar',
+                            fr: 'Soutenir',
+                            de: 'Unterstützen',
+                          ),
+                          onTap: () => Navigator.of(context).pop('support'),
+                        ),
                     ],
                   ),
                 ),
@@ -4754,5 +4791,7 @@ Future<void> showHomeMainMenu(
         builder: (_) => CallHistoryScreen(controller: controller),
       ),
     );
+    return;
   }
+  if (action == 'support') await openDonateSection(context);
 }

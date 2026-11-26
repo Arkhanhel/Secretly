@@ -489,6 +489,36 @@ class MainActivity : FlutterFragmentActivity() {
                 result.error("heat_probe", e.message, null)
             }
         }
+        // Беззвучный канал уведомлений («Отправить без звука», SendFlow).
+        try {
+            MessageNotifier.ensureSilentChannel(applicationContext)
+        } catch (e: Exception) {
+            Log.w("Secretly", "silent channel: ${e.message}")
+        }
+        // Нативное окно оценки Google Play (24.11.2026). Когда просить —
+        // решает Dart (app_review_prompt.dart); покажет ли Play окно — решает
+        // Google (квота, установка не из Play — молча ничего).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "secretly/app_review").setMethodCallHandler { call, result ->
+            if (call.method != "request") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            try {
+                val manager = com.google.android.play.core.review.ReviewManagerFactory.create(this)
+                manager.requestReviewFlow().addOnCompleteListener { request ->
+                    if (!request.isSuccessful || isFinishing || isDestroyed) {
+                        result.success(false)
+                        return@addOnCompleteListener
+                    }
+                    manager.launchReviewFlow(this, request.result).addOnCompleteListener {
+                        result.success(true)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w("Secretly", "in-app review unavailable: ${e.message}")
+                result.success(false)
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "secretly/battery").setMethodCallHandler { call, result ->
             when (call.method) {
                 "isIgnoringBatteryOptimizations" -> {

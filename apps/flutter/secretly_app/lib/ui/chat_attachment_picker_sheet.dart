@@ -10,10 +10,15 @@ import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:image/image.dart' as img;
 import 'package:secretly_app/ui/secretly_snackbar.dart';
 import 'package:secretly_app/ui/video_trim_editor_screen.dart';
+import '../media/photo_compressor.dart' show kPhotoSendMaxSideSd;
+import '../media/video_compressor.dart' show VideoCompressor;
+import 'media_viewer/media_viewer_tokens.dart' show mediaViewerGlass, mediaViewerGlassFilter, mediaViewerLiquidGlass;
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -28,10 +33,18 @@ import 'motion/motion.dart';
 import 'motion/press_feedback.dart';
 import 'recent_attachments_store.dart';
 import 'widgets/island_backdrop.dart';
+import '../diagnostics/picker_probe.dart';
+import 'motion/frame_stats.dart' show kFrameStats;
+import 'chat/composer_drops.dart' show ComposerDropStyle, ComposerDropSurface;
+import 'gallery_thumbs.dart';
 import 'theme_presets.dart';
 import 'wave1_l10n.dart';
 import 'widgets/secretly_glass_sheet.dart';
 import 'widgets/broken_media_box.dart';
+import 'media_viewer/edited_media_view.dart' show exportEditedImageFile;
+import 'media_viewer/editor/media_editor_model.dart' show MediaEditorTab;
+import 'media_viewer/editor/media_editor_screen.dart' show openMediaEditor;
+import 'media_viewer/media_edits.dart' show MediaEdits;
 import 'package:secretly_app/ui/apple_controls.dart';
 import 'package:secretly_app/ui/icons/adaptive_icons.dart';
 
@@ -47,17 +60,57 @@ enum ChatAttachmentPickerResultKind {
 
 enum ChatAttachmentPickerMediaKind { image, video }
 
+/// Параметры отправки пачки (SendFlow, меню по долгому нажатию).
+class ChatAttachmentSendOptions {
+  const ChatAttachmentSendOptions({
+    this.captionAbove = false,
+    this.group = true,
+    this.spoiler = false,
+    this.silent = false,
+    this.scheduleAtMs,
+  });
+
+  static const ChatAttachmentSendOptions defaults = ChatAttachmentSendOptions();
+
+  /// Подпись над медиа.
+  final bool captionAbove;
+
+  /// `false` — «Не группировать»: каждое медиа отдельным сообщением.
+  final bool group;
+
+  /// Скрыть под спойлер (только если все получатели умеют).
+  final bool spoiler;
+
+  /// Без звука у получателя.
+  final bool silent;
+
+  /// Отложенная отправка (момент, мс); `null` — сразу.
+  final int? scheduleAtMs;
+}
+
 class ChatAttachmentPickerMediaItem {
   const ChatAttachmentPickerMediaItem({
     required this.path,
     required this.kind,
     this.mime,
     this.caption = '',
+    this.photoMaxSide,
+    this.videoMaxSide,
+    this.muteVideo = false,
+    this.viewOnce = false,
   });
+
+  /// Одноразовый просмотр этого снимка (SendFlow Э5).
+  final bool viewOnce;
 
   final String path;
   final ChatAttachmentPickerMediaKind kind;
   final String? mime;
+
+  /// SendFlow: качество, выбранное в просмотре (см. PendingPhotoUpload).
+  final int? photoMaxSide;
+  final int? videoMaxSide;
+  final bool muteVideo;
 
   /// SEND EDITOR (2026-07-17): caption typed in the fullscreen pre-send
   /// editor. Non-empty → the chat uses it directly and skips its own caption
@@ -75,8 +128,11 @@ class ChatAttachmentPickerMediaItem {
 }
 
 class ChatAttachmentPickerResult {
-  ChatAttachmentPickerResult.photos(List<ChatAttachmentPickerMediaItem> items)
-    : kind = ChatAttachmentPickerResultKind.photos,
+  ChatAttachmentPickerResult.photos(
+    List<ChatAttachmentPickerMediaItem> items, {
+    ChatAttachmentSendOptions options = ChatAttachmentSendOptions.defaults,
+  }) : _options = options,
+       kind = ChatAttachmentPickerResultKind.photos,
       mediaItems = List<ChatAttachmentPickerMediaItem>.unmodifiable(items),
       filePaths = List<String>.unmodifiable(
         items.map((item) => item.path).toList(growable: false),
@@ -158,6 +214,11 @@ class ChatAttachmentPickerResult {
 
   final ChatAttachmentPickerResultKind kind;
   final List<ChatAttachmentPickerMediaItem> mediaItems;
+
+  /// SendFlow: параметры отправки из меню (долгое нажатие на «Отправить»).
+  ChatAttachmentSendOptions? _options;
+  ChatAttachmentSendOptions get options =>
+      _options ?? ChatAttachmentSendOptions.defaults;
   final List<String> filePaths;
 
   /// Original file name (e.g. "report.pdf") for the [file] result, captured
@@ -179,6 +240,8 @@ Future<ChatAttachmentPickerResult?> showChatAttachmentPickerSheet(
   bool showPoll = false,
   bool showTopic = false,
   bool showEvent = false,
+  Future<bool> Function()? spoilerSupported,
+  VoidCallback? onSettled,
 }) {
   return showModalBottomSheet<ChatAttachmentPickerResult>(
   sheetAnimationStyle: appSheetAnimationStyle,
@@ -192,9 +255,44 @@ Future<ChatAttachmentPickerResult?> showChatAttachmentPickerSheet(
       showPoll: showPoll,
       showTopic: showTopic,
       showEvent: showEvent,
+      spoilerSupported: spoilerSupported,
+      onSettled: onSettled,
     ),
   );
 }
+
+/// Первая страница из памяти → свежая: свежая целиком, за ней подгруженное
+/// ниже (без повторов и без ушедшего из первой страницы). `null` — ничего не
+/// изменилось.
+@visibleForTesting
+List<AssetEntity>? mergeGalleryPages({
+  required List<AssetEntity> shown,
+  required List<AssetEntity> oldFirst,
+  required List<AssetEntity> fresh,
+}) {
+  bool same = oldFirst.length == fresh.length;
+  for (var i = 0; same && i < fresh.length; i++) {
+    same =
+        oldFirst[i].id == fresh[i].id &&
+        oldFirst[i].modifiedDateSecond == fresh[i].modifiedDateSecond;
+  }
+  if (same) return null;
+  final freshIds = {for (final a in fresh) a.id};
+  final oldIds = {for (final a in oldFirst) a.id};
+  return [
+    ...fresh,
+    for (final a in shown)
+      if (!freshIds.contains(a.id) && !oldIds.contains(a.id)) a,
+  ];
+}
+
+/// Шапка листа: ручка, под ней название альбома, сразу под ним снимки
+/// (владелец, 25.11.2026: ближе к верхнему краю). У файлов и музыки шапка
+/// пустая — место только под ручку.
+const double kSheetHeaderTop = 12;
+const double kSheetHeaderHeight = 32;
+const double kSheetGridTop = kSheetHeaderTop + kSheetHeaderHeight + 2;
+const double kSheetListTop = 28;
 
 enum _AttachmentPickerTab { photo, file, music }
 
@@ -203,7 +301,15 @@ class _ChatAttachmentPickerSheet extends StatefulWidget {
     this.showPoll = false,
     this.showTopic = false,
     this.showEvent = false,
+    this.spoilerSupported,
+    this.onSettled,
   });
+
+  /// Лист выехал до конца.
+  final VoidCallback? onSettled;
+
+  /// Умеют ли все получатели спойлер и одноразовый просмотр (SendFlow Э5).
+  final Future<bool> Function()? spoilerSupported;
 
   final bool showPoll;
   final bool showTopic;
@@ -236,8 +342,92 @@ class _ChatAttachmentPickerSheetState
     'amr',
   };
   final List<AssetEntity> _galleryAssets = <AssetEntity>[];
-  final Map<String, Future<Uint8List?>> _galleryThumbnailFutures =
-      <String, Future<Uint8List?>>{};
+  // ── SendFlow Э1 (24.11.2026, макет SendFlow) ──────────────────────────
+  /// Альбом сетки: Недавние / Избранное / Видео / Скриншоты.
+  _GalleryFilter _galleryFilter = _GalleryFilter.recent;
+  final Map<_GalleryFilter, AssetPathEntity> _filterPaths = {};
+  final Map<_GalleryFilter, int> _filterCounts = {};
+  bool _filtersResolved = false;
+  bool _albumsOpen = false;
+
+  /// Сетка слушает это вместо setState листа: новая страница не перестраивает
+  /// стекло, шапку и подпись (25.11.2026).
+  final ValueNotifier<int> _galleryTick = ValueNotifier<int>(0);
+
+  /// Первая страница «Недавних» с прошлого открытия — сетка сразу, обновление
+  /// следом. Только в памяти процесса.
+  static AssetPathEntity? _lastRecentAlbum;
+  static List<AssetEntity> _lastRecentPage = const <AssetEntity>[];
+
+  /// Номер загрузки: ответ прежнего альбома не перебивает новый.
+  int _loadSeq = 0;
+  Timer? _albumsTimer;
+  Timer? _cameraTimer;
+  Animation<double>? _routeAnimation;
+
+  /// Выбранные снимки по id — переживают смену альбома (в сетке другого
+  /// альбома их может не быть), отправка идёт в порядке выбора.
+  final Map<String, AssetEntity> _selectedAssetById = {};
+
+  // Меню отправки (долгое нажатие): общие для пачки.
+  bool _flowCaptionAbove = false;
+  bool _flowGroup = true;
+  bool _flowSpoiler = false;
+  bool _flowSilent = false;
+  final int? _flowScheduleAtMs = null;
+  bool _flowAsFiles = false;
+
+  /// Поддержка спойлера/одноразового у получателей — спрашиваем один раз.
+  late final Future<bool> _spoilerOk =
+      widget.spoilerSupported?.call() ?? Future<bool>.value(false);
+
+  void _explainSpoilerUnavailable() => _showInlineMessage(
+    wave1Text(context, ru: 'Недоступно в этом чате: нужна новая версия Secretly на телефонах получателя (в группах пока нет)', en: 'Not available in this chat: the recipient’s phones need the new Secretly (not in groups yet)', uk: 'Недоступно в цьому чаті: потрібна нова версія Secretly на телефонах одержувача (у групах поки ні)', es: 'No disponible aquí: el destinatario necesita la nueva versión de Secretly en sus teléfonos (aún no en grupos)', pt: 'Indisponível aqui: o destinatário precisa da nova versão do Secretly nos telemóveis (ainda não em grupos)', ptBr: 'Indisponível aqui: o destinatário precisa da nova versão do Secretly nos celulares (ainda não em grupos)', fr: 'Indisponible ici : le destinataire doit avoir la nouvelle version de Secretly sur ses téléphones (pas encore en groupe)', de: 'Hier nicht verfügbar: Empfänger braucht die neue Secretly-Version auf dem Handy (noch nicht in Gruppen)'),
+  );
+
+  ChatAttachmentSendOptions _flowOptions() => ChatAttachmentSendOptions(
+    captionAbove: _flowCaptionAbove,
+    group: _flowGroup,
+    spoiler: _flowSpoiler,
+    silent: _flowSilent,
+    scheduleAtMs: _flowScheduleAtMs,
+  );
+
+  final Map<String, _AssetSendOpts> _sendOptsByAssetId = {};
+  _AssetSendOpts _optsFor(String id) =>
+      _sendOptsByAssetId.putIfAbsent(id, _AssetSendOpts.new);
+
+  /// Подпись, набранная прямо в листе (к пачке — у первого снимка).
+  final TextEditingController _sheetCaption = TextEditingController();
+
+  bool _toggleAssetSelection(AssetEntity asset) {
+    if (_selectedPhotoIds.remove(asset.id)) {
+      _selectedAssetById.remove(asset.id);
+      setState(() {});
+      return true;
+    }
+    if (_selectedPhotoIds.length >= kSendFlowMaxSelection) {
+      _showInlineMessage(
+        wave1Text(
+          context,
+          ru: 'Можно выбрать до $kSendFlowMaxSelection медиа',
+          en: 'You can select up to $kSendFlowMaxSelection items',
+          uk: 'Можна вибрати до $kSendFlowMaxSelection медіа',
+          es: 'Puedes elegir hasta $kSendFlowMaxSelection elementos',
+          pt: 'Pode escolher até $kSendFlowMaxSelection itens',
+          ptBr: 'Você pode escolher até $kSendFlowMaxSelection itens',
+          fr: 'Vous pouvez choisir jusqu’à $kSendFlowMaxSelection éléments',
+          de: 'Du kannst bis zu $kSendFlowMaxSelection Medien auswählen',
+        ),
+      );
+      return false;
+    }
+    _selectedPhotoIds.add(asset.id);
+    _selectedAssetById[asset.id] = asset;
+    setState(() {});
+    return true;
+  }
+
   final Set<String> _selectedPhotoIds = <String>{};
 
   // MULTI-PHOTO CAPTIONS (2026-07-17): the fullscreen send editor writes each
@@ -277,8 +467,53 @@ class _ChatAttachmentPickerSheetState
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (_lastRecentPage.isNotEmpty && (Platform.isAndroid || Platform.isIOS)) {
+      _galleryAlbum = _lastRecentAlbum;
+      _galleryAssets.addAll(_lastRecentPage);
+      _galleryNextPage = 1;
+      _galleryLoading = false;
+    }
+    PickerProbe.opened(fromMemory: _lastRecentPage.isNotEmpty);
+    if (kFrameStats) {
+      GalleryThumbs.instance.onFastIdle = () => PickerProbe.mark('thumbs');
+    }
     unawaited(_loadGalleryAssets());
-    unawaited(_initializeCameraPreview());
+    // Камера — когда лист уже выехал: её запуск и живой кадр в сетке не
+    // делят с ним первые кадры (25.11.2026).
+    _cameraInitializing = _supportsLiveCamera;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _watchSheetSettled());
+  }
+
+  void _watchSheetSettled() {
+    if (!mounted) return;
+    final animation = ModalRoute.of(context)?.animation;
+    if (animation == null || animation.isCompleted) {
+      _scheduleCamera();
+      return;
+    }
+    _routeAnimation = animation..addStatusListener(_onRouteStatus);
+  }
+
+  void _onRouteStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    _routeAnimation?.removeStatusListener(_onRouteStatus);
+    _routeAnimation = null;
+    _scheduleCamera();
+  }
+
+  void _scheduleCamera() {
+    widget.onSettled?.call();
+    _cameraTimer = Timer(const Duration(milliseconds: 250), () {
+      // Системная камера или выбор уже идут — камерой управляет тот путь.
+      if (!mounted || _busy || _cameraController != null) return;
+      final life = WidgetsBinding.instance.lifecycleState;
+      if (life != null && life != AppLifecycleState.resumed) {
+        // Ушли в фон раньше — откроем по возвращении.
+        _cameraReleasedForBackground = true;
+        return;
+      }
+      unawaited(_initializeCameraPreview());
+    });
   }
 
   /// Камеру отпустили, уйдя в фон, — вернуть её при возвращении.
@@ -311,11 +546,16 @@ class _ChatAttachmentPickerSheetState
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _albumsTimer?.cancel();
+    _cameraTimer?.cancel();
+    _routeAnimation?.removeStatusListener(_onRouteStatus);
     final cameraController = _cameraController;
     _cameraController = null;
     if (cameraController != null) {
       unawaited(cameraController.dispose());
     }
+    _galleryTick.dispose();
+    _sheetCaption.dispose();
     super.dispose();
   }
 
@@ -371,6 +611,8 @@ class _ChatAttachmentPickerSheetState
     String caption = '',
     String? editedPath,
   }) async {
+    final opts = _optsFor(asset.id);
+    final photoSide = opts.hd ? null : kPhotoSendMaxSideSd;
     // An edited (rotated/cropped/drawn) file replaces the original — always a
     // baked JPEG image.
     if (editedPath != null && editedPath.isNotEmpty) {
@@ -381,16 +623,24 @@ class _ChatAttachmentPickerSheetState
           kind: ChatAttachmentPickerMediaKind.image,
           mime: 'image/jpeg',
           caption: caption,
+          photoMaxSide: photoSide,
+          viewOnce: opts.once,
         );
       }
     }
     final file = await asset.file;
     if (file == null || !await file.exists()) return null;
+    final isVideo = asset.type == AssetType.video;
     return ChatAttachmentPickerMediaItem(
       path: file.path,
       kind: _galleryMediaKind(asset),
       mime: _mimeForPath(file.path),
       caption: caption,
+      photoMaxSide: isVideo ? null : photoSide,
+      videoMaxSide:
+          isVideo ? VideoCompressor.maxSideForQuality(opts.videoQuality) : null,
+      muteVideo: isVideo && opts.mute,
+      viewOnce: opts.once,
     );
   }
 
@@ -439,7 +689,14 @@ class _ChatAttachmentPickerSheetState
       return;
     }
 
-    if (mounted) {
+    final seq = ++_loadSeq;
+    final filter = _galleryFilter;
+    // Первая страница из памяти уже на экране — крутилка не нужна.
+    final shown =
+        filter == _GalleryFilter.recent &&
+        _galleryAssets.isNotEmpty &&
+        identical(_galleryAlbum, _lastRecentAlbum);
+    if (mounted && !shown) {
       setState(() {
         _galleryLoading = true;
         _galleryPermissionDenied = false;
@@ -448,33 +705,36 @@ class _ChatAttachmentPickerSheetState
 
     try {
       final granted = await _requestGalleryPermission();
-      if (!mounted) return;
+      if (!mounted || seq != _loadSeq) return;
       if (!granted) {
+        _lastRecentAlbum = null;
+        _lastRecentPage = const <AssetEntity>[];
         setState(() {
+          _galleryAssets.clear();
           _galleryLoading = false;
           _galleryPermissionDenied = true;
         });
         return;
       }
 
-      final filterOption = FilterOptionGroup(
-        orders: const <OrderOption>[
-          OrderOption(type: OrderOptionType.createDate, asc: false),
-        ],
-      );
-      final paths = await PhotoManager.getAssetPathList(
-        type: RequestType.common,
-        hasAll: true,
-        onlyAll: true,
-        filterOption: filterOption,
-      );
-      final album = paths.isNotEmpty ? paths.first : null;
+      // Только «Недавние»: остальные альбомы и счётчики — потом, показ их не
+      // ждёт (раньше до сетки шло до семи запросов к фототеке).
+      if (!_filterPaths.containsKey(_GalleryFilter.recent)) {
+        final all = await PhotoManager.getAssetPathList(
+          type: RequestType.common,
+          hasAll: true,
+          onlyAll: true,
+          filterOption: _galleryOrder,
+        );
+        if (all.isNotEmpty) _filterPaths[_GalleryFilter.recent] = all.first;
+      }
+      if (!mounted || seq != _loadSeq) return;
+      final album =
+          _filterPaths[filter] ?? _filterPaths[_GalleryFilter.recent];
       if (album == null) {
-        if (!mounted) return;
         setState(() {
           _galleryAlbum = null;
           _galleryAssets.clear();
-          _galleryThumbnailFutures.clear();
           _galleryNextPage = 0;
           _galleryHasMore = false;
           _galleryLoadingMore = false;
@@ -491,28 +751,149 @@ class _ChatAttachmentPickerSheetState
       final mediaAssets = firstPage
           .where(_isGalleryMediaAsset)
           .toList(growable: false);
+      prepareGalleryThumbs(mediaAssets);
 
-      if (!mounted) return;
-      setState(() {
-        _galleryAlbum = album;
-        _galleryAssets
-          ..clear()
-          ..addAll(mediaAssets);
-        _galleryThumbnailFutures.clear();
-        _galleryNextPage = 1;
-        _galleryHasMore = firstPage.length >= _galleryPageSize;
-        _galleryLoadingMore = false;
-        _galleryLoading = false;
-        _galleryPermissionDenied = false;
-      });
+      if (!mounted || seq != _loadSeq) return;
+      if (shown) {
+        _refreshShownPage(album, mediaAssets, firstPage.length);
+      } else {
+        setState(() {
+          _galleryAlbum = album;
+          _galleryAssets
+            ..clear()
+            ..addAll(mediaAssets);
+          _galleryNextPage = 1;
+          _galleryHasMore = firstPage.length >= _galleryPageSize;
+          _galleryLoadingMore = false;
+          _galleryLoading = false;
+          _galleryPermissionDenied = false;
+        });
+      }
+      if (filter == _GalleryFilter.recent) {
+        _lastRecentAlbum = album;
+        _lastRecentPage = mediaAssets;
+      }
+      PickerProbe.mark('list');
+      _scheduleAlbums();
     } catch (_) {
-      if (!mounted) return;
+      // Страница из памяти уже на экране — сбой обновления её не стирает.
+      if (!mounted || seq != _loadSeq || shown) return;
       setState(() {
         _galleryLoading = false;
         _galleryLoadingMore = false;
         _galleryPermissionDenied = true;
       });
     }
+  }
+
+  /// 🔴 ЗАНОВО НА КАЖДЫЙ ЗАПРОС, БЕЗ ГРАНИЦЫ ПО ДАТЕ (26.11.2026).
+  ///
+  /// Был один общий набор на всё время работы приложения, а у photo_manager
+  /// условие даты по умолчанию — «не позже, чем СЕЙЧАС» на момент создания.
+  /// Всё снятое, скачанное или заскриншоченное после первого открытия скрепки
+  /// в галерею не попадало, пока приложение не перезапустят.
+  static FilterOptionGroup get _galleryOrder => FilterOptionGroup(
+    createTimeCond: DateTimeCond.def().copyWith(ignore: true),
+    orders: const <OrderOption>[
+      OrderOption(type: OrderOptionType.createDate, asc: false),
+    ],
+  );
+
+  /// Страница из памяти уже показана, пришла свежая: новое — наверх,
+  /// удалённое — вон, подгруженное ниже остаётся. Ничего не изменилось —
+  /// сетку не трогаем.
+  void _refreshShownPage(
+    AssetPathEntity album,
+    List<AssetEntity> fresh,
+    int pageLength,
+  ) {
+    final merged = mergeGalleryPages(
+      shown: _galleryAssets,
+      oldFirst: _lastRecentPage,
+      fresh: fresh,
+    );
+    _galleryAlbum = album;
+    if (_galleryNextPage <= 1) _galleryHasMore = pageLength >= _galleryPageSize;
+    if (merged != null) {
+      _galleryAssets
+        ..clear()
+        ..addAll(merged);
+      _galleryTick.value++;
+    }
+  }
+
+  /// Список альбомов — когда лист выехал и первые миниатюры уже запрошены.
+  void _scheduleAlbums() {
+    if (_filtersResolved) return;
+    _filtersResolved = true;
+    _albumsTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) unawaited(_resolveFilterPaths());
+    });
+  }
+
+  /// Альбомы для выпадающего списка: «Недавние» (всё), «Видео», а на
+  /// iPhone «Избранное» и «Снимки экрана» — системные альбомы; на Android
+  /// снимки экрана — папка Screenshots. Нет альбома — нет пункта.
+  Future<void> _resolveFilterPaths() async {
+    try {
+      final videos = await PhotoManager.getAssetPathList(
+        type: RequestType.video,
+        hasAll: true,
+        onlyAll: true,
+        filterOption: _galleryOrder,
+      );
+      if (videos.isNotEmpty) _filterPaths[_GalleryFilter.videos] = videos.first;
+      final albums = await PhotoManager.getAssetPathList(
+        type: RequestType.common,
+        hasAll: false,
+        filterOption: _galleryOrder,
+      );
+      for (final a in albums) {
+        final sub = a.albumTypeEx?.darwin?.subtype;
+        final name = a.name.toLowerCase();
+        if (sub == PMDarwinAssetCollectionSubtype.smartAlbumFavorites) {
+          _filterPaths[_GalleryFilter.favorites] = a;
+        } else if (sub == PMDarwinAssetCollectionSubtype.smartAlbumScreenshots ||
+            (Platform.isAndroid &&
+                (name == 'screenshots' || name.contains('снимки экрана')))) {
+          _filterPaths.putIfAbsent(_GalleryFilter.screenshots, () => a);
+        }
+      }
+    } catch (_) {
+      // Без списка альбомов — только «Недавние», как раньше.
+    }
+    if (mounted) setState(() {});
+  }
+
+  bool _countsLoading = false;
+
+  /// Сколько снимков в альбомах — только когда открыли их список: на большой
+  /// фототеке каждый подсчёт — выборка всего альбома.
+  Future<void> _loadFilterCounts() async {
+    if (_countsLoading) return;
+    _countsLoading = true;
+    try {
+      for (final e in List.of(_filterPaths.entries)) {
+        if (_filterCounts.containsKey(e.key)) continue;
+        final n = await e.value.assetCountAsync;
+        if (!mounted) return;
+        setState(() => _filterCounts[e.key] = n);
+      }
+    } catch (_) {
+      // Без счётчиков.
+    } finally {
+      _countsLoading = false;
+    }
+  }
+
+  Future<void> _selectGalleryFilter(_GalleryFilter f) async {
+    setState(() {
+      _albumsOpen = false;
+      _galleryFilter = f;
+    });
+    await _loadGalleryAssets();
+    final c = _draggableScrollController;
+    if (c != null && c.hasClients) c.jumpTo(0);
   }
 
   Future<void> _loadMoreGalleryAssets() async {
@@ -525,9 +906,8 @@ class _ChatAttachmentPickerSheetState
     }
 
     final page = _galleryNextPage;
-    if (mounted) {
-      setState(() => _galleryLoadingMore = true);
-    }
+    final seq = _loadSeq;
+    _galleryLoadingMore = true;
 
     try {
       final nextPage = await album.getAssetListPaged(
@@ -538,22 +918,21 @@ class _ChatAttachmentPickerSheetState
           .where(_isGalleryMediaAsset)
           .toList(growable: false);
       if (!mounted) return;
-      setState(() {
-        final knownIds = _galleryAssets.map((asset) => asset.id).toSet();
-        for (final asset in mediaAssets) {
-          if (knownIds.add(asset.id)) {
-            _galleryAssets.add(asset);
-          }
+      _galleryLoadingMore = false;
+      // Пока грузили, открыли другой альбом — эта страница не его.
+      if (!identical(album, _galleryAlbum) && seq != _loadSeq) return;
+      prepareGalleryThumbs(mediaAssets);
+      final knownIds = _galleryAssets.map((asset) => asset.id).toSet();
+      for (final asset in mediaAssets) {
+        if (knownIds.add(asset.id)) {
+          _galleryAssets.add(asset);
         }
-        _galleryNextPage = page + 1;
-        _galleryHasMore = nextPage.length >= _galleryPageSize;
-        _galleryLoadingMore = false;
-      });
+      }
+      _galleryNextPage = page + 1;
+      _galleryHasMore = nextPage.length >= _galleryPageSize;
+      _galleryTick.value++;
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _galleryLoadingMore = false;
-      });
+      _galleryLoadingMore = false;
     }
   }
 
@@ -733,14 +1112,27 @@ class _ChatAttachmentPickerSheetState
     if (_selectedPhotoIds.isEmpty || _busy) return;
     setState(() => _busy = true);
     try {
-      final selected = _galleryAssets
-          .where((asset) => _selectedPhotoIds.contains(asset.id))
-          .toList(growable: false);
+      // В порядке выбора (номера на плитках), а не в порядке галереи; снимки
+      // из другого альбома тоже уходят.
+      final selected = <AssetEntity>[
+        for (final id in _selectedPhotoIds)
+          if (_selectedAssetById[id] ??
+                  _galleryAssets.where((a) => a.id == id).firstOrNull
+              case final a?)
+            a,
+      ];
+      final sheetCaption = _sheetCaption.text.trim();
       final mediaItems = <ChatAttachmentPickerMediaItem>[];
-      for (final asset in selected) {
+      for (var i = 0; i < selected.length; i++) {
+        final asset = selected[i];
+        var caption = _captionByAssetId[asset.id]?.trim() ?? '';
+        // Подпись из листа — подпись пачки: у первого снимка.
+        if (i == 0 && sheetCaption.isNotEmpty && caption.isEmpty) {
+          caption = sheetCaption;
+        }
         final mediaItem = await _resolveGalleryMediaItem(
           asset,
-          caption: _captionByAssetId[asset.id]?.trim() ?? '',
+          caption: caption,
           editedPath: _editedPathByAssetId[asset.id],
         );
         if (mediaItem == null) continue;
@@ -748,11 +1140,17 @@ class _ChatAttachmentPickerSheetState
       }
       if (!mounted || mediaItems.isEmpty) return;
       Navigator.of(context).pop(
-        _sendPhotosAsFiles
+        _sendPhotosAsFiles || _flowAsFiles
             ? ChatAttachmentPickerResult.filesFromGallery(mediaItems)
-            : ChatAttachmentPickerResult.photos(mediaItems),
+            : ChatAttachmentPickerResult.photos(
+                mediaItems,
+                options: _flowOptions(),
+              ),
       );
     } finally {
+      // Разовые действия меню — только для этой отправки.
+      _flowAsFiles = false;
+      _flowSilent = false;
       if (mounted) {
         setState(() => _busy = false);
       }
@@ -964,9 +1362,28 @@ class _ChatAttachmentPickerSheetState
     final actionBottom = visuals?.actionBottom ?? colors.secondary;
     final safeBottom = MediaQuery.paddingOf(context).bottom;
     final tabChipsBottom = safeBottom + 16;
-    final sendButtonBottom = tabChipsBottom + (_overlayHidden ? 6 : 58);
 
-    return DraggableScrollableSheet(
+    // Закрытие с выбранным — только после «Отменить выбор?».
+    return PopScope(
+      canPop: _selectedPhotoIds.isEmpty && _sheetCaption.text.trim().isEmpty,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (_albumsOpen) {
+          setState(() => _albumsOpen = false);
+          return;
+        }
+        final discard = await _confirmDiscardSelection();
+        if (!discard || !context.mounted) return;
+        {
+          setState(() {
+            _selectedPhotoIds.clear();
+            _selectedAssetById.clear();
+            _sheetCaption.clear();
+          });
+          Navigator.of(context).pop();
+        }
+      },
+      child: DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.62,
       minChildSize: 0.26,
@@ -979,6 +1396,7 @@ class _ChatAttachmentPickerSheetState
         return SecretlyGlassSheetSurface(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
           flushToEdges: true,
+          solid: true,
           child: SafeArea(
             top: false,
             child: NotificationListener<ScrollNotification>(
@@ -987,19 +1405,34 @@ class _ChatAttachmentPickerSheetState
                 children: <Widget>[
                   Positioned.fill(child: _buildBody(scrollController)),
                   const Positioned(
-                    top: 10,
+                    top: 7,
                     left: 0,
                     right: 0,
                     child: Center(child: SecretlyGlassSheetHandle()),
                   ),
+                  // Шапка (макет SendFlow): «Отмена» · альбом ▾ · «Выбрано N».
                   Positioned(
-                    top: 16,
-                    right: 14,
-                    child: _buildGlassIconButton(
-                      icon: AppIcons.close,
-                      onTap: () => Navigator.of(context).maybePop(),
-                    ),
+                    top: kSheetHeaderTop,
+                    left: 10,
+                    right: 10,
+                    height: kSheetHeaderHeight,
+                    child: _buildSheetHeader(),
                   ),
+                  if (_albumsOpen && _currentTab == _AttachmentPickerTab.photo)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => setState(() => _albumsOpen = false),
+                      ),
+                    ),
+                  if (_albumsOpen && _currentTab == _AttachmentPickerTab.photo)
+                    Positioned(
+                      top: kSheetGridTop,
+                      left: 0,
+                      right: 0,
+                      child: Center(child: _buildAlbumsMenu()),
+                    ),
+                  if (!_selectionBarOn)
                   Positioned(
                     left: 12,
                     right: 12,
@@ -1025,12 +1458,13 @@ class _ChatAttachmentPickerSheetState
                       ),
                     ),
                   ),
-                  if (_currentTab == _AttachmentPickerTab.photo &&
-                      _selectedPhotoIds.isNotEmpty)
+                  // Выбрано — вместо вкладок: подпись и кнопка с числом.
+                  if (_selectionBarOn)
                     Positioned(
-                      right: 14,
-                      bottom: sendButtonBottom,
-                      child: _buildSendSelectionButton(
+                      left: 10,
+                      right: 10,
+                      bottom: safeBottom + 10,
+                      child: _buildSelectionCaptionBar(
                         actionTop: actionTop,
                         actionBottom: actionBottom,
                       ),
@@ -1060,6 +1494,7 @@ class _ChatAttachmentPickerSheetState
           ),
         );
       },
+    ),
     );
   }
 
@@ -1091,7 +1526,7 @@ class _ChatAttachmentPickerSheetState
     if (_galleryPermissionDenied) {
       return ListView(
         controller: scrollController,
-        padding: const EdgeInsets.fromLTRB(14, 66, 14, 110),
+        padding: const EdgeInsets.fromLTRB(14, kSheetGridTop + 8, 14, 110),
         children: <Widget>[
           _buildInlineStateTile(
             icon: AppIcons.photoSolid,
@@ -1111,11 +1546,12 @@ class _ChatAttachmentPickerSheetState
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         final crossAxisCount = width >= 900 ? 5 : (width >= 650 ? 4 : 3);
-        return GridView.builder(
+        return ValueListenableBuilder<int>(
+          valueListenable: _galleryTick,
+          builder: (context, _, _) => GridView.builder(
           controller: scrollController,
-          // Extra top clearance so the first row clears the floating handle +
-          // close button (which previously overlapped the top-right thumbnail).
-          padding: const EdgeInsets.fromLTRB(2, 66, 2, 114),
+          // Сверху — ручка и название альбома.
+          padding: const EdgeInsets.fromLTRB(2, kSheetGridTop, 2, 114),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: crossAxisCount,
             mainAxisSpacing: 1.5,
@@ -1135,6 +1571,7 @@ class _ChatAttachmentPickerSheetState
             }
             return _buildPhotoTile(_galleryAssets[index - 1]);
           },
+          ),
         );
       },
     );
@@ -1213,7 +1650,7 @@ class _ChatAttachmentPickerSheetState
         final cs = Theme.of(context).colorScheme;
         return ListView(
           controller: scrollController,
-          padding: const EdgeInsets.fromLTRB(10, 66, 10, 114),
+          padding: const EdgeInsets.fromLTRB(10, kSheetListTop, 10, 114),
           children: <Widget>[
             if (showGalleryAsFiles) _buildGalleryAsFilesTile(),
             _buildCompactBrowseTile(
@@ -1441,7 +1878,7 @@ class _ChatAttachmentPickerSheetState
   }) {
     return ListView(
       controller: scrollController,
-      padding: const EdgeInsets.fromLTRB(10, 66, 10, 114),
+      padding: const EdgeInsets.fromLTRB(10, kSheetListTop, 10, 114),
       children: <Widget>[
         if (showGalleryAsFiles) _buildGalleryAsFilesTile(),
         _buildInlineStateTile(
@@ -1682,89 +2119,379 @@ class _ChatAttachmentPickerSheetState
     );
   }
 
-  Widget _buildGlassIconButton({
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    final colors = Theme.of(context).colorScheme;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(999),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Theme.of(context).brightness == Brightness.dark
-                ? Colors.black.withValues(alpha: 0.24)
-                : Colors.white.withValues(alpha: 0.58),
-            border: Border.all(color: colors.onSurface.withValues(alpha: 0.08)),
+  final GlobalKey _sendButtonKey = GlobalKey(debugLabel: 'sendflow:send');
+
+  bool get _selectionBarOn =>
+      _currentTab == _AttachmentPickerTab.photo && _selectedPhotoIds.isNotEmpty;
+
+  String _filterLabel(_GalleryFilter f) => switch (f) {
+    _GalleryFilter.recent => wave1Text(context, ru: 'Недавние', en: 'Recents', uk: 'Нещодавні', es: 'Recientes', pt: 'Recentes', ptBr: 'Recentes', fr: 'Récents', de: 'Neueste'),
+    _GalleryFilter.favorites => wave1Text(context, ru: 'Избранное', en: 'Favorites', uk: 'Обране', es: 'Favoritos', pt: 'Favoritos', ptBr: 'Favoritos', fr: 'Favoris', de: 'Favoriten'),
+    _GalleryFilter.videos => wave1Text(context, ru: 'Видео', en: 'Videos', uk: 'Відео', es: 'Vídeos', pt: 'Vídeos', ptBr: 'Vídeos', fr: 'Vidéos', de: 'Videos'),
+    _GalleryFilter.screenshots => wave1Text(context, ru: 'Скриншоты', en: 'Screenshots', uk: 'Знімки екрана', es: 'Capturas', pt: 'Capturas de ecrã', ptBr: 'Capturas de tela', fr: 'Captures', de: 'Bildschirmfotos'),
+  };
+
+  IconData _filterIcon(_GalleryFilter f) => switch (f) {
+    _GalleryFilter.recent => Icons.photo_library_outlined,
+    _GalleryFilter.favorites => Icons.favorite_border_rounded,
+    _GalleryFilter.videos => Icons.videocam_outlined,
+    _GalleryFilter.screenshots => Icons.screenshot_outlined,
+  };
+
+  Widget _buildSheetHeader() {
+    final cs = Theme.of(context).colorScheme;
+    final photo = _currentTab == _AttachmentPickerTab.photo;
+    final n = _selectedPhotoIds.length;
+    final multipleAlbums = _filterPaths.length > 1;
+    return Row(
+      children: [
+        // Кнопки «закрыть» нет (владелец, 25.11.2026): лист закрывают
+        // смахиванием, касанием мимо или «назад». Место слева держит название
+        // альбома посередине.
+        const SizedBox(width: 92),
+        Expanded(
+          child: photo
+              ? Center(
+                  child: GestureDetector(
+                    key: const ValueKey('sendflow:albums'),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: multipleAlbums
+                        ? () {
+                            setState(() => _albumsOpen = !_albumsOpen);
+                            if (_albumsOpen) unawaited(_loadFilterCounts());
+                          }
+                        : null,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            _filterLabel(_galleryFilter),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                        ),
+                        if (multipleAlbums)
+                          AnimatedRotation(
+                            turns: _albumsOpen ? 0.5 : 0,
+                            duration: const Duration(milliseconds: 200),
+                            child: Icon(Icons.expand_more_rounded, size: 22, color: cs.onSurface),
+                          ),
+                      ],
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        SizedBox(
+          width: 92,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: photo && n > 0
+                  ? Text(
+                      wave1Text(context, ru: 'Выбрано: $n', en: 'Selected: $n', uk: 'Вибрано: $n', es: 'Elegidos: $n', pt: 'Escolhidos: $n', ptBr: 'Selecionados: $n', fr: 'Choisis : $n', de: 'Gewählt: $n'),
+                      key: ValueKey('sendflow:count:$n'),
+                      style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+                    )
+                  : const SizedBox.shrink(),
+            ),
           ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: onTap,
-              child: SizedBox(
-                width: 38,
-                height: 38,
-                child: Icon(
-                  icon,
-                  size: 18,
-                  color: colors.onSurface.withValues(alpha: 0.82),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAlbumsMenu() {
+    final cs = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.9, end: 1),
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutBack,
+      builder: (context, v, child) => Transform.scale(
+        scale: v,
+        alignment: Alignment.topCenter,
+        child: Opacity(opacity: ((v - 0.9) * 10).clamp(0.0, 1.0), child: child),
+      ),
+      child: Container(
+        key: const ValueKey('sendflow:albums-menu'),
+        width: 240,
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: dark ? const Color(0xFF22303D) : cs.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35)),
+          boxShadow: const [
+            BoxShadow(color: Color(0x73000000), blurRadius: 34, offset: Offset(0, 14)),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final f in _GalleryFilter.values)
+              if (_filterPaths.containsKey(f))
+                InkWell(
+                  key: ValueKey('sendflow:album:${f.name}'),
+                  onTap: () => unawaited(_selectGalleryFilter(f)),
+                  child: SizedBox(
+                    height: 44,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: Row(
+                        children: [
+                          Icon(_filterIcon(f), size: 20, color: f == _galleryFilter ? cs.primary : cs.onSurface),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _filterLabel(f),
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: cs.onSurface,
+                                fontWeight: f == _galleryFilter ? FontWeight.w600 : FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                          if (_filterCounts[f] case final c?)
+                            Text('$c', style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelectionCaptionBar({
+    required Color actionTop,
+    required Color actionBottom,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final n = _selectedPhotoIds.length;
+    return Row(
+      children: [
+        Expanded(
+          // Островок подписи — как поле ввода чата (стекло iPhone / матовое
+          // Android), а не тёмная цветная плашка (владелец 24.11.2026).
+          child: ComposerDropSurface(
+            style: _islandStyle(actionTop, actionBottom),
+            radius: BorderRadius.circular(22),
+            child: Container(
+            height: 44,
+            padding: const EdgeInsets.only(left: 16, right: 8),
+            alignment: Alignment.centerLeft,
+            child: TextField(
+              key: const ValueKey('sendflow:sheet-caption'),
+              controller: _sheetCaption,
+              minLines: 1,
+              maxLines: 1,
+              textCapitalization: TextCapitalization.sentences,
+              style: TextStyle(fontSize: 16, color: cs.onSurface),
+              decoration: InputDecoration(
+                isCollapsed: true,
+                border: InputBorder.none,
+                hintText: wave1Text(context, ru: 'Добавить подпись…', en: 'Add a caption…', uk: 'Додати підпис…', es: 'Añadir un pie…', pt: 'Adicionar legenda…', ptBr: 'Adicionar legenda…', fr: 'Ajouter une légende…', de: 'Bildunterschrift…'),
+                hintStyle: TextStyle(color: cs.onSurfaceVariant),
               ),
             ),
+          ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _buildRoundSendButton(count: n, actionTop: actionTop, actionBottom: actionBottom),
+      ],
+    );
+  }
+
+  ComposerDropStyle _islandStyle(Color top, Color bottom) => ComposerDropStyle.of(
+    context,
+    frosted: PanelPrefs.frostedEnabled.value,
+    accentTop: top,
+    accentBottom: bottom,
+    solidFill: opaquePanelFill(context),
+  );
+
+  Widget _buildRoundSendButton({
+    required int count,
+    required Color actionTop,
+    required Color actionBottom,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return Semantics(
+      button: true,
+      label: '${context.l10n.send} $count',
+      child: GestureDetector(
+        key: _sendButtonKey,
+        onTap: _busy ? null : _confirmPhotoSelection,
+        onLongPress: _busy
+            ? null
+            : () => unawaited(
+                _openSendMenu(
+                  _sendButtonKey.currentContext ?? context,
+                  multi: _selectedPhotoIds.length > 1,
+                ).then((go) {
+                  if (go && mounted) unawaited(_confirmPhotoSelection());
+                }),
+              ),
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [actionTop, actionBottom],
+                  ),
+                ),
+                child: const Icon(AppIcons.send, color: Colors.white, size: 22),
+              ),
+              Positioned(
+                right: -4,
+                top: -4,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 160),
+                  transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
+                  child: Container(
+                    key: ValueKey(count),
+                    constraints: const BoxConstraints(minWidth: 20),
+                    height: 20,
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: cs.surface, width: 2),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      '$count',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: actionTop),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildSendSelectionButton({
-    required Color actionTop,
-    required Color actionBottom,
-  }) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(999),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[actionTop, actionBottom],
-        ),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: actionBottom.withValues(alpha: 0.26),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
-          ),
-        ],
+  /// Меню отправки (макет SendFlow, долгое нажатие на «Отправить»).
+  /// Возвращает `true`, если выбрали действие «отправить сейчас»; флажки
+  /// (подпись над, не группировать) меняются на месте.
+  Future<bool> _openSendMenu(BuildContext anchorContext, {required bool multi}) async {
+    HapticFeedback.mediumImpact();
+    final box = anchorContext.findRenderObject() as RenderBox?;
+    final media = MediaQuery.of(context);
+    final bottom = box == null
+        ? media.padding.bottom + 70
+        : media.size.height - box.localToGlobal(Offset.zero).dy + 8;
+    final go = await showGeneralDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'send-menu',
+      barrierColor: Colors.black.withValues(alpha: 0.35),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (ctx, _, _) => _SendFlowMenu(
+        bottom: bottom,
+        multi: multi,
+        captionAbove: _flowCaptionAbove,
+        group: _flowGroup,
+        spoiler: _flowSpoiler,
+        spoilerOk: _spoilerOk,
+        onSpoiler: (v) async {
+          if (!await _spoilerOk) {
+            _explainSpoilerUnavailable();
+            return false;
+          }
+          setState(() => _flowSpoiler = v);
+          return true;
+        },
+        onAsFiles: () {
+          // Файлом одноразовое и спойлер не отправить — не снимаем их молча.
+          final hidden = _flowSpoiler ||
+              _selectedPhotoIds.any((id) => _sendOptsByAssetId[id]?.once ?? false);
+          if (hidden) {
+            Navigator.of(ctx).pop(false);
+            _showInlineMessage(
+              wave1Text(context, ru: 'Одноразовое и спойлер файлом не отправить — снимите их или отправьте как медиа', en: 'View-once and spoiler can’t be sent as files — turn them off or send as media', uk: 'Одноразове і спойлер файлом не надіслати — вимкніть їх або надішліть як медіа', es: 'Vista única y spoiler no se envían como archivo: desactívalos o envía como medio', pt: 'Visualização única e spoiler não seguem como ficheiro — desligue-os ou envie como multimédia', ptBr: 'Visualização única e spoiler não vão como arquivo — desative ou envie como mídia', fr: 'Vue unique et spoiler impossibles en fichier : désactivez-les ou envoyez en média', de: 'Einmalansicht und Spoiler gehen nicht als Datei – ausschalten oder als Medien senden'),
+            );
+            return;
+          }
+          _flowAsFiles = true;
+          Navigator.of(ctx).pop(true);
+        },
+        onSilent: () {
+          _flowSilent = true;
+          Navigator.of(ctx).pop(true);
+        },
+        onCaptionAbove: (v) {
+          setState(() => _flowCaptionAbove = v);
+          Navigator.of(ctx).pop(false);
+        },
+        onGroup: (v) => setState(() => _flowGroup = v),
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(999),
-          onTap: _busy ? null : _confirmPhotoSelection,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                const Icon(AppIcons.send, size: 17, color: Colors.white),
-                const SizedBox(width: 8),
-                Text(
-                  '${context.l10n.send} ${_selectedPhotoIds.length}',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
+      transitionBuilder: (ctx, a, _, child) => FadeTransition(
+        opacity: a,
+        child: ScaleTransition(
+          scale: Tween(begin: .85, end: 1.0).animate(
+            CurvedAnimation(parent: a, curve: const Cubic(.3, 1.35, .5, 1)),
           ),
+          alignment: Alignment.bottomRight,
+          child: child,
         ),
       ),
     );
+    return go ?? false;
+  }
+
+  /// «Отменить выбор?» (макет SendFlow): при закрытии с выбранным или с
+  /// набранной подписью.
+  Future<bool> _confirmDiscardSelection() async {
+    final n = _selectedPhotoIds.length;
+    final hasCaption = _sheetCaption.text.trim().isNotEmpty;
+    if (n == 0 && !hasCaption) return true;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(wave1Text(ctx, ru: 'Отменить выбор?', en: 'Discard selection?', uk: 'Скасувати вибір?', es: '¿Descartar la selección?', pt: 'Descartar seleção?', ptBr: 'Descartar seleção?', fr: 'Annuler la sélection ?', de: 'Auswahl verwerfen?')),
+        content: Text(
+          n > 0
+              ? wave1Text(ctx, ru: '$n медиа не будут отправлены, изменения в редакторе пропадут.', en: '$n items won’t be sent and edits will be lost.', uk: '$n медіа не буде надіслано, зміни в редакторі зникнуть.', es: 'No se enviarán $n elementos y se perderán los cambios.', pt: '$n itens não serão enviados e as edições perdem-se.', ptBr: '$n itens não serão enviados e as edições serão perdidas.', fr: '$n éléments ne seront pas envoyés et les retouches seront perdues.', de: '$n Medien werden nicht gesendet, Bearbeitungen gehen verloren.')
+              : wave1Text(ctx, ru: 'Подпись не будет отправлена.', en: 'The caption won’t be sent.', uk: 'Підпис не буде надіслано.', es: 'El pie no se enviará.', pt: 'A legenda não será enviada.', ptBr: 'A legenda não será enviada.', fr: 'La légende ne sera pas envoyée.', de: 'Die Bildunterschrift wird nicht gesendet.'),
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('sendflow:keep'),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(wave1Text(ctx, ru: 'Продолжить', en: 'Keep', uk: 'Продовжити', es: 'Seguir', pt: 'Continuar', ptBr: 'Continuar', fr: 'Continuer', de: 'Weiter')),
+          ),
+          TextButton(
+            key: const ValueKey('sendflow:discard'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(ctx).colorScheme.error),
+            child: Text(wave1Text(ctx, ru: 'Сбросить', en: 'Discard', uk: 'Скинути', es: 'Descartar', pt: 'Descartar', ptBr: 'Descartar', fr: 'Annuler', de: 'Verwerfen')),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
   }
 
   Widget _buildCameraTile() {
@@ -1897,15 +2624,7 @@ class _ChatAttachmentPickerSheetState
     final isSelected = selectedIndex > 0;
     final isVideo = asset.type == AssetType.video;
 
-    void toggleSelection() {
-      setState(() {
-        if (_selectedPhotoIds.contains(asset.id)) {
-          _selectedPhotoIds.remove(asset.id);
-        } else {
-          _selectedPhotoIds.add(asset.id);
-        }
-      });
-    }
+    void toggleSelection() => _toggleAssetSelection(asset);
 
     return Material(
       color: Colors.transparent,
@@ -1923,26 +2642,67 @@ class _ChatAttachmentPickerSheetState
                     // opaque:false kept the chat route (and its accent-tinted
                     // composer field) painted underneath, so it bled through as a
                     // second "caption" field overlapping ours.
-                    opaque: true,
-                    barrierColor: Colors.black,
-                    pageBuilder: (_, __, ___) => _AssetPreviewPage(
-                      asset: asset,
-                      isSelected: () =>
-                          _selectedPhotoIds.contains(asset.id),
-                      onToggle: toggleSelection,
-                      localize: _t,
-                      initialCaption: _captionByAssetId[asset.id] ?? '',
-                      selectedCount: () => _selectedPhotoIds.length,
-                      onPersistCaption: (id, cap) {
-                        if (cap.isEmpty) {
-                          _captionByAssetId.remove(id);
-                        } else {
-                          _captionByAssetId[id] = cap;
-                        }
-                      },
-                      onPersistEditedPath: (id, path) {
-                        _editedPathByAssetId[id] = path;
-                      },
+                    // Прозрачный маршрут: при смахивании вниз и закрытии
+                    // снимок улетает обратно в свою плитку (Hero), а сетка
+                    // видна под гаснущим фоном. Фон рисует сам просмотр.
+                    opaque: false,
+                    transitionDuration: const Duration(milliseconds: 320),
+                    reverseTransitionDuration: const Duration(milliseconds: 280),
+                    // 24.11.2026: листание по всей галерее, с этого снимка.
+                    pageBuilder: (_, __, ___) => _AssetPreviewPager(
+                      assets: List<AssetEntity>.of(_galleryAssets),
+                      initialIndex: math.max(
+                        0,
+                        _galleryAssets.indexWhere((a) => a.id == asset.id),
+                      ),
+                      pageFor: (
+                        a, {
+                        required active,
+                        required onZoomChanged,
+                        required chromeOpacity,
+                        required onJump,
+                      }) =>
+                          _AssetPreviewPage(
+                            asset: a,
+                            active: active,
+                            onZoomChanged: onZoomChanged,
+                            chromeOpacity: chromeOpacity,
+                            onJump: onJump,
+                            opts: _optsFor(a.id),
+                            selectionNumber: () {
+                              final i = _selectedPhotoIds.toList().indexOf(a.id);
+                              return i + 1;
+                            },
+                            strip: () => [
+                              for (final id in _selectedPhotoIds)
+                                if (_selectedAssetById[id] case final e?) e,
+                            ],
+                            onSendMenu: (ctx, multi) =>
+                                _openSendMenu(ctx, multi: multi),
+                            onceAllowed: () async {
+                              if (await _spoilerOk) return true;
+                              _explainSpoilerUnavailable();
+                              return false;
+                            },
+                            stripThumb: GalleryThumbs.instance.bytes,
+                            thumbnail: GalleryThumbs.instance.bytes(a),
+                            isSelected: () => _selectedPhotoIds.contains(a.id),
+                            onToggle: () => _toggleAssetSelection(a),
+                            localize: _t,
+                            initialCaption: _captionByAssetId[a.id] ?? '',
+                            initialEditedPath: _editedPathByAssetId[a.id],
+                            selectedCount: () => _selectedPhotoIds.length,
+                            onPersistCaption: (id, cap) {
+                              if (cap.isEmpty) {
+                                _captionByAssetId.remove(id);
+                              } else {
+                                _captionByAssetId[id] = cap;
+                              }
+                            },
+                            onPersistEditedPath: (id, path) {
+                              _editedPathByAssetId[id] = path;
+                            },
+                          ),
                     ),
                     transitionsBuilder: (_, anim, __, child) =>
                         FadeTransition(opacity: anim, child: child),
@@ -1955,29 +2715,53 @@ class _ChatAttachmentPickerSheetState
                   await _confirmPhotoSelection();
                   return;
                 }
+                // Снимок, который отправили, — тот, на котором стоял просмотр
+                // (могли пролистать от открытого).
+                final sent = _galleryAssets
+                        .where((a) => a.id == req.assetId)
+                        .firstOrNull ??
+                    asset;
+                final sentIsVideo = sent.type == AssetType.video;
+                final sentOpts = _optsFor(sent.id);
                 final item = ChatAttachmentPickerMediaItem(
                   path: req.path,
-                  kind: isVideo
+                  kind: sentIsVideo
                       ? ChatAttachmentPickerMediaKind.video
                       : ChatAttachmentPickerMediaKind.image,
                   mime: req.mime ??
                       (req.trimmed
                           ? 'video/mp4'
-                          : (asset.mimeType ??
-                                (isVideo ? 'video/mp4' : 'image/jpeg'))),
+                          : (sent.mimeType ??
+                                (sentIsVideo ? 'video/mp4' : 'image/jpeg'))),
                   caption: req.caption,
+                  photoMaxSide:
+                      sentIsVideo || sentOpts.hd ? null : kPhotoSendMaxSideSd,
+                  videoMaxSide: sentIsVideo
+                      ? VideoCompressor.maxSideForQuality(sentOpts.videoQuality)
+                      : null,
+                  muteVideo: sentIsVideo && sentOpts.mute,
+                  viewOnce: sentOpts.once,
                 );
                 Navigator.of(context).pop(
-                  ChatAttachmentPickerResult.photos(
-                    <ChatAttachmentPickerMediaItem>[item],
-                  ),
+                  _flowAsFiles
+                      ? ChatAttachmentPickerResult.filesFromGallery(
+                          <ChatAttachmentPickerMediaItem>[item],
+                        )
+                      : ChatAttachmentPickerResult.photos(
+                          <ChatAttachmentPickerMediaItem>[item],
+                          options: _flowOptions(),
+                        ),
                 );
               },
         child: Ink(
           child: Stack(
             fit: StackFit.expand,
             children: <Widget>[
-              _buildPhotoThumbnail(asset),
+              // Перелёт в просмотр и обратно (макет SendFlow).
+              Hero(
+                tag: 'sendflow:${asset.id}',
+                child: _buildPhotoThumbnail(asset),
+              ),
               if (isVideo)
                 Positioned.fill(
                   child: DecoratedBox(
@@ -2097,43 +2881,8 @@ class _ChatAttachmentPickerSheetState
     );
   }
 
-  Widget _buildPhotoThumbnail(AssetEntity asset) {
-    final colors = Theme.of(context).colorScheme;
-    return FutureBuilder<Uint8List?>(
-      future: _galleryThumbnailFutures.putIfAbsent(
-        asset.id,
-        () => asset.thumbnailDataWithSize(
-          const ThumbnailSize(320, 320),
-          quality: 80,
-        ),
-      ),
-      builder: (context, snapshot) {
-        final data = snapshot.data;
-        if (data != null && data.isNotEmpty) {
-          return Image.memory(data, fit: BoxFit.cover, gaplessPlayback: true);
-        }
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return DecoratedBox(
-            decoration: BoxDecoration(color: colors.surfaceContainerHighest),
-            child: const Center(
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: SecretlySpinner(strokeWidth: 2),
-              ),
-            ),
-          );
-        }
-        return DecoratedBox(
-          decoration: BoxDecoration(color: colors.surfaceContainerHighest),
-          child: Icon(
-            AppIcons.brokenImage,
-            color: colors.onSurface.withValues(alpha: 0.6),
-          ),
-        );
-      },
-    );
-  }
+  Widget _buildPhotoThumbnail(AssetEntity asset) =>
+      GalleryThumbView(key: ValueKey<String>(asset.id), asset: asset);
 
   String _formatAssetDuration(int durationSeconds) {
     final safeSeconds = durationSeconds.clamp(0, 99 * 60 * 60);
@@ -2746,6 +3495,7 @@ class _AssetEditorSendRequest {
     required this.caption,
     required this.trimmed,
     this.mime,
+    this.assetId,
   }) : sendAll = false;
 
   /// The user hit Send with MORE than one asset selected — the picker sends the
@@ -2756,6 +3506,7 @@ class _AssetEditorSendRequest {
       caption = '',
       trimmed = false,
       mime = null,
+      assetId = null,
       sendAll = true;
 
   final String path;
@@ -2766,6 +3517,397 @@ class _AssetEditorSendRequest {
   /// photo is baked to JPEG). Null = keep the asset's original mime.
   final String? mime;
   final bool sendAll;
+
+  /// Какой снимок отправляется: в просмотре можно пролистать к другому
+  /// (24.11.2026), и вид/тип файла берутся у него, а не у открытого первым.
+  final String? assetId;
+}
+
+/// Просмотр снимков галереи с листанием (24.11.2026, владелец: «нажал на
+/// фото — показывается, можно редактировать… и листать свайпом влево,
+/// вправо»). Каждая страница — прежний экран снимка (выбор, подпись, трим,
+/// правка); подпись и правки каждого снимка хранит лист вложений, поэтому
+/// листание туда-обратно их не теряет. Пока снимок увеличен, листание стоит.
+/// Лимит выбора за раз (макет SendFlow, как в Telegram).
+const int kSendFlowMaxSelection = 10;
+
+enum _GalleryFilter { recent, favorites, videos, screenshots }
+
+/// Параметры отправки одного снимка (SendFlow): HD — оригинал (как было),
+/// SD — 1280; видео 480/720/1080p, без звука.
+class _AssetSendOpts {
+  _AssetSendOpts();
+  bool hd = true;
+  int videoQuality = 1080;
+  bool mute = false;
+  bool once = false;
+}
+
+/// Заглушка для страниц без листа (тесты): правки ни на что не влияют.
+class _NoOpts implements _AssetSendOpts {
+  const _NoOpts();
+  @override
+  bool get hd => true;
+  @override
+  set hd(bool v) {}
+  @override
+  int get videoQuality => 1080;
+  @override
+  set videoQuality(int v) {}
+  @override
+  bool get mute => false;
+  @override
+  set mute(bool v) {}
+  @override
+  bool get once => false;
+  @override
+  set once(bool v) {}
+}
+
+/// Меню отправки (макет SendFlow): стеклянная карточка над кнопкой.
+class _SendFlowMenu extends StatefulWidget {
+  const _SendFlowMenu({
+    required this.bottom,
+    required this.multi,
+    required this.captionAbove,
+    required this.group,
+    required this.onAsFiles,
+    required this.onCaptionAbove,
+    required this.onGroup,
+    required this.spoiler,
+    required this.spoilerOk,
+    required this.onSpoiler,
+    required this.onSilent,
+  });
+
+  final VoidCallback onSilent;
+
+  final bool spoiler;
+  final Future<bool> spoilerOk;
+  final Future<bool> Function(bool value) onSpoiler;
+
+  final double bottom;
+  final bool multi;
+  final bool captionAbove;
+  final bool group;
+  final VoidCallback onAsFiles;
+  final ValueChanged<bool> onCaptionAbove;
+  final ValueChanged<bool> onGroup;
+
+  @override
+  State<_SendFlowMenu> createState() => _SendFlowMenuState();
+}
+
+class _SendFlowMenuState extends State<_SendFlowMenu> {
+  late bool _group = widget.group;
+  late bool _spoiler = widget.spoiler;
+
+  @override
+  Widget build(BuildContext context) {
+    final ios = mediaViewerLiquidGlass;
+    final blur = mediaViewerGlass;
+    Widget row(String key, IconData icon, String label, VoidCallback onTap, {bool check = false}) {
+      return InkWell(
+        key: ValueKey('sendflow:menu:$key'),
+        onTap: onTap,
+        child: SizedBox(
+          height: 46,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: Colors.white),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 15)),
+                ),
+                if (check) const Icon(Icons.check_rounded, size: 20, color: Color(0xFF3390EC)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    String t(String ru, String en, String uk, String es, String pt, String ptBr, String fr, String de) =>
+        wave1Text(context, ru: ru, en: en, uk: uk, es: es, pt: pt, ptBr: ptBr, fr: fr, de: de);
+
+    final card = Container(
+      width: 270,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      decoration: BoxDecoration(
+        color: !blur
+            ? const Color(0xF51E2834)
+            : ios
+            ? Colors.white.withValues(alpha: 0.16)
+            : const Color(0xCC12161C),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: ios ? 0.22 : 0.16), width: ios ? .5 : 1),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            row(
+              'silent',
+              Icons.notifications_off_outlined,
+              t('Отправить без звука', 'Send without sound', 'Надіслати без звуку', 'Enviar sin sonido', 'Enviar sem som', 'Enviar sem som', 'Envoyer sans son', 'Ohne Ton senden'),
+              widget.onSilent,
+            ),
+            row(
+              'as-file',
+              Icons.description_outlined,
+              widget.multi
+                  ? t('Отправить как файлы', 'Send as files', 'Надіслати як файли', 'Enviar como archivos', 'Enviar como ficheiros', 'Enviar como arquivos', 'Envoyer en fichiers', 'Als Dateien senden')
+                  : t('Отправить как файл', 'Send as file', 'Надіслати як файл', 'Enviar como archivo', 'Enviar como ficheiro', 'Enviar como arquivo', 'Envoyer en fichier', 'Als Datei senden'),
+              widget.onAsFiles,
+            ),
+            FutureBuilder<bool>(
+              future: widget.spoilerOk,
+              builder: (context, snap) => Opacity(
+                opacity: snap.data == true ? 1 : 0.45,
+                child: row(
+                  'spoiler',
+                  Icons.visibility_off_outlined,
+                  t('Скрыть под спойлер', 'Hide with spoiler', 'Сховати під спойлер', 'Ocultar con spoiler', 'Ocultar com spoiler', 'Ocultar com spoiler', 'Masquer (spoiler)', 'Als Spoiler verbergen'),
+                  () async {
+                    if (await widget.onSpoiler(!_spoiler) && mounted) {
+                      setState(() => _spoiler = !_spoiler);
+                    }
+                  },
+                  check: _spoiler,
+                ),
+              ),
+            ),
+            row(
+              'caption-above',
+              widget.captionAbove ? Icons.vertical_align_bottom_rounded : Icons.vertical_align_top_rounded,
+              widget.captionAbove
+                  ? t('Подпись под медиа', 'Caption below media', 'Підпис під медіа', 'Pie debajo', 'Legenda abaixo', 'Legenda abaixo', 'Légende en dessous', 'Text unter Medien')
+                  : t('Подпись над медиа', 'Caption above media', 'Підпис над медіа', 'Pie encima', 'Legenda acima', 'Legenda acima', 'Légende au-dessus', 'Text über Medien'),
+              () => widget.onCaptionAbove(!widget.captionAbove),
+            ),
+            if (widget.multi)
+              row(
+                'no-group',
+                Icons.view_agenda_outlined,
+                t('Не группировать', 'Don’t group', 'Не групувати', 'No agrupar', 'Não agrupar', 'Não agrupar', 'Ne pas grouper', 'Nicht gruppieren'),
+                () {
+                  setState(() => _group = !_group);
+                  widget.onGroup(_group);
+                },
+                check: !_group,
+              ),
+          ],
+        ),
+      ),
+    );
+    return Stack(
+      children: [
+        Positioned(
+          right: 12,
+          bottom: widget.bottom,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: blur && ios
+                ? BackdropFilter(filter: mediaViewerGlassFilter(24), child: card)
+                : card,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChromeFade extends StatelessWidget {
+  const _ChromeFade({required this.opacity, required this.child});
+
+  final ValueListenable<double>? opacity;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = opacity;
+    if (o == null) return child;
+    return ValueListenableBuilder<double>(
+      valueListenable: o,
+      child: child,
+      builder: (context, v, child) => IgnorePointer(
+        ignoring: v < 0.5,
+        child: Opacity(opacity: v, child: child),
+      ),
+    );
+  }
+}
+
+/// Видимость панелей страницы [index] по положению [pages].
+class _PageChromeOpacity extends ValueNotifier<double> {
+  _PageChromeOpacity(this.pages, this.index, this.dragDy) : super(1) {
+    pages.addListener(_update);
+    dragDy.addListener(_update);
+    _update();
+  }
+
+  final PageController pages;
+  final int index;
+  final ValueListenable<double> dragDy;
+
+  void _update() {
+    final p = pages.hasClients && pages.position.haveDimensions
+        ? (pages.page ?? index.toDouble())
+        : pages.initialPage.toDouble();
+    final byPage = (1 - (p - index).abs() * 2.5).clamp(0.0, 1.0);
+    // Смахивание вниз — панели прячутся сразу.
+    final byDrag = (1 - dragDy.value.abs() / 40).clamp(0.0, 1.0);
+    value = byPage * byDrag;
+  }
+
+  @override
+  void dispose() {
+    pages.removeListener(_update);
+    dragDy.removeListener(_update);
+    super.dispose();
+  }
+}
+
+class _AssetPreviewPager extends StatefulWidget {
+  const _AssetPreviewPager({
+    required this.assets,
+    required this.initialIndex,
+    required this.pageFor,
+  });
+
+  final List<AssetEntity> assets;
+  final int initialIndex;
+  final Widget Function(
+    AssetEntity asset, {
+    required bool active,
+    required ValueChanged<bool> onZoomChanged,
+    required ValueListenable<double> chromeOpacity,
+    required ValueChanged<String> onJump,
+  })
+  pageFor;
+
+  @override
+  State<_AssetPreviewPager> createState() => _AssetPreviewPagerState();
+}
+
+class _AssetPreviewPagerState extends State<_AssetPreviewPager> {
+  late final PageController _pages = PageController(
+    initialPage: widget.initialIndex,
+  );
+  late int _index = widget.initialIndex;
+  bool _zoomed = false;
+  final Map<int, _PageChromeOpacity> _chrome = {};
+
+  /// Смахивание вниз (макет SendFlow): снимок едет за пальцем и уменьшается,
+  /// фон гаснет, панели прячутся; дальше 110 pt или быстро — закрыть (снимок
+  /// улетает в плитку), иначе — пружиной назад.
+  final ValueNotifier<double> _dragDy = ValueNotifier<double>(0);
+  bool _dragging = false;
+
+  _PageChromeOpacity _chromeFor(int i) =>
+      _chrome.putIfAbsent(i, () => _PageChromeOpacity(_pages, i, _dragDy));
+
+  void _onDragUpdate(DragUpdateDetails d) {
+    if (_zoomed) return;
+    _dragging = true;
+    _dragDy.value = math.max(-40, _dragDy.value + d.delta.dy);
+  }
+
+  void _onDragEnd(DragEndDetails d) {
+    if (!_dragging) return;
+    _dragging = false;
+    final v = d.primaryVelocity ?? 0;
+    if (_dragDy.value > 110 || v > 700) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    _animateBack();
+  }
+
+  void _animateBack() {
+    final from = _dragDy.value;
+    final c = AnimationController(
+      vsync: Navigator.of(context),
+      duration: const Duration(milliseconds: 260),
+    );
+    final a = CurvedAnimation(parent: c, curve: const Cubic(.2, .8, .2, 1));
+    a.addListener(() => _dragDy.value = from * (1 - a.value));
+    c.forward().whenComplete(c.dispose);
+  }
+
+  @override
+  void dispose() {
+    for (final c in _chrome.values) {
+      c.dispose();
+    }
+    _dragDy.dispose();
+    _pages.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final h = MediaQuery.sizeOf(context).height;
+    final page = PageView.builder(
+        key: const ValueKey('asset-preview:pager'),
+        controller: _pages,
+        physics: _zoomed
+            ? const NeverScrollableScrollPhysics()
+            : const BouncingScrollPhysics(),
+        itemCount: widget.assets.length,
+        onPageChanged: (i) => setState(() {
+          _index = i;
+          _zoomed = false;
+        }),
+        itemBuilder: (context, i) {
+          final asset = widget.assets[i];
+          return KeyedSubtree(
+            key: ValueKey('asset-preview:${asset.id}'),
+            child: widget.pageFor(
+              asset,
+              active: i == _index,
+              chromeOpacity: _chromeFor(i),
+              onJump: (id) {
+                final k = widget.assets.indexWhere((a) => a.id == id);
+                if (k < 0 || k == _index) return;
+                _pages.animateToPage(
+                  k,
+                  duration: const Duration(milliseconds: 340),
+                  curve: const Cubic(.2, .8, .2, 1),
+                );
+              },
+              onZoomChanged: (z) {
+                if (i != _index || z == _zoomed) return;
+                setState(() => _zoomed = z);
+              },
+            ),
+          );
+        },
+      );
+    return GestureDetector(
+      key: const ValueKey('sendflow:dismiss-drag'),
+      onVerticalDragUpdate: _zoomed ? null : _onDragUpdate,
+      onVerticalDragEnd: _zoomed ? null : _onDragEnd,
+      child: ValueListenableBuilder<double>(
+        valueListenable: _dragDy,
+        child: page,
+        builder: (context, dy, child) {
+          final bg = dy == 0 ? 1.0 : 1 - (dy.abs() / 350).clamp(0.0, 1.0) * 0.9;
+          final scale = 1 - (dy.abs() / h).clamp(0.0, 1.0) * 0.3;
+          return ColoredBox(
+            color: Colors.black.withValues(alpha: bg),
+            child: Transform.translate(
+              offset: Offset(0, dy),
+              child: Transform.scale(scale: scale, child: child),
+            ),
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _AssetPreviewPage extends StatefulWidget {
@@ -2778,7 +3920,56 @@ class _AssetPreviewPage extends StatefulWidget {
     required this.onPersistCaption,
     required this.selectedCount,
     required this.onPersistEditedPath,
-  });
+    this.initialEditedPath,
+    this.active = true,
+    this.onZoomChanged,
+    this.chromeOpacity,
+    this.thumbnail,
+    this.onJump,
+    _AssetSendOpts? opts,
+    this.selectionNumber,
+    this.strip,
+    this.stripThumb,
+    this.onSendMenu,
+    this.onceAllowed,
+  }) : opts = opts ?? const _NoOpts();
+
+  /// Можно ли одноразовый (все получатели умеют); `false` — объяснить.
+  final Future<bool> Function()? onceAllowed;
+
+  /// Меню отправки по долгому нажатию; `true` — отправить сейчас.
+  final Future<bool> Function(BuildContext context, bool multi)? onSendMenu;
+
+  /// Параметры отправки этого снимка (хранит лист вложений).
+  final _AssetSendOpts opts;
+
+  /// Номер в выборе (0 — не выбран).
+  final int Function()? selectionNumber;
+
+  /// Выбранные снимки по порядку — лента над инструментами (от двух).
+  final List<AssetEntity> Function()? strip;
+  final Future<Uint8List?> Function(AssetEntity asset)? stripThumb;
+
+  /// Перейти к снимку из ленты.
+  final ValueChanged<String>? onJump;
+
+  /// Видимость панелей (0…1) от положения листания: панели не уезжают со
+  /// снимком, а гаснут у уходящего и проявляются у нового (как в Telegram).
+  final ValueListenable<double>? chromeOpacity;
+
+  /// Миниатюра из сетки — сразу на месте снимка, пока грузится оригинал
+  /// (вместо чёрного экрана со спиннером при каждом свайпе).
+  final Future<Uint8List?>? thumbnail;
+
+  /// Правленый файл этого снимка с прошлого визита (листание туда-обратно не
+  /// теряет кадрирование и рисунок).
+  final String? initialEditedPath;
+
+  /// Страница на экране (в листании): видео играет только у неё.
+  final bool active;
+
+  /// Снимок увеличен — листание отключается, чтобы двигать снимок.
+  final ValueChanged<bool>? onZoomChanged;
 
   final AssetEntity asset;
   final bool Function() isSelected;
@@ -2811,7 +4002,6 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
   int _fileBytes = 0;
   VideoPlayerController? _video;
   bool _loadFailed = false;
-  bool _muted = false;
   bool _exporting = false;
 
   List<File> _frames = const <File>[];
@@ -2844,16 +4034,48 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
   bool get _hasTrim =>
       _isVideo && (_startMs > 60 || (_durationMs - _endMs) > 60);
 
+  final TransformationController _zoom = TransformationController();
+  bool _zoomed = false;
+
+  void _onZoom() {
+    final z = _zoom.value.getMaxScaleOnAxis() > 1.02;
+    if (z == _zoomed) return;
+    _zoomed = z;
+    widget.onZoomChanged?.call(z);
+  }
+
   @override
   void initState() {
     super.initState();
     _caption.text = widget.initialCaption;
+    _zoom.addListener(_onZoom);
     unawaited(_load());
+  }
+
+  @override
+  void didUpdateWidget(covariant _AssetPreviewPage old) {
+    super.didUpdateWidget(old);
+    if (old.active == widget.active) return;
+    if (widget.active && _isVideo && !_videoStarted) _scheduleVideoStart();
+    if (!widget.active) _videoStartTimer?.cancel();
+    final v = _video;
+    if (v == null || !v.value.isInitialized) return;
+    // Видео играет только на странице, которая на экране.
+    if (widget.active) {
+      unawaited(v.play());
+    } else {
+      unawaited(v.pause());
+    }
   }
 
   Future<void> _load() async {
     try {
-      final f = await widget.asset.file;
+      final edited = widget.initialEditedPath;
+      final editedFile = edited != null && File(edited).existsSync()
+          ? File(edited)
+          : null;
+      if (editedFile != null) _bakedToJpeg = true;
+      final f = editedFile ?? await widget.asset.file;
       if (!mounted) return;
       if (f == null) {
         setState(() => _loadFailed = true);
@@ -2866,46 +4088,68 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
         _fileBytes = bytes;
       });
       if (_isPhoto) {
-        // True ORIENTED dimensions (EXIF-applied), for correct crop/draw AR.
-        try {
-          final codec = await ui.instantiateImageCodec(await f.readAsBytes());
-          final frame = await codec.getNextFrame();
-          final iw = frame.image.width;
-          final ih = frame.image.height;
-          frame.image.dispose();
-          if (mounted) {
-            setState(() {
-              _workW = iw;
-              _workH = ih;
-            });
-          }
-        } catch (_) {
-          if (mounted) {
-            setState(() {
-              _workW = widget.asset.width;
-              _workH = widget.asset.height;
-            });
-          }
+        // Размеры без раскрытия снимка (раньше — полный декод 24–48 Мп на
+        // каждой странице листания: сотни МБ и нагрев). Оригинал — по
+        // данным галереи с учётом поворота EXIF; правленый JPEG — по
+        // заголовку файла (поворот в нём уже «запечён»).
+        final dims = editedFile != null
+            ? await _probeImageSize(f)
+            : (widget.asset.orientatedWidth, widget.asset.orientatedHeight);
+        if (mounted && dims != null) {
+          setState(() {
+            _workW = dims.$1;
+            _workH = dims.$2;
+          });
         }
       }
       if (_isVideo) {
+        // Видео — только у страницы на экране и после того, как листание
+        // остановилось: пролистанные мимо не поднимают плеер и FFmpeg.
+        _scheduleVideoStart();
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadFailed = true);
+    }
+  }
+
+  Timer? _videoStartTimer;
+  bool _videoStarted = false;
+
+  void _scheduleVideoStart() {
+    _videoStartTimer?.cancel();
+    if (!widget.active || _videoStarted || _file == null) return;
+    _videoStartTimer = Timer(const Duration(milliseconds: 280), () {
+      if (mounted && widget.active && !_videoStarted) unawaited(_startVideo());
+    });
+  }
+
+  Future<void> _startVideo() async {
+    final f = _file;
+    if (f == null || _videoStarted) return;
+    _videoStarted = true;
+    try {
+      {
         final v = VideoPlayerController.file(f);
         _video = v;
         await v.initialize();
         await v.setLooping(false);
         v.addListener(_onVideoTick);
-        if (!mounted) {
-          await v.dispose();
-          return;
-        }
+        if (widget.opts.mute) unawaited(v.setVolume(0));
+        // Страницу закрыли, пока плеер поднимался: его уже освободил
+        // dispose страницы — второй раз нельзя.
+        if (!mounted) return;
         setState(() {
           _durationMs = v.value.duration.inMilliseconds;
           _startMs = 0;
           _endMs = _durationMs;
         });
-        unawaited(v.play());
+        if (widget.active) unawaited(v.play());
         unawaited(
-          videoTrimFilmstripFrames(f.path).then((frames) {
+          Future<void>.delayed(const Duration(milliseconds: 400)).then((_) async {
+            // Лента кадров — полный проход FFmpeg; только если человек
+            // остался на этом видео.
+            if (!mounted || !widget.active) return;
+            final frames = await videoTrimFilmstripFrames(f.path);
             if (mounted && frames.isNotEmpty) {
               setState(() => _frames = frames);
             }
@@ -2914,6 +4158,22 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
       }
     } catch (_) {
       if (mounted) setState(() => _loadFailed = true);
+    }
+  }
+
+  /// Ширина и высота картинки по заголовку файла, без раскрытия пикселей.
+  static Future<(int, int)?> _probeImageSize(File f) async {
+    ui.ImmutableBuffer? buf;
+    ui.ImageDescriptor? desc;
+    try {
+      buf = await ui.ImmutableBuffer.fromFilePath(f.path);
+      desc = await ui.ImageDescriptor.encoded(buf);
+      return (desc.width, desc.height);
+    } catch (_) {
+      return null;
+    } finally {
+      desc?.dispose();
+      buf?.dispose();
     }
   }
 
@@ -3027,6 +4287,7 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
           path: path,
           caption: _caption.text.trim(),
           trimmed: trimmed,
+          assetId: widget.asset.id,
         ),
       );
       return;
@@ -3040,6 +4301,7 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
         caption: _caption.text.trim(),
         trimmed: false,
         mime: photoEdited ? 'image/jpeg' : null,
+        assetId: widget.asset.id,
       ),
     );
   }
@@ -3108,83 +4370,112 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
     }
   }
 
-  Future<void> _openCrop() async {
+  /// Поворот на 90° по часовой — сразу в файл (как кадр и рисунок): при
+  /// листании и отправке пачкой поворот не теряется, а редактор потом видит
+  /// уже повёрнутый снимок. JPEG кодируется в фоновом потоке.
+  Future<void> _rotateBaked() async {
     final file = _file;
-    if (file == null) return;
-    final rect = await Navigator.of(context).push<Rect>(
-      MaterialPageRoute<Rect>(
-        fullscreenDialog: true,
-        builder: (_) => _CropPage(
-          file: file,
-          quarterTurns: _rotationQuarter,
-          imageWidth: _workW,
-          imageHeight: _workH,
-          localize: widget.localize,
-        ),
-      ),
-    );
-    if (rect == null || !mounted) return;
+    if (file == null || _exporting) return;
     setState(() => _exporting = true);
-    final baked = await _bakeViaUi(
-      file,
-      quarterTurns: _rotationQuarter,
-      cropNorm: rect,
-    );
-    if (!mounted) return;
-    if (baked == null) {
-      setState(() => _exporting = false);
-      return;
+    try {
+      final dir = await getTemporaryDirectory();
+      final out = await exportEditedImageFile(
+        source: file,
+        edits: const MediaEdits(rotation: 90),
+        outPath:
+            '${dir.path}/secretly_rotate_${DateTime.now().microsecondsSinceEpoch}.jpg',
+      );
+      final len = await out.length();
+      final dims = await _probeImageSize(out);
+      if (!mounted) return;
+      setState(() {
+        _file = out;
+        _fileBytes = len;
+        if (dims != null) {
+          _workW = dims.$1;
+          _workH = dims.$2;
+        }
+        _rotationQuarter = 0;
+        _bakedToJpeg = true;
+        _exporting = false;
+      });
+      _zoom.value = Matrix4.identity();
+    } catch (_) {
+      if (mounted) setState(() => _exporting = false);
     }
-    final len = await File(baked.$1).length();
-    if (!mounted) return;
-    setState(() {
-      _file = File(baked.$1);
-      _fileBytes = len;
-      _workW = baked.$2; // baked file is already rotated + oriented
-      _workH = baked.$3;
-      _rotationQuarter = 0;
-      _bakedToJpeg = true;
-      _exporting = false;
-    });
   }
 
-  Future<void> _openDraw() async {
-    final file = _file;
-    if (file == null) return;
-    final out = await Navigator.of(context).push<String>(
-      MaterialPageRoute<String>(
-        fullscreenDialog: true,
-        builder: (_) => _DrawPage(
-          file: file,
-          quarterTurns: _rotationQuarter,
-          imageWidth: _workW,
-          imageHeight: _workH,
-        ),
-      ),
-    );
-    if (out == null || !mounted) return;
-    final len = await File(out).length();
-    // Refresh working dims from the drawn output (rotation is baked in).
-    int? nw;
-    int? nh;
-    try {
-      final codec = await ui.instantiateImageCodec(await File(out).readAsBytes());
-      final frame = await codec.getNextFrame();
-      nw = frame.image.width;
-      nh = frame.image.height;
-      frame.image.dispose();
-    } catch (_) {}
-    if (!mounted) return;
-    setState(() {
-      _file = File(out);
-      _fileBytes = len;
-      if (nw != null && nh != null) {
-        _workW = nw;
-        _workH = nh;
+  Future<void> _openCrop() => _openEditor(MediaEditorTab.crop);
+
+  Future<void> _openDraw() => _openEditor(MediaEditorTab.draw);
+
+  /// Правка — в новом редакторе просмотра медиа (24.11.2026, владелец: «у
+  /// нас уже есть готовый редактор… сделай, чтобы тут так же»): кадр,
+  /// поворот, рисунок, текст, настройки, отмена шагов. Результат «запекается»
+  /// в JPEG и заменяет рабочий файл — отправка и пачка берут его.
+  Future<void> _openEditor(MediaEditorTab tab) async {
+    var file = _file;
+    if (file == null || _exporting) return;
+    // Быстрый поворот кнопкой — сначала в файл, чтобы редактор видел то же.
+    if (_rotationQuarter != 0) {
+      setState(() => _exporting = true);
+      final baked = await _bakeViaUi(file, quarterTurns: _rotationQuarter);
+      if (!mounted) return;
+      setState(() => _exporting = false);
+      if (baked != null) {
+        file = File(baked.$1);
+        setState(() {
+          _file = file;
+          _workW = baked.$2;
+          _workH = baked.$3;
+          _rotationQuarter = 0;
+          _bakedToJpeg = true;
+        });
       }
-      _rotationQuarter = 0;
-      _bakedToJpeg = true;
-    });
+    }
+    final aspect = _workW > 0 && _workH > 0 ? _workW / _workH : 1.0;
+    // В редактор — уменьшенная копия (до 2048 по длинной стороне): экспорт
+    // всё равно берёт исходный файл.
+    final edits = await openMediaEditor(
+      context,
+      image: ResizeImage(
+        FileImage(file),
+        width: aspect >= 1 ? 2048 : null,
+        height: aspect < 1 ? 2048 : null,
+        allowUpscaling: false,
+      ),
+      sourceAspect: aspect,
+      initial: MediaEdits.identity,
+      initialTab: tab,
+    );
+    if (edits == null || edits.isIdentity || !mounted) return;
+    setState(() => _exporting = true);
+    try {
+      final dir = await getTemporaryDirectory();
+      final out = await exportEditedImageFile(
+        source: file,
+        edits: edits,
+        outPath:
+            '${dir.path}/secretly_edit_${DateTime.now().microsecondsSinceEpoch}.jpg',
+      );
+      final len = await out.length();
+      final dims = await _probeImageSize(out);
+      if (!mounted) return;
+      setState(() {
+        _file = out;
+        _fileBytes = len;
+        if (dims != null) {
+          _workW = dims.$1;
+          _workH = dims.$2;
+        }
+        _rotationQuarter = 0;
+        _bakedToJpeg = true;
+        _exporting = false;
+      });
+      _zoom.value = Matrix4.identity();
+    } catch (_) {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   @override
@@ -3192,6 +4483,15 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
     // Keep whatever caption was typed for this asset (backing out must not lose
     // it — the multi-photo flow relies on captions persisting in the picker).
     widget.onPersistCaption(widget.asset.id, _caption.text.trim());
+    // Правки этого снимка — тоже (уход листанием или назад их не теряет).
+    final edited = _file;
+    if (_isPhoto && _bakedToJpeg && edited != null) {
+      widget.onPersistEditedPath(widget.asset.id, edited.path);
+    }
+    _zoom
+      ..removeListener(_onZoom)
+      ..dispose();
+    _videoStartTimer?.cancel();
     final v = _video;
     _video = null;
     if (v != null) {
@@ -3202,25 +4502,6 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
     super.dispose();
   }
 
-  String _metaLine() {
-    final w = widget.asset.width;
-    final h = widget.asset.height;
-    final parts = <String>[];
-    if (w > 0 && h > 0) parts.add('${w}x$h');
-    if (_isVideo && _durationMs > 0) {
-      final effective = (_endMs - _startMs).clamp(0, _durationMs);
-      final total = (effective / 1000).round();
-      final m = total ~/ 60;
-      final sec = (total % 60).toString().padLeft(2, '0');
-      parts.add('$m:$sec');
-    }
-    if (_fileBytes > 0) {
-      final mb = _fileBytes / (1024 * 1024);
-      parts.add('~${mb.toStringAsFixed(1)} MB');
-    }
-    return parts.join(', ');
-  }
-
   @override
   Widget build(BuildContext context) {
     final video = _video;
@@ -3228,7 +4509,8 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final safeBottom = MediaQuery.of(context).padding.bottom;
     return Scaffold(
-      backgroundColor: Colors.black,
+      // Фон — у просмотра (гаснет при смахивании вниз).
+      backgroundColor: Colors.transparent,
       resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
@@ -3244,14 +4526,19 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
                 setState(() {});
               },
               child: Center(
-                child: _loadFailed
+                child: Hero(
+                  tag: 'sendflow:${widget.asset.id}',
+                  // Пока летит — миниатюра из сетки (оригинал ещё грузится).
+                  flightShuttleBuilder: (_, anim, dir, from, to) =>
+                      dir == HeroFlightDirection.push ? _placeholder() : from.widget,
+                  child: _loadFailed
                     ? const Icon(
                         AppIcons.brokenImage,
                         color: Colors.white70,
                         size: 44,
                       )
                     : _file == null
-                    ? const SecretlySpinner(color: Colors.white)
+                    ? _placeholder()
                     : _isVideo
                     ? (video != null && video.value.isInitialized
                           ? AspectRatio(
@@ -3260,24 +4547,35 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
                                   : video.value.aspectRatio,
                               child: VideoPlayer(video),
                             )
-                          : const SecretlySpinner(
-                              color: Colors.white,
-                            ))
+                          : _placeholder())
                     : InteractiveViewer(
+                        transformationController: _zoom,
                         minScale: 0.9,
                         maxScale: 5,
                         child: RotatedBox(
                           quarterTurns: _rotationQuarter,
+                          // Декод под экран (×1,5 под увеличение), а не
+                          // 24–48 Мп целиком на каждой странице листания.
                           child: Image.file(
                             _file!,
                             fit: BoxFit.contain,
+                            cacheWidth: _workW >= _workH ? _displayDecodeSide(context) : null,
+                            cacheHeight: _workW < _workH ? _displayDecodeSide(context) : null,
+                            gaplessPlayback: true,
                             errorBuilder: (_, _, _) => const BrokenMediaBox(iconSize: 40, onDarkSurface: true),
                           ),
                         ),
                       ),
+                ),
               ),
             ),
           ),
+          // Панели гаснут при листании, а не уезжают со снимком.
+          Positioned.fill(
+            child: _ChromeFade(
+              opacity: widget.chromeOpacity,
+              child: Stack(
+                children: [
           // Центральная кнопка Play (когда видео на паузе).
           if (video != null &&
               video.value.isInitialized &&
@@ -3329,7 +4627,8 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    _metaLine(),
+                    _infoLine(),
+                    key: const ValueKey('sendflow:info'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -3363,20 +4662,33 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
                           width: 1.6,
                         ),
                       ),
-                      child: Icon(
-                        AdaptiveIcons.check_rounded,
-                        size: 18,
-                        color: selected
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.55),
-                      ),
+                      alignment: Alignment.center,
+                      // Выбран — номер в выборе (как на плитке), нет — галочка.
+                      child: selected && (widget.selectionNumber?.call() ?? 0) > 0
+                          ? Text(
+                              '${widget.selectionNumber!.call()}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            )
+                          : Icon(
+                              AdaptiveIcons.check_rounded,
+                              size: 18,
+                              color: selected
+                                  ? Colors.white
+                                  : Colors.white.withValues(alpha: 0.55),
+                            ),
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          // ---------- низ: [звук + трим-лента] + подпись + отправка ----------
+          // ---------- низ (макет SendFlow) ----------
+          // Лента выбранных · плеер с обрезкой · инструменты и переключатели ·
+          // подпись и отправка. Острова — стекло iPhone / мат Android.
           Positioned(
             left: 0,
             right: 0,
@@ -3384,279 +4696,116 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                _selectionStrip(),
                 if (_isVideo &&
                     video != null &&
                     video.value.isInitialized) ...[
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
                     child: Row(
                       children: [
                         GestureDetector(
+                          key: const ValueKey('sendflow:play'),
                           behavior: HitTestBehavior.opaque,
                           onTap: () {
-                            setState(() => _muted = !_muted);
-                            unawaited(video.setVolume(_muted ? 0 : 1));
+                            video.value.isPlaying ? video.pause() : video.play();
+                            setState(() {});
                           },
-                          child: _roundGlass(
-                            size: 38,
-                            child: Icon(
-                              _muted
-                                  ? AdaptiveIcons.volume_off_rounded
-                                  : AdaptiveIcons.volume_up_rounded,
-                              color: Colors.white,
-                              size: 19,
+                          child: _glass(
+                            radius: BorderRadius.circular(10),
+                            child: SizedBox(
+                              width: 40,
+                              height: 44,
+                              child: Icon(
+                                video.value.isPlaying
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 26,
+                              ),
                             ),
                           ),
                         ),
+                        const SizedBox(width: 10),
+                        // Облегчённая сборка: обрезать нечем — трека нет.
+                        if (kVideoToolsAvailable)
+                          Expanded(
+                            child: VideoTrimTrack(
+                              durationMs: _durationMs,
+                              startMs: _startMs,
+                              endMs: _endMs,
+                              minTrimMs: _minTrimMs,
+                              frames: _frames,
+                              positionMs: video.value.position.inMilliseconds,
+                              onChanged: _onTrimChanged,
+                            ),
+                          )
+                        else
+                          const Spacer(),
                       ],
                     ),
                   ),
-                  // Облегчённая сборка: обрезать нечем — трека нет, и `_hasTrim`
-                  // никогда не станет истиной.
-                  if (kVideoToolsAvailable) ...[
-                    const SizedBox(height: 8),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: VideoTrimTrack(
-                        durationMs: _durationMs,
-                        startMs: _startMs,
-                        endMs: _endMs,
-                        minTrimMs: _minTrimMs,
-                        frames: _frames,
-                        positionMs: video.value.position.inMilliseconds,
-                        onChanged: _onTrimChanged,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                  ],
                 ],
-                _editToolbar(),
+                _toolsRow(),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(18),
-                          child: BackdropFilter(
-                            filter: islandBackdropFilter(
-                              sigmaX: 20,
-                              sigmaY: 20,
+                        // Островок подписи — как остальные острова (владелец
+                        // 24.11.2026: «не тёмный и не цветной»).
+                        child: _glass(
+                          radius: BorderRadius.circular(21),
+                          child: TextField(
+                            key: const ValueKey('sendflow:caption'),
+                            controller: _caption,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
                             ),
-                            child: Container(
-                              // Island recipe over media: vibrancy blur + a soft
-                              // top→bottom tint (kept dark enough for white text
-                              // to stay legible over bright photos) + a specular
-                              // top-edge highlight + hairline border.
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(18),
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    Colors.black.withValues(alpha: 0.26),
-                                    Colors.black.withValues(alpha: 0.40),
-                                  ],
-                                ),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.16),
-                                ),
+                            cursorColor: Colors.white,
+                            decoration: InputDecoration(
+                              hintText: wave1Text(
+                                context,
+                                ru: 'Добавить подпись…',
+                                en: 'Add a caption…',
+                                uk: 'Додати підпис…',
+                                es: 'Añadir un pie…',
+                                pt: 'Adicionar legenda…',
+                                ptBr: 'Adicionar legenda…',
+                                fr: 'Ajouter une légende…',
+                                de: 'Bildunterschrift…',
                               ),
-                              foregroundDecoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(18),
-                                border: Border(
-                                  top: BorderSide(
-                                    color: Colors.white.withValues(alpha: 0.22),
-                                  ),
-                                ),
+                              hintStyle: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.55),
+                                fontSize: 16,
                               ),
-                              child: TextField(
-                                controller: _caption,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                ),
-                                cursorColor:
-                                    Theme.of(context).colorScheme.primary,
-                                decoration: InputDecoration(
-                                  hintText: wave1Text(
-                                    context,
-                                    ru: 'Добавить подпись...',
-                                    en: 'Add a caption...',
-                                    uk: 'Додати підпис...',
-                                    es: 'Añadir descripción...',
-                                    pt: 'Adicionar legenda...',
-                                    ptBr: 'Adicionar legenda...',
-                                    fr: 'Ajouter une légende...',
-                                    de: 'Beschriftung hinzufügen...',
-                                  ),
-                                  hintStyle: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.5),
-                                    fontSize: 15,
-                                  ),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 9,
-                                  ),
-                                ),
-                                keyboardType: TextInputType.multiline,
-                                textCapitalization:
-                                    TextCapitalization.sentences,
-                                minLines: 1,
-                                maxLines: 3,
+                              border: InputBorder.none,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.fromLTRB(
+                                16,
+                                11,
+                                12,
+                                11,
                               ),
                             ),
+                            keyboardType: TextInputType.multiline,
+                            textCapitalization: TextCapitalization.sentences,
+                            minLines: 1,
+                            maxLines: 4,
                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _exporting ? null : () => unawaited(_send()),
-                        child: Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Theme.of(context).colorScheme.primary,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.26),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: _exporting
-                              ? const Padding(
-                                  padding: EdgeInsets.all(12),
-                                  child: SecretlySpinner(
-                                    strokeWidth: 2.2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(
-                                  AppIcons.send,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                        ),
-                      ),
+                      _sendButton(),
                     ],
                   ),
                 ),
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _roundGlass({required Widget child, double size = 44}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(999),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.black.withValues(alpha: 0.32),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
-
-  /// Bottom edit-tools island — a glass pill in our style (matte blur, soft
-  /// white border), sized/positioned like the reference screenshots. Only
-  /// FUNCTIONAL tools are shown (no dead buttons): today = photo rotate. Crop /
-  /// draw / adjust and the video cover picker land here in later passes.
-  Widget _editToolbar() {
-    final tools = <Widget>[];
-    if (_isPhoto) {
-      tools.add(
-        _toolButton(
-          icon: AdaptiveIcons.crop_rounded,
-          tooltip: wave1Text(
-            context,
-            ru: 'Кадрировать',
-            en: 'Crop',
-            uk: 'Кадрувати',
-            es: 'Recortar',
-            pt: 'Cortar',
-            ptBr: 'Cortar',
-            fr: 'Rogner',
-            de: 'Zuschneiden',
-          ),
-          onTap: _exporting ? null : () => unawaited(_openCrop()),
-        ),
-      );
-      tools.add(
-        _toolButton(
-          icon: AdaptiveIcons.rotate_right_rounded,
-          tooltip: wave1Text(
-            context,
-            ru: 'Повернуть',
-            en: 'Rotate',
-            uk: 'Повернути',
-            es: 'Girar',
-            pt: 'Girar',
-            ptBr: 'Girar',
-            fr: 'Pivoter',
-            de: 'Drehen',
-          ),
-          onTap: _exporting
-              ? null
-              : () => setState(
-                  () => _rotationQuarter = (_rotationQuarter + 1) % 4,
-                ),
-        ),
-      );
-      tools.add(
-        _toolButton(
-          icon: AdaptiveIcons.brush_rounded,
-          tooltip: wave1Text(
-            context,
-            ru: 'Рисовать',
-            en: 'Draw',
-            uk: 'Малювати',
-            es: 'Dibujar',
-            pt: 'Desenhar',
-            ptBr: 'Desenhar',
-            fr: 'Dessiner',
-            de: 'Zeichnen',
-          ),
-          onTap: _exporting ? null : () => unawaited(_openDraw()),
-        ),
-      );
-    }
-    if (tools.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.32),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.16),
-                  ),
-                ),
-                child: Row(mainAxisSize: MainAxisSize.min, children: tools),
+                ],
               ),
             ),
           ),
@@ -3665,19 +4814,437 @@ class _AssetPreviewPageState extends State<_AssetPreviewPage> {
     );
   }
 
-  Widget _toolButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback? onTap,
-  }) {
-    return PressFeedback(child: IconButton(
-      tooltip: tooltip,
-      onPressed: onTap,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 46, minHeight: 46),
-      icon: Icon(icon, color: Colors.white, size: 21),
-    ));
+  /// Остров поверх медиа (макет SendFlow): iPhone — жидкое стекло
+  /// (белый 14 %, кант 0,5 px), Android — матовое (тёмный 55 %, кант 1 px);
+  /// «Размытие панелей» выключено — сплошная подложка.
+  Widget _glass({required Widget child, required BorderRadius radius, Color? tint}) {
+    final blur = mediaViewerGlass;
+    final ios = mediaViewerLiquidGlass;
+    final fill = tint ??
+        (!blur
+            ? const Color(0xF0202328)
+            : ios
+            ? Colors.white.withValues(alpha: 0.14)
+            : const Color(0x8C0A0C10));
+    final border = Border.all(
+      color: Colors.white.withValues(alpha: ios ? 0.22 : 0.16),
+      width: ios ? 0.5 : 1,
+    );
+    Widget body = DecoratedBox(
+      decoration: BoxDecoration(color: fill, borderRadius: radius, border: border),
+      child: child,
+    );
+    // Размытие — только жидкое стекло iPhone. На Android (макет: blur none)
+    // — плотная подложка: семь размытых островов поверх снимка давали
+    // подтормаживания на Xiaomi (журнал 755: raster p90 13–17 мс).
+    if (blur && ios) {
+      body = BackdropFilter(filter: mediaViewerGlassFilter(20), child: body);
+    }
+    return ClipRRect(borderRadius: radius, child: body);
   }
+
+  static const Color _kSendFlowBlue = Color(0xF23390EC);
+
+  final GlobalKey _previewSendKey = GlobalKey(debugLabel: 'sendflow:preview-send');
+
+  void _toast(String text) {
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(
+        SecretlySnackBar(
+          content: Text(text),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+  }
+
+  Widget _toolsRow() {
+    final tools = <({String key, IconData icon, String tip, VoidCallback onTap, bool on})>[
+      if (_isPhoto) ...[
+        (key: 'crop', icon: Icons.crop_rounded, tip: wave1Text(context, ru: 'Кадр', en: 'Crop', uk: 'Кадр', es: 'Recortar', pt: 'Cortar', ptBr: 'Cortar', fr: 'Rogner', de: 'Zuschneiden'), onTap: () => unawaited(_openCrop()), on: false),
+        (key: 'rotate', icon: Icons.rotate_90_degrees_ccw_rounded, tip: wave1Text(context, ru: 'Повернуть', en: 'Rotate', uk: 'Повернути', es: 'Girar', pt: 'Rodar', ptBr: 'Girar', fr: 'Pivoter', de: 'Drehen'), onTap: () => unawaited(_rotateBaked()), on: false),
+        (key: 'draw', icon: Icons.brush_rounded, tip: wave1Text(context, ru: 'Рисовать', en: 'Draw', uk: 'Малювати', es: 'Dibujar', pt: 'Desenhar', ptBr: 'Desenhar', fr: 'Dessiner', de: 'Zeichnen'), onTap: () => unawaited(_openDraw()), on: false),
+        (key: 'adjust', icon: Icons.tune_rounded, tip: wave1Text(context, ru: 'Настройки', en: 'Adjust', uk: 'Налаштування', es: 'Ajustes', pt: 'Ajustes', ptBr: 'Ajustes', fr: 'Réglages', de: 'Anpassen'), onTap: () => unawaited(_openEditor(MediaEditorTab.adjust)), on: false),
+      ],
+    ];
+    final toggles = <Widget>[
+      if (_isPhoto)
+        _toggle(
+          key: 'quality',
+          text: widget.opts.hd ? 'HD' : 'SD',
+          on: widget.opts.hd,
+          onTap: () {
+            setState(() => widget.opts.hd = !widget.opts.hd);
+            _toast(
+              widget.opts.hd
+                  ? wave1Text(context, ru: 'Фото будет отправлено в HD', en: 'The photo will be sent in HD', uk: 'Фото буде надіслано в HD', es: 'La foto se enviará en HD', pt: 'A foto será enviada em HD', ptBr: 'A foto será enviada em HD', fr: 'La photo sera envoyée en HD', de: 'Das Foto wird in HD gesendet')
+                  : wave1Text(context, ru: 'Фото будет сжато (SD)', en: 'The photo will be compressed (SD)', uk: 'Фото буде стиснуто (SD)', es: 'La foto se comprimirá (SD)', pt: 'A foto será comprimida (SD)', ptBr: 'A foto será comprimida (SD)', fr: 'La photo sera compressée (SD)', de: 'Das Foto wird komprimiert (SD)'),
+            );
+          },
+        ),
+      // Без FFmpeg (облегчённая сборка) дорожку не вырезать — не обещаем.
+      if (_isVideo && kVideoToolsAvailable) ...[
+        _toggle(
+          key: 'mute',
+          icon: widget.opts.mute ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+          on: widget.opts.mute,
+          onTap: () {
+            setState(() => widget.opts.mute = !widget.opts.mute);
+            unawaited(_video?.setVolume(widget.opts.mute ? 0 : 1));
+            _toast(
+              widget.opts.mute
+                  ? wave1Text(context, ru: 'Видео будет отправлено без звука', en: 'The video will be sent without sound', uk: 'Відео буде надіслано без звуку', es: 'El vídeo se enviará sin sonido', pt: 'O vídeo será enviado sem som', ptBr: 'O vídeo será enviado sem som', fr: 'La vidéo sera envoyée sans son', de: 'Das Video wird ohne Ton gesendet')
+                  : wave1Text(context, ru: 'Звук включён', en: 'Sound on', uk: 'Звук увімкнено', es: 'Sonido activado', pt: 'Som ligado', ptBr: 'Som ativado', fr: 'Son activé', de: 'Ton an'),
+            );
+          },
+        ),
+        const SizedBox(width: 6),
+        PopupMenuButton<int>(
+          key: const ValueKey('sendflow:video-quality'),
+          tooltip: '',
+          position: PopupMenuPosition.over,
+          color: const Color(0xF51E2834),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          offset: const Offset(0, -150),
+          onSelected: (q) => setState(() => widget.opts.videoQuality = q),
+          itemBuilder: (context) => [
+            for (final q in const [480, 720, 1080])
+              PopupMenuItem<int>(
+                value: q,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 22,
+                      child: widget.opts.videoQuality == q
+                          ? const Icon(Icons.check_rounded, size: 18, color: Color(0xFF3390EC))
+                          : null,
+                    ),
+                    Text('${q}p', style: const TextStyle(color: Colors.white, fontSize: 15)),
+                    const Spacer(),
+                    Text(
+                      '~${_videoMb(q).toStringAsFixed(1).replaceAll('.', ',')} ${_mbUnit()}',
+                      style: const TextStyle(color: Color(0xFF7F91A4), fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          child: _toggleBody(text: '${widget.opts.videoQuality}p', on: false),
+        ),
+      ],
+      const SizedBox(width: 6),
+      _toggle(
+        key: 'once',
+        text: '1',
+        on: widget.opts.once,
+        onTap: () async {
+          if (!widget.opts.once &&
+              !(await widget.onceAllowed?.call() ?? false)) {
+            return;
+          }
+          if (!mounted) return;
+          setState(() => widget.opts.once = !widget.opts.once);
+          _toast(
+            widget.opts.once
+                ? (_isVideo
+                      ? wave1Text(context, ru: 'Получатель сможет посмотреть видео один раз', en: 'The recipient can watch the video once', uk: 'Одержувач зможе переглянути відео один раз', es: 'Podrá ver el vídeo una sola vez', pt: 'O destinatário poderá ver o vídeo uma vez', ptBr: 'O destinatário poderá ver o vídeo uma vez', fr: 'La vidéo ne pourra être vue qu’une fois', de: 'Das Video kann einmal angesehen werden')
+                      : wave1Text(context, ru: 'Получатель сможет открыть фото один раз', en: 'The recipient can open the photo once', uk: 'Одержувач зможе відкрити фото один раз', es: 'Podrá abrir la foto una sola vez', pt: 'O destinatário poderá abrir a foto uma vez', ptBr: 'O destinatário poderá abrir a foto uma vez', fr: 'La photo ne pourra être ouverte qu’une fois', de: 'Das Foto kann einmal geöffnet werden'))
+                : wave1Text(context, ru: 'Одноразовый просмотр выключен', en: 'View once is off', uk: 'Одноразовий перегляд вимкнено', es: 'Vista única desactivada', pt: 'Visualização única desligada', ptBr: 'Visualização única desativada', fr: 'Vue unique désactivée', de: 'Einmalansicht aus'),
+          );
+        },
+      ),
+    ];
+    if (tools.isEmpty && toggles.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: Row(
+        children: [
+          if (tools.isNotEmpty)
+            _glass(
+              radius: BorderRadius.circular(21),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final t in tools)
+                      Semantics(
+                        button: true,
+                        label: t.tip,
+                        child: GestureDetector(
+                          key: ValueKey('sendflow:tool:${t.key}'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _exporting ? null : t.onTap,
+                          child: SizedBox(
+                            width: 42,
+                            height: 42,
+                            child: Icon(t.icon, color: Colors.white, size: 22),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          const Spacer(),
+          ...toggles,
+        ],
+      ),
+    );
+  }
+
+  Widget _toggleBody({String? text, IconData? icon, required bool on}) {
+    return _glass(
+      radius: BorderRadius.circular(21),
+      tint: on ? _kSendFlowBlue : null,
+      child: Container(
+        height: 42,
+        constraints: const BoxConstraints(minWidth: 42),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        alignment: Alignment.center,
+        child: icon != null
+            ? Icon(icon, color: Colors.white, size: 20)
+            : Text(
+                text ?? '',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _toggle({
+    required String key,
+    String? text,
+    IconData? icon,
+    required bool on,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      key: ValueKey('sendflow:toggle:$key'),
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 160),
+        child: KeyedSubtree(
+          key: ValueKey('$key:$on:$text'),
+          child: _toggleBody(text: text, icon: icon, on: on),
+        ),
+      ),
+    );
+  }
+
+  Widget _selectionStrip() {
+    final items = widget.strip?.call() ?? const <AssetEntity>[];
+    if (items.length < 2) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: SizedBox(
+        height: 40,
+        child: Center(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var k = 0; k < items.length; k++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 3),
+                    child: GestureDetector(
+                      key: ValueKey('sendflow:strip:${items[k].id}'),
+                      onTap: () => widget.onJump?.call(items[k].id),
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: items[k].id == widget.asset.id
+                              ? Border.all(color: Colors.white, width: 2)
+                              : null,
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(
+                            items[k].id == widget.asset.id ? 6 : 8,
+                          ),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              FutureBuilder<Uint8List?>(
+                                future: widget.stripThumb?.call(items[k]),
+                                builder: (context, snap) => snap.data == null
+                                    ? const ColoredBox(color: Color(0x33FFFFFF))
+                                    : Image.memory(snap.data!, fit: BoxFit.cover, gaplessPlayback: true),
+                              ),
+                              Positioned(
+                                right: 2,
+                                top: 2,
+                                child: Container(
+                                  constraints: const BoxConstraints(minWidth: 14),
+                                  height: 14,
+                                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF3390EC),
+                                    borderRadius: BorderRadius.circular(7),
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    '${k + 1}',
+                                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sendButton() {
+    final n = widget.selectedCount();
+    final badge = n > 1 || (n == 1 && !widget.isSelected());
+    final count = widget.isSelected() ? n : n + 1;
+    return GestureDetector(
+      key: _previewSendKey,
+      behavior: HitTestBehavior.opaque,
+      onTap: _exporting ? null : () => unawaited(_send()),
+      onLongPress: _exporting || widget.onSendMenu == null
+          ? null
+          : () async {
+              final multi = widget.selectedCount() > 1 ||
+                  (widget.selectedCount() == 1 && !widget.isSelected());
+              final go = await widget.onSendMenu!(
+                _previewSendKey.currentContext ?? context,
+                multi,
+              );
+              if (go && mounted) unawaited(_send());
+            },
+      child: SizedBox(
+        width: 48,
+        height: 46,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF3390EC),
+              ),
+              child: _exporting
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: SecretlySpinner(strokeWidth: 2.2, color: Colors.white),
+                    )
+                  : const Icon(AppIcons.send, color: Colors.white, size: 21),
+            ),
+            if (badge)
+              Positioned(
+                right: -2,
+                top: -5,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 20),
+                  height: 20,
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.black, width: 2),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$count',
+                    style: const TextStyle(color: Color(0xFF3390EC), fontSize: 12, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _mbUnit() => wave1Text(context, ru: 'МБ', en: 'MB', uk: 'МБ', es: 'MB', pt: 'MB', ptBr: 'MB', fr: 'Mo', de: 'MB');
+
+  double _videoMb(int q) {
+    final d = ((_endMs - _startMs).clamp(0, _durationMs)) / 1000;
+    final per = switch (q) { <= 480 => 0.22, <= 720 => 0.45, _ => 0.95 };
+    return d * per * (widget.opts.mute ? 0.9 : 1);
+  }
+
+  /// Строка сверху (макет): фото «3024×4032, ~2,4 МБ» (SD — 1280 по длинной
+  /// стороне), видео «720p · 0:14 · ~6,3 МБ».
+  String _infoLine() {
+    String n(double v) => v.toStringAsFixed(1).replaceAll('.', ',');
+    if (_isVideo) {
+      final q = widget.opts.videoQuality;
+      final total = ((_endMs - _startMs).clamp(0, _durationMs) / 1000).round();
+      final m = total ~/ 60;
+      final sec = (total % 60).toString().padLeft(2, '0');
+      return '${q}p · $m:$sec · ~${n(_videoMb(q))} ${_mbUnit()}';
+    }
+    var w = _workW > 0 ? _workW : widget.asset.orientatedWidth;
+    var h = _workH > 0 ? _workH : widget.asset.orientatedHeight;
+    if (w <= 0 || h <= 0) return '';
+    double mb;
+    if (widget.opts.hd) {
+      mb = _fileBytes > 0 ? _fileBytes / (1024 * 1024) : w * h / 1e6 * 0.34;
+    } else {
+      final longest = math.max(w, h);
+      if (longest > kPhotoSendMaxSideSd) {
+        final k = kPhotoSendMaxSideSd / longest;
+        w = (w * k).round();
+        h = (h * k).round();
+      }
+      mb = w * h / 1e6 * 0.24;
+    }
+    return '$w×$h, ~${n(mb)} ${_mbUnit()}';
+  }
+
+  int _displayDecodeSide(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final longest = math.max(size.width, size.height) * dpr * 1.5;
+    return longest.clamp(1024, 3072).round();
+  }
+
+  /// Пока грузится оригинал — миниатюра из сетки, без спиннера.
+  Widget _placeholder() {
+    final thumb = widget.thumbnail;
+    if (thumb == null) return const SecretlySpinner(color: Colors.white);
+    return FutureBuilder<Uint8List?>(
+      future: thumb,
+      builder: (context, snap) {
+        final bytes = snap.data;
+        if (bytes == null) return const SizedBox.shrink();
+        return Image.memory(bytes, fit: BoxFit.contain, gaplessPlayback: true);
+      },
+    );
+  }
+
+  Widget _roundGlass({required Widget child, double size = 44}) {
+    return _glass(
+      radius: BorderRadius.circular(size / 2),
+      child: SizedBox(width: size, height: size, child: child),
+    );
+  }
+
+  /// Bottom edit-tools island — a glass pill in our style (matte blur, soft
+  /// white border), sized/positioned like the reference screenshots. Only
+  /// FUNCTIONAL tools are shown (no dead buttons): today = photo rotate. Crop /
+  /// draw / adjust and the video cover picker land here in later passes.
 }
 
 /// Interactive free-form photo crop. Shows the image (respecting the editor's

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import 'album_caption.dart';
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -104,6 +105,7 @@ import '../attachments/attachment_failure.dart'
 import 'pending_attachment_upload.dart';
 import 'upload_background_task.dart';
 import '../media/media_metadata_scrub.dart';
+import '../media/photo_compressor.dart';
 import '../media/video_compressor.dart';
 import '../l10n/app_localizations.dart';
 import '../crypto/support_seal.dart';
@@ -111,6 +113,7 @@ import '../messages/room_flags.dart' show Rooms2Flags;
 import '../messages/call_flags.dart';
 import '../messages/disappearing_flags.dart';
 import '../messages/privacy_flags.dart';
+import '../stickers/premium_sticker_packs.dart';
 import '../stickers/sticker_flags.dart';
 import '../stickers/sticker_pack_lock.dart';
 import '../stickers/sticker_share_mode.dart';
@@ -2733,6 +2736,75 @@ class AppController {
   /// (a star for everyone would be meaningless). Published via premium_badge.
   bool get myPremiumBadge => entitlementStateNow.tier.isPaid;
 
+  /// SendFlow Э5: умеют ли ВСЕ устройства получателей спойлер и одноразовый
+  /// просмотр (`msx1`). Неизвестно (нет сведений, нет сети) — нет: лучше не
+  /// дать кнопку, чем показать снимок открыто у старой сборки.
+  Future<bool> mediaSpoilerSupportedFor(String convoId) async {
+    try {
+      final db = _db;
+      final did = _deviceId;
+      if (db == null || did == null) return false;
+      final id = convoId.trim();
+      // Группы: конверт группового вложения пока не несёт эти флаги —
+      // участники увидели бы медиа открыто. До доработки — нет.
+      if (id.startsWith('group:')) return false;
+      final profiles = id.startsWith('group:')
+          ? (await listGroupMembers(id))
+                .where((p) => p.trim().isNotEmpty && p != _profileId)
+                .toList()
+          : <String>[id];
+      if (profiles.isEmpty) return false;
+      final devices = <String>[];
+      for (final pid in profiles) {
+        final list = await _listRecipientDevicesForSend(
+          peerProfileId: pid,
+          selfDeviceId: did,
+        );
+        if (list.isEmpty) return false;
+        devices.addAll(list);
+      }
+      final capable = await db.deviceIdsWithCap(
+        deviceIds: devices,
+        cap: E2ePayloadV1.capMediaSpoilerOnce,
+      );
+      return devices.every(capable.contains);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Есть ли на устройстве сообщения старше [cutoffMs] (окно оценки
+  /// отличает старый аккаунт от нового). Нет базы — считаем, что есть:
+  /// лучше не попросить нового, чем попросить старого.
+  Future<bool> hasLocalMessagesBefore(int cutoffMs) async {
+    try {
+      final db = _db;
+      if (db == null) return true;
+      return await db.hasEventsBefore(cutoffMs);
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Можно ли отправлять стикеры премиум-наборов (premium_sticker_packs.dart).
+  /// Тот же замок, что у остальных премиум-возможностей.
+  bool get premiumStickersUnlocked =>
+      _premiumStickersUnlockedOverrideForTesting ??
+      FeatureGate.isUnlocked(entitlementStateNow, GatedFeature.premiumStickers);
+
+  bool? _premiumStickersUnlockedOverrideForTesting;
+  @visibleForTesting
+  set premiumStickersUnlockedOverrideForTesting(bool? value) =>
+      _premiumStickersUnlockedOverrideForTesting = value;
+
+  /// 🔴 Стикер премиум-набора без Premium не уходит (и из «Недавних» после
+  /// окончания подписки).
+  void _ensurePremiumStickerAllowed(SecretlyStickerDescriptor sticker) {
+    if (isPremiumStickerPackId(sticker.packId) && !premiumStickersUnlocked) {
+      throw PremiumStickerLockedException(sticker.packId);
+    }
+  }
+
   String? _myFrameId;
   // 🔴 13.11.2026: часть рамок и обложек бесплатна (`kFreeAvatarFrameIds`,
   // `kFreeProfileCoverIds`). Без проверки по id бесплатная рамка у бесплатного
@@ -3415,7 +3487,11 @@ class AppController {
         duration: duration ?? Duration.zero,
       );
       unawaited(_syncNativeMediaPlayback(force: true));
-      await _sharedAudioPlayer.play();
+      // 🔴 НЕ ЖДАТЬ play() (26.11.2026): у just_audio он завершается, когда
+      // трек ДОИГРАЕТ. Автопереход ждал его под флагом «переходим», и флаг
+      // снимался лишь в конце следующего трека — его окончание приходило под
+      // поднятым флагом, и третье голосовое уже не включалось.
+      unawaited(_sharedAudioPlayer.play().catchError((Object _) {}));
     } catch (_) {
       _sharedAudioQueue = previousQueue;
       _sharedAudioQueueIndex = previousQueueIndex;
@@ -5431,7 +5507,11 @@ class AppController {
       // Whether a compress phase will actually RUN (drives the first half of the
       // ring). Keyed on the size threshold — NOT on whether the re-encode shrank
       // the file — so the ring never jumps backward if it didn't shrink.
-      final willCompress = isVideo && originalTotal > VideoCompressor.skipBelowBytes;
+      final videoSide = pending.videoMaxSide ?? 1920;
+      final willCompress = isVideo &&
+          (originalTotal > VideoCompressor.skipBelowBytes ||
+              pending.muteVideo ||
+              videoSide < 1920);
 
       void reportVideoFraction(double fraction) {
         final sent = (originalTotal * fraction.clamp(0.0, 1.0)).round();
@@ -5476,11 +5556,30 @@ class AppController {
         sendPath = await VideoCompressor.compressForSend(
           pending.filePath,
           onProgress: (f) => reportVideoFraction(compressWeight * f),
+          maxSide: videoSide,
+          mute: pending.muteVideo,
         );
+        // «Без звука» обещан человеку — при сбое пережатия не отправляем
+        // оригинал со звуком.
+        if (pending.muteVideo && sendPath == pending.filePath) {
+          throw AttachmentFailure(AttachmentFailureCode.generic);
+        }
         if (pending.cancelToken.isCanceled) {
           _dropPendingPhoto(pending);
           return;
         }
+      }
+
+      // SendFlow: HD/SD для фото (не файлом и не GIF).
+      final photoSide = pending.photoMaxSide;
+      var sendMime = pending.mime;
+      if (photoSide != null &&
+          !pending.asFile &&
+          pending.mime.toLowerCase().startsWith('image/') &&
+          pending.mime.toLowerCase() != 'image/gif') {
+        final before = sendPath;
+        sendPath = await downscalePhotoForSend(sendPath, maxSide: photoSide);
+        if (sendPath != before) sendMime = 'image/jpeg';
       }
 
       // No wall-clock timeout: large media may upload for a while on a slow
@@ -5499,12 +5598,13 @@ class AppController {
           : null;
       final payloadEventId = await (pending.isGroup
           ? sendGroupAttachmentFile(
+              flags: pending.flags,
               groupId: pending.convoId,
               filePath: sendPath,
               width: hints?.width,
               height: hints?.height,
               thumbB64: hints?.thumbB64,
-              mime: pending.mime,
+              mime: sendMime,
               replyToPayloadEventId: pending.replyToPayloadEventId,
               mediaGroupId: pending.mediaGroupId,
               cancelToken: pending.cancelToken,
@@ -5520,13 +5620,14 @@ class AppController {
               onLocalRowInserting: onRowInserting,
             )
           : sendAttachmentFile(
+              flags: pending.flags,
               onLocalRowInserting: onRowInserting,
               peerProfileId: pending.targetId,
               filePath: sendPath,
               width: hints?.width,
               height: hints?.height,
               thumbB64: hints?.thumbB64,
-              mime: pending.mime,
+              mime: sendMime,
               replyToPayloadEventId: pending.replyToPayloadEventId,
               mediaGroupId: pending.mediaGroupId,
               cancelToken: pending.cancelToken,
@@ -5581,12 +5682,9 @@ class AppController {
 
   Future<void> _runPendingPhotoAlbumUpload(PendingPhotoAlbumUpload album) async {
     try {
-      // Album caption (if any) rides inside the FIRST item's bubble.
-      final albumCaption = album.items.isEmpty
-          ? null
-          : (album.items.first.caption.trim().isEmpty
-                ? null
-                : album.items.first.caption.trim());
+      // Album caption (if any) rides inside the FIRST item's event.
+      // Подпись могли написать к любому снимку альбома (album_caption.dart).
+      final albumCaption = albumCaptionOf(album.items.map((e) => e.caption));
 
       // Per-item smooth progress across compress→upload, mapped onto each item's
       // ORIGINAL byte total so the ring never freezes at 0 nor shrinks when the
@@ -5600,7 +5698,9 @@ class AppController {
       final willCompress = <bool>[
         for (final item in album.items)
           VideoCompressor.isVideoMime(item.mime) &&
-              item.totalBytes > VideoCompressor.skipBelowBytes,
+              (item.totalBytes > VideoCompressor.skipBelowBytes ||
+                  item.muteVideo ||
+                  (item.videoMaxSide ?? 1920) < 1920),
       ];
 
       void reportItemFraction(int index, double fraction) {
@@ -5633,7 +5733,22 @@ class AppController {
           path = await VideoCompressor.compressForSend(
             item.filePath,
             onProgress: (f) => reportItemFraction(i, compressWeight * f),
+            maxSide: item.videoMaxSide ?? 1920,
+            mute: item.muteVideo,
           );
+          if (item.muteVideo && path == item.filePath) {
+            throw AttachmentFailure(AttachmentFailureCode.generic);
+          }
+        }
+        // SendFlow: HD/SD для фото альбома.
+        var itemMime = item.mime;
+        final side = item.photoMaxSide;
+        if (side != null &&
+            item.mime.toLowerCase().startsWith('image/') &&
+            item.mime.toLowerCase() != 'image/gif') {
+          final before = path;
+          path = await downscalePhotoForSend(path, maxSide: side);
+          if (path != before) itemMime = 'image/jpeg';
         }
         // О10: у ролика альбома — пропорции и размытый кадр.
         final hints = VideoCompressor.isVideoMime(item.mime)
@@ -5642,7 +5757,7 @@ class AppController {
         files.add(
           AttachmentFileSendRequest(
             filePath: path,
-            mime: item.mime,
+            mime: itemMime,
             width: hints?.width,
             height: hints?.height,
             thumbB64: hints?.thumbB64,
@@ -5671,6 +5786,7 @@ class AppController {
           : null;
       final eventIds = await (album.isGroup
           ? sendGroupAttachmentFiles(
+              flags: album.items.first.flags,
               groupId: album.convoId,
               files: files,
               replyToPayloadEventId: album.items.first.replyToPayloadEventId,
@@ -5686,6 +5802,7 @@ class AppController {
               onLocalRowInserting: onRowInserting,
             )
           : sendAttachmentFiles(
+              flags: album.items.first.flags,
               peerProfileId: album.targetId,
               files: files,
               replyToPayloadEventId: album.items.first.replyToPayloadEventId,
@@ -5722,7 +5839,8 @@ class AppController {
       return;
     }
     try {
-      final firstCaption = batch.items.first.caption.trim();
+      final firstCaption =
+          albumCaptionOf(batch.items.map((e) => e.caption)) ?? '';
       // Ролик, отправляемый как видео (не файлом), сперва сжимается — как у
       // телефона; кольцо делится на сжатие и загрузку и только растёт.
       const compressWeight = 0.5;
@@ -7352,6 +7470,7 @@ class AppController {
     String? senderDisplayName,
     String? convoTitle,
     String? previewText,
+    bool silent = false,
   }) {
     final cleanedConvoId = convoId.trim();
     final cleanedMessageKind = messageKind.trim().toLowerCase();
@@ -7386,6 +7505,9 @@ class AppController {
         if (cleanedSenderDisplayName != null)
           'sender_display_name': cleanedSenderDisplayName,
         if (cleanedConvoTitle != null) 'convo_title': cleanedConvoTitle,
+        // SendFlow Э6: «Отправить без звука» — реле шлёт уведомление без
+        // звука. Старое реле поле пропускает (serde), будет со звуком.
+        if (silent) 'silent': true,
       },
     });
   }
@@ -13831,6 +13953,8 @@ class AppController {
 
         final receiptPayload = E2ePayloadV1(
           senderDeviceId: did,
+          // Возможности сборки (спойлер/одноразовое и др.) — с отчётом.
+          caps: E2ePayloadV1.ownCaps,
           createdAtMs: now,
           events: receiptEvents,
         );
@@ -31737,10 +31861,7 @@ class AppController {
           [MsgEventV1(eventId: _uuid.v4(), text: controlText)],
       // Возможности этой сборки: по ним собеседники решают, выдавать ли ей
       // ключ комнаты (выпущенным сборкам — нет).
-      caps: const <String>[
-        E2ePayloadV1.capRoomKeyV2,
-        kRoomCallKeyCapability,
-      ],
+      caps: E2ePayloadV1.ownCaps,
     );
 
     // Durable per-recipient backstop, mirroring the proven 1:1 pending-no-device
@@ -33866,6 +33987,147 @@ class AppController {
   /// planned time (the "Отправить сейчас" menu action). Routes to the group or
   /// 1:1 fire path by convo kind. Guards against a concurrent sweep firing the
   /// same placeholder (the fire methods clear the guard in their `finally`).
+  /// Отложенное личное, которое уже лежит на реле (26.11.2026). Раньше его
+  /// нельзя было ни изменить (в срок уходил старый текст), ни удалить
+  /// (удалялось только здесь, а в срок всё равно приходило), ни отправить
+  /// сейчас. Теперь каждая ещё не выданная копия отзывается с реле и, если
+  /// не [drop], выгружается заново из своей копии (с правкой, если она была)
+  /// на [deliverAtMs] (`null` — прежний срок, `0` — сразу).
+  ///
+  /// Возвращает, сколько копий было и сколько отозвано: копию, которую реле
+  /// уже выдало, отозвать нельзя — тогда работает обычная правка/удаление.
+  Future<({int held, int handled, int unknown, int lastDeliverAtMs})>
+  _reissueHeldScheduledDirect(
+    String localEventId, {
+    bool drop = false,
+    int? deliverAtMs,
+  }) async {
+    final db = _db;
+    final relay = _relay;
+    final ratchet = _ratchetV3;
+    final did = _deviceId;
+    const none = (held: 0, handled: 0, unknown: 0, lastDeliverAtMs: 0);
+    if (db == null || relay == null || ratchet == null || did == null) {
+      return none;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final rows = await db.outboxHeldRowsForEventRef(localEventId, nowMs: now);
+    var handled = 0;
+    var unknown = 0;
+    var lastDeliverAt = 0;
+    Uint8List? plain;
+    for (final row in rows) {
+      final msgId = ((row['msg_id'] as String?) ?? '').trim();
+      final toDeviceId = ((row['to_device_id'] as String?) ?? '').trim();
+      final convoId = ((row['convo_id'] as String?) ?? '').trim();
+      final oldDeliverAt = (row['deliver_at_ms'] as num?)?.toInt() ?? 0;
+      if (msgId.isEmpty || toDeviceId.isEmpty) continue;
+      if (convoId.isEmpty || !canReplayLocalCopyToPeer(convoId)) continue;
+      final state = OutboxSendState.normalize(
+        (row['state'] as String?) ?? '',
+      );
+      // Срок ещё не наступил, значит реле копию не выдало: «нет у меня»
+      // означает «не доходила», и её можно заменить. Копия, которая прямо
+      // сейчас уходит, — неизвестность: её не трогаем.
+      if (state == OutboxSendState.sending) {
+        unknown++;
+        lastDeliverAt = math.max(lastDeliverAt, oldDeliverAt);
+        continue;
+      }
+      try {
+        if (state != OutboxSendState.pending) {
+          final cancelled = await relay.cancelScheduled(
+            toDeviceId: toDeviceId,
+            msgId: msgId,
+          );
+          if (cancelled == null) {
+            // Нет ответа: старая копия, возможно, на реле и придёт в срок.
+            unknown++;
+            lastDeliverAt = math.max(lastDeliverAt, oldDeliverAt);
+            continue;
+          }
+          if (!cancelled && oldDeliverAt - now < 3000) {
+            // Впритык к сроку «нет у меня» может значить «уже выдал».
+            unknown++;
+            lastDeliverAt = math.max(lastDeliverAt, oldDeliverAt);
+            continue;
+          }
+        }
+        await db.outboxDeleteByMsgId(msgId);
+        handled++;
+        if (drop) continue;
+        plain ??= await _decryptStoredLocalPayloadBytes(localEventId);
+        if (plain == null) continue;
+        final deliverAt = deliverAtMs ?? oldDeliverAt;
+        final local = E2ePayloadV1.decode(plain);
+        // Срок исчезновения — как у первой выгрузки (своя копия после
+        // правки могла его потерять).
+        final eventRow = await db.eventGet(localEventId);
+        final expSeconds = (eventRow?['disappear_seconds'] as num?)?.toInt();
+        final events = [
+          for (final e in local.events)
+            if (e is MsgEventV1 && e.exp == null && (expSeconds ?? 0) > 0)
+              MsgEventV1(
+                eventId: e.eventId,
+                text: e.text,
+                replyToEventId: e.replyToEventId,
+                mentions: e.mentions,
+                topicId: e.topicId,
+                linkPreview: e.linkPreview,
+                exp: expSeconds,
+              )
+            else
+              e,
+        ];
+        // Получатель видит время доставки, как у первой выгрузки.
+        final peerPayload = E2ePayloadV1(
+          senderDeviceId: local.senderDeviceId,
+          createdAtMs: deliverAt > 0 ? deliverAt : now,
+          events: events,
+        );
+        final wire = await _encryptToPeerSerialized(
+          ratchet: ratchet,
+          selfDeviceId: did,
+          peerProfileId: convoId,
+          peerDeviceId: toDeviceId,
+          plaintext: Uint8List.fromList(peerPayload.encode()),
+        );
+        await db.outboxUpsert(
+          msgId: _uuid.v4(),
+          toDeviceId: toDeviceId,
+          ciphertextB64: base64Encode(wire),
+          ttlSeconds: _outboxUserMessageTtlSeconds,
+          state: OutboxSendState.pending,
+          attemptCount: 0,
+          nextRetryAtMs: now,
+          createdAtMs: now,
+          correlationId: (row['correlation_id'] as String?)?.trim(),
+          payloadEventId: (row['payload_event_id'] as String?)?.trim(),
+          convoId: convoId,
+          transportMetaJson: row['transport_meta_json'] as String?,
+          expiresAtMs:
+              (deliverAt > 0 ? deliverAt : now) + _outboxUserMessageTtlMs,
+          eventIdRef: localEventId,
+          deliverAtMs: deliverAt,
+        );
+      } catch (e) {
+        unknown++;
+        lastDeliverAt = math.max(lastDeliverAt, oldDeliverAt);
+        DiagLog.event('send', 'sched_reissue_failed', {
+          'to_dev': DiagLog.pfx(toDeviceId),
+          'reason': _classifyShortReason(e),
+        });
+      }
+    }
+    if (handled > 0 && !drop) _kickRelayOutbox();
+    return (
+      held: rows.length,
+      handled: handled,
+      unknown: unknown,
+      lastDeliverAtMs: lastDeliverAt,
+    );
+  }
+
   Future<void> sendScheduledMessageNow({
     required String convoId,
     required String eventId,
@@ -33873,6 +34135,18 @@ class AppController {
     final id = eventId.trim();
     if (id.isEmpty) return;
     final isGroup = convoId.startsWith('group:');
+    // Уже на реле: забрать и выдать сразу.
+    if (!isGroup) {
+      final r = await _reissueHeldScheduledDirect(id, deliverAtMs: 0);
+      if (r.held > 0) {
+        if (r.handled > 0) await _db?.eventSetScheduledAt(id, null);
+        _changed.add(null);
+        if (r.handled == 0) {
+          throw StateError('Scheduled message could not be sent now');
+        }
+        return;
+      }
+    }
     final firing = isGroup
         ? _firingScheduledGroupEventIds
         : _firingScheduledDirectEventIds;
@@ -33891,6 +34165,7 @@ class AppController {
     String? replyToPayloadEventId,
     String? topicId,
   }) async {
+    _ensurePremiumStickerAllowed(sticker);
     // Список тем — раньше сообщения в тему (см. [shouldResendRoomTopics]).
     unawaited(_maybeResendRoomTopics(groupId, topicId));
     final db = _db;
@@ -34225,6 +34500,7 @@ class AppController {
   }
 
   Future<String> sendGroupAttachmentFile({
+    AttachmentEventFlags flags = AttachmentEventFlags.none,
     required String groupId,
     required String filePath,
     String? mime,
@@ -34483,6 +34759,9 @@ class AppController {
           waveform: waveform,
           topicId: normalizedTopicId,
           caption: captionForPayload,
+          captionAbove: flags.captionAbove,
+          spoiler: flags.spoiler,
+          viewOnce: flags.viewOnce,
           filename: resolvedFilename,
           videoNote: videoNote,
           durationMs: durationMs,
@@ -34498,6 +34777,7 @@ class AppController {
     final localCipher = await crypto.encrypt(payload.encode());
     final localEventId = 'local:grpatt:$msgEventId';
     final transportMetaJson = _buildChatTransportMetaJson(
+          silent: flags.silent,
       convoId: groupId,
       isGroup: true,
       messageKind: 'attachment',
@@ -34913,14 +35193,50 @@ class AppController {
     required String convoId,
     required String query,
     int limit = 1000,
+    // Сколько последних строк смотреть. Поиск внутри чата смотрит всю
+    // историю (до 5 000 строк, 26.11.2026: было 200 — старое «не
+    // находилось»); быстрый поиск по всем чатам на ПК — по-прежнему 200.
+    int scanLimit = 200,
+    // Новый запрос отменяет прежний: без этого каждая пауза в наборе
+    // запускала ещё один полный просмотр, и они копились.
+    bool Function()? isCancelled,
   }) async {
     final q = query.trim();
     if (q.isEmpty || limit <= 0) return const <ChatSearchHit>[];
     final qLower = q.toLowerCase();
-    // loadEvents returns newest-first (DB `ORDER BY created_at_ms DESC`); reverse
-    // to chronological so hit index 0 is the OLDEST match.
-    final events = (await loadEvents(convoId)).reversed.toList(growable: false);
+    bool cancelled() => isCancelled?.call() ?? false;
+    // loadEvents returns newest-first (DB `ORDER BY created_at_ms DESC`).
+    // Совпадения собираются от НОВЫХ к старым (предел [limit] срезает
+    // старейшие, а не свежие), а отдаются по времени: 0 — самое старое.
+    final events = await loadEvents(convoId, limit: scanLimit);
     final db = _db;
+    // Удалённое у всех (метками от автора) не находится.
+    final commands =
+        <({String senderDeviceId, String text, String localState})>[];
+    final textByEvent = <String, String>{};
+    for (final e in events) {
+      if (cancelled()) return const <ChatSearchHit>[];
+      try {
+        final cacheKey =
+            '${e.eventId}|${(e.localCiphertextB64 ?? e.ciphertextB64).length}'
+            '|${(e.localCiphertextB64 ?? e.ciphertextB64).hashCode}';
+        final raw =
+            _searchPlainCache[cacheKey] ?? await decryptPlainAsync(e);
+        if (_searchPlainCache.length > 12000) {
+          _searchPlainCache.remove(_searchPlainCache.keys.first);
+        }
+        _searchPlainCache[cacheKey] = raw;
+        textByEvent[e.eventId] = raw;
+        if (isDeleteForAllCommandText(raw)) {
+          commands.add((
+            senderDeviceId: e.senderDeviceId,
+            text: raw,
+            localState: e.localState,
+          ));
+        }
+      } catch (_) {}
+    }
+    final deleted = await authorizeDeleteForAll(convoId, commands);
     // Per-device sender cache so we resolve each distinct device at most once.
     // Local-only (`deviceProfileCached`) — never a network call — to keep search
     // fast and fail-soft; unresolved devices simply carry a null profile id.
@@ -34944,11 +35260,24 @@ class AppController {
 
     final hits = <ChatSearchHit>[];
     for (final e in events) {
+      if (cancelled()) return const <ChatSearchHit>[];
+      final raw = textByEvent[e.eventId];
+      if (raw == null) continue; // не расшифровалось
+      if (deleted.contains((e.payloadEventId ?? '').trim())) continue;
+      // Служебные строки (голоса, темы, закреплённые, удаление) — не текст;
+      // пересланное, опрос и событие ищутся по тому, что видно; у фото и
+      // файлов — подпись.
+      if (isDeleteForAllCommandText(raw) || isHiddenMessageControlText(raw)) {
+        continue;
+      }
       String text;
-      try {
-        text = await decryptPlainAsync(e);
-      } catch (_) {
-        continue; // skip undecryptable rows
+      if (e.type == 'att') {
+        final payload = await payloadEventForChatEvent(e);
+        text = payload is AttachmentEventV1
+            ? (payload.caption ?? '').trim()
+            : '';
+      } else {
+        text = visibleMessageText(raw);
       }
       if (text.isEmpty) continue;
       // Resolve the author once per matching row. Outgoing → me (profile id);
@@ -34983,10 +35312,16 @@ class AppController {
             isOutgoing: outgoing,
           ),
         );
-        if (hits.length >= limit) return hits;
+        if (hits.length >= limit) break;
         from = idx + q.length; // non-overlapping occurrences
       }
+      if (hits.length >= limit) break;
     }
+    // По времени, внутри сообщения — по месту.
+    hits.sort((a, b) {
+      final t = a.createdAtMs.compareTo(b.createdAtMs);
+      return t != 0 ? t : a.matchStart.compareTo(b.matchStart);
+    });
     return hits;
   }
 
@@ -36866,12 +37201,15 @@ class AppController {
     }
   }
 
-  Future<void> deleteEventsLocal({
+  /// Возвращает, сколько сообщений НЕ удалено: отложенное, которое не
+  /// удалось снять с реле (нет связи), остаётся — иначе оно пришло бы
+  /// собеседнику в срок, а у меня его бы уже не было.
+  Future<int> deleteEventsLocal({
     required String convoId,
     required List<String> eventIds,
   }) async {
     final db = _db;
-    if (db == null || eventIds.isEmpty) return;
+    if (db == null || eventIds.isEmpty) return 0;
     // 🔴 DF-1 (17.09.2026). Принадлежность чату проверялась по 5 000 САМЫХ
     // СТАРЫХ событий (`listEventsChronological` идёт по возрастанию): в
     // длинной переписке свежее сообщение не находилось, и «удалить у себя»
@@ -36880,10 +37218,24 @@ class AppController {
       convoId: convoId,
       eventIds: eventIds,
     )).toSet();
-    final filtered = eventIds.where(existing.contains).toList(growable: false);
-    if (filtered.isEmpty) return;
+    var filtered = eventIds.where(existing.contains).toList(growable: false);
+    if (filtered.isEmpty) return 0;
+    // Отложенное, ещё лежащее на реле, отзывается: «удалить» значит «не
+    // присылать» (раньше в срок оно всё равно приходило).
+    final kept = <String>{};
+    if (!convoId.startsWith('group:')) {
+      for (final id in filtered) {
+        try {
+          final r = await _reissueHeldScheduledDirect(id, drop: true);
+          if (r.unknown > 0) kept.add(id);
+        } catch (_) {}
+      }
+    }
+    filtered = filtered.where((id) => !kept.contains(id)).toList();
+    if (filtered.isEmpty) return kept.length;
     await db.deleteEventsByIds(filtered);
     _changed.add(null);
+    return kept.length;
   }
 
   Future<void> deleteChat({required String convoId}) async {
@@ -36958,7 +37310,7 @@ class AppController {
       ).toIso8601String();
       final fromMe = e.senderDeviceId == deviceId;
       final who = fromMe ? 'me' : e.senderDeviceId;
-      final text = await decryptPlainAsync(e);
+      final text = visibleMessageText(await decryptPlainAsync(e));
       b.writeln('[$when] $who: $text');
     }
 
@@ -37211,6 +37563,33 @@ class AppController {
     await db.contactSetAvatarPath(profileId: profileId, avatarPath: path);
     _changed.add(null);
     _scheduleManagedDeviceContactSync();
+  }
+
+  /// Строка сообщения по его номеру — для цитаты ответа на то, что ещё не
+  /// загружено в ленту (26.11.2026). `null` — у нас его нет.
+  Future<ChatEvent?> chatEventForPayloadId(
+    String convoId,
+    String payloadEventId,
+  ) async {
+    final db = _db;
+    if (db == null || payloadEventId.trim().isEmpty) return null;
+    final effectiveConvoId = await _canonicalChatConvoIdForLoad(convoId);
+    final rows = await db.eventsByPayloadEventId(
+      convoId: effectiveConvoId,
+      payloadEventId: payloadEventId,
+    );
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    return ChatEvent(
+      eventId: r['event_id'] as String,
+      createdAtMs: (r['created_at_ms'] as num?)?.toInt() ?? 0,
+      type: (r['type'] as String?) ?? 'msg',
+      ciphertextB64: (r['ciphertext_b64'] as String?) ?? '',
+      localCiphertextB64: r['local_ciphertext_b64'] as String?,
+      senderDeviceId: (r['sender_device_id'] as String?) ?? '',
+      localState: (r['local_state'] as String?) ?? 'received',
+      payloadEventId: r['payload_event_id'] as String?,
+    );
   }
 
   Future<String?> cachedProfileIdByDeviceId(String deviceId) async {
@@ -41555,6 +41934,81 @@ class AppController {
     _changed.add(null);
   }
 
+  /// Номера сообщений чата, текст которых правили (пометка «изменено»,
+  /// 26.11.2026). Хранится локально, рядом с самой правкой.
+  Future<Set<String>> editedPayloadIds(String convoId) async {
+    final id = convoId.trim();
+    final cached = _editedIdsCache[id];
+    if (cached != null) return cached;
+    final db = _db;
+    if (db == null) return const <String>{};
+    var out = <String>{};
+    try {
+      final raw = await db.localKvGet('edited_v1:$id');
+      if (raw != null && raw.isNotEmpty) {
+        out = (jsonDecode(raw) as List).whereType<String>().toSet();
+      }
+    } catch (_) {}
+    // Пометки чата держим в памяти: лента спрашивает на каждой пересборке.
+    if (_editedIdsCache.length > 100) {
+      _editedIdsCache.remove(_editedIdsCache.keys.first);
+    }
+    return _editedIdsCache[id] = out;
+  }
+
+  final Map<String, Set<String>> _editedIdsCache = <String, Set<String>>{};
+  Future<void> _editedMarkChain = Future<void>.value();
+
+  /// По одной записи за раз: две правки одновременно не теряют пометку.
+  Future<void> _markMessageEdited(String convoId, String payloadEventId) {
+    final next = _editedMarkChain.then((_) async {
+      final db = _db;
+      if (db == null) return;
+      final id = convoId.trim();
+      final ids = (await editedPayloadIds(id)).toList()
+        ..remove(payloadEventId)
+        ..add(payloadEventId);
+      // Память на чат ограничена: самые давние пометки уходят первыми.
+      final kept = ids.length > 2000 ? ids.sublist(ids.length - 2000) : ids;
+      _editedIdsCache[id] = kept.toSet();
+      try {
+        await db.localKvSet('edited_v1:$id', jsonEncode(kept));
+      } catch (_) {}
+    });
+    _editedMarkChain = next.catchError((_) {});
+    return next;
+  }
+
+  /// Сколько раз записывались отметки «прочитано» в комнатах.
+  int get roomReceiptsVersion => _db?.roomReceiptsSeq ?? 0;
+
+  /// Сколько своих строк уже вставлено (см. [AppDb.outgoingInsertSeq]).
+  int get outgoingInsertSeq => _db?.outgoingInsertSeq ?? 0;
+
+  /// Счёт своих вставок в чатах [convoIds] (сумма).
+  int outgoingInsertSeqFor(Iterable<String?> convoIds) {
+    final db = _db;
+    if (db == null) return 0;
+    var sum = 0;
+    for (final id in convoIds.whereType<String>().toSet()) {
+      sum += db.outgoingInsertSeqByConvo[id.trim()] ?? 0;
+    }
+    return sum;
+  }
+
+  /// Своя строка, вставленная последней, — если это неотправленное сообщение
+  /// чата [convoId]; иначе `null`.
+  Future<String?> failedOutgoingInsertedSince(String convoId, int seq) async {
+    final db = _db;
+    if (db == null || db.outgoingInsertSeq == seq) return null;
+    final id = db.lastOutgoingInsertEventId;
+    if (id == null) return null;
+    final row = await db.eventGet(id);
+    if (row == null || (row['convo_id'] as String?) != convoId) return null;
+    if ((row['local_state'] as String?) != MessageLocalState.failed) return null;
+    return id;
+  }
+
   Future<void> retryOutgoingEventSend({required String localEventId}) async {
     final db = _db;
     if (db == null) {
@@ -41874,9 +42328,9 @@ class AppController {
     final did = (_deviceId ?? '').trim();
     if (pid.isEmpty || pid.startsWith('LOCAL-') || did.isEmpty) return;
     final normalizedConvoId = convoId.trim();
-    if (normalizedConvoId.isEmpty || normalizedConvoId.startsWith('group:')) {
-      return;
-    }
+    // Комнаты тоже (26.11.2026): рассылка правки участникам пропускает свой
+    // профиль, и мои другие устройства правку комнаты не получали вовсе.
+    if (normalizedConvoId.isEmpty) return;
 
     var ownTargets = <String>[];
     try {
@@ -42539,7 +42993,14 @@ class AppController {
       } else if (isOwn) {
         continue;
       } else if (cleanedConvoId.startsWith('group:')) {
-        if (editingDid.isEmpty || senderDid != editingDid) continue;
+        if (editingDid.isEmpty) continue;
+        if (senderDid != editingDid) {
+          // Правка с другого устройства того же человека (26.11.2026):
+          // написал с телефона, поправил с компьютера — раньше у всех
+          // оставался старый текст.
+          final rowPid = (await db.deviceProfileCached(senderDid))?.trim();
+          if (editingPid.isEmpty || rowPid != editingPid) continue;
+        }
       } else {
         if (editingPid.isEmpty || cleanedConvoId != editingPid) continue;
       }
@@ -42581,6 +43042,8 @@ class AppController {
             // Карточка остаётся; если правка убрала ссылку, её не покажет
             // проверка при выводе (`acceptIncomingLinkPreview`).
             linkPreview: payloadEvent.linkPreview,
+            // Исчезающее остаётся исчезающим (26.11.2026: правка теряла срок).
+            exp: payloadEvent.exp,
           ),
         ],
       );
@@ -42604,6 +43067,15 @@ class AppController {
       // preview widget's cache key so the edited last message re-renders.
       _convoPreviewEpoch[cleanedConvoId] =
           (_convoPreviewEpoch[cleanedConvoId] ?? 0) + 1;
+      _changed.add(null);
+    }
+    // Ещё не отправленное отложенное — не «изменено»: его никто не видел.
+    final scheduledOnly = rows.every(
+      (r) =>
+          ((r['local_state'] as String?) ?? '') == MessageLocalState.scheduled,
+    );
+    if (changed && !scheduledOnly) {
+      await _markMessageEdited(cleanedConvoId, cleanedPayloadEventId);
       _changed.add(null);
     }
     return changed;
@@ -42672,6 +43144,32 @@ class AppController {
     );
     if (isScheduledTarget) return true;
 
+    // Отложенное, уже выгруженное на реле: копии забираются и уходят заново
+    // с новым текстом к прежнему сроку. Правку собеседнику слать не нужно —
+    // если только какую-то копию реле уже не выдало.
+    var peerEditNeeded = true;
+    var editDeliverAtMs = 0;
+    if (!cleanedConvoId.startsWith('group:')) {
+      for (final r in targetRows ?? const <Map<String, Object?>>[]) {
+        final id = ((r['event_id'] as String?) ?? '').trim();
+        if (id.isEmpty || !isOwnDeviceId((r['sender_device_id'] as String?) ?? '')) {
+          continue;
+        }
+        final reissued = await _reissueHeldScheduledDirect(id);
+        if (reissued.held > 0 && reissued.handled == reissued.held) {
+          peerEditNeeded = false;
+        } else if (reissued.unknown > 0) {
+          // Старую копию снять не вышло (нет связи): она придёт в срок, а
+          // правка — сразу после неё, тоже придержанная реле. Раньше правка
+          // приходила раньше самого сообщения и терялась.
+          editDeliverAtMs = math.max(
+            editDeliverAtMs,
+            reissued.lastDeliverAtMs + 2000,
+          );
+        }
+      }
+    }
+
     final editedAtMs = DateTime.now().millisecondsSinceEpoch;
     final command = buildEditMessageCommand(
       convoId: cleanedConvoId.startsWith('group:')
@@ -42698,19 +43196,38 @@ class AppController {
           await sendControlMessage(
             peerProfileId: member,
             controlText: command,
+            // Правка живёт, как само сообщение (26.11.2026): служебный срок
+            // в час терял её у всех, кто был не в сети дольше часа.
+            ttlSeconds: _outboxUserMessageTtlSeconds,
           );
         } catch (_) {
           // Unreachable member re-syncs the edit on their next history fetch.
         }
       }
+      unawaited(
+        _mirrorMessageEditToOwnDevices(
+          convoId: cleanedConvoId,
+          payloadEventId: cleanedPayloadEventId,
+          text: editedText,
+          editedAtMs: editedAtMs,
+          mentions: mentions,
+        ),
+      );
     } else {
       final peerProfileId =
           await _normalizeDirectPeerProfileId(cleanedConvoId) ?? cleanedConvoId;
-      if (peerProfileId.isNotEmpty && !peerProfileId.startsWith('dev:')) {
+      if (peerEditNeeded &&
+          peerProfileId.isNotEmpty &&
+          !peerProfileId.startsWith('dev:')) {
         try {
           await sendControlMessage(
             peerProfileId: peerProfileId,
             controlText: command,
+            // Как само сообщение (26.11.2026): с часовым сроком собеседник,
+            // бывший не в сети дольше часа, навсегда оставался со старым
+            // текстом.
+            ttlSeconds: _outboxUserMessageTtlSeconds,
+            deliverAtMs: editDeliverAtMs,
           );
         } catch (_) {
           // Best-effort; the local edit stands and the peer re-syncs later.
@@ -42985,17 +43502,126 @@ class AppController {
   /// Предел честности: метки ищутся только в просмотренном окне строк. Если
   /// удаление старше окна, предпросмотр о нём не узнает — но такое сообщение
   /// уже и не было бы последним, то есть в предпросмотр не попало бы.
-  Set<String> _deletedPayloadIdsFromDecoded(
+  Future<Set<String>> _deletedPayloadIdsFromDecoded(
+    String convoId,
     List<(ChatEvent, String)> decoded,
   ) {
+    return authorizeDeleteForAll(convoId, [
+      for (final (e, text) in decoded)
+        if (text.trim().startsWith(kDeleteForAllCommandPrefix))
+          (senderDeviceId: e.senderDeviceId, text: text, localState: e.localState),
+    ]);
+  }
+
+  /// «Удалить у всех» — только автором (26.11.2026).
+  ///
+  /// Раньше любая метка удаления прятала названные в ней сообщения, кто бы
+  /// её ни прислал: участник с изменённым приложением мог скрыть у всех
+  /// чужие слова. Теперь метка действует на строку, только если её прислало
+  /// то же устройство, что и строку, или другое устройство того же человека.
+  ///
+  /// Принятое ещё и стирается из базы (кроме самой метки): иначе удалённое
+  /// продолжало жить в галерее, поиске и очереди голосовых. Строка, которой
+  /// ещё нет (метка пришла раньше), будет проверена, когда придёт.
+  ///
+  /// Возвращает номера сообщений, которые надо скрыть.
+  Future<Set<String>> authorizeDeleteForAll(
+    String convoId,
+    List<({String senderDeviceId, String text, String localState})> commands,
+  ) async {
+    final db = _db;
     final out = <String>{};
-    for (final (_, text) in decoded) {
-      final trimmed = text.trim();
-      if (!trimmed.startsWith(kDeleteForAllCommandPrefix)) continue;
-      out.addAll(parseDeleteForAllCommand(trimmed));
+    if (db == null || commands.isEmpty) return out;
+    final profileOf = <String, String?>{};
+    Future<String?> pidOf(String did) async {
+      if (profileOf.containsKey(did)) return profileOf[did];
+      String? pid;
+      if (isOwnDeviceId(did)) {
+        pid = profileId.trim();
+      } else {
+        try {
+          pid = (await db.deviceProfileCached(did))?.trim();
+        } catch (_) {}
+      }
+      return profileOf[did] = (pid == null || pid.isEmpty) ? null : pid;
+    }
+
+    final purge = <String>[];
+    for (final c in commands) {
+      final commander = c.senderDeviceId.trim();
+      if (commander.isEmpty) continue;
+      // Своя метка действует, только когда она ушла: ещё не отправленная
+      // или не отправившаяся («нет связи», «контакт не проверен») не стирает
+      // ничего — сообщение должно остаться, чтобы повторить (26.11.2026).
+      if (isOwnDeviceId(commander) &&
+          const {
+            MessageLocalState.pending,
+            MessageLocalState.failed,
+            MessageLocalState.scheduled,
+          }.contains(c.localState)) {
+        continue;
+      }
+      for (final id in parseDeleteForAllCommand(c.text.trim())) {
+        if (out.contains(id)) continue;
+        final cacheKey = '$convoId|$commander|$id';
+        final decided = _deleteForAllDecisions[cacheKey];
+        if (decided == true) {
+          out.add(id);
+          continue;
+        }
+        final rows = await db.eventsByPayloadEventId(
+          convoId: convoId,
+          payloadEventId: id,
+        );
+        var allowed = false;
+        final targets = <String>[];
+        for (final r in rows) {
+          final rowDid = ((r['sender_device_id'] as String?) ?? '').trim();
+          final rowId = ((r['event_id'] as String?) ?? '').trim();
+          if (rowDid.isEmpty || rowId.isEmpty || rowDid == 'unknown') continue;
+          final same =
+              rowDid == commander ||
+              (isOwnDeviceId(rowDid) && isOwnDeviceId(commander)) ||
+              // Личный чат: всё не моё в нём — от собеседника.
+              (!convoId.startsWith('group:') &&
+                  !isOwnDeviceId(rowDid) &&
+                  !isOwnDeviceId(commander)) ||
+              (await pidOf(rowDid) != null &&
+                  await pidOf(rowDid) == await pidOf(commander));
+          if (!same) continue;
+          allowed = true;
+          targets.add(rowId);
+        }
+        // Решение запоминается, когда строка уже есть: дальше ни запросов,
+        // ни проверок на каждую пересборку ленты и списка.
+        // «Нет» не запоминаем: владелец устройства может стать известен позже.
+        if (rows.isNotEmpty && allowed) {
+          if (_deleteForAllDecisions.length > 5000) {
+            _deleteForAllDecisions.remove(_deleteForAllDecisions.keys.first);
+          }
+          _deleteForAllDecisions[cacheKey] = true;
+        }
+        if (!allowed) continue;
+        out.add(id);
+        purge.addAll(targets);
+      }
+    }
+    if (purge.isNotEmpty) {
+      try {
+        await db.deleteEventsByIds(purge);
+        _changed.add(null);
+      } catch (_) {
+        // Не стёрлось — лента всё равно скрывает.
+      }
     }
     return out;
   }
+
+  final Map<String, bool> _deleteForAllDecisions = <String, bool>{};
+
+  /// Расшифрованный текст строк для поиска в чате: повторный поиск не
+  /// расшифровывает тысячи строк заново.
+  final Map<String, String> _searchPlainCache = <String, String>{};
 
   /// Была ли эта строка удалена у всех.
   bool _isPayloadDeleted(ChatEvent event, Set<String> deletedPayloadIds) {
@@ -43025,7 +43651,10 @@ class AppController {
       );
       decoded.add((e, await decryptPlainAsync(e)));
     }
-    final deletedPayloadIds = _deletedPayloadIdsFromDecoded(decoded);
+    final deletedPayloadIds = await _deletedPayloadIdsFromDecoded(
+      effectiveConvoId,
+      decoded,
+    );
     for (final (e, decrypted) in decoded) {
       // 🔴 УДАЛЁННОЕ У ВСЕХ НЕ ИМЕЕТ ПРАВА ЖИТЬ В ПРЕДПРОСМОТРЕ (16.08.2026).
       //
@@ -43093,7 +43722,10 @@ class AppController {
     final decodedForDeletes = <(ChatEvent, String)>[
       for (final e in events) (e, await decryptPlainAsync(e)),
     ];
-    final deletedPayloadIds = _deletedPayloadIdsFromDecoded(decodedForDeletes);
+    final deletedPayloadIds = await _deletedPayloadIdsFromDecoded(
+      effectiveConvoId,
+      decodedForDeletes,
+    );
 
     bool hiddenControlText(String text) {
       final t = text.trim();
@@ -43186,6 +43818,25 @@ class AppController {
       if (payload is AttachmentEventV1) {
         final mime = (payload.mime ?? '').toLowerCase();
         final sName = await resolveSenderName(event.senderDeviceId);
+        // SendFlow Э5: одноразовое и под спойлером — без миниатюр и без
+        // подписи в списке чатов (иначе спойлер раскрывался бы здесь).
+        if (payload.viewOnce || payload.spoiler) {
+          final video = mime.startsWith('video/');
+          return ChatListPreview(
+            kind: ChatListPreviewKind.photo,
+            text: payload.viewOnce
+                ? (video
+                      ? _localizedText(ru: 'Одноразовое видео', en: 'View-once video', uk: 'Одноразове відео', es: 'Vídeo de una vista', pt: 'Vídeo de visualização única', ptBr: 'Vídeo de visualização única', fr: 'Vidéo éphémère', de: 'Einmal-Video')
+                      : _localizedText(ru: 'Одноразовое фото', en: 'View-once photo', uk: 'Одноразове фото', es: 'Foto de una vista', pt: 'Foto de visualização única', ptBr: 'Foto de visualização única', fr: 'Photo éphémère', de: 'Einmal-Foto'))
+                : (video
+                      ? _localizedText(ru: 'Видео (спойлер)', en: 'Video (spoiler)', uk: 'Відео (спойлер)', es: 'Vídeo (spoiler)', pt: 'Vídeo (spoiler)', ptBr: 'Vídeo (spoiler)', fr: 'Vidéo (spoiler)', de: 'Video (Spoiler)')
+                      : _localizedText(ru: 'Фото (спойлер)', en: 'Photo (spoiler)', uk: 'Фото (спойлер)', es: 'Foto (spoiler)', pt: 'Foto (spoiler)', ptBr: 'Foto (spoiler)', fr: 'Photo (spoiler)', de: 'Foto (Spoiler)')),
+            imageBlobIds: const <String>[],
+            senderName: sName,
+            senderDeviceId: event.senderDeviceId,
+            senderLocalState: event.localState,
+          );
+        }
         if (mime.startsWith('image/')) {
           final imageBlobIds = <String>[payload.blobId];
           var caption = (payload.caption ?? '').trim();
@@ -43504,6 +44155,7 @@ class AppController {
     final db = _db;
     if (db == null) {
       SecretlyStickerCatalog.clearRemoteCatalog();
+      _stickerCatalogInMemory = false;
       return;
     }
     final packRows = await db.listStickerCatalogPacks();
@@ -43542,7 +44194,14 @@ class AppController {
       );
     }
     SecretlyStickerCatalog.applyRemoteCatalog(remotePacks);
+    _stickerCatalogInMemory = true;
   }
+
+  bool _stickerCatalogInMemory = false;
+
+  /// Наборы панели, если каталог уже прочитан; иначе `null`.
+  List<SecretlyStickerPack>? get stickerPickerPacksInMemory =>
+      _stickerCatalogInMemory ? SecretlyStickerCatalog.pickerPacks : null;
 
   Future<void> _pruneStaleStickerCatalogPacks({
     required RemoteStickerCatalogManifest manifest,
@@ -43702,6 +44361,18 @@ class AppController {
     } finally {
       _stickerCatalogSyncInFlight = false;
     }
+  }
+
+  /// То же, что [loadStickerPickerPacks], но каталог из памяти (его
+  /// перечитывают при запуске и после каждого изменения) — базу не трогаем.
+  /// Панель стикеров звала прежний вызов на каждом открытии: ~12 тыс. строк
+  /// из SQLCipher, и пустая панель до конца чтения (24.11.2026).
+  Future<List<SecretlyStickerPack>> loadStickerPickerPacksFromMemory({
+    bool refresh = true,
+  }) async {
+    if (!_stickerCatalogInMemory) await _loadStickerCatalogFromDb();
+    if (refresh) await _syncStickerCatalog();
+    return SecretlyStickerCatalog.pickerPacks;
   }
 
   Future<List<SecretlyStickerPack>> loadStickerPickerPacks({
@@ -44706,6 +45377,8 @@ class AppController {
   void _prefetchInboundAttachmentBlobs(E2ePayloadV1 payload) {
     final onCellularOnly = isCellularOnly(_autoDownloadNetwork ?? const <ConnectivityResult>[]);
     for (final ev in payload.events) {
+      // Одноразовое (SendFlow) заранее не скачивается — только при открытии.
+      if (ev is AttachmentEventV1 && ev.viewOnce) continue;
       if (ev is AttachmentEventV1 && ev.blobId.trim().isNotEmpty) {
         // П1 (разбор медиа 15.11.2026): по выбору человека на мобильной сети
         // часть файлов ждёт Wi-Fi или открытия. По умолчанию — всё, как было.
@@ -46301,6 +46974,9 @@ class AppController {
     SecretlyStickerDescriptor sticker, {
     required String favoritesTitle,
   }) async {
+    // Встроенный набор дизайнера: файла нет, а копия сделала бы премиум-
+    // стикер «своим» (обход замка) — в избранное не кладём.
+    if (isDesignerStickerPackId(sticker.packId)) return;
     final pid = (_profileId ?? '').trim();
     if (pid.isEmpty) throw StateError('profile not ready');
     // В панели у стикеров своих и поставленных наборов путь — файл в кеше.
@@ -46501,6 +47177,7 @@ class AppController {
     required SecretlyStickerDescriptor sticker,
     String? replyToPayloadEventId,
   }) async {
+    _ensurePremiumStickerAllowed(sticker);
     // Whether this is a user sticker whose blob must be uploaded lazily (after
     // the local mirror is shown) — true for a freshly created sticker and for a
     // reused one (from recents / «Мои стикеры») that has no live blob.
@@ -48498,6 +49175,7 @@ class AppController {
   }
 
   Future<String> sendAttachmentFile({
+    AttachmentEventFlags flags = AttachmentEventFlags.none,
     required String peerProfileId,
     required String filePath,
     String? mime,
@@ -48718,6 +49396,9 @@ class AppController {
             mediaGroupId: mediaGroupId,
             waveform: waveform,
             caption: caption,
+            captionAbove: flags.captionAbove,
+            spoiler: flags.spoiler,
+            viewOnce: flags.viewOnce,
             filename: resolvedFilename,
             videoNote: videoNote,
             durationMs: durationMs,
@@ -48853,6 +49534,9 @@ class AppController {
           mediaGroupId: mediaGroupId,
           waveform: waveform,
           caption: caption,
+          captionAbove: flags.captionAbove,
+          spoiler: flags.spoiler,
+          viewOnce: flags.viewOnce,
           filename: resolvedFilename,
           videoNote: videoNote,
           durationMs: durationMs,
@@ -48876,6 +49560,7 @@ class AppController {
     final localB64 = base64Encode(localCipher);
     final localEventId = 'local:$eventId';
     final transportMetaJson = _buildChatTransportMetaJson(
+          silent: flags.silent,
       convoId: resolvedPeerProfileId,
       isGroup: false,
       messageKind: 'attachment',
@@ -49655,6 +50340,7 @@ class AppController {
   }
 
   Future<List<String>> sendAttachmentFiles({
+    AttachmentEventFlags flags = AttachmentEventFlags.none,
     required String peerProfileId,
     required List<AttachmentFileSendRequest> files,
     String? replyToPayloadEventId,
@@ -49748,6 +50434,9 @@ class AppController {
               replyToEventId: index == 0 ? replyToPayloadEventId : null,
               mediaGroupId: effectiveGroupId,
               caption: captionForIndex(index),
+              captionAbove: flags.captionAbove && index == 0,
+              spoiler: flags.spoiler,
+              viewOnce: flags.viewOnce,
               filename: input.fileName,
               width: input.width,
               height: input.height,
@@ -49891,6 +50580,9 @@ class AppController {
             replyToEventId: index == 0 ? replyToPayloadEventId : null,
             mediaGroupId: effectiveGroupId,
             caption: captionForIndex(index),
+            captionAbove: flags.captionAbove && index == 0,
+            spoiler: flags.spoiler,
+            viewOnce: flags.viewOnce,
             filename: input.fileName,
             width: input.width,
             height: input.height,
@@ -49906,6 +50598,7 @@ class AppController {
       final localCipher = await crypto.encrypt(payloadBytes);
       final localEventId = 'local:$eventId';
       final transportMetaJson = _buildChatTransportMetaJson(
+          silent: flags.silent,
         convoId: resolvedPeerProfileId,
         isGroup: false,
         messageKind: 'attachment',
@@ -50111,6 +50804,7 @@ class AppController {
   }
 
   Future<List<String>> sendGroupAttachmentFiles({
+    AttachmentEventFlags flags = AttachmentEventFlags.none,
     required String groupId,
     required List<AttachmentFileSendRequest> files,
     String? replyToPayloadEventId,
@@ -50284,6 +50978,9 @@ class AppController {
             mediaGroupId: effectiveGroupId,
             topicId: normalizedTopicId,
             caption: captionForIndex(index),
+            captionAbove: flags.captionAbove && index == 0,
+            spoiler: flags.spoiler,
+            viewOnce: flags.viewOnce,
             filename: input.fileName,
             width: input.width,
             height: input.height,
@@ -50298,6 +50995,7 @@ class AppController {
       final localCipher = await crypto.encrypt(payload.encode());
       final localEventId = 'local:grpatt:$messageId';
       final transportMetaJson = _buildChatTransportMetaJson(
+          silent: flags.silent,
         convoId: groupId,
         isGroup: true,
         messageKind: 'attachment',

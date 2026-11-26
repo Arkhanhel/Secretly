@@ -79,6 +79,9 @@ class VerifiedBadge extends StatefulWidget {
 
 class _VerifiedBadgeState extends State<VerifiedBadge>
     with PacedTickerProviderStateMixin {
+  @override
+  bool get restsWhenIdle => true;
+
   late final Ticker _ticker = createTicker(_onTick);
   final ValueNotifier<double> _seconds = ValueNotifier<double>(0);
 

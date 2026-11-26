@@ -3289,5 +3289,11 @@
   "penHintPanels": "Прозоро чи щільно",
   "penHintCovers": "Живі обкладинки",
   "penHintEmoji": "Емодзі, стікери, GIF",
-  "penHintReactions": "Реакції — довгим натисканням"
+  "penHintReactions": "Реакції — довгим натисканням",
+  "stickerPremiumPackSafe": "Секретний сейф",
+  "stickerPremiumPackPixel": "Pixel",
+  "stickerPremiumSubtitle": "Анімовані стікери для передплатників Premium",
+  "stickerPremiumUnlock": "Відкрити з Premium",
+  "stickerPackKids": "Дітки",
+  "meToolArrow": "Стрілка"
 }

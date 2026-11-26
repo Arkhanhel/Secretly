@@ -3285,5 +3285,11 @@
   "penHintPanels": "Прозрачно или плотно",
   "penHintCovers": "Живые обложки",
   "penHintEmoji": "Эмодзи, стикеры, GIF",
-  "penHintReactions": "Реакции — долгим нажатием"
+  "penHintReactions": "Реакции — долгим нажатием",
+  "stickerPremiumPackSafe": "Секретный сейф",
+  "stickerPremiumPackPixel": "Pixel",
+  "stickerPremiumSubtitle": "Анимированные стикеры для подписчиков Premium",
+  "stickerPremiumUnlock": "Открыть с Premium",
+  "stickerPackKids": "Детки",
+  "meToolArrow": "Стрелка"
 }

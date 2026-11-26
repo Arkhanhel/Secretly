@@ -44,6 +44,9 @@ class EmojiTabModel extends ChangeNotifier {
   EmojiTabModel({required this.categories, required this.profileKey}) {
     _all = [for (final c in categories) ...c.emoji];
     scroll.addListener(_spy);
+    // Настройки уже открыты — недавние и тона сразу, до первого кадра.
+    recents = EmojiPanelPrefs.recentsNow(profileKey) ?? recents;
+    tones = EmojiPanelPrefs.tonesNow(profileKey) ?? tones;
     unawaited(_load());
   }
 

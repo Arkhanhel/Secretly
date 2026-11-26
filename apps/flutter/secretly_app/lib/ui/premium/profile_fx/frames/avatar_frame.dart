@@ -153,6 +153,9 @@ class AnimatedAvatarFrame extends StatefulWidget {
 }
 
 class _AnimatedAvatarFrameState extends State<AnimatedAvatarFrame> with PacedTickerProviderStateMixin {
+  @override
+  bool get restsWhenIdle => true;
+
   late FrameSim _sim = widget.frame._create();
   late final Ticker _ticker = createTicker(_onTick);
   Duration _last = Duration.zero;

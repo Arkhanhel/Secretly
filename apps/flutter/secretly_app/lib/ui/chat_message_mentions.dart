@@ -47,8 +47,11 @@ class ChatMessageLink {
   final Uri uri;
 }
 
+// Квадратные скобки — часть адреса (`?__cft__[0]=…` у Facebook, 26.11.2026);
+// закрывающая в конце отсекается как знак препинания. Обратная кавычка и
+// черта (знаки кода и спойлера) адрес заканчивают, `](` — тоже (`[текст](адрес)`).
 final RegExp _chatMessageUrlPattern = RegExp(
-  r'(?:https?:\/\/|www\.)[^\s<>"\[\]]+',
+  r'(?:https?:\/\/|www\.)(?:(?!\]\()[^\s<>"`|])+',
   caseSensitive: false,
 );
 
@@ -187,6 +190,13 @@ List<ChatMessageLink> extractChatMessageLinks(String text) {
   }
   return out;
 }
+
+/// Места ссылок в тексте (с отсечённым хвостом) — для разметки: знаки
+/// внутри ссылки — часть адреса, а не начало курсива.
+List<(int, int)> _chatUrlSpans(String text) => [
+  for (final m in _chatMessageUrlPattern.allMatches(text))
+    (m.start, m.start + _trimTrailingUrlPunctuation(m.group(0) ?? '').length),
+];
 
 ChatMessageLink? firstChatMessageLink(String text) {
   final links = extractChatMessageLinks(text);
@@ -369,7 +379,19 @@ bool chatTextHasFormatting(String text) {
 /// previews / notifications so they don't show raw `**` etc.
 String stripChatFormattingMarkers(String text) {
   if (!chatTextHasFormatting(text)) return text;
-  var out = text;
+  // Ссылки — как есть (см. разбор знаков в ленте): прячем их на время.
+  final urls = <String>[];
+  final b = StringBuffer();
+  var at = 0;
+  for (final (start, end) in _chatUrlSpans(text)) {
+    if (end <= start) continue;
+    b.write(text.substring(at, start));
+    urls.add(text.substring(start, end));
+    b.write('\u0000${urls.length - 1}\u0000');
+    at = end;
+  }
+  b.write(text.substring(at));
+  var out = b.toString();
   for (final marker in _chatFormatMarkers) {
     // Replace `<open>inner<close>` → `inner` (non-greedy, single line).
     final escapedOpen = RegExp.escape(marker.open);
@@ -379,7 +401,10 @@ String stripChatFormattingMarkers(String text) {
       (m) => m.group(1) ?? '',
     );
   }
-  return out;
+  return out.replaceAllMapped(
+    RegExp('\u0000(\\d+)\u0000'),
+    (m) => urls[int.parse(m.group(1)!)],
+  );
 }
 
 List<InlineSpan> _buildChatPlainTextSpans({
@@ -409,16 +434,30 @@ List<InlineSpan> _buildChatPlainTextSpans({
   // parity for the common cases) — except spoilers which render their inner
   // text plainly under the dots.
   final out = <InlineSpan>[];
+  // Знаки разметки внутри ссылки — часть адреса (26.11.2026): ссылка вида
+  // `…?__cft__[0]=…&__tn__=…` резалась на первом `__`, текст становился
+  // курсивом, а касание открывало обрубок адреса.
+  final urls = _chatUrlSpans(text);
+  int markerAt(String token, int from) {
+    var at = text.indexOf(token, from);
+    while (at >= 0) {
+      final inUrl = urls.any((u) => at >= u.$1 && at < u.$2);
+      if (!inUrl) return at;
+      at = text.indexOf(token, at + 1);
+    }
+    return -1;
+  }
+
   var cursor = 0;
   while (cursor < text.length) {
     int bestOpen = -1;
     _FormatMarker? bestMarker;
     int bestClose = -1;
     for (final marker in _chatFormatMarkers) {
-      final openIdx = text.indexOf(marker.open, cursor);
+      final openIdx = markerAt(marker.open, cursor);
       if (openIdx < 0) continue;
       final innerStart = openIdx + marker.open.length;
-      final closeIdx = text.indexOf(marker.close, innerStart);
+      final closeIdx = markerAt(marker.close, innerStart);
       if (closeIdx < 0 || closeIdx <= innerStart) continue;
       final isEarlier = bestOpen < 0 || openIdx < bestOpen;
       final isLongerTie =
@@ -669,6 +708,9 @@ class _SpoilerText extends StatefulWidget {
 
 class _SpoilerTextState extends State<_SpoilerText>
     with PacedTickerProviderStateMixin {
+  @override
+  bool get restsWhenIdle => true;
+
   late final AnimationController _controller;
   bool _revealed = false;
 
@@ -767,7 +809,8 @@ class _SpoilerDotsPainter extends CustomPainter {
 
 String _trimTrailingUrlPunctuation(String value) {
   var end = value.length;
-  while (end > 0 && '.,!?;:)]}'.contains(value[end - 1])) {
+  // `*`, `~`, `_` в конце — закрывающая разметка (`**https://x**`), не адрес.
+  while (end > 0 && '.,!?;:)]}*~_'.contains(value[end - 1])) {
     end--;
   }
   return value.substring(0, end);

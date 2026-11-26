@@ -6131,5 +6131,17 @@
   "penHintEmoji": "Emoji, stickers, GIFs",
   "@penHintEmoji": {"description": "What’s new in 1.9 (welcome sheet, tour cards, pen hints)."},
   "penHintReactions": "Long-press to react",
-  "@penHintReactions": {"description": "What’s new in 1.9 (welcome sheet, tour cards, pen hints)."}
+  "@penHintReactions": {"description": "What’s new in 1.9 (welcome sheet, tour cards, pen hints)."},
+  "stickerPremiumPackSafe": "Secret Safe",
+  "@stickerPremiumPackSafe": {"description": "Premium sticker packs (panel rail, upsell sheet)."},
+  "stickerPremiumPackPixel": "Pixel",
+  "@stickerPremiumPackPixel": {"description": "Premium sticker packs (panel rail, upsell sheet)."},
+  "stickerPremiumSubtitle": "Animated stickers for Premium subscribers",
+  "@stickerPremiumSubtitle": {"description": "Premium sticker packs (panel rail, upsell sheet)."},
+  "stickerPremiumUnlock": "Unlock with Premium",
+  "@stickerPremiumUnlock": {"description": "Premium sticker packs (panel rail, upsell sheet)."},
+  "stickerPackKids": "Kids",
+  "@stickerPackKids": {"description": "Free built-in sticker pack title."},
+  "meToolArrow": "Arrow",
+  "@meToolArrow": {"description": "Media editor draw tool (SendFlow 24.11.2026)."}
 }

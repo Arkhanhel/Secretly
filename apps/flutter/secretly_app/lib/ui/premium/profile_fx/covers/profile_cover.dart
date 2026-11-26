@@ -191,6 +191,9 @@ class ProfileCover extends StatefulWidget {
 }
 
 class _ProfileCoverState extends State<ProfileCover> with PacedTickerProviderStateMixin {
+  @override
+  bool get restsWhenIdle => true;
+
   late CoverSim _sim = widget.style._create();
   late final Ticker _ticker = createTicker(_onTick);
   final _clock = ValueNotifier<int>(0);
@@ -226,7 +229,7 @@ class _ProfileCoverState extends State<ProfileCover> with PacedTickerProviderSta
     super.didUpdateWidget(old);
     if (old.style != widget.style) {
       _sim = widget.style._create();
-      _acc?.dispose();
+      GpuImageGuard.disposeAfterFrames(_acc);
       _acc = null;
     }
     _sync();
@@ -295,7 +298,7 @@ class _ProfileCoverState extends State<ProfileCover> with PacedTickerProviderSta
     }
     paintFxDay(day, () => s.draw(c, size, _t, dt, _dark, tap, ptr), ink: false);
     final img = rec.endRecording().toImageSync((size.width * _dpr).ceil(), (size.height * _dpr).ceil());
-    prev?.dispose();
+    GpuImageGuard.disposeAfterFrames(prev);
     _acc = img;
     _accSize = size;
     canvas.drawImageRect(img, Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()), Offset.zero & size, Paint()..filterQuality = FilterQuality.medium);
@@ -306,7 +309,7 @@ class _ProfileCoverState extends State<ProfileCover> with PacedTickerProviderSta
     _pokes?.removeListener(_onPoke);
     _ticker.dispose();
     _clock.dispose();
-    _acc?.dispose();
+    GpuImageGuard.disposeAfterFrames(_acc);
     super.dispose();
   }
 

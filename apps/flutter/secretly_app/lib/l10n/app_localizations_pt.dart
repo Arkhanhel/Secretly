@@ -9666,6 +9666,24 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get penHintReactions => 'Mantenha premido para reagir';
+
+  @override
+  String get stickerPremiumPackSafe => 'Cofre secreto';
+
+  @override
+  String get stickerPremiumPackPixel => 'Pixel';
+
+  @override
+  String get stickerPremiumSubtitle => 'Stickers animados para assinantes Premium';
+
+  @override
+  String get stickerPremiumUnlock => 'Desbloquear com Premium';
+
+  @override
+  String get stickerPackKids => 'Miúdos';
+
+  @override
+  String get meToolArrow => 'Seta';
 }
 
 /// The translations for Portuguese, as used in Brazil (`pt_BR`).
@@ -19330,4 +19348,22 @@ class AppLocalizationsPtBr extends AppLocalizationsPt {
 
   @override
   String get penHintReactions => 'Toque e segure para reagir';
+
+  @override
+  String get stickerPremiumPackSafe => 'Cofre secreto';
+
+  @override
+  String get stickerPremiumPackPixel => 'Pixel';
+
+  @override
+  String get stickerPremiumSubtitle => 'Stickers animados para assinantes Premium';
+
+  @override
+  String get stickerPremiumUnlock => 'Desbloquear com Premium';
+
+  @override
+  String get stickerPackKids => 'Pequenos';
+
+  @override
+  String get meToolArrow => 'Seta';
 }

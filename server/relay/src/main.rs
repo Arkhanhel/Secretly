@@ -1577,6 +1577,10 @@ struct MessageTransportMetaBody {
     sender_display_name: Option<String>,
     #[serde(default)]
     convo_title: Option<String>,
+    /// SendFlow (24.11.2026): «Отправить без звука» — уведомление без звука.
+    /// Старые клиенты не шлют.
+    #[serde(default)]
+    silent: bool,
     // 🔴 Приватность (24.09.2026): поля `preview_text` здесь НЕТ намеренно.
     // Приложение кладёт в него начало текста сообщения открытым текстом;
     // реле его не читает, не хранит (`store::strip_transport_meta_preview`)
@@ -1647,6 +1651,8 @@ struct MessageTransportMetaRecord {
     created_at_ms: i64,
     sender_profile_id: Option<String>,
     sender_display_name: Option<String>,
+    /// «Без звука» от отправителя (SendFlow).
+    silent: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1754,7 +1760,17 @@ struct PushWakePayload {
     // so the OS leaves the current badge untouched (call/receipt wakes must not
     // stomp the message count).
     badge: Option<u32>,
+    /// SendFlow (24.11.2026): баннер без звука — отправитель выбрал «без
+    /// звука». Android — свой беззвучный канал, iOS — без `sound`.
+    sound_off: bool,
+    /// У Android-сборки получателя есть беззвучный канал (сборка ≥
+    /// `SILENT_CHANNEL_MIN_BUILD`). Иначе FCM положил бы уведомление в
+    /// системный канал «Прочее» — со звуком и в обход настроек человека.
+    silent_channel_ok: bool,
 }
+
+/// Первая сборка с каналом `secretly_messages_silent_v1` (SendFlow).
+const SILENT_CHANNEL_MIN_BUILD: i64 = 755;
 
 fn verify_ed25519_b64(pub_b64: &str, sig_b64: &str, msg: &[u8]) -> bool {
     let Ok(pub_bytes) = base64::engine::general_purpose::STANDARD.decode(pub_b64.as_bytes()) else {
@@ -3004,6 +3020,7 @@ fn parse_chat_message_transport_meta(
             .as_deref()
             .and_then(normalize_push_profile_id),
         sender_display_name: normalize_push_text(message.sender_display_name.as_deref(), 80),
+        silent: message.silent,
     }))
 }
 
@@ -13738,6 +13755,8 @@ fn build_generic_push_wake_payload(
         // Generic wakes (calls / control envelopes) never carry a message count;
         // leave the icon badge untouched.
         badge: None,
+        sound_off: false,
+        silent_channel_ok: false,
     }
 }
 
@@ -13757,6 +13776,8 @@ async fn build_push_wake_payload(
     let mut notification_body = "New message".to_string();
     let device_ref = log_fingerprint(to_device_id);
     let push_policy = parse_push_policy_json(push_policy_json);
+    let mut message_sound_off = false;
+    let mut message_silent_channel_ok = false;
     let mut include_notification = push_policy
         .as_ref()
         .map(|policy| policy.notifications_enabled && policy.message_visual_alerts_enabled)
@@ -14062,6 +14083,17 @@ async fn build_push_wake_payload(
                 } else {
                     None
                 };
+                message_sound_off = message_meta.silent;
+                if message_sound_off {
+                    let build = state
+                        .store
+                        .client_builds_for_devices(vec![to_device_id.to_string()])
+                        .await
+                        .ok()
+                        .and_then(|builds| builds.get(to_device_id).copied())
+                        .unwrap_or(0);
+                    message_silent_channel_ok = build >= SILENT_CHANNEL_MIN_BUILD;
+                }
                 let message = MessageTransportMetaRecord {
                     sender_profile_id: resolved_sender_profile_id.clone(),
                     sender_display_name: resolved_sender_name
@@ -14320,6 +14352,8 @@ async fn build_push_wake_payload(
         include_notification,
         data,
         badge,
+        sound_off: message_sound_off,
+        silent_channel_ok: message_silent_channel_ok,
     }
 }
 
@@ -14601,13 +14635,22 @@ fn build_fcm_v1_message_payload(
                 serde_json::Value::String(fcm_android_ttl_for_payload(payload).to_string()),
             );
             if include_notification {
+                // «Без звука» (SendFlow): беззвучный канал приложения. У старых
+                // сборок канала нет — система возьмёт канал по умолчанию.
                 android.insert(
                     "notification".into(),
-                    serde_json::json!({
-                        "sound": "default",
-                        "tag": payload.notification_tag.clone(),
-                        "channel_id": "secretly_messages_v2"
-                    }),
+                    if payload.sound_off && payload.silent_channel_ok {
+                        serde_json::json!({
+                            "tag": payload.notification_tag.clone(),
+                            "channel_id": "secretly_messages_silent_v1"
+                        })
+                    } else {
+                        serde_json::json!({
+                            "sound": "default",
+                            "tag": payload.notification_tag.clone(),
+                            "channel_id": "secretly_messages_v2"
+                        })
+                    },
                 );
             }
             message.insert("android".into(), serde_json::Value::Object(android));
@@ -14629,10 +14672,12 @@ fn build_fcm_v1_message_payload(
                     "mutable-content".into(),
                     serde_json::Value::Number(1.into()),
                 );
-                aps.insert(
-                    "sound".into(),
-                    serde_json::Value::String("default".to_string()),
-                );
+                if !payload.sound_off {
+                    aps.insert(
+                        "sound".into(),
+                        serde_json::Value::String("default".to_string()),
+                    );
+                }
                 aps.insert(
                     "thread-id".into(),
                     serde_json::Value::String(payload.notification_tag.clone()),
@@ -14700,10 +14745,13 @@ fn build_fcm_legacy_payload(
             "body".into(),
             serde_json::Value::String(payload.notification_body.clone()),
         );
-        notification.insert(
-            "sound".into(),
-            serde_json::Value::String("default".to_string()),
-        );
+        // Legacy: Android без беззвучного канала — со звуком, как раньше.
+        if !payload.sound_off || (platform == "android" && !payload.silent_channel_ok) {
+            notification.insert(
+                "sound".into(),
+                serde_json::Value::String("default".to_string()),
+            );
+        }
         notification.insert(
             "tag".into(),
             serde_json::Value::String(payload.notification_tag.clone()),
@@ -19800,6 +19848,8 @@ mod tests {
             include_notification: true,
             data,
             badge: None,
+            sound_off: false,
+            silent_channel_ok: false,
         }
     }
 
@@ -19992,6 +20042,8 @@ mod tests {
                 include_notification,
                 data,
                 badge: None,
+                sound_off: false,
+                silent_channel_ok: false,
             }
         }
 
@@ -20055,6 +20107,8 @@ mod tests {
                 include_notification: true,
                 data,
                 badge: None,
+                sound_off: false,
+                silent_channel_ok: false,
             }
         }
 
@@ -20241,6 +20295,66 @@ mod tests {
     }
 
     #[test]
+    fn sendflow_silent_message_push_has_no_sound() {
+        // SendFlow (24.11.2026): «Отправить без звука» — баннер есть, звука
+        // нет: iOS без `sound`, Android — беззвучный канал. Без флага — как
+        // раньше.
+        fn payload(sound_off: bool) -> PushWakePayload {
+            payload_b(sound_off, true)
+        }
+        fn payload_b(sound_off: bool, silent_channel_ok: bool) -> PushWakePayload {
+            let mut data = serde_json::Map::new();
+            data.insert(
+                "wake_kind".into(),
+                serde_json::Value::String("chat_message_v1".to_string()),
+            );
+            PushWakePayload {
+                notification_title: "Secretly".into(),
+                notification_body: "New message".into(),
+                collapse_key: "k".into(),
+                notification_tag: "t".into(),
+                include_notification: true,
+                data,
+                badge: None,
+                sound_off,
+                silent_channel_ok,
+            }
+        }
+        let ios = build_fcm_v1_message_payload("tok", &payload(true), "ios");
+        let aps = &ios["message"]["apns"]["payload"]["aps"];
+        assert!(aps.get("sound").is_none());
+        assert_eq!(aps["thread-id"], "t");
+        let ios_loud = build_fcm_v1_message_payload("tok", &payload(false), "ios");
+        assert_eq!(ios_loud["message"]["apns"]["payload"]["aps"]["sound"], "default");
+
+        let android = build_fcm_v1_message_payload("tok", &payload(true), "android");
+        let n = &android["message"]["android"]["notification"];
+        assert_eq!(n["channel_id"], "secretly_messages_silent_v1");
+        assert!(n.get("sound").is_none());
+        let android_loud = build_fcm_v1_message_payload("tok", &payload(false), "android");
+        assert_eq!(
+            android_loud["message"]["android"]["notification"]["channel_id"],
+            "secretly_messages_v2"
+        );
+
+        let legacy = build_fcm_legacy_payload("tok", &payload(true), "android");
+        assert!(legacy["notification"].get("sound").is_none());
+
+        // Старая сборка Android (канала нет): обычный канал и звук — FCM не
+        // уронит уведомление в системный «Прочее».
+        let old = build_fcm_v1_message_payload("tok", &payload_b(true, false), "android");
+        assert_eq!(
+            old["message"]["android"]["notification"]["channel_id"],
+            "secretly_messages_v2"
+        );
+        let old_legacy = build_fcm_legacy_payload("tok", &payload_b(true, false), "android");
+        assert_eq!(old_legacy["notification"]["sound"], "default");
+        // iOS без звука — для любой сборки.
+        let ios_old = build_fcm_v1_message_payload("tok", &payload_b(true, false), "ios");
+        assert!(ios_old["message"]["apns"]["payload"]["aps"].get("sound").is_none());
+    }
+
+    #[test]
     fn build_fcm_v1_message_payload_adds_ios_apns_wake_fields() {
         let mut data = serde_json::Map::new();
         data.insert(
@@ -20263,6 +20377,8 @@ mod tests {
             include_notification: true,
             data,
             badge: Some(3),
+            sound_off: false,
+            silent_channel_ok: false,
         };
 
         let built = build_fcm_v1_message_payload("ios-token-1", &payload, "ios");
@@ -20363,6 +20479,8 @@ mod tests {
             include_notification: true,
             data,
             badge: None,
+            sound_off: false,
+            silent_channel_ok: false,
         };
 
         let built = build_fcm_legacy_payload("ios-token-legacy-1", &payload, "ios");
@@ -20407,6 +20525,8 @@ mod tests {
             include_notification: false,
             data,
             badge: None,
+            sound_off: false,
+            silent_channel_ok: false,
         };
 
         let built = build_fcm_v1_message_payload("ios-token-bg-1", &payload, "ios");
@@ -20451,6 +20571,8 @@ mod tests {
             include_notification: true,
             data,
             badge: None,
+            sound_off: false,
+            silent_channel_ok: false,
         };
 
         let built = build_fcm_v1_message_payload("android-token-call-1", &payload, "android");
@@ -20498,6 +20620,8 @@ mod tests {
             include_notification: true,
             data,
             badge: None,
+            sound_off: false,
+            silent_channel_ok: false,
         };
 
         let built = build_fcm_legacy_payload("android-token-call-legacy-1", &payload, "android");
@@ -20551,6 +20675,8 @@ mod tests {
             include_notification: true,
             data,
             badge: None,
+            sound_off: false,
+            silent_channel_ok: false,
         };
 
         let built = build_apns_voip_payload(&payload);
@@ -30036,6 +30162,8 @@ mod tests {
             include_notification: false,
             data,
             badge: None,
+            sound_off: false,
+            silent_channel_ok: false,
         }
     }
 
@@ -30098,6 +30226,8 @@ mod tests {
             include_notification: false,
             data,
             badge: None,
+            sound_off: false,
+            silent_channel_ok: false,
         };
         assert!(push_call_collapse_key(&payload).is_none());
         assert_eq!(

@@ -18,6 +18,39 @@ abstract final class EmojiPanelPrefs {
   static String _tonesKey(String profile) =>
       'mobile_emoji_panel_tones_v1:$profile';
 
+  /// Уже открытые настройки — чтобы панель показала недавние и тона сразу, в
+  /// первом кадре, а не «моргнула» ими во втором (24.11.2026).
+  static SharedPreferences? _opened;
+
+  static Future<void> warmUp() async {
+    try {
+      _opened = await SharedPreferences.getInstance();
+    } catch (_) {}
+  }
+
+  static List<String>? recentsNow(String profile) =>
+      _opened?.getStringList(_recentsKey(profile));
+
+  static Map<String, String>? tonesNow(String profile) {
+    final p = _opened;
+    return p == null ? null : _parseTones(p.getString(_tonesKey(profile)));
+  }
+
+  static Map<String, String> _parseTones(String? raw) {
+    if (raw == null || raw.isEmpty) return <String, String>{};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return <String, String>{};
+      return <String, String>{
+        for (final e in decoded.entries)
+          if (e.key is String && e.value is String)
+            e.key as String: e.value as String,
+      };
+    } catch (_) {
+      return <String, String>{};
+    }
+  }
+
   static Future<List<String>> loadRecents(String profile) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -41,15 +74,7 @@ abstract final class EmojiPanelPrefs {
   static Future<Map<String, String>> loadTones(String profile) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_tonesKey(profile));
-      if (raw == null || raw.isEmpty) return <String, String>{};
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map) return <String, String>{};
-      return <String, String>{
-        for (final e in decoded.entries)
-          if (e.key is String && e.value is String)
-            e.key as String: e.value as String,
-      };
+      return _parseTones(prefs.getString(_tonesKey(profile)));
     } catch (_) {
       return <String, String>{};
     }

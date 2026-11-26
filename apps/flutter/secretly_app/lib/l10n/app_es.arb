@@ -3289,5 +3289,11 @@
   "penHintPanels": "Transparente u opaco",
   "penHintCovers": "Portadas animadas",
   "penHintEmoji": "Emoji, stickers, GIF",
-  "penHintReactions": "Mantén pulsado para reaccionar"
+  "penHintReactions": "Mantén pulsado para reaccionar",
+  "stickerPremiumPackSafe": "Caja fuerte secreta",
+  "stickerPremiumPackPixel": "Pixel",
+  "stickerPremiumSubtitle": "Stickers animados para suscriptores Premium",
+  "stickerPremiumUnlock": "Desbloquear con Premium",
+  "stickerPackKids": "Peques",
+  "meToolArrow": "Flecha"
 }

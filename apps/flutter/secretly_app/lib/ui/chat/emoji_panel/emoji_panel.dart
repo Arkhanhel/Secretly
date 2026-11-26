@@ -35,6 +35,8 @@ import 'emoji_panel_sources.dart';
 import 'emoji_panel_stickers.dart';
 import 'emoji_panel_style.dart';
 import 'emoji_panel_widgets.dart';
+import 'premium_sticker_sheet.dart';
+import '../../../stickers/premium_sticker_packs.dart' show isPremiumStickerPackId;
 
 export 'emoji_panel_controller.dart'
     show EmojiPanelController, kInlineEmojiPanel;
@@ -327,6 +329,23 @@ class EmojiPanelState extends State<EmojiPanel>
   }
 
   void _sendSticker(SecretlyStickerDescriptor s, Rect? from) {
+    // Премиум-стикер без Premium (из «Недавних» после окончания подписки) —
+    // окно набора с покупкой, а не «полёт» в чат и ошибка следом.
+    if (isPremiumStickerPackId(s.packId) && !_stickers.premiumUnlocked) {
+      final pack = _stickers.premium.where((p) => p.id == s.packId).firstOrNull;
+      if (pack != null) {
+        HapticFeedback.selectionClick();
+        unawaited(
+          showPremiumStickerPackSheet(
+            context,
+            pack: pack,
+            unlocked: false,
+            onOpenPremium: () => unawaited(_stickers.openPremium(context)),
+          ),
+        );
+        return;
+      }
+    }
     HapticFeedback.lightImpact();
     widget.onSendSticker(s);
     final r = widget.composerRect?.call();
@@ -498,6 +517,10 @@ class EmojiPanelState extends State<EmojiPanel>
                     style: s,
                   ),
                 },
+                // Пустые, пока наборы не загружены (значки сами слушают модель).
+                trailingFor: (tab) => tab == 1
+                    ? PremiumStickerPins(model: _stickers, style: s)
+                    : null,
               ),
             ),
             Expanded(
@@ -578,6 +601,7 @@ class _TopBar extends StatelessWidget {
     required this.onOpen,
     required this.onClose,
     required this.railFor,
+    this.trailingFor,
   });
 
   final EmojiPanelStyle style;
@@ -598,6 +622,10 @@ class _TopBar extends StatelessWidget {
   final VoidCallback onOpen;
   final VoidCallback onClose;
   final Widget Function(int tab) railFor;
+
+  /// Закреплённое справа от рейки, у лупы (премиум-наборы стикеров); не
+  /// гаснет вместе с краем рейки и не уезжает с её прокруткой.
+  final Widget? Function(int tab)? trailingFor;
 
   static const List<String> _fieldKeys = [
     'emoji-panel:emoji-search',
@@ -647,7 +675,14 @@ class _TopBar extends StatelessWidget {
                       opacity: (1 - tc * 1.5).clamp(0.0, 1.0),
                       child: Transform.translate(
                         offset: Offset(-36 * tc, 0),
-                        child: rail,
+                        // Всегда Row — дерево одно на всех вкладках, рейка
+                        // не пересоздаётся при переходе на стикеры.
+                        child: Row(
+                          children: [
+                            Expanded(child: rail!),
+                            trailingFor?.call(t) ?? const SizedBox.shrink(),
+                          ],
+                        ),
                       ),
                     ),
                   ),

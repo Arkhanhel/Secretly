@@ -31,6 +31,7 @@ class SecretlyGlassSheetSurface extends StatelessWidget {
     this.borderRadius = const BorderRadius.vertical(top: Radius.circular(30)),
     this.blurSigma = 22,
     this.flushToEdges = false,
+    this.solid = false,
   });
 
   final Widget child;
@@ -42,6 +43,11 @@ class SecretlyGlassSheetSurface extends StatelessWidget {
   /// Тогда рамка нужна только сверху: слева, справа и снизу она легла бы на сами
   /// края экрана и читалась бы как случайная линия, а не как край листа.
   final bool flushToEdges;
+
+  /// Без размытия: лист целиком закрыт непрозрачным содержимым (сетка
+  /// снимков), и размытие на весь экран — ~2 мс видеочипа на кадр — всё равно
+  /// не видно.
+  final bool solid;
 
   @override
   Widget build(BuildContext context) {
@@ -94,7 +100,7 @@ class SecretlyGlassSheetSurface extends StatelessWidget {
 
     // Стекло выключено — рисуем плиту без блюра, как это делают островки. Это
     // ещё и самая дешёвая поверхность: один непрозрачный прямоугольник.
-    if (!PanelPrefs.frostedEnabled.value) {
+    if (solid || !PanelPrefs.frostedEnabled.value) {
       return DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: borderRadius,

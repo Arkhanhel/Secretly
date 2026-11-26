@@ -202,7 +202,7 @@ void main() {
     final at = s.indexOf('Future<void> _openMessageTextSelection(');
     final body = s.substring(at, at + 2400);
     expect(body.contains('setState(() => _textSelectEventId = event.eventId);'), isTrue);
-    expect(body.contains('selectAll(\n          SelectionChangedCause.toolbar,'), isTrue);
+    expect(body.contains('selectWordAt(position)'), isTrue);
     final w = s.indexOf('Widget _inlineTextSelection(');
     final menu = s.substring(w, w + 4000);
     expect(menu.contains("label('Копировать'"), isTrue);
@@ -210,9 +210,11 @@ void main() {
     expect(menu.contains('_startReply('), isTrue);
     // Пока выделяется текст, жесты — выделению, а не обёртке сообщения.
     expect(s.contains('passThrough: _textSelectEventId == event.eventId,'), isTrue);
-    // 23.11.2026: долгое нажатие — через onLongPressStart (по пузырю медиа —
-    // меню, рядом — выделение); при выделении текста обёртка молчит.
-    expect(s.contains('onLongPressStart: pass\n          ? null'), isTrue);
-    expect(s.contains('widget.onLongPress();'), isTrue);
+    // 24.11.2026: касание снимает выделение и в режиме текста, долгое —
+    // выбирает другое слово; двойного касания в режиме выделения нет.
+    expect(s.contains('onTap: pass\n          ? widget.onTextTap'), isTrue);
+    expect(s.contains('onTextTap: () => _toggleSelection(event.eventId)'), isTrue);
+    expect(s.contains('onDoubleTap: pass || widget.selectionMode'), isTrue);
+    expect(s.contains('widget.onLongPress(details.globalPosition);'), isTrue);
   });
 }

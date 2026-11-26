@@ -28,6 +28,7 @@ class PanelRail extends StatefulWidget {
     this.indicatorRadius = 18,
     this.minItemWidth = 36,
     this.semanticLabels,
+    this.clampActive = true,
   });
 
   final EmojiPanelStyle style;
@@ -41,6 +42,10 @@ class PanelRail extends StatefulWidget {
   final double indicatorRadius;
   final double minItemWidth;
   final List<String>? semanticLabels;
+
+  /// `false` — раздел с номером за пределами рейки не подсвечивает её
+  /// последний значок (премиум-наборы закреплены отдельно, у лупы).
+  final bool clampActive;
 
   @override
   State<PanelRail> createState() => _PanelRailState();
@@ -77,6 +82,7 @@ class _PanelRailState extends State<PanelRail> {
   void _keepVisible() {
     if (!_scroll.hasClients || _scroll.position.maxScrollExtent <= 0) return;
     final i = widget.active.value;
+    if (!widget.clampActive && i >= widget.count) return;
     final left = 8 + i * _itemW;
     final right = left + _itemW;
     final pos = _scroll.position;
@@ -112,9 +118,12 @@ class _PanelRailState extends State<PanelRail> {
             valueListenable: widget.active,
             builder: (context, active, _) {
               final a = active.clamp(0, math.max(0, widget.count - 1));
+              // Раздел за пределами рейки (премиум-наборы у лупы) — без
+              // подсветки здесь.
+              final outside = !widget.clampActive && active >= widget.count;
               return Stack(
                 children: [
-                  if (widget.count > 0)
+                  if (widget.count > 0 && !outside)
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 450),
                       curve: kPanelRailCurve,
@@ -143,7 +152,7 @@ class _PanelRailState extends State<PanelRail> {
                             height: 44,
                             child: Semantics(
                               button: true,
-                              selected: i == a,
+                              selected: i == a && !outside,
                               label: widget.semanticLabels != null &&
                                       i < widget.semanticLabels!.length
                                   ? widget.semanticLabels![i]
@@ -156,7 +165,11 @@ class _PanelRailState extends State<PanelRail> {
                                     : () => widget.onLongPress!(i),
                                 child: PanelPress(
                                   child: Center(
-                                    child: widget.itemBuilder(context, i, i == a),
+                                    child: widget.itemBuilder(
+                                      context,
+                                      i,
+                                      i == a && !outside,
+                                    ),
                                   ),
                                 ),
                               ),

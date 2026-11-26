@@ -9666,4 +9666,22 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get penHintReactions => 'Appui long pour réagir';
+
+  @override
+  String get stickerPremiumPackSafe => 'Coffre secret';
+
+  @override
+  String get stickerPremiumPackPixel => 'Pixel';
+
+  @override
+  String get stickerPremiumSubtitle => 'Stickers animés pour les abonnés Premium';
+
+  @override
+  String get stickerPremiumUnlock => 'Débloquer avec Premium';
+
+  @override
+  String get stickerPackKids => 'Mômes';
+
+  @override
+  String get meToolArrow => 'Flèche';
 }

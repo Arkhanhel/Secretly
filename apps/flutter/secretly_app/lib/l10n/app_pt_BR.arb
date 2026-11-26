@@ -3289,5 +3289,11 @@
   "penHintPanels": "Transparente ou sólido",
   "penHintCovers": "Capas animadas",
   "penHintEmoji": "Emoji, figurinhas, GIF",
-  "penHintReactions": "Toque e segure para reagir"
+  "penHintReactions": "Toque e segure para reagir",
+  "stickerPremiumPackSafe": "Cofre secreto",
+  "stickerPremiumPackPixel": "Pixel",
+  "stickerPremiumSubtitle": "Stickers animados para assinantes Premium",
+  "stickerPremiumUnlock": "Desbloquear com Premium",
+  "stickerPackKids": "Pequenos",
+  "meToolArrow": "Seta"
 }

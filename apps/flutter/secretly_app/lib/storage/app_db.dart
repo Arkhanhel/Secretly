@@ -11119,6 +11119,15 @@ ORDER BY c.created_at_ms ASC
         .toSet();
   }
 
+  /// Счёт вставок своих исходящих строк (всё, что не «получено»): по нему
+  /// поле ввода понимает, появился ли пузырь до ошибки отправки (26.11.2026).
+  int outgoingInsertSeq = 0;
+  String? lastOutgoingInsertEventId;
+
+  /// То же по чатам: чужие вставки (копия с моего другого устройства в
+  /// другом чате) не мешают понять, появился ли пузырь в этом.
+  final Map<String, int> outgoingInsertSeqByConvo = <String, int>{};
+
   Future<void> insertEvent({
     required String eventId,
     required String convoId,
@@ -11141,6 +11150,12 @@ ORDER BY c.created_at_ms ASC
     int? disappearSeconds,
     int? expiresAtMs,
   }) async {
+    if (localState != 'received') {
+      outgoingInsertSeq++;
+      lastOutgoingInsertEventId = eventId;
+      outgoingInsertSeqByConvo[convoId] =
+          (outgoingInsertSeqByConvo[convoId] ?? 0) + 1;
+    }
     await _db.insert('events', {
       'event_id': eventId,
       'convo_id': convoId,
@@ -11517,6 +11532,19 @@ ORDER BY c.created_at_ms ASC
     }
   }
 
+  /// Есть ли сообщения старше [cutoffMs] (окно оценки: старый аккаунт или
+  /// новый). EXISTS с LIMIT 1 — у старого пользователя первая же строка
+  /// подходит, полного прохода по таблице нет (индекса по времени нет).
+  Future<bool> hasEventsBefore(int cutoffMs) async {
+    final rows = await _db.rawQuery(
+      'SELECT EXISTS(SELECT 1 FROM events WHERE created_at_ms > 0 '
+      'AND created_at_ms < ? LIMIT 1) AS e',
+      [cutoffMs],
+    );
+    if (rows.isEmpty) return false;
+    return ((rows.first['e'] as num?) ?? 0) != 0;
+  }
+
   /// Есть ли в переписке [convoId] сообщение с логическим id [payloadEventId].
   ///
   /// Строже, чем [convoIdForPayloadEventId]: та ищет по всем перепискам и
@@ -11618,6 +11646,10 @@ HAVING COUNT(*) > 1;
     return rows.first['convo_id'] as String?;
   }
 
+  /// Счёт записей об отметках «прочитано» в комнатах: лента комнаты
+  /// сверяется с ним, иначе «прочитали: 1» застывало (26.11.2026).
+  int roomReceiptsSeq = 0;
+
   Future<void> roomMessageReceiptUpsert({
     required String payloadEventId,
     required String readerProfileId,
@@ -11665,6 +11697,14 @@ HAVING COUNT(*) > 1;
     }
 
     final cleanedReaderDeviceId = readerDeviceId?.trim();
+    // Счёт — только за настоящую смену отметки и ПОСЛЕ записи: иначе
+    // пересборка между счётом и записью запоминала старое число.
+    final statusChanged =
+        existing.isEmpty ||
+        MessageReceiptState.normalize(
+              (existing.first['status'] as String?) ?? '',
+            ) !=
+            effectiveStatus;
     await _db.insert('room_message_receipts', {
       'payload_event_id': cleanedPayloadEventId,
       'reader_profile_id': cleanedReaderProfileId,
@@ -11675,6 +11715,7 @@ HAVING COUNT(*) > 1;
       'status': effectiveStatus,
       'updated_at_ms': effectiveUpdatedAtMs,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+    if (statusChanged) roomReceiptsSeq++;
   }
 
   Future<List<RoomMessageReceiptRecord>> roomMessageReceiptList(
@@ -12054,6 +12095,30 @@ HAVING COUNT(*) > 1;
   /// still shows T; only the client fire-sweep (which selects `local_state =
   /// 'scheduled'`) stops considering it, preventing a duplicate send when the
   /// phone wakes.
+  /// Строки очереди отложенного сообщения, которые реле ещё держит (или
+  /// которые ещё не выгружены): срок доставки позже [nowMs].
+  Future<List<Map<String, Object?>>> outboxHeldRowsForEventRef(
+    String eventIdRef, {
+    required int nowMs,
+  }) {
+    return _db.query(
+      'outbox',
+      where: 'event_id_ref = ? AND deliver_at_ms > ?',
+      whereArgs: [eventIdRef, nowMs],
+    );
+  }
+
+  /// Новое время отложенного (`null` — уже не отложено).
+  Future<void> eventSetScheduledAt(String eventId, int? atMs) async {
+    final n = await _db.update(
+      'events',
+      {'scheduled_at_ms': atMs},
+      where: 'event_id = ?',
+      whereArgs: [eventId],
+    );
+    if (n > 0) _notifyStateChanged(await _convoIdOfEvent(eventId));
+  }
+
   Future<void> markScheduledDirectUploaded(String localEventId) async {
     final n = await _db.update(
       'events',

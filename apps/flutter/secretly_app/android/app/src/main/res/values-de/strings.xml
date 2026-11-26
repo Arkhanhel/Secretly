@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">Secretly</string>
+    <string name="notification_channel_silent_name">Nachrichten ohne Ton</string>
     <string name="notification_channel_messages_name">Nachrichten</string>
     <string name="notification_channel_messages_description">Eingehende Secretly-Nachrichten</string>
     <string name="notification_action_reply">Antworten</string>

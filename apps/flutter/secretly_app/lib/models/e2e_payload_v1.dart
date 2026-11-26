@@ -4,6 +4,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
+
 import '../calls/call_failure.dart';
 import '../calls/call_event.dart';
 import 'link_preview_v1.dart';
@@ -52,6 +54,26 @@ class E2ePayloadV1 {
   /// `SKR1` (К-2). Только таким устройствам выдаётся ключ комнаты и
   /// запечатанные сообщения — выпущенные сборки остаются на попарной рассылке.
   static const String capRoomKeyV2 = 'rk2';
+
+  /// SendFlow (24.11.2026): умеет медиа под спойлером и одноразовый
+  /// просмотр. Только таким получателям их и шлём — старая сборка показала
+  /// бы снимок открыто.
+  static const String capMediaSpoilerOnce = 'msx1';
+
+  /// Возможности ЭТОЙ сборки — в служебных сообщениях и в отчётах о
+  /// доставке/прочтении (24.11.2026). НЕ в обычных: короткие сообщения
+  /// выравниваются до 160 байт, и лишние ~30 байт утроили бы трафик.
+  /// `rc1` — ключ звонка комнаты (call_e2ee_protocol).
+  static List<String> get ownCaps => <String>[
+    capRoomKeyV2,
+    'rc1',
+    // Только телефоны: ПК спойлер и одноразовое пока не рисует — объявив
+    // `msx1`, он показал бы такое медиа открыто (разбор 24.11.2026).
+    if (!kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.android))
+      capMediaSpoilerOnce,
+  ];
 
   static const int version = 1;
 
@@ -179,6 +201,9 @@ abstract class E2eEventV1 {
         height: (json['height'] as num?)?.toInt(),
         thumbB64: json['thumb_b64'] as String?,
         exp: disappearSecondsFromJson(json['exp']),
+        captionAbove: json['cap_above'] == true,
+        spoiler: json['spoiler'] == true,
+        viewOnce: json['view_once'] == true,
       ),
       'sticker' => StickerEventV1(
         eventId: json['event_id'] as String,
@@ -696,6 +721,9 @@ class AttachmentEventV1 extends E2eEventV1 {
     this.height,
     this.thumbB64,
     this.exp,
+    this.captionAbove = false,
+    this.spoiler = false,
+    this.viewOnce = false,
   });
 
   final String eventId;
@@ -733,6 +761,19 @@ class AttachmentEventV1 extends E2eEventV1 {
   /// Optional caption/comment shown INSIDE the same bubble as the media
   /// (Telegram-style), instead of as a separate following text message. Null
   /// for older clients (renderer falls back to no caption).
+  /// SendFlow (24.11.2026): подпись над медиа. Старые клиенты не знают
+  /// поля и покажут подпись снизу — безопасно.
+  final bool captionAbove;
+
+  /// SendFlow: медиа под спойлером (размыто до касания). Отправляется
+  /// ТОЛЬКО если все получатели умеют (`caps`), иначе старый клиент показал
+  /// бы снимок открыто.
+  final bool spoiler;
+
+  /// SendFlow: одноразовый просмотр — после закрытия у получателя файл
+  /// удаляется, снимки экрана запрещены. Тоже только при поддержке у всех.
+  final bool viewOnce;
+
   final String? caption;
 
   /// Original file name (e.g. "report_2024.pdf") so files show their real name
@@ -789,6 +830,9 @@ class AttachmentEventV1 extends E2eEventV1 {
     if (height != null && height! > 0) 'height': height,
     if (thumbB64 != null && thumbB64!.isNotEmpty) 'thumb_b64': thumbB64,
     if (exp != null && exp! > 0) 'exp': exp,
+    if (captionAbove) 'cap_above': true,
+    if (spoiler) 'spoiler': true,
+    if (viewOnce) 'view_once': true,
   };
 }
 
@@ -988,4 +1032,27 @@ class CallEventV1 extends E2eEventV1 {
     'had_screen_share': hadScreenShare,
     'quality_summary': qualitySummary,
   };
+}
+
+/// SendFlow (24.11.2026): флаги отправки медиа — в `AttachmentEventV1`.
+/// [captionAbove] ставится у первого снимка пачки (там подпись).
+class AttachmentEventFlags {
+  const AttachmentEventFlags({
+    this.captionAbove = false,
+    this.spoiler = false,
+    this.viewOnce = false,
+    this.silent = false,
+  });
+
+  static const AttachmentEventFlags none = AttachmentEventFlags();
+
+  /// Без звука у получателя — уходит реле в служебных сведениях, не в
+  /// зашифрованное сообщение.
+  final bool silent;
+
+  final bool captionAbove;
+  final bool spoiler;
+  final bool viewOnce;
+
+  bool get isNone => !captionAbove && !spoiler && !viewOnce && !silent;
 }

@@ -72,6 +72,7 @@ class GlassCategoryStrip extends StatefulWidget {
     this.height = 40,
     this.margin = const EdgeInsets.symmetric(horizontal: 14),
     this.fontSize = 14,
+    this.itemPadding = 14,
   });
 
   final List<GlassStripItem> items;
@@ -92,6 +93,10 @@ class GlassCategoryStrip extends StatefulWidget {
   final EdgeInsets margin;
   final double fontSize;
 
+  /// Поле слева и справа от подписи пункта. Для 5 пунктов в полосе
+  /// (галерея профиля) — уже, чтобы помещались поровну во всю ширину.
+  final double itemPadding;
+
   @override
   State<GlassCategoryStrip> createState() => GlassCategoryStripState();
 }
@@ -100,7 +105,6 @@ class GlassCategoryStrip extends StatefulWidget {
 class GlassCategoryStripState extends State<GlassCategoryStrip>
     with SingleTickerProviderStateMixin {
   static const double _inset = 3; // поле между пластиной и каплей
-  static const double _itemPad = 14;
   static const double _iconGap = 5;
 
   late final AnimationController _spring = AnimationController.unbounded(
@@ -230,7 +234,7 @@ class GlassCategoryStripState extends State<GlassCategoryStrip>
       return w;
     }
 
-    var w = _itemPad * 2 + textW(it.label, widget.fontSize);
+    var w = widget.itemPadding * 2 + textW(it.label, widget.fontSize);
     if (it.icon != null) w += scaler.scale(16) + _iconGap;
     if (it.badge > 0) {
       w += _iconGap + math.max(scaler.scale(18), textW('${it.badge}', 11) + 10);

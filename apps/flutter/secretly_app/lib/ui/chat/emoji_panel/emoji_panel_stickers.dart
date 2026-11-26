@@ -23,9 +23,10 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lottie/lottie.dart';
 
 import '../../../l10n/app_localizations.dart';
+import '../../../stickers/premium_sticker_packs.dart'
+    show isDesignerStickerPackId;
 import '../../../stickers/sticker_catalog.dart';
 import '../../motion/app_dialogs.dart';
 import '../../apple_controls.dart' show SecretlyAlertDialog, SecretlySpinner;
@@ -34,6 +35,7 @@ import '../../secretly_snackbar.dart';
 import '../../widgets/secretly_sticker_widgets.dart'
     show
         SecretlyStickerAssetView,
+        bundledStickerLottie,
         confirmSecretlyStickerDelete,
         confirmSecretlyStickerDestructive,
         showSecretlyForeignStickerPackSheet;
@@ -41,6 +43,7 @@ import 'emoji_panel_rail.dart';
 import 'emoji_panel_sources.dart';
 import 'emoji_panel_style.dart';
 import 'emoji_panel_widgets.dart';
+import 'premium_sticker_sheet.dart' show premiumPackTitle;
 
 /// Стикеров в ряд.
 const int kPanelStickerColumns = 5;
@@ -98,13 +101,23 @@ class StickerPlaybackGate extends ChangeNotifier {
 
   // Клетки появляются во время сборки кадра — оповещаем после него.
   void _schedule() {
-    if (_scheduled) return;
+    if (_scheduled || _disposed) return;
     _scheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scheduled = false;
+      // Панель закрыли в этом же кадре — оповещать некого.
+      if (_disposed) return;
       notifyListeners();
     });
     WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }
 
@@ -154,6 +167,17 @@ class _PanelStickerThumbState extends State<PanelStickerThumb> {
     super.dispose();
   }
 
+  bool get _lottie => widget.sticker.format == SecretlyStickerFormat.lottie;
+
+  /// Lottie играет, только если [StickerPlaybackGate] пускает; иначе —
+  /// неподвижный кадр картинкой (см. [BundledStickerLottie]).
+  Widget _lottieCell(bool play) => bundledStickerLottie(
+    widget.sticker,
+    size: widget.size,
+    maxLoops: null,
+    animate: play,
+  );
+
   Widget _image() {
     final s = widget.sticker;
     final d = widget.size;
@@ -164,12 +188,7 @@ class _PanelStickerThumbState extends State<PanelStickerThumb> {
         return broken();
       case SecretlyStickerAssetSource.bundledAsset:
         return switch (s.format) {
-          SecretlyStickerFormat.lottie => Lottie.asset(
-            s.assetPath,
-            width: d,
-            height: d,
-            fit: BoxFit.contain,
-          ),
+          SecretlyStickerFormat.lottie => bundledStickerLottie(s, size: d, maxLoops: null),
           _ => Image.asset(
             s.assetPath,
             width: d,
@@ -184,12 +203,7 @@ class _PanelStickerThumbState extends State<PanelStickerThumb> {
         final file = File(s.assetPath);
         if (!file.existsSync()) return broken();
         return switch (s.format) {
-          SecretlyStickerFormat.lottie => Lottie.file(
-            file,
-            width: d,
-            height: d,
-            fit: BoxFit.contain,
-          ),
+          SecretlyStickerFormat.lottie => bundledStickerLottie(s, size: d, maxLoops: null),
           _ => Image.file(
             file,
             width: d,
@@ -206,12 +220,24 @@ class _PanelStickerThumbState extends State<PanelStickerThumb> {
 
   @override
   Widget build(BuildContext context) {
+    final gate = widget.gate;
+    if (_lottie && widget.sticker.assetSource != SecretlyStickerAssetSource.missing) {
+      Widget cell(bool play) => SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: RepaintBoundary(child: _lottieCell(play)),
+      );
+      if (gate == null) return cell(false);
+      return ListenableBuilder(
+        listenable: gate,
+        builder: (context, _) => cell(gate.allows(this)),
+      );
+    }
     final image = SizedBox(
       width: widget.size,
       height: widget.size,
       child: RepaintBoundary(child: _image()),
     );
-    final gate = widget.gate;
     if (!_animated) return image;
     if (gate == null) return TickerMode(enabled: false, child: image);
     return ListenableBuilder(
@@ -259,7 +285,73 @@ class PanelStickerSection {
 class StickerTabModel extends ChangeNotifier {
   StickerTabModel({required this.source, required this.canCreate}) {
     scroll.addListener(_spy);
-    unawaited(reload(refresh: true));
+    _showSnapshot();
+    unawaited(_open());
+  }
+
+  /// Недавние по профилю с прошлого показа — чтобы первый кадр панели сразу
+  /// был полным. Владелец 24.11.2026: панель на долю секунды показывала
+  /// пустые «Недавние» и короткую рейку, потом «моргала» и наполнялась.
+  static final Map<String, List<SecretlyStickerDescriptor>> _recentsCache =
+      <String, List<SecretlyStickerDescriptor>>{};
+
+  /// Прочитать недавние заранее (чат открыт, панель ещё нет).
+  static Future<void> warmUp(EmojiPanelStickerSource source) async {
+    final key = source.cacheKey;
+    if (key == null) return;
+    try {
+      _recentsCache[key] = await source.loadRecent();
+    } catch (_) {}
+  }
+
+  /// Из того, что уже в памяти: наборы и недавние — до первого кадра.
+  void _showSnapshot() {
+    final all = source.packsNow();
+    final key = source.cacheKey;
+    final r = key == null ? null : _recentsCache[key];
+    if (all == null) return;
+    _apply(r ?? const [], all);
+    loading = r == null;
+  }
+
+  /// Открытие: сперва всё, что есть без сети (одним обновлением), потом
+  /// каталог с сервера.
+  Future<void> _open() async {
+    await reload();
+    if (_disposed) return;
+    try {
+      final all = await source.loadPacks();
+      // Тот же список — каталог не менялся, сетку не трогаем. Недавние
+      // остаются как есть: под пальцем они не переставляются.
+      if (_disposed || identical(all, _shownPacks)) return;
+      _apply(recents, all);
+      notifyListeners();
+    } catch (_) {
+      // Нет сети — остаётся показанное.
+    }
+  }
+
+  List<SecretlyStickerPack>? _shownPacks;
+
+  void _apply(
+    List<SecretlyStickerDescriptor> r,
+    List<SecretlyStickerPack> all,
+  ) {
+    final favId = source.favoritesPackId;
+    recents = r;
+    _shownPacks = all;
+    favorites = all.where((p) => p.id == favId).firstOrNull;
+    // Наборы, где есть что показать (как у прежней ленты).
+    premium = source.premiumPacks();
+    final premiumIds = {for (final p in premium) p.id};
+    packs = all
+        .where(
+          (p) =>
+              p.id != favId &&
+              p.stickers.isNotEmpty &&
+              !premiumIds.contains(p.id),
+        )
+        .toList(growable: false);
   }
 
   final EmojiPanelStickerSource source;
@@ -273,6 +365,21 @@ class StickerTabModel extends ChangeNotifier {
 
   List<SecretlyStickerDescriptor> recents = const [];
   List<SecretlyStickerPack> packs = const [];
+
+  /// Премиум-наборы (значки закреплены слева от лупы). С Premium они ещё и
+  /// разделы сетки в конце; без Premium — только окно набора с покупкой.
+  List<SecretlyStickerPack> premium = const [];
+
+  /// Есть ли Premium — читается каждый раз (после покупки или поздней
+  /// загрузки подписки панель отпирается без переоткрытия).
+  bool get premiumUnlocked => source.premiumUnlocked;
+
+  /// Страница покупки; по возвращении панель перестраивается — замки
+  /// снимаются сразу, если подписка оформлена.
+  Future<void> openPremium(BuildContext context) async {
+    await source.openPremium(context);
+    if (!_disposed) notifyListeners();
+  }
   SecretlyStickerPack? favorites;
   bool loading = true;
   String query = '';
@@ -288,13 +395,9 @@ class StickerTabModel extends ChangeNotifier {
       final r = await source.loadRecent();
       final all = await source.loadPacks(refresh: refresh);
       if (_disposed) return;
-      final favId = source.favoritesPackId;
-      recents = r;
-      favorites = all.where((p) => p.id == favId).firstOrNull;
-      // Наборы, где есть что показать (как у прежней ленты).
-      packs = all
-          .where((p) => p.id != favId && p.stickers.isNotEmpty)
-          .toList(growable: false);
+      final key = source.cacheKey;
+      if (key != null) _recentsCache[key] = r;
+      _apply(r, all);
     } catch (_) {
       // Сбой — показываем то, что было.
     }
@@ -347,11 +450,34 @@ class StickerTabModel extends ChangeNotifier {
         PanelStickerSection(
           kind: PanelStickerSectionKind.pack,
           id: p.id,
-          title: p.title,
+          // Встроенные наборы дизайнера — на языке интерфейса.
+          title: premiumPackTitle(l10n, p),
           stickers: p.stickers,
           pack: p,
         ),
+      // Премиум — всегда последними: их значки закреплены у лупы, а не в
+      // прокручиваемой рейке ([railCount]).
+      if (premiumUnlocked)
+        for (final p in premium)
+          PanelStickerSection(
+            kind: PanelStickerSectionKind.pack,
+            id: p.id,
+            title: premiumPackTitle(l10n, p),
+            stickers: p.stickers,
+            pack: p,
+          ),
     ];
+  }
+
+  /// Сколько разделов показывает прокручиваемая рейка: все, кроме премиум.
+  int railCount(List<PanelStickerSection> secs) =>
+      secs.where((s) => s.pack?.premium != true).length;
+
+  /// Прокрутить сетку к разделу набора [packId] (значок у лупы).
+  void jumpToPack(AppLocalizations l10n, String packId) {
+    final secs = buildSections(l10n);
+    final i = secs.indexWhere((s) => s.id == packId);
+    if (i >= 0) jump(i);
   }
 
   static double cellSize(double width) =>
@@ -436,6 +562,8 @@ class StickerTabModel extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _lockTimer?.cancel();
+    // Отправленное за этот показ — в снимок для следующего.
+    unawaited(warmUp(source));
     scroll.removeListener(_spy);
     scroll.dispose();
     search.dispose();
@@ -471,8 +599,10 @@ class StickerPackRail extends StatelessWidget {
         final secs = model.buildSections(l10n);
         return PanelRail(
           style: style,
-          count: secs.length,
+          // Премиум-разделы — последними, их значки у лупы.
+          count: model.railCount(secs),
           active: model.active,
+          clampActive: false,
           indicatorHeight: 38,
           indicatorRadius: 14,
           minItemWidth: 44,
@@ -762,7 +892,10 @@ class StickerGridPageState extends State<StickerGridPage>
       final dt = math.max(1, now - _lastMs);
       _lastMs = now;
       final v = (n.scrollDelta ?? 0).abs() / dt * 1000;
-      _m.gate.paused = v > 2200;
+      // Пока лента едет — все стоят картинками (24.11.2026: живые векторы
+      // во время прокрутки давали 9–10 мс растра на кадр при бюджете 8,3).
+      // До конца жеста: иначе на замедлении клетки мигали бы туда-обратно.
+      if (v > 250) _m.gate.paused = true;
     } else if (n is ScrollEndNotification) {
       _m.gate.paused = false;
     }
@@ -1298,7 +1431,12 @@ class _StickerPreviewOverlayState extends State<_StickerPreviewOverlay>
             mainAxisSize: MainAxisSize.min,
             children: [
               item('send', Icons.send_rounded, l10n.stickerSend),
-              if (fav)
+              // Встроенные наборы дизайнера — без «Избранного»: файла на
+              // диске нет (стикер в сборке), а копия в своё избранное
+              // сделала бы премиум-стикер «своим» в обход замка.
+              if (isDesignerStickerPackId(st.sticker.packId))
+                const SizedBox.shrink()
+              else if (fav)
                 item('unfavorite', Icons.star_rounded, l10n.stickerRemoveFromFavorites)
               else
                 item('favorite', Icons.star_outline_rounded, l10n.stickerMakeFavorite),

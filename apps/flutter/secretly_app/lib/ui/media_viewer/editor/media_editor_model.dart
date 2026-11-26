@@ -22,7 +22,7 @@ import '../media_edits.dart';
 enum MediaEditorTab { crop, draw, adjust }
 
 /// Инструменты вкладки «Рисунок».
-enum MediaDrawTool { pen, marker, neon, eraser, text }
+enum MediaDrawTool { pen, arrow, marker, neon, eraser, text }
 
 enum MediaEditorHaptic { selection, light, medium }
 

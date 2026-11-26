@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // SPDX-FileCopyrightText: 2025-2026 Yurii Arkhanhelskyi
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
+import '../app/album_caption.dart';
 import 'whats_new/pen_mark.dart';
 import 'glass/glass_category_strip.dart';
 import 'dart:async';
@@ -70,11 +71,19 @@ import '../cosmetics/cosmetics_catalog_service.dart';
 import '../entitlements/cosmetic_catalog.dart';
 import 'widgets/animated_wallpaper_preview.dart';
 import 'widgets/apple_menu.dart';
+import 'widgets/lottie_still.dart';
+import 'widgets/still_under_sheet.dart';
 import 'widgets/covered_route_media_freeze.dart' show mediaQueryNow;
 import 'widgets/island_backdrop.dart';
 import 'widgets/wallpaper_picker_sheet.dart';
 import 'paywall_screen.dart';
 import '../billing/show_paywall.dart';
+import '../stickers/premium_sticker_packs.dart';
+import 'chat/emoji_panel/premium_sticker_sheet.dart';
+import 'chat/emoji_panel/emoji_panel_prefs.dart' show EmojiPanelPrefs;
+import 'chat/emoji_panel/emoji_panel_stickers.dart' show StickerTabModel;
+import 'chat/inline_text_selection.dart';
+import 'chat/media_spoiler_once.dart';
 import 'voice/voice_dictation.dart';
 import 'voice/voice_transcription.dart';
 import 'voice/voice_transcription_toggle.dart';
@@ -1313,7 +1322,11 @@ class _ChatScreenState extends State<ChatScreen>
       <String, ({int atMs, int count})>{};
   final Set<String> _imagePreviewGoneBlobIds = <String>{};
   final Set<String> _selectedEventIds = <String>{};
-  final Set<String> _seenEventIds = <String>{};
+  // Общая на все открытия чатов (26.11.2026): своё «привет», выйти и
+  // вернуться — пузырь больше не вылетает из поля ввода заново, а пришедшее
+  // по уведомлению не вырастает второй раз.
+  Set<String> get _seenEventIds => _seenEventIdsGlobal;
+  static final Set<String> _seenEventIdsGlobal = _CappedSeenSet(4000);
   // payloadEventIds that were hidden last build because a pending-upload
   // placeholder was covering them. When one leaves this set (the placeholder
   // settled into its real event row) we let that row appear WITHOUT the
@@ -1628,6 +1641,9 @@ class _ChatScreenState extends State<ChatScreen>
   int _readThroughMs = 0;
   final GlobalKey _composerOverlayKey = GlobalKey();
 
+  /// Чат под листом скрепки — картинкой (см. [StillUnderSheet]).
+  final StillUnderSheetController _underSheet = StillUnderSheetController();
+
   /// Островок шапки (имя) и полоса под ним (закреплённое, музыка, темы):
   /// по ним меряется настоящий низ верхних островов — под ним встаёт зелёная
   /// плашка звонка (22.11.2026: по расчётной высоте шапки она оказывалась
@@ -1671,6 +1687,19 @@ class _ChatScreenState extends State<ChatScreen>
   late final VideoNoteController _videoNote;
   OverlayEntry? _videoNoteOverlay;
   AppLifecycleListener? _videoNoteLifecycle;
+  AppLifecycleListener? _draftLifecycle;
+  Timer? _draftSaveTimer;
+
+  /// Набранное до начала правки: правка его не стирает, после неё (или
+  /// отмены) оно возвращается в поле и в черновик.
+  String? _draftBeforeEdit;
+
+  /// Сохранённый черновик не загружен в поле (открыли с пересылкой или
+  /// правкой) — пустое поле его не стирает.
+  bool _savedDraftNotLoaded = false;
+
+  /// Текст, о котором уже сказали «печатает» (сдвиг курсора — не набор).
+  String _typingSeenText = '';
   // Anchors the room actions dropdown to the 3-dots button.
   final GlobalKey _roomMenuButtonKey = GlobalKey();
 
@@ -1926,6 +1955,22 @@ class _ChatScreenState extends State<ChatScreen>
   @override
   void initState() {
     super.initState();
+    _replyThumbLoader = widget.controller.cachedAttachmentFile;
+    unawaited(ViewOnceStore.load());
+    _viewOnceOpener = (ctx, att) => unawaited(
+      openViewOnceMedia(
+        ctx,
+        attachment: att,
+        loadFile: () => loadConversationAttachmentFile(widget.controller, att),
+        onDeleteFile: (f) async {
+          _chatMediaFileMemoByBlobId.remove(att.blobId);
+          try {
+            if (await f.exists()) await f.delete();
+          } catch (_) {}
+        },
+        restorePrivacyTo: widget.controller.screenPrivacy,
+      ),
+    );
     _islandCallManager = CallManager.instance;
     _islandCallMinimized = _callIslandVisibleNow();
     _islandCallManager?.state.addListener(_onCallStateForIslands);
@@ -1991,6 +2036,15 @@ class _ChatScreenState extends State<ChatScreen>
         vsync: this,
         field: _messageInputFocusNode,
       );
+      // Недавние стикеры и эмодзи — заранее, чтобы первый кадр панели был
+      // полным (24.11.2026: панель «моргала» при открытии).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(EmojiPanelPrefs.warmUp());
+        unawaited(
+          StickerTabModel.warmUp(AppControllerStickerSource(widget.controller)),
+        );
+      });
     }
     _initVoiceRecorder();
     _initVideoNote();
@@ -2007,6 +2061,12 @@ class _ChatScreenState extends State<ChatScreen>
     );
     _forwardDraft = widget.initialForwardDraft;
     _text.addListener(_onComposerTextChanged);
+    // Черновик живёт не только до выхода из чата (26.11.2026): система могла
+    // закрыть приложение в фоне, и набранное пропадало.
+    _draftLifecycle = AppLifecycleListener(
+      onInactive: () => unawaited(_persistDraft()),
+      onHide: () => unawaited(_persistDraft()),
+    );
     unawaited(_loadBundledWallpapers());
     unawaited(_restoreChatWallpaperSelection());
     unawaited(_restorePinnedMessages());
@@ -2024,6 +2084,12 @@ class _ChatScreenState extends State<ChatScreen>
       unawaited(VoiceTranscriptionService.instance.warmUp());
     }
     _changedSub = widget.controller.changed.listen((_) {
+      // Под листом — новая картинка с тем, что пришло.
+      if (_underSheet.still) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _underSheet.refresh(),
+        );
+      }
       _scheduleMarkRead();
       unawaited(_refreshJumpUnreadCount());
       // Пришёл более свежий список закреплённых (21.11.2026).
@@ -4021,6 +4087,30 @@ class _ChatScreenState extends State<ChatScreen>
     }
   }
 
+  String? _roomPolicySig;
+
+  static String _roomPolicySignature(RoomPolicyState p) {
+    final st = p.settings;
+    return [
+      p.isMember, p.role.name, p.canSendText, p.canSendMedia,
+      p.canAddMembers, p.canPinMessages, p.canChangeGroupInfo,
+      p.canChangeOwnTag, p.canManageSettings, p.canManageAdmins,
+      p.canManageMemberRoles, p.canManageInviteLinks,
+      p.canApproveJoinRequests, p.canRemoveMembers, p.canBanMembers,
+      p.canUseBroadcastMentions, p.canReceiveAdminMentions, p.canReact,
+      p.allowedReactionEmojis.join(','), p.isSlowModeActive,
+      p.slowModeRemainingSeconds,
+      st.ownerProfileId, st.avatarPath, st.avatarHash,
+      st.pinnedMessageEventId, st.coverId, st.frameId, st.nameEmoji,
+      st.description, st.reactionsMode.name, st.allowTextMessages,
+      st.allowMedia, st.allowAddMembers, st.allowPinMessages,
+      st.allowChangeGroupInfo, st.allowChangeTag, st.joinApprovalRequired,
+      st.slowModeSeconds, st.chatHistoryVisible, st.membershipVersion,
+      st.stateVersion, st.parentRoomId, st.roomKind,
+      st.allowMembersCreateTopics,
+    ].join('\u0001');
+  }
+
   Future<void> _refreshRoomPolicyState() async {
     if (!_isGroupChat) {
       return;
@@ -4032,9 +4122,17 @@ class _ChatScreenState extends State<ChatScreen>
       return;
     }
     _scheduleRoomPolicyRefresh(policy);
-    setState(() {
+    // Перерисовка всего экрана — только когда права/настройки комнаты
+    // правда изменились (26.11.2026): раньше на КАЖДОЕ событие чата.
+    final sig = _roomPolicySignature(policy);
+    if (sig == _roomPolicySig) {
       _roomPolicyState = policy;
-    });
+    } else {
+      _roomPolicySig = sig;
+      setState(() {
+        _roomPolicyState = policy;
+      });
+    }
     if (_roomMentionCandidates.isEmpty ||
         _canUseBroadcastRoomMentions() != hadBroadcastMentions) {
       unawaited(_refreshRoomMentionCandidates(force: true));
@@ -4740,6 +4838,16 @@ class _ChatScreenState extends State<ChatScreen>
   void _onComposerTextChanged() {
     _syncComposerMentionDraft();
     _linkPreviewDraft.update(_text.text);
+    _draftSaveTimer?.cancel();
+    _draftSaveTimer = Timer(const Duration(milliseconds: 800), () {
+      if (mounted) unawaited(_persistDraft());
+    });
+    // «Печатает» — только живой набор в поле с фокусом: восстановленный
+    // черновик, начало правки и сдвиг курсора им не были (26.11.2026).
+    final typedText = _text.text;
+    final textChanged = typedText != _typingSeenText;
+    _typingSeenText = typedText;
+    if (!textChanged || !_messageInputFocusNode.hasFocus) return;
     if (!_canEmitTyping) return;
 
     final hasText = _text.text.trim().isNotEmpty;
@@ -5476,7 +5584,10 @@ class _ChatScreenState extends State<ChatScreen>
       } else {
         _selectedEventIds.add(eventId);
       }
-      if (!_selectedEventIds.contains(_textSelectEventId)) {
+      // Сняли это сообщение или отметили ещё одно — текст больше не
+      // выделяем.
+      if (_selectedEventIds.length != 1 ||
+          !_selectedEventIds.contains(_textSelectEventId)) {
         _textSelectEventId = null;
       }
     });
@@ -5485,40 +5596,23 @@ class _ChatScreenState extends State<ChatScreen>
   // ── Выделение части текста в пузыре (21.11.2026) ──────────────────────
   /// Сообщение, текст которого сейчас выделяется (одно за раз).
   String? _textSelectEventId;
-  final GlobalKey<SelectionAreaState> _textSelectAreaKey =
-      GlobalKey<SelectionAreaState>();
-  String _textSelectContent = '';
-  bool _textSelectHadContent = false;
+  final GlobalKey<InlineTextSelectionState> _textSelectKey =
+      GlobalKey<InlineTextSelectionState>();
 
   void _endTextSelection() {
-    if (_textSelectEventId == null) return;
-    setState(() {
-      _textSelectEventId = null;
-      _textSelectContent = '';
-      _textSelectHadContent = false;
-    });
+    if (_textSelectEventId == null || !mounted) return;
+    setState(() => _textSelectEventId = null);
   }
 
   Widget _inlineTextSelection(_TimelineEntry entry, Widget text) {
-    return SelectionArea(
-      key: _textSelectAreaKey,
-      onSelectionChanged: (content) {
-        final value = content?.plainText ?? '';
-        _textSelectContent = value;
-        if (value.isNotEmpty) {
-          _textSelectHadContent = true;
-        } else if (_textSelectHadContent) {
-          // Сняли выделение касанием мимо — выходим из режима текста.
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => _endTextSelection(),
-          );
-        }
-      },
-      contextMenuBuilder: (menuContext, region) {
+    return InlineTextSelection(
+      key: _textSelectKey,
+      onCleared: _endTextSelection,
+      menu: (selection) {
         String label(String ru, String en, String uk, String es, String pt,
                 String fr, String de) =>
             chatText(
-              menuContext,
+              context,
               ru: ru,
               en: en,
               uk: uk,
@@ -5527,50 +5621,51 @@ class _ChatScreenState extends State<ChatScreen>
               fr: fr,
               de: de,
             );
-        return AdaptiveTextSelectionToolbar.buttonItems(
-          anchors: region.contextMenuAnchors,
-          buttonItems: [
-            ContextMenuButtonItem(
-              label: label('Копировать', 'Copy', 'Копіювати', 'Copiar',
-                  'Copiar', 'Copier', 'Kopieren'),
-              onPressed: () {
-                final value = _textSelectContent;
-                region.hideToolbar();
-                if (value.isEmpty) return;
-                unawaited(Clipboard.setData(ClipboardData(text: value)));
-                HapticFeedback.selectionClick();
-                _endTextSelection();
-                _clearSelection();
-                _showChatMessage(
-                  chatText(context, ru: 'Скопировано', en: 'Copied'),
-                );
-              },
-            ),
-            ContextMenuButtonItem(
-              label: label('Цитировать', 'Quote', 'Цитувати', 'Citar',
-                  'Citar', 'Citer', 'Zitieren'),
-              onPressed: () {
-                final value = _textSelectContent.trim();
-                region.hideToolbar();
-                if (value.isEmpty) return;
-                _endTextSelection();
-                _clearSelection();
-                _startReply(
-                  payloadEventId: entry.payloadEventId,
-                  previewText: value,
-                  authorName: entry.isMe
-                      ? _selfAuthorLabel()
-                      : (_isGroupChat
-                            ? (entry.authorName.trim().isEmpty
-                                  ? widget.title
-                                  : entry.authorName)
-                            : widget.title),
-                  authorIsMe: entry.isMe,
-                );
-              },
-            ),
-          ],
-        );
+        return [
+          ContextMenuButtonItem(
+            label: label('Копировать', 'Copy', 'Копіювати', 'Copiar',
+                'Copiar', 'Copier', 'Kopieren'),
+            onPressed: () {
+              final value = selection.selectedText;
+              selection.hideMenu();
+              if (value.isEmpty) return;
+              unawaited(Clipboard.setData(ClipboardData(text: value)));
+              HapticFeedback.selectionClick();
+              _endTextSelection();
+              _clearSelection();
+              _showChatMessage(
+                chatText(context, ru: 'Скопировано', en: 'Copied'),
+              );
+            },
+          ),
+          ContextMenuButtonItem(
+            label: label('Цитировать', 'Quote', 'Цитувати', 'Citar',
+                'Citar', 'Citer', 'Zitieren'),
+            onPressed: () {
+              final value = selection.selectedText.trim();
+              selection.hideMenu();
+              if (value.isEmpty) return;
+              _endTextSelection();
+              _clearSelection();
+              _startReply(
+                payloadEventId: entry.payloadEventId,
+                previewText: value,
+                authorName: entry.isMe
+                    ? _selfAuthorLabel()
+                    : (_isGroupChat
+                          ? (entry.authorName.trim().isEmpty
+                                ? widget.title
+                                : entry.authorName)
+                          : widget.title),
+                authorIsMe: entry.isMe,
+              );
+            },
+          ),
+          ContextMenuButtonItem(
+            label: MaterialLocalizations.of(context).selectAllButtonLabel,
+            onPressed: selection.selectAll,
+          ),
+        ];
       },
       child: text,
     );
@@ -5633,6 +5728,7 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   bool _isDownloadableMediaAttachment(AttachmentEventV1 attachment) {
+    if (attachment.viewOnce) return false; // одноразовое не сохраняется
     final mime = (attachment.mime ?? '').toLowerCase();
     return mime.startsWith('image/') ||
         mime.startsWith('video/') ||
@@ -5884,8 +5980,10 @@ class _ChatScreenState extends State<ChatScreen>
               )
             : chatText(
                 context,
-                ru: 'Сохранено $savedCount файл(ов) в ${dir.path}',
-                en: 'Saved $savedCount file(s) to ${dir.path}',
+                ru: 'Сохранено $savedCount ${_slavicPlural(savedCount, 'файл', 'файла', 'файлов')} в ${dir.path}',
+                en: savedCount == 1
+                    ? 'Saved 1 file to ${dir.path}'
+                    : 'Saved $savedCount files to ${dir.path}',
                 uk: 'Збережено файлів: $savedCount у ${dir.path}',
                 es: 'Guardados $savedCount archivo(s) en ${dir.path}',
                 pt: '$savedCount ficheiro(s) guardado(s) em ${dir.path}',
@@ -5914,6 +6012,8 @@ class _ChatScreenState extends State<ChatScreen>
     required AttachmentEventV1 attachment,
     required int createdAtMs,
   }) async {
+    // Одноразовое (SendFlow Э5) не сохраняется.
+    if (attachment.viewOnce) return;
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
 
@@ -6684,12 +6784,20 @@ class _ChatScreenState extends State<ChatScreen>
     }
   }
 
+  /// Отложенное уже на сервере, а связи нет — снять/отправить сейчас нельзя.
+  String _scheduledNoConnectionText() => chatText(
+    context,
+    ru: 'Отложенное уже на сервере, а связи нет. Оно осталось — попробуйте ещё раз.',
+    en: 'The scheduled message is already on the server and there is no connection. It is still here — try again.',
+    uk: 'Відкладене вже на сервері, а зв’язку немає. Воно лишилося — спробуйте ще раз.',
+    es: 'El mensaje programado ya está en el servidor y no hay conexión. Sigue aquí; inténtalo de nuevo.',
+    pt: 'A mensagem agendada já está no servidor e não há ligação. Continua aqui — tente novamente.',
+    fr: 'Le message programmé est déjà sur le serveur et il n’y a pas de connexion. Il est toujours là — réessayez.',
+    de: 'Die geplante Nachricht ist schon auf dem Server und es gibt keine Verbindung. Sie ist noch da – versuche es erneut.',
+  );
+
   String _buildDeleteForAllCommand(List<String> payloadEventIds) {
     return buildDeleteForAllCommand(payloadEventIds);
-  }
-
-  List<String> _parseDeleteForAllCommand(String text) {
-    return parseDeleteForAllCommand(text);
   }
 
   Future<void> _copySelectedMessages() async {
@@ -6756,6 +6864,8 @@ class _ChatScreenState extends State<ChatScreen>
       if (_text.text.isNotEmpty ||
           _editingTarget != null ||
           _forwardDraft != null) {
+        // Сохранённый черновик не показан — и пустое поле его не сотрёт.
+        _savedDraftNotLoaded = true;
         return;
       }
       _text.value = TextEditingValue(
@@ -6771,15 +6881,22 @@ class _ChatScreenState extends State<ChatScreen>
   Future<void> _persistDraft() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final text = _text.text;
       final key = _draftPrefKey();
-      // Never persist a draft while editing/forwarding — that text is transient.
-      if (text.trim().isEmpty ||
-          _editingTarget != null ||
-          _forwardDraft != null) {
+      // Во время правки черновик — то, что было набрано до неё; при пересылке
+      // сохранённое не трогаем (раньше уход стирал его).
+      if (_editingTarget == null && _forwardDraft != null) return;
+      final field = _text.text;
+      // Правка идёт (или уже ушла, но ещё не вернула набранное) — черновик
+      // это набранное до неё.
+      final text = _editingTarget != null
+          ? (_draftBeforeEdit ?? '')
+          : (field.trim().isNotEmpty ? field : (_draftBeforeEdit ?? ''));
+      if (text.trim().isEmpty) {
+        if (_savedDraftNotLoaded) return;
         ChatListDrafts.set(widget.convoId, null);
         await prefs.remove(key);
       } else {
+        _savedDraftNotLoaded = false;
         // Строка в списке чатов сразу покажет «Черновик: …».
         ChatListDrafts.set(widget.convoId, text);
         await prefs.setString(key, text);
@@ -8167,7 +8284,7 @@ class _ChatScreenState extends State<ChatScreen>
             _isHiddenSystemCommandText(payload.text)) {
           continue;
         }
-        text = payload.text;
+        text = visibleMessageText(payload.text);
       } else if (payload is AttachmentEventV1) {
         text = _attachmentPreviewLabel(payload.mime, waveform: payload.waveform);
       } else if (payload is StickerEventV1) {
@@ -8351,17 +8468,24 @@ class _ChatScreenState extends State<ChatScreen>
             : sourceProfileId != null && sourceProfileId.isNotEmpty
             ? await widget.controller.resolveConvoTitle(sourceProfileId)
             : widget.title;
+        // Пересланное пересылается с исходным автором и текстом, без обёртки
+        // в обёртке.
+        final fwd = parseForwardCommand(payload.text);
         items.add(
           ForwardDraftItem.text(
-            authorName: author,
-            text: payload.text,
-            sourceProfileId: sourceProfileId,
+            authorName: fwd?.authorName ?? author,
+            text: fwd?.text ?? payload.text,
+            sourceProfileId: fwd == null
+                ? sourceProfileId
+                : fwd.authorProfileId,
             sourceConvoId: widget.convoId,
           ),
         );
         continue;
       }
       if (payload is AttachmentEventV1) {
+        // Одноразовое (SendFlow Э5) не пересылается.
+        if (payload.viewOnce) continue;
         // 🔴 ФАЙЛ ЗДЕСЬ НЕ ТРОГАЕМ ВОВСЕ (14.08.2026).
         //
         // Здесь стоял `downloadAndDecryptAttachment`: он выкачивал блоб С
@@ -8430,7 +8554,10 @@ class _ChatScreenState extends State<ChatScreen>
     if (!mounted) return;
     // Leave selection mode and open the full-screen «Переслать…» chat picker.
     if (_selectionMode) {
-      setState(() => _selectedEventIds.clear());
+      setState(() {
+        _selectedEventIds.clear();
+        _textSelectEventId = null;
+      });
     }
 
     if (blockedCount > 0) {
@@ -8622,16 +8749,10 @@ class _ChatScreenState extends State<ChatScreen>
         : const <String>[];
     final deleteForAll = deleteForAllPayloadIds.isNotEmpty;
 
-    await widget.controller.deleteEventsLocal(
-      convoId: widget.convoId,
-      eventIds: localEventIds,
-    );
-
-    // The delete-for-all broadcast is BEST-EFFORT: the local delete already
-    // succeeded, so a transient send failure (slow link, session hiccup) must
-    // NOT throw out of here — that used to abort the caller before it cleared
-    // the selection, leaving the selection toolbar stuck even though the
-    // messages were gone.
+    // «У всех» — сначала метка, потом своё (26.11.2026). Раньше сначала
+    // стиралось у себя, а метка при ошибке (нет сети, отказ комнаты)
+    // молча пропадала: у меня сообщения нет, у всех есть, и повторить уже
+    // нечего. Теперь не ушла метка — сообщение остаётся и можно повторить.
     if (deleteForAll) {
       try {
         if (_isGroupChat) {
@@ -8645,9 +8766,34 @@ class _ChatScreenState extends State<ChatScreen>
             text: _buildDeleteForAllCommand(deleteForAllPayloadIds),
           );
         }
-      } catch (_) {
-        // Local delete stands; the peer re-syncs the removal on its next fetch.
+      } catch (e) {
+        if (mounted) {
+          final policy = tryRoomPolicyErrorText(context.l10n, e);
+          _showChatMessage(
+            policy ??
+                chatText(
+                  context,
+                  ru: 'Не удалось удалить у всех: нет связи. Сообщение осталось — попробуйте ещё раз.',
+                  en: 'Could not delete for everyone: no connection. The message is still here — try again.',
+                  uk: 'Не вдалося видалити для всіх: немає зв’язку. Повідомлення лишилося — спробуйте ще раз.',
+                  es: 'No se pudo eliminar para todos: sin conexión. El mensaje sigue aquí; inténtalo de nuevo.',
+                  pt: 'Não foi possível apagar para todos: sem ligação. A mensagem continua aqui — tente novamente.',
+                  fr: 'Impossible de supprimer pour tous : pas de connexion. Le message est toujours là — réessayez.',
+                  de: 'Für alle löschen fehlgeschlagen: keine Verbindung. Die Nachricht ist noch da – versuche es erneut.',
+                ),
+          );
+        }
+        return false;
       }
+    }
+
+    final keptScheduled = await widget.controller.deleteEventsLocal(
+      convoId: widget.convoId,
+      eventIds: localEventIds,
+    );
+    if (keptScheduled > 0) _showChatMessage(_scheduledNoConnectionText());
+
+    if (deleteForAll) {
       // Д-3 (22.11.2026): удалённое у всех было закреплено — тот, кто
       // удалял и вправе закреплять, рассылает список без него (старые
       // сборки получают обычный список и тоже убирают его с плашки).
@@ -8934,8 +9080,13 @@ class _ChatScreenState extends State<ChatScreen>
                         value: 'reply',
                       ),
                       if (entry.isMe &&
-                          entry.event.localState ==
-                              MessageLocalState.scheduled)
+                          (entry.event.localState ==
+                                  MessageLocalState.scheduled ||
+                              // Уже на реле и ещё не выдано (26.11.2026).
+                              // Только личные: у комнат такого отзыва нет.
+                              (!_isGroupChat &&
+                                  (entry.event.scheduledAtMs ?? 0) >
+                                      DateTime.now().millisecondsSinceEpoch)))
                         _menuActionItem(
                           context,
                           icon: AdaptiveIcons.send_rounded,
@@ -8951,7 +9102,12 @@ class _ChatScreenState extends State<ChatScreen>
                           entry.attachment == null &&
                           entry.stickerEvent == null &&
                           entry.callEvent == null &&
-                          entry.systemEvent == null)
+                          entry.systemEvent == null &&
+                          // Чужие слова, опрос и событие не правятся: поле
+                          // показало бы служебную запись (25.11.2026).
+                          entry.forwardedFrom == null &&
+                          entry.pollData == null &&
+                          entry.eventData == null)
                         _menuActionItem(
                           context,
                           icon: AppIcons.edit,
@@ -9450,10 +9606,14 @@ class _ChatScreenState extends State<ChatScreen>
         await _deleteEventsWithConfirm(_eventsForTimelineEntry(entry).toList());
         return;
       case 'send_now':
-        await widget.controller.sendScheduledMessageNow(
-          convoId: widget.convoId,
-          eventId: entry.event.eventId,
-        );
+        try {
+          await widget.controller.sendScheduledMessageNow(
+            convoId: widget.convoId,
+            eventId: entry.event.eventId,
+          );
+        } catch (_) {
+          _showChatMessage(_scheduledNoConnectionText());
+        }
         return;
     }
   }
@@ -10546,7 +10706,15 @@ class _ChatScreenState extends State<ChatScreen>
                 style: const TextStyle(fontSize: 14),
               ),
               trailing: Text(
-                _formatTime(reader.readAtMs),
+                // Не сегодня — с днём (26.11.2026: прочитанное три дня назад
+                // выглядело сегодняшним).
+                _isSameCalendarDay(
+                      reader.readAtMs,
+                      DateTime.now().millisecondsSinceEpoch,
+                    )
+                    ? _formatTime(reader.readAtMs)
+                    : '${_chatDayLabel(context, reader.readAtMs)}, '
+                          '${_formatTime(reader.readAtMs)}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               onTap: () => onTapReader(reader, member, name),
@@ -10766,6 +10934,9 @@ class _ChatScreenState extends State<ChatScreen>
       _onTranslationSettingsChanged,
     );
     // Persist any unsent composer text so it's restored next time.
+    _draftSaveTimer?.cancel();
+    _draftLifecycle?.dispose();
+    _roomReceiptsTimer?.cancel();
     unawaited(_persistDraft());
     widget.controller.clearActiveConversation(widget.convoId);
     // M1: do NOT cancel in-flight uploads on dispose — they now live in the
@@ -10797,6 +10968,7 @@ class _ChatScreenState extends State<ChatScreen>
     unawaited(_voice.dispose().whenComplete(_voiceRecorder.dispose));
     _smileIconController.dispose();
     _inlineEmojiPanel?.dispose();
+    _underSheet.dispose();
     _voicePulseController.dispose();
     _roomPolicyRefreshTimer?.cancel();
     _retentionTimer?.cancel();
@@ -10859,7 +11031,10 @@ class _ChatScreenState extends State<ChatScreen>
   @override
   Widget build(BuildContext context) => _ChatKindScope(
     isGroup: _isGroupChat,
-    child: Builder(builder: _buildChat),
+    child: StillUnderSheet(
+      controller: _underSheet,
+      child: Builder(builder: _buildChat),
+    ),
   );
 
   Widget _buildChat(BuildContext context) {
@@ -11290,6 +11465,11 @@ class _ChatScreenState extends State<ChatScreen>
                                 context,
                                 ru: 'Выбрано ${_selectedEventIds.length}',
                                 en: '${_selectedEventIds.length} selected',
+                                uk: 'Вибрано ${_selectedEventIds.length}',
+                                es: '${_selectedEventIds.length} seleccionados',
+                                pt: '${_selectedEventIds.length} selecionadas',
+                                fr: '${_selectedEventIds.length} sélectionnés',
+                                de: '${_selectedEventIds.length} ausgewählt',
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -11338,7 +11518,7 @@ class _ChatScreenState extends State<ChatScreen>
                                   ),
                                 ),
                                 onChanged: (_) => _onSearchQueryChanged(),
-                                onSubmitted: (_) => _nextSearchHit(),
+                                onSubmitted: (_) => _prevSearchHit(),
                               ),
                             ),
                             PressFeedback(child: IconButton(
@@ -12536,8 +12716,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                       _wrapSelectableEventItem(
                                                         event: entry.event,
                                                         onTapAction: (_) {},
-                                                        onDoubleTapAction:
-                                                            () {},
+                                                        onDoubleTapAction: null,
                                                         child:
                                                             _SystemEventBubble(
                                                               text: entry
@@ -12558,7 +12737,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                   child: _wrapSelectableEventItem(
                                                     event: entry.event,
                                                     onTapAction: (_) {},
-                                                    onDoubleTapAction: () {},
+                                                    onDoubleTapAction: null,
                                                     child: _CallEventBubble(
                                                       callEvent: callEvent,
                                                       timestampMs: entry
@@ -13522,7 +13701,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                             hasRoomInviteCard ||
                                                             hasPoll ||
                                                             hasEvent
-                                                        ? () {}
+                                                        ? null
                                                         : () => unawaited(
                                                             _doubleTapReact(entry, reactionEventId),
                                                           ),
@@ -13825,6 +14004,7 @@ class _ChatScreenState extends State<ChatScreen>
                                                                 ),
                                                           )
                                                         : _MessageBubble(
+                                                            edited: entry.edited,
                                                             text: entry
                                                                 .messageText,
                                                             showTranslateButton:
@@ -15137,7 +15317,10 @@ class _ChatScreenState extends State<ChatScreen>
     required ChatEvent event,
     required Widget child,
     required ValueChanged<Offset?> onTapAction,
-    required VoidCallback onDoubleTapAction,
+    // `null` — двойного касания у этого пузыря нет, и одиночное (опрос,
+    // событие, карточка, соло-эмодзи) срабатывает сразу, без ожидания
+    // второго касания 0,3 с (26.11.2026).
+    required VoidCallback? onDoubleTapAction,
     bool ownsTap = false,
     bool longPressOpensMenu = false,
     ValueChanged<Offset?>? menuAction,
@@ -15171,16 +15354,23 @@ class _ChatScreenState extends State<ChatScreen>
               }
               onTapAction(tapPosition);
             },
-      onDoubleTap: () {
-        if (_selectionMode) return;
-        onDoubleTapAction();
-      },
-      onLongPress: () {
+      onDoubleTap: onDoubleTapAction == null
+          ? null
+          : () {
+              if (_selectionMode) return;
+              onDoubleTapAction();
+            },
+      // 24.11.2026 (владелец): повторное касание снимает выделение всегда, и
+      // когда в этом сообщении выделяется текст.
+      onTextTap: () => _toggleSelection(event.eventId),
+      onTextLongPress: (position) =>
+          _textSelectKey.currentState?.selectWordAt(position),
+      onLongPress: (position) {
         if (_selectionMode) {
           // Второе долгое касание по уже выделенному — выделение текста
           // (21.11.2026); по другому сообщению — как было, отметить.
           if (selected) {
-            unawaited(_openMessageTextSelection(event));
+            unawaited(_openMessageTextSelection(event, position));
           } else {
             _toggleSelection(event.eventId);
           }
@@ -15194,14 +15384,17 @@ class _ChatScreenState extends State<ChatScreen>
 
   /// Лист выделения части текста. Не текст (фото без подписи, стикер,
   /// голосовое) — снимаем отметку, как раньше.
-  Future<void> _openMessageTextSelection(ChatEvent event) async {
+  Future<void> _openMessageTextSelection(
+    ChatEvent event,
+    Offset position,
+  ) async {
     final payload = await widget.controller.payloadEventForChatEvent(event);
     if (!mounted) return;
     String text = '';
     if (payload is MsgEventV1 &&
         !_isDeleteForAllCommandText(payload.text) &&
         !_isHiddenSystemCommandText(payload.text)) {
-      text = payload.text;
+      text = visibleMessageText(payload.text);
     } else if (payload is AttachmentEventV1) {
       text = payload.caption?.trim() ?? '';
     }
@@ -15217,9 +15410,8 @@ class _ChatScreenState extends State<ChatScreen>
       setState(() => _textSelectEventId = event.eventId);
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted || _textSelectEventId != event.eventId) return;
-        _textSelectAreaKey.currentState?.selectableRegion.selectAll(
-          SelectionChangedCause.toolbar,
-        );
+        // Слово под пальцем; дальше — ручками или «Выбрать все».
+        _textSelectKey.currentState?.selectWordAt(position);
       });
       return;
     }
@@ -15339,6 +15531,10 @@ class _ChatScreenState extends State<ChatScreen>
     AttachmentEventV1? mediaAttachment,
   }) {
     if (payloadEventId == null || payloadEventId.isEmpty) return;
+    // Ответ посреди правки: текст правки в поле не остаётся (иначе он ушёл
+    // бы ответом), возвращается набранное до неё.
+    final wasEditing = _editingTarget != null;
+    if (wasEditing) _restoreDraftAfterEdit();
     setState(() {
       _editingTarget = null;
       _replyTo = _ReplyTarget(
@@ -15346,7 +15542,11 @@ class _ChatScreenState extends State<ChatScreen>
         authorName: authorName,
         previewText: _trimPreview(previewText),
         authorIsMe: authorIsMe,
-        mediaAttachment: mediaAttachment,
+        // Спойлер и одноразовое — без миниатюры над полем ввода.
+        mediaAttachment: (mediaAttachment != null &&
+                (mediaAttachment.spoiler || mediaAttachment.viewOnce))
+            ? null
+            : mediaAttachment,
       );
     });
     _messageInputFocusNode.requestFocus();
@@ -15359,9 +15559,15 @@ class _ChatScreenState extends State<ChatScreen>
       entry.event,
     );
     if (!mounted || payload is! MsgEventV1) return;
-    if (_isDeleteForAllCommandText(payload.text) ||
-        _isHiddenSystemCommandText(payload.text)) {
+    // Любая служебная запись (пересланное, опрос, событие) — не для правки.
+    if (payload.text.trimLeft().startsWith(kSecretlyHiddenCommandPrefix)) {
       return;
+    }
+    if (_editingTarget == null) {
+      // Пустое поле не затирает набранное до прошлой правки, которая ещё
+      // уходит.
+      final typed = _text.text;
+      if (typed.trim().isNotEmpty) _draftBeforeEdit = typed;
     }
     setState(() {
       _editingTarget = _EditingTarget(
@@ -15386,7 +15592,27 @@ class _ChatScreenState extends State<ChatScreen>
       _editingTarget = null;
       _composerMentionDraft = null;
     });
-    _text.clear();
+    _restoreDraftAfterEdit();
+  }
+
+  /// Вернуть в поле набранное до правки (или очистить его). [merge] —
+  /// правка уже ушла, и в поле, возможно, набрано новое: оно не стирается,
+  /// набранное до правки ставится перед ним.
+  void _restoreDraftAfterEdit({bool merge = false}) {
+    final stash = _draftBeforeEdit;
+    _draftBeforeEdit = null;
+    final current = _text.text;
+    if (stash == null) {
+      if (!merge) _text.clear();
+      return;
+    }
+    final next = merge && current.trim().isNotEmpty
+        ? '$stash\n$current'
+        : stash;
+    _text.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: next.length),
+    );
   }
 
   /// True when two message timestamps fall on the same calendar day in the
@@ -15828,6 +16054,13 @@ class _ChatScreenState extends State<ChatScreen>
   /// and a reverse list anchors at the newest row so the prepend never jumps
   /// the scroll position.
   static const int _timelineLoadLimitStep = 200;
+
+  /// Тема, ради которой окно выросло, и размер окна до этого.
+  String? _topicGrowFor;
+  int _topicGrowFrom = _timelineLoadLimitStep;
+
+  /// До скольких строк окно растёт само ради выбранной темы.
+  static const int _topicGrowCeiling = 2000;
   int _timelineLoadLimit = _timelineLoadLimitStep;
   bool _timelineMaybeHasMore = true;
   bool _timelineGrowInFlight = false;
@@ -15917,7 +16150,21 @@ class _ChatScreenState extends State<ChatScreen>
     final sig =
         '${_timelineSignatureFor(events)}'
         '|${_currentTopicId ?? ''}'
-        '|${_roomTopics.map((t) => t.id).join(',')}';
+        '|${_roomTopics.map((t) => t.id).join(',')}'
+        // Отметки «прочитано» в комнате не меняют строк ленты, но меняют
+        // «прочитали: N» на своих сообщениях (26.11.2026: число застывало).
+        '|$_roomReceiptsSeen';
+    // Отметки приходят пачками (на одно сообщение — по одной от каждого):
+    // ленту пересобираем не чаще раза в полторы секунды.
+    if (_isGroupChat &&
+        widget.controller.roomReceiptsVersion != _roomReceiptsSeen &&
+        _roomReceiptsTimer == null) {
+      _roomReceiptsTimer = Timer(const Duration(milliseconds: 1500), () {
+        _roomReceiptsTimer = null;
+        if (!mounted) return;
+        setState(() => _roomReceiptsSeen = widget.controller.roomReceiptsVersion);
+      });
+    }
     final cached = _timelineEntriesFuture;
     if (cached != null && sig == _timelineEntriesSignature) {
       return cached;
@@ -16154,13 +16401,20 @@ class _ChatScreenState extends State<ChatScreen>
       }
     }
 
-    final deletedPayloadIds = <String>{};
-    for (final item in resolved) {
-      final payload = item.payload;
-      if (payload is! MsgEventV1) continue;
-      if (!_isDeleteForAllCommandText(payload.text)) continue;
-      deletedPayloadIds.addAll(_parseDeleteForAllCommand(payload.text));
-    }
+    // Метка удаления действует только от автора (см. authorizeDeleteForAll).
+    final deletedPayloadIds = await widget.controller.authorizeDeleteForAll(
+      widget.convoId,
+      [
+        for (final item in resolved)
+          if (item.payload case final MsgEventV1 m
+              when _isDeleteForAllCommandText(m.text))
+            (
+              senderDeviceId: item.event.senderDeviceId,
+              text: m.text,
+              localState: item.event.localState,
+            ),
+      ],
+    );
     // Д-3 (22.11.2026): удалённое у всех уходит и с плашки закреплённых.
     if (kPinSyncChecksV2) _notePinDeletedIds(deletedPayloadIds);
 
@@ -16287,7 +16541,85 @@ class _ChatScreenState extends State<ChatScreen>
         previewText: _trimPreview(item.displayText),
         authorIsMe: widget.controller.isOwnDeviceId(item.event.senderDeviceId),
         authorSeed: item.event.senderDeviceId,
+        // Спойлер и одноразовое — без миниатюры (иначе она раскрыла бы их).
+        media: payload is AttachmentEventV1 &&
+                _attachmentRendersAsPhoto(payload) &&
+                !payload.spoiler &&
+                !payload.viewOnce
+            ? payload
+            : null,
       );
+    }
+
+    final editedPayloadIds = await widget.controller.editedPayloadIds(
+      widget.convoId,
+    );
+
+    // Ответ на сообщение, которого нет в загруженном окне (старше или ещё
+    // не подгружено): цитата берётся из базы (26.11.2026). Раньше такой
+    // ответ выглядел обычным сообщением — без цитаты и перехода к ней.
+    final missingReplyIds = <String>{
+      for (final item in resolved)
+        if (item.payload case final MsgEventV1 m
+            when (m.replyToEventId ?? '').isNotEmpty &&
+                !previewByPayloadId.containsKey(m.replyToEventId) &&
+                !deletedPayloadIds.contains(m.replyToEventId))
+          m.replyToEventId!,
+    };
+    // Уже найденные — из памяти; за один проход ищем не больше 40 новых.
+    final toFetch = <String>[];
+    for (final id in missingReplyIds) {
+      final cached = _olderReplySnippets[id];
+      if (cached != null) {
+        previewByPayloadId[id] = cached;
+      } else {
+        toFetch.add(id);
+      }
+    }
+    for (final id in toFetch.take(40)) {
+      _ReplySnippet? snippet;
+      try {
+        final event = await widget.controller.chatEventForPayloadId(
+          widget.convoId,
+          id,
+        );
+        final payload = event == null
+            ? null
+            : await widget.controller.payloadEventForChatEvent(event);
+        String? text;
+        if (payload is MsgEventV1 &&
+            !_isDeleteForAllCommandText(payload.text) &&
+            !_isHiddenSystemCommandText(payload.text)) {
+          text = stripChatFormattingMarkers(visibleMessageText(payload.text));
+        } else if (payload is AttachmentEventV1) {
+          final caption = (payload.caption ?? '').trim();
+          text = caption.isNotEmpty
+              ? caption
+              : _attachmentPreviewLabel(
+                  payload.mime,
+                  waveform: payload.waveform,
+                );
+        }
+        if (event != null && text != null && text.trim().isNotEmpty) {
+          final own = widget.controller.isOwnDeviceId(event.senderDeviceId);
+          snippet = _ReplySnippet(
+            authorName: own
+                ? _selfAuthorLabel()
+                : (_isGroupChat
+                      ? (authorByDeviceId[event.senderDeviceId]?.name ??
+                            _authorFallbackFromDevice(event.senderDeviceId))
+                      : widget.title),
+            previewText: _trimPreview(text),
+            authorIsMe: own,
+            authorSeed: event.senderDeviceId,
+          );
+        }
+      } catch (_) {}
+      // Не найденное не запоминается: оно может прийти позже.
+      if (snippet != null) {
+        _olderReplySnippets[id] = snippet;
+        previewByPayloadId[id] = snippet;
+      }
     }
 
     bool sameImageGroup(_ResolvedTimelineItem a, _ResolvedTimelineItem b) {
@@ -16303,6 +16635,8 @@ class _ChatScreenState extends State<ChatScreen>
       if (!_attachmentRendersAsPhoto(pa) || !_attachmentRendersAsPhoto(pb)) {
         return false;
       }
+      // Одноразовое — всегда отдельным пузырём (SendFlow Э5).
+      if (pa.viewOnce || pb.viewOnce) return false;
       return ga == gb && a.event.senderDeviceId == b.event.senderDeviceId;
     }
 
@@ -16353,6 +16687,13 @@ class _ChatScreenState extends State<ChatScreen>
           var j = i + 1;
           while (j < resolved.length && sameImageGroup(item, resolved[j])) {
             final nextPayload = resolved[j].payload;
+            // Удалённое у всех фото альбома не остаётся в нём (раньше
+            // проверялся только первый кадр).
+            final nextPid = resolved[j].event.payloadEventId;
+            if (nextPid != null && deletedPayloadIds.contains(nextPid)) {
+              j++;
+              continue;
+            }
             if (nextPayload is AttachmentEventV1) {
               group.add(nextPayload);
               groupItems.add(
@@ -16652,6 +16993,7 @@ class _ChatScreenState extends State<ChatScreen>
       }
       out.add(
         _TimelineEntry(
+          edited: editedPayloadIds.contains(item.event.payloadEventId),
           event: item.event,
           isMe: widget.controller.isOwnDeviceId(item.event.senderDeviceId),
           payloadEventId: item.event.payloadEventId,
@@ -16689,13 +17031,63 @@ class _ChatScreenState extends State<ChatScreen>
       );
       i++;
     }
+    // Тема, чьи сообщения старше загруженного окна, не выглядит пустой
+    // (26.11.2026): окно растёт само, пока в теме мало строк, — раньше оно
+    // росло только от прокрутки, а пустую тему не прокрутить.
+    // Ушли из темы, ради которой окно росло, — окно возвращается к прежнему:
+    // иначе вся комната дальше жила бы с 2 000 строк.
+    final grownFor = _topicGrowFor;
+    if (grownFor != null && _currentTopicId != grownFor) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _topicGrowFor != grownFor) return;
+        final back = _topicGrowFrom;
+        _topicGrowFor = null;
+        if (_timelineLoadLimit > back) {
+          setState(() {
+            _timelineLoadLimit = back;
+            _eventsFuture = null;
+          });
+        }
+      });
+    }
+    if (_isGroupChat &&
+        _currentTopicId != null &&
+        out.length < 30 &&
+        _timelineMaybeHasMore &&
+        _timelineLoadLimit < _topicGrowCeiling) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _timelineGrowInFlight || !_timelineMaybeHasMore) return;
+        if (_currentTopicId == null || _timelineLoadLimit >= _topicGrowCeiling) {
+          return;
+        }
+        if (_topicGrowFor != _currentTopicId) {
+          _topicGrowFrom = _topicGrowFor == null
+              ? _timelineLoadLimit
+              : _topicGrowFrom;
+          _topicGrowFor = _currentTopicId;
+        }
+        _timelineGrowInFlight = true;
+        setState(() {
+          _timelineLoadLimit += _timelineLoadLimitStep;
+          _eventsFuture = null;
+        });
+      });
+    }
     return out;
   }
 
   Future<void> _queueSelectedPhotoPaths({
     required String targetId,
     required List<ChatAttachmentPickerMediaItem> mediaItems,
+    ChatAttachmentSendOptions options = ChatAttachmentSendOptions.defaults,
   }) async {
+    AttachmentEventFlags flagsFor(ChatAttachmentPickerMediaItem item) =>
+        AttachmentEventFlags(
+          captionAbove: options.captionAbove,
+          spoiler: options.spoiler,
+          viewOnce: item.viewOnce,
+          silent: options.silent,
+        );
     final existingMediaItems = <ChatAttachmentPickerMediaItem>[];
     for (final item in mediaItems) {
       final path = item.path.trim();
@@ -16710,7 +17102,12 @@ class _ChatScreenState extends State<ChatScreen>
             // Preserve the send-editor caption — this rebuild dropped it, which
             // is why captions never showed under the photo/video (single AND
             // album).
-            caption: item.caption,
+            // Одноразовое — без подписи: её не видно, а скопировать можно было бы.
+            caption: item.viewOnce ? '' : item.caption,
+            photoMaxSide: item.photoMaxSide,
+            videoMaxSide: item.videoMaxSide,
+            muteVideo: item.muteVideo,
+            viewOnce: item.viewOnce,
           ),
         );
       }
@@ -16724,7 +17121,11 @@ class _ChatScreenState extends State<ChatScreen>
       return;
     }
 
-    final hasMany = existingMediaItems.length > 1;
+    // «Не группировать» (SendFlow) — каждое медиа отдельным сообщением.
+    final hasMany = existingMediaItems.length > 1 &&
+        options.group &&
+        // Одноразовые (Э5) — всегда отдельными сообщениями.
+        !existingMediaItems.any((i) => i.viewOnce);
     final groupId = hasMany
         ? DateTime.now().microsecondsSinceEpoch.toString()
         : null;
@@ -16749,6 +17150,10 @@ class _ChatScreenState extends State<ChatScreen>
             totalBytes: fileBytes,
             replyToPayloadEventId: index == 0 ? replyToEventId : null,
             mediaGroupId: groupId,
+            photoMaxSide: mediaItem.photoMaxSide,
+            videoMaxSide: mediaItem.videoMaxSide,
+            muteVideo: mediaItem.muteVideo,
+            flags: flagsFor(mediaItem),
           ),
         );
       }
@@ -16789,6 +17194,10 @@ class _ChatScreenState extends State<ChatScreen>
         topicId: _isGroupChat ? _currentTopicId : null,
         replyToPayloadEventId: index == 0 ? replyToEventId : null,
         mediaGroupId: groupId,
+        photoMaxSide: mediaItem.photoMaxSide,
+        videoMaxSide: mediaItem.videoMaxSide,
+        muteVideo: mediaItem.muteVideo,
+        flags: flagsFor(mediaItem),
       );
       if (!mounted) return;
       // Consume the reply the moment we hand off (the executor used to clear it
@@ -17259,12 +17668,26 @@ class _ChatScreenState extends State<ChatScreen>
     // The actual permission for creating a topic is enforced when the topic
     // list is broadcast (broadcastRoomTopics), so the chip itself shows for any
     // group member — mirroring how «Опрос» behaves.
-    final selection = await showChatAttachmentPickerSheet(
-      context,
-      showPoll: _isGroupChat,
-      showTopic: _isGroupChat,
-      showEvent: _isGroupChat,
-    );
+    // Клавиатуры и панели эмодзи нет — чат замирает сразу, ещё до выезда
+    // листа; иначе — когда лист выехал и всё внизу уже улеглось.
+    if (mediaQueryNow(context).viewInsets.bottom == 0 &&
+        (_inlineEmojiPanel?.height.value ?? 0) == 0) {
+      _underSheet.freeze();
+    }
+    final ChatAttachmentPickerResult? selection;
+    try {
+      selection = await showChatAttachmentPickerSheet(
+        context,
+        showPoll: _isGroupChat,
+        showTopic: _isGroupChat,
+        showEvent: _isGroupChat,
+        spoilerSupported: () =>
+            widget.controller.mediaSpoilerSupportedFor(widget.convoId),
+        onSettled: _underSheet.freeze,
+      );
+    } finally {
+      _underSheet.thaw();
+    }
     if (!mounted || selection == null) return;
 
     try {
@@ -17273,6 +17696,7 @@ class _ChatScreenState extends State<ChatScreen>
           await _queueSelectedPhotoPaths(
             targetId: targetId,
             mediaItems: selection.mediaItems,
+            options: selection.options,
           );
           return;
         case ChatAttachmentPickerResultKind.filesFromGallery:
@@ -18309,6 +18733,14 @@ class _ChatScreenState extends State<ChatScreen>
     tapped ??= SecretlyStickerCatalog.resolveEvent(event);
     if (!mounted) return;
 
+    // Премиум-набор (24.11.2026): окно набора с покупкой; с Premium —
+    // касание стикера отправляет его сюда. Плашка реакций — как у всех.
+    final premiumPack = isPremiumStickerPackId(event.packId)
+        ? SecretlyStickerCatalog.premiumPickerPacks
+              .where((p) => p.id == event.packId)
+              .firstOrNull
+        : null;
+
     final myPid = widget.controller.profileId;
     final packId = event.packId;
     // Author to fetch the pack from: the stamped origin, else (1-1 chat) the
@@ -18353,7 +18785,7 @@ class _ChatScreenState extends State<ChatScreen>
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         );
 
-    Widget packSheet(BuildContext sheetCtx) => _StickerPackSheet(
+    Widget regularPackSheet(BuildContext sheetCtx) => _StickerPackSheet(
       controller: widget.controller,
       event: event,
       packId: packId,
@@ -18366,11 +18798,35 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
 
+    Widget packSheet(BuildContext sheetCtx) {
+      if (premiumPack != null) {
+        final unlocked = widget.controller.premiumStickersUnlocked;
+        return PremiumStickerPackSheet(
+          pack: premiumPack,
+          unlocked: unlocked,
+          onOpenPremium: () {
+            Navigator.of(sheetCtx).pop();
+            if (mounted) unawaited(showPaywall(context, PaywallTrigger.cosmetic));
+          },
+          onSend: unlocked
+              ? (s) {
+                  Navigator.of(sheetCtx).pop();
+                  unawaited(_sendSticker(targetId: widget.convoId, sticker: s));
+                }
+              : null,
+        );
+      }
+      return regularPackSheet(sheetCtx);
+    }
+
+
     if (reactionEventId == null || options.isEmpty) {
       await showModalBottomSheet<void>(
         sheetAnimationStyle: appSheetAnimationStyle,
         context: context,
         isScrollControlled: true,
+        // Окно премиум-набора рисует свой фон со скруглением.
+        backgroundColor: premiumPack != null ? Colors.transparent : null,
         builder: packSheet,
       );
       return;
@@ -18444,6 +18900,24 @@ class _ChatScreenState extends State<ChatScreen>
         : options;
   }
 
+  DateTime? _premiumPaywallAt;
+
+  /// Пересылка чужого премиум-стикера без Premium: стикер пропускается
+  /// (остальные пересылаемые сообщения уходят), страница покупки — один раз.
+  bool _skipLockedPremiumSticker(SecretlyStickerDescriptor sticker) {
+    if (!isPremiumStickerPackId(sticker.packId) ||
+        widget.controller.premiumStickersUnlocked) {
+      return false;
+    }
+    final now = DateTime.now();
+    final last = _premiumPaywallAt;
+    if (mounted && (last == null || now.difference(last).inSeconds > 5)) {
+      _premiumPaywallAt = now;
+      unawaited(showPaywall(context, PaywallTrigger.cosmetic));
+    }
+    return true;
+  }
+
   Future<void> _sendSticker({
     required String targetId,
     required SecretlyStickerDescriptor sticker,
@@ -18457,6 +18931,10 @@ class _ChatScreenState extends State<ChatScreen>
         replyToPayloadEventId: _replyTo?.payloadEventId,
       );
       if (mounted) setState(() => _replyTo = null);
+    } on PremiumStickerLockedException {
+      // Стикер премиум-набора без Premium (например, из «Недавних» после
+      // окончания подписки) — страница покупки вместо ошибки.
+      if (mounted) unawaited(showPaywall(context, PaywallTrigger.cosmetic));
     } catch (e) {
       if (!mounted) return;
       final roomPolicyText = tryRoomPolicyErrorText(context.l10n, e);
@@ -20471,6 +20949,8 @@ class _ChatScreenState extends State<ChatScreen>
       final imageItems = entry.imageItems;
       if (imageItems == null || imageItems.isEmpty) continue;
       for (final imageItem in imageItems) {
+        // Одноразовое — только своим экраном, не листанием соседних фото.
+        if (imageItem.attachment.viewOnce) continue;
         final key = '${imageItem.event.eventId}|${imageItem.attachment.blobId}';
         if (!seenKeys.add(key)) continue;
         items.add(
@@ -20488,7 +20968,7 @@ class _ChatScreenState extends State<ChatScreen>
     required AttachmentEventV1 attachment,
     required int createdAtMs,
   }) async {
-    if (!mounted) return;
+    if (!mounted || attachment.viewOnce) return;
 
     try {
       final source = await _ensureAttachmentFile(attachment);
@@ -20892,21 +21372,21 @@ class _ChatScreenState extends State<ChatScreen>
     return null;
   }
 
-  bool _sendInFlight = false;
+  int _roomReceiptsSeen = 0;
+  Timer? _roomReceiptsTimer;
 
-  /// Re-entry guard. A plain text send is already safe (the field is cleared
-  /// synchronously before the first await), but a FORWARD's draft isn't cleared
-  /// until later — so a rapid double-tap could send it twice. Ignore re-taps
-  /// until the in-flight send settles.
-  Future<void> _send({int? scheduledAtMs}) async {
-    if (_sendInFlight) return;
-    _sendInFlight = true;
-    try {
-      await _sendInner(scheduledAtMs: scheduledAtMs);
-    } finally {
-      _sendInFlight = false;
-    }
-  }
+  /// Цитаты ответов на сообщения вне окна ленты (см. сборку ленты).
+  final Map<String, _ReplySnippet?> _olderReplySnippets = {};
+
+  /// Отправки идут по очереди (26.11.2026). Раньше вторая, нажатая, пока
+  /// первая ещё шла по сети, молча пропадала: кнопка вздрагивала, а
+  /// сообщения не было. Теперь всё, что нужно отправке (текст, ответ,
+  /// пересылка, правка, тема), забирается из поля СРАЗУ, а сеть ждёт
+  /// предыдущую — повторное нажатие не может ничего отправить дважды.
+  Future<void> _sendChain = Future<void>.value();
+
+  Future<void> _send({int? scheduledAtMs}) =>
+      _sendInner(scheduledAtMs: scheduledAtMs);
 
   /// Central handler for attachment-send failures. A "too large" file that
   /// WOULD fit under Premium gets the Telegram-style upsell dialog (explain +
@@ -21017,6 +21497,11 @@ class _ChatScreenState extends State<ChatScreen>
                     context,
                     ru: 'В теме ${roomTopicDisplayTitle(topic)} пока пусто',
                     en: '${roomTopicDisplayTitle(topic)} is empty so far',
+                    uk: 'У темі ${roomTopicDisplayTitle(topic)} поки порожньо',
+                    es: '${roomTopicDisplayTitle(topic)} todavía está vacío',
+                    pt: '${roomTopicDisplayTitle(topic)} ainda está vazio',
+                    fr: '${roomTopicDisplayTitle(topic)} est encore vide',
+                    de: '${roomTopicDisplayTitle(topic)} ist noch leer',
                   ),
             textAlign: TextAlign.center,
             style: Theme.of(
@@ -21163,7 +21648,6 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _sendWaveEmoji() async {
-    if (_sendInFlight) return;
     final draft = _text.text;
     _text.text = '👋';
     await _send();
@@ -21174,7 +21658,7 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _sendInner({int? scheduledAtMs}) async {
-    final text = _text.text.trim();
+    final text = composerSafeText(_text.text.trim());
     // Была ли поднята клавиатура в момент отправки (см. finally ниже).
     final keyboardWasUp = _messageInputFocusNode.hasFocus;
     final editingTarget = _editingTarget;
@@ -21207,17 +21691,97 @@ class _ChatScreenState extends State<ChatScreen>
         : null;
     _text.clear();
     _linkPreviewDraft.reset();
-    unawaited(_clearDraft());
+    // У правки черновик — набранное до неё; он остаётся.
+    if (editingTarget == null && !hasForward) unawaited(_clearDraft());
     _stopTypingNow();
-    final replyToPayloadEventId = _replyTo?.payloadEventId;
+    final replyTarget = _replyTo;
+    final replyToPayloadEventId = replyTarget?.payloadEventId;
+    final forwardDraft = _forwardDraft;
+    final forwardLeft = forwardDraft?.items.toList();
+    // Пункт пересылки, который сейчас отправляется: не ушёл — вернётся.
+    ForwardDraftItem? forwardInFlight;
+    var forwardInFlightSeq = 0;
+    final topicId = _currentTopicId;
+    // Счёт вставок берётся ПОСЛЕ ожидания очереди: пузырь предыдущей
+    // отправки не должен выглядеть пузырём этой.
+    final chatIds = [widget.convoId, widget.peerProfileIdForSend];
+    late final int insertSeqBefore;
+    late final int chatInsertSeqBefore;
+    // Поле свободно сразу: ответ, пересылка и правка ушли с этим сообщением.
+    if (replyTarget != null || forwardDraft != null || editingTarget != null) {
+      setState(() {
+        _replyTo = null;
+        _forwardDraft = null;
+        _editingTarget = null;
+        _composerMentionDraft = null;
+      });
+      if (forwardDraft != null) widget.controller.clearForwardDraft();
+    }
+    // Не удалось и пузыря нет — текст, ответ и остаток пересылки
+    // возвращаются в поле (если человек его ещё не занял): раньше при ошибке
+    // в комнате без сети набранное пропадало бесследно.
+    void restoreComposer() {
+      if (!mounted) return;
+      final noBubble =
+          widget.controller.outgoingInsertSeqFor(chatIds) ==
+          chatInsertSeqBefore;
+      final fieldFree = _text.text.trim().isEmpty;
+      final current = _text.text;
+      setState(() {
+        if (editingTarget != null) {
+          if (fieldFree && _editingTarget == null && _replyTo == null) {
+            _editingTarget = editingTarget;
+            _text.value = TextEditingValue(
+              text: text,
+              selection: TextSelection.collapsed(offset: text.length),
+            );
+          }
+          return;
+        }
+        if (noBubble && text.isNotEmpty && !current.contains(text)) {
+          // Поле уже занято (не ушло и следующее, или человек начал новое) —
+          // текст дописывается, а не теряется.
+          final merged = fieldFree ? text : '$current\n$text';
+          _text.value = TextEditingValue(
+            text: merged,
+            selection: TextSelection.collapsed(offset: merged.length),
+          );
+        }
+        if (noBubble && replyTarget != null && _replyTo == null) {
+          _replyTo = replyTarget;
+        }
+        final inFlight = forwardInFlight;
+        if (inFlight != null &&
+            forwardLeft != null &&
+            widget.controller.outgoingInsertSeqFor(chatIds) ==
+                forwardInFlightSeq) {
+          forwardLeft.insert(0, inFlight);
+        }
+        if (forwardLeft != null &&
+            forwardLeft.isNotEmpty &&
+            _forwardDraft == null) {
+          _forwardDraft = ForwardDraft(items: forwardLeft);
+        }
+      });
+    }
+
+    // Подписи — до ожидания очереди: после него контекст может быть другим.
+    final missingRecipientText = context.l10n.missingRecipient;
+    final previous = _sendChain;
+    final turn = Completer<void>();
+    _sendChain = turn.future;
+    try {
+      await previous;
+    } catch (_) {}
+    insertSeqBefore = widget.controller.outgoingInsertSeq;
+    chatInsertSeqBefore = widget.controller.outgoingInsertSeqFor(chatIds);
     try {
       if (editingTarget != null) {
         if (text == editingTarget.originalText.trim()) {
           if (mounted) {
-            setState(() {
-              _editingTarget = null;
-              _composerMentionDraft = null;
-            });
+            // Правка снята с поля ещё до сети; новую, начатую за это время,
+            // не трогаем.
+            if (_editingTarget == null) _restoreDraftAfterEdit(merge: true);
           }
           return;
         }
@@ -21234,11 +21798,7 @@ class _ChatScreenState extends State<ChatScreen>
           throw StateError(editFailedText);
         }
         if (mounted) {
-          setState(() {
-            _editingTarget = null;
-            _replyTo = null;
-            _composerMentionDraft = null;
-          });
+          if (_editingTarget == null) _restoreDraftAfterEdit(merge: true);
         }
         return;
       }
@@ -21257,14 +21817,19 @@ class _ChatScreenState extends State<ChatScreen>
               replyToPayloadEventId: replyToPayloadEventId,
               mentions: mentions,
               scheduledAtMs: scheduledAtMs,
-              topicId: _currentTopicId,
+              topicId: topicId,
               linkPreview: linkPreview,
             );
             sentForwardContent = true;
           }
-          final draft = _forwardDraft;
+          final draft = forwardDraft;
           if (draft != null) {
             for (final item in draft.items) {
+              forwardLeft?.remove(item);
+              forwardInFlight = item;
+              forwardInFlightSeq = widget.controller.outgoingInsertSeqFor(
+                chatIds,
+              );
               if (!await widget.controller.canForwardFromProfile(
                 item.sourceProfileId,
               )) {
@@ -21280,16 +21845,17 @@ class _ChatScreenState extends State<ChatScreen>
                     authorProfileId: item.sourceProfileId,
                     sourceConvoId: item.sourceConvoId,
                   ),
-                  topicId: _currentTopicId,
+                  topicId: topicId,
                 );
                 sentForwardContent = true;
               } else if (item.isSticker) {
                 final sticker = item.sticker;
                 if (sticker == null) continue;
+                if (_skipLockedPremiumSticker(sticker)) continue;
                 await widget.controller.sendGroupSticker(
                   groupId: widget.convoId,
                   sticker: sticker,
-                  topicId: _currentTopicId,
+                  topicId: topicId,
                 );
                 sentForwardContent = true;
               } else {
@@ -21310,13 +21876,6 @@ class _ChatScreenState extends State<ChatScreen>
               }
             }
           }
-          if (mounted) {
-            setState(() {
-              _forwardDraft = null;
-              _replyTo = null;
-            });
-          }
-          widget.controller.clearForwardDraft();
           if (blockedForwardCount > 0) {
             _showChatMessage(
               sentForwardContent
@@ -21333,18 +21892,15 @@ class _ChatScreenState extends State<ChatScreen>
           replyToPayloadEventId: replyToPayloadEventId,
           mentions: mentions,
           scheduledAtMs: scheduledAtMs,
-          topicId: _currentTopicId,
+          topicId: topicId,
           linkPreview: linkPreview,
         );
-        if (mounted && _replyTo != null) {
-          setState(() => _replyTo = null);
-        }
         return;
       }
 
       final peer = widget.peerProfileIdForSend;
       if (peer == null || peer.isEmpty) {
-        throw StateError(context.l10n.missingRecipient);
+        throw StateError(missingRecipientText);
       }
 
       if (hasForward) {
@@ -21360,9 +21916,14 @@ class _ChatScreenState extends State<ChatScreen>
           );
           sentForwardContent = true;
         }
-        final draft = _forwardDraft;
+        final draft = forwardDraft;
         if (draft != null) {
           for (final item in draft.items) {
+            forwardLeft?.remove(item);
+            forwardInFlight = item;
+              forwardInFlightSeq = widget.controller.outgoingInsertSeqFor(
+                chatIds,
+              );
             if (!await widget.controller.canForwardFromProfile(
               item.sourceProfileId,
             )) {
@@ -21383,6 +21944,7 @@ class _ChatScreenState extends State<ChatScreen>
             } else if (item.isSticker) {
               final sticker = item.sticker;
               if (sticker == null) continue;
+              if (_skipLockedPremiumSticker(sticker)) continue;
               await widget.controller.sendSticker(
                 peerProfileId: peer,
                 sticker: sticker,
@@ -21409,13 +21971,6 @@ class _ChatScreenState extends State<ChatScreen>
             }
           }
         }
-        if (mounted) {
-          setState(() {
-            _forwardDraft = null;
-            _replyTo = null;
-          });
-        }
-        widget.controller.clearForwardDraft();
         if (blockedForwardCount > 0) {
           _showChatMessage(
             sentForwardContent ? someForwardSkippedText : allForwardBlockedText,
@@ -21431,11 +21986,9 @@ class _ChatScreenState extends State<ChatScreen>
         scheduledAtMs: scheduledAtMs,
         linkPreview: linkPreview,
       );
-      if (mounted && _replyTo != null) {
-        setState(() => _replyTo = null);
-      }
     } catch (e) {
       if (!mounted) return;
+      restoreComposer();
 
       final l10n = context.l10n;
       final roomPolicyText = tryRoomPolicyErrorText(l10n, e);
@@ -21498,13 +22051,26 @@ class _ChatScreenState extends State<ChatScreen>
         if (choice == 'send') {
           try {
             await widget.controller.approveUnverifiedContactDevices(peer);
-            await widget.controller.sendMessage(
-              peerProfileId: peer,
-              text: text,
-              replyToPayloadEventId: replyToPayloadEventId,
-              scheduledAtMs: scheduledAtMs,
-              linkPreview: linkPreview,
-            );
+            // Красный пузырь уже есть — отправляем ЕГО, а не второй такой же
+            // (26.11.2026: оставался дубль, а повтор красного слал ещё одну
+            // копию).
+            final failedId = await widget.controller
+                .failedOutgoingInsertedSince(widget.convoId, insertSeqBefore);
+            if (failedId != null) {
+              await widget.controller.retryOutgoingEventSend(
+                localEventId: failedId,
+              );
+            } else {
+              await widget.controller.sendMessage(
+                peerProfileId: peer,
+                text: text,
+                replyToPayloadEventId: replyToPayloadEventId,
+                scheduledAtMs: scheduledAtMs,
+                linkPreview: linkPreview,
+              );
+              // Пузыря не было, и текст вернулся в поле — теперь он ушёл.
+              if (mounted && _text.text.trim() == text) _text.clear();
+            }
           } catch (retryError) {
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
@@ -21521,6 +22087,7 @@ class _ChatScreenState extends State<ChatScreen>
         SecretlySnackBar(content: Text(directMessageErrorText(l10n, e))),
       );
     } finally {
+      turn.complete();
       // 24.11.2026 (владелец): после соло-эмодзи клавиатура поднималась
       // заново и закрывала эффект на весь экран. Клавиатуру возвращаем,
       // только если она и была: соло-эмодзи при опущенной клавиатуре и
@@ -22771,6 +23338,8 @@ class _ChatScreenState extends State<ChatScreen>
       hits = await widget.controller.searchChatMatches(
         convoId: widget.convoId,
         query: query,
+        scanLimit: 4000,
+        isCancelled: () => token != _searchRunToken || !mounted,
       );
     } catch (_) {
       hits = const <ChatSearchHit>[];
@@ -22782,10 +23351,11 @@ class _ChatScreenState extends State<ChatScreen>
       _searchHits = hits;
       _activeSearchQuery = query;
       _chatSearchInProgress = false;
-      _currentSearchHitIndex = hits.isEmpty ? -1 : 0;
+      // С самого свежего совпадения, как в Telegram (было — с самого старого).
+      _currentSearchHitIndex = hits.length - 1;
     });
     if (hits.isNotEmpty) {
-      final hit = hits.first;
+      final hit = hits.last;
       unawaited(_scrollToReply(hit.payloadEventId ?? hit.eventId));
     }
   }
@@ -23594,11 +24164,16 @@ class _ReplySnippet {
     required this.previewText,
     required this.authorIsMe,
     this.authorSeed = '',
+    this.media,
   });
 
   final String authorName;
   final String previewText;
   final bool authorIsMe;
+
+  /// Фото / видео / GIF, на которое отвечают: маленькая миниатюра в цитате
+  /// (24.11.2026, как в Telegram).
+  final AttachmentEventV1? media;
 
   /// Seed for deterministic colour (device-id or profile-id).
   final String authorSeed;
@@ -23634,8 +24209,39 @@ class _AuthorMeta {
   final String? tag;
 }
 
+/// Множество с пределом: старейшие записи вытесняются.
+class _CappedSeenSet extends SetBase<String> {
+  _CappedSeenSet(this.cap);
+  final int cap;
+  final LinkedHashSet<String> _inner = LinkedHashSet<String>();
+
+  @override
+  bool add(String value) {
+    if (_inner.contains(value)) return false;
+    _inner.add(value);
+    while (_inner.length > cap) {
+      _inner.remove(_inner.first);
+    }
+    return true;
+  }
+
+  @override
+  bool contains(Object? element) => _inner.contains(element);
+  @override
+  Iterator<String> get iterator => _inner.iterator;
+  @override
+  int get length => _inner.length;
+  @override
+  String? lookup(Object? element) => _inner.lookup(element);
+  @override
+  bool remove(Object? value) => _inner.remove(value);
+  @override
+  Set<String> toSet() => _inner.toSet();
+}
+
 class _TimelineEntry {
   const _TimelineEntry({
+    this.edited = false,
     required this.event,
     required this.isMe,
     required this.payloadEventId,
@@ -23666,6 +24272,8 @@ class _TimelineEntry {
     this.linkPreview,
   });
 
+  /// Текст правили — у времени пометка «изменено» (26.11.2026).
+  final bool edited;
   final ChatEvent event;
   final bool isMe;
   final String? payloadEventId;
@@ -24075,6 +24683,16 @@ String _formatCallDurationMeta(int durationMs, {required bool isRu}) {
   }
   if (minutes > 0) return '${minutes}m';
   return '${seconds}s';
+}
+
+/// Форма слова после числа (1 — [one], 2–4 — [few], 5+ — [many]): славянские
+/// языки. Вместо окончаний в скобках (26.11.2026).
+String _slavicPlural(int n, String one, String few, String many) {
+  final mod10 = n % 10;
+  final mod100 = n % 100;
+  if (mod10 == 1 && mod100 != 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
 }
 
 String _ruHours(int value) {
@@ -24737,7 +25355,7 @@ class _PendingPhotoAlbumBubble extends StatelessWidget {
                 // М7/М8: подпись альбома — как у готового (под сеткой).
                 if (kPendingSwapV2)
                   _AttachmentCaptionText(
-                    caption: items.isEmpty ? null : items.first.caption,
+                    caption: albumCaptionOf(items.map((e) => e.caption)),
                     color: fg,
                     padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
                   ),
@@ -25158,8 +25776,14 @@ class _EventCard extends StatelessWidget {
 
   String _formatWhen(BuildContext context) {
     final dt = DateTime.fromMillisecondsSinceEpoch(data.startMs).toLocal();
-    String two(int v) => v.toString().padLeft(2, '0');
-    return '${two(dt.day)}.${two(dt.month)}.${dt.year} · ${two(dt.hour)}:${two(dt.minute)}';
+    // Дата по языку человека (26.11.2026: было «dd.MM.yyyy» для всех):
+    // «28 нояб. 2026 г.», «Nov 28, 2026».
+    final ml = MaterialLocalizations.of(context);
+    final time = ml.formatTimeOfDay(
+      TimeOfDay.fromDateTime(dt),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+    );
+    return '${ml.formatMediumDate(dt)} · $time';
   }
 
   @override
@@ -25960,7 +26584,16 @@ class _PollCard extends StatelessWidget {
     if (total <= 0) {
       return chatText(context, ru: 'Нет голосов', en: 'No votes yet');
     }
-    return chatText(context, ru: '$total голос(ов)', en: '$total votes');
+    return chatText(
+      context,
+      ru: '$total ${_slavicPlural(total, 'голос', 'голоса', 'голосов')}',
+      en: total == 1 ? '1 vote' : '$total votes',
+      uk: '$total ${_slavicPlural(total, 'голос', 'голоси', 'голосів')}',
+      es: total == 1 ? '1 voto' : '$total votos',
+      pt: total == 1 ? '1 voto' : '$total votos',
+      fr: total == 1 ? '1 vote' : '$total votes',
+      de: total == 1 ? '1 Stimme' : '$total Stimmen',
+    );
   }
 }
 
@@ -26705,6 +27338,7 @@ class _SoloEmojiMessageState extends State<_SoloEmojiMessage>
 
 class _MessageBubble extends StatelessWidget {
   const _MessageBubble({
+    this.edited = false,
     required this.text,
     this.mentions = const <MsgMentionV1>[],
     required this.timestampMs,
@@ -26754,6 +27388,7 @@ class _MessageBubble extends StatelessWidget {
   /// они копировались вместе с текстом.
   final Widget Function(Widget text)? selectableText;
 
+  final bool edited;
   final String text;
   final List<MsgMentionV1> mentions;
   final int timestampMs;
@@ -27011,6 +27646,7 @@ class _MessageBubble extends StatelessWidget {
         const SizedBox(height: 4),
         alignSide(
           _BubbleMetaFooter(
+            edited: edited,
             timestampMs: timestampMs,
             scheduledAtMs: scheduledAtMs,
             scheduledHeldUntilMs: scheduledHeldUntilMs,
@@ -27388,8 +28024,9 @@ class _StickerPackSheet extends StatelessWidget {
         final lockedView = controller.stickerPackLockedView(packId);
         final closed =
             !isOwnPack && !installed && (event.packClosed || lockedView != null);
+        // Встроенные наборы дизайнера («Детки») — на языке интерфейса.
         final title = (localPack != null && localPack.title.isNotEmpty)
-            ? localPack.title
+            ? premiumPackTitle(l10n, localPack)
             : ((event.packTitle != null && event.packTitle!.isNotEmpty)
                   ? event.packTitle!
                   : ((lockedView?.title.isNotEmpty ?? false)
@@ -29650,6 +30287,22 @@ class _ImageAttachmentBubble extends StatelessWidget {
                   onTap: onReplyQuoteTap,
                 ),
               ),
+            // SendFlow: «Подпись над медиа».
+            if (!bubbleless && attachment.captionAbove && !attachment.viewOnce)
+              _AttachmentCaptionText(
+                caption: attachment.caption,
+                color: fg,
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+              ),
+            // SendFlow Э5: одноразовое — плашка вместо превью.
+            if (attachment.viewOnce)
+              ViewOnceTile(
+                attachment: attachment,
+                isMe: isMe,
+                color: fg,
+                onOpen: () => _viewOnceOpener?.call(context, attachment),
+              )
+            else
             Padding(
               padding: const EdgeInsets.fromLTRB(1, 1, 1, 0),
               // With a CAPTION the caption text (not the photo) can
@@ -29666,6 +30319,8 @@ class _ImageAttachmentBubble extends StatelessWidget {
                     : null,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(19),
+                  child: _maybeSpoiler(
+                  attachment,
                   // Sync-first: rows are disposed as they scroll away, so a
                   // plain FutureBuilder restarted the file resolve on every
                   // return — at least one frame of dark placeholder before the
@@ -29785,10 +30440,11 @@ class _ImageAttachmentBubble extends StatelessWidget {
                     },
                   ),
                 ),
+                ),
               ),
             ),
             // GIFs float like stickers: no caption plate.
-            if (!bubbleless)
+            if (!bubbleless && !attachment.captionAbove && !attachment.viewOnce)
               _AttachmentCaptionText(
                 caption: attachment.caption,
                 color: fg,
@@ -29943,6 +30599,13 @@ class _ImageGroupBubble extends StatelessWidget {
               ),
             ),
           ],
+          // SendFlow: «Подпись над медиа» — подпись альбома над сеткой.
+          if (attachments.any((a) => a.captionAbove))
+            _AttachmentCaptionText(
+              caption: albumCaptionOf(attachments.map((e) => e.caption)),
+              color: fg,
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 6),
+            ),
           FutureBuilder<List<File?>>(
             future: loadCachedFiles(attachments),
             builder: (context, snapshot) {
@@ -29962,7 +30625,7 @@ class _ImageGroupBubble extends StatelessWidget {
                   ? maxVisibleTiles
                   : attachments.length;
               final hiddenCount = attachments.length - visibleCount;
-              return _ImageGroupCollage(
+              final collage = _ImageGroupCollage(
                 attachments: attachments,
                 files: files,
                 visibleCount: visibleCount,
@@ -29970,11 +30633,17 @@ class _ImageGroupBubble extends StatelessWidget {
                 collageWidth: collageWidth,
                 onImageTap: onImageTap,
               );
+              // SendFlow Э5: альбом под спойлером — одна обложка на всю сетку.
+              final spoilered = attachments.where((a) => a.spoiler).firstOrNull;
+              return spoilered == null
+                  ? collage
+                  : MediaSpoilerCover(eventId: spoilered.eventId, child: collage);
             },
           ),
-          // Album caption rides under the grid (carried on the first item).
+          // Подпись альбома под сеткой — с любого снимка (album_caption.dart).
+          if (!attachments.any((a) => a.captionAbove))
           _AttachmentCaptionText(
-            caption: attachments.isEmpty ? null : attachments.first.caption,
+            caption: albumCaptionOf(attachments.map((e) => e.caption)),
             color: fg,
             padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
           ),
@@ -31719,6 +32388,19 @@ class _VideoPlayerDialogState extends State<_VideoPlayerDialog> {
   }
 }
 
+/// SendFlow Э5: открыть одноразовое (ставит открытый чат).
+void Function(BuildContext context, AttachmentEventV1 attachment)? _viewOnceOpener;
+
+/// Спойлер поверх медиа, если отмечено (SendFlow Э5).
+Widget _maybeSpoiler(AttachmentEventV1 a, {required Widget child}) =>
+    a.spoiler ? MediaSpoilerCover(eventId: a.eventId, child: child) : child;
+
+/// Загрузчик файла для миниатюры в цитате ответа (24.11.2026): ставит
+/// открытый чат (только из кэша — как у плашки ответа над полем). Не
+/// снимается при закрытии: чаты делят один контроллер, и закрытие чата,
+/// открытого поверх другого, оставило бы нижний без миниатюр.
+Future<File?> Function(AttachmentEventV1 attachment)? _replyThumbLoader;
+
 class _ReplyQuoteStrip extends StatelessWidget {
   const _ReplyQuoteStrip({
     required this.snippet,
@@ -31766,13 +32448,23 @@ class _ReplyQuoteStrip extends StatelessWidget {
         children: [
           Container(
             width: 3,
-            height: 28,
+            // С миниатюрой полоска во всю её высоту.
+            height: snippet.media != null ? 36 : 28,
             decoration: BoxDecoration(
               color: accent,
               borderRadius: BorderRadius.circular(3),
             ),
           ),
           const SizedBox(width: 7),
+          // Миниатюра того, на что ответили (фото, видео, GIF): квадрат,
+          // кадр обрезается по центру — не растягивается и не сжимается.
+          if (snippet.media case final media?) ...[
+            _ReplyMediaThumb(
+              attachment: media,
+              loadCachedFile: _replyThumbLoader ?? (_) async => null,
+            ),
+            const SizedBox(width: 7),
+          ],
           Flexible(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -33787,6 +34479,32 @@ class _GifPickerViewState extends State<_GifPickerView> {
   }
 }
 
+/// Кадр Noto-эмодзи, отрисованный один раз в картинку — общий кэш
+/// [LottieStillCache] (вектор Lottie на Impeller перерисовывается каждый
+/// кадр; картинка — копия текстуры, почти даром).
+class _NotoStillImage extends StatelessWidget {
+  const _NotoStillImage({
+    required this.file,
+    required this.size,
+    required this.fallback,
+    this.progress = 0.0,
+  });
+
+  final File file;
+  final double size;
+  final double progress;
+  final Widget Function() fallback;
+
+  @override
+  Widget build(BuildContext context) => LottieStillImage(
+    provider: FileLottie(file),
+    id: file.path,
+    size: size,
+    progress: progress,
+    fallback: (_) => fallback(),
+  );
+}
+
 class _NotoEmojiLottie extends StatefulWidget {
   const _NotoEmojiLottie({
     super.key,
@@ -33821,6 +34539,9 @@ class _NotoEmojiLottieState extends State<_NotoEmojiLottie>
   File? _file;
   AnimationController? _ctrl;
   int _loadGeneration = 0;
+
+  /// Анимация «один раз» доиграла — показываем неподвижный кадр картинкой.
+  bool _settled = false;
 
   /// INVISIBLE perf: for [_NotoLottieMode.looping] only — when the emoji is
   /// scrolled off-screen we set `animate: false`, which stops Lottie's internal
@@ -33900,6 +34621,8 @@ class _NotoEmojiLottieState extends State<_NotoEmojiLottie>
               // styles, instead of a possibly-blank frame 0.
               if (status == AnimationStatus.completed && mounted) {
                 _ctrl!.value = 0.01;
+                // Сыграло — дальше неподвижной картинкой (см. _NotoStillImage).
+                setState(() => _settled = true);
               }
             });
     } else if (widget.mode == _NotoLottieMode.looping) {
@@ -33926,6 +34649,7 @@ class _NotoEmojiLottieState extends State<_NotoEmojiLottie>
     }
     if (oldWidget.mode != widget.mode && widget.mode == _NotoLottieMode.once) {
       _ctrl?.reset();
+      _settled = false;
     }
   }
 
@@ -33941,21 +34665,23 @@ class _NotoEmojiLottieState extends State<_NotoEmojiLottie>
     if (f == null) return _fallback();
     switch (widget.mode) {
       case _NotoLottieMode.preview:
-        return RepaintBoundary(
-          child: SizedBox(
-            width: widget.size,
-            height: widget.size,
-            child: Lottie.file(
-              f,
-              width: widget.size,
-              height: widget.size,
-              animate: false,
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => _fallback(),
-            ),
-          ),
+        // Неподвижный эмодзи — один раз в картинку (24.11.2026, журнал 755:
+        // десяток соло-эмодзи давал 16,5 мс отрисовки на каждый кадр —
+        // Impeller перерисовывает вектор Lottie заново на каждом кадре).
+        return _NotoStillImage(
+          file: f,
+          size: widget.size,
+          fallback: _fallback,
         );
       case _NotoLottieMode.once:
+        if (_settled) {
+          return _NotoStillImage(
+            file: f,
+            size: widget.size,
+            progress: 0.01,
+            fallback: _fallback,
+          );
+        }
         final ctrl = _ctrl!;
         // No static glyph layered underneath (that duplicated the emoji —
         // visible statically AND animated at once — for the vast majority
@@ -34206,7 +34932,9 @@ String _chatDayLabel(BuildContext context, int timestampMs) {
       de: 'Heute',
     );
   }
-  if (day == today.subtract(const Duration(days: 1))) {
+  // Календарный вчерашний день, а не «сегодня минус 24 часа»: в дни
+  // перевода часов то давало не тот день (26.11.2026).
+  if (day == DateTime(now.year, now.month, now.day - 1)) {
     return chatText(
       context,
       ru: 'Вчера',
@@ -34377,6 +35105,8 @@ class _SelectableEventWrapper extends StatefulWidget {
     required this.onTap,
     required this.onDoubleTap,
     required this.onLongPress,
+    required this.onTextTap,
+    required this.onTextLongPress,
     this.onBubbleLongPress,
     this.passThrough = false,
     required this.child,
@@ -34394,12 +35124,15 @@ class _SelectableEventWrapper extends StatefulWidget {
   /// while in selection mode (to toggle), and otherwise lets the gesture fall
   /// through to the child. Long-press / double-tap are unaffected.
   final ValueChanged<Offset?>? onTap;
-  final VoidCallback onDoubleTap;
-  final VoidCallback onLongPress;
+  final VoidCallback? onDoubleTap;
+  final ValueChanged<Offset> onLongPress;
 
-  /// Идёт выделение текста в этом пузыре: касания, двойные касания и
-  /// долгие нажатия — выделению (ручки, слово), а не обёртке.
+  /// Идёт выделение текста в этом пузыре: касание ([onTextTap]) снимает
+  /// выделение, долгое нажатие ([onTextLongPress]) выбирает другое слово.
+  /// Ручки и меню — поверх экрана, обёртка им не мешает.
   final bool passThrough;
+  final VoidCallback onTextTap;
+  final ValueChanged<Offset> onTextLongPress;
   final Widget child;
 
   @override
@@ -34438,12 +35171,14 @@ class _SelectableEventWrapperState extends State<_SelectableEventWrapper> {
           : (details) {
               _lastTapPosition = details.globalPosition;
             },
-      onDoubleTapDown: pass
+      onDoubleTapDown: pass || widget.selectionMode || widget.onDoubleTap == null
           ? null
           : (details) {
               _lastTapPosition = details.globalPosition;
             },
-      onTap: wrapperHandlesTap && !pass
+      onTap: pass
+          ? widget.onTextTap
+          : wrapperHandlesTap
           ? () {
               if (!_isInteractiveChildHit(_lastTapPosition)) {
                 FocusManager.instance.primaryFocus?.unfocus();
@@ -34455,14 +35190,16 @@ class _SelectableEventWrapperState extends State<_SelectableEventWrapper> {
               }
             }
           : null,
-      onDoubleTap: pass
+      // В режиме выделения двойного касания нет: иначе каждое касание ждало
+      // бы его 300 мс, а быстрые два подряд пропадали бы.
+      onDoubleTap: pass || widget.selectionMode || widget.onDoubleTap == null
           ? null
           : () {
               if (!_isInteractiveChildHit(_lastTapPosition)) return;
-              widget.onDoubleTap();
+              widget.onDoubleTap?.call();
             },
       onLongPressStart: pass
-          ? null
+          ? (details) => widget.onTextLongPress(details.globalPosition)
           : (details) {
               final bubble = widget.onBubbleLongPress;
               if (bubble != null &&
@@ -34471,7 +35208,7 @@ class _SelectableEventWrapperState extends State<_SelectableEventWrapper> {
                 bubble(details.globalPosition);
                 return;
               }
-              widget.onLongPress();
+              widget.onLongPress(details.globalPosition);
             },
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -34648,6 +35385,7 @@ class _ReplySwipeWrapperState extends State<_ReplySwipeWrapper>
 
 class _BubbleMetaFooter extends StatelessWidget {
   const _BubbleMetaFooter({
+    this.edited = false,
     required this.timestampMs,
     required this.status,
     required this.color,
@@ -34661,6 +35399,7 @@ class _BubbleMetaFooter extends StatelessWidget {
     this.scheduledHeldUntilMs,
   });
 
+  final bool edited;
   final int timestampMs;
   final Widget? status;
   final Color color;
@@ -34711,7 +35450,9 @@ class _BubbleMetaFooter extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
-                _formatTime(timestampMs),
+                edited
+                    ? '${chatText(context, ru: 'изменено', en: 'edited', uk: 'змінено', es: 'editado', pt: 'editado', fr: 'modifié', de: 'bearbeitet')} ${_formatTime(timestampMs)}'
+                    : _formatTime(timestampMs),
                 // Время тише текста (разбор): обычное начертание, 12 px.
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   fontSize: 12,
@@ -36726,13 +37467,23 @@ class _RoomCallAnnouncementCard extends StatelessWidget {
                       isVideo
                           ? chatText(
                               context,
-                              ru: 'Начался video звонок',
+                              ru: 'Начался видеозвонок',
                               en: 'Video call started',
+                              uk: 'Почався відеодзвінок',
+                              es: 'Comenzó una videollamada',
+                              pt: 'Começou uma videochamada',
+                              fr: 'Appel vidéo commencé',
+                              de: 'Videoanruf gestartet',
                             )
                           : chatText(
                               context,
-                              ru: 'Начался voice звонок',
+                              ru: 'Начался звонок',
                               en: 'Voice call started',
+                              uk: 'Почався дзвінок',
+                              es: 'Comenzó una llamada',
+                              pt: 'Começou uma chamada',
+                              fr: 'Appel vocal commencé',
+                              de: 'Sprachanruf gestartet',
                             ),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: cs.onSurfaceVariant,

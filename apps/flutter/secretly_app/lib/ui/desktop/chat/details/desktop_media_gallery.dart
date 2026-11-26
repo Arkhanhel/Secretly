@@ -166,7 +166,13 @@ class _DesktopMediaGalleryState extends State<DesktopMediaGallery> {
                 // «видео» заставляли искать в двух местах то, что человек
                 // помнит как «картинка, которую он кидал во вторник».
                 final media =
-                    <ConversationAttachmentItem>[...vm.photos, ...vm.videos]
+                    <ConversationAttachmentItem>[
+                      ...vm.photos,
+                      ...vm.videos,
+                      // GIF у телефона — своя вкладка (24.11.2026); на ПК
+                      // остаются в общей ленте медиа, как было.
+                      ...vm.gifs,
+                    ]
                       ..sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
                 return TabBarView(
                   children: [

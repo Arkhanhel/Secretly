@@ -45,6 +45,9 @@ class AppBrandLogo extends StatefulWidget {
 
 class _AppBrandLogoState extends State<AppBrandLogo>
     with PacedTickerProviderStateMixin {
+  @override
+  bool get restsWhenIdle => true;
+
   late final AnimationController _fingerprintController;
   Duration? _compositionDuration;
 

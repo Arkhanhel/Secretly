@@ -3,6 +3,7 @@
 // Additional permission under AGPL-3.0 section 7: see LICENSE-EXCEPTION.
 import '../models/e2e_payload_v1.dart';
 import '../ui/app_asset_paths.dart';
+import 'premium_sticker_packs.dart';
 import 'sticker_share_mode.dart';
 
 /// [webp] is an ANIMATED WebP (full-alpha, multi-frame) — Premium "live"
@@ -186,6 +187,7 @@ class SecretlyStickerPack {
     this.featuredRank,
     this.iconEmojiHint = '',
     this.shareMode = StickerShareMode.fallback,
+    this.premium = false,
   });
 
   final String id;
@@ -203,6 +205,10 @@ class SecretlyStickerPack {
   /// Режим доступа к СВОЕМУ набору (ТЗ 14.11.2026). Для каталога и встроенных
   /// всегда значение по умолчанию — «открытый», то есть нынешнее поведение.
   final StickerShareMode shareMode;
+
+  /// Премиум-набор (premium_sticker_packs.dart): отправлять может только
+  /// Premium, видеть — все.
+  final bool premium;
 
   /// Закрыт ли набор автором: собеседникам он не отдаётся.
   bool get isClosed => shareMode == StickerShareMode.personal;
@@ -1185,24 +1191,51 @@ abstract final class SecretlyStickerCatalog {
 
   static List<SecretlyStickerPack> _remotePacks = const <SecretlyStickerPack>[];
   static List<SecretlyStickerPack> _lookupPacks =
-      List<SecretlyStickerPack>.unmodifiable(bundledPacks);
+      List<SecretlyStickerPack>.unmodifiable(<SecretlyStickerPack>[
+        ...bundledPacks,
+        ...premiumPickerPacks,
+        ...freeDesignerPacks,
+      ]);
+
+  /// Премиум-наборы для панели и поиска стикера по событию; пусто, если
+  /// выключатель [kPremiumStickerPacks] снят.
+  static List<SecretlyStickerPack> get premiumPickerPacks =>
+      kPremiumStickerPacks ? premiumStickerPacks : const <SecretlyStickerPack>[];
+
+  /// Бесплатные встроенные наборы дизайнера («Детки») — в панели у всех.
+  static List<SecretlyStickerPack> get freeDesignerPacks =>
+      kKidsStickerPack ? <SecretlyStickerPack>[kidsStickerPack] : const <SecretlyStickerPack>[];
   static List<SecretlyStickerPack> _installedPacks =
-      List<SecretlyStickerPack>.unmodifiable(bundledPickerPacks);
+      List<SecretlyStickerPack>.unmodifiable(<SecretlyStickerPack>[
+        ...bundledPickerPacks,
+        ...freeDesignerPacks,
+      ]);
   static List<SecretlyStickerPack> _pickerPacks =
-      List<SecretlyStickerPack>.unmodifiable(bundledPickerPacks);
+      List<SecretlyStickerPack>.unmodifiable(<SecretlyStickerPack>[
+        ...bundledPickerPacks,
+        ...freeDesignerPacks,
+      ]);
   static Map<String, SecretlyStickerPack> _packsByLookupKey =
       <String, SecretlyStickerPack>{
-        for (final pack in bundledPacks)
+        for (final pack in [
+          ...bundledPacks,
+          ...premiumPickerPacks,
+          ...freeDesignerPacks,
+        ])
           _packLookupKey(pack.id, pack.version): pack,
       };
   static Map<String, SecretlyStickerDescriptor> _stickersByLookupKey =
       <String, SecretlyStickerDescriptor>{
-        for (final pack in bundledPacks)
+        for (final pack in [
+          ...bundledPacks,
+          ...premiumPickerPacks,
+          ...freeDesignerPacks,
+        ])
           for (final sticker in pack.stickers) sticker.lookupKey: sticker,
       };
   static List<SecretlyStickerDescriptor> _searchableStickers =
       List<SecretlyStickerDescriptor>.unmodifiable(<SecretlyStickerDescriptor>[
-        for (final pack in bundledPickerPacks)
+        for (final pack in [...bundledPickerPacks, ...freeDesignerPacks])
           for (final sticker in pack.stickers)
             if (sticker.isRenderable) sticker,
       ]);
@@ -1386,7 +1419,12 @@ abstract final class SecretlyStickerCatalog {
         if (installCompare != 0) return installCompare;
         return a.title.toLowerCase().compareTo(b.title.toLowerCase());
       });
-    final visibleBundled = bundledPickerPacks; // empty — clean slate
+    // Встроенных наборов в панели нет, кроме бесплатных наборов дизайнера
+    // («Детки», 24.11.2026) — они первыми, до своих.
+    final visibleBundled = <SecretlyStickerPack>[
+      ...bundledPickerPacks,
+      ...freeDesignerPacks,
+    ];
     // The picker shows ONLY the user's own packs (packId `user:…`). Server
     // catalog packs are kept in _lookupPacks (so historical sends still resolve)
     // but are NOT offered in the picker. Bundled cookie pack is gone too.
@@ -1394,7 +1432,12 @@ abstract final class SecretlyStickerCatalog {
         .where((pack) => pack.id.startsWith('user:'))
         .toList(growable: false);
     _lookupPacks = List<SecretlyStickerPack>.unmodifiable(
-      _dedupePacks(<SecretlyStickerPack>[...bundledPacks, ...remoteOrdered]),
+      _dedupePacks(<SecretlyStickerPack>[
+        ...bundledPacks,
+        ...premiumPickerPacks,
+        ...freeDesignerPacks,
+        ...remoteOrdered,
+      ]),
     );
     _installedPacks = List<SecretlyStickerPack>.unmodifiable(
       _dedupePacks(<SecretlyStickerPack>[...visibleBundled, ...userPacks]),

@@ -23,6 +23,8 @@
 ///   освободит сборщик.
 library;
 
+import 'dart:ui' as ui;
+
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
@@ -40,6 +42,19 @@ abstract final class GpuImageGuard {
       return true;
     }
     return state == null || state == AppLifecycleState.resumed;
+  }
+
+  /// Освободить картинку через два кадра (26.11.2026). Сразу нельзя:
+  /// записанный кадр, который видеокарта ещё рисует, держит её — на её месте
+  /// появлялся розово-фиолетовый квадрат (рамки-шейдеры, обложки со следами).
+  static void disposeAfterFrames(ui.Image? image) {
+    if (image == null) return;
+    final binding = SchedulerBinding.instance;
+    binding.addPostFrameCallback((_) {
+      binding.addPostFrameCallback((_) => image.dispose());
+      binding.scheduleFrame();
+    });
+    binding.scheduleFrame();
   }
 
   /// [reset] обнуляет кеш; вызывается при каждом возвращении на экран.

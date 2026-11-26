@@ -665,12 +665,15 @@ EventCommand? parseEventCommand(String text) {
     final title = (json['title'] as String?)?.trim() ?? '';
     if (eventId.isEmpty || title.isEmpty) return null;
     final startRaw = json['startMs'];
-    final startMs = switch (startRaw) {
+    var startMs = switch (startRaw) {
       final int v => v,
       final num v => v.toInt(),
       final String v => int.tryParse(v) ?? 0,
       _ => 0,
     };
+    // За пределами дат Dart (±8,64e15) — нет даты: иначе карточка, копия,
+    // поиск и выгрузка падали бы на испорченном событии (26.11.2026).
+    if (startMs.abs() > 8640000000000000) startMs = 0;
     return EventCommand(
       eventId: eventId,
       title: title,
@@ -796,7 +799,27 @@ String buildForwardCommand({
 bool isForwardCommandText(String text) =>
     text.trimLeft().startsWith(kForwardCommandPrefix);
 
+/// Пересланное ещё раз (до 25.11.2026 вложенная запись уходила как есть):
+/// разворачиваем до исходного текста и автора — иначе в пузыре, строке списка
+/// и уведомлении стоял бы внутренний шифр. [ForwardCommand.sourceConvoId] —
+/// внешний: внутренний относится к чужому устройству.
 ForwardCommand? parseForwardCommand(String text) {
+  var outer = _parseForwardCommandOnce(text);
+  if (outer == null) return null;
+  for (var depth = 0; depth < 8; depth++) {
+    final inner = _parseForwardCommandOnce(outer!.text);
+    if (inner == null) break;
+    outer = ForwardCommand(
+      authorName: inner.authorName,
+      text: inner.text,
+      authorProfileId: inner.authorProfileId,
+      sourceConvoId: outer.sourceConvoId,
+    );
+  }
+  return outer;
+}
+
+ForwardCommand? _parseForwardCommandOnce(String text) {
   final normalized = text.trimLeft();
   if (!normalized.startsWith(kForwardCommandPrefix)) return null;
   final raw = normalized.substring(kForwardCommandPrefix.length).trim();
@@ -817,6 +840,45 @@ ForwardCommand? parseForwardCommand(String text) {
   } catch (_) {
     return null;
   }
+}
+
+/// Текст сообщения, каким его видит человек: пересланное — без служебной
+/// обёртки, опрос и событие — словами. Всё, что уходит из ленты наружу
+/// (копирование, выгрузка), берёт его, а не сырую запись (25.11.2026: в буфер
+/// попадал шифр пересланного вместе с номерами чата и автора).
+String visibleMessageText(String raw) {
+  final fwd = parseForwardCommand(raw);
+  final text = fwd?.text ?? raw;
+  final poll = parsePollCommand(text);
+  if (poll != null) {
+    return ['📊 ${poll.question}', for (final o in poll.options) '• $o']
+        .join('\n');
+  }
+  final event = parseEventCommand(text);
+  if (event != null) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    final dt = DateTime.fromMillisecondsSinceEpoch(event.startMs).toLocal();
+    return [
+      '📅 ${event.title}',
+      if (event.startMs > 0)
+        '${two(dt.day)}.${two(dt.month)}.${dt.year} · '
+            '${two(dt.hour)}:${two(dt.minute)}',
+      if (event.location.isNotEmpty) event.location,
+      if (event.description.isNotEmpty) event.description,
+    ].join('\n');
+  }
+  return text;
+}
+
+/// Набранное или вставленное человеком не бывает командой. Обёртка
+/// пересланного из старого буфера превращается в её текст; остальное с
+/// служебным началом получает невидимый знак впереди и остаётся текстом.
+String composerSafeText(String typed) {
+  if (!typed.trimLeft().startsWith(kSecretlyHiddenCommandPrefix)) return typed;
+  final visible = visibleMessageText(typed);
+  return visible.trimLeft().startsWith(kSecretlyHiddenCommandPrefix)
+      ? '\u200B$visible'
+      : visible;
 }
 
 class PollVoteCommand {

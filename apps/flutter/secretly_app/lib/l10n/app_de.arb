@@ -3289,5 +3289,11 @@
   "penHintPanels": "Transparent oder deckend",
   "penHintCovers": "Lebendige Titelbilder",
   "penHintEmoji": "Emojis, Sticker, GIFs",
-  "penHintReactions": "Lange drücken für Reaktionen"
+  "penHintReactions": "Lange drücken für Reaktionen",
+  "stickerPremiumPackSafe": "Geheimer Safe",
+  "stickerPremiumPackPixel": "Pixel",
+  "stickerPremiumSubtitle": "Animierte Sticker für Premium-Abonnenten",
+  "stickerPremiumUnlock": "Mit Premium freischalten",
+  "stickerPackKids": "Knirpse",
+  "meToolArrow": "Pfeil"
 }

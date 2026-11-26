@@ -9666,4 +9666,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get penHintReactions => 'Long-press to react';
+
+  @override
+  String get stickerPremiumPackSafe => 'Secret Safe';
+
+  @override
+  String get stickerPremiumPackPixel => 'Pixel';
+
+  @override
+  String get stickerPremiumSubtitle => 'Animated stickers for Premium subscribers';
+
+  @override
+  String get stickerPremiumUnlock => 'Unlock with Premium';
+
+  @override
+  String get stickerPackKids => 'Kids';
+
+  @override
+  String get meToolArrow => 'Arrow';
 }

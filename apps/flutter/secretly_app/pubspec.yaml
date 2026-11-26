@@ -235,6 +235,10 @@ flutter:
     - assets/shaders/secretly_glass.frag
 
   assets:
+    # Наборы стикеров дизайнера (.tgs, 24.11.2026): премиум и «Детки».
+    - assets/stickers/premium_safe/
+    - assets/stickers/premium_pixel/
+    - assets/stickers/kids/
     - assets/whats_new/
     - pubspec.yaml
     # Перечень украшений по требованию (Э7): путь → отпечаток и размер.

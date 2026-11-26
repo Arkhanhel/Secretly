@@ -18063,6 +18063,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Long-press to react'**
   String get penHintReactions;
+
+  /// Premium sticker packs (panel rail, upsell sheet).
+  ///
+  /// In en, this message translates to:
+  /// **'Secret Safe'**
+  String get stickerPremiumPackSafe;
+
+  /// Premium sticker packs (panel rail, upsell sheet).
+  ///
+  /// In en, this message translates to:
+  /// **'Pixel'**
+  String get stickerPremiumPackPixel;
+
+  /// Premium sticker packs (panel rail, upsell sheet).
+  ///
+  /// In en, this message translates to:
+  /// **'Animated stickers for Premium subscribers'**
+  String get stickerPremiumSubtitle;
+
+  /// Premium sticker packs (panel rail, upsell sheet).
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock with Premium'**
+  String get stickerPremiumUnlock;
+
+  /// Free built-in sticker pack title.
+  ///
+  /// In en, this message translates to:
+  /// **'Kids'**
+  String get stickerPackKids;
+
+  /// Media editor draw tool (SendFlow 24.11.2026).
+  ///
+  /// In en, this message translates to:
+  /// **'Arrow'**
+  String get meToolArrow;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

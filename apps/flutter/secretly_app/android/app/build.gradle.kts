@@ -287,4 +287,7 @@ dependencies {
     // verified with readelf on the built bundle. Gradle picks the higher version,
     // so datastore-core comes along at the same version.
     implementation("androidx.datastore:datastore-preferences:1.1.7")
+    // Нативное окно оценки Google Play (24.11.2026, app_review_prompt.dart).
+    // Только Java/Kotlin, без .so — проверка 16 КБ не затронута.
+    implementation("com.google.android.play:review:2.0.2")
 }
